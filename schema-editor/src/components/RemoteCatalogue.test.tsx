@@ -154,3 +154,62 @@ describe('RemoteCatalogue', () => {
       expect(screen.getByText(/workspace is empty/)).toBeInTheDocument());
   });
 });
+
+describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
+  it('remembers a SAVED kit progress after it stops being the live one', async () => {
+    const { rerender } = render(
+      <RemoteCatalogue
+        onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
+        liveProgress={{ kitId: 'draft-kit', saved: true, percent: 93, complete: 93, total: 100 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('93%')).toBeInTheDocument());
+    // The kit closes (liveProgress gone) -- the saved value must survive, not
+    // revert to the mount-time scan (0%).
+    rerender(
+      <RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />,
+    );
+    expect(screen.getByText('93%')).toBeInTheDocument();
+  });
+
+  it('never remembers UNSAVED live progress', async () => {
+    const { rerender } = render(
+      <RemoteCatalogue
+        onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
+        liveProgress={{ kitId: 'draft-kit', saved: false, percent: 93, complete: 93, total: 100 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('93%')).toBeInTheDocument());
+    rerender(
+      <RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />,
+    );
+    // Discarded edit -> back to the scan value, no phantom 93%.
+    await waitFor(() => expect(screen.queryByText('93%')).not.toBeInTheDocument());
+  });
+
+  it('blocks Mark complete while the open kit has unsaved edits', async () => {
+    render(
+      <RemoteCatalogue
+        onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
+        liveProgress={{ kitId: 'draft-kit', saved: false, percent: 50, complete: 1, total: 2 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Mark complete')).toBeInTheDocument());
+    const btn = screen.getByText('Mark complete');
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute('title', expect.stringContaining('Save your changes first'));
+    fireEvent.click(btn);
+    expect(setRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  it('allows Mark complete once the open kit is saved', async () => {
+    render(
+      <RemoteCatalogue
+        onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
+        liveProgress={{ kitId: 'draft-kit', saved: true, percent: 100, complete: 2, total: 2 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Mark complete')).toBeInTheDocument());
+    expect(screen.getByText('Mark complete')).not.toBeDisabled();
+  });
+});

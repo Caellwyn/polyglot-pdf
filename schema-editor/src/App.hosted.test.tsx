@@ -283,3 +283,57 @@ describe('App hosted mode (bd 92qe.2)', () => {
     expect(probeSession).not.toHaveBeenCalled();
   });
 });
+
+describe('App hosted mode Codex r1 fixes (PR #280)', () => {
+  it('edits made WHILE a save is in flight stay marked unsaved', async () => {
+    // The PUT resolves only when we say so; the user edits mid-flight.
+    let resolveSave: () => void = () => {};
+    vi.mocked(saveRemoteSchema).mockImplementation(
+      () => new Promise<void>((res) => { resolveSave = res; }),
+    );
+    await passGate();
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('edit-field')); // dirty -> payload v1
+    fireEvent.keyDown(window, { key: 's', metaKey: true }); // PUT starts (pending)
+    await waitFor(() => expect(saveRemoteSchema).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTestId('edit-field')); // NEW edit mid-flight
+    resolveSave(); // the OLD payload's PUT completes
+
+    // The newer edit was never sent -- the state must still read unsaved
+    // (marking it clean would lose it on unload -- Codex P1, PR #280).
+    await waitFor(() =>
+      expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument());
+    expect(screen.queryByText(/Saved to the shared workspace/)).not.toBeInTheDocument();
+  });
+
+  it('a slow kit-A open never overwrites a faster kit-B open (race guard)', async () => {
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    // Kit A's schema resolves LATE; kit B's immediately.
+    let resolveA: (s: FormSchema) => void = () => {};
+    vi.mocked(loadRemoteSchema).mockImplementation((id: string) => {
+      if (id === 'draft-kit') {
+        return new Promise<FormSchema | null>((res) => { resolveA = res as never; });
+      }
+      return Promise.resolve(
+        JSON.parse(JSON.stringify({ ...SCHEMA, form_metadata: { title: 'B', version: '1' } })) as FormSchema,
+      );
+    });
+    vi.mocked(loadRemotePdfBlobUrl).mockImplementation(
+      (id: string) => Promise.resolve(`blob:${id}`),
+    );
+
+    await passGate();
+    fireEvent.click(screen.getByText('Draft Form'));   // A: hangs
+    fireEvent.click(screen.getByText('Second Form'));  // B: completes
+    await waitFor(() =>
+      expect(screen.getByTestId('pdf')).toHaveTextContent('blob:second-kit'));
+
+    // A's slow response lands AFTER B -- it must be discarded, not applied.
+    resolveA(JSON.parse(JSON.stringify(SCHEMA)) as FormSchema);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByTestId('pdf')).toHaveTextContent('blob:second-kit');
+  });
+});

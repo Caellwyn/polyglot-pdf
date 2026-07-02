@@ -65,6 +65,12 @@ export const App: React.FC = () => {
     commit: commitSchema, load: loadSchemaState, markSaved, clear: clearSchema,
     undo, redo,
   } = useSchemaHistory();
+  // The LATEST schema, readable after an await: a remote save's completion
+  // handler must compare against what the schema IS then, not the closure's
+  // stale capture, or edits made while the PUT was in flight would be marked
+  // clean and silently lost on unload (Codex P1, PR #280).
+  const schemaRef = React.useRef(schema);
+  React.useEffect(() => { schemaRef.current = schema; }, [schema]);
   const [selectedFieldId, setSelectedFieldId] = React.useState<string | null>(null);
   // Right-pane view mode (bd polyglot-pdf-s4dp.4): 'edit' shows the FieldEditor,
   // 'preview' swaps in the standalone interactive PreviewPane so the author can
@@ -200,6 +206,13 @@ export const App: React.FC = () => {
   // schema + PDF through the token-gated routes and drive the same schema +
   // PDFViewer flow the local kit path uses. The save target is the kit id
   // (saveRemoteSchema), not a file handle.
+  // Monotonic open token: remote opens take real network time and the cards
+  // stay clickable, so kit A's SLOW response must never apply after kit B was
+  // opened -- the stale open would overwrite B's schema/kit id and leave the
+  // editor on the wrong kit (Codex P1, PR #280). Each open bumps the token;
+  // any await that resumes under a newer token abandons silently.
+  const openSeqRef = React.useRef(0);
+
   const handleOpenRemoteKit = React.useCallback(async (entry: RemoteKitEntry) => {
     if (hasUnsavedChanges) {
       const confirmed = window.confirm(
@@ -207,6 +220,7 @@ export const App: React.FC = () => {
       );
       if (!confirmed) return;
     }
+    const seq = ++openSeqRef.current;
     setLoading(true);
     setError(null);
     setSelectedFieldId(null);
@@ -215,12 +229,19 @@ export const App: React.FC = () => {
     fileHandleRef.current = null; // hosted mode never saves via a file handle
     try {
       const loaded = await loadRemoteSchema(entry.id);
+      if (seq !== openSeqRef.current) return; // superseded by a newer open
       if (!loaded) {
         throw new Error(`${entry.label} has no schema yet.`);
       }
       let pdfUrl = '';
       if (entry.hasPdf) {
         pdfUrl = (await loadRemotePdfBlobUrl(entry.id)) ?? '';
+      }
+      if (seq !== openSeqRef.current) {
+        // A newer open won while our PDF was in flight: discard OUR blob URL
+        // (nobody will ever render it) and touch nothing else.
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+        return;
       }
       // Swap the blob URL only now that BOTH fetches succeeded. Revoking the
       // prior kit's URL BEFORE the fetches (the old order) meant any mid-open
@@ -237,6 +258,7 @@ export const App: React.FC = () => {
       setSavedFileName(null); // nothing saved back yet this session
       setSavingToKit(true); // saves target the kit's own remote schema
     } catch (err) {
+      if (seq !== openSeqRef.current) return; // a stale open's failure is moot
       if (err instanceof AuthError) {
         handleAuthExpired();
         return;
@@ -244,7 +266,7 @@ export const App: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to open form');
       console.error('Failed to open remote kit:', err);
     } finally {
-      setLoading(false);
+      if (seq === openSeqRef.current) setLoading(false);
     }
   }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
 
@@ -415,10 +437,19 @@ export const App: React.FC = () => {
     if (hosted) {
       if (!selectedKitId || saving) return;
       setSaving(true);
+      // Snapshot what this save actually sends: the editor stays editable
+      // while the PUT is in flight, so completion must only mark the state
+      // clean if the schema is STILL the snapshot -- otherwise edits made
+      // during the round trip would be flagged saved and lost on unload
+      // (Codex P1, PR #280). The still-dirty flag then simply prompts the
+      // contractor to save again, which sends the newer payload.
+      const snapshot = schema;
       try {
-        await saveRemoteSchema(selectedKitId, schema);
-        setSavedFileName('the shared workspace');
-        markSaved();
+        await saveRemoteSchema(selectedKitId, snapshot);
+        if (schemaRef.current === snapshot) {
+          setSavedFileName('the shared workspace');
+          markSaved();
+        }
         setError(null);
       } catch (err) {
         if (err instanceof AuthError) {

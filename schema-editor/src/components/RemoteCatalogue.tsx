@@ -62,7 +62,35 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // clobber the current one (same stale-scan discipline as FormCatalogue).
   const refreshSeq = React.useRef(0);
 
-  const refresh = React.useCallback(async () => {
+  // Last SAVED in-editor stats per kit (the FormCatalogue editedProgress
+  // pattern -- Codex P1, PR #280): liveProgress only covers the kit that is
+  // open RIGHT NOW, so after saving kit A and opening kit B, A's card would
+  // revert to the mount-time scan until a manual Refresh. Remembering saved
+  // values keeps the shared catalogue honest between refreshes; unsaved edits
+  // still show live on the open card but are never remembered (a discarded
+  // edit must not leave phantom progress). A Refresh (fresh server scan)
+  // supersedes the cache.
+  const [editedProgress, setEditedProgress] = React.useState<
+    Record<string, { percent: number; complete: number; total: number; version?: KitVersionInfo }>
+  >({});
+  React.useEffect(() => {
+    if (!liveProgress || !liveProgress.saved) return;
+    const { kitId, percent, complete, total, version } = liveProgress;
+    setEditedProgress((prev) => {
+      const e = prev[kitId];
+      if (e && e.percent === percent && e.complete === complete && e.total === total
+          && e.version?.label === version?.label
+          && e.version?.lowConfidence === version?.lowConfidence) return prev;
+      return { ...prev, [kitId]: { percent, complete, total, version } };
+    });
+  }, [liveProgress]);
+
+  // `deliberate` = a user-clicked Refresh: only THAT treats the fresh scan as
+  // superseding remembered saved values. An automatic scan (mount, post-status,
+  // post-onboard) must NOT clear the cache -- a scan that STARTED before a save
+  // landed would otherwise wipe the just-saved value and revert the card (the
+  // exact FormCatalogue lesson, Codex PR #224 r7).
+  const refresh = React.useCallback(async (deliberate = false) => {
     const seq = ++refreshSeq.current;
     setBusy(true);
     setError(null);
@@ -109,6 +137,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         return;
       }
       setProgress(Object.fromEntries(computed));
+      if (deliberate) setEditedProgress({});
     } catch (err) {
       if (seq !== refreshSeq.current) return;
       if (err instanceof AuthError) {
@@ -160,7 +189,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   return (
     <div data-testid="remote-catalogue" className="p-4 bg-white border-b border-gray-200">
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="btn btn-secondary" onClick={() => void refresh()} disabled={busy}>
+        <button className="btn btn-secondary" onClick={() => void refresh(true)} disabled={busy}>
           Refresh
         </button>
         <span className="text-sm text-gray-500">
@@ -194,12 +223,21 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {kits.map((kit) => {
             const prog = progress[kit.id];
+            // Precedence: the OPEN kit's live stats (tracks unsaved edits) >
+            // the last remembered SAVED value for this kit > the scan.
             const live = liveProgress && liveProgress.kitId === kit.id ? liveProgress : null;
-            const pct = live ? live.percent : (prog?.reviewPercent ?? null);
-            const completeFields = live ? live.complete : (prog?.completeFields ?? 0);
-            const totalFields = live ? live.total : (prog?.totalFields ?? 0);
-            const showSchemaError = !live && prog?.schemaError && pct === null;
-            const cardVersion = live?.version ?? prog?.version ?? null;
+            const edited = editedProgress[kit.id] ?? null;
+            const source = live ?? edited;
+            const pct = source ? source.percent : (prog?.reviewPercent ?? null);
+            const completeFields = source ? source.complete : (prog?.completeFields ?? 0);
+            const totalFields = source ? source.total : (prog?.totalFields ?? 0);
+            const showSchemaError = !source && prog?.schemaError && pct === null;
+            const cardVersion = source?.version ?? prog?.version ?? null;
+            // The open kit has UNSAVED edits: promoting now would publish the
+            // stale persisted schema (and the follow-up save would then be
+            // refused by the published-kit guard) -- block until saved
+            // (Codex P1, PR #280).
+            const openDirty = live !== null && !live.saved;
             return (
               <li key={kit.id}>
                 <button
@@ -274,8 +312,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       <button
                         className="btn-sm btn-primary text-xs"
                         onClick={() => void handleSetStatus(kit, 'complete')}
-                        disabled={busy}
-                        title="Mark complete (ships with the maintainer's next deploy)"
+                        disabled={busy || openDirty}
+                        title={openDirty
+                          ? 'Save your changes first (Cmd+S) -- completing now '
+                            + 'would publish the last saved version, not your edits'
+                          : "Mark complete (ships with the maintainer's next deploy)"}
                       >
                         Mark complete
                       </button>
