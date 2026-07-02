@@ -477,10 +477,18 @@ export const App: React.FC = () => {
 
     if (!fsAccess) {
       // Fallback: browsers without the API get the original download behavior.
-      const name = suggestedFileName();
-      saveSchema(schema, name);
-      markSaved();
-      setSaveError(null);
+      // Wrapped like the other three save paths so a thrown failure (e.g.
+      // JSON.stringify on a circular schema) surfaces in the saveError banner
+      // instead of an unhandled exception (bd polyglot-pdf-gtbw).
+      try {
+        const name = suggestedFileName();
+        saveSchema(schema, name);
+        markSaved();
+        setSaveError(null);
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : 'Failed to save schema');
+        console.error('Failed to save schema:', err);
+      }
       return;
     }
 

@@ -165,4 +165,29 @@ describe('App one-step save (File System Access)', () => {
     fireEvent.keyDown(window, { key: 's', metaKey: true });
     await waitFor(() => expect(loader.saveSchema).toHaveBeenCalledTimes(1));
   });
+
+  it('a failed download-fallback save shows the dismissible banner (bd polyglot-pdf-gtbw)', async () => {
+    // no window.showSaveFilePicker -> fsAccess false -> plain-download path.
+    // This was the fourth save path, the only one without a try/catch: a throw
+    // from saveSchema (JSON.stringify / Blob / anchor click) escaped unhandled
+    // instead of landing in the saveError banner like the other three.
+    vi.mocked(loader.saveSchema).mockImplementation(() => {
+      throw new Error('download failed');
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByText('pick-A'));
+    await waitFor(() => expect(loader.loadSchema).toHaveBeenCalled());
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent('download failed');
+    // The live editor stays mounted; no full-screen error state.
+    expect(screen.getByTestId('list')).toBeInTheDocument();
+    expect(screen.getByTestId('pdf')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Error' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Dismiss save error'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
