@@ -53,8 +53,18 @@ VALID_SCHEMA = {
 }
 
 
-def _settings(editor=None, author=None):
-    return SimpleNamespace(SCHEMA_EDITOR_TOKEN=editor, SCHEMA_AUTHOR_TOKEN=author)
+def _settings(editor=None, author=None, **overrides):
+    base = dict(
+        SCHEMA_EDITOR_TOKEN=editor,
+        SCHEMA_AUTHOR_TOKEN=author,
+        # Extraction knobs (bd 92qe.3) with test-friendly defaults.
+        EXTRACTOR_MODEL="gemini-2.5-pro",
+        EXTRACTOR_TIMEOUT_SEC=60.0,
+        EXTRACTOR_MAX_PDF_MB=25.0,
+        GEMINI_API_KEY="fake-key",
+    )
+    base.update(overrides)
+    return SimpleNamespace(**base)
 
 
 def _make_kit(root, kit_id, *, status="draft", schema=None, label=None, extra_meta=None):
@@ -844,6 +854,261 @@ def test_local_concurrent_writes_to_same_file_both_succeed(tmp_path):
     final = _run(store.load_schema("i-90"))
     assert final["fields"][0]["id"] in ("a", "b")
     assert [p.name for p in (tmp_path / "i-90").iterdir()] == ["schema.json"]
+
+
+# --- author tier: onboarding + hosted extraction (bd polyglot-pdf-92qe.3) ----
+
+
+PDF_BYTES = b"%PDF-1.7 fake acroform"
+
+
+def _upload(c, token, filename="Form I-90.pdf", data=PDF_BYTES, label=None):
+    form = {"label": label} if label else {}
+    return c.post(
+        "/api/editor/kits",
+        headers={"X-Editor-Token": token},
+        files={"pdf": (filename, data, "application/pdf")},
+        data=form,
+    )
+
+
+def test_onboard_creates_kit_with_author_token(client):
+    c, store, root = client
+    r = _upload(c, "auth-tok")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == "form-i-90"
+    assert body["status"] == "draft"
+    assert body["hasPdf"] is True and body["hasSchema"] is False
+    # The kit landed in the store: pdf bytes + draft metadata.
+    assert (root / "form-i-90" / "form.pdf").read_bytes() == PDF_BYTES
+    meta = json.loads((root / "form-i-90" / "metadata.json").read_text())
+    assert meta == {"label": "Form I 90", "status": "draft"}
+
+
+def test_onboard_uniquifies_taken_ids_and_honors_label(client):
+    c, _store, root = client
+    _make_kit(root, "form-i-90")
+    r = _upload(c, "auth-tok", label="My Custom Label")
+    assert r.status_code == 200
+    assert r.json()["id"] == "form-i-90-2"
+    meta = json.loads((root / "form-i-90-2" / "metadata.json").read_text())
+    assert meta["label"] == "My Custom Label"
+
+
+def test_onboard_requires_author_role(client):
+    c, _store, root = client
+    r = _upload(c, "edit-tok")
+    assert r.status_code == 403
+    assert list(root.iterdir()) == []  # nothing was created
+
+
+def test_onboard_rejects_non_pdf_and_oversize(client, monkeypatch):
+    c, _store, root = client
+    r = _upload(c, "auth-tok", filename="page.pdf", data=b"<html>not a pdf")
+    assert r.status_code == 422
+    monkeypatch.setattr(
+        ekr, "get_settings",
+        lambda: _settings(editor="edit-tok", author="auth-tok", EXTRACTOR_MAX_PDF_MB=0.00001),
+    )
+    r2 = _upload(c, "auth-tok")
+    assert r2.status_code == 413
+    assert list(root.iterdir()) == []
+
+
+def test_concurrent_onboards_of_same_filename_both_persist(tmp_path, monkeypatch):
+    # TOCTOU (fresh-eyes, reproduced): two concurrent uploads deriving the SAME
+    # kit id must NOT silently collapse onto one kit -- both PDFs persist under
+    # DISTINCT ids (the onboard lock serializes the list->derive->write window).
+    # Direct async calls on ONE loop (asyncio.gather): the TestClient runs each
+    # request on its own portal loop, which cannot exercise a shared lock.
+    import io
+    from starlette.datastructures import UploadFile as StarletteUploadFile
+
+    store = LocalFormKitStore(tmp_path)
+    monkeypatch.setattr(ekr, "get_form_kit_store", lambda: store)
+    monkeypatch.setattr(
+        ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
+    )
+
+    def _upload_file(payload: bytes) -> StarletteUploadFile:
+        return StarletteUploadFile(
+            file=io.BytesIO(payload), filename="Form I-90.pdf"
+        )
+
+    async def _both():
+        return await asyncio.gather(
+            ekr.onboard_editor_kit(
+                role="author", pdf=_upload_file(b"%PDF-1.7 AUTHOR-A"), label=None
+            ),
+            ekr.onboard_editor_kit(
+                role="author", pdf=_upload_file(b"%PDF-1.7 AUTHOR-B"), label=None
+            ),
+        )
+
+    results = asyncio.new_event_loop().run_until_complete(_both())
+    ids = sorted(r.id for r in results)
+    assert ids == ["form-i-90", "form-i-90-2"]
+    stored = sorted((tmp_path / kid / "form.pdf").read_bytes() for kid in ids)
+    assert stored == [b"%PDF-1.7 AUTHOR-A", b"%PDF-1.7 AUTHOR-B"]
+
+
+def test_onboard_long_filename_truncates_instead_of_400(client):
+    # A realistic long download name must onboard (truncated slug), never 400
+    # with a baffling "Invalid kit id" (fresh-eyes, reproduced live).
+    c, _store, root = client
+    long_name = (
+        "USCIS Form I-90 Application to Replace Permanent Resident Card "
+        "(Green Card) - Official 2026 Edition Downloaded From Immigration "
+        "Website.pdf"
+    )
+    r = _upload(c, "auth-tok", filename=long_name)
+    assert r.status_code == 200, r.text
+    kit_id = r.json()["id"]
+    assert len(kit_id) <= 64
+    assert (root / kit_id / "form.pdf").exists()
+
+
+def _fake_extractor(schema_payload, exit_code=0, write_out=True):
+    """A subprocess.run stand-in that mimics extract_form.py: writes --out."""
+
+    def _run(cmd, **kwargs):
+        out_path = cmd[cmd.index("--out") + 1]
+        if write_out:
+            with open(out_path, "w", encoding="utf-8") as fh:
+                json.dump(schema_payload, fh)
+        return SimpleNamespace(
+            returncode=exit_code,
+            stdout=f"[OK] wrote {out_path} -- 2 fields",
+            stderr="",
+        )
+
+    return _run
+
+
+def test_extract_runs_and_stores_the_draft(client, monkeypatch):
+    c, store, root = client
+    _make_kit(root, "fresh")  # PDF, no schema
+    draft = {"fields": [{"id": "a"}, {"id": "b"}], "sections": []}
+    fake = _fake_extractor(draft)
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    r = c.post(
+        "/api/editor/kits/fresh/extract",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["fieldCount"] == 2
+    assert body["schemaFile"] == "schema.json"
+    # The temp --out path never leaks into the user-facing detail.
+    assert ".tmp" not in body["detail"] and "extract_" not in body["detail"]
+    # The draft landed in the store.
+    assert _run(store.load_schema("fresh")) == draft
+
+
+def test_extract_requires_author_role_and_a_pdf(client, monkeypatch):
+    c, _store, root = client
+    _make_kit(root, "fresh")
+    monkeypatch.setattr(ekr.subprocess, "run", _fake_extractor({"fields": []}))
+    assert c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "edit-tok"}
+    ).status_code == 403
+    # A kit with no PDF cannot extract.
+    kit = root / "no-pdf"
+    kit.mkdir()
+    (kit / "metadata.json").write_text(json.dumps({"status": "draft"}), encoding="utf-8")
+    assert c.post(
+        "/api/editor/kits/no-pdf/extract", headers={"X-Editor-Token": "auth-tok"}
+    ).status_code == 409
+
+
+def test_extract_refuses_overwrite_without_force(client, monkeypatch):
+    c, store, root = client
+    _make_kit(root, "done", schema={"fields": [{"id": "old"}]})
+    monkeypatch.setattr(
+        ekr.subprocess, "run", _fake_extractor({"fields": [{"id": "new"}]})
+    )
+    r = c.post(
+        "/api/editor/kits/done/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 409
+    assert _run(store.load_schema("done")) == {"fields": [{"id": "old"}]}
+    # force=true replaces it.
+    r2 = c.post(
+        "/api/editor/kits/done/extract",
+        headers={"X-Editor-Token": "auth-tok"},
+        data={"force": "true"},
+    )
+    assert r2.status_code == 200
+    assert _run(store.load_schema("done")) == {"fields": [{"id": "new"}]}
+
+
+def test_extract_failure_maps_to_502_and_stores_nothing(client, monkeypatch):
+    c, store, root = client
+    _make_kit(root, "fresh")
+    monkeypatch.setattr(
+        ekr.subprocess, "run",
+        _fake_extractor({"fields": []}, exit_code=1, write_out=False),
+    )
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_schema("fresh"))
+
+
+def test_extract_invalid_draft_failure_detail_scrubs_temp_path(client, monkeypatch):
+    # An INVALID draft (a common, expected outcome) exits 1 AFTER writing the
+    # temp --out path into its message -- the FAILURE detail must scrub the
+    # internal temp path exactly like the success path does (Opus fallback
+    # review, PR #282).
+    c, _store, root = client
+    _make_kit(root, "fresh")
+
+    def _invalid_run(cmd, **kwargs):
+        out_path = cmd[cmd.index("--out") + 1]
+        with open(out_path, "w", encoding="utf-8") as fh:
+            json.dump({"fields": []}, fh)
+        return SimpleNamespace(
+            returncode=1,
+            stdout=f"[INVALID] wrote {out_path} -- validation failed",
+            stderr="",
+        )
+
+    monkeypatch.setattr(ekr.subprocess, "run", _invalid_run)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert "extract_" not in detail and ".tmp" not in detail
+    assert "Temp" not in detail and "\\" not in detail.replace("\n", "")
+    assert "schema.json" in detail  # the scrub substitutes the store name
+
+
+def test_extract_unconfigured_is_503(client, monkeypatch):
+    c, _store, root = client
+    _make_kit(root, "fresh")
+    # Non-gemini model (the container has no claude CLI) -> 503.
+    monkeypatch.setattr(
+        ekr, "get_settings",
+        lambda: _settings(editor="edit-tok", author="auth-tok",
+                          EXTRACTOR_MODEL="claude-opus-4-8"),
+    )
+    assert c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    ).status_code == 503
+    # No API key anywhere -> 503.
+    monkeypatch.setattr(
+        ekr, "get_settings",
+        lambda: _settings(editor="edit-tok", author="auth-tok", GEMINI_API_KEY=None),
+    )
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    ).status_code == 503
 
 
 def test_status_rejects_unknown_values(client):

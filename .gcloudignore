@@ -1,0 +1,49 @@
+# What `gcloud builds submit` (repo-root context, bd 92qe.3) does NOT upload.
+# The image needs ONLY: backend/ + scripts/authoring/ + scripts/bakeoff/
+# (see Dockerfile). Everything else stays out so the Cloud Build upload is
+# a few MB, not the whole monorepo (PDF corpora, node_modules, docs, .git).
+
+.git
+.gitignore
+
+# Frontends build separately (Firebase Hosting), never in this image.
+frontend/
+schema-editor/
+landing/
+pitch/
+token-monitor/
+
+# Node deps anywhere.
+node_modules/
+**/node_modules/
+
+# Docs, planning, journal, agent state.
+docs/
+planning_documents/
+.claude/
+.beads/
+AGENTS.md
+CLAUDE.md
+*.md
+
+# Form/PDF corpora + outputs (the store lives in GCS, not the image).
+form-kits/
+example_pdfs/
+pdfs_and_schemas/
+example_webforms/
+outputs/
+
+# Tests + research harnesses (only authoring/ + bakeoff/ ship, and the
+# bakeoff outputs/ subdir is excluded below).
+tests/
+backend/tests/
+scripts/spikes/
+scripts/bakeoff/outputs/
+shared/
+
+# Local env/venv/caches.
+backend/.venv/
+**/__pycache__/
+*.pyc
+.env
+.env.*

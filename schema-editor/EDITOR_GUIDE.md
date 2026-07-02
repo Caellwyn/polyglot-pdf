@@ -95,8 +95,11 @@ A hosted build (`npm run build:hosted`, `VITE_DELIVERY_MODE=hosted` from
 
 1. Open the hosted URL and enter your **access code** (asked once per browser).
    The code determines your tier: *editor* (review/polish the provided forms)
-   or *author* (additionally onboard PDFs + run extraction; that UI ships with
-   bd 92qe.3).
+   or *author* (additionally: **Add a form (PDF)** uploads a blank AcroForm PDF
+   into the shared workspace, and **Run extraction** on a schemaless card runs
+   the PDF -> schema pipeline on the server -- takes a few minutes, with an
+   elapsed counter; optionally attach the form's official instructions PDF
+   first to enrich the per-field help text).
 2. The catalogue lists every kit in the shared workspace -- drafts included
    (drafts ARE the work list). Open a card, edit exactly as in local mode.
 3. **Cmd/Ctrl+S** saves back to the shared store (watch for the `Saving...` ->

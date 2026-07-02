@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
@@ -41,6 +42,26 @@ def safe_filename(name: Any, default: str) -> str:
 	if "/" in name or "\\" in name or ".." in name or not _SAFE_FILENAME_RE.fullmatch(name):
 		return default
 	return name
+
+
+def _replace_with_retry(src: "Path", dst: "Path") -> None:
+	"""os.replace with a brief retry loop for the WINDOWS transient EACCES.
+
+	On Windows, two threads replacing onto the SAME destination at the same
+	instant (or an AV scanner holding it) can raise PermissionError even though
+	each replace is individually atomic -- POSIX rename never does this. A few
+	short retries absorb the transient; a persistent denial still raises (the
+	caller maps it to FormKitStoreError). Seen live: the concurrent double-save
+	test failed under full-suite thread contention (bd 92qe.3).
+	"""
+	for attempt in range(5):
+		try:
+			os.replace(src, dst)
+			return
+		except PermissionError:
+			if attempt == 4:
+				raise
+			time.sleep(0.05 * (attempt + 1))
 
 
 class FormKitStoreError(Exception):
@@ -152,6 +173,12 @@ class FormKitStore:
 	async def put_schema(
 		self, kit_id: str, schema: dict, schema_file: str = "schema.json"
 	) -> None:
+		raise NotImplementedError
+
+	async def put_pdf_bytes(
+		self, kit_id: str, data: bytes, pdf_file: str = "form.pdf"
+	) -> None:
+		"""Write a kit's form PDF (the author-tier onboarding, bd 92qe.3)."""
 		raise NotImplementedError
 
 	async def list_kit_files(self) -> dict[str, list[str]]:
@@ -307,6 +334,29 @@ class LocalFormKitStore(FormKitStore):
 		schema_file = safe_filename(schema_file, "schema.json")
 		await self._write_json(self._kit_dir(kit_id) / schema_file, schema)
 
+	async def put_pdf_bytes(
+		self, kit_id: str, data: bytes, pdf_file: str = "form.pdf"
+	) -> None:
+		pdf_file = safe_filename(pdf_file, "form.pdf")
+		path = self._kit_dir(kit_id) / pdf_file
+
+		def _write() -> None:
+			path.parent.mkdir(parents=True, exist_ok=True)
+			# Per-write nonce, same reason as _write_json (Codex P1 r2, PR #279):
+			# a pid-only temp name collides under two concurrent writes.
+			tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid4().hex}.tmp")
+			try:
+				tmp.write_bytes(data)
+				_replace_with_retry(tmp, path)
+			finally:
+				if tmp.exists():
+					tmp.unlink(missing_ok=True)
+
+		try:
+			await anyio.to_thread.run_sync(_write)
+		except OSError as exc:
+			raise FormKitStoreError(f"Unable to write {pdf_file}: {exc}") from exc
+
 	async def _write_json(self, path: Path, data: dict) -> None:
 		"""Atomic JSON write: temp file in the same dir, then os.replace.
 
@@ -328,7 +378,7 @@ class LocalFormKitStore(FormKitStore):
 					json.dumps(data, indent=2, ensure_ascii=False) + "\n",
 					encoding="utf-8",
 				)
-				os.replace(tmp, path)
+				_replace_with_retry(tmp, path)
 			finally:
 				if tmp.exists():
 					tmp.unlink(missing_ok=True)
@@ -475,6 +525,24 @@ class GCSFormKitStore(FormKitStore):
 	) -> None:
 		schema_file = safe_filename(schema_file, "schema.json")
 		await self._upload_json(self._build_blob_path(kit_id, schema_file), schema)
+
+	async def put_pdf_bytes(
+		self, kit_id: str, data: bytes, pdf_file: str = "form.pdf"
+	) -> None:
+		pdf_file = safe_filename(pdf_file, "form.pdf")
+		blob_path = self._build_blob_path(kit_id, pdf_file)
+
+		def _upload() -> None:
+			blob = self._bucket.blob(blob_path)
+			blob.cache_control = "no-cache"
+			blob.upload_from_string(data, content_type="application/pdf")
+
+		try:
+			await anyio.to_thread.run_sync(_upload)
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to write gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
 
 	async def _upload_json(self, blob_path: str, data: dict) -> None:
 		"""Upload a JSON blob with no-cache so a re-pull after a save is never

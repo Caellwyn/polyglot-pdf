@@ -416,6 +416,18 @@ class Settings(BaseModel):
 	# whose 60s cap would kill minutes-long extraction), so its origin must be
 	# allowed here.
 	CORS_EXTRA_ORIGINS: str = os.getenv("CORS_EXTRA_ORIGINS", "")
+	# Hosted PDF->schema extraction (bd polyglot-pdf-92qe.3, author tier).
+	# EXTRACTOR_MODEL must be a gemini-* model on Cloud Run: the extraction
+	# script's default (the local `claude` CLI) does not exist in the container.
+	# gemini-2.5-pro over flash on purpose: authoring is a ONE-OFF per form, so
+	# quality beats per-call cost (the runtime token economy does not apply --
+	# bd 7a9 doctrine). Swap by env without a redeploy of code.
+	EXTRACTOR_MODEL: str = os.getenv("EXTRACTOR_MODEL", "gemini-2.5-pro")
+	# Wall-clock cap for one extraction subprocess. Well under Cloud Run's
+	# --timeout=3600 so the HTTP request outlives the subprocess kill.
+	EXTRACTOR_TIMEOUT_SEC: float = float(os.getenv("EXTRACTOR_TIMEOUT_SEC", "1500"))
+	# Upload cap for the onboarding PDF (MB). Government form PDFs run 1-15 MB.
+	EXTRACTOR_MAX_PDF_MB: float = float(os.getenv("EXTRACTOR_MAX_PDF_MB", "25"))
 
 	# Form kit storage (schema/PDF pairs)
 	FORM_KITS_MODE: str = os.getenv("FORM_KITS_MODE", "local")

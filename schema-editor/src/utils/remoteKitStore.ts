@@ -178,3 +178,47 @@ export async function setRemoteStatus(
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the status'));
 }
+
+// --- author tier (bd polyglot-pdf-92qe.3) ----------------------------------
+// Onboarding + hosted extraction: multipart POSTs (no manual Content-Type --
+// the browser sets the boundary). Both need the AUTHOR access code; the server
+// answers 403 for the editor tier.
+
+/** Upload a blank form PDF -> a new draft kit in the shared store. */
+export async function onboardRemoteKit(
+  pdf: File, label?: string,
+): Promise<RemoteKitEntry> {
+  const form = new FormData();
+  form.append('pdf', pdf, pdf.name);
+  if (label) form.append('label', label);
+  const res = await editorFetch('/api/editor/kits', { method: 'POST', body: form });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not upload the PDF'));
+  return (await res.json()) as RemoteKitEntry;
+}
+
+export interface RemoteExtractionResult {
+  ok: boolean;
+  detail: string;
+  schemaFile?: string;
+  fieldCount?: number;
+}
+
+/** Run the server-side PDF -> draft-schema extraction for a kit. Minutes-long:
+ * the caller shows elapsed progress. An optional official instructions PDF
+ * enriches the per-field help text (parity with the local dev flow). */
+export async function extractRemoteKit(
+  kitId: string,
+  opts: { force?: boolean; instructionsPdf?: File } = {},
+): Promise<RemoteExtractionResult> {
+  const form = new FormData();
+  if (opts.force) form.append('force', 'true');
+  if (opts.instructionsPdf) {
+    form.append('instructions_pdf', opts.instructionsPdf, opts.instructionsPdf.name);
+  }
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/extract`,
+    { method: 'POST', body: form },
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Extraction failed'));
+  return (await res.json()) as RemoteExtractionResult;
+}
