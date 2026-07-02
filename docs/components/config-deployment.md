@@ -1,8 +1,8 @@
 # Config & deployment
 
-**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py backend/Dockerfile deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
+**Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-07-01. Added the hosted schema-editor access env vars (`SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`, bd polyglot-pdf-92qe.1). The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
+*Last updated: 2026-07-01. Added the hosted-extraction knobs (EXTRACTOR_MODEL/TIMEOUT/MAX_PDF_MB) + the repo-root image build (bd 92qe.3), and the hosted schema-editor access env vars (`SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`, bd polyglot-pdf-92qe.1). The demo runs on Vertex AI (`VERTEXAI=true`,`USE_PREMIUM_MODEL=false`); `_resolve_model` is backend-aware so the standard tier picks the Vertex native-audio id (`gemini-live-2.5-flash-native-audio`) without a `MODEL_NATIVE` pin (bd polyglot-pdf-a079). Form-kit deploy is gated on `metadata.json status: complete` (`kit_is_complete` in deploy-all.sh) -- only complete kits reach GCS + the manifest. See [../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](../journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). 2026-06-27: added the `SECRETARY_TIMEOUT_S` env knob (secretary blocking-call guard) and the `ask_secretary` tool (jnjj.45); see [../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](../journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -31,7 +31,8 @@ which bypasses the cache).
   `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `SECRETARY_TIMEOUT_S`, `FORM_KITS_MODE`,
   `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`, `FORM_KITS_REMOTE_BASE_URL`,
   `FORM_KITS_REMOTE_PREFIX`, `FORM_KITS_REMOTE_TIMEOUT_SEC`,
-  `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`.
+  `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`, `CORS_EXTRA_ORIGINS`,
+  `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`, `EXTRACTOR_MAX_PDF_MB`.
 - **Code constants** (plain field defaults — changing them needs a code edit, NOT
   an env var): `PROACTIVE_AUDIO`, the audio rates
   (`AUDIO_IN_RATE` 16000 / `AUDIO_OUT_RATE` 24000), the WS knobs
@@ -101,6 +102,15 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   List explicit origins only; do NOT set `*` — the app runs
   `allow_credentials=True`, and browsers reject the wildcard+credentials
   combination, so `*` silently breaks CORS instead of opening it.
+- **`EXTRACTOR_MODEL` / `EXTRACTOR_TIMEOUT_SEC` / `EXTRACTOR_MAX_PDF_MB`** — the
+  hosted PDF->schema extraction knobs (bd `polyglot-pdf-92qe.3`, author tier).
+  `EXTRACTOR_MODEL` defaults to `gemini-2.5-pro` and MUST be a `gemini-*` model
+  on Cloud Run (the container has no `claude` CLI; authoring is one-off per form
+  so quality beats per-call cost). Extraction runs
+  `scripts/authoring/extract_form.py` as a subprocess — the image is built from
+  the REPO ROOT (`Dockerfile` at the root; `backend/Dockerfile` is gone) so
+  `scripts/authoring` + `scripts/bakeoff` ship in it; `.gcloudignore` keeps the
+  Cloud Build upload lean. Needs `GEMINI_API_KEY` mounted (Secret Manager).
 - **`GENAI_WEBSOCKET_BASE`** — optional override of the genai SDK's Live WebSocket
   base (`backend/adapters/live_ai_gemini.py`), for pointing at a non-default
   endpoint.

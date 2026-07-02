@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
@@ -41,6 +42,26 @@ def safe_filename(name: Any, default: str) -> str:
 	if "/" in name or "\\" in name or ".." in name or not _SAFE_FILENAME_RE.fullmatch(name):
 		return default
 	return name
+
+
+def _replace_with_retry(src: "Path", dst: "Path") -> None:
+	"""os.replace with a brief retry loop for the WINDOWS transient EACCES.
+
+	On Windows, two threads replacing onto the SAME destination at the same
+	instant (or an AV scanner holding it) can raise PermissionError even though
+	each replace is individually atomic -- POSIX rename never does this. A few
+	short retries absorb the transient; a persistent denial still raises (the
+	caller maps it to FormKitStoreError). Seen live: the concurrent double-save
+	test failed under full-suite thread contention (bd 92qe.3).
+	"""
+	for attempt in range(5):
+		try:
+			os.replace(src, dst)
+			return
+		except PermissionError:
+			if attempt == 4:
+				raise
+			time.sleep(0.05 * (attempt + 1))
 
 
 class FormKitStoreError(Exception):
@@ -326,7 +347,7 @@ class LocalFormKitStore(FormKitStore):
 			tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid4().hex}.tmp")
 			try:
 				tmp.write_bytes(data)
-				os.replace(tmp, path)
+				_replace_with_retry(tmp, path)
 			finally:
 				if tmp.exists():
 					tmp.unlink(missing_ok=True)
@@ -357,7 +378,7 @@ class LocalFormKitStore(FormKitStore):
 					json.dumps(data, indent=2, ensure_ascii=False) + "\n",
 					encoding="utf-8",
 				)
-				os.replace(tmp, path)
+				_replace_with_retry(tmp, path)
 			finally:
 				if tmp.exists():
 					tmp.unlink(missing_ok=True)
