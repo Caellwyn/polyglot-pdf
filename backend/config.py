@@ -730,8 +730,13 @@ def parse_extra_origins(raw: str | None) -> list[str]:
 	into a clean origin list. Empty/None -> [] (no extra origins). Used by
 	main.py to extend the hardcoded localhost CORS list with the hosted
 	schema-editor's origin(s) without a code change per deploy
-	(bd polyglot-pdf-92qe.1)."""
-	return [o.strip() for o in (raw or "").split(",") if o.strip()]
+	(bd polyglot-pdf-92qe.1).
+
+	Accepts SEMICOLONS as well as commas (bd 92qe.4): the value reaches Cloud
+	Run inside `gcloud run deploy --set-env-vars=A=1,B=2,...`, where commas are
+	the PAIR separator -- a multi-origin value must therefore use semicolons in
+	the deploy scripts ("https://a.web.app;https://a.firebaseapp.com")."""
+	return [o.strip() for o in re.split(r"[,;]", raw or "") if o.strip()]
 
 
 # ============================================================================

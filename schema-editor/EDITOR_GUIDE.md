@@ -116,6 +116,23 @@ shell env) is compiled in plaintext into the served JS bundle, readable by
 anyone who opens the site. Rotate a code by updating the backend secret; every
 open session drops to the code screen on its next request.
 
+Maintainer runbook (sharing + publishing, bd 92qe.4):
+
+1. **Deploy the editor site**: `./deploy-editor.sh` (one-time setup -- site
+   create, target mapping, the two token secrets, the bucket write grant -- is
+   documented in that script's header). The voice-app deploy never touches the
+   editor site (`deploy-all.sh` is pinned to `hosting:app`).
+2. **Share access**: send a contractor the editor URL plus ONE code --
+   the *editor* code for polish-only work, the *author* code to also upload
+   PDFs and run extraction. Codes live in Secret Manager
+   (`schema-editor-token` / `schema-author-token`); rotate by updating the
+   secret and redeploying the backend.
+3. **Publish contractor work**: `./scripts/pull-form-kits.sh` syncs the shared
+   bucket DOWN into your local `form-kits/` (local-only kits are preserved);
+   review the diff in git, then run the normal deploy -- only
+   `status: complete` kits ship to the voice app. Without the pull, a kit that
+   exists only in the bucket drops off the served list on your next deploy.
+
 Local mode (everything below) is unchanged; the two modes never mix in one
 build.
 
