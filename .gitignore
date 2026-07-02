@@ -74,3 +74,7 @@ backend/.venv
 # location; Codex PR #246). The committable cost CSV/meta.json siblings are NOT
 # matched by this pattern.
 *.debug.json
+
+# Local project-scoped MCP server config (e.g. the gemini-docs MCP). Machine-
+# local developer setup, not shared project state -- keep it out of the tree.
+.mcp.json
