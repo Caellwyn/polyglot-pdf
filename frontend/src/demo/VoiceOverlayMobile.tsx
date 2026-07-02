@@ -1132,7 +1132,11 @@ useEffect(() => {
 	return () => clearInterval(interval)
 }, [currentSectionId, completedSections])
 
-const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
+// Session-alive gate for the status dot / FAB color / thinking indicator.
+// Includes the transient `switching_section` + `reconnecting` states (matching
+// the desktop overlay) so the dot does not flash grey and the thinking dots do
+// not vanish mid-switch while the session is still live (bd polyglot-pdf-bxng).
+const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section' || status.toLowerCase().startsWith('reconnecting')
 // Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio is
 // actually reaching the backend -- a steady `connected` session. We deliberately
 // do NOT include the transient turn-taking states `reconnecting` (mic gate drops
@@ -1175,8 +1179,13 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 			{/* Main FAB */}
 			<div className="vff-fab" onClick={() => setIsExpanded(!isExpanded)}>
 				<div className="vff-fab-pulse" style={{ borderColor: statusColor }}></div>
-				{/* VAD speech detection indicator - small green dot badge */}
-				{vad.userSpeaking && !pushToTalkMode && !nativeVad && (
+				{/* Mic-activity badge (bd polyglot-pdf-8v53): green dot while audio is
+				    actually reaching the backend. Gated on `isListening && micSending`
+				    (the same live signals as the panel's listening indicator) so it
+				    works in native VAD mode -- the old `vad.userSpeaking && !nativeVad`
+				    gate needed client Silero VAD, which never runs in the deployed
+				    native-VAD default, leaving the dot permanently dark. */}
+				{isListening && micSending && (
 					<div className="vff-fab-vad-badge">
 						<div className="vff-fab-vad-dot"></div>
 					</div>

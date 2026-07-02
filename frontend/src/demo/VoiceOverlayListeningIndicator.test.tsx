@@ -23,7 +23,15 @@
 //
 // Mobile note: the indicator lives in the EXPANDED panel, so the test expands
 // it (the FAB is collapsed by default). The desktop panel is always expanded.
-import { render, cleanup, within, fireEvent } from '@testing-library/react'
+//
+// This file also pins the two sibling mobile gates that share this harness:
+//   - the FAB mic-activity badge (bd polyglot-pdf-8v53): `isListening && micSending`,
+//     replacing the same dead `vad.userSpeaking && !nativeVad` condition 1dvp
+//     removed from the panel row;
+//   - the broader `isConnected` gate (bd polyglot-pdf-bxng): status dot / FAB
+//     color / thinking indicator stay "live" through `switching_section` and
+//     `reconnecting`, matching the desktop overlay.
+import { render, cleanup, within, fireEvent, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
@@ -62,7 +70,7 @@ const MINIMAL_SCHEMA: FormSchema = {
   fields: [],
 } as unknown as FormSchema
 
-function makeMockManager(status: string): ConnectionManager {
+function makeMockManager(status: string, opts?: { sendingMic?: boolean }): ConnectionManager {
   const audioManager = {
     setPTTMode: vi.fn(),
     setVADActive: vi.fn(),
@@ -89,7 +97,7 @@ function makeMockManager(status: string): ConnectionManager {
     resume: vi.fn(async () => {}),
     getStatus: vi.fn(() => status),
     getThinking: vi.fn(() => false),
-    isSendingMicAudio: vi.fn(() => false),
+    isSendingMicAudio: vi.fn(() => opts?.sendingMic ?? false),
     sendAudio: vi.fn(),
     sendActivityStart: vi.fn(),
     sendActivityEnd: vi.fn(async () => {}),
@@ -128,6 +136,23 @@ const LIVE_STATE = {
   jitModeEnabled: false, disclaimerAccepted: true, selectedLanguage: 'English',
 }
 
+// Shared env stubs (sessionStorage / fetch / state-manager spies) used by every
+// describe block below; each block picks its own fake-timer config.
+function stubEnv() {
+  const store: Record<string, string> = {}
+  vi.stubGlobal('sessionStorage', {
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => { store[k] = v },
+    removeItem: (k: string) => { delete store[k] },
+    clear: () => { for (const k of Object.keys(store)) delete store[k] },
+    key: () => null,
+    length: 0,
+  })
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })))
+  vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({ ...LIVE_STATE } as any))
+  vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
+}
+
 describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => {
   beforeEach(() => {
     // Fake timers so the overlay's connect-poll loop (a 5s setTimeout loop in
@@ -136,18 +161,7 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     // assertions -- we render, assert synchronously, and unmount; the poll loop
     // is abandoned without ticking the clock.
     vi.useFakeTimers()
-    const store: Record<string, string> = {}
-    vi.stubGlobal('sessionStorage', {
-      getItem: (k: string) => store[k] ?? null,
-      setItem: (k: string, v: string) => { store[k] = v },
-      removeItem: (k: string) => { delete store[k] },
-      clear: () => { for (const k of Object.keys(store)) delete store[k] },
-      key: () => null,
-      length: 0,
-    })
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })))
-    vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({ ...LIVE_STATE } as any))
-    vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
+    stubEnv()
   })
 
   afterEach(() => {
@@ -238,5 +252,131 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
   it('mobile: HIDDEN while reconnecting (Codex PR #278)', () => {
     const { container } = renderMobileExpanded('reconnecting')
     expect(listeningEl(container)).toBeNull()
+  })
+})
+
+describe('Mobile FAB mic-activity badge (bd polyglot-pdf-8v53)', () => {
+  // The badge is driven by `micSending`, which the energy-meter effect computes
+  // inside a requestAnimationFrame tick -- so this block fakes rAF + performance
+  // and advances one frame after feeding the worklet energy callback. Runs in
+  // native VAD mode (the mock manager's isNativeVad() is true and the mocked
+  // useDemoVAD keeps userSpeaking false), proving the badge no longer depends on
+  // the dead client-VAD gate.
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+               'Date', 'performance', 'requestAnimationFrame', 'cancelAnimationFrame'],
+    })
+    stubEnv()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  const badge = (c: HTMLElement) => c.querySelector('.vff-fab-vad-badge')
+
+  // Render the (collapsed) mobile overlay -- the badge sits on the FAB itself --
+  // and return the energy callback the meter effect registered, if any.
+  function renderFab(status: string, sendingMic: boolean) {
+    const manager = makeMockManager(status, { sendingMic })
+    const utils = render(
+      <VoiceOverlayMobile
+        schema={MINIMAL_SCHEMA}
+        connectionManager={manager}
+        status={status}
+        initialLanguage="English"
+      />
+    )
+    const audio = manager.getAudioManager() as any
+    const cb = audio.setEnergyCallback.mock.calls.at(-1)?.[0]
+    return { ...utils, cb }
+  }
+
+  it('SHOWN when connected and audio is reaching the backend', () => {
+    const { container, cb } = renderFab('connected', true)
+    expect(typeof cb).toBe('function')
+    act(() => { cb(42, true) })                 // worklet frame: energy 42, gate open
+    act(() => { vi.advanceTimersToNextFrame() }) // one rAF tick computes micSending
+    expect(badge(container)).toBeTruthy()
+  })
+
+  it('HIDDEN when connected but the connection send gate is closed', () => {
+    const { container, cb } = renderFab('connected', false)
+    expect(typeof cb).toBe('function')
+    act(() => { cb(42, true) })                 // worklet says sending...
+    act(() => { vi.advanceTimersToNextFrame() }) // ...but isSendingMicAudio() is false
+    expect(badge(container)).toBeNull()
+  })
+
+  it('HIDDEN when paused', () => {
+    const { container } = renderFab('paused', true)
+    expect(badge(container)).toBeNull()
+  })
+
+  it('HIDDEN when disconnected', () => {
+    const { container } = renderFab('disconnected', true)
+    expect(badge(container)).toBeNull()
+  })
+})
+
+describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxng)', () => {
+  // The mobile overlay's `isConnected` (status dot / FAB color / thinking
+  // indicator) must match the desktop definition: still "live" during
+  // `switching_section` and `reconnecting`. The LISTENING indicator deliberately
+  // stays connected-only in both overlays (Codex PR #278) -- covered by the
+  // 1dvp block above, NOT widened here.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    stubEnv()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  const GREEN = 'rgb(16, 185, 129)'  // #10b981, the connected statusColor
+
+  function renderExpanded(status: string, thinking = false) {
+    const utils = render(
+      <VoiceOverlayMobile
+        schema={MINIMAL_SCHEMA}
+        connectionManager={makeMockManager(status)}
+        status={status}
+        thinking={thinking}
+        initialLanguage="English"
+      />
+    )
+    const fab = utils.container.querySelector('.vff-fab') as HTMLElement
+    fireEvent.click(fab)
+    return utils
+  }
+
+  const statusDot = (c: HTMLElement) => c.querySelector('.vff-status-dot') as HTMLElement
+
+  it('status dot stays green during switching_section', () => {
+    const { container } = renderExpanded('switching_section')
+    expect(statusDot(container).style.background).toBe(GREEN)
+  })
+
+  it('status dot stays green while reconnecting', () => {
+    const { container } = renderExpanded('reconnecting')
+    expect(statusDot(container).style.background).toBe(GREEN)
+  })
+
+  it('status dot is NOT green when disconnected', () => {
+    const { container } = renderExpanded('disconnected')
+    expect(statusDot(container).style.background).not.toBe(GREEN)
+  })
+
+  it('thinking indicator survives a section switch', () => {
+    const { container } = renderExpanded('switching_section', true)
+    expect(container.querySelector('.vff-thinking-indicator')).toBeTruthy()
   })
 })
