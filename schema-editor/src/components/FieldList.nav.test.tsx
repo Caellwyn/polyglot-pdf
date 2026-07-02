@@ -101,6 +101,43 @@ describe('next-needs-review navigation (bd 92qe.5)', () => {
     expect(onSelectField).toHaveBeenCalledWith('g-two');
   });
 
+  it('with every visible field complete: the button disables and N no-ops', () => {
+    const allDone = {
+      ...SCHEMA,
+      fields: [
+        completeField('f-one', 's1'),
+        completeField('f-two', 's1'),
+        completeField('g-one', 's2'),
+        completeField('g-two', 's2'),
+      ],
+    } as unknown as FormSchema;
+    const onSelectField = vi.fn();
+    render(
+      <FieldList schema={allDone} selectedFieldId={null} onSelectField={onSelectField} />
+    );
+    expect(screen.getByText('Next to review')).toBeDisabled();
+    fireEvent.keyDown(window, { key: 'n' });
+    expect(onSelectField).not.toHaveBeenCalled();
+  });
+
+  it('re-selects the current field when it is the ONLY one needing review', () => {
+    const onlyOne = {
+      ...SCHEMA,
+      fields: [
+        completeField('f-one', 's1'),
+        reviewField('f-two', 's1'),
+        completeField('g-one', 's2'),
+        completeField('g-two', 's2'),
+      ],
+    } as unknown as FormSchema;
+    const onSelectField = vi.fn();
+    render(
+      <FieldList schema={onlyOne} selectedFieldId="f-two" onSelectField={onSelectField} />
+    );
+    fireEvent.click(screen.getByText('Next to review'));
+    expect(onSelectField).toHaveBeenCalledWith('f-two'); // full wrap lands home
+  });
+
   it('pressing N triggers the same jump', () => {
     const { onSelectField } = renderList(null);
     fireEvent.keyDown(window, { key: 'n' });

@@ -265,6 +265,15 @@ export const FieldList: React.FC<FieldListProps> = ({
   // so navigation starts from the right position.
   const selectedBaseId = selectedFieldId ? selectedFieldId.split(':option:')[0] : null;
 
+  // Anything left to review? Drives the button's disabled state so a finished
+  // form reads as DONE instead of a silently dead button (fresh-eyes note).
+  const hasReviewTarget = React.useMemo(
+    () => visibleOrderedFields.some(f => getFieldStatus(f) !== 'complete'),
+    // getFieldStatus is a pure per-field check; the memo keys on the fields.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleOrderedFields]
+  );
+
   const jumpToNextReview = React.useCallback(() => {
     const fields = visibleOrderedFields;
     if (fields.length === 0) return;
@@ -405,8 +414,11 @@ export const FieldList: React.FC<FieldListProps> = ({
         <button
           type="button"
           onClick={jumpToNextReview}
-          title="Jump to the next field needing attention (N). Arrow keys move; Esc deselects."
-          className="shrink-0 px-2 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          disabled={!hasReviewTarget}
+          title={hasReviewTarget
+            ? 'Jump to the next field needing attention (N). Arrow keys move; Esc deselects.'
+            : 'Every visible field is complete -- nothing left to review.'}
+          className="shrink-0 px-2 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-default"
         >
           Next to review
         </button>
