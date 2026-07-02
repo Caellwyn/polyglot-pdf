@@ -461,11 +461,13 @@ _extract_semaphore = asyncio.Semaphore(1)
 # a cross-instance collision remains theoretically possible and is accepted --
 # same-second same-filename uploads from two authors on two instances.
 #
-# The lock is PER EVENT LOOP (lazy, keyed weakly by the running loop): an
-# asyncio.Lock binds to whichever loop first acquires it and raises on any
-# other -- fine under uvicorn (one loop for the process), but the TestClient
-# spins a loop per client, so a module-level Lock would poison every test
-# after the first. In production exactly one entry ever exists.
+# The lock is PER EVENT LOOP (lazy, keyed weakly by the running loop). An
+# asyncio.Lock binds to a loop only on a CONTENDED acquire (the uncontended
+# fast path never touches the loop check), so a module-level Lock would work
+# for most sequential tests -- but any genuinely contended acquire on a second
+# loop (the TestClient runs each request on its own) raises RuntimeError. The
+# per-loop map removes that trap defensively; under uvicorn (one loop for the
+# process) exactly one entry ever exists.
 _onboard_locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = (
     weakref.WeakKeyDictionary()
 )
