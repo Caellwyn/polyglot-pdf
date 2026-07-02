@@ -207,15 +207,14 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// so a flat meter reads as "no audio reaching the backend".
 	//
 	// Only runs while the meter is rendered -- no perpetual rAF through the
-	// pre-connect / paused / reconnect-failed states (Codex PR #203). Tears down
-	// + unsubscribes on leaving a send-capable state (effect re-runs on `status`).
-	// MUST match the listening-indicator gate (`isListening`, below): the meter is
-	// nested in that badge, so if the badge renders during `switching_section` but
-	// this effect stops re-subscribing there, the nested meter freezes (Codex PR
-	// #278). Both cover the send-capable states from shouldSendMicChunk.
+	// pre-connect / paused / reconnect-failed states (Codex PR #203). MUST match the
+	// listening-indicator gate (`isListening`, below): the meter is nested in that
+	// badge, which renders only while `connected*`, so the effect subscribes on the
+	// same condition (Codex PR #278). Tears down + unsubscribes on leaving
+	// `connected` (effect re-runs on `status`).
 	useEffect(() => {
 		const s = status.toLowerCase()
-		const meterVisible = s === 'connected' || s.startsWith('connected ') || s === 'switching_section'
+		const meterVisible = s === 'connected' || s.startsWith('connected ')
 		if (!meterVisible) return
 		const audioManager = connectionManager?.getAudioManager()
 		if (!audioManager?.setEnergyCallback) return
@@ -1134,13 +1133,13 @@ useEffect(() => {
 }, [currentSectionId, completedSections])
 
 const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
-// Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio can
-// actually reach the backend -- the send-capable states from shouldSendMicChunk
-// (`connected` / `switching_section`), NOT `reconnecting` (the mic gate drops
-// reconnecting audio, so a "listening" cue there would be misleading -- Codex
-// PR #278). The broader isConnected/meter divergence on mobile is bd
-// polyglot-pdf-bxng.
-const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section'
+// Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio is
+// actually reaching the backend -- a steady `connected` session. We deliberately
+// do NOT include the transient turn-taking states `reconnecting` (mic gate drops
+// audio) or `switching_section` (the reconnecting startSection path sets it before
+// the socket reopens, so audio can be dropped mid-switch) -- Codex PR #278 round 3.
+// Matches the desktop gate and the meter-subscription condition below.
+const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 const isPausedState = status.toLowerCase() === 'paused'
 const isWarming = status.toLowerCase().includes('warming')
 const isReady = status.toLowerCase() === 'ready'
@@ -1518,12 +1517,18 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					background: #f9fafb;
 					border-radius: 6px;
 					white-space: nowrap;
+					/* Respect the 2-column grid track on narrow phones: let the cell's
+					   contents shrink/clip instead of painting into the PTT toggle +
+					   clear button in the same row (Codex PR #278 round 3). */
+					min-width: 0;
+					overflow: hidden;
 				}
 
 				.vff-status-dot {
 					width: 8px;
 					height: 8px;
 					border-radius: 50%;
+					flex-shrink: 0;
 				}
 
 				.vff-status-text {
@@ -1531,17 +1536,26 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					font-weight: 500;
 					color: #374151;
 					flex: 1;
+					/* Truncate the status word before it can push the listening badge
+					   out of the cell (Codex PR #278 round 3). */
+					min-width: 0;
+					overflow: hidden;
+					text-overflow: ellipsis;
 				}
 
 				/* Live mic-energy meter (bd polyglot-pdf-s3zv) */
 				.vff-mic-meter {
 					display: inline-block;
 					width: 40px;
+					/* Cap + allow shrink so the badge fits the narrow status cell on
+					   small phones (Codex PR #278 round 3). */
+					max-width: 40px;
+					min-width: 16px;
+					flex: 0 1 auto;
 					height: 6px;
 					border-radius: 3px;
 					background: #e5e7eb;
 					overflow: hidden;
-					flex-shrink: 0;
 				}
 
 				.vff-mic-meter-bar {
@@ -1563,7 +1577,11 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					background: #f3f4f6;
 					border-radius: 10px;
 					border: 1px solid #d1d5db;
-					flex-shrink: 0;
+					/* Shrinkable so the badge never overflows the 2-column status cell
+					   into the adjacent controls on narrow phones (Codex PR #278 round
+					   3); the ear stays fixed, the meter absorbs the shrink. */
+					flex: 0 1 auto;
+					min-width: 0;
 					transition: background 120ms ease, border-color 120ms ease;
 				}
 
@@ -1580,6 +1598,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				.vff-listening-ear {
 					font-size: 13px;
 					line-height: 1;
+					flex-shrink: 0;
 				}
 
 				.vff-language-selector-mobile {

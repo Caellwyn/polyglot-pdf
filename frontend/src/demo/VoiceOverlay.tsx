@@ -235,11 +235,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// terminal reconnect-failure (Codex PR #203). The effect re-runs on `status`, so
 	// it tears down the rAF + unsubscribes the moment we leave `connected`.
 	useEffect(() => {
-		// Same "is the meter rendered?" condition as the JSX below (connected /
-		// switching / reconnecting). Only then do we wake the rAF loop.
+		// MUST match the listening-indicator gate (`isListening` below): the meter is
+		// nested inside that badge, so it is only rendered while `connected*`. Waking
+		// the rAF loop / holding the energy callback for `switching_section` or
+		// `reconnecting` -- where the badge is hidden -- is per-frame work for an
+		// element that cannot render (Codex PR #278 round 3).
 		const s = status.toLowerCase()
 		const meterVisible = s === 'connected' || s.startsWith('connected ')
-			|| s === 'switching_section' || s.startsWith('reconnecting')
 		if (!meterVisible) return
 		const audioManager = connectionManager?.getAudioManager()
 		if (!audioManager?.setEnergyCallback) return
@@ -1367,13 +1369,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}, [])
 
 	const isConnected = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section' || status.toLowerCase().startsWith('reconnecting')
-	// Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio can
-	// actually reach the backend -- the same send-capable states as
-	// shouldSendMicChunk (`connected` / `switching_section`), NOT `reconnecting`.
-	// `isConnected` is broader (it keeps the green status dot lit through a
-	// reconnect), but during `reconnecting` the mic gate drops all audio, so a
-	// "listening" cue there would be misleading (Codex PR #278).
-	const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ') || status.toLowerCase() === 'switching_section'
+	// Listening indicator (bd polyglot-pdf-1dvp): show ONLY when mic audio is
+	// actually reaching the backend -- i.e. a steady `connected` session. We
+	// deliberately do NOT include the transient turn-taking states:
+	//   - `reconnecting`: `isConnected` stays true for the status dot, but the mic
+	//     gate (shouldSendMicChunk) drops all audio, so a "listening" cue there is
+	//     misleading (Codex PR #278);
+	//   - `switching_section`: the AI-initiated swap keeps the socket up, but the
+	//     reconnecting `startSection()` path sets `switching_section` BEFORE it
+	//     closes + reopens the socket, so audio can be dropped in that sub-second
+	//     window; rather than a fragile per-render socket probe, we just hide the
+	//     cue during the switch (briefly not showing "listening" mid-switch is
+	//     harmless and honest -- Codex PR #278 round 3).
+	// This keeps the gate a pure, reactive function of `status` and lets the
+	// mic-energy meter effect below share the exact same visibility condition.
+	const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
 	const isPausedState = status.toLowerCase() === 'paused'
 	const isWarming = status.toLowerCase().includes('warming')
 	const isReady = status.toLowerCase() === 'ready'

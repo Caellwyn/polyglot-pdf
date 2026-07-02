@@ -13,11 +13,13 @@
 //
 // This pins the gate so a revert to the old VAD-based condition fails CI:
 //   - connected            -> indicator SHOWN
-//   - switching_section    -> indicator SHOWN (audio still flows)
+//   - switching_section    -> indicator HIDDEN (socket may be closed mid-switch)
 //   - paused               -> indicator HIDDEN
 //   - disconnected         -> indicator HIDDEN
 //   - reconnecting         -> indicator HIDDEN (mic gate drops audio)
-// Exercised for BOTH the desktop and mobile overlays.
+// Exercised for BOTH the desktop and mobile overlays. The gate is `connected*`
+// only -- the transient turn-taking states are deliberately excluded because the
+// mic send gate can drop audio in those windows (Codex PR #278).
 //
 // Mobile note: the indicator lives in the EXPANDED panel, so the test expands
 // it (the FAB is collapsed by default). The desktop panel is always expanded.
@@ -196,9 +198,9 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     expect((el as HTMLElement).querySelector('.vff-mic-meter')).toBeTruthy()
   })
 
-  it('desktop: SHOWS during switching_section (audio still flows)', () => {
+  it('desktop: HIDDEN during switching_section (socket may be closed mid-switch)', () => {
     const { container } = renderDesktop('switching_section')
-    expect(listeningEl(container)).toBeTruthy()
+    expect(listeningEl(container)).toBeNull()
   })
 
   it('desktop: HIDDEN when paused', () => {
@@ -223,9 +225,9 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     expect((el as HTMLElement).querySelector('.vff-mic-meter')).toBeTruthy()
   })
 
-  it('mobile: SHOWS during switching_section (audio still flows)', () => {
+  it('mobile: HIDDEN during switching_section (socket may be closed mid-switch)', () => {
     const { container } = renderMobileExpanded('switching_section')
-    expect(listeningEl(container)).toBeTruthy()
+    expect(listeningEl(container)).toBeNull()
   })
 
   it('mobile: HIDDEN when paused', () => {
