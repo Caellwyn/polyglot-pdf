@@ -82,6 +82,61 @@ describe('validateField (a_number)', () => {
   });
 });
 
+// uscis_account normalization + validation (bd polyglot-pdf-k2ww): FE mirror of
+// the backend TestUSCISAccountNormalization suite (jnjj.40). A USCIS online
+// account number is exactly 12 digits, but speech-to-text formats the spoken
+// digits with a "$" / commas / spaces; normalization strips PUNCTUATION only
+// (letters survive so a wrong value stays invalid) and, unlike a_number, does
+// NOT drop a leading letter -- uscis_account has no alphabetic prefix.
+const uscisAccountField: FormField = {
+  id: 'p1_line2_acctidentifier',
+  name: 'USCIS Online Account Number',
+  spoken_name: 'uscis online account number',
+  type: 'text',
+  section_id: 'Part 1 - Information About You',
+  validation: {
+    pattern: '^[0-9]{12}$',
+    format_preset: 'uscis_account',
+    min_length: 12,
+    max_length: 12,
+  },
+};
+
+describe('normalizeFieldValue (uscis_account)', () => {
+  it.each([
+    ['123456789012', '123456789012'],           // already canonical
+    ['$1,234,567,890,12', '123456789012'],       // the STT-mangled form (jnjj.40)
+    ['1,234,567,890,12', '123456789012'],        // commas only
+    ['1 2 3 4 5 6 7 8 9 0 1 2', '123456789012'], // spaced digit-by-digit
+  ])('normalizes %s -> %s', (raw, expected) => {
+    expect(normalizeFieldValue(uscisAccountField, raw)).toBe(expected);
+  });
+
+  it('keeps a leading letter (no a_number-style prefix drop)', () => {
+    expect(normalizeFieldValue(uscisAccountField, 'A23456789012')).toBe('A23456789012');
+  });
+});
+
+describe('validateField (uscis_account)', () => {
+  it.each(['123456789012', '$1,234,567,890,12'])(
+    'accepts a 12-digit value: %s',
+    (raw) => {
+      expect(validateField(uscisAccountField, raw)).toBeNull();
+    }
+  );
+
+  it.each(['1234567890', '1234567890123'])(
+    'rejects wrong digit count: %s',
+    (raw) => {
+      expect(validateField(uscisAccountField, raw)).not.toBeNull();
+    }
+  );
+
+  it('rejects embedded letters (punctuation is stripped, letters are not)', () => {
+    expect(validateField(uscisAccountField, 'A23456789012')).not.toBeNull();
+  });
+});
+
 // Enum / option-membership validation (bd polyglot-pdf-wpw.3): an option-backed
 // field's value must be one of its declared options. Guards an AI-applied value
 // where the model invents an option that does not exist in the schema.
@@ -542,5 +597,44 @@ describe('shouldShowField (checkbox-group equals/not_equals trigger)', () => {
     // Without the fields list we cannot confirm a checkbox group, so a comma
     // string is NOT split -- safer than guessing.
     expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' })).toBe(false);
+  });
+});
+
+// is_empty / is_not_empty on a checkbox-group ARRAY trigger (bd polyglot-pdf-rigd):
+// an empty selection ([]) IS empty, mirroring the is_checked array branch. The old
+// scalar-only checks treated [] as "not empty" (an array is not null/undefined/""),
+// inverting the semantics -- a dependent gated on "controller is_empty" would HIDE
+// when nothing was selected and SHOW once any option was picked. Latent (no current
+// schema uses is_empty/is_not_empty show_if), pinned here so it stays fixed.
+describe('shouldShowField (is_empty / is_not_empty with a checkbox-group array)', () => {
+  const gatedIsEmpty: FormField = {
+    id: 'dep_empty',
+    name: 'Shown when nothing is selected',
+    type: 'text',
+    section_id: 'Part 5',
+    show_if: { field: 'cbg', operator: 'is_empty' },
+  } as FormField;
+
+  const gatedIsNotEmpty: FormField = {
+    ...gatedIsEmpty,
+    id: 'dep_not_empty',
+    show_if: { field: 'cbg', operator: 'is_not_empty' },
+  } as FormField;
+
+  it('is_empty: SHOWS on an empty selection ([]), HIDES once an option is picked', () => {
+    expect(shouldShowField(gatedIsEmpty, { cbg: [] })).toBe(true);
+    expect(shouldShowField(gatedIsEmpty, { cbg: ['x'] })).toBe(false);
+  });
+
+  it('is_not_empty: HIDES on an empty selection ([]), SHOWS once an option is picked', () => {
+    expect(shouldShowField(gatedIsNotEmpty, { cbg: [] })).toBe(false);
+    expect(shouldShowField(gatedIsNotEmpty, { cbg: ['x'] })).toBe(true);
+  });
+
+  it('scalar triggers keep the null/undefined/"" semantics', () => {
+    expect(shouldShowField(gatedIsEmpty, { cbg: '' })).toBe(true);
+    expect(shouldShowField(gatedIsEmpty, {})).toBe(true);
+    expect(shouldShowField(gatedIsEmpty, { cbg: 'hi' })).toBe(false);
+    expect(shouldShowField(gatedIsNotEmpty, { cbg: 'hi' })).toBe(true);
   });
 });
