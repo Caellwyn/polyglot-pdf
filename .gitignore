@@ -19,6 +19,14 @@ __pycache__/
 # here; they go in Secret Manager.
 !.env.production
 !.env.demo
+# schema-editor/.env.hosted (hosted-mode build config, bd 92qe.2) is the same
+# class: only public VITE_* values (delivery-mode flag + the backend URL). The
+# access code is NEVER baked here -- contractors enter it in the UI (or pass
+# VITE_EDITOR_TOKEN via the shell env at build time, off-repo). Scoped to the
+# schema-editor PATH on purpose (Codex P1 r2, PR #280): a bare !.env.hosted
+# would un-ignore a file of that name ANYWHERE -- including backend/, where
+# .env* files are exactly where real secrets live.
+!schema-editor/.env.hosted
 
 # example data files
 example_webforms/

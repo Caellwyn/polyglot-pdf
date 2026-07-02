@@ -87,6 +87,35 @@ Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ form
 
 Opens at http://localhost:3001
 
+### Hosted mode (the contractor workspace)
+
+A hosted build (`npm run build:hosted`, `VITE_DELIVERY_MODE=hosted` from
+`.env.hosted`) swaps the local-folder front door for the backend's token-gated
+`/api/editor/*` routes over the shared form-kits store (bd polyglot-pdf-92qe.2):
+
+1. Open the hosted URL and enter your **access code** (asked once per browser).
+   The code determines your tier: *editor* (review/polish the provided forms)
+   or *author* (additionally onboard PDFs + run extraction; that UI ships with
+   bd 92qe.3).
+2. The catalogue lists every kit in the shared workspace -- drafts included
+   (drafts ARE the work list). Open a card, edit exactly as in local mode.
+3. **Cmd/Ctrl+S** saves back to the shared store (watch for the `Saving...` ->
+   `Saved` header state). **Mark complete** promotes the kit; the server
+   validates the schema against the form contract first and refuses with the
+   reason if it's broken. Completed kits reach the voice app on the
+   maintainer's next deploy.
+4. If your code stops working (rotated), the editor drops back to the code
+   screen -- enter the new one. Your unsaved edits survive the round trip.
+
+Maintainer note on codes: hand codes out via the entry prompt, never by baking
+`VITE_EDITOR_TOKEN` into a build -- any baked value (from `.env.hosted` or the
+shell env) is compiled in plaintext into the served JS bundle, readable by
+anyone who opens the site. Rotate a code by updating the backend secret; every
+open session drops to the code screen on its next request.
+
+Local mode (everything below) is unchanged; the two modes never mix in one
+build.
+
 ### Open a Form (the catalogue)
 
 The front door is the **form catalogue** -- it reads your local `form-kits/`
