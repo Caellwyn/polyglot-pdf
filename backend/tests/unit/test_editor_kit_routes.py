@@ -136,6 +136,20 @@ def test_editor_only_deployment_still_works(client, monkeypatch):
     ).status_code == 401
 
 
+def test_author_only_deployment_still_works(client, monkeypatch):
+    # The symmetric case (fresh-eyes finding): only SCHEMA_AUTHOR_TOKEN set --
+    # the author code works (role author), anything else is 401, and the
+    # surface is NOT 503 (one configured token is enough to enable it).
+    c, _store, _root = client
+    monkeypatch.setattr(ekr, "get_settings", lambda: _settings(author="auth-tok"))
+    r = c.get("/api/editor/session", headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 200
+    assert r.json() == {"role": "author"}
+    assert c.get(
+        "/api/editor/session", headers={"X-Editor-Token": "edit-tok"}
+    ).status_code == 401
+
+
 def test_require_author_role_rejects_editor():
     # The author gate (used by onboarding/extraction, bd 92qe.3) refuses the
     # editor role with 403 -- tested directly at the dependency level.

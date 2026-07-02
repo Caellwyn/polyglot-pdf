@@ -98,6 +98,9 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   hardcoded localhost list in `backend/main.py` (e.g. the hosted schema-editor
   site, which calls Cloud Run directly rather than through the Hosting `/api`
   rewrite — the rewrite's 60s cap would kill minutes-long extraction requests).
+  List explicit origins only; do NOT set `*` — the app runs
+  `allow_credentials=True`, and browsers reject the wildcard+credentials
+  combination, so `*` silently breaks CORS instead of opening it.
 - **`GENAI_WEBSOCKET_BASE`** — optional override of the genai SDK's Live WebSocket
   base (`backend/adapters/live_ai_gemini.py`), for pointing at a non-default
   endpoint.
