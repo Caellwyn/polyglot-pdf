@@ -52,6 +52,32 @@ _DIGIT_PRESETS = frozenset({"a_number", "uscis_account"})
 _DIGIT_PUNCT_RE = re.compile(r"[\s,.$-]")
 
 
+def _resolve_constraint(field: Dict[str, Any], top_key: str, nested_key: str) -> Any:
+    """Resolve a validation constraint from the CANONICAL nested location
+    (validation.<snake_case>) with a fallback to the flattened TOP-LEVEL key.
+
+    validation_handler pre-flattens validation.* to top-level camelCase keys
+    (minLength, maxLength, ...), but raw schema-shaped dicts (form-kits/*/
+    schema.json, tests, any future non-WS caller) keep constraints nested under
+    `validation` in snake_case (min_length, max_length, pattern, ...). Reading
+    the top level alone silently skipped ALL pattern/length/min/max validation
+    for nested callers (bd polyglot-pdf-0mv2; parallel to the format_preset miss
+    fixed in bd polyglot-pdf-cn0e). `validation` may be a dict or a Pydantic
+    model, so read it tolerantly. Returns None when the constraint is absent.
+    """
+    validation = field.get("validation")
+    if isinstance(validation, dict):
+        for key in (nested_key, top_key):
+            value = validation.get(key)
+            if value is not None:
+                return value
+    elif validation is not None:
+        value = getattr(validation, nested_key, None)
+        if value is not None:
+            return value
+    return field.get(top_key)
+
+
 def _resolve_format_preset(field: Dict[str, Any]) -> Optional[str]:
     """Resolve a field's format_preset from the CANONICAL nested location
     (validation.format_preset) with a legacy TOP-LEVEL fallback.
@@ -161,8 +187,8 @@ def _validate_number(field: Dict[str, Any], value: Any, field_id: str, field_nam
         return errors  # If not a number, can't check min/max
 
     # Check min constraint
-    if "min" in field:
-        min_val = field["min"]
+    min_val = _resolve_constraint(field, "min", "min")
+    if min_val is not None:
         if num_value < min_val:
             errors.append(ValidationError(
                 field_id, field_name, value, "min",
@@ -171,8 +197,8 @@ def _validate_number(field: Dict[str, Any], value: Any, field_id: str, field_nam
             ))
 
     # Check max constraint
-    if "max" in field:
-        max_val = field["max"]
+    max_val = _resolve_constraint(field, "max", "max")
+    if max_val is not None:
         if num_value > max_val:
             errors.append(ValidationError(
                 field_id, field_name, value, "max",
@@ -215,7 +241,7 @@ def _validate_date(field: Dict[str, Any], value: Any, field_id: str, field_name:
 
         # Check date_constraint (past_only, future_only, within_5_years)
         today = datetime.now()
-        date_constraint = field.get("date_constraint")
+        date_constraint = _resolve_constraint(field, "date_constraint", "date_constraint")
 
         if date_constraint == "past_only":
             if date_obj > today:
@@ -244,27 +270,29 @@ def _validate_date(field: Dict[str, Any], value: Any, field_id: str, field_name:
                 ))
 
         # Check min constraint (minimum date)
-        if "min" in field:
+        min_constraint = _resolve_constraint(field, "min", "min")
+        if min_constraint is not None:
             try:
-                min_date = datetime.strptime(str(field["min"]), "%Y-%m-%d")
+                min_date = datetime.strptime(str(min_constraint), "%Y-%m-%d")
                 if date_obj < min_date:
                     errors.append(ValidationError(
                         field_id, field_name, value, "min",
-                        f"Date cannot be before {field['min']}",
-                        constraint_value=field["min"]
+                        f"Date cannot be before {min_constraint}",
+                        constraint_value=min_constraint
                     ))
             except ValueError:
                 pass  # Invalid min constraint, skip
 
         # Check max constraint (maximum date)
-        if "max" in field:
+        max_constraint = _resolve_constraint(field, "max", "max")
+        if max_constraint is not None:
             try:
-                max_date = datetime.strptime(str(field["max"]), "%Y-%m-%d")
+                max_date = datetime.strptime(str(max_constraint), "%Y-%m-%d")
                 if date_obj > max_date:
                     errors.append(ValidationError(
                         field_id, field_name, value, "max",
-                        f"Date cannot be after {field['max']}",
-                        constraint_value=field["max"]
+                        f"Date cannot be after {max_constraint}",
+                        constraint_value=max_constraint
                     ))
             except ValueError:
                 pass  # Invalid max constraint, skip
@@ -281,7 +309,7 @@ def _validate_text(field: Dict[str, Any], value: Any, field_id: str, field_name:
     errors = []
 
     # Check digits_only constraint
-    if field.get("digits_only") is True:
+    if _resolve_constraint(field, "digits_only", "digits_only") is True:
         if not value_str.isdigit():
             errors.append(ValidationError(
                 field_id, field_name, value, "digits_only",
@@ -290,8 +318,8 @@ def _validate_text(field: Dict[str, Any], value: Any, field_id: str, field_name:
             ))
 
     # Check minLength
-    if "minLength" in field:
-        min_len = field["minLength"]
+    min_len = _resolve_constraint(field, "minLength", "min_length")
+    if min_len is not None:
         if len(value_str) < min_len:
             errors.append(ValidationError(
                 field_id, field_name, value, "minLength",
@@ -300,8 +328,8 @@ def _validate_text(field: Dict[str, Any], value: Any, field_id: str, field_name:
             ))
 
     # Check maxLength
-    if "maxLength" in field:
-        max_len = field["maxLength"]
+    max_len = _resolve_constraint(field, "maxLength", "max_length")
+    if max_len is not None:
         if len(value_str) > max_len:
             errors.append(ValidationError(
                 field_id, field_name, value, "maxLength",
@@ -310,8 +338,8 @@ def _validate_text(field: Dict[str, Any], value: Any, field_id: str, field_name:
             ))
 
     # Check pattern (regex)
-    if "pattern" in field:
-        pattern = field["pattern"]
+    pattern = _resolve_constraint(field, "pattern", "pattern")
+    if pattern is not None:
         if not re.match(pattern, value_str):
             errors.append(ValidationError(
                 field_id, field_name, value, "pattern",

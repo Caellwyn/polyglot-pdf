@@ -506,4 +506,97 @@ class TestUSCISAccountNormalization:
         assert result["validation_errors"], f"{raw!r} should produce a validation error"
 
 
+class TestNestedValidationConstraints:
+    """Regression for bd polyglot-pdf-0mv2: _validate_text and its siblings must
+    resolve pattern/minLength/maxLength/min/max/digits_only/date_constraint from
+    the CANONICAL nested location (validation.<snake_case>), not only the
+    flattened top-level keys.
+
+    validation_handler._convert_fields_to_dicts pre-flattens the nested
+    validation object to top-level camelCase before calling validate_updates, so
+    the WS path was fine -- but a raw schema-shaped dict (form-kits/*/schema.json,
+    tests, any future non-WS caller) had ALL pattern and length validation
+    silently skipped: a 2-digit A-Number passed, a non-ISO date passed. Parallel
+    to the format_preset nesting miss fixed in bd polyglot-pdf-cn0e.
+    """
+
+    @staticmethod
+    def _load_real_i90_field(field_id):
+        import json
+        import os
+        schema_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..",
+            "form-kits", "i-90", "schema.json")
+        with open(schema_path, encoding="utf-8") as f:
+            schema = json.load(f)
+        return next(fld for fld in schema["fields"] if fld["id"] == field_id)
+
+    @pytest.mark.parametrize("raw", [
+        "A12",           # normalizes to "12" -- too few digits for ^\d{7,9}$
+        "ABCDEF12345",   # letters survive normalization -- must fail the pattern
+    ])
+    def test_real_i90_nested_pattern_rejects_bad_a_number(self, raw):
+        """The ACTUAL i-90 aliennumber field nests pattern under `validation`
+        (no top-level pattern) -- these values passed before the fix."""
+        from backend.utils.field_validator import validate_updates
+        anum = self._load_real_i90_field("p1_line1_aliennumber")
+        # Sanity: the schema really nests the pattern (guards the test's premise).
+        assert anum.get("pattern") is None
+        assert anum["validation"]["pattern"] == r"^\d{7,9}$"
+        result = validate_updates([anum], {"p1_line1_aliennumber": raw})
+        assert "p1_line1_aliennumber" not in result["valid_fields"], \
+            f"{raw!r} should be rejected via the nested pattern"
+        assert result["validation_errors"], f"{raw!r} should produce a validation error"
+
+    # The validation_handler pre-flattened shape (top-level camelCase) must keep
+    # rejecting the same values -- no regression from adding the nested fallback.
+    FLATTENED_FIELD = {
+        "id": "p1_line1_aliennumber",
+        "name": "Alien Registration Number",
+        "type": "text",
+        "pattern": r"^\d{7,9}$",
+        "format_preset": "a_number",
+        "maxLength": 9,
+    }
+
+    @pytest.mark.parametrize("raw", ["A12", "ABCDEF12345"])
+    def test_flattened_shape_still_rejects(self, raw):
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([self.FLATTENED_FIELD], {"p1_line1_aliennumber": raw})
+        assert "p1_line1_aliennumber" not in result["valid_fields"], \
+            f"{raw!r} should still be rejected in the pre-flattened shape"
+        assert result["validation_errors"]
+
+    def test_real_i90_nested_min_max_length_enforced(self):
+        """p1_line2_acctidentifier nests min_length/max_length (snake_case)."""
+        from backend.utils.field_validator import validate_updates
+        acct = self._load_real_i90_field("p1_line2_acctidentifier")
+        assert acct["validation"]["min_length"] == 12  # premise guard
+        result = validate_updates([acct], {"p1_line2_acctidentifier": "12345"})
+        assert "p1_line2_acctidentifier" not in result["valid_fields"], \
+            "5 digits should fail the nested min_length=12"
+        result = validate_updates([acct], {"p1_line2_acctidentifier": "123456789012"})
+        assert "p1_line2_acctidentifier" in result["valid_fields"], \
+            "12 digits should pass the nested length bounds"
+
+    def test_nested_number_min_max_enforced(self):
+        field = {"id": "n1", "name": "Count", "type": "number",
+                 "validation": {"min": 1, "max": 10}}
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([field], {"n1": "50"})
+        assert "n1" not in result["valid_fields"], "50 should fail nested max=10"
+        result = validate_updates([field], {"n1": "5"})
+        assert "n1" in result["valid_fields"]
+
+    def test_nested_date_constraint_enforced(self):
+        field = {"id": "d1", "name": "Signature Date", "type": "date",
+                 "validation": {"date_constraint": "past_only"}}
+        from backend.utils.field_validator import validate_updates
+        result = validate_updates([field], {"d1": "2999-01-01"})
+        assert "d1" not in result["valid_fields"], \
+            "a far-future date should fail the nested past_only constraint"
+        result = validate_updates([field], {"d1": "2020-01-01"})
+        assert "d1" in result["valid_fields"]
+
+
 # Run with: pytest backend/tests/unit/test_field_validation_responses.py -v
