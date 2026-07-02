@@ -607,10 +607,16 @@ async def extract_editor_kit(
             detail="Hosted extraction needs a gemini-* EXTRACTOR_MODEL "
                    "(the local claude CLI is not available on the server)",
         )
-    if not (settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")):
+    # Extraction is "configured" if it can authenticate to Gemini AT ALL: either
+    # Vertex AI (ADC / service account -- how Cloud Run runs, no key) OR an AI
+    # Studio key (local dev). The provider picks the same way (llm_providers.py),
+    # so this gate must not demand a key when VERTEXAI is on, or it would 503
+    # before ever reaching the working Vertex path (bd polyglot-pdf-fyq4).
+    if not (settings.VERTEXAI or settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")):
         raise HTTPException(
             status_code=503,
-            detail="Hosted extraction is not configured (no GEMINI_API_KEY)",
+            detail="Hosted extraction is not configured (set VERTEXAI=true for "
+                   "service-account auth, or provide a GEMINI_API_KEY)",
         )
 
     store = get_form_kit_store()
