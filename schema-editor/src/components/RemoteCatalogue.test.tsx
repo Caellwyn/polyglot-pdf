@@ -213,3 +213,16 @@ describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
     expect(screen.getByText('Mark complete')).not.toBeDisabled();
   });
 });
+
+describe('RemoteCatalogue Codex r2 fixes (PR #280)', () => {
+  it('a schema whose fields entries are not objects surfaces as unreadable', async () => {
+    // fields IS an array, but of junk -- must not "measure" as a bogus 0%.
+    vi.mocked(loadRemoteSchema).mockResolvedValue(
+      { fields: ['not', 'objects'], sections: [] } as never,
+    );
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getAllByText(/unreadable/).length).toBeGreaterThan(0));
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+  });
+});

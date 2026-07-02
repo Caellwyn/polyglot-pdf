@@ -32,6 +32,7 @@ beforeEach(() => {
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   window.localStorage.clear();
+  clearAccessCode(); // drops the module-level in-memory fallback copy too
 });
 
 afterEach(() => {
@@ -170,5 +171,32 @@ describe('endpoints', () => {
     );
     await expect(setRemoteStatus('broken', 'complete'))
       .rejects.toThrow('does not validate');
+  });
+});
+
+describe('storage-less browsers (Codex r2, PR #280)', () => {
+  it('keeps the entered code in memory when localStorage.setItem throws', () => {
+    const original = window.localStorage.setItem.bind(window.localStorage);
+    // Simulate Safari private browsing: writes throw, reads return null.
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('QuotaExceededError');
+    });
+    try {
+      setAccessCode('memory-only-code');
+      expect(getAccessCode()).toBe('memory-only-code');
+      clearAccessCode();
+      expect(getAccessCode()).toBeNull();
+    } finally {
+      vi.mocked(Storage.prototype.setItem).mockRestore();
+      original('noop', 'noop');
+      window.localStorage.removeItem('noop');
+    }
+  });
+
+  it('localStorage still wins over the memory copy when available', () => {
+    setAccessCode('persisted');
+    expect(window.localStorage.getItem('schema-editor.accessCode')).toBe('persisted');
+    expect(getAccessCode()).toBe('persisted');
+    clearAccessCode();
   });
 });

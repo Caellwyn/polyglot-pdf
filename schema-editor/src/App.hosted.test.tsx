@@ -72,12 +72,13 @@ vi.mock('./utils/remoteKitStore', async (importOriginal) => {
 
 import { App } from './App';
 import {
-  AuthError, isHostedMode, listRemoteKits, loadRemotePdfBlobUrl,
-  loadRemoteSchema, probeSession, saveRemoteSchema,
+  AuthError, clearAccessCode, isHostedMode, listRemoteKits,
+  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, saveRemoteSchema,
 } from './utils/remoteKitStore';
 
 beforeEach(() => {
   window.localStorage.clear();
+  clearAccessCode(); // also drops the module-level in-memory fallback copy
   vi.mocked(isHostedMode).mockReturnValue(true);
   vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
   vi.mocked(listRemoteKits).mockResolvedValue([KIT]);
@@ -91,6 +92,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  clearAccessCode();
 });
 
 /** Enter the access code through the gate and land on the catalogue. */

@@ -115,7 +115,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       const computed = await Promise.all(withSchema.map(async (e) => {
         try {
           const schema = await loadRemoteSchema(e.id);
-          if (!schema || !Array.isArray(schema.fields)) {
+          // Same shape guard as the local readKitProgress (Codex P1 r2,
+          // PR #280): fields must be an array OF OBJECTS -- a corrupted draft
+          // whose entries are strings/arrays would otherwise "measure" as a
+          // bogus 0% card instead of surfacing as unreadable.
+          const fieldsOk = schema && Array.isArray(schema.fields)
+            && schema.fields.every(
+              (f) => f !== null && typeof f === 'object' && !Array.isArray(f));
+          if (!schema || !fieldsOk) {
             return [e.id, { reviewPercent: null, completeFields: 0, totalFields: 0, schemaError: true, version: null }] as const;
           }
           const stats = getCompletionStats(schema);

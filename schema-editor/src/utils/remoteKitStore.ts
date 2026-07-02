@@ -46,6 +46,14 @@ export class AuthError extends Error {
 
 const ACCESS_CODE_KEY = 'schema-editor.accessCode';
 
+// In-memory fallback for the access code (Codex P1 r2, PR #280): when
+// localStorage is unavailable (Safari private browsing, storage disabled),
+// setAccessCode would otherwise swallow the typed code entirely -- the very
+// next probeSession() reads getAccessCode(), gets nothing, and the editor is
+// unopenable even with a valid code. Memory keeps the CURRENT session working;
+// it just won't persist across reloads.
+let memoryAccessCode: string | null = null;
+
 /** True when this build runs against the remote store (VITE_DELIVERY_MODE=hosted). */
 export function isHostedMode(): boolean {
   return import.meta.env.VITE_DELIVERY_MODE === 'hosted';
@@ -58,29 +66,32 @@ export function apiBaseUrl(): string {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
 }
 
-/** The active access code: the human-entered one (localStorage) wins, else a
- * baked VITE_EDITOR_TOKEN (single-contractor compat), else null (prompt). */
+/** The active access code: the human-entered one (localStorage, with an
+ * in-memory fallback for storage-less browsers) wins, else a baked
+ * VITE_EDITOR_TOKEN (single-contractor compat), else null (prompt). */
 export function getAccessCode(): string | null {
   try {
     const stored = window.localStorage.getItem(ACCESS_CODE_KEY);
     if (stored) return stored;
   } catch {
-    // storage unavailable (rare) -> fall through to the baked token
+    // storage unavailable -> fall through to the in-memory copy
   }
+  if (memoryAccessCode) return memoryAccessCode;
   const baked = import.meta.env.VITE_EDITOR_TOKEN as string | undefined;
   return baked || null;
 }
 
 export function setAccessCode(code: string): void {
+  memoryAccessCode = code; // always -- storage is best-effort persistence only
   try {
     window.localStorage.setItem(ACCESS_CODE_KEY, code);
   } catch {
-    // storage unavailable -> the session still works off the in-memory prompt
-    // value held by the caller; it just won't persist across reloads.
+    // storage unavailable -> the in-memory copy above carries the session.
   }
 }
 
 export function clearAccessCode(): void {
+  memoryAccessCode = null;
   try {
     window.localStorage.removeItem(ACCESS_CODE_KEY);
   } catch {
