@@ -515,23 +515,12 @@ export class WebFormConnection {
           this.handleGetFieldValueRequest(message);
           break;
 
-        case "complete_section":
-          // DEPRECATED: Section completion now auto-detected after field confirmation
-          // Gemini no longer calls complete_section tool - frontend detects when
-          // all fields are confirmed and auto-switches to next section
-          console.warn('[WebFormConnection] Received deprecated complete_section message');
-          break;
-
         case "confirm_field":
           this.handleConfirmFieldRequest(message);
           break;
 
         case "error":
           this.handleServerError(message);
-          break;
-
-        case "ai_response":
-          // AI is speaking - no action needed
           break;
 
         case "turn_complete":
@@ -1385,16 +1374,6 @@ export class WebFormConnection {
       found: found,
     });
   }
-
-  /**
-   * DEPRECATED: Phase 3 complete_section handling (no longer used)
-   *
-   * Section completion is now auto-detected in handleConfirmFieldRequest()
-   * when computeNextField() returns null (all fields confirmed).
-   *
-   * Kept for reference but no longer called.
-   */
-  // private async handleCompleteSectionRequest(message: any): Promise<void> { ... }
 
   /**
    * Handle confirm_field request from backend (Gemini called confirm_field tool)
