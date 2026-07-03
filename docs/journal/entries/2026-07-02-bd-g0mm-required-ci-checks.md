@@ -53,6 +53,12 @@ effective state -- it still described a "To Dev" ruleset with a
 
 - Bumped + edited: docs/doctrine/branch-protection-setup.md (see above).
 
+Also folded in: docs/standards/testing.md's contract-dir row still called
+test_websocket_protocol.py an "empty stub" -- stale since PR #291 filled it
+with 79 tests; updated to current state (stamp not re-bumped: it already
+reads 2026-07-02, and PR #292 edits the same stamp line -- avoiding a
+same-line merge conflict).
+
 ## Files touched
 
 - docs/doctrine/branch-protection-setup.md -- rewritten to effective state.

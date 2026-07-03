@@ -64,7 +64,7 @@ The backend suite is organized **by directory**, not by marker:
 |-----|------|-------|
 | `backend/tests/unit/` | Fast, isolated unit tests | The bulk of the suite. |
 | `backend/tests/integration/` | Multi-component flows (WS ephemeral session, idle-timeout flow) | |
-| `backend/tests/contract/` | Protocol / tool / live-adapter contracts | Holds the one **`external`** test (`test_live_ai_gemini_integration.py`); `test_tool_contracts.py` and `test_websocket_protocol.py` are **empty stubs** (0 collected tests) awaiting fill — populate these rather than adding a fourth file. |
+| `backend/tests/contract/` | Protocol / tool / live-adapter contracts | Holds the one **`external`** test (`test_live_ai_gemini_integration.py`); `test_websocket_protocol.py` pins the ws-protocol.md wire contract via doc-vs-code diffs (bd polyglot-pdf-ceyt) and `test_tool_contracts.py` pins the tool-call sequence — add to these rather than creating a fourth file. |
 | `backend/tests/*.py` (root) | Cross-cutting tests | `test_audio_handler.py`, `test_callback_handler.py`, `test_no_pii_logging.py`, `test_request_coordinator.py`. |
 
 - **Async tests** use `pytest-asyncio` with an **explicit** `@pytest.mark.asyncio`
