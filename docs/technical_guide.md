@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-07-02. Dead-code cleanup (bd polyglot-pdf-o0pc): dropped the removed `PROACTIVE_AUDIO` constant from the tunables list and added the dev-only `POST /dev/console-log` route to the route table. Prior: 2026-07-01, added the author-tier onboarding/extraction routes (bd 92qe.3) and the token-gated `/api/editor/*` hosted-editor surface to the route table (bd polyglot-pdf-92qe.1), and the single-kit read routes (`/api/form-kits/{kit_id}/schema` and `.../pdf`, bd polyglot-pdf-sbfk). The `USE_PREMIUM_MODEL` row records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-07-02 (bd polyglot-pdf-puu8: `/ws/audio` + `/ws/echo` are now dev-only behind the `.env.DEV` marker gate; noted that the prod build ships only `index.html`). Also 2026-07-02, dead-code cleanup (bd polyglot-pdf-o0pc): dropped the removed `PROACTIVE_AUDIO` constant from the tunables list and added the dev-only `POST /dev/console-log` route to the route table. Prior: 2026-07-01, added the author-tier onboarding/extraction routes (bd 92qe.3) and the token-gated `/api/editor/*` hosted-editor surface to the route table (bd polyglot-pdf-92qe.1), and the single-kit read routes (`/api/form-kits/{kit_id}/schema` and `.../pdf`, bd polyglot-pdf-sbfk). The `USE_PREMIUM_MODEL` row records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -61,7 +61,7 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
 | Method | Path | Surface doc |
 |--------|------|-------------|
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. `components/websocket-routing.md`, `components/voice-ai.md` |
-| WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. `components/websocket-routing.md` |
+| WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
 | WS | `/ws/vad-config` | VAD config socket (declared on `app` directly in `main.py`). `standards/voice-and-vad.md` |
 | POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). `components/pdf-filling.md` |
 | POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized). `standards/confirmation-and-audit.md` |
@@ -88,6 +88,14 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
   `VITE_WS_URL` env var wins if set, else it falls back to `PRODUCTION_WS_URL`
   (the Cloud Run host) in prod or `ws://localhost:8000/ws/fill` in dev. The
   `/api`-prefixed WS mount exists for parity but the live client uses the direct URL.
+- **The prod frontend build has a single HTML entry (`index.html`).**
+  `frontend/vite.config.ts` declares no multi-page `rollupOptions.input`, so
+  `vad-tuning.html` and `schema-form-demo.html` are **dev-server-only** pages
+  (served by `vite dev`, absent from the deployed bundle); wire them into
+  `rollupOptions.input` if a deployed variant is ever wanted. Static assets
+  from `frontend/public/` (e.g. `thank-you.html`) ARE copied verbatim into
+  `dist/` by the build (`publicDir`), so the deployed bundle is index.html +
+  public assets -- not literally one file.
 - **Stateless backend; the client owns all field state.** Field values,
   confirmations, and section state live in the browser's `sessionStorage`; the
   backend rebuilds context from the WS handshake on every (re)connect. Never add
