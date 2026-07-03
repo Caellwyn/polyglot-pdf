@@ -34,7 +34,7 @@ Effective rules, verified via `gh api repos/.../rules/branches/dev`:
 |------|--------|
 | `deletion` | `dev` cannot be deleted |
 | `non_fast_forward` | no force-push to `dev` |
-| `pull_request` | merging to `dev` requires a PR. `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: true`, `required_review_thread_resolution: false`, all merge methods allowed |
+| `pull_request` | merging to `dev` requires a PR. `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: false`, `required_review_thread_resolution: false`, all merge methods allowed |
 | `required_status_checks` | a PR into `dev` can only merge when the CI checks **`backend pytest`**, **`frontend vitest`**, and **`schema-editor vitest`** pass (bd polyglot-pdf-g0mm; non-strict — the branch need not be up to date with `dev`) |
 
 Human approval is **not** required (count 0), and there is no ruleset-level

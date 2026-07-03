@@ -61,7 +61,16 @@ same-line merge conflict).
 
 ## Files touched
 
-- docs/doctrine/branch-protection-setup.md -- rewritten to effective state.
+- docs/doctrine/branch-protection-setup.md -- rewritten to effective state
+  (fresh-eyes round-1 catch: the rewritten table had carried over
+  `dismiss_stale_reviews_on_push: true` unverified; the API says false --
+  fixed).
+- docs/standards/testing.md -- contract-dir row updated (empty-stub claim
+  stale since PR #291).
+- docs/journal/telemetry/2026-07-03T00-44-26Z-0f62cf8a.json -- this PR's
+  telemetry row (g0mm + 6oh0). A stray row for PR #292's bead 63zi that
+  briefly rode this branch was removed by fresh-eyes round 1 and moved to
+  its own PR's branch.
 - GitHub ruleset "Defend Dev" -- required_status_checks rule added (not a
   repo file).
 - bd memory worktree-branch-off-dev-not-default -- updated (default IS dev).
