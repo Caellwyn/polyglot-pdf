@@ -1,6 +1,6 @@
 # Branch-protection setup: the GitHub rulesets
 
-*Last updated: 2026-05-29. See [the journal entry](../journal/entries/2026-05-29-bd-xmf-github-branch-protection-rulesets.md) for the setup.*
+*Last updated: 2026-07-02 (bd polyglot-pdf-g0mm: the three CI test jobs are now REQUIRED status checks on `dev` PRs; documented that "Defend Production" is currently INERT -- quote-mangled patterns, zero effective rules on `main`, fix owned by bd polyglot-pdf-pidj -- and that the repo default branch is `dev`). Prior 2026-05-29; see [the journal entry](../journal/entries/2026-05-29-bd-xmf-github-branch-protection-rulesets.md) for the original setup.*
 
 How `main` and `dev` are protected on `Caellwyn/polyglot-pdf`. This is the
 GitHub side of the [promotion-tiers](promotion-tiers.md) flow. Ported from
@@ -10,39 +10,37 @@ Protection is via **repository rulesets**, not classic branch protection.
 
 ## The two rulesets
 
-### "Defend Production" — targets the default branch (`main`)
+The repo's **default branch is `dev`** (the working integration branch); `main`
+is the promotion target with no active prod behind it.
 
-| Rule | Effect |
-|------|--------|
-| `deletion` | `main` cannot be deleted |
-| `non_fast_forward` | no force-push to `main` |
-| `required_deployments` → `staging` | a PR into `main` can only merge after a successful deploy to the **`staging`** environment |
+### "Defend Production" (id 17055207) — currently INERT, protects nothing
 
-`bypass_actors: []` — nobody bypasses. `~DEFAULT_BRANCH` targeting means it
-follows the default branch automatically.
+Its include patterns all carry literal quote characters
+(`refs/heads/"main"`, `refs/heads/"Prod"`, ...), which match no real ref:
+`gh api repos/Caellwyn/polyglot-pdf/rules/branches/main` returns `[]` — `main`
+has ZERO effective rules today (deletable, force-pushable, no PR required).
+Its intended rules (deletion, non_fast_forward, `required_deployments` →
+`staging`, pull_request) do not apply. **The fix is a maintainer decision**
+(fixing the patterns would also ACTIVATE the staging-deploy gate, blocking the
+dev→main promotion) — owned by bd `polyglot-pdf-pidj`.
 
-> **The `staging` gate blocks all merges to `main` until a deploy pipeline runs
-> and a deployment to the `staging` environment succeeds.** The `staging`
-> environment exists (empty); wiring the actual deploy is the maintainer's
-> infra task. Until then, `dev` is the working integration branch and nothing
-> lands on `main`.
+### "Defend Dev" (id 17131149) — the effective ruleset on `dev`
 
-### "To Dev" — targets `refs/heads/dev`
+Matches `dev` via its `~DEFAULT_BRANCH` entry (its literal `refs/heads/"dev"`
+entries are the same quote-mangled junk as above and match nothing).
+Effective rules, verified via `gh api repos/.../rules/branches/dev`:
 
 | Rule | Effect |
 |------|--------|
 | `deletion` | `dev` cannot be deleted |
 | `non_fast_forward` | no force-push to `dev` |
 | `pull_request` | merging to `dev` requires a PR. `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: true`, `required_review_thread_resolution: false`, all merge methods allowed |
-| `copilot_code_review` | Copilot reviews automatically — `review_on_push: true`, `review_draft_pull_requests: true` |
+| `required_status_checks` | a PR into `dev` can only merge when the CI checks **`backend pytest`**, **`frontend vitest`**, and **`schema-editor vitest`** pass (bd polyglot-pdf-g0mm; non-strict — the branch need not be up to date with `dev`) |
 
-Human approval is **not** required (count 0). Note what these rules do and do
-**not** enforce: a PR is mandatory and Copilot *reviews* every push, but with
-`required_review_thread_resolution: false` and 0 required approvals, **nothing
-mechanically blocks a merge with open Copilot threads** — Copilot reviews but
-does not *gate*. The gate is procedural (the [review-flow](review-flow.md):
-loop Copilot to clean, then the maintainer drives the merge), not a hard
-ruleset check. This matches [review-flow.md](review-flow.md).
+Human approval is **not** required (count 0), and there is no ruleset-level
+review gate — the review gate is procedural (the
+[review-flow](review-flow.md): loop Codex to clean, then the maintainer drives
+the merge). The CI status checks are the only mechanical merge blocker. This matches [review-flow.md](review-flow.md).
 
 ## Recreate / inspect
 
