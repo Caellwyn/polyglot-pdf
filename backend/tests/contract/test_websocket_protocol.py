@@ -3,10 +3,12 @@
 Pins the /ws/fill wire contract documented in docs/standards/ws-protocol.md
 against the REAL implementation in backend/routes/websocket_routes.py (plus the
 backend->frontend senders in callback_handler.py, request_coordinator.py, and
-form_filling_service.py). The goal is a set of tests that FAIL the moment a wire
-key or message `type` string is renamed or dropped on either side of the union --
-so the future part_* -> section_* wire rename (bd polyglot-pdf-zun) is
-test-driven from here rather than discovered live.
+form_filling_service.py) AND the frontend's actual send sites (read-only:
+frontend/src/webFormConnection.ts, frontend/src/shared/connection.ts,
+frontend/src/schema-forms/state/schemaFormState.ts). The goal is a set of tests
+that FAIL the moment a wire key or message `type` string is renamed or dropped
+on any side of the union -- so the future part_* -> section_* wire rename (bd
+polyglot-pdf-zun) is test-driven from here rather than discovered live.
 
 Scope note (CLAUDE.md scar #5): `part_*` keys in the handshake manifest
 (`manifest.parts`) and the token-log payload are CURRENT wire format as of this
@@ -107,6 +109,27 @@ def doc_handshake_mode_types() -> set[str]:
     return {"handshake", "handshake_jit"}
 
 
+def doc_handshake_shared_keys() -> set[str]:
+    """Keys in the doc's 'Mode selector + shared keys' handshake table."""
+    return set(_doc_table_rows("### Mode selector + shared keys"))
+
+
+def doc_handshake_legacy_keys() -> set[str]:
+    """Keys in the doc's legacy-mode handshake key table."""
+    return set(_doc_table_rows("### Legacy-mode keys"))
+
+
+def doc_handshake_jit_keys() -> set[str]:
+    """Keys in the doc's JIT-mode handshake key table."""
+    return set(_doc_table_rows("### JIT-mode keys"))
+
+
+def doc_session_ready_keys() -> set[str]:
+    """Keys in the doc's 'Handshake acknowledgement (backend -> frontend)'
+    session_ready key table."""
+    return set(_doc_table_rows("### Handshake acknowledgement"))
+
+
 # ---------------------------------------------------------------------------
 # Code-side extraction: literal `"type": "..."` sends and `mtype == "..."`
 # dispatch arms, scoped to the /ws/fill route only (the /ws/echo and /ws/audio
@@ -146,6 +169,77 @@ def code_service_send_types() -> set[str]:
 
 
 # ---------------------------------------------------------------------------
+# Frontend-side extraction (read-only cross-check; Codex PR #291 finding 2):
+# the literal `type` strings the CLIENT actually sends, so a client-side rename
+# or drop of a wire type fails these tests too -- not just a backend change.
+#
+# Send-call shapes in the frontend (verified by reading the files):
+#   - webFormConnection.ts / shared/connection.ts: `this.send({ type: '...', ... })`
+#     (send() itself JSON.stringifies) and one `ws.send(JSON.stringify({...}))`.
+#     The extractor anchors on `.send(` followed by an object literal and takes
+#     the FIRST `type: '...'` within a short window, so `case '...'` RECEIVE
+#     arms and unrelated `type:` object fields (e.g. field schemas) never match.
+#   - schema-forms/state/schemaFormState.ts: the handshake payload BUILDERS
+#     (getHandshakePayload / getJITHandshakePayload) -- the objects are sent
+#     later via webFormConnection's `this.send(handshake)`, so the type literals
+#     live on the builder, not at a `.send(` call site. That file's only
+#     `type: '...'` literals ARE the two handshake modes, so a plain literal
+#     scan is exact there.
+# ---------------------------------------------------------------------------
+
+_FE_SEND_CALL_FILES = (
+    "frontend/src/webFormConnection.ts",
+    # shared/connection.ts sends read_disclaimer / restart_gemini_session /
+    # change_spoken_language (the doc's own send-site column cites it).
+    "frontend/src/shared/connection.ts",
+)
+_FE_BUILDER_FILES = ("frontend/src/schema-forms/state/schemaFormState.ts",)
+
+
+def frontend_send_types() -> set[str]:
+    """Every message `type` literal the frontend actually SENDS to /ws/fill."""
+    types: set[str] = set()
+    for rel in _FE_SEND_CALL_FILES:
+        src = (REPO_ROOT / Path(rel)).read_text(encoding="utf-8")
+        # `.send(` optionally wrapping JSON.stringify, then an object literal;
+        # scan a short window for its `type` property. Binary sends
+        # (`this.send(audioData)`) and variable sends (`this.send(handshake)`)
+        # have no object literal and are correctly skipped.
+        for m in re.finditer(r"\.send\(\s*(?:JSON\.stringify\(\s*)?\{", src):
+            window = src[m.end() : m.end() + 250]
+            t = re.search(r"""type:\s*['"]([a-zA-Z0-9_]+)['"]""", window)
+            if t:
+                types.add(t.group(1))
+    for rel in _FE_BUILDER_FILES:
+        src = (REPO_ROOT / Path(rel)).read_text(encoding="utf-8")
+        types |= set(re.findall(r"""type:\s*['"]([a-zA-Z0-9_]+)['"]""", src))
+    return types
+
+
+# Documented inbound types with NO live frontend sender today. Kept as an
+# EXPLICIT, exact exception list (asserted with equality below) so adding an FE
+# sender for one of these, or dropping any other FE send, both fail a test.
+DOC_INBOUND_TYPES_WITHOUT_FE_SENDER = {
+    # ws-protocol.md itself flags this: "LEGACY reactive ... No live FE sender
+    # today (the FE drives section completion via the confirm handler) -- the
+    # arm is retained for back-compat."
+    "section_completed",
+    # Liveness/health probes: the doc's send-site column is "--" (no SPA
+    # sender; exercised by harnesses/manual probes, answered by pong/stats).
+    "ping",
+    "stats",
+    # DOC-VS-CODE GAP (reported, pinned-as-is per bd polyglot-pdf-ceyt): the
+    # doc documents `next_field_hint` as a client-pushed hint distinct from the
+    # get_next_field_hint/next_field_hint_response pair, and the backend arm
+    # exists (websocket_routes.py), but NO frontend send site exists today --
+    # the FE only ever sends next_field_hint_response. The doc's own send-site
+    # column for this row already points at the backend handler, not an FE
+    # line. Unlike section_completed, the doc does NOT flag the missing sender.
+    "next_field_hint",
+}
+
+
+# ---------------------------------------------------------------------------
 # 1. Handshake shape: required/optional keys the backend reads.
 # ---------------------------------------------------------------------------
 
@@ -162,29 +256,49 @@ class TestHandshakeShape:
         fn_src = inspect.getsource(fill_form_from_schema)
         return set(re.findall(r'handshake\.get\(\s*"([a-zA-Z0-9_]+)"', fn_src))
 
-    def test_shared_handshake_keys_are_read_by_the_route(self):
-        """Every mode-shared key the doc documents (type, form_session_id,
-        current_values, full_schema, fill_language, section_number,
-        section_label, total_sections, section_id, previous_spoken_names,
-        initial_field_hint, resume) is actually read via handshake.get(...)."""
-        documented_shared_keys = {
-            "type",
-            "form_session_id",
-            "current_values",
-            "full_schema",
-            "fill_language",
-            "section_number",
-            "section_label",
-            "total_sections",
-            "section_id",
-            "previous_spoken_names",
-            "initial_field_hint",
-            "resume",
-        }
+    def test_doc_key_table_parser_sanity(self):
+        """Guard the doc-table parser itself: if the heading or table format
+        drifted so the parse silently returned nothing/garbage, the diff tests
+        below could pass vacuously in one direction. Anchor on keys that have
+        been in the tables since the doc was frozen."""
+        shared = doc_handshake_shared_keys()
+        assert {"type", "resume", "form_session_id"} <= shared
+        assert len(shared) >= 10
+        assert doc_handshake_legacy_keys() == {"schema"}
+        assert {"manifest", "first_field_schema"} <= doc_handshake_jit_keys()
+
+    def test_every_documented_handshake_key_is_read_by_the_route(self):
+        """Doc -> code: every key in the doc's shared/legacy/JIT handshake
+        tables (parsed from ws-protocol.md, not hardcoded -- Codex PR #291
+        finding 1) is actually read via handshake.get(...). Renaming or
+        dropping a key in the DOC without a code change fails here."""
+        documented = (
+            doc_handshake_shared_keys()
+            | doc_handshake_legacy_keys()
+            | doc_handshake_jit_keys()
+        )
         code_keys = self._handshake_get_keys()
-        missing = documented_shared_keys - code_keys
+        missing = documented - code_keys
         assert not missing, (
-            f"doc documents handshake keys the route no longer reads: {missing}"
+            f"ws-protocol.md documents handshake keys the route no longer reads "
+            f"via handshake.get(...): {missing}"
+        )
+
+    def test_every_code_read_handshake_key_is_documented(self):
+        """Code -> doc: every top-level handshake.get(...) read in the route has
+        a row in one of the doc's three handshake key tables. A NEW key read in
+        code without a doc update fails here. No exceptions today: the doc and
+        code key sets match exactly."""
+        documented = (
+            doc_handshake_shared_keys()
+            | doc_handshake_legacy_keys()
+            | doc_handshake_jit_keys()
+        )
+        code_keys = self._handshake_get_keys()
+        undocumented = code_keys - documented
+        assert not undocumented, (
+            f"the route reads handshake keys not documented in any of "
+            f"ws-protocol.md's handshake key tables: {undocumented}"
         )
 
     def test_legacy_mode_requires_schema_key(self):
@@ -196,10 +310,13 @@ class TestHandshakeShape:
         assert '"code": "invalid_schema"' in fn_src
 
     def test_jit_mode_keys_are_read(self):
-        """type == 'handshake_jit' reads manifest, first_field_schema,
-        loaded_field_ids, form_title (per the JIT-mode key table)."""
+        """type == 'handshake_jit' reads every key in the doc's JIT-mode table
+        (manifest, first_field_schema, loaded_field_ids, form_title today --
+        parsed from the doc, not hardcoded)."""
         fn_src = inspect.getsource(fill_form_from_schema)
-        for key in ("manifest", "first_field_schema", "loaded_field_ids", "form_title"):
+        jit_keys = doc_handshake_jit_keys()
+        assert jit_keys, "JIT-mode key table parse returned nothing"
+        for key in sorted(jit_keys):
             assert f'handshake.get("{key}"' in fn_src, (
                 f"JIT-mode key '{key}' documented in ws-protocol.md but not read "
                 f"via handshake.get(...) in fill_form_from_schema"
@@ -220,17 +337,34 @@ class TestHandshakeShape:
 class TestSessionReadyShape:
     """Pins the session_ready ack payload keys."""
 
-    def test_session_ready_carries_documented_keys(self):
+    def _session_ready_code_keys(self) -> set[str]:
+        """Keys of the session_ready send_json dict literal in the route."""
         fn_src = inspect.getsource(fill_form_from_schema)
-        # The session_ready send_json call site.
         m = re.search(r'"type":\s*"session_ready".*?\}\)', fn_src, re.DOTALL)
         assert m, "session_ready send_json call not found in fill_form_from_schema"
-        block = m.group(0)
-        for key in ("session_id", "ephemeral", "jit_mode_enabled", "native_vad"):
-            assert f'"{key}"' in block, (
-                f"doc documents session_ready.{key} but it is missing from the "
-                f"send_json call"
-            )
+        # Dict-entry keys only: a quoted string immediately followed by a colon.
+        # Values (e.g. "session_ready") are never colon-suffixed, and the
+        # comment lines inside the dict contain no quote-colon sequences.
+        return set(re.findall(r'"([a-zA-Z0-9_]+)":', m.group(0)))
+
+    def test_session_ready_keys_match_doc_both_directions(self):
+        """The session_ready payload keys are diffed against the doc's
+        'Handshake acknowledgement' table (parsed, not hardcoded -- Codex PR
+        #291 finding 1 applied to the ack side too). No exceptions: since
+        dti_mode_enabled was documented, doc and code match exactly."""
+        doc_keys = doc_session_ready_keys()
+        assert {"type", "session_id"} <= doc_keys, (
+            "session_ready key-table parse returned garbage"
+        )
+        code_keys = self._session_ready_code_keys()
+        assert doc_keys - code_keys == set(), (
+            f"ws-protocol.md documents session_ready keys the code no longer "
+            f"sends: {doc_keys - code_keys}"
+        )
+        assert code_keys - doc_keys == set(), (
+            f"session_ready sends keys not documented in ws-protocol.md's "
+            f"Handshake acknowledgement table: {code_keys - doc_keys}"
+        )
 
     def test_session_ready_dti_mode_enabled_sent_and_documented(self):
         """session_ready carries dti_mode_enabled (websocket_routes.py, consumed
@@ -338,6 +472,65 @@ class TestFrontendToBackendUnion:
         assert bogus not in doc_frontend_to_backend_types()
         assert bogus not in code_fill_route_dispatch_types()
         assert "unknown_control" in _fill_route_src()
+
+
+class TestFrontendSendSites:
+    """Client-side half of the inbound union (Codex PR #291 finding 2): the
+    doc-vs-backend diffs above cannot see a rename/drop of a SEND literal in
+    the frontend. These tests extract the type literals from the FE's actual
+    send sites (webFormConnection.ts + shared/connection.ts send calls, plus
+    the schemaFormState.ts handshake payload builders) and diff them against
+    the doc's inbound union -- so a client-side wire rename fails a test."""
+
+    def test_frontend_extractor_sanity(self):
+        """Guard the FE extractor: anchor on literals that have been send sites
+        since the doc was frozen, so a broken regex cannot pass vacuously."""
+        fe_types = frontend_send_types()
+        assert {"handshake", "handshake_jit", "form_state_response",
+                "clear_thinking", "read_disclaimer"} <= fe_types, (
+            f"FE send-site extractor lost known anchors; got: {sorted(fe_types)}"
+        )
+        assert len(fe_types) >= 20
+
+    def test_every_frontend_send_literal_is_in_the_doc_inbound_union(self):
+        """A client-side RENAME (or undocumented new send) lands here: every
+        type the FE sends must be a documented frontend->backend type. No
+        exceptions today (binary audio frames have no `type` literal and never
+        reach the extractor)."""
+        fe_types = frontend_send_types()
+        undocumented = fe_types - doc_frontend_to_backend_types()
+        assert not undocumented, (
+            f"the frontend sends wire types not documented in ws-protocol.md's "
+            f"frontend->backend table: {undocumented}"
+        )
+
+    def test_doc_inbound_types_without_fe_sender_are_exactly_the_known_set(self):
+        """A client-side DROP lands here: the documented inbound types the FE
+        does NOT send must be exactly the explicit exception list (see
+        DOC_INBOUND_TYPES_WITHOUT_FE_SENDER for the per-type reasons, including
+        the reported next_field_hint doc gap). Equality, not subset: if the FE
+        gains a sender for an excepted type, or loses any other send, this
+        fails and the exception list must be consciously updated."""
+        fe_types = frontend_send_types()
+        doc_only = doc_frontend_to_backend_types() - fe_types
+        assert doc_only == DOC_INBOUND_TYPES_WITHOUT_FE_SENDER, (
+            f"documented-inbound-types-without-an-FE-sender changed. "
+            f"unexpected: {doc_only - DOC_INBOUND_TYPES_WITHOUT_FE_SENDER}; "
+            f"no-longer-missing: {DOC_INBOUND_TYPES_WITHOUT_FE_SENDER - doc_only}"
+        )
+
+    def test_every_frontend_send_type_has_a_backend_handler(self):
+        """Code-to-code: every FE send literal (minus the handshake modes,
+        consumed pre-loop by fill_form_from_schema) has an `mtype == ...`
+        dispatch arm in the /ws/fill control loop -- a backend arm rename that
+        orphans a live FE sender fails here even if the doc were updated in
+        lockstep with only one side."""
+        fe_types = frontend_send_types() - doc_handshake_mode_types()
+        unhandled = fe_types - code_fill_route_dispatch_types()
+        assert not unhandled, (
+            f"the frontend sends types with no dispatch arm in the /ws/fill "
+            f"control loop: {unhandled}"
+        )
 
 
 class TestHandshakeTypesInFrontendToBackendTable:

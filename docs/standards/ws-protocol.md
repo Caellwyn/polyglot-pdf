@@ -134,7 +134,7 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `handshake` / `handshake_jit` | schemaFormState.ts:604 / :636 | Initial + section-switch handshake (see above). |
 | `form_state` | webFormConnection.ts:2018 | Push current form state; backend replies `form_state_ack`. |
 | `form_state_response` | webFormConnection.ts:812 | Reply to backend `get_form_state`. Each `field_values[id]` entry carries `{value, confirmed, shown}`. `shown` (bd polyglot-pdf-p68s / jnjj.45d) is the field's current applicability, computed client-side via `shouldShowField` (the backend is stateless and cannot derive it); it feeds the secretary's `shown_map` so a value-bearing-but-now-hidden field is distinguishable from a visible one. An older client that omits `shown` leaves the field out of `shown_map` (renderer default = shown). |
-| `next_field_hint` | websocket_routes.py:300 | Client-pushed next-field hint (distinct from the `get_next_field_hint` request/`next_field_hint_response` reply pair). |
+| `next_field_hint` | websocket_routes.py:300 | Client-pushed next-field hint (distinct from the `get_next_field_hint` request/`next_field_hint_response` reply pair). No live FE sender today (the FE only sends `next_field_hint_response`; caught by the ceyt contract tests) -- the arm is retained for back-compat. |
 | `next_field_hint_response` | webFormConnection.ts:835 | Reply to backend `get_next_field_hint`. |
 | `read_disclaimer` | websocket_routes.py:377 (sent connection.ts:844) | Client signals the disclaimer is being read; backend replies `disclaimer_read_initiated`. |
 | `restart_gemini_session` | websocket_routes.py:480 (sent connection.ts:464) | Client asks the backend to restart the Gemini session; backend replies `gemini_session_restarted`. |

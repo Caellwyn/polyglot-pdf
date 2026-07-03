@@ -88,11 +88,14 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
   `VITE_WS_URL` env var wins if set, else it falls back to `PRODUCTION_WS_URL`
   (the Cloud Run host) in prod or `ws://localhost:8000/ws/fill` in dev. The
   `/api`-prefixed WS mount exists for parity but the live client uses the direct URL.
-- **The prod frontend build ships ONLY `index.html`.** `frontend/vite.config.ts`
-  declares no multi-page `rollupOptions.input`, so `vad-tuning.html` and
-  `schema-form-demo.html` are **dev-server-only** pages (served by `vite dev`,
-  absent from the deployed bundle). Wire them into `rollupOptions.input` if a
-  deployed variant is ever wanted.
+- **The prod frontend build has a single HTML entry (`index.html`).**
+  `frontend/vite.config.ts` declares no multi-page `rollupOptions.input`, so
+  `vad-tuning.html` and `schema-form-demo.html` are **dev-server-only** pages
+  (served by `vite dev`, absent from the deployed bundle); wire them into
+  `rollupOptions.input` if a deployed variant is ever wanted. Static assets
+  from `frontend/public/` (e.g. `thank-you.html`) ARE copied verbatim into
+  `dist/` by the build (`publicDir`), so the deployed bundle is index.html +
+  public assets -- not literally one file.
 - **Stateless backend; the client owns all field state.** Field values,
   confirmations, and section state live in the browser's `sessionStorage`; the
   backend rebuilds context from the WS handshake on every (re)connect. Never add
