@@ -3,12 +3,16 @@
  * Tests Bug 1: Manual Entry Shows [object Object]
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { TextField } from './TextField';
 import type { FormField, FieldValue } from '../../types/schema';
 
 describe('TextField - Bug 1: [object Object] Fix', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   const mockField: FormField = {
     id: 'test-field',
     name: 'Test Field',

@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-07-02 (bd polyglot-pdf-o0pc: the duplicate-basename example and the "probe scripts outside testpaths" passage updated after the dead-code cleanup deleted the cited `scripts/test_*.py` probes and relocated `backend/test_manifest_generation.py` into `backend/tests/unit/`). Prior: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
+*Last updated: 2026-07-02 (bd polyglot-pdf-63zi: the three parked `.NEEDS_CLEANUP` field-component tests are revived and collected -- the frontend section's stale five-active/five-dormant counts replaced with current state + the cleanup/jest-dom conventions new component tests must follow). Also 2026-07-02, bd polyglot-pdf-o0pc: the duplicate-basename example and the "probe scripts outside testpaths" passage updated after the dead-code cleanup deleted the cited `scripts/test_*.py` probes and relocated `backend/test_manifest_generation.py` into `backend/tests/unit/`. Prior: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -117,16 +117,20 @@ touch `sessionStorage`/DOM and fail under vitest's default node environment. The
 `--environment jsdom` flag on the npm script is now redundant but harmless.
 
 Test files are colocated next to the code as `*.test.ts(x)` (the `.spec.` suffix is
-not used). **Five are active** and run: schema-form utilities (`fieldValue`,
-`conditionalFieldCheck`, `manifestUtils`), the disclaimer modal, and
-navigation-confirmation — i.e. the pure client-state logic, not the voice/WS path.
+not used). The suite spans the client-state logic (schema-form utilities,
+`fieldManager`, `schemaFormState`), the WS/connection layer (`webFormConnection`,
+`connection`, audio gating), UI components (field components, disclaimer modal,
+navigation-confirmation), and contexts — run `vitest run` for the current count.
 
-> **Five more are dormant.** Files renamed with a trailing `.NEEDS_CLEANUP` /
-> `.NEEDS_SECTION_REFACTOR` suffix (the field components `RadioField` / `SelectField`
-> / `TextField`, plus `schemaFormState` and `connection`) no longer match vitest's
-> `*.test.ts(x)` glob, so they are **not collected** — parked, not deleted, pending
-> the section-refactor cleanup. Don't mistake them for passing coverage; re-enabling
-> one means renaming it back and fixing it.
+> **No test files are parked.** The former `.NEEDS_CLEANUP` renames (the field
+> components `RadioField` / `SelectField` / `TextField`) were revived in
+> bd polyglot-pdf-63zi — the parked tests still matched the components' contracts
+> and only needed the repo's explicit `afterEach(cleanup)` convention (no
+> `test.globals`, so testing-library auto-cleanup never fires) and the removal of
+> `toBeInTheDocument()` (`@testing-library/jest-dom` is not installed; use
+> `toBeTruthy()`). Follow both conventions in every new component test. Do NOT
+> park a test by renaming it off the `*.test.ts(x)` glob — fix it or delete it
+> with its coverage mapped.
 
 > **Running a Vite dev server from a git worktree needs `server.fs.allow`.** A
 > worktree's `node_modules` is typically a junction into the main checkout, so Vite

@@ -3,12 +3,16 @@
  * Tests Bug 1: Manual Entry Shows [object Object]
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SelectField } from './SelectField';
 import type { FormField, FieldValue } from '../../types/schema';
 
 describe('SelectField - Bug 1: [object Object] Fix', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   const mockField: FormField = {
     id: 'state-field',
     name: 'State',
@@ -124,10 +128,10 @@ describe('SelectField - Bug 1: [object Object] Fix', () => {
         <SelectField field={mockField} value="" onChange={onChange} />
       );
 
-      expect(screen.getByText('California')).toBeInTheDocument();
-      expect(screen.getByText('New York')).toBeInTheDocument();
-      expect(screen.getByText('Texas')).toBeInTheDocument();
-      expect(screen.getByText('-- Please select --')).toBeInTheDocument();
+      expect(screen.getByText('California')).toBeTruthy();
+      expect(screen.getByText('New York')).toBeTruthy();
+      expect(screen.getByText('Texas')).toBeTruthy();
+      expect(screen.getByText('-- Please select --')).toBeTruthy();
     });
 
     it('should have correct option selected when value matches', () => {
