@@ -4,12 +4,16 @@
  * Tests Bug 2: Radio Buttons Reset Form (state preservation)
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { RadioField } from './RadioField';
 import type { FormField, FieldValue } from '../../types/schema';
 
 describe('RadioField - Bug 1 & 2 Fixes', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   const mockField: FormField = {
     id: 'gender-field',
     name: 'Gender',
@@ -160,9 +164,9 @@ describe('RadioField - Bug 1 & 2 Fixes', () => {
         <RadioField field={mockField} value="" onChange={onChange} />
       );
 
-      expect(screen.getByLabelText('Male')).toBeInTheDocument();
-      expect(screen.getByLabelText('Female')).toBeInTheDocument();
-      expect(screen.getByLabelText('Other')).toBeInTheDocument();
+      expect(screen.getByLabelText('Male')).toBeTruthy();
+      expect(screen.getByLabelText('Female')).toBeTruthy();
+      expect(screen.getByLabelText('Other')).toBeTruthy();
     });
 
     it('should only check one radio at a time', () => {
