@@ -18,6 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
+import { unwrapFieldValue } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -38,6 +39,44 @@ export function stripToken(url: string): string {
     .filter((p) => p.length > 0 && !p.startsWith("token="));
 
   return params.length > 0 ? `${base}?${params.join("&")}` : base;
+}
+
+/**
+ * Canonicalize an AI-supplied checkbox-group value to the client's one true
+ * shape: string[] (bd polyglot-pdf-h76m.2).
+ *
+ * The backend prompt (config.py) tells Gemini "Multiple checkboxes:
+ * comma-separated exact values", so the voice path delivers a checkbox-group
+ * selection as ONE comma-joined STRING -- but everything downstream expects an
+ * array: the interactive renderer stores string[], the conditional evaluator's
+ * array branch is the reliable one, and /api/fill-pdf fills a group only from
+ * a list (a raw string is rejected as checkbox_unsupported_value and the group
+ * silently stays empty on the printed PDF). Splitting at the AI ingress makes
+ * validation, storage, conditionals, and fill all see the same array.
+ *
+ * A "choice group" here is a checkbox field WITH options (the renderer's own
+ * group rule -- CheckboxField renders options-bearing checkbox fields as a
+ * multi-select storing string[]) or one explicitly marked group_kind
+ * "checkbox". A standalone boolean checkbox (no options) is never touched, and
+ * non-string values (bool, array) pass through unchanged. Option values may
+ * contain "/" but never "," (the schema contract forbids it; slugs later make
+ * that structural), so comma is an unambiguous delimiter. A single no-comma
+ * selection becomes a one-element array -- as a bare string it would fail PDF
+ * fill exactly like the multi-select case.
+ */
+export function canonicalizeAiCheckboxGroupValue(field: FormField, value: any): any {
+  const isChoiceGroup =
+    field.type === "checkbox" &&
+    ((field.options?.length ?? 0) > 0 || field.group_kind === "checkbox");
+  if (!isChoiceGroup) return value;
+
+  const raw = unwrapFieldValue(value);
+  if (typeof raw !== "string") return value;
+
+  return raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
 }
 
 export type ConnectionStatus =
@@ -743,8 +782,13 @@ export class WebFormConnection {
         // skipped and a corrective PII-free prompt is routed to the model (bd
         // polyglot-pdf-wpw.3). Applied values fill as UNCONFIRMED -- they still
         // require explicit confirmation via the confirm_field tool.
-        if (this.applyAiValueWithValidation(field, value, { emit: false })) {
-          updatedFields.push({ fieldId: field.id, value });
+        // Canonicalize the shape FIRST (comma-string -> string[] for checkbox
+        // groups, bd h76m.2) so the onFieldUpdate callback carries the same
+        // value the funnel validates and stores (idempotent -- the funnel
+        // re-canonicalizes internally as its own guarantee).
+        const canonicalValue = canonicalizeAiCheckboxGroupValue(field, value);
+        if (this.applyAiValueWithValidation(field, canonicalValue, { emit: false })) {
+          updatedFields.push({ fieldId: field.id, value: canonicalValue });
         }
       } else {
         // Field not found in schema - ignore
@@ -836,9 +880,11 @@ export class WebFormConnection {
       // value. A pure unchanged echo never reaches this point (it is `continue`d by
       // the limitToApplied guard above or by shouldUpdate). So validate
       // unconditionally; a reject skips the apply and routes a corrective PII-free
-      // prompt to the model.
-      if (this.applyAiValueWithValidation(field, value, { emit: false })) {
-        updatedFields.push({ fieldId: field.id, value });
+      // prompt to the model. Canonicalized first (comma-string -> string[] for
+      // checkbox groups, bd h76m.2) so the callback carries the stored shape.
+      const canonicalValue = canonicalizeAiCheckboxGroupValue(field, value);
+      if (this.applyAiValueWithValidation(field, canonicalValue, { emit: false })) {
+        updatedFields.push({ fieldId: field.id, value: canonicalValue });
       }
     }
 
@@ -871,9 +917,12 @@ export class WebFormConnection {
         // or the legacy no-applied_fields path sent it and it differs from current);
         // a pure unchanged echo was already `continue`d above. So validate
         // unconditionally; a reject skips the apply and routes a corrective PII-free
-        // prompt to the model. Applied values fill as UNCONFIRMED.
-        if (this.applyAiValueWithValidation(field, value, { emit: false })) {
-          updatedFields.push({ fieldId: field.id, value });
+        // prompt to the model. Applied values fill as UNCONFIRMED. Canonicalized
+        // first (comma-string -> string[] for checkbox groups, bd h76m.2) so the
+        // callback carries the stored shape.
+        const canonicalValue = canonicalizeAiCheckboxGroupValue(field, value);
+        if (this.applyAiValueWithValidation(field, canonicalValue, { emit: false })) {
+          updatedFields.push({ fieldId: field.id, value: canonicalValue });
         }
       }
     }
@@ -1918,6 +1967,15 @@ export class WebFormConnection {
     value: any,
     options: { emit: boolean }
   ): boolean {
+    // Canonicalize the value SHAPE before anything sees it (bd polyglot-pdf-
+    // h76m.2): the backend prompt tells Gemini to send a checkbox-group
+    // selection as ONE comma-separated string of exact option values
+    // (config.py "Multiple checkboxes: comma-separated exact values"), but the
+    // canonical client shape for a choice-group value is string[] (what the
+    // interactive renderer stores and what /api/fill-pdf fills from). Split
+    // here -- the single funnel every AI call site goes through -- so
+    // validation, storage, conditionals, and PDF fill all see the same array.
+    value = canonicalizeAiCheckboxGroupValue(field, value);
     const validationError = validateField(field, value);
 
     if (validationError) {

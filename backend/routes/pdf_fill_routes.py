@@ -302,6 +302,19 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 			elif field_type == "checkbox":
 				_log.debug("checkbox_processing", kit=request.kit_id, field_id=field_id, value_type=type(value).__name__)  # never log value -- bd hjo
+				# Defensive shape canonicalization (bd polyglot-pdf-h76m.2): the
+				# voice path historically stored a checkbox-GROUP selection as one
+				# comma-separated string of option values (config.py "Multiple
+				# checkboxes: comma-separated exact values"). The frontend now
+				# splits that at the AI ingress, but sessions started before that
+				# fix (or stale sessionStorage) can still send the string here --
+				# without this split it falls to the unsupported-value branch and
+				# the group silently stays empty on the printed PDF. Option values
+				# never contain commas (schema contract), so the split is safe.
+				# Only options-bearing fields qualify: a standalone checkbox has
+				# no options to match the parts against.
+				if isinstance(value, str) and (field_obj.get("options") or []):
+					value = [part.strip() for part in value.split(",") if part.strip()]
 				if isinstance(value, bool):
 					pdf_field_name = field_obj.get("pdf_field_name")
 					if not pdf_field_name:
