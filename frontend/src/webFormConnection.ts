@@ -63,6 +63,14 @@ export function stripToken(url: string): string {
  * that structural), so comma is an unambiguous delimiter. A single no-comma
  * selection becomes a one-element array -- as a bare string it would fail PDF
  * fill exactly like the multi-select case.
+ *
+ * Boolean-INTENT strings ("true"/"false", the literal forms the backend tool
+ * contract documents for a standalone checkbox) are excluded from the split:
+ * they are not option selections, and wrapping them into a one-element array
+ * would misrepresent a boolean-shaped value as a group selection (a standalone
+ * checkbox that carries a single-widget options array would otherwise have its
+ * "true" turned into ["true"]). They pass through untouched, matching the
+ * backend filler's own boolean-string handling.
  */
 export function canonicalizeAiCheckboxGroupValue(field: FormField, value: any): any {
   const isChoiceGroup =
@@ -72,6 +80,7 @@ export function canonicalizeAiCheckboxGroupValue(field: FormField, value: any): 
 
   const raw = unwrapFieldValue(value);
   if (typeof raw !== "string") return value;
+  if (/^(true|false)$/i.test(raw.trim())) return value;
 
   return raw
     .split(",")

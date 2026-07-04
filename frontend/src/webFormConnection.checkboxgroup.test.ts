@@ -151,6 +151,26 @@ describe('voice checkbox-group value canonicalization (bd polyglot-pdf-h76m.2)',
     expect(appliedValue('p2_apt_checkbox')).toBe(true)
     expect(conn.getState().fieldValues['p2_apt_checkbox']?.value).toBe(true)
   })
+
+  it('splits a comma string arriving via the form_updated path too', async () => {
+    // handleFormUpdated is a second, independently-reachable AI ingress (the
+    // backend's form_updated message, callback_handler.py) with its own
+    // canonicalization call sites -- cover it separately from field_update.
+    const ws = await connect()
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'form_updated',
+        data: {
+          form_state: { p3_race: 'P3_checkbox7_White[0], P3_checkbox7_Black[0]' },
+          applied_fields: ['p3_race'],
+        },
+      }),
+    })
+
+    const expected = ['P3_checkbox7_White[0]', 'P3_checkbox7_Black[0]']
+    expect(appliedValue('p3_race')).toEqual(expected)
+    expect(conn.getState().fieldValues['p3_race']?.value).toEqual(expected)
+  })
 })
 
 describe('canonicalizeAiCheckboxGroupValue unit behavior', () => {
@@ -172,6 +192,16 @@ describe('canonicalizeAiCheckboxGroupValue unit behavior', () => {
 
   it('does not touch a standalone checkbox (no options) even for strings', () => {
     expect(canonicalizeAiCheckboxGroupValue(standaloneField, 'true')).toBe('true')
+  })
+
+  it('passes boolean-intent strings through untouched even on a group field', () => {
+    // "true"/"false" are the literal boolean forms the backend tool contract
+    // documents for a standalone checkbox -- never option selections. A
+    // standalone checkbox carrying a single-widget options array must not have
+    // its "true" wrapped into ["true"].
+    expect(canonicalizeAiCheckboxGroupValue(groupField, 'true')).toBe('true')
+    expect(canonicalizeAiCheckboxGroupValue(groupField, 'False')).toBe('False')
+    expect(canonicalizeAiCheckboxGroupValue(groupField, ' TRUE ')).toBe(' TRUE ')
   })
 
   it('does not touch non-checkbox field types', () => {

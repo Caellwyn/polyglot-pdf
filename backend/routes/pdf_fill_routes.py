@@ -312,8 +312,17 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				# the group silently stays empty on the printed PDF. Option values
 				# never contain commas (schema contract), so the split is safe.
 				# Only options-bearing fields qualify: a standalone checkbox has
-				# no options to match the parts against.
-				if isinstance(value, str) and (field_obj.get("options") or []):
+				# no options to match the parts against. Boolean-INTENT strings
+				# ("true"/"false", the literal forms config.py documents for a
+				# standalone checkbox) are excluded: they are not option
+				# selections, and routing them into the group branch would trade
+				# the accurate checkbox_unsupported_value diagnostic for a
+				# misleading checkbox_option_not_found one.
+				if (
+					isinstance(value, str)
+					and value.strip().lower() not in ("true", "false")
+					and (field_obj.get("options") or [])
+				):
 					value = [part.strip() for part in value.split(",") if part.strip()]
 				if isinstance(value, bool):
 					pdf_field_name = field_obj.get("pdf_field_name")

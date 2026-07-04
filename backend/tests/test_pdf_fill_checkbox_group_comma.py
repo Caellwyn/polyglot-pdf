@@ -110,3 +110,16 @@ def test_list_group_value_still_fills():
     states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
     for leaf in _RACE_SELECTED:
         assert states[leaf] not in ("/Off", "Off", None), f"{leaf} did not fill"
+    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED):
+        assert states[leaf] in ("/Off", "Off"), f"{leaf} should not be selected"
+
+
+def test_boolean_intent_string_is_not_split_into_a_selection():
+    """A literal "true" on an options-bearing checkbox is boolean intent, not a
+    group selection: the split guard excludes it, so it falls through to the
+    unsupported-value branch (accurate diagnostic) and fills nothing."""
+    pdf = _fill_race("true")
+
+    states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
+    for leaf in _RACE_ALL_LEAVES:
+        assert states[leaf] in ("/Off", "Off"), f"{leaf} should not be selected"
