@@ -1,0 +1,83 @@
+{
+  "recorded_at": "2026-07-04T17:37:52Z",
+  "session_id": "057d5f3f-741f-4c9b-80d5-8478f94a1499",
+  "beads": [
+    "polyglot-pdf-h76m.2"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-07-04T16:37:29.678Z",
+    "last_ts": "2026-07-04T17:37:45.702Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 71337,
+      "output_tokens": 153924,
+      "cache_read_input_tokens": 25067257,
+      "cache_creation_input_tokens": 1548209
+    },
+    "subagent": {
+      "input_tokens": 18224,
+      "output_tokens": 39958,
+      "cache_read_input_tokens": 15622769,
+      "cache_creation_input_tokens": 649022
+    },
+    "total": {
+      "input_tokens": 89561,
+      "output_tokens": 193882,
+      "cache_read_input_tokens": 40690026,
+      "cache_creation_input_tokens": 2197231
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-fable-5": {
+        "input_tokens": 71337,
+        "output_tokens": 153924,
+        "cache_read_input_tokens": 25067257,
+        "cache_creation_input_tokens": 1548209
+      }
+    },
+    "subagent": {
+      "claude-sonnet-5": {
+        "input_tokens": 18224,
+        "output_tokens": 39958,
+        "cache_read_input_tokens": 15622769,
+        "cache_creation_input_tokens": 649022
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-fable-5": 52.82944
+    },
+    "subagent": {
+      "claude-sonnet-5": 0.0
+    },
+    "by_model": {
+      "claude-fable-5": 52.82944,
+      "claude-sonnet-5": 0.0
+    },
+    "unpriced_models": [
+      "claude-sonnet-5"
+    ],
+    "orchestrator_total": 52.82944,
+    "subagent_total": 0.0,
+    "total": 52.82944,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-sonnet-5"
+  ],
+  "assistant_turns": {
+    "orchestrator": 173,
+    "subagent": 224
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 1,
+  "maintainer_touchpoints": 0,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}

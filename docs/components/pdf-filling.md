@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-07-01. bd 92qe.1: the form-kit store gained an additive editor write/list surface (put_schema, put_metadata, load_metadata, list_kit_files) used by the token-gated `/api/editor/*` routes -- the PDF-fill read contract is unchanged. Prior 2026-06-14, bd np64: non-ASCII -> ASCII in pdfFiller.ts code comments/console strings (cosmetic, no PDF-filling change). See [the 7a9.15/16 journal entry](../journal/entries/2026-06-08-bd-7a9.15-16-i90-choice-fill-bugs.md) for closeout details.*
+*Last updated: 2026-07-04. bd h76m.2: the checkbox branch now canonicalizes a comma-separated string value on an options-bearing field into the list shape before filling (the voice path's historical group format). See [the h76m.2 journal entry](../journal/entries/2026-07-04-bd-h76m.2-voice-checkbox-group-comma-fill.md) for closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -35,7 +35,14 @@ builds a `field_id → pdf_field_name` map + a `field_id → field` lookup from
 - **radio** — find the selected `option` by `value`, fill each option's
   `pdf_field_name` widget on/off.
 - **checkbox** — a `bool` fills one widget; a `list` is a checkbox *group* (fill
-  each selected option's widget).
+  each selected option's widget). A `str` value on an options-bearing checkbox
+  field is first split on commas into the list shape (bd `polyglot-pdf-h76m.2`):
+  the voice path historically stored a group selection as one comma-separated
+  string of option values, and without the split it fell to the
+  unsupported-value branch and the group silently stayed empty. The frontend
+  now canonicalizes the same string to `string[]` at the AI-value ingress
+  (`webFormConnection.canonicalizeAiCheckboxGroupValue`); the backend split is
+  the defensive layer for sessions whose stored values predate that fix.
 
 ### The widget gotchas (scar tissue)
 
