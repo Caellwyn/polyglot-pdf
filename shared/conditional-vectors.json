@@ -1,0 +1,461 @@
+{
+  "description": "Shared conditional-semantics vector suite (bd polyglot-pdf-h76m.1, P0.1). Pins TODAY'S show_if evaluation semantics of BOTH evaluators -- the voice runtime (frontend/src/schema-forms/utils/validation.ts shouldShowField) and the editor preview (schema-editor/src/utils/conditionalVisibility.ts shouldShowField) -- BEFORE the schema-v2 composite-logic rework changes anything. This file is the anti-drift contract: any semantic change must be made in both evaluators AND here, deliberately, or CI turns red. Includes the vq4m equals-as-membership hack on checkbox-group triggers, the comma-string gating (voice path), and known warts (String() coercions, no trim on is_empty). Do not 'fix' an expectation to make a code change pass -- a red runner means the evaluators and this contract disagree, which is exactly the drift this suite exists to catch.",
+  "expectShape": "expect is either a boolean (both evaluators agree -- the normal case) or {frontend, editor} (a field shape where the two evaluators GENUINELY DIVERGE today; pinned honestly rather than papered over). Divergences stem from the comma-split gate: the runtime keys on group_kind === 'checkbox', the editor keys on type === 'checkbox' with non-empty options[] (its FormField type has no group_kind). The editor also never unwraps FieldValue objects (a runtime storage detail).",
+  "vectors": [
+    {
+      "name": "no-show_if-visible",
+      "field": { "id": "dep", "type": "text", "label": "Dependent" },
+      "fields": [],
+      "fieldValues": {},
+      "expect": true
+    },
+    {
+      "name": "no-show_if-hidden",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "hidden": true },
+      "fields": [],
+      "fieldValues": {},
+      "expect": false
+    },
+    {
+      "name": "show_if-overrides-static-hidden",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "hidden": true, "show_if": { "field": "t_text", "operator": "equals", "value": "x" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "x" },
+      "expect": true
+    },
+    {
+      "name": "equals-scalar-match",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "yes" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "yes" },
+      "expect": true
+    },
+    {
+      "name": "equals-scalar-mismatch",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "yes" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "no" },
+      "expect": false
+    },
+    {
+      "name": "equals-strict-no-type-coercion-number-vs-string",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "5" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": 5 },
+      "expect": false
+    },
+    {
+      "name": "equals-boolean-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_bool", "operator": "equals", "value": true } },
+      "fields": [{ "id": "t_bool", "type": "checkbox", "label": "Standalone checkbox" }],
+      "fieldValues": { "t_bool": true },
+      "expect": true
+    },
+    {
+      "name": "equals-undefined-trigger",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "x" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": {},
+      "expect": false
+    },
+    {
+      "name": "vq4m-equals-membership-array-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "equals", "value": "a" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }, { "value": "c", "label": "Option C" }] }],
+      "fieldValues": { "t_group": ["a", "b"] },
+      "expect": true
+    },
+    {
+      "name": "vq4m-equals-membership-array-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "equals", "value": "c" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }, { "value": "c", "label": "Option C" }] }],
+      "fieldValues": { "t_group": ["a", "b"] },
+      "expect": false
+    },
+    {
+      "name": "vq4m-equals-membership-array-any-trigger-shape",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "a" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": ["a", "b"] },
+      "expect": true
+    },
+    {
+      "name": "vq4m-equals-membership-numeric-coercion",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "equals", "value": 1 } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "1", "label": "One" }, { "value": "2", "label": "Two" }] }],
+      "fieldValues": { "t_group": [1, 2] },
+      "expect": true
+    },
+    {
+      "name": "vq4m-equals-membership-empty-selection",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "equals", "value": "a" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": [] },
+      "expect": false
+    },
+    {
+      "name": "vq4m-comma-string-membership-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "equals", "value": "b" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }, { "value": "c", "label": "Option C" }] }],
+      "fieldValues": { "t_group": "a, b" },
+      "expect": true
+    },
+    {
+      "name": "vq4m-comma-string-membership-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "equals", "value": "c" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }, { "value": "c", "label": "Option C" }] }],
+      "fieldValues": { "t_group": "a, b" },
+      "expect": false
+    },
+    {
+      "name": "comma-string-single-value-no-comma-strict-equal",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "equals", "value": "a" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": "a" },
+      "expect": true
+    },
+    {
+      "name": "comma-scalar-on-text-trigger-not-split-full-match",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "Springfield, IL" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "Springfield, IL" },
+      "expect": true
+    },
+    {
+      "name": "comma-scalar-on-text-trigger-not-membership",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "Springfield" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "Springfield, IL" },
+      "expect": false
+    },
+    {
+      "name": "comma-string-unresolvable-trigger-strict-compare",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_missing", "operator": "equals", "value": "a,b" } },
+      "fields": [],
+      "fieldValues": { "t_missing": "a,b" },
+      "expect": true
+    },
+    {
+      "name": "DIVERGENT-comma-string-checkbox-options-without-group_kind",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group_nogk", "operator": "equals", "value": "b" } },
+      "fields": [{ "id": "t_group_nogk", "type": "checkbox", "label": "Checkbox group without group_kind", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group_nogk": "a, b" },
+      "expect": { "frontend": false, "editor": true }
+    },
+    {
+      "name": "DIVERGENT-comma-string-group_kind-without-options",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_gk_noopts", "operator": "equals", "value": "b" } },
+      "fields": [{ "id": "t_gk_noopts", "type": "checkbox", "label": "group_kind but no options", "group_kind": "checkbox" }],
+      "fieldValues": { "t_gk_noopts": "a, b" },
+      "expect": { "frontend": true, "editor": false }
+    },
+    {
+      "name": "DIVERGENT-fieldvalue-wrapper-unwrapped-by-runtime-only",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "equals", "value": "a" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": { "value": "a", "confirmed": true } },
+      "expect": { "frontend": true, "editor": false }
+    },
+    {
+      "name": "not_equals-scalar-differs",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "not_equals", "value": "y" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "x" },
+      "expect": true
+    },
+    {
+      "name": "not_equals-scalar-same",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "not_equals", "value": "x" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "x" },
+      "expect": false
+    },
+    {
+      "name": "vq4m-not_equals-membership-selected",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "not_equals", "value": "a" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a"] },
+      "expect": false
+    },
+    {
+      "name": "vq4m-not_equals-membership-not-selected",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "not_equals", "value": "b" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a"] },
+      "expect": true
+    },
+    {
+      "name": "vq4m-not_equals-empty-selection",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "not_equals", "value": "a" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": [] },
+      "expect": true
+    },
+    {
+      "name": "contains-array-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "contains", "value": "b" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a", "b"] },
+      "expect": true
+    },
+    {
+      "name": "contains-array-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "contains", "value": "c" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a", "b"] },
+      "expect": false
+    },
+    {
+      "name": "contains-substring-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "contains", "value": "lo w" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "hello world" },
+      "expect": true
+    },
+    {
+      "name": "contains-substring-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "contains", "value": "xyz" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "hello world" },
+      "expect": false
+    },
+    {
+      "name": "WART-contains-undefined-trigger-stringified",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "contains", "value": "undef" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": {},
+      "expect": true
+    },
+    {
+      "name": "greater_than-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "greater_than", "value": 5 } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "10" },
+      "expect": true
+    },
+    {
+      "name": "greater_than-equal-is-false",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "greater_than", "value": 5 } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "5" },
+      "expect": false
+    },
+    {
+      "name": "greater_than-non-numeric-nan-false",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "greater_than", "value": 5 } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "abc" },
+      "expect": false
+    },
+    {
+      "name": "greater_than-undefined-trigger-false",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "greater_than", "value": 5 } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": {},
+      "expect": false
+    },
+    {
+      "name": "less_than-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "less_than", "value": 5 } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "3" },
+      "expect": true
+    },
+    {
+      "name": "less_than-false",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "less_than", "value": 5 } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "7" },
+      "expect": false
+    },
+    {
+      "name": "is_checked-boolean-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_bool", "operator": "is_checked", "value": true } },
+      "fields": [{ "id": "t_bool", "type": "checkbox", "label": "Standalone checkbox" }],
+      "fieldValues": { "t_bool": true },
+      "expect": true
+    },
+    {
+      "name": "is_checked-boolean-false",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_bool", "operator": "is_checked", "value": true } },
+      "fields": [{ "id": "t_bool", "type": "checkbox", "label": "Standalone checkbox" }],
+      "fieldValues": { "t_bool": false },
+      "expect": false
+    },
+    {
+      "name": "WART-is_checked-string-true-is-not-checked",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_bool", "operator": "is_checked", "value": true } },
+      "fields": [{ "id": "t_bool", "type": "checkbox", "label": "Standalone checkbox" }],
+      "fieldValues": { "t_bool": "true" },
+      "expect": false
+    },
+    {
+      "name": "is_checked-array-nonempty",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "is_checked", "value": true } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a"] },
+      "expect": true
+    },
+    {
+      "name": "is_checked-array-empty",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "is_checked", "value": true } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": [] },
+      "expect": false
+    },
+    {
+      "name": "WART-is_checked-comma-string-not-split",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "is_checked", "value": true } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": "a, b" },
+      "expect": false
+    },
+    {
+      "name": "is_empty-empty-string",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_empty", "value": "" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "" },
+      "expect": true
+    },
+    {
+      "name": "is_empty-null",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_empty", "value": "" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": null },
+      "expect": true
+    },
+    {
+      "name": "is_empty-missing-key",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_empty", "value": "" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": {},
+      "expect": true
+    },
+    {
+      "name": "rigd-is_empty-empty-array",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "is_empty", "value": "" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": [] },
+      "expect": true
+    },
+    {
+      "name": "rigd-is_empty-nonempty-array",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "is_empty", "value": "" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a"] },
+      "expect": false
+    },
+    {
+      "name": "WART-is_empty-zero-is-not-empty",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_empty", "value": "" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": 0 },
+      "expect": false
+    },
+    {
+      "name": "WART-is_empty-whitespace-not-trimmed",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_empty", "value": "" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": " " },
+      "expect": false
+    },
+    {
+      "name": "is_not_empty-value-present",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_not_empty", "value": "" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "x" },
+      "expect": true
+    },
+    {
+      "name": "is_not_empty-empty-string",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_not_empty", "value": "" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "" },
+      "expect": false
+    },
+    {
+      "name": "is_not_empty-empty-array",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "is_not_empty", "value": "" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": [] },
+      "expect": false
+    },
+    {
+      "name": "is_not_empty-nonempty-array",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "is_not_empty", "value": "" } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a"] },
+      "expect": true
+    },
+    {
+      "name": "in-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "in", "value": ["a", "b"] } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "b" },
+      "expect": true
+    },
+    {
+      "name": "in-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "in", "value": ["a", "b"] } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "c" },
+      "expect": false
+    },
+    {
+      "name": "in-numeric-coercion",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "in", "value": ["1", "2"] } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": 1 },
+      "expect": true
+    },
+    {
+      "name": "in-non-array-value-false",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "in", "value": "a" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "a" },
+      "expect": false
+    },
+    {
+      "name": "WART-in-array-trigger-stringified",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_group", "operator": "in", "value": ["a", "b"] } },
+      "fields": [{ "id": "t_group", "type": "checkbox", "label": "Checkbox group", "group_kind": "checkbox", "options": [{ "value": "a", "label": "Option A" }, { "value": "b", "label": "Option B" }] }],
+      "fieldValues": { "t_group": ["a"] },
+      "expect": true
+    },
+    {
+      "name": "not_in-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "not_in", "value": ["a", "b"] } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "c" },
+      "expect": true
+    },
+    {
+      "name": "not_in-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "not_in", "value": ["a", "b"] } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "a" },
+      "expect": false
+    },
+    {
+      "name": "WART-not_in-non-array-value-false-not-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "not_in", "value": "a" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "b" },
+      "expect": false
+    },
+    {
+      "name": "unknown-operator-falls-back-to-not-hidden",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "t_text", "operator": "is_selected", "value": "x" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "x" },
+      "expect": true
+    },
+    {
+      "name": "unknown-operator-hidden-field-stays-hidden",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "hidden": true, "show_if": { "field": "t_text", "operator": "is_selected", "value": "x" } },
+      "fields": [{ "id": "t_text", "type": "text", "label": "Text trigger" }],
+      "fieldValues": { "t_text": "x" },
+      "expect": false
+    }
+  ]
+}
