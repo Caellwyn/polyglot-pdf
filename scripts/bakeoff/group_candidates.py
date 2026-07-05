@@ -64,7 +64,9 @@ def _button_widgets(dump: dict) -> list[dict[str, Any]]:
                 "leaf": dec["leaf"],          # leaf base, [n] stripped
                 "index": dec["index"],
                 "on_value": w.get("on_value"),
-                "tooltip": w.get("tooltip") or "",
+                # acroform_dump.py writes the /TU tooltip under "tu" (fresh-eyes
+                # PR finding, bd cqc6: reading "tooltip" left the signal dead).
+                "tooltip": w.get("tu") or "",
                 "page": rect.get("page"),
                 "x": rect.get("x"),
                 "y": rect.get("y"),

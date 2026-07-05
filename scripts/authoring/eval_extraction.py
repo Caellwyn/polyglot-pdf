@@ -308,6 +308,8 @@ def render_table(rows: list[dict]) -> str:
         f1 = r.get("field_f1")  # schema_score f1 is already a 0-100 percentage
         f1_cell = "     - " if f1 is None else f"{f1:6.1f} "
         form_cell = r["form"] + ("*" if r.get("baseline") else "")
+        if r.get("group_candidates"):
+            form_cell += " [gc]"  # the candidates-block ablation arm
         L.append(
             f"{form_cell:<12} {r['verdict']:<7} "
             f"{str(r['lint_errors']) + '/' + str(r['lint_warnings']):<9} "

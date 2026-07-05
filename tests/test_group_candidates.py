@@ -73,6 +73,24 @@ def test_w9_classification_family_is_one_candidate(tmp_path):
     assert all("c1_2[0]" not in c["leaves"] for c in candidates)
 
 
+def test_tooltip_prefix_signal_fires_on_tu_key():
+    """The dump writes /TU tooltips under "tu" (acroform_dump.py:102); the
+    miner must read that key -- reading "tooltip" left the signal permanently
+    dead (fresh-eyes finding, bd cqc6; w7/w9 carry no tooltips, so only a
+    synthetic dump can pin this)."""
+    dump = {"fields": [
+        {"name": f"top[0].race_{i}[0]", "logical_type": "checkbox",
+         "widgets": [{"on_value": "1", "tu": f"Race. Select all. Option {i}",
+                      "rect": {"page": 0, "x": 50.0, "y": 100.0 + 12 * i}}]}
+        for i in range(1, 4)
+    ]}
+    candidates = gc.find_group_candidates(dump)
+    assert len(candidates) == 1
+    signals = "; ".join(candidates[0]["signals"])
+    assert "tooltip-prefix" in signals
+    assert "Race. Select all." in signals
+
+
 def test_render_block_is_suggest_not_decide():
     block = gc.render_candidates_block([
         {"widgets": ["top.c1_2[0]", "top.c1_3[0]"],
