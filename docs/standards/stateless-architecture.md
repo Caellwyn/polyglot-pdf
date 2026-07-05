@@ -1,6 +1,6 @@
 # Stateless architecture
 
-*Last updated: 2026-06-14. bd uj57: emoji -> ASCII in webFormConnection.ts console logs (cosmetic string-only, no state change). bd 0tgc: onStopCapture/onFormComplete wired in createConnectionManager -- client-side only, no server-side state. bd b6k4: createMicDropWarn exported from connection.ts -- internal refactor, no protocol change. bd vfb2: send_form_update request_hint param -- client round-trip opt-in, backend stateless invariant unchanged. Prior: bd polyglot-pdf-vmxx: resume:true handshake hint; the stateless invariant is unchanged. The connection.ts dev test-injection hook (bd polyglot-pdf-g8w) adds no server-side state. bd jnjj.45: the secretary's handle_ask_secretary requests the full form state from the client per call and holds it in a TRANSIENT local (discarded after the lookup) to build the secretary context -- the request-use-discard pattern get_form_status/validate already use; NO field values are persisted or logged server-side, so the invariant holds (the cached full SCHEMA is metadata, not PII). See [journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md](journal/entries/2026-06-27-bd-jnjj.45-secretary-build.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the secretary's request-use-discard pattern into the Rules section; verified accurate against current code otherwise). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 **Tracks:** `backend/services/form_filling_service.py` `backend/routes/websocket_routes.py` `frontend/src/schema-forms/state/schemaFormState.ts` `frontend/src/webFormConnection.ts` `frontend/src/shared/connection.ts`
 
@@ -94,6 +94,15 @@ durability is a property of the form-session (client-side), never the WS session
   timings (see [`logging-and-cost.md`](logging-and-cost.md), planned `polyglot-pdf-m8s`).
 - **Treat `current_values` as ephemeral context, not storage.** It's an input to
   prompt-building, consumed and dropped within the connection.
+- **The request-use-discard pattern for any handler that needs current field
+  state.** `get_form_status`/`validate` and the secretary
+  (`FormFillingService.handle_ask_secretary`) all need a fresh read of field
+  values mid-session; none of them cache it. `handle_ask_secretary` calls
+  `request_form_state_from_client(...)` per invocation and holds the result in a
+  local variable only for the duration of that call (building the secretary's
+  `context` dict), never assigning it to `self`; the value is gone once the
+  handler returns. Follow this pattern for any new handler that needs field
+  state -- ask the client, use it, let it fall out of scope.
 - **Clearing state is a client concern.** `SchemaFormStateManager.clear()`
   (`sessionStorage.removeItem("schema_form_state")`) wipes the only durable copy;
   there is nothing server-side to also clear. Note `clear()` does **not** fire the

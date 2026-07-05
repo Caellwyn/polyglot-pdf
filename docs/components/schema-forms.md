@@ -1,8 +1,8 @@
 # Schema forms & client state
 
-**Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts
+**Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md](../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md) for closeout details.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code; added normalizeToComposite.ts and conditionalFieldCheck.ts to Tracks since the body already documents them). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -157,5 +157,3 @@ carries (see [websocket-routing.md](websocket-routing.md)).
   is section-based, with load-time migration of the old `*Part*` keys.
 - **`signature`/`address_group`/`table` are stubs** — don't assume all 12
   `FieldType`s render.
-
-*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md](../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md) for closeout details.*

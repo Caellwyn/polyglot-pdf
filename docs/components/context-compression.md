@@ -2,11 +2,12 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-06-18. bd jnjj.35 (A6): the DTI compression window/trigger are now DERIVED per-form from the rendered SI+tools floor (new CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR / *_HEADROOM_TOKENS / *_MARGIN_TOKENS knobs); the static TRIGGER/WINDOW are the override. Prior: 2026-06-13. bd vfb2: send_form_update no longer unconditionally awaits request_next_field_hint (no compression behavior change). Prior: 2026-06-12 (status flip: eviction confirmed working on 3.1 under SDK 2.8.0;
-cost-motivation of section resets corrected per maintainer; epic `polyglot-pdf-hcsl`,
-bead `polyglot-pdf-h04c`). Session-resumption/GoAway decisions: see
-[../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md](../journal/entries/2026-06-12-bd-wnt-session-resumption-eval.md)
-and [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: fixed the broken
+link to the exploration plan, which had moved to `docs/archive/`, and added the
+go/no-go brief that followed it; the derivation formula, gating (`USE_DTI` +
+`CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR`), and parameter defaults in
+`_build_live_config` were verified still accurate, no other corrections needed).
+See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 > **STATUS (2026-06-12): WORKING on BOTH models -- eviction confirmed on SDK 2.8.0.**
 > Sliding-window eviction is real and reliable on `gemini-3.1-flash-live-preview`
@@ -34,8 +35,10 @@ Related: the adapter ([voice-ai.md](voice-ai.md)), the stateless contract
 ([../standards/stateless-architecture.md](../standards/stateless-architecture.md)),
 the PII layering ([../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md)),
 the authoritative SDK reference ([../genai_docs/README.md](../genai_docs/README.md)),
-and the active exploration plan
-([../sprint_4_sliding-window-context_plan.md](../sprint_4_sliding-window-context_plan.md)).
+the original exploration plan
+([../archive/sprint_4_sliding-window-context_plan.md](../archive/sprint_4_sliding-window-context_plan.md)),
+and the go/no-go brief that came out of it
+([../sliding-window-go-no-go-brief.md](../sliding-window-go-no-go-brief.md)).
 
 ## Why -- and what compression actually buys us
 

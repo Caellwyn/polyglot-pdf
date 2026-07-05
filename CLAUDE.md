@@ -41,8 +41,8 @@ This file (CLAUDE.md) is auto-loaded every session. Everything else is on-demand
 
 **Trigger reads:** Before changing code in a surface, read the matching
 `docs/components/<surface>.md`. If the doc is wrong, fix the doc first as a
-separate commit. The tier-2 docs below are being populated under the docs-reorg
-epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
+separate commit. The full tier-2 set exists (docs-reorg epic `polyglot-pdf-gfb`,
+closed); the cited code path is the ground truth when a doc and the code disagree.
 
 | Before changing... | Read |
 |--------------------|------|
@@ -98,11 +98,14 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
 5. **"Section" is the navigation unit; "part" is a real but distinct level.**
    The hierarchy is Form > Parts > Sections > Fields -- *part* is an optional
    grouping of sections, **not** a synonym for section. Don't name section-state
-   `current_part_id` / `part_id`. The internal holdouts have been renamed
-   (`polyglot-pdf-gfb.4`); the only remaining `part` drift is on the **wire format**
-   (the token-log payload key + the WS-handshake manifest keys), sequenced against
-   consumers under `polyglot-pdf-zun`. Full canon (incl. field-id brackets,
-   form-session vs session) in
+   `current_part_id` / `part_id`. The internal holdouts and the wire-format keys
+   are now section-canonical (`polyglot-pdf-gfb.4` + `polyglot-pdf-zun`: token-log
+   `section_id`; frontend handshake-manifest keys). The one remaining `part`-named
+   holdout is the backend-internal `manifest_service.py` / `ai_context.py`
+   SI-text path -- deliberately deferred (renaming changes the Gemini prompt
+   wording); the `manifest.parts` navigation key keeps its name because that IS
+   the backend wire contract. Full canon (incl. field-id brackets, form-session
+   vs session) in
    [`docs/standards/terminology.md`](docs/standards/terminology.md) (`polyglot-pdf-m3f`).
 6. **ASCII ONLY in code files.** In `.py` / `.ts` / `.tsx` / `.js` and any other
    source file -- including comments and string literals -- use plain ASCII: `--`

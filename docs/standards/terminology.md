@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md](../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md) for closeout details.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- form_models.py's v2 strictness checks, FieldOption/FormSection/FormPart shapes, and the consolidated_widgets/group_kind enforcement all still match this doc's claims). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 

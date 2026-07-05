@@ -1,8 +1,8 @@
 # Validation delegation (cheap-model validator) -- frozen contract
 
-**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
+**Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-06-29. Pillar B is now FULLY WIRED. B3 (jnjj.15): `ValidatorService` renders the contract-2 payload, calls `ITextAI.validate()`, returns the contract-1 verdict, fail-OPEN. B4 (jnjj.16): the client emits the proactive `section_complete` / `form_complete` events (contract 4) and the backend receives them. B5 (jnjj.17): `FormFillingService.handle_validation_boundary` runs the validator at each boundary, pushes the `validation_result` envelope to the client for EVERY boundary (contract 1), and on a SURVIVING conflict injects the steering directive into the Live session (contract 3 -- names both fields + the override escape hatch); the frontend gates the section switch on the verdict (contract 4 ordering: clean -> resume, conflict -> hold in-section, fail-OPEN timeout -> advance unchecked) and owns the per-field `steered` marker (contract 2/3 max-resteer bound). See [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for B5 closeout details. The A-pillar secretary `ask()` was implemented in jnjj.45a/b/c and hardened in j268.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -78,7 +78,8 @@ The **text-generation path** was added in bd polyglot-pdf-jnjj.14:
   `MODEL_LABELING=gemini-2.5-flash-lite` in deploy env for the lite validator tier).
 
 `MODEL_LABELING` is no longer orphaned -- `get_text_ai()` is its live consumer. The
-original field-labeling normalizer it was named for is still deprecated (`config.py:55`).
+original field-labeling normalizer it was named for is still deprecated (`config.py`,
+the `MODEL_LABELING` field comment).
 
 Field-level validation is **per-value only**: `backend/utils/field_validator.py`
 checks one value against its own schema constraints; the frontend mirror is
@@ -209,8 +210,9 @@ existing path (`LiveAIGemini.send_text_message` ->
 `send_client_content` / `send_realtime_input`, the same mechanism the initiating
 message uses). It is NOT sent to the browser: the frontend has no role in voicing
 a steer, and an unknown message type falls through the frontend dispatcher's
-default-ignore path (`webFormConnection.ts:489-491`), so a steer routed to the
-client would simply be dropped and the conflict never voiced. Accordingly there is
+default-ignore path (`webFormConnection.ts`, the message-handler `switch`'s
+`default` case), so a steer routed to the client would simply be dropped and the
+conflict never voiced. Accordingly there is
 **no `validator_steer` WS message type** -- F2's message-type registry does not list
 one (an earlier draft wrongly reserved it as backend->frontend; removed). The
 shape below is the internal directive the backend builds and injects, not a wire
@@ -267,7 +269,7 @@ invariants it honors.
 Today completion is **reactive-only**: the backend pulls a hint via a
 `get_next_field_hint` request and the frontend answers it
 (`frontend/src/webFormConnection.ts::handleGetNextFieldHintRequest` ->
-`computeNextFieldHintString`, ~lines 822-876), computing
+`computeNextFieldHintString`), computing
 `isFormComplete` / `computeNextField` from `frontend/src/navigation.ts` only when
 asked. Nothing is emitted proactively.
 
@@ -277,8 +279,9 @@ the boundaries where the validator should run. The wire TYPE names are reserved 
 
 Both events **carry their own `fields` payload** -- the backend is stateless and
 keeps NO server-side form values (`FormFillingService.start_session` treats
-`current_values` as client-owned and does not persist them,
-`backend/services/form_filling_service.py:119-120,136-139`), so the validator's
+`current_values` as client-owned and does not persist them --
+`backend/services/form_filling_service.py`, the `current_values` param docstring
+and the "client is source of truth" comment in its body), so the validator's
 input MUST ride on the event itself; there is nothing server-side to project from
 after the message arrives.
 
@@ -334,8 +337,9 @@ confirmed:
 
 Today, when the last field of a section is confirmed, the client auto-advances to
 the next section IN THE SAME confirm handler
-(`frontend/src/webFormConnection.ts:1318-1343` -> `computeNextField` ->
-`switchToSection`, which restarts the Live session into the next section). If
+(`frontend/src/webFormConnection.ts`, the confirm-field handler around line 1583
+-> `computeNextField` -> `switchToSection`, which restarts the Live session into
+the next section). If
 `section_complete` simply fires alongside that, **the validator's verdict arrives
 after Gemini has already been restarted into the next section**, and the
 steer-back-to-the-problem-field flow cannot work (the live model is no longer in
@@ -366,11 +370,21 @@ class ITextAI(ABC):
         (contract 2) and return the verdict (contract 1). Fail-open: on
         timeout/error the caller advances unchecked (see PII sign-off)."""
         ...
+
+    async def ask(self, query: str, context: dict) -> str:
+        """Send a prose query + current-values context to the secretary agent
+        and return its prose answer. Fail-open: on error returns "" so the Live
+        model can ask the user directly. Non-abstract with a NotImplementedError
+        default (the A-pillar secretary, jnjj.45)."""
+        ...
 ```
 
 - Method: `async validate(payload) -> verdict` -- payload is contract 2, verdict
-  is contract 1. A single method is enough for B; resist widening the port until a
-  second text-model use exists.
+  is contract 1 (B pillar). `async ask(query, context) -> str` is the A-pillar
+  secretary method (jnjj.45): a plain prose query in, a prose answer out,
+  fail-open to `""`. `ask()` is declared non-abstract (default raises
+  `NotImplementedError`) so an adapter that predates the secretary bead fails
+  loudly rather than silently; `TextAIGemini` implements both.
 - Adapter: `backend/adapters/text_ai_gemini.py::TextAIGemini`, mirroring
   `LiveAIGemini`'s constructor convention --
   `TextAIGemini(api_key=..., model=..., vertexai=...)`, constructing a

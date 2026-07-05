@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-07-02 (bd polyglot-pdf-63zi: the three parked `.NEEDS_CLEANUP` field-component tests are revived and collected -- the frontend section's stale five-active/five-dormant counts replaced with current state + the cleanup/jest-dom conventions new component tests must follow). Also 2026-07-02, bd polyglot-pdf-o0pc: the duplicate-basename example and the "probe scripts outside testpaths" passage updated after the dead-code cleanup deleted the cited `scripts/test_*.py` probes and relocated `backend/test_manifest_generation.py` into `backend/tests/unit/`. Prior: 2026-06-12 (tsc --noEmit gate, bd polyglot-pdf-uov.17; live-probe deploy-fidelity rule, bd polyglot-pdf-h04c). See [../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md](../journal/entries/2026-06-12-bd-uov.17-tsc-noemit-clean.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- the CI merge-gate wording already matches the auto-merge-vs-maintainer-merge policy in `.github/workflows/ci.yml`). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -238,5 +238,3 @@ real unit and let IT drive the mock; a cheap guard against writing the fake vers
 is to mutate one production assertion (e.g. flip a close code) and confirm the test
 goes red. (`polyglot-pdf-uov.9` found this in `test_idle_timeout.py`; the honest
 idle-watchdog spec drives the real `_handle_fill_session` watchdog.)
-
-*Last updated: 2026-06-19 (worktree Vite `server.fs.allow` for junctioned node_modules, bd polyglot-pdf-7a9.17). See [../journal/entries/2026-06-19-bd-7a9.17-wire-extractor-into-editor.md](../journal/entries/2026-06-19-bd-7a9.17-wire-extractor-into-editor.md).*
