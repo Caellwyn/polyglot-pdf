@@ -11,7 +11,7 @@ import {
   isGroupableField,
   mergeBlockReason,
   stripEditorState,
-  stripOptionRefs,
+  optionValueReferencedBy,
 } from './fieldGrouping';
 import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
 
@@ -896,10 +896,37 @@ describe('require_if handling in merge/un-merge (bd 319g)', () => {
   });
 });
 
-// Removing a group option must not orphan a dependent that referenced its slug
-// (bd h76m.10, Codex PR #310). stripOptionRefs is the helper the FieldEditor
-// Remove action calls.
-describe('stripOptionRefs (Codex PR #310)', () => {
+// require_if must be remapped in the un-merge FALLBACK exactly like show_if
+// (bd h76m.10, Codex PR #310 round 2): it was previously left dangling.
+describe('un-merge fallback remaps require_if too (Codex PR #310 round 2)', () => {
+  it('remaps a checkbox_group dependent require_if after save/reload/un-merge', () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      require_if: { field: 'reason_b', operator: 'is_checked' },
+    } as FormField);
+    schema.sections[0].fields.push('detail');
+
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    expect(asAtom(merged.fields.find(f => f.id === 'detail')!.require_if).operator).toBe('includes');
+
+    const saved = stripEditorState(merged);
+    const unmerged = ungroupField(saved, 'reason_a');
+    const back = asAtom(unmerged.fields.find(f => f.id === 'detail')!.require_if);
+    // No dangling includes on a now-standalone boolean checkbox.
+    expect(back.operator).not.toBe('includes');
+    expect(back.operator).toBe('is_checked');
+    expect(unmerged.fields.some(f => f.id === back.field && f.type === 'checkbox')).toBe(true);
+  });
+});
+
+// Deleting a group option that a dependent references must be BLOCKED, not
+// silently rewritten (bd h76m.10, Codex PR #310 round 2): a silent strip would
+// flip a positive-trigger dependent from correctly-hidden to shown-for-all.
+describe('optionValueReferencedBy (Codex PR #310)', () => {
   function groupSchema(): FormSchema {
     return {
       source: 'pdf',
@@ -917,33 +944,29 @@ describe('stripOptionRefs (Codex PR #310)', () => {
         { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false, required: false,
           require_if: { field: 'grp', operator: 'includes', value: 'b' } },
         { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false, required: false,
-          show_if: { all_of: [
-            { field: 'grp', operator: 'includes', value: 'a' },
-            { field: 'grp', operator: 'includes', value: 'b' },
-          ] } },
+          show_if: { all_of: [{ field: 'grp', operator: 'includes', value: 'a' }] } },
       ],
     } as unknown as FormSchema;
   }
 
-  it('drops a single-condition show_if / require_if that referenced the deleted slug', () => {
-    const { fields } = stripOptionRefs(groupSchema(), 'grp', 'b');
-    expect(fields.find(f => f.id === 'dep')!.show_if).toBeUndefined();
-    expect(fields.find(f => f.id === 'dep2')!.require_if).toBeUndefined();
+  it('lists every dependent that references the slug via show_if OR require_if', () => {
+    expect(optionValueReferencedBy(groupSchema(), 'grp', 'b').sort()).toEqual(['dep', 'dep2']);
   });
 
-  it('drops only the matching ATOM inside a composite, keeping the rest', () => {
-    const { fields } = stripOptionRefs(groupSchema(), 'grp', 'b');
-    const combo = fields.find(f => f.id === 'combo')!.show_if as { all_of?: unknown[] };
-    expect(combo.all_of).toHaveLength(1);
-    expect(combo.all_of![0]).toEqual({ field: 'grp', operator: 'includes', value: 'a' });
+  it('finds a reference inside a composite condition', () => {
+    expect(optionValueReferencedBy(groupSchema(), 'grp', 'a')).toEqual(['combo']);
   });
 
-  it('leaves conditions on OTHER fields untouched', () => {
+  it('returns empty when no dependent references the slug (safe to delete)', () => {
+    expect(optionValueReferencedBy(groupSchema(), 'grp', 'no_such_slug')).toEqual([]);
+  });
+
+  it('ignores references to the SAME slug on a different trigger field', () => {
     const s = groupSchema();
-    const { fields } = stripOptionRefs(s, 'grp', 'no_such_slug');
-    // nothing referenced 'no_such_slug' -> every field is the same reference.
-    for (const f of fields) {
-      expect(f).toBe(s.fields.find(x => x.id === f.id));
-    }
+    s.fields.push({ id: 'other', name: 'Other', type: 'checkbox_group', section_id: 's1',
+      read_only: false, required: false,
+      options: [{ value: 'b', label: 'B', pdf_field_name: 'ob[0]' }] } as unknown as FormField);
+    // 'dep' references grp.b, not other.b -> deleting other.b is unblocked.
+    expect(optionValueReferencedBy(s, 'other', 'b')).toEqual([]);
   });
 });

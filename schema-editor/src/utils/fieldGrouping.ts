@@ -264,60 +264,39 @@ function rewriteCondition(
   return rewriteShowIf(cond, mergedAwayToValue, primaryId, membership) ?? cond;
 }
 
-// Remove any show_if / require_if ATOM that references a specific option slug
-// of `triggerFieldId` (bd h76m.10, Codex PR #310). Called when an author
-// deletes an option from a choice field: a dependent gated on
-// `{field: triggerFieldId, operator: includes/equals/..., value: <deleted
-// slug>}` would otherwise dangle (a ref-option-value lint error + a condition
-// that can never match). A condition left with no atoms is dropped entirely
-// (the field reverts to always-shown / statically-required). Returns the full
-// field list (only the affected dependents differ by reference).
-export function stripOptionRefs(
+// Field IDs of dependents whose show_if / require_if references a specific
+// option slug of `triggerFieldId` (bd h76m.10, Codex PR #310). Deleting such an
+// option must NOT silently strip the condition -- for a positive trigger
+// (includes/equals) that would flip the dependent from correctly-hidden to
+// shown-for-everyone (round-2 finding). So the editor BLOCKS the delete and
+// tells the author to retarget the dependent first, keeping the schema
+// ref-clean without a silent semantic change. Returns the referencing field
+// ids (empty = safe to delete).
+export function optionValueReferencedBy(
   schema: FormSchema,
   triggerFieldId: string,
-  deletedSlug: string,
-): { fields: FormField[] } {
-  const targetsDeleted = (atom: ConditionalDisplay): boolean =>
-    atom.field === triggerFieldId && String(atom.value) === deletedSlug;
-
-  const stripCondition = (cond: FieldCondition | undefined): FieldCondition | undefined => {
-    if (!cond) return cond;
-    if (isCompositeCondition(cond)) {
-      const out: CompositeConditionalDisplay = {};
-      let atomCount = 0;
-      let removedAny = false;
-      for (const bucket of CONDITION_BUCKETS) {
-        const members = cond[bucket];
-        if (members) {
-          const kept = members.filter(a => !targetsDeleted(a));
-          if (kept.length !== members.length) removedAny = true;
-          if (kept.length > 0) {
-            out[bucket] = kept;
-            atomCount += kept.length;
-          }
-        }
+  optionSlug: string,
+): string[] {
+  const refs = (cond: FieldCondition | undefined): boolean => {
+    for (const atom of conditionAtomsOf(cond)) {
+      if (atom.field === triggerFieldId && String(atom.value) === optionSlug) {
+        return true;
       }
-      // No atom removed -> return the SAME reference (callers diff by identity
-      // to skip untouched fields).
-      if (!removedAny) return cond;
-      return atomCount > 0 ? out : undefined;
     }
-    return targetsDeleted(cond) ? undefined : cond;
+    return false;
   };
+  return schema.fields
+    .filter(f => f.id !== triggerFieldId && (refs(f.show_if) || refs(f.require_if)))
+    .map(f => f.id);
+}
 
-  const fields = schema.fields.map(f => {
-    if (f.id === triggerFieldId) return f; // the trigger itself is untouched
-    const nextShow = stripCondition(f.show_if);
-    const nextReq = stripCondition(f.require_if);
-    if (nextShow === f.show_if && nextReq === f.require_if) return f;
-    const next: FormField = { ...f };
-    if (nextShow) next.show_if = nextShow;
-    else delete (next as unknown as Record<string, unknown>).show_if;
-    if (nextReq) next.require_if = nextReq;
-    else delete (next as unknown as Record<string, unknown>).require_if;
-    return next;
-  });
-  return { fields };
+// Flatten a legacy-or-composite condition to its atomic conditions.
+function conditionAtomsOf(cond: FieldCondition | undefined): ConditionalDisplay[] {
+  if (!cond) return [];
+  if (isCompositeCondition(cond)) {
+    return CONDITION_BUCKETS.flatMap(b => cond[b] ?? []);
+  }
+  return [cond];
 }
 
 // Rewrite every dependent field's show_if / controls_fields that referenced a
@@ -865,13 +844,15 @@ function remapFallbackDependent(
   let changed = false;
   const next: FormField = { ...f };
 
-  // show_if may be legacy or a v2 composite (bd h76m.8): remap atom-wise,
-  // preserving the stored shape.
-  if (f.show_if && conditionReferencesAny(f.show_if, new Set([fieldId]))) {
-    if (isCompositeCondition(f.show_if)) {
+  // Remap a show_if/require_if that referenced the now-split consolidated
+  // field, atom-wise, preserving the stored shape (legacy or v2 composite --
+  // bd h76m.8). show_if AND require_if get the SAME treatment (Codex PR #310
+  // round 2: require_if was previously left dangling).
+  const remapCond = (cond: FieldCondition): FieldCondition => {
+    if (isCompositeCondition(cond)) {
       const out: CompositeConditionalDisplay = {};
       for (const bucket of CONDITION_BUCKETS) {
-        const members = f.show_if[bucket];
+        const members = cond[bucket];
         if (members) {
           out[bucket] = members.map(atom =>
             atom.field === fieldId
@@ -880,12 +861,17 @@ function remapFallbackDependent(
           );
         }
       }
-      next.show_if = out;
-    } else {
-      next.show_if = remapFallbackAtom(
-        f.show_if, valueToReconstructedId, primaryReconstructedId,
-      );
+      return out;
     }
+    return remapFallbackAtom(cond, valueToReconstructedId, primaryReconstructedId);
+  };
+
+  if (f.show_if && conditionReferencesAny(f.show_if, new Set([fieldId]))) {
+    next.show_if = remapCond(f.show_if);
+    changed = true;
+  }
+  if (f.require_if && conditionReferencesAny(f.require_if, new Set([fieldId]))) {
+    next.require_if = remapCond(f.require_if);
     changed = true;
   }
 

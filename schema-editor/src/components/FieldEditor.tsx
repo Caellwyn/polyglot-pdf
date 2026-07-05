@@ -7,7 +7,7 @@ import type {
   ConditionalOperator,
   ControlActionKey,
 } from '../types/schema';
-import { canUngroup, mintUniqueSlugs, stripOptionRefs } from '../utils/fieldGrouping';
+import { canUngroup, mintUniqueSlugs, optionValueReferencedBy } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
 
 interface FieldEditorProps {
@@ -230,21 +230,45 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-gray-900">Basic Properties</h4>
 
-          {/* Field Type */}
-          <div>
-            <label className="label">Field Type</label>
-            <select
-              className="input"
-              value={field.type}
-              onChange={(e) => updateField({ type: e.target.value as FieldType })}
-            >
-              {FIELD_TYPES.map(type => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Field Type. A field that already carries options[] is a GROUP
+              (checkbox_group / a consolidated radio); raw-switching its type
+              would strand the options or mint a model-invalid group, so the
+              picker is read-only for groups -- change the group via Merge /
+              Ungroup instead. checkbox_group is only OFFERED as a target to
+              authors, since building a valid one requires per-option PDF
+              mapping (Codex PR #310 round 2). */}
+          {(() => {
+            const isGroup = !!field.options && field.options.length > 0;
+            const typeChoices = FIELD_TYPES.filter(
+              t => t !== 'checkbox_group' || authorTier || field.type === 'checkbox_group',
+            );
+            return (
+              <div>
+                <label className="label">Field Type</label>
+                <select
+                  className="input disabled:opacity-60"
+                  value={field.type}
+                  disabled={isGroup}
+                  title={isGroup
+                    ? 'This is a group (has options). Change it via Merge / Ungroup, not a type switch.'
+                    : undefined}
+                  onChange={(e) => updateField({ type: e.target.value as FieldType })}
+                >
+                  {typeChoices.map(type => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                {isGroup && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Group type is set by Merge (several = checkbox group, exactly
+                    one = radio) and reversed by Ungroup.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Spoken Name */}
           <div>
@@ -670,26 +694,32 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           {option.value}
                         </span>
                       )}
-                      <button
-                        className="btn-sm btn-secondary"
-                        onClick={() => {
-                          const removed = option.value;
-                          const newOptions = (field.options || []).filter((_, i) => i !== idx);
-                          // Removing an option can orphan a dependent condition
-                          // that referenced its slug (show_if/require_if
-                          // includes/equals <slug>). Strip those atoms so the
-                          // saved schema stays ref-clean (Codex PR #310).
-                          const patched = removed
-                            ? stripOptionRefs(schema, field.id, String(removed))
-                            : { fields: schema.fields };
-                          onUpdateField({ ...field, options: newOptions });
-                          for (const f of patched.fields) {
-                            if (f.id !== field.id) onUpdateField(f);
-                          }
-                        }}
-                      >
-                        Remove
-                      </button>
+                      {(() => {
+                        // A dependent gated on this option's slug would dangle
+                        // (or, if silently stripped, flip from hidden to
+                        // shown-for-everyone). Block the delete and name the
+                        // dependents so the author retargets them first
+                        // (Codex PR #310 round 2).
+                        const referencedBy = option.value
+                          ? optionValueReferencedBy(schema, field.id, String(option.value))
+                          : [];
+                        const blocked = referencedBy.length > 0;
+                        return (
+                          <button
+                            className="btn-sm btn-secondary disabled:opacity-50"
+                            disabled={blocked}
+                            title={blocked
+                              ? `Used by a condition on: ${referencedBy.join(', ')}. Retarget those first.`
+                              : undefined}
+                            onClick={() => {
+                              const newOptions = (field.options || []).filter((_, i) => i !== idx);
+                              updateField({ options: newOptions });
+                            }}
+                          >
+                            Remove
+                          </button>
+                        );
+                      })()}
                     </div>
                     {authorTier && (
                       <details className="text-xs pl-1">
@@ -712,20 +742,22 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     )}
                   </div>
                 ))}
-                <button
-                  className="btn btn-secondary w-full text-sm"
-                  onClick={() => {
-                    const opts = field.options || [];
-                    const value = mintUniqueSlugs(
-                      [...opts.map(o => o.label || ''), 'option'],
-                    ).slice(-1)[0];
-                    updateField({ options: [...opts, { label: '', value }] });
-                  }}
-                >
-                  + Add Option
-                </button>
+                {(authorTier || field.type === 'select') && (
+                  <button
+                    className="btn btn-secondary w-full text-sm"
+                    onClick={() => {
+                      const opts = field.options || [];
+                      const value = mintUniqueSlugs(
+                        [...opts.map(o => o.label || ''), 'option'],
+                      ).slice(-1)[0];
+                      updateField({ options: [...opts, { label: '', value }] });
+                    }}
+                  >
+                    + Add Option
+                  </button>
+                )}
               </div>
-            ) : (
+            ) : (authorTier || field.type === 'select') ? (
               <button
                 className="btn btn-secondary w-full"
                 onClick={() =>
@@ -736,6 +768,8 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               >
                 + Add Option
               </button>
+            ) : (
+              <p className="text-xs text-gray-500">No options.</p>
             )}
           </div>
         )}
