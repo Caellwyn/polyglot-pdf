@@ -319,7 +319,11 @@ Step 6 (open the PR).
    `Agent({ subagent_type: "general-purpose", model: "<picked>", ... })`. The prompt
    MUST (a) include the bead's `## Exit criteria` verbatim so the assessor scores
    the rubric, not just style; (b) name the branch; (c) tell it to read the REAL
-   diff (`git diff origin/dev...HEAD`), never a summary. **If you picked `haiku`,
+   diff (`git diff origin/dev...HEAD`), never a summary; (d) tell it to TRACE every
+   changed value/format/contract into its consumers in untouched files before
+   clearing (bd dgoa -- the standing agent file already embeds this mandate; state
+   it in a one-off prompt too, and it is worth naming explicitly for a diff whose
+   changed strings/formats are parsed elsewhere). **If you picked `haiku`,
    the prompt MUST tell the reviewer it is running as Haiku** -- that sentence arms
    the self-escalation clause (a Haiku run that finds the change risky stops and
    recommends a Sonnet re-review). Without it the clause is dormant.
@@ -532,10 +536,11 @@ Keep the working tree clean between rounds (`git status --short`). Fresh-eyes lo
 verdict in the window), or `NO-ACK` (Codex never reacted to the trigger within
 the 2-min ack window) -- i.e. Codex is unavailable.** A CLEAN/COMMENTS Codex
 review never gets here; it loops in Step 7. The point: when Codex can't review,
-the PR must NOT stall waiting on the maintainer. Route to ONE additional
-adversarial review by an **Opus-4.8 subagent** -- the most capable affordable
+the PR must NOT stall waiting on the maintainer. Route to the **Opus-4.8 fallback
+gate** -- adversarial review by Opus-4.8 subagents (the most capable affordable
 reviewer once Codex credits are spent, a fresh independent look from a stronger
-tier than the Sonnet fresh-eyes that already cleared the rubric pre-PR.
+tier than the Sonnet fresh-eyes that already cleared the rubric pre-PR), which
+requires **two independent clearing reviews** as defined immediately below.
 
 **Two independent clearing reviews are required, not one** (maintainer directive
 2026-07-05, bd polyglot-pdf-dgoa). When Codex is down, the fallback is the ONLY
