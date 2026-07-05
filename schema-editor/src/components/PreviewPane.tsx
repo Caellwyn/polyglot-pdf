@@ -148,6 +148,7 @@ function rendersSingleControl(field: FormField): boolean {
   const hasOptions = !!field.options && field.options.length > 0;
   if (field.type === 'radio') return false;
   if (field.type === 'checkbox') return !hasOptions; // lone checkbox is single
+  if (field.type === 'checkbox_group') return false; // per-option labels (v2)
   if (field.type === 'signature' || field.type === 'table') return false;
   return true; // text/textarea/select/date/number/tel/email
 }
@@ -223,8 +224,10 @@ function PreviewInput({ field, value, disabled, inputId, onSetValue, onToggleOpt
   }
 
   // CHECKBOX: a group (options[]) multi-selects into an array; a lone checkbox
-  // (no options) is a single boolean.
-  if (field.type === 'checkbox') {
+  // (no options) is a single boolean. The v2 checkbox_group TYPE (bd h76m.9)
+  // is the same multi-select group, explicit in the type instead of inferred
+  // from options[].
+  if (field.type === 'checkbox' || field.type === 'checkbox_group') {
     if (options.length > 0) {
       const selected = Array.isArray(value) ? value : [];
       return (
