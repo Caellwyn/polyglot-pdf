@@ -484,13 +484,19 @@ def _lint_schema(schema: dict, dump: dict | None) -> dict:
 
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             model: str = "claude-opus-4-8", keep_dump: bool = False,
-            instructions_pdf: str | None = None) -> dict:
+            instructions_pdf: str | None = None,
+            group_candidates: bool = False) -> dict:
     """Run the full PDF -> draft-schema pass and write `out_path`. Returns the
     draft dict (with a `_bakeoff` provenance block).
 
     instructions_pdf: optional path to the form's official instructions PDF. When
     given, its text enriches each field's help.instructions on top of the /TU
-    baseline (bd polyglot-pdf-s4dp.3); when absent, help.instructions is /TU-only."""
+    baseline (bd polyglot-pdf-s4dp.3); when absent, help.instructions is /TU-only.
+
+    group_candidates (bd h76m.12): when True, the prompt carries the
+    deterministic pre-grouping candidates block (suggest, don't decide --
+    see scripts/bakeoff/group_candidates.py). Default OFF; flips on once the
+    eval_extraction ablation shows no held-out regression."""
     # 1. Deterministic AcroForm dump (to a temp file unless --keep-dump).
     dump_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     if keep_dump:
@@ -503,7 +509,8 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
 
         # 2. The strong-LLM pass over dump + PDF.
         schema = arm_llm_native.run(pdf_path, dump_path, model, send_pdf=True,
-                                    plain=plain)
+                                    plain=plain,
+                                    group_candidates=group_candidates)
 
         # 3. Deterministically back-fill pdf_position from the dump (the LLM is
         #    flaky at coordinates; the dump has them keyed by exact widget name).
@@ -605,6 +612,9 @@ def main(argv: list[str] | None = None) -> int:
                      help="force the enriched-bundle prompt")
     ap.add_argument("--keep-dump", action="store_true",
                     help="keep the intermediate AcroForm dump (<out>_acroform.json)")
+    ap.add_argument("--group-candidates", action="store_true",
+                    help="include the deterministic pre-grouping candidates "
+                         "block in the prompt (bd h76m.12; default off)")
     ap.add_argument("--instructions-pdf", default=None,
                     help="OPTIONAL official instructions PDF; its text enriches "
                          "help.instructions on top of the /TU baseline (bd s4dp.3)")
@@ -613,7 +623,8 @@ def main(argv: list[str] | None = None) -> int:
     plain = DEFAULT_PLAIN if args.plain is None else args.plain
     schema = extract(args.pdf, args.out, plain=plain, model=args.model,
                      keep_dump=args.keep_dump,
-                     instructions_pdf=args.instructions_pdf)
+                     instructions_pdf=args.instructions_pdf,
+                     group_candidates=args.group_candidates)
     return 0 if schema.get("_bakeoff", {}).get("authoring", {}).get("schema_valid") else 1
 
 

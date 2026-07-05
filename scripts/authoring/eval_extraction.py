@@ -209,19 +209,23 @@ def _try_repair(draft_path: str) -> tuple[str, str]:
 
 
 def evaluate_form(form: dict, draft_path: Optional[str],
-                  extract: bool, model: str) -> dict:
+                  extract: bool, model: str,
+                  group_candidates: bool = False) -> dict:
     """Run [extract ->] repair -> lint -> roundtrip -> score for one form."""
     name = form["name"]
     row: dict[str, Any] = {"form": name, "draft": draft_path}
 
     if extract:
         import extract_form  # noqa: E402 (sibling module; heavy deps)
+        suffix = "_gc" if group_candidates else ""
         out = os.path.join(_REPO, "scripts", "authoring", "outputs",
-                           f"{name}_eval_draft.json")
+                           f"{name}_eval_draft{suffix}.json")
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        extract_form.extract(form["pdf"], out, model=model)
+        extract_form.extract(form["pdf"], out, model=model,
+                             group_candidates=group_candidates)
         draft_path = out
         row["draft"] = draft_path
+        row["group_candidates"] = group_candidates
 
     if draft_path is None:
         if form["gold"] is None:
@@ -324,6 +328,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                          ">6 min + paid tokens). Default: evaluate existing schemas.")
     ap.add_argument("--model", default="claude-opus-4-8",
                     help="extractor model for --extract")
+    ap.add_argument("--group-candidates", action="store_true",
+                    help="(with --extract) include the deterministic "
+                         "pre-grouping candidates block -- the bd h76m.12 "
+                         "ablation arm")
     ap.add_argument("--draft-dir", default=None,
                     help="directory of drafts to score, one <form>.json per form")
     ap.add_argument("--form", default=None,
@@ -348,7 +356,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if draft is None and args.draft_dir:
             cand = os.path.join(args.draft_dir, f"{form['name']}.json")
             draft = cand if os.path.exists(cand) else None
-        rows.append(evaluate_form(form, draft, args.extract, args.model))
+        rows.append(evaluate_form(form, draft, args.extract, args.model,
+                                  group_candidates=args.group_candidates))
 
     print(render_table(rows))
     if any(r.get("baseline") for r in rows):
