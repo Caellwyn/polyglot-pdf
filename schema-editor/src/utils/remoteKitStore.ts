@@ -166,6 +166,39 @@ export async function saveRemoteSchema(kitId: string, schema: FormSchema): Promi
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not save the schema'));
 }
 
+/** One lint finding as the backend's /api/editor/lint route reports it -- the
+ * authoritative Python schema_lint output (bd h76m.11, P4.3). field_id is the
+ * field the ValidationPanel focuses on click (null for a non-field-anchored
+ * finding, e.g. a PDF widget-claim). */
+export interface LintFinding {
+  severity: 'ERROR' | 'WARNING';
+  rule: string;
+  path: string;
+  message: string;
+  field_id: string | null;
+}
+
+export interface LintReport {
+  findings: LintFinding[];
+  errorCount: number;
+  warningCount: number;
+}
+
+/** Lint the CURRENT (possibly-unsaved) schema over the backend's single Python
+ * ruleset -- the same rules the mark-complete promotion gate enforces. Sends
+ * the schema the editor holds, not a kit id, so the panel lints exactly what is
+ * on screen before any save. AuthError on a rotated code (editorFetch throws it
+ * for the caller to re-prompt). */
+export async function lintSchema(schema: FormSchema): Promise<LintReport> {
+  const res = await editorFetch('/api/editor/lint', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(stripEditorState(schema)),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not lint the schema'));
+  return (await res.json()) as LintReport;
+}
+
 /** Flip a kit's status. Promotion to complete is validated server-side (the
  * publish gate) -- a 422 carries the validation detail to show the human. */
 export async function setRemoteStatus(

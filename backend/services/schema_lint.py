@@ -48,6 +48,7 @@ ASCII only.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -58,6 +59,28 @@ SEVERITY_WARNING = "WARNING"
 
 _ATOM_KEYS = frozenset({"field", "operator"})
 
+# Every field-anchored finding path embeds its field id as "(id=X)" (see the
+# _walk/_check helpers below); the editor's ValidationPanel focuses a finding by
+# selecting that field, so the id extraction is authored HERE (one Python
+# implementation) rather than re-parsed in the frontend (bd h76m.11, P4.3).
+_FIELD_ID_RE = re.compile(r"\(id=(.*?)\)")
+
+
+def field_id_of(path: str) -> Optional[str]:
+    """The schema field id a finding path anchors to, or None.
+
+    Field-anchored paths carry "(id=X)" (fields[3] (id=x).show_if,
+    "fields (id=y)" for show-if-cycle warnings); non-field paths ("$",
+    "widget 'foo'") have no id and return None -- the panel simply renders
+    those without a click-to-focus target. A literal "(id=None)" (a field
+    with no id key) is treated as no anchor: there is nothing to focus.
+    """
+    m = _FIELD_ID_RE.search(path or "")
+    if not m:
+        return None
+    fid = m.group(1)
+    return fid if fid and fid != "None" else None
+
 
 @dataclass(frozen=True)
 class LintFinding:
@@ -66,12 +89,15 @@ class LintFinding:
     path: str      # e.g. "fields[3] (id=x).show_if"
     message: str
 
-    def as_dict(self) -> Dict[str, str]:
+    def as_dict(self) -> Dict[str, Optional[str]]:
         return {
             "severity": self.severity,
             "rule": self.rule,
             "path": self.path,
             "message": self.message,
+            # field_id lets the editor focus the offending field on click; it is
+            # derived from `path`, never a second source of truth.
+            "field_id": field_id_of(self.path),
         }
 
 

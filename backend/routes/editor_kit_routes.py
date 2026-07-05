@@ -56,7 +56,9 @@ import structlog
 from backend.config import get_settings
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
-from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
+from backend.services.schema_lint import (
+    SEVERITY_ERROR, SEVERITY_WARNING, lint_schema,
+)
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
@@ -146,6 +148,32 @@ class EditorKitListResponse(BaseModel):
 
 class KitStatusBody(BaseModel):
     status: Literal["draft", "complete"]
+
+
+class LintFindingOut(BaseModel):
+    """One lint finding as the editor's ValidationPanel renders it.
+
+    Mirrors schema_lint.LintFinding.as_dict(): the raw finding fields plus the
+    derived field_id (the field the panel focuses on click; null for a
+    non-field-anchored finding like a dump widget-claim)."""
+
+    severity: str  # ERROR | WARNING
+    rule: str
+    path: str
+    message: str
+    field_id: Optional[str] = None
+
+
+class LintResponse(BaseModel):
+    """Load-time lint report for a schema (bd h76m.11, P4.3).
+
+    findings are in the linter's emission order; counts are the split the panel
+    shows in its header. The frontend NEVER runs its own copy of these rules --
+    this endpoint is the single Python implementation surfaced to the editor."""
+
+    findings: list[LintFindingOut]
+    errorCount: int
+    warningCount: int
 
 
 def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
@@ -343,6 +371,37 @@ async def save_editor_kit_schema(
     _log.info("editor_schema_saved", kit_id=kit_id, role=role,
               field_count=len(schema.get("fields", [])))
     return {"ok": True, "schemaFile": schema_file}
+
+
+@router.post("/lint", response_model=LintResponse)
+async def lint_editor_schema(
+    role: Annotated[str, Depends(require_editor_role)],
+    schema: Annotated[dict, Body()],
+) -> LintResponse:
+    """Lint a schema and return structured findings for load-time display.
+
+    The editor POSTs the schema it currently HOLDS (which may carry unsaved
+    edits), not a kit id -- so the panel lints exactly what is on screen, before
+    any save, over the same authoritative Python rules the mark-complete
+    promotion gate uses (backend/services/schema_lint.py). This is P4.3's "single
+    Python implementation": the frontend renders these findings instead of
+    maintaining a parallel TS ruleset that could drift from the promotion gate.
+
+    Never 4xx on schema shape -- lint_schema never raises, and a malformed draft
+    IS the thing the contractor needs the findings for (a structural problem
+    surfaces as a condition-malformed finding, not an HTTP error). No dump is
+    passed: the acroform dump is not a per-kit artifact until P5.3, matching the
+    promotion gate's dump-less lint today.
+    """
+    findings = lint_schema(schema)
+    out = [LintFindingOut(**f.as_dict()) for f in findings]
+    error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+    warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+    _log.info("editor_schema_linted", role=role,
+              errors=error_count, warnings=warning_count)
+    return LintResponse(
+        findings=out, errorCount=error_count, warningCount=warning_count,
+    )
 
 
 @router.post("/kits/{kit_id}/status")
