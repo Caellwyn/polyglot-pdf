@@ -87,6 +87,22 @@ def test_coverage_fails_on_identity_collapse():
     assert not r["passed"]
 
 
+def test_coverage_fails_on_field_level_claims_with_collapsed_option_values():
+    # The Opus-fallback bypass shape (PR #304): each box claimed via a
+    # field-level pdf_field_name (identity preserved) while the options
+    # collapse to one shared value with no widget mapping -- addressability
+    # is broken even though every widget is claimed exactly once.
+    schema = {"fields": [
+        {"id": "r2", "type": "checkbox", "pdf_field_name": "c1_2[0]",
+         "options": [{"value": "1", "pdf_field_name": None}]},
+        {"id": "r3", "type": "checkbox", "pdf_field_name": "c1_3[0]",
+         "options": [{"value": "1", "pdf_field_name": None}]},
+    ]}
+    r = ev.check_widget_coverage(schema, _LEAVES)
+    assert not r["passed"]
+    assert any("not distinct" in p for p in r["problems"])
+
+
 def test_coverage_fails_on_double_claim():
     schema = {"fields": [
         {"id": "a", "type": "checkbox",

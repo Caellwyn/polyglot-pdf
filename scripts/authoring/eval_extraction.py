@@ -112,6 +112,14 @@ def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
     distinct claiming value; `consolidated` reports whether ONE field's options
     carry them all (the v2 target shape). Modeling-agnostic -- see module doc."""
     claims: dict[str, list[tuple[str, Optional[str]]]] = {w: [] for w in widget_leaves}
+    # The distinctness pool: the values a filler would use to ADDRESS each
+    # claimed box. Option-level claims contribute their option value. A
+    # FIELD-level claim by an option-bearing field contributes that field's
+    # option values too -- otherwise a draft hanging each box off a
+    # field-level pdf_field_name while its options collapse to one shared
+    # value ("1" x8, the W-7 failure family) would pass on identity while
+    # failing addressability (Opus fallback review, PR #304).
+    pool: list[str] = []
     for f in schema.get("fields", []) or []:
         if not isinstance(f, dict):
             continue
@@ -125,11 +133,19 @@ def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
             ol = _leaf(o.get("pdf_field_name"))
             if ol in claims:
                 option_leaves.add(ol)
-                claims[ol].append((fid, str(o.get("value")) if o.get("value") is not None else None))
+                value = str(o.get("value")) if o.get("value") is not None else None
+                claims[ol].append((fid, value))
+                if value is not None:
+                    pool.append(value)
         # A field-level claim that merely restates one of its own options'
         # widgets (the groups-of-one convention) is not a second claim.
         if fl in claims and fl not in option_leaves:
             claims[fl].append((fid, None))
+            for o in options:
+                if isinstance(o, dict) and o.get("value") is not None:
+                    pool.append(str(o.get("value")))
+                elif isinstance(o, str):
+                    pool.append(o)
 
     problems: list[str] = []
     for w, claimants in claims.items():
@@ -138,8 +154,7 @@ def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
         elif len(claimants) > 1:
             problems.append(f"{w}: claimed {len(claimants)} times "
                             f"({', '.join(fid for fid, _ in claimants)})")
-    values = [v for cl in claims.values() for _, v in cl if v is not None]
-    dupes = sorted({v for v in values if values.count(v) > 1})
+    dupes = sorted({v for v in pool if pool.count(v) > 1})
     if dupes:
         problems.append(f"claiming option values not distinct: {dupes}")
 
