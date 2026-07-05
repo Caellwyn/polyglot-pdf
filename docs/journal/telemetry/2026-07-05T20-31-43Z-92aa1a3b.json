@@ -1,0 +1,84 @@
+{
+  "recorded_at": "2026-07-05T20:31:43Z",
+  "session_id": "92aa1a3b-515c-40a7-8c40-163757f26e89",
+  "beads": [
+    "polyglot-pdf-h76m.11",
+    "polyglot-pdf-h903"
+  ],
+  "arm": "C",
+  "cost_category": "audit",
+  "wall_clock": {
+    "first_ts": "2026-07-05T19:55:08.217Z",
+    "last_ts": "2026-07-05T20:31:32.495Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 39751,
+      "output_tokens": 98385,
+      "cache_read_input_tokens": 35919371,
+      "cache_creation_input_tokens": 673884
+    },
+    "subagent": {
+      "input_tokens": 37522,
+      "output_tokens": 13673,
+      "cache_read_input_tokens": 6292498,
+      "cache_creation_input_tokens": 303461
+    },
+    "total": {
+      "input_tokens": 77273,
+      "output_tokens": 112058,
+      "cache_read_input_tokens": 42211869,
+      "cache_creation_input_tokens": 977345
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 39751,
+        "output_tokens": 98385,
+        "cache_read_input_tokens": 35919371,
+        "cache_creation_input_tokens": 673884
+      }
+    },
+    "subagent": {
+      "claude-sonnet-5": {
+        "input_tokens": 37522,
+        "output_tokens": 13673,
+        "cache_read_input_tokens": 6292498,
+        "cache_creation_input_tokens": 303461
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-opus-4-8": 24.829841
+    },
+    "subagent": {
+      "claude-sonnet-5": 0.0
+    },
+    "by_model": {
+      "claude-opus-4-8": 24.829841,
+      "claude-sonnet-5": 0.0
+    },
+    "unpriced_models": [
+      "claude-sonnet-5"
+    ],
+    "orchestrator_total": 24.829841,
+    "subagent_total": 0.0,
+    "total": 24.829841,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-sonnet-5"
+  ],
+  "assistant_turns": {
+    "orchestrator": 227,
+    "subagent": 70
+  },
+  "phase_tokens": null,
+  "copilot_rounds": null,
+  "maintainer_touchpoints": 0,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}
