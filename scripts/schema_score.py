@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field as dc_field
@@ -523,11 +524,74 @@ def score(draft_path: str, truth_path: str, label: Optional[str] = None) -> dict
     }
 
 
+# --------------------------------------------------------------------------- #
+# --pdf: fill-truth + lint columns (bd polyglot-pdf-h76m.6, P2.2)
+# --------------------------------------------------------------------------- #
+
+def score_pdf(draft_path: str, pdf_path: str) -> dict:
+    """Run the fill-truth + lint layer over a draft against its real PDF.
+
+    Wires the two safety-net tools in as first-class report columns:
+    - scripts/bakeoff/roundtrip_fill.py (bd 7a9.14): synthetic full-coverage
+      values through the production filler's exact widget-write semantics,
+      verified by /AS read-back;
+    - backend/services/schema_lint.py (bd h76m.5): structured findings over
+      the raw draft dict (works on drafts Pydantic rejects).
+    """
+    _here = os.path.dirname(os.path.abspath(__file__))
+    _repo = os.path.dirname(_here)
+    sys.path.insert(0, os.path.join(_repo, "scripts", "bakeoff"))
+    sys.path.insert(0, _repo)
+    import roundtrip_fill  # noqa: E402
+    from backend.services.schema_lint import lint_schema  # noqa: E402
+
+    draft = load_schema(draft_path)
+    rt = roundtrip_fill.run(draft_path, pdf_path)
+    findings = lint_schema(draft)
+    return {
+        "roundtrip": rt,
+        "lint": {
+            "errors": sum(1 for f in findings if f.severity == "ERROR"),
+            "warnings": sum(1 for f in findings if f.severity == "WARNING"),
+            "findings": [f.as_dict() for f in findings],
+        },
+    }
+
+
+def _fmt_tally(t: dict) -> str:
+    """roundtrip_fill tallies carry pct=None (not NaN) when nothing attempted."""
+    p = t.get("pct")
+    ps = "  n/a" if p is None else f"{p:5.1f}%"
+    return f"{ps}  ({t.get('filled', 0)}/{t.get('attempted', 0)})"
+
+
+def render_pdf_report(p: dict) -> str:
+    L = []
+    L.append("(c) FILL TRUTH + LINT (--pdf)")
+    rt = p["roundtrip"]
+    L.append(f"  roundtrip fill: choice {_fmt_tally(rt['choice_fill_success'])}   "
+             f"text {_fmt_tally(rt['text_fill_success'])}")
+    conv = rt.get("value_convention", {})
+    L.append(f"  value convention: {_fmt_tally({'pct': conv.get('pct'), 'filled': conv.get('conforming', 0), 'attempted': conv.get('total', 0)})} "
+             f"option values on the widget-leaf convention")
+    lint = p["lint"]
+    L.append(f"  lint: {lint['errors']} error(s), {lint['warnings']} warning(s)")
+    for f in lint["findings"][:8]:
+        L.append(f"    {f['severity']} [{f['rule']}] {f['path']}: {f['message'][:90]}")
+    if len(lint["findings"]) > 8:
+        L.append(f"    ... and {len(lint['findings']) - 8} more")
+    L.append("")
+    return "\n".join(L)
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Score a draft FormSchema vs ground truth.")
     ap.add_argument("--draft", required=True, help="path to the draft (extractor) schema")
     ap.add_argument("--truth", required=True, help="path to the ground-truth schema")
     ap.add_argument("--label", default=None, help="display label for the report")
+    ap.add_argument("--pdf", default=None,
+                    help="path to the blank form PDF: adds roundtrip-fill + lint "
+                         "columns (bd h76m.6)")
     ap.add_argument("--json", dest="json_out", default=None,
                     help="optional path to write the full result JSON")
     args = ap.parse_args(argv)
@@ -535,6 +599,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     result = score(args.draft, args.truth, args.label)
     print(render_report(result["label"], result["field_extraction"],
                         result["relationships"]))
+    if args.pdf:
+        result["pdf"] = score_pdf(args.draft, args.pdf)
+        print(render_pdf_report(result["pdf"]))
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as fh:
             json.dump(result, fh, indent=2)
