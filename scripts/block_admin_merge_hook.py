@@ -73,11 +73,13 @@ _FRAG_BOUNDARIES = frozenset({";", "&&", "||", "|", "&", "(", ")", ";;", "`"})
 _OP_RE = re.compile(r"(\|\||&&|;;|;|\||&|\(|\)|`)")
 # gh options (on ``gh pr merge`` and inherited from ``gh pr``) that TAKE A VALUE: the
 # next argv token is their value, not a flag -- so ``--body --admin`` is a body of
-# "--admin", NOT the admin flag. Kept generous; a missing entry only risks a rare
-# false POSITIVE (over-block), never a bypass.
+# "--admin", NOT the admin flag. Sourced from ``gh pr merge --help`` value flags
+# plus the persistent ``-R/--repo``. A missing entry only risks a rare false
+# POSITIVE (over-block, e.g. a value that happens to equal ``--admin``), never a
+# bypass, so erring toward completeness here is safe.
 _GH_VALUE_OPTS = frozenset({
-    "-b", "--body", "-t", "--title", "--subject", "--body-file", "-F",
-    "--author", "--author-email", "--match-head-commit", "-R", "--repo",
+    "-b", "--body", "-t", "--subject", "-F", "--body-file",
+    "-A", "--author-email", "--match-head-commit", "-R", "--repo",
 })
 
 
@@ -104,6 +106,17 @@ def _admin_merge_at(frag: list[str], s: int) -> bool:
     if s >= len(frag) or not _is_gh(frag[s]):
         return False
     j = s + 1
+    # Allow global/persistent ``gh`` flags BEFORE the ``pr`` subcommand
+    # (``gh --repo o/r pr merge ... --admin`` is a real admin merge -- gh/Cobra
+    # accepts persistent flags before the subcommand). Skip them the same way.
+    while j < len(frag) and frag[j] != "pr":
+        if frag[j].startswith("-"):
+            if frag[j] in _GH_VALUE_OPTS and "=" not in frag[j]:
+                j += 2  # flag + its value
+            else:
+                j += 1
+        else:
+            return False  # a non-flag, non-``pr`` word -> not a ``gh pr`` invocation
     if j >= len(frag) or frag[j] != "pr":
         return False
     j += 1

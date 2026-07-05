@@ -78,6 +78,12 @@ BLOCK = [
     "eval gh pr merge 5 --admin",                # eval wrapper (Codex F6)
     "timeout 30 gh pr merge 5 --admin",          # timeout wrapper (Codex F6)
     "xargs -I{} gh pr merge {} --admin",         # xargs -I placeholder (now caught)
+    # Fallback review: a persistent gh flag BEFORE the `pr` subcommand (Opus round 1)
+    "gh --repo o/r pr merge 5 --admin",          # --repo before pr (real admin merge)
+    "gh -R o/r pr merge 5 --admin",              # short form
+    "gh --repo o/r pr --repo o/r merge 5 --admin",  # persistent flag both positions
+    "sudo gh --repo o/r pr merge 5 --admin",     # wrapped + persistent flag
+    "gh pr merge --admin --body x",              # --admin is a real flag BEFORE a value-opt
 ]
 # OUT OF SCOPE (documented, not blocked): the gh command is nested inside an opaque
 # argument or reached via runtime variable expansion, which a static argv model
@@ -120,7 +126,7 @@ ALLOW = [
     # is NOT the flag (it's the value of --body). Must PASS.
     "gh pr merge 301 --body '--admin'",
     "gh pr merge 301 --body \"--admin\"",
-    "gh pr merge 301 --title '--admin' --body ok",
+    "gh pr merge 301 --subject '--admin' --body ok",   # --subject is a real value flag
     # Round-5 argv-model false-positive guards:
     "gh pr merge 301 --body --admin",            # unquoted, but VALUE of --body (not the flag)
     "git commit -m 'note (gh pr merge 301 --admin)'",  # operator INSIDE a quoted arg (Codex F3)

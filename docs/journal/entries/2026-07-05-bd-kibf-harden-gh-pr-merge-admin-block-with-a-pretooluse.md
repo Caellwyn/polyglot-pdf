@@ -116,6 +116,14 @@ emits the deny JSON; a legit `--squash --match-head-commit` merge emits nothing.
   after the inner loop went clean.** The redesign also promoted two
   formerly-out-of-scope forms (`xargs -I{}`, some `$VAR`-free templating) to caught,
   and fixed a greedy `endswith("gh")` that would have false-positived `$GH`/`foogh`.
+  The Opus-4.8 fallback review of the redesign (Codex was quota-out) then confirmed
+  all 7 closed and found ONE more real bypass: a persistent gh flag BEFORE the
+  subcommand -- `gh --repo o/r pr merge 5 --admin` -- which gh/Cobra accepts and
+  which slipped BOTH the hook (it required `pr` immediately after `gh`) and the
+  contiguous-`gh pr merge` wildcard denies. Fixed by skipping inherited gh flags
+  between `gh` and `pr` too (mirroring the `pr`->`merge` skip). **The persistent-flag
+  position is the kind of gap you only find by knowing the tool's actual grammar --
+  Cobra accepts persistent flags before OR after the subcommand.**
 - **PreToolUse hooks are a real security layer, not advisory.** Per the docs they
   run BEFORE the permission-mode check and cannot be bypassed even under
   `bypassPermissions`; a hook can tighten but never loosen what permission rules
