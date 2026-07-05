@@ -1,8 +1,9 @@
 import React from 'react';
 import type { FormSchema } from '../types/schema';
-import { getCompletionStats } from '../utils/validation';
+import { getCompletionStats, validateSchema } from '../utils/validation';
 import {
   AuthError,
+  isHostedMode,
   lintSchema,
   type LintFinding,
   type LintReport,
@@ -38,23 +39,59 @@ const RULE_LABELS: Record<string, string> = {
   'dump-widget-multiclaim': 'PDF widget claimed twice',
 };
 
+// Local (non-hosted) delivery mode has no backend and no access code to reach
+// the token-gated /api/editor/lint route, so it falls back to the network-free
+// client-side validateSchema -- mapped into the same LintFinding rows the panel
+// renders, so field-focus and display are identical to the hosted path (bd
+// polyglot-pdf-h903; without this, local mode silently lost all lint feedback).
+// The client ruleset is intentionally lighter than the Python one; hosted mode
+// is where the authoritative rules run.
+function localLintReport(schema: FormSchema): LintReport {
+  const findings: LintFinding[] = validateSchema(schema).map((e) => ({
+    // validateSchema does not carry the backend rule ids; render the message
+    // as-is (no RULE_LABELS prefix) by tagging it with a sentinel the renderer
+    // treats as label-less.
+    severity: e.type === 'error' ? 'ERROR' : 'WARNING',
+    rule: '',
+    path: e.field_id,
+    message: e.message,
+    // e.field_id is a field id for field-level errors and a section/_metadata
+    // id otherwise; only real field ids focus, but the string is a safe target
+    // (App's setSelectedFieldId simply no-ops for a non-field id).
+    field_id: e.field_id || null,
+  }));
+  const errorCount = findings.filter((f) => f.severity === 'ERROR').length;
+  return { findings, errorCount, warningCount: findings.length - errorCount };
+}
+
 export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   schema,
   onSelectField,
   onAuthError,
 }) => {
   const stats = React.useMemo(() => getCompletionStats(schema), [schema]);
+  const hosted = React.useMemo(isHostedMode, []);
 
   const [report, setReport] = React.useState<LintReport | null>(null);
   const [lintError, setLintError] = React.useState<string | null>(null);
   const [linting, setLinting] = React.useState(false);
 
-  // Re-lint whenever the schema changes, over the authoritative backend rules
-  // (P4.3). A monotonic token drops a stale in-flight result: the schema edits
-  // faster than the round trip, so an earlier lint must never overwrite a newer
-  // one (same staleness guard the remote-open path uses).
+  // Re-lint whenever the schema changes. Hosted mode calls the backend's
+  // authoritative Python linter (P4.3); local mode -- which has no backend and
+  // no access code to reach the token-gated route -- lints synchronously
+  // client-side (bd polyglot-pdf-h903). A monotonic token drops a stale
+  // in-flight backend result: the schema edits faster than the round trip, so
+  // an earlier lint must never overwrite a newer one (same staleness guard the
+  // remote-open path uses).
   const seqRef = React.useRef(0);
   React.useEffect(() => {
+    if (!hosted) {
+      // Synchronous, network-free: no staleness window, no failure path.
+      setReport(localLintReport(schema));
+      setLintError(null);
+      setLinting(false);
+      return;
+    }
     const seq = ++seqRef.current;
     setLinting(true);
     lintSchema(schema)
@@ -70,15 +107,15 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
           return;
         }
         // A lint failure is non-blocking: the editor stays usable, the panel
-        // just notes it could not lint (e.g. no backend in a pure-local file
-        // session). Keep the last successful report visible rather than
-        // clearing it, so a transient blip does not wipe the findings.
+        // just notes it could not lint (e.g. the backend is transiently down).
+        // Keep the last successful report visible rather than clearing it, so a
+        // blip does not wipe the findings.
         setLintError(err instanceof Error ? err.message : 'Could not lint the schema');
       })
       .finally(() => {
         if (seq === seqRef.current) setLinting(false);
       });
-  }, [schema, onAuthError]);
+  }, [schema, hosted, onAuthError]);
 
   const findings = report?.findings ?? [];
   const errorCount = report?.errorCount ?? 0;
@@ -86,23 +123,26 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
 
   const renderFinding = (finding: LintFinding, idx: number) => {
     const isError = finding.severity === 'ERROR';
-    const label = RULE_LABELS[finding.rule] ?? finding.rule;
+    // Backend findings carry a rule id (mapped to a friendly label); the local
+    // fallback leaves it empty, so the message stands alone with no label span.
+    const label = finding.rule ? RULE_LABELS[finding.rule] ?? finding.rule : '';
     const canFocus = Boolean(finding.field_id && onSelectField);
     const body = (
       <>
-        <span className="font-medium">{label}</span>
+        {label && <span className="font-medium">{label} </span>}
         {finding.field_id && (
-          <>
-            {' '}
-            <span className="font-mono">{finding.field_id}</span>
-          </>
+          <span className="font-mono">{finding.field_id}</span>
         )}
-        : {finding.message}
+        {(label || finding.field_id) ? ': ' : ''}
+        {finding.message}
       </>
     );
     const className = `w-full text-left text-xs p-2 rounded ${
       isError ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'
     } ${canFocus ? 'hover:ring-1 hover:ring-current cursor-pointer' : ''}`;
+    const title = finding.rule
+      ? (canFocus ? `${finding.rule} -- click to focus ${finding.field_id}` : finding.rule)
+      : undefined;
     // Field-anchored findings are buttons (click focuses the field); the rest
     // are plain divs -- there is nothing to jump to.
     return canFocus ? (
@@ -110,13 +150,13 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
         key={idx}
         type="button"
         className={className}
-        title={`${finding.rule} -- click to focus ${finding.field_id}`}
+        title={title}
         onClick={() => onSelectField?.(finding.field_id as string)}
       >
         {body}
       </button>
     ) : (
-      <div key={idx} className={className} title={finding.rule}>
+      <div key={idx} className={className} title={title}>
         {body}
       </div>
     );

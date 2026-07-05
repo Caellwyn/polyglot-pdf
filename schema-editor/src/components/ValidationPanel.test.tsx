@@ -12,10 +12,17 @@ import type { LintReport } from '../utils/remoteKitStore';
 const lintSchema = vi.fn((_schema: FormSchema): Promise<LintReport> =>
   Promise.resolve({ findings: [], errorCount: 0, warningCount: 0 }),
 );
+// Default to hosted mode: most tests exercise the backend /lint path. The
+// local-mode test flips this to false to hit the client-side fallback.
+let hostedMode = true;
 
 vi.mock('../utils/remoteKitStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/remoteKitStore')>();
-  return { ...actual, lintSchema: (schema: FormSchema) => lintSchema(schema) };
+  return {
+    ...actual,
+    lintSchema: (schema: FormSchema) => lintSchema(schema),
+    isHostedMode: () => hostedMode,
+  };
 });
 
 // Imported AFTER the mock so the component picks up the mocked lintSchema.
@@ -38,6 +45,7 @@ function report(findings: LintReport['findings']): LintReport {
 
 beforeEach(() => {
   lintSchema.mockReset();
+  hostedMode = true;
 });
 afterEach(cleanup);
 
@@ -126,5 +134,29 @@ describe('ValidationPanel load-time lint display', () => {
       <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onAuthError={onAuthError} />,
     );
     await waitFor(() => expect(onAuthError).toHaveBeenCalled());
+  });
+
+  it('lints client-side in local mode (no backend call) -- bd h903', async () => {
+    hostedMode = false;
+    // A schema with a bad conditional reference: validateSchema flags it as a
+    // warning, and the panel must show it WITHOUT ever calling the backend.
+    const local = {
+      form_metadata: { title: 'T', version: '1', form_number: 'X' },
+      sections: [],
+      fields: [
+        {
+          id: 'dep', name: 'Dep', type: 'text', spoken_name: 'dep',
+          show_if: { field: 'ghost', operator: 'equals', value: 'x' },
+        },
+      ],
+    } as unknown as FormSchema;
+    render(<ValidationPanel schema={local} onSelectField={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByText(/non-existent field: ghost/)).toBeInTheDocument(),
+    );
+    // The backend linter was never called in local mode.
+    expect(lintSchema).not.toHaveBeenCalled();
+    // No "could not check" note -- the client-side lint succeeded.
+    expect(screen.queryByText(/Could not check for issues/)).toBeNull();
   });
 });
