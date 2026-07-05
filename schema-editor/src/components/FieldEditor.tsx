@@ -247,6 +247,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 <label className="label">Field Type</label>
                 <select
                   className="input disabled:opacity-60"
+                  aria-label="Field Type"
                   value={field.type}
                   disabled={isGroup}
                   title={isGroup
@@ -464,7 +465,14 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           />
         </div>
 
-        {/* Controls Fields (trigger-side: this field's value affects others) */}
+        {/* Controls Fields (trigger-side: this field's value affects others).
+            HIDDEN for a checkbox_group (Codex PR #310 round 3): this legacy
+            editor writes {operator:'equals', value:''} and offers no membership
+            operators, which is v2-invalid on a group trigger (the registry
+            allows only includes/not_includes/emptiness there). controls_fields
+            is deprecated (deleted at P6.2), so hiding it beats teaching a
+            dead editor group semantics. */}
+        {field.type !== 'checkbox_group' && (
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-gray-900">
             Controls Fields
@@ -632,6 +640,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             + Add Control
           </button>
         </div>
+        )}
 
         {/* Un-group: split a consolidated options[] field back into one field
             per widget (bd polyglot-pdf-s4dp.1). Rendered for ANY consolidated
@@ -703,14 +712,25 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         const referencedBy = option.value
                           ? optionValueReferencedBy(schema, field.id, String(option.value))
                           : [];
-                        const blocked = referencedBy.length > 0;
+                        // A choice field (select/radio/checkbox_group) needs >= 2
+                        // options in v2; removing at the floor would make a valid
+                        // group unsaveable/unpromotable in one click. Structural
+                        // splits go through Ungroup, not option-by-option Remove
+                        // (Codex PR #310 round 3).
+                        const atFloor =
+                          field.type !== 'checkbox' &&
+                          (field.options?.length ?? 0) <= 2;
+                        const blocked = referencedBy.length > 0 || atFloor;
+                        const reason = referencedBy.length > 0
+                          ? `Used by a condition on: ${referencedBy.join(', ')}. Retarget those first.`
+                          : atFloor
+                            ? 'A group needs at least two options. Ungroup to split it instead.'
+                            : undefined;
                         return (
                           <button
                             className="btn-sm btn-secondary disabled:opacity-50"
                             disabled={blocked}
-                            title={blocked
-                              ? `Used by a condition on: ${referencedBy.join(', ')}. Retarget those first.`
-                              : undefined}
+                            title={reason}
                             onClick={() => {
                               const newOptions = (field.options || []).filter((_, i) => i !== idx);
                               updateField({ options: newOptions });

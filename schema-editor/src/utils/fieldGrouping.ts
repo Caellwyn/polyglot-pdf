@@ -66,10 +66,20 @@ const CONTROL_ACTION_KEYS: ControlActionKey[] = [
 ];
 
 // "Selection" operators -- conditions that test whether a (checkbox/radio) widget
-// is the selected one. When that widget is merged into a consolidated radio, the
-// runtime value becomes the selected option's value, so these must convert to
-// `equals <option value>` rather than keep a widget-level is_checked/equals.
+// is the selected one. When that widget is merged into a consolidated group, the
+// runtime value becomes the selected option(s), so these must convert to a
+// membership/equality reference on the group rather than keep a widget-level op.
 const SELECTION_OPERATORS = new Set(['is_checked', 'equals', 'is_not_empty']);
+
+// The NEGATIVE selection predicates -- "this widget is NOT selected" on a source
+// checkbox. On the merged group these must become the NEGATIVE reference
+// (not_includes <slug> for a checkbox_group, not_equals <slug> for a radio),
+// NOT be left as a widget-level not_equals/is_empty that is either v2-invalid on
+// a group or silently re-scoped to "no options selected" (Codex PR #310 round 3).
+//   not_equals true  -> box is unchecked
+//   not_equals <on>  -> box is unchecked (widget on-value form)
+//   is_empty         -> box is unchecked
+const NEGATIVE_SELECTION_OPERATORS = new Set(['not_equals', 'is_empty']);
 
 // v2 option-slug minting (bd h76m.10): mirror backend
 // conditional_vocabulary.mint_option_slug / mint_unique_slugs. Merge mints
@@ -215,7 +225,18 @@ function rewriteShowIf(
       ? { field: primaryId, operator: 'includes', value: optionValue }
       : { field: primaryId, operator: 'equals', value: optionValue };
   }
-  // A non-selection operator (e.g. is_empty) keeps its operator but retargets.
+  if (NEGATIVE_SELECTION_OPERATORS.has(cond.operator)) {
+    // "this widget is NOT selected" -> the group does NOT hold the slug.
+    // checkbox_group -> not_includes <slug>; radio -> not_equals <slug>
+    // (Codex PR #310 round 3). Leaving the widget-level not_equals/is_empty
+    // would be v2-invalid on a group or silently mean "no options selected".
+    return membership
+      ? { field: primaryId, operator: 'not_includes', value: optionValue }
+      : { field: primaryId, operator: 'not_equals', value: optionValue };
+  }
+  // A genuinely non-selection operator (contains/greater_than/...) keeps its
+  // operator but retargets. These do not arise from a checkbox source in
+  // practice; preserved best-effort.
   return { ...cond, field: primaryId };
 }
 

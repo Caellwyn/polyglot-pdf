@@ -129,3 +129,63 @@ describe('FieldEditor option metadata (bd h76m.10)', () => {
     expect(screen.getByText('white')).toBeInTheDocument();
   });
 });
+
+// Round-3 group-editing guards (bd h76m.10, Codex PR #310 round 3).
+describe('FieldEditor group guards (Codex PR #310 round 3)', () => {
+  function twoOptionGroup(): FormField {
+    return {
+      id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+      section_id: 's1', read_only: false, required: false,
+      options: [
+        { value: 'white', label: 'White', pdf_field_name: 'w[0]' },
+        { value: 'black', label: 'Black', pdf_field_name: 'b[0]' },
+      ],
+    } as FormField;
+  }
+  function schemaWith(f: FormField): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: [f.id] }],
+      fields: [f],
+    } as FormSchema;
+  }
+
+  it('disables Remove at the 2-option floor (a group needs >= 2)', () => {
+    const f = twoOptionGroup();
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
+    const removes = screen.getAllByRole('button', { name: 'Remove' });
+    expect(removes).toHaveLength(2);
+    for (const b of removes) expect(b).toBeDisabled();
+  });
+
+  it('allows Remove above the floor (3 options)', () => {
+    const f = twoOptionGroup();
+    f.options = [...f.options!, { value: 'asian', label: 'Asian', pdf_field_name: 'a[0]' }];
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
+    const removes = screen.getAllByRole('button', { name: 'Remove' });
+    expect(removes.some(b => !(b as HTMLButtonElement).disabled)).toBe(true);
+  });
+
+  it('hides the legacy Controls Fields editor for a checkbox_group', () => {
+    const f = twoOptionGroup();
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
+    expect(screen.queryByText('Controls Fields')).not.toBeInTheDocument();
+    expect(screen.queryByText('+ Add Control')).not.toBeInTheDocument();
+  });
+
+  it('keeps the Controls Fields editor for a plain checkbox', () => {
+    const f = { id: 'cb', name: 'CB', spoken_name: 'cb', type: 'checkbox',
+      section_id: 's1', pdf_field_name: 'cb[0]', read_only: false, required: false } as FormField;
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
+    expect(screen.getByText('Controls Fields')).toBeInTheDocument();
+  });
+
+  it('makes the type picker read-only for an option-bearing group', () => {
+    const f = twoOptionGroup();
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
+    const typeSelect = screen.getByLabelText('Field Type') as HTMLSelectElement;
+    expect(typeSelect).toBeDisabled();
+  });
+});

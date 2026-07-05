@@ -896,6 +896,63 @@ describe('require_if handling in merge/un-merge (bd 319g)', () => {
   });
 });
 
+// Negative selection predicates ("box is UNCHECKED") must convert to the
+// negative group reference on merge (Codex PR #310 round 3), else a group gets
+// a v2-invalid not_equals / a re-scoped is_empty.
+describe('merge converts negative selection predicates (Codex PR #310 round 3)', () => {
+  function schemaWithDep(op: ConditionalDisplay['operator'], value?: unknown): FormSchema {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: op, ...(value !== undefined ? { value } : {}) },
+    } as unknown as FormField);
+    schema.sections[0].fields.push('detail');
+    return schema;
+  }
+
+  it('not_equals true on a source checkbox -> not_includes <slug> for a checkbox_group', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('not_equals', true), ['reason_a', 'reason_b'], 'checkbox_group',
+    );
+    const atom = asAtom(merged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).toBe('not_includes');
+    expect(atom.field).toBe('reason_a');
+    expect(atom.value).toBe('reason_b'); // slug minted from label 'Reason B'
+  });
+
+  it('is_empty on a source checkbox -> not_includes <slug> for a checkbox_group', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('is_empty'), ['reason_a', 'reason_b'], 'checkbox_group',
+    );
+    const atom = asAtom(merged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).toBe('not_includes');
+    expect(atom.value).toBe('reason_b');
+  });
+
+  it('radio merge uses not_equals <slug> for the negative predicate', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('not_equals', true), ['reason_a', 'reason_b'], 'radio',
+    );
+    const atom = asAtom(merged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).toBe('not_equals');
+    expect(atom.value).toBe('reason_b');
+  });
+
+  it('un-merge inverts not_includes back to a boolean-checkbox condition', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('not_equals', true), ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    const saved = stripEditorState(merged);
+    const unmerged = ungroupField(saved, 'reason_a');
+    const atom = asAtom(unmerged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).not.toBe('not_includes'); // not dangling on a boolean box
+    // negative option predicate inverts to `not_equals true` (unchecked).
+    expect(atom.operator).toBe('not_equals');
+    expect(atom.value).toBe(true);
+  });
+});
+
 // require_if must be remapped in the un-merge FALLBACK exactly like show_if
 // (bd h76m.10, Codex PR #310 round 2): it was previously left dangling.
 describe('un-merge fallback remaps require_if too (Codex PR #310 round 2)', () => {
