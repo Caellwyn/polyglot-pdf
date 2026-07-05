@@ -15,9 +15,12 @@ body invariants that, if broken, would silently change how the skill runs:
     (Codex AUTO-REVIEWS on open -- round 1 needs no comment, just an `@codex
     review` nudge in the PR body -- in parallel with fresh-eyes), fix the combined
     issues, loop Codex until CLEAN via an `@codex review` comment per re-review
-    round, then close the bead + ping Josh to merge. NO drafts and NO ready-flip.
-    Regression guards assert both the old "hard stop before `gh pr create`" wording
-    AND the draft/ready-flip wording are gone. (Codex replaced Copilot at bd hrn.9.)
+    round, then close the bead and make the merge decision: auto-merge a routine
+    low-risk PR that reviewed CLEAN, else ping the maintainer for a
+    consequence-bearing one (bd 16pj). NO drafts and NO ready-flip. Regression
+    guards assert the old "hard stop before `gh pr create`" wording, the
+    draft/ready-flip wording, AND the old blanket "never run `gh pr merge`" ban are
+    all gone. (Codex replaced Copilot at bd hrn.9.)
 """
 
 import pathlib

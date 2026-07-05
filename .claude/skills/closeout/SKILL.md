@@ -1,6 +1,6 @@
 ---
 name: closeout
-description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then the SPEAR pre-PR Assess (rubric scorecard + a recursive adversarial fresh-eyes loop scored against the bead's exit criteria, looped to no-gap), then open a NORMAL (non-draft) PR and loop the Codex outer review until clean, then close the bead + ping the maintainer to merge. NO draft PRs. The only thing it never does autonomously is the final merge (that is the maintainer's). Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
+description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then the SPEAR pre-PR Assess (rubric scorecard + a recursive adversarial fresh-eyes loop scored against the bead's exit criteria, looped to no-gap), then open a NORMAL (non-draft) PR and loop the Codex outer review until clean, then close the bead and either auto-merge (routine low-risk PR that reviewed CLEAN) or ping the maintainer (consequence-bearing PR). NO draft PRs. It never force-pushes or force-pushes dolt. Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
 ---
 
 # Sprint closeout
