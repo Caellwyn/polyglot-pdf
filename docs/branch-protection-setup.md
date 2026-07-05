@@ -1,6 +1,6 @@
 # Branch-protection setup (one-time, agent-executable)
 
-*Last updated: <DATE>.*
+*Last updated: 2026-07-05.*
 
 This configures the GitHub rulesets the swarm workflow depends on. Run it once
 per repo. An agent can execute it via the `gh` CLI (shown) or the GitHub MCP if
@@ -9,15 +9,25 @@ is connected.
 
 ## What you are creating
 
-Two branch rulesets:
+One branch ruleset that is load-bearing today, plus one optional guard:
 
-1. **"To Dev"** -- targets `dev` (the integration branch). Enables Copilot code
-   review and requires PRs. This is what makes Copilot review on PR-open and
-   re-review on push.
-2. **"Defend Production"** -- targets `main`. Blocks direct pushes / force-pushes
-   / deletion so production only advances by fast-forward promotion from `dev`.
+1. **"To Dev"** -- targets `dev` (the integration branch). Requires PRs into `dev`.
+   (This ruleset historically also enabled *Copilot* code review; that rule is
+   RETIRED -- the reviewer is now OpenAI Codex, which is a repo-level GitHub app
+   that auto-reviews on PR-open, NOT a `copilot_code_review` ruleset rule. See
+   step 2 below and [`doctrine/review-flow.md`](doctrine/review-flow.md).)
+2. **"Defend Production"** -- targets `main`. OPTIONAL for this project: there is
+   **no active production `main`** (this repo is a demo built for future investor
+   demonstration, not a production app), so protecting `main` is not load-bearing.
+   Kept here only for reference / a future prod tier.
 
-And one repo setting: **`allow_auto_merge=false`** -- the single human merge gate.
+And one repo setting: **`allow_auto_merge=false`**. This only disables GitHub's
+merge-on-green auto-merge *feature*; it is NOT "the human merge gate." The actual
+merge policy is the **auto-merge-vs-ping rule** (CLAUDE.md "Auto-merge vs.
+maintainer merge", bd `polyglot-pdf-16pj`): closeout **auto-merges a routine
+low-risk PR** that an adversarial reviewer cleared CLEAN (via an explicit
+`gh pr merge`, which `allow_auto_merge=false` does not block), and **pings the
+maintainer** for a consequence-bearing PR.
 
 ## Preflight
 
@@ -26,31 +36,35 @@ gh auth status                       # confirm you are authenticated
 gh repo view <OWNER>/<REPO> --json nameWithOwner   # confirm the target repo
 ```
 
-## 1. Disable auto-merge (the merge gate)
+## 1. Disable GitHub auto-merge-on-green
 
 ```
 gh api -X PATCH repos/<OWNER>/<REPO> -F allow_auto_merge=false
 ```
 
-This is load-bearing: it is what lets the review flow run autonomously up to the
-ping while still requiring the maintainer to click merge. Verify:
+This disables GitHub's built-in "auto-merge when checks pass" feature so a PR never
+merges itself on green. It does **not** stop the orchestrator's explicit
+`gh pr merge` -- that is governed by the auto-merge-vs-ping rule (a routine
+low-risk PR that reviewed CLEAN is merged autonomously; a consequence-bearing PR
+pings the maintainer). Verify:
 
 ```
 gh api repos/<OWNER>/<REPO> --jq .allow_auto_merge    # expect: false
 ```
 
-## 2. Create the "To Dev" ruleset (Copilot review + PR required)
+## 2. Create the "To Dev" ruleset (PR required)
 
-The `copilot_code_review` rule has exactly two parameters -- `review_on_push`
-and `review_draft_pull_requests`. There is NO parameter for the draft->ready
-trigger (that is built into GitHub and not configurable), which is WHY the
-review flow avoids draft PRs (see `doctrine/review-flow.md`).
+This ruleset requires PRs into `dev` and blocks deletion / force-pushes.
 
-Set `review_draft_pull_requests` to your preference:
-- `false` (recommended, matches the no-draft flow) -- Copilot reviews on PR-open
-  and on push; no draft reviews.
-- `true` -- Copilot also reviews drafts (only useful if you deliberately use
-  drafts, which the kit flow does not).
+**Code review is NOT configured here.** The reviewer is **OpenAI Codex**, a
+repo-level GitHub app that **auto-reviews a PR on open** (and re-reviews on an
+`@codex review` comment) -- it is not a branch-ruleset rule. Codex replaced the
+former `copilot_code_review` ruleset rule at the Copilot->Codex cutover
+(bd `polyglot-pdf-hrn.8`/`hrn.9`); do NOT add a `copilot_code_review` rule (Copilot
+is retired here). How the review loop drives Codex lives in
+[`doctrine/review-flow.md`](doctrine/review-flow.md) and the closeout skill, not in
+GitHub ruleset config. (The no-draft-PR convention still holds -- Codex's auto-review
+fires on PR-open, so opening normal PRs is what triggers round 1.)
 
 Save this as `to-dev-ruleset.json`:
 
@@ -71,9 +85,7 @@ Save this as `to-dev-ruleset.json`:
         "require_last_push_approval": false,
         "required_review_thread_resolution": false,
         "allowed_merge_methods": ["merge", "squash", "rebase"]
-      } },
-    { "type": "copilot_code_review",
-      "parameters": { "review_on_push": true, "review_draft_pull_requests": false } }
+      } }
   ]
 }
 ```
@@ -84,9 +96,12 @@ Create it:
 gh api -X POST repos/<OWNER>/<REPO>/rulesets --input to-dev-ruleset.json
 ```
 
-## 3. Create the "Defend Production" ruleset
+## 3. Create the "Defend Production" ruleset (OPTIONAL -- no active prod here)
 
-Save as `defend-prod-ruleset.json`:
+**Skip this for the demo repo.** There is no active production `main` to defend
+(the project is a demo for future investor demonstration, not a production app), so
+this ruleset is not load-bearing. It is retained only as a reference for a future
+prod tier. If you do create it, save as `defend-prod-ruleset.json`:
 
 ```json
 {
@@ -118,17 +133,17 @@ gh api -X POST repos/<OWNER>/<REPO>/rulesets --input defend-prod-ruleset.json
 
 ```
 gh api repos/<OWNER>/<REPO>/rulesets --jq '.[] | {id, name, enforcement}'
-gh api repos/<OWNER>/<REPO>/rulesets/<TO_DEV_ID> --jq '.rules[] | select(.type=="copilot_code_review")'
+gh api repos/<OWNER>/<REPO>/rulesets/<TO_DEV_ID> --jq '.rules[] | .type'
 ```
 
-You should see both rulesets `active`, and the `copilot_code_review` rule with
-your chosen parameters.
+You should see the "To Dev" ruleset `active` with `pull_request`, `deletion`, and
+`non_fast_forward` rules (no `copilot_code_review` -- that rule is retired).
 
 ## Notes
 
-- **Copilot code review must be enabled for the repo/org** (a GitHub Copilot
-  Enterprise/Business feature) for the `copilot_code_review` rule to take effect.
-  If `gh api` rejects the rule type, Copilot review is not available on the plan.
+- **Code review is Codex, not a ruleset.** Codex (a repo-level GitHub app) reviews
+  PRs on open; there is nothing to configure in a branch ruleset for it. Do not add
+  a `copilot_code_review` rule (Copilot is retired -- bd `polyglot-pdf-hrn.8`/`hrn.9`).
 - **GitHub MCP path:** if a GitHub MCP server is connected, it can create these
   rulesets too -- pass the same JSON bodies. Do not assume the MCP exists; the
   `gh` CLI is the portable path.
