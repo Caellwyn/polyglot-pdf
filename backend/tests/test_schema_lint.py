@@ -323,6 +323,33 @@ def test_lint_never_raises_on_garbage():
     assert lint_schema({}) == []
 
 
+def test_non_list_options_never_crash_any_pass():
+    # Codex PR #302 round 2: malformed `options` (a number) reached raw
+    # iteration in BOTH the option-reference check and the dump-claim pass.
+    fields = [
+        {"id": "weird", "type": "select", "options": 5,
+         "pdf_field_name": "w[0]"},
+        {"id": "dep", "type": "text",
+         "show_if": {"field": "weird", "operator": "equals", "value": "x"}},
+    ]
+    dump = {"fields": [{"name": "top[0].w[0]"}]}
+    findings = lint_schema(_schema(fields), dump)  # must not raise
+    assert all(isinstance(f.rule, str) for f in findings)
+
+
+def test_long_acyclic_show_if_chain_does_not_overflow():
+    # Codex PR #302 round 2: recursive DFS hit Python's recursion limit on
+    # long chains; the iterative walk must handle depth > 1000 and stay quiet.
+    n = 2000
+    fields = [{"id": "f0", "type": "text"}]
+    fields += [
+        {"id": f"f{i}", "type": "text",
+         "show_if": {"field": f"f{i-1}", "operator": "is_not_empty"}}
+        for i in range(1, n)
+    ]
+    assert lint_schema(_schema(fields)) == []
+
+
 # ---------------------------------------------------------------------------
 # Real artifacts: shipped kits lint clean; the archived broken draft is RED.
 # ---------------------------------------------------------------------------

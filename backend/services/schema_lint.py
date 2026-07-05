@@ -269,7 +269,9 @@ def _check_atom(
         and trigger_field is not None
         and str(trigger_field.get("type")) in vocab.CHOICE_FIELD_TYPES
     ):
-        options = trigger_field.get("options") or []
+        options = trigger_field.get("options")
+        if not isinstance(options, list):
+            options = []  # malformed options never crash the never-throws contract
         # Both runtime option shapes: {value,label} dicts and legacy plain
         # strings (a string option's value is the string itself -- same
         # contract as the frontend's optionValue()).
@@ -370,32 +372,42 @@ def _check_cycles(
                 triggers.append(ref)
         graph[fid] = triggers
 
+    # Iterative DFS (explicit stack): a long acyclic show_if chain in a large
+    # generated form must not hit Python's recursion limit -- the linter never
+    # throws (Codex PR #302).
     WHITE, GRAY, BLACK = 0, 1, 2
     color: Dict[str, int] = {fid: WHITE for fid in graph}
     reported: set = set()
 
-    def dfs(node: str, stack: List[str]) -> None:
-        color[node] = GRAY
-        stack.append(node)
-        for nxt in graph.get(node, []):
-            if color.get(nxt, BLACK) == GRAY:
-                cycle = tuple(sorted(stack[stack.index(nxt):]))
+    for start in graph:
+        if color[start] != WHITE:
+            continue
+        color[start] = GRAY
+        stack = [(start, iter(graph.get(start, [])))]
+        path = [start]
+        while stack:
+            node, neighbors = stack[-1]
+            nxt = next(neighbors, None)
+            if nxt is None:
+                stack.pop()
+                path.pop()
+                color[node] = BLACK
+                continue
+            state = color.get(nxt, BLACK)
+            if state == GRAY:
+                cycle = tuple(sorted(path[path.index(nxt):]))
                 if cycle not in reported:
                     reported.add(cycle)
                     out.append(LintFinding(
                         SEVERITY_WARNING, "show-if-cycle",
                         f"fields (id={nxt})",
                         "show_if dependencies form a cycle: "
-                        + " -> ".join(stack[stack.index(nxt):] + [nxt]),
+                        + " -> ".join(path[path.index(nxt):] + [nxt]),
                     ))
-            elif color.get(nxt) == WHITE:
-                dfs(nxt, stack)
-        stack.pop()
-        color[node] = BLACK
-
-    for fid in graph:
-        if color[fid] == WHITE:
-            dfs(fid, [])
+            elif state == WHITE:
+                color[nxt] = GRAY
+                stack.append((nxt, iter(graph.get(nxt, []))))
+                path.append(nxt)
 
 
 # ---------------------------------------------------------------------------
@@ -442,7 +454,10 @@ def _check_dump_claims(
     for f in fields:
         fid = str(f.get("id"))
         register(f.get("pdf_field_name"), fid, "field")
-        for i, o in enumerate(f.get("options") or []):
+        options = f.get("options")
+        if not isinstance(options, list):
+            continue  # malformed options never crash the never-throws contract
+        for i, o in enumerate(options):
             if isinstance(o, dict):
                 register(o.get("pdf_field_name"), fid, f"option[{i}]")
 
