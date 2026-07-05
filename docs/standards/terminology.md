@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-06-14. bd np64: non-ASCII -> ASCII in schemaFormState.ts code comments (cosmetic, no terminology change). bd polyglot-pdf-vmxx added `resume: boolean` to the handshake payload (`getHandshakePayload`) -- this is a new handshake key, not a terminology change; see schema-forms.md for the calling convention. The internal-rename closeout (gfb.4) and the wire-format renames (zun / tb7) are unchanged.*
+*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md](../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md) for closeout details.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -64,6 +64,31 @@ The **internal** holdouts were renamed to section-canonical names in
   its name because that IS the backend wire contract.
 
 Don't add new `part_id`/`currentPartId` names for section state.
+
+## Schema v2 group + conditional vocabulary (bd h76m.3)
+
+`FormSchema.schema_version` selects the dialect: `None`/`"1"` is the legacy
+tolerant read (every shipped kit today); `"2"` opts in to the strict rules
+below (enforced at parse by `form_models.py`, matrix defined in
+`backend/models/conditional_vocabulary.py` -- the registry is the source of
+truth, never a hand-copied list). Until the strictness flip (epic h76m P6.2)
+both dialects parse.
+
+| Term | Meaning in v2 |
+|------|---------------|
+| **checkbox** | A STANDALONE boolean field. `options` are **forbidden** on it. Never a group. |
+| **checkbox_group** | ONE logical multi-select question; the only group mechanism is its `options[]`. Value shape is a `List[str]` of option slugs. No field-level `pdf_field_name`; per-box PDF identity lives on `options[].pdf_field_name` (+ `pdf_on_value`). |
+| **radio** | Single-select choice field (value is one option slug). PDF mapping is per-option `pdf_field_name` OR a shared field-level `pdf_field_name` + per-option `pdf_on_value` (true-AcroForm kids). |
+| **option slug** | `FieldOption.value` in v2: a SEMANTIC slug minted deterministically from the label (lowercase ascii `[a-z0-9_-]`, no commas/spaces, unique per field, immutable once minted). Widget identity never lives in `value`. |
+| **ConditionGroup** | The composite condition: one level of `all_of` / `any_of` / `none_of` buckets of atomic `{field, operator, value}` conditions. Flat by construction -- no nesting. "(A AND B) AND NOT C" = `all_of:[A,B] + none_of:[C]`. |
+| **require_if** | Field-level condition (same shape as `show_if`) under which the field becomes REQUIRED. Replaces `controls_fields.makes_required`. |
+| **includes / not_includes** | Group-membership operators: "option slug X is (not) in the checkbox_group trigger's selected set". In v2, `equals` on a group trigger is a validation ERROR -- the undocumented equals-means-membership evaluator hack (bd vq4m) is retired vocabulary. |
+| **is_checked** | Bool sugar on a standalone checkbox ONLY. "Any box of the group ticked" is `is_not_empty` (the is_checked dual fate -- `backend/tests/fixtures/is_checked_dual_fate.json`). |
+
+Deprecated-in-v2 (parse-with-warning until the P6.2 flip, then deleted):
+`controls_fields` (trigger-side action lists; dead at runtime),
+`conditional_fields` (v2 parse ERROR), `group_kind` /
+`consolidated_widgets` (superseded by the `checkbox_group` type).
 
 ## Field IDs and brackets
 

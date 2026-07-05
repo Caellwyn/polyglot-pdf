@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-07-02. bd polyglot-pdf-o0pc (dead-code cleanup): the `form_models.py` row no longer cites the deleted `tool_models.py`/`websocket_models.py` siblings (both removed -- zero importers). No risk classification changed. See [../journal/entries/2026-07-02-bd-o0pc-dead-code-cleanup.md](../journal/entries/2026-07-02-bd-o0pc-dead-code-cleanup.md).*
+*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md](../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md) for closeout details.*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of
@@ -70,13 +70,14 @@ listed -- **anything not listed is treated as `low` until rated otherwise.**
 | `backend/config.py` | Model/config selection, including which Gemini model and VAD env are read; imported by ~7 source modules (criteria 1 + 2). |
 | `backend/services/callback_handler.py` | The PII/PHI logging path (field IDs, spoken-name labels) -- the policy surface (criterion 3). |
 | `backend/services/form_kits.py` | The form-kit definitions PDF filling and schema forms both build on (criterion 2 + 3). |
-| `backend/models/form_models.py` | The shared form/field schema crossing the adapter, routes, and client wire (criterion 2); imported by the matcher/validation/field-utils path. (It is the only model module -- tool declarations live in `config.py#TOOL_DECLARATIONS`.) |
+| `backend/models/form_models.py` | The shared form/field schema crossing the adapter, routes, and client wire (criterion 2); imported by the matcher/validation/field-utils path. (Tool declarations live in `config.py#TOOL_DECLARATIONS`; its sibling `conditional_vocabulary.py` is rated Med below.) |
 
 ### Med
 
 | File | Why med |
 |------|---------|
 | `backend/services/ai_context.py` | Builds the system instruction / context for the adapter -- real behavior, but bugs surface in the adapter it feeds. |
+| `backend/models/conditional_vocabulary.py` | The schema-v2 operator/trigger registry + option-slug convention (bd h76m.3) driving the `form_models.py` v2 validators (and later the P1.2 contract render + P2.1 lint) -- a wrong matrix entry mis-validates, but bugs surface through the model validation it feeds. |
 | `backend/services/form_filling_service.py`, `manifest_service.py`, `validation_handler.py`, `request_coordinator.py` | Service-layer logic with callers, but not a cross-file contract or a money/PII surface on their own. |
 | `backend/routes/vad_config_routes.py`, `form_kit_routes.py`, `disclaimer_routes.py` | Route handlers with narrower blast radius than the WS/PDF routes. |
 | `backend/main.py`, `backend/dependencies.py` | Wiring/bootstrap -- a break is loud and caught immediately at startup. |
