@@ -6,6 +6,7 @@ Stateless: receives data -> fills PDF -> returns bytes (no storage).
 """
 from typing import Any, Dict, Optional
 import os
+import re
 import tempfile
 
 from fastapi import APIRouter, HTTPException
@@ -21,6 +22,11 @@ from backend.services.form_kits import (
 )
 
 _log = structlog.get_logger().bind(module="pdf_fill_routes")
+
+# Characters that terminate or escape a raw PDF /Name token. An on-state
+# containing any of these cannot be written via direct xref surgery without
+# escaping, so the filler refuses it (bd h76m.17).
+_PDF_NAME_UNSAFE = re.compile(r"[\s/#()<>\[\]{}%]")
 
 router = APIRouter(prefix="/api", tags=["pdf"])
 
@@ -182,6 +188,20 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 			return (None, None)
 
+		def widget_has_on_state(widget, on_state: str) -> bool:
+			"""STRICT membership check: on_state appears in the widget's /AP
+			normal states. Unlike get_button_on_state (whose 'Yes' DEFAULT is
+			right for single-target fills), a failed/empty appearance table here
+			means NOT-a-match -- defaulting would let a broken sibling kid
+			masquerade as the target when the real on-state is literally 'Yes'
+			(fresh-eyes, bd h76m.17: silent wrong-box selection)."""
+			try:
+				states = widget.button_states() or {}
+				normal = states.get("normal") or []
+				return isinstance(normal, list) and on_state in normal
+			except Exception:
+				return False
+
 		def find_widget_by_state(field_name: str, on_state: str):
 			"""Find the radio KID matching an 'on' appearance state (bd h76m.17).
 
@@ -202,7 +222,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					if name == field_name or name.endswith(field_name):
 						if fallback == (None, None):
 							fallback = (widget, page)
-						if get_button_on_state(widget) == on_state:
+						if widget_has_on_state(widget, on_state):
 							return (widget, page)
 			return fallback
 
@@ -307,6 +327,18 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						if not shared_pdf_field or not on_state:
 							continue
 						if option.get("value") != value:
+							continue
+						# The on-state goes into a RAW /Name token below: refuse
+						# PDF-Name-unsafe characters rather than writing a corrupt
+						# xref entry (defensive until the authoring-side lint pins
+						# the charset; fresh-eyes, bd h76m.17).
+						if _PDF_NAME_UNSAFE.search(on_state):
+							_log.warning(
+								"radio_on_state_unsafe_chars",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=shared_pdf_field,
+							)
 							continue
 						widget, page = find_widget_by_state(shared_pdf_field, on_state)
 						if not widget or not page:

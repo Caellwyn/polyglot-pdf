@@ -278,3 +278,93 @@ def test_validator_standalone_checkbox_unchanged():
     standalone = {"id": "cb", "name": "CB", "type": "checkbox"}
     assert validate_field_value(standalone, True) == []
     assert validate_field_value(standalone, "not-a-bool") != []
+
+
+# ---------------------------------------------------------------------------
+# Fresh-eyes round 1 hardening
+# ---------------------------------------------------------------------------
+
+def _synthetic_radio_pdf_broken_sibling() -> bytes:
+    """Kid 1 has a MALFORMED appearance table (no /N states); kid 2's real
+    on-state is literally 'Yes'. A 'Yes'-defaulting state reader would match
+    the broken kid first -- the silent wrong-box hazard."""
+    doc = fitz.open()
+    page = doc.new_page()
+    for idx, rect in enumerate((fitz.Rect(50, 50, 70, 70), fitz.Rect(50, 90, 70, 110))):
+        w = fitz.Widget()
+        w.field_name = f"tmp_{idx}[0]"
+        w.field_type = fitz.PDF_WIDGET_TYPE_CHECKBOX
+        w.rect = rect
+        page.add_widget(w)
+    xrefs = [w.xref for w in doc[0].widgets() or []]
+    doc.xref_set_key(xrefs[0], "T", "(grp[0])")
+    doc.xref_set_key(xrefs[0], "AP", "<< >>")  # malformed: no /N dict
+    doc.xref_set_key(xrefs[1], "T", "(grp[0])")
+    doc.xref_set_key(xrefs[1], "AP", "<< /N << /Yes null /Off null >> >>")
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def test_shared_radio_skips_broken_sibling_for_yes_state(monkeypatch):
+    monkeypatch.setattr(
+        pdf_fill_routes,
+        "get_form_kit_store",
+        lambda: _StubStore(_synthetic_radio_pdf_broken_sibling()),
+    )
+    schema = {
+        "fields": [{
+            "id": "marital", "type": "radio", "pdf_field_name": "grp[0]",
+            "options": [{"value": "yes", "label": "Yes", "pdf_on_value": "Yes"},
+                        {"value": "no", "label": "No", "pdf_on_value": "2"}],
+        }]
+    }
+    req = PDFFillRequest(
+        kit_id="synthetic", pdf_filename="s.pdf",
+        field_values={"marital": "yes"}, form_schema=schema,
+    )
+    resp = asyncio.run(fill_pdf(req))
+    assert resp.status_code == 200
+
+    doc = fitz.open(stream=resp.body, filetype="pdf")
+    try:
+        page = doc[0]
+        for w in page.widgets() or []:
+            states = (w.button_states() or {}).get("normal") or []
+            as_key = doc.xref_get_key(w.xref, "AS")
+            as_val = as_key[1] if isinstance(as_key, (list, tuple)) and len(as_key) > 1 else None
+            if "Yes" in states:
+                assert as_val == "/Yes", f"intended kid not selected: {as_val}"
+            else:
+                assert as_val != "/Yes", "the BROKEN sibling was selected (Yes-default regression)"
+    finally:
+        doc.close()
+
+
+def test_shared_radio_refuses_pdf_name_unsafe_on_state(monkeypatch):
+    monkeypatch.setattr(
+        pdf_fill_routes, "get_form_kit_store", lambda: _StubStore(_synthetic_radio_pdf())
+    )
+    schema = {
+        "fields": [{
+            "id": "marital", "type": "radio", "pdf_field_name": "grp[0]",
+            "options": [{"value": "bad", "label": "Bad", "pdf_on_value": "has space/slash"}],
+        }]
+    }
+    req = PDFFillRequest(
+        kit_id="synthetic", pdf_filename="s.pdf",
+        field_values={"marital": "bad"}, form_schema=schema,
+    )
+    resp = asyncio.run(fill_pdf(req))
+    assert resp.status_code == 200  # refused + skipped, never a corrupt write
+
+
+@_i90_present
+def test_checkbox_group_bool_value_skips_cleanly():
+    """Stale client data sending a bare bool to a v2 group must skip with the
+    no-pdf-mapping diagnostic (v2 forbids the field-level pdf_field_name the
+    bool path needs), never crash or silently succeed."""
+    pdf = _fill(_v2_group_schema(), {_RACE_FIELD_ID: True})
+    states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
+    for leaf in _RACE_ALL_LEAVES:
+        assert states[leaf] in ("/Off", "Off", None), f"{leaf} should stay unfilled"
