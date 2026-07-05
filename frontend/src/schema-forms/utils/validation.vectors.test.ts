@@ -8,8 +8,9 @@
 // object pin the shapes where the two evaluators genuinely diverge today; this
 // runner reads the `frontend` leg.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { shouldShowField } from "./validation";
+import { normalizeToComposite } from "./normalizeToComposite";
 import type { FormField } from "../types/schema";
 import rawSuite from "../../../../shared/conditional-vectors.json";
 
@@ -21,7 +22,16 @@ interface Vector {
   expect: boolean | { frontend: boolean; editor: boolean };
 }
 
-const suite = rawSuite as unknown as { vectors: Vector[] };
+interface NormalizeCase {
+  name: string;
+  input?: unknown;
+  expect: unknown;
+}
+
+const suite = rawSuite as unknown as {
+  vectors: Vector[];
+  normalize: NormalizeCase[];
+};
 
 describe("shared conditional vectors (frontend shouldShowField)", () => {
   it("suite is non-empty", () => {
@@ -38,6 +48,56 @@ describe("shared conditional vectors (frontend shouldShowField)", () => {
         vector.field,
       ] as unknown as FormField[];
       expect(shouldShowField(field, vector.fieldValues, fields)).toBe(expected);
+    });
+  }
+});
+
+// P3.0 (bd h76m.7): the shape-only coexistence contract, pinned by the same
+// shared file. MALFORMED-* cases must fail OPEN (null) and warn.
+describe("shared normalize vectors (frontend normalizeToComposite)", () => {
+  it("suite has normalize cases", () => {
+    expect(suite.normalize.length).toBeGreaterThan(0);
+  });
+
+  for (const c of suite.normalize) {
+    it(c.name, () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        expect(normalizeToComposite(c.input)).toEqual(c.expect);
+        if (c.name.startsWith("MALFORMED")) {
+          expect(warnSpy).toHaveBeenCalled();
+        } else {
+          expect(warnSpy).not.toHaveBeenCalled();
+        }
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  }
+});
+
+// P3.0 exit criterion 2: normalize is pure shape -- for every v0 vector,
+// evaluating the normalized one-atom group's atom must equal evaluating the
+// original legacy show_if through TODAY'S evaluator.
+describe("property: evaluate(normalize(show_if)) == evaluate(show_if)", () => {
+  for (const vector of suite.vectors) {
+    if (!vector.field.show_if) continue;
+    it(vector.name, () => {
+      const field = vector.field as unknown as FormField;
+      const fields = [
+        ...(vector.fields ?? []),
+        vector.field,
+      ] as unknown as FormField[];
+      const original = shouldShowField(field, vector.fieldValues, fields);
+
+      const group = normalizeToComposite(vector.field.show_if);
+      expect(group).not.toBeNull();
+      expect(group!.all_of).toHaveLength(1);
+      const rebuilt = {
+        ...vector.field,
+        show_if: group!.all_of![0],
+      } as unknown as FormField;
+      expect(shouldShowField(rebuilt, vector.fieldValues, fields)).toBe(original);
     });
   }
 });

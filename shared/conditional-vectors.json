@@ -1,6 +1,136 @@
 {
   "description": "Shared conditional-semantics vector suite (bd polyglot-pdf-h76m.1, P0.1). Pins TODAY'S show_if evaluation semantics of BOTH evaluators -- the voice runtime (frontend/src/schema-forms/utils/validation.ts shouldShowField) and the editor preview (schema-editor/src/utils/conditionalVisibility.ts shouldShowField) -- BEFORE the schema-v2 composite-logic rework changes anything. This file is the anti-drift contract: any semantic change must be made in both evaluators AND here, deliberately, or CI turns red. Includes the vq4m equals-as-membership hack on checkbox-group triggers, the comma-string gating (voice path), and known warts (String() coercions, no trim on is_empty). Do not 'fix' an expectation to make a code change pass -- a red runner means the evaluators and this contract disagree, which is exactly the drift this suite exists to catch.",
   "expectShape": "expect is either a boolean (both evaluators agree -- the normal case) or {frontend, editor} (a field shape where the two evaluators GENUINELY DIVERGE today; pinned honestly rather than papered over). Divergences stem from the comma-split gate: the runtime keys on group_kind === 'checkbox', the editor keys on type === 'checkbox' with non-empty options[] (its FormField type has no group_kind). The editor also never unwraps FieldValue objects (a runtime storage detail).",
+  "normalizeShape": "The `normalize` section (bd h76m.7, P3.0) pins normalizeToComposite -- the shape-only coexistence contract duplicated verbatim in frontend/src/schema-forms/utils/normalizeToComposite.ts and schema-editor/src/utils/normalizeToComposite.ts. Each case is {name, input?, expect}: input omitted means undefined; expect is the canonical composite group or null (null = 'always shown', which is also the FAIL-OPEN result for every malformed shape -- those cases also emit a console.warn). Normalize NEVER rewrites operators or values; semantics stay in the leaf evaluators until P6.2.",
+  "normalize": [
+    {
+      "name": "null-input",
+      "input": null,
+      "expect": null
+    },
+    {
+      "name": "absent-input",
+      "expect": null
+    },
+    {
+      "name": "legacy-atom-becomes-one-atom-all_of",
+      "input": { "field": "t", "operator": "equals", "value": "yes" },
+      "expect": { "all_of": [{ "field": "t", "operator": "equals", "value": "yes" }] }
+    },
+    {
+      "name": "legacy-atom-operator-passthrough-no-rewrite",
+      "input": { "field": "grp", "operator": "equals", "value": "a" },
+      "expect": { "all_of": [{ "field": "grp", "operator": "equals", "value": "a" }] }
+    },
+    {
+      "name": "legacy-atom-without-value",
+      "input": { "field": "t", "operator": "is_empty" },
+      "expect": { "all_of": [{ "field": "t", "operator": "is_empty" }] }
+    },
+    {
+      "name": "legacy-atom-null-value-preserved",
+      "input": { "field": "t", "operator": "equals", "value": null },
+      "expect": { "all_of": [{ "field": "t", "operator": "equals", "value": null }] }
+    },
+    {
+      "name": "legacy-atom-list-value-preserved",
+      "input": { "field": "t", "operator": "in", "value": ["a", "b"] },
+      "expect": { "all_of": [{ "field": "t", "operator": "in", "value": ["a", "b"] }] }
+    },
+    {
+      "name": "legacy-atom-unknown-operator-passthrough",
+      "input": { "field": "t", "operator": "is_selected", "value": "x" },
+      "expect": { "all_of": [{ "field": "t", "operator": "is_selected", "value": "x" }] }
+    },
+    {
+      "name": "legacy-atom-stray-keys-dropped",
+      "input": { "field": "t", "operator": "equals", "value": "x", "note": "stray" },
+      "expect": { "all_of": [{ "field": "t", "operator": "equals", "value": "x" }] }
+    },
+    {
+      "name": "v2-group-all_of-passthrough",
+      "input": { "all_of": [{ "field": "a", "operator": "equals", "value": 1 }, { "field": "b", "operator": "is_not_empty" }] },
+      "expect": { "all_of": [{ "field": "a", "operator": "equals", "value": 1 }, { "field": "b", "operator": "is_not_empty" }] }
+    },
+    {
+      "name": "v2-group-three-buckets-passthrough",
+      "input": {
+        "all_of": [{ "field": "a", "operator": "includes", "value": "x" }],
+        "any_of": [{ "field": "b", "operator": "equals", "value": "1" }, { "field": "c", "operator": "equals", "value": "2" }],
+        "none_of": [{ "field": "d", "operator": "is_checked" }]
+      },
+      "expect": {
+        "all_of": [{ "field": "a", "operator": "includes", "value": "x" }],
+        "any_of": [{ "field": "b", "operator": "equals", "value": "1" }, { "field": "c", "operator": "equals", "value": "2" }],
+        "none_of": [{ "field": "d", "operator": "is_checked" }]
+      }
+    },
+    {
+      "name": "v2-group-empty-bucket-dropped",
+      "input": { "all_of": [], "none_of": [{ "field": "c", "operator": "is_checked" }] },
+      "expect": { "none_of": [{ "field": "c", "operator": "is_checked" }] }
+    },
+    {
+      "name": "v2-group-null-bucket-treated-absent",
+      "input": { "all_of": null, "any_of": [{ "field": "a", "operator": "equals", "value": "x" }] },
+      "expect": { "any_of": [{ "field": "a", "operator": "equals", "value": "x" }] }
+    },
+    {
+      "name": "MALFORMED-only-empty-buckets",
+      "input": { "all_of": [], "any_of": [] },
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-mixed-atom-and-bucket-keys",
+      "input": { "field": "t", "operator": "equals", "value": "x", "all_of": [{ "field": "u", "operator": "is_empty" }] },
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-nested-group-in-bucket",
+      "input": { "all_of": [{ "any_of": [{ "field": "a", "operator": "equals", "value": 1 }] }] },
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-bucket-not-an-array",
+      "input": { "all_of": { "field": "a", "operator": "equals", "value": 1 } },
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-atom-missing-operator",
+      "input": { "field": "t", "value": "x" },
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-atom-non-string-field",
+      "input": { "field": 5, "operator": "equals", "value": "x" },
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-array-input",
+      "input": [{ "field": "t", "operator": "equals", "value": "x" }],
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-string-input",
+      "input": "field == x",
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-number-input",
+      "input": 42,
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-boolean-input",
+      "input": true,
+      "expect": null
+    },
+    {
+      "name": "MALFORMED-empty-object",
+      "input": {},
+      "expect": null
+    }
+  ],
   "vectors": [
     {
       "name": "no-show_if-visible",
