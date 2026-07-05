@@ -421,16 +421,18 @@ async def set_editor_kit_status(
             f for f in lint_schema(schema) if f.severity == SEVERITY_ERROR
         ]
         if lint_errors:
+            # Cap the finding list BEFORE appending the "and N more" tail so a
+            # long list can never truncate away the count of what was elided.
             shown = "; ".join(
                 f"[{f.rule}] {f.path}: {f.message}" for f in lint_errors[:8]
-            )
+            )[:1400]
             more = len(lint_errors) - 8
             if more > 0:
                 shown += f"; ... and {more} more"
             raise HTTPException(
                 status_code=409,
                 detail=f"Schema has {len(lint_errors)} lint error(s), so it "
-                       f"cannot be marked complete: {shown}"[:1600],
+                       f"cannot be marked complete: {shown}",
             )
 
     next_meta = {**(meta or {}), "status": body.status}
