@@ -78,6 +78,17 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/block_admin_merge_hook.py"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "",
