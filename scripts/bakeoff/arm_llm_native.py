@@ -165,7 +165,8 @@ def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
                  pdf_path: Optional[str],
                  disabled: frozenset[str] = DEFAULT_DISABLED,
                  order_caveat: bool = True,
-                 plain: bool = False) -> str:
+                 plain: bool = False,
+                 group_candidates: bool = False) -> str:
     """Assemble the full text prompt (contract + anti-hallucination + few-shot +
     field list). When pdf_path is given, the prompt INSTRUCTS the model to
     read that PDF (the Claude CLI reads it via its Read tool; the Gemini backend
@@ -187,6 +188,17 @@ def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
         parts.append(build_fewshot(fewshot_truth))
         parts.append("")
 
+    # Deterministic pre-grouping candidates (bd h76m.12): suggest, don't
+    # decide -- the block presents structurally-mined widget families for the
+    # model to adopt as one field or split. Flag-gated (default OFF) so
+    # eval_extraction can run the with/without ablation.
+    candidates_block = ""
+    if group_candidates:
+        from group_candidates import (  # noqa: E402 (sibling module)
+            find_group_candidates, render_candidates_block,
+        )
+        candidates_block = render_candidates_block(find_group_candidates(dump))
+
     if plain:
         # Plain claude-hybrid: raw AcroForm field list, no enrichment.
         if pdf_path:
@@ -202,6 +214,9 @@ def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
                 "pixels are provided -- reason from the list alone.\n"
             )
         parts.append(acroform_field_list(dump))
+        if candidates_block:
+            parts.append("")
+            parts.append(candidates_block)
         return "\n".join(parts)
 
     enrich(dump, disabled=disabled)
@@ -222,6 +237,9 @@ def build_prompt(acroform_path: str, fewshot_truth: Optional[str],
             "-- reason from the bundle alone.\n"
         )
     parts.append(enriched_field_list(dump, order_caveat=order_caveat))
+    if candidates_block:
+        parts.append("")
+        parts.append(candidates_block)
     return "\n".join(parts)
 
 
@@ -230,11 +248,12 @@ def run(pdf_path: str, acroform_path: str, model: str,
         send_pdf: bool = True,
         disabled: frozenset[str] = DEFAULT_DISABLED,
         order_caveat: bool = True,
-        plain: bool = False) -> dict:
+        plain: bool = False,
+        group_candidates: bool = False) -> dict:
     pdf_for_prompt = pdf_path if send_pdf else None
     prompt = build_prompt(acroform_path, fewshot_truth, pdf_for_prompt,
                           disabled=disabled, order_caveat=order_caveat,
-                          plain=plain)
+                          plain=plain, group_candidates=group_candidates)
 
     # The LLM out-call is behind a provider seam (bd 7a9.17, llm_providers.py):
     # EXTRACTOR_PROVIDER overrides; otherwise the model name dispatches (gemini*
@@ -253,6 +272,7 @@ def run(pdf_path: str, acroform_path: str, model: str,
         "enriched": not plain, "fewshot": bool(fewshot_truth), "pdf_sent": send_pdf,
         "disabled_signals": [] if plain else sorted(disabled),
         "order_caveat": False if plain else order_caveat,
+        "group_candidates": group_candidates,
     })
     if tok:
         schema["_bakeoff"]["tokens"] = tok

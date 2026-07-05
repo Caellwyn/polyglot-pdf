@@ -1,0 +1,251 @@
+[
+  {
+    "form": "w9-heldout",
+    "draft": "C:\\Users\\caell\\code_projects\\polyglot-pdf\\.claude\\worktrees\\nifty-zhukovsky-51d558\\scripts\\authoring\\outputs\\w9-heldout_eval_draft.json",
+    "group_candidates": false,
+    "repair": "-",
+    "lint_errors": 0,
+    "lint_warnings": 0,
+    "choice_fill": {
+      "attempted": 2,
+      "filled": 2,
+      "pct": 100.0
+    },
+    "text_fill": {
+      "attempted": 15,
+      "filled": 15,
+      "pct": 100.0
+    },
+    "value_convention": {
+      "total": 8,
+      "conforming": 8,
+      "pct": 100.0,
+      "violations": []
+    },
+    "field_f1": null,
+    "structural": {
+      "passed": true,
+      "problems": [],
+      "consolidated": false,
+      "widgets": 8
+    },
+    "verdict": "OK",
+    "arm": "candidates-off"
+  },
+  {
+    "form": "w9-heldout",
+    "draft": "C:\\Users\\caell\\code_projects\\polyglot-pdf\\.claude\\worktrees\\nifty-zhukovsky-51d558\\scripts\\authoring\\outputs\\w9-heldout_eval_draft_gc.json",
+    "group_candidates": true,
+    "repair": "-",
+    "lint_errors": 0,
+    "lint_warnings": 0,
+    "choice_fill": {
+      "attempted": 2,
+      "filled": 2,
+      "pct": 100.0
+    },
+    "text_fill": {
+      "attempted": 15,
+      "filled": 15,
+      "pct": 100.0
+    },
+    "value_convention": {
+      "total": 8,
+      "conforming": 8,
+      "pct": 100.0,
+      "violations": []
+    },
+    "field_f1": null,
+    "structural": {
+      "passed": true,
+      "problems": [],
+      "consolidated": false,
+      "widgets": 8
+    },
+    "verdict": "OK",
+    "arm": "candidates-on"
+  },
+  {
+    "form": "w7",
+    "draft": "C:\\Users\\caell\\code_projects\\polyglot-pdf\\.claude\\worktrees\\nifty-zhukovsky-51d558\\scripts\\authoring\\outputs\\w7_eval_draft.json",
+    "group_candidates": false,
+    "repair": "-",
+    "lint_errors": 0,
+    "lint_warnings": 0,
+    "choice_fill": {
+      "attempted": 8,
+      "filled": 8,
+      "pct": 100.0
+    },
+    "text_fill": {
+      "attempted": 47,
+      "filled": 47,
+      "pct": 100.0
+    },
+    "value_convention": {
+      "total": 13,
+      "conforming": 13,
+      "pct": 100.0,
+      "violations": []
+    },
+    "field_f1": 99.17355371900825,
+    "structural": {
+      "passed": false,
+      "problems": [
+        "field 'reason_a' claims 'c1_2[0]' at field level but carries unmapped options ['c1_2[0]'] -- unfillable on the interactive path",
+        "field 'reason_b' claims 'c1_3[0]' at field level but carries unmapped options ['c1_3[0]'] -- unfillable on the interactive path",
+        "field 'reason_c' claims 'c1_4[0]' at field level but carries unmapped options ['c1_4[0]'] -- unfillable on the interactive path",
+        "field 'reason_d' claims 'c1_5[0]' at field level but carries unmapped options ['c1_5[0]'] -- unfillable on the interactive path",
+        "field 'reason_e' claims 'c1_6[0]' at field level but carries unmapped options ['c1_6[0]'] -- unfillable on the interactive path",
+        "field 'reason_f' claims 'c1_7[0]' at field level but carries unmapped options ['c1_7[0]'] -- unfillable on the interactive path",
+        "field 'reason_g' claims 'c1_8[0]' at field level but carries unmapped options ['c1_8[0]'] -- unfillable on the interactive path",
+        "field 'reason_h' claims 'c1_9[0]' at field level but carries unmapped options ['c1_9[0]'] -- unfillable on the interactive path"
+      ],
+      "consolidated": false,
+      "widgets": 8
+    },
+    "verdict": "RED",
+    "arm": "candidates-off"
+  },
+  {
+    "form": "w7",
+    "draft": "C:\\Users\\caell\\code_projects\\polyglot-pdf\\.claude\\worktrees\\nifty-zhukovsky-51d558\\scripts\\authoring\\outputs\\w7_eval_draft_gc.json",
+    "group_candidates": true,
+    "repair": "-",
+    "lint_errors": 5,
+    "lint_warnings": 0,
+    "choice_fill": {
+      "attempted": 6,
+      "filled": 6,
+      "pct": 100.0
+    },
+    "text_fill": {
+      "attempted": 48,
+      "filled": 48,
+      "pct": 100.0
+    },
+    "value_convention": {
+      "total": 21,
+      "conforming": 0,
+      "pct": 0.0,
+      "violations": [
+        {
+          "field_id": "application_type",
+          "value": "2",
+          "widget_leaf": "c1_1[0]"
+        },
+        {
+          "field_id": "application_type",
+          "value": "1",
+          "widget_leaf": "c1_1[1]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_2[0]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_3[0]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_4[0]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_5[0]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_6[0]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_7[0]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_8[0]"
+        },
+        {
+          "field_id": "reason_for_submission",
+          "value": "1",
+          "widget_leaf": "c1_9[0]"
+        },
+        {
+          "field_id": "gender",
+          "value": "1",
+          "widget_leaf": "c1_10[0]"
+        },
+        {
+          "field_id": "gender",
+          "value": "2",
+          "widget_leaf": "c1_10[1]"
+        },
+        {
+          "field_id": "identification_document_type",
+          "value": "1",
+          "widget_leaf": "c1_11[0]"
+        },
+        {
+          "field_id": "identification_document_type",
+          "value": "2",
+          "widget_leaf": "c1_11[1]"
+        },
+        {
+          "field_id": "identification_document_type",
+          "value": "3",
+          "widget_leaf": "c1_11[2]"
+        },
+        {
+          "field_id": "identification_document_type",
+          "value": "4",
+          "widget_leaf": "c1_11[3]"
+        },
+        {
+          "field_id": "previously_received_itin_irsn",
+          "value": "1",
+          "widget_leaf": "c1_12[0]"
+        },
+        {
+          "field_id": "previously_received_itin_irsn",
+          "value": "2",
+          "widget_leaf": "c1_12[1]"
+        },
+        {
+          "field_id": "delegate_relationship",
+          "value": "1",
+          "widget_leaf": "c1_13[0]"
+        },
+        {
+          "field_id": "delegate_relationship",
+          "value": "2",
+          "widget_leaf": "c1_13[1]"
+        },
+        {
+          "field_id": "delegate_relationship",
+          "value": "3",
+          "widget_leaf": "c1_13[2]"
+        }
+      ]
+    },
+    "field_f1": 93.91304347826087,
+    "structural": {
+      "passed": false,
+      "problems": [
+        "field 'reason_for_submission': claiming option values not distinct within the field: ['1']"
+      ],
+      "consolidated": true,
+      "widgets": 8
+    },
+    "verdict": "RED",
+    "arm": "candidates-on"
+  }
+]
