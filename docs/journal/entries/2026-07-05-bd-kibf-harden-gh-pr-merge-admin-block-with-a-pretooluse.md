@@ -1,0 +1,117 @@
+---
+date: 2026-07-05
+bead: polyglot-pdf-kibf
+title: "Harden gh pr merge --admin block with a PreToolUse hook (settings wildcard is fragile)"
+tags: [doctrine, testing]
+---
+
+## Trigger
+
+The auto-merge policy (bd `polyglot-pdf-16pj`) lets the orchestrator run
+`gh pr merge` itself for a routine low-risk PR, gated on CI/required checks being
+green. `gh pr merge --admin` bypasses that gate (it merges a PR that does not meet
+requirements). 16pj denied `--admin` via three space-wildcard patterns in
+settings.json, but claude-code-guide confirmed the Bash permission matcher does
+only substring/space-glob matching and is fragile for flag validation. bd kibf
+adds the robust layer: a PreToolUse hook that tokenizes the command.
+
+## What shipped
+
+- **`scripts/block_admin_merge_hook.py`** -- a PreToolUse hook. Reads the Bash
+  command from `tool_input.command`, SPLITS it on all shell boundaries (`\n ; && ||
+  | & ( ) { }`) so each fragment is a fresh command context, tokenizes each fragment
+  robustly (`shlex posix=False` so Windows backslash paths survive, + a single
+  quote-unwrap), skips benign leading prefixes (`sudo`/`env`/`exec`/`!`/`VAR=val`),
+  and DENIES only when a `gh` executable (incl. path-qualified and `gh.cmd`/`gh.bat`
+  shims) heads the fragment as `gh pr merge` with an `--admin`/`--admin=` flag. On
+  anything else -- a legit merge, a `--admin` substring inside a quoted argument,
+  `gh pr merge --admin` merely NAMED in another command's arguments, a non-Bash
+  tool, malformed stdin -- it exits 0 with no output, so the normal permission flow
+  (including the settings.json denies) still applies. It never emits
+  `permissionDecision: "allow"`, so it can only ADD a restriction, never remove one.
+- **`.claude/settings.json`** -- wired the hook as a `PreToolUse` hook with
+  `matcher: "Bash"`. The three `--admin` wildcard denies are KEPT as the first layer
+  (defense-in-depth; bd kibf exit criterion 2). Force-push / `bd dolt push --force`
+  denies untouched.
+- **`tests/test_block_admin_merge_hook.py`** -- 62 tests pinning the detection core
+  (block forms incl. subshell/brace-group/negation/exec, embedded newline, Windows
+  backslash path + `.cmd`/`.bat` shims, env-assignment and separator prefixes, and
+  `--admin=`; allow forms incl. the quoted-string evasion, the `gh pr merge --admin`
+  mentioned-in-another-command's-args case, `--administrator`/substring near-misses)
+  and the stdin/stdout main() contract (deny JSON shape, silent passthrough, non-Bash
+  ignore, malformed-stdin survival).
+
+Verified end-to-end by piping a real hook payload to the script: an admin-merge
+emits the deny JSON; a legit `--squash --match-head-commit` merge emits nothing.
+
+## Lessons
+
+- **Why the hook succeeds where the wildcard deny cannot:** the settings matcher
+  sees a raw string; the hook sees TOKENS. `gh pr merge 5 --body 'do not use
+  --admin'` matches a naive `*--admin*` wildcard (the substring is there) but is a
+  perfectly legitimate command -- only the tokenizer knows `--admin` is inside a
+  quoted argument, not a flag. Tokenize before you validate a flag. (Extends
+  [[bash-permission-wildcard-trailing-only]].)
+- **A command-detection guard must distinguish the command being RUN from text in
+  another command's ARGUMENTS -- caught when the hook blocked its own commit.** The
+  first cut scanned for `gh pr merge ... --admin` anywhere in the token stream, so a
+  `git commit -m "...block gh pr merge --admin..."` (the flag named in the commit
+  message) was denied -- the hook refused to let me commit itself. The fix: only
+  treat `gh pr merge` as an admin-merge when `gh` is an actual COMMAND HEAD.
+- **`shlex.split` alone is NOT a safe basis for a shell-command security guard --
+  adversarial fresh-eyes found 6 bypasses in the first head-detection cut.** shlex
+  (posix=True) silently merges newlines (so `git fetch\ngh pr merge 5 --admin`
+  slipped through), mangles Windows backslash paths (`C:\tools\gh` -> `C:toolsgh`, so
+  a path-qualified gh evaded on a Windows-only repo), and does not understand
+  grouping/negation (`(gh pr merge 5 --admin)`, `{ ...; }`, `! ...`) or `exec` -- all
+  of which slipped through, some ALSO evading the wildcard-deny layer (worst case:
+  both layers bypassed). Redesign: SPLIT the raw command on all shell boundaries
+  first (`\n ; && || | & ( ) { }`) so each fragment starts a fresh command context,
+  tokenize each fragment with `posix=False` (backslashes survive) + a single
+  quote-unwrap, skip benign leading prefixes (`sudo`/`env`/`exec`/`!`/`VAR=val`), and
+  match a `gh` exe (incl. `gh.cmd`/`gh.bat` Windows shims, path-qualified) head
+  followed by `pr merge` + an `--admin` token. A SECOND adversarial round then found
+  2 more: backtick/`$(...)`/`xargs` (added `` ` `` to the split set + `xargs` to the
+  prefixes) and a false POSITIVE where a bare-quoted `--body '--admin'` value
+  unwrapped to look like the flag (fixed by having `_tokenize` return `(text,
+  was_quoted)` pairs so a quoted arg is never treated as a flag). 62 tests pin all of
+  it. **Lesson: a security guard over shell strings needs boundary-splitting +
+  head-anchoring + quote-tracking, not a flat token scan -- and it must be tested
+  against the wrapping idioms (subshell, newline, path, negation, substitution),
+  not just the happy path.**
+- **Round 3 closed two more statically-fixable false negatives INSIDE the hook's own
+  advertised scope.** A benign prefix carrying its own option flag (`sudo -u foo gh pr
+  merge --admin`, `nice -n 10 ...`) defeated the head-skip -- the loop stopped at the
+  prefix's `-u`/`-n` option -- so the prefix-skip now also consumes a prefix's leading
+  `-flag` (and a single following plain value). And a backslash-newline line
+  continuation (`gh pr merge 5 \<newline>--admin`, which POSIX joins before word
+  splitting) was orphaning `--admin` into its own fragment -- fixed by stripping
+  `\<newline>` before the boundary split. Both came with false-positive guards
+  (`sudo -u foo systemctl...`, `nice -n 10 gh pr view`, `sudo apt install gh` still
+  pass). 62 tests.
+- **Draw and TEST the scope boundary explicitly.** Some forms (`bash -c "gh pr merge
+  ... --admin"`, `xargs -I{} gh pr merge {} --admin`, `GH=gh; $GH pr merge --admin`)
+  run a merge but the gh command is nested in an opaque arg, placeholder-templated,
+  or behind variable indirection -- catching them needs full shell emulation, well
+  past a static head-matcher. Rather than pretend or chase them, they are documented
+  out of scope with a pinning test (`test_templated_or_nested_forms_are_documented_
+  out_of_scope`) asserting they return False, and the settings.json wildcard denies
+  remain their backstop. A known, tested boundary beats an unbounded ambition.
+- **PreToolUse hooks are a real security layer, not advisory.** Per the docs they
+  run BEFORE the permission-mode check and cannot be bypassed even under
+  `bypassPermissions`; a hook can tighten but never loosen what permission rules
+  allow. That is exactly the "can't be evaded" property a checks-bypass guard needs
+  -- stronger than the wildcard deny it backs up.
+
+## Doc freshness
+
+- No tier-1/tier-2 doc changes. The hook's own rationale + contract live in its
+  module docstring (current-state). No CLAUDE.md change (16pj already documents the
+  auto-merge interlock; this hardens its enforcement, not its policy).
+
+## Files touched
+
+- `scripts/block_admin_merge_hook.py` -- new PreToolUse hook.
+- `.claude/settings.json` -- PreToolUse wiring (wildcard denies retained).
+- `tests/test_block_admin_merge_hook.py` -- new; 62 tests.
+- `docs/journal/entries/2026-07-05-bd-kibf-...md` -- this entry.
