@@ -343,3 +343,30 @@ describe('PreviewPane: malformed checkbox_group with zero options', () => {
     expect(screen.getByText('No options defined for this group.')).toBeTruthy();
   });
 });
+
+// Fresh-eyes round 2: the preview must obey an authored "Required when"
+// condition live -- the required '*' badge tracks isFieldRequired, not just
+// the static flag.
+describe('PreviewPane: require_if drives the required badge live', () => {
+  it('shows the * only while the require_if condition holds', () => {
+    const schema = makeSchema();
+    schema.fields = schema.fields.map(f =>
+      f.id === 'target'
+        ? {
+            ...f,
+            label: 'Target Field',
+            require_if: { field: 'check_c', operator: 'is_checked' },
+          }
+        : f,
+    );
+    const { container } = render(<PreviewPane schema={schema} />);
+    const badgeFor = () =>
+      Array.from(container.querySelectorAll('[title="required"]'));
+
+    expect(badgeFor().length).toBe(0);
+    fireEvent.click(screen.getByLabelText('check c'));
+    expect(badgeFor().length).toBe(1);
+    fireEvent.click(screen.getByLabelText('check c'));
+    expect(badgeFor().length).toBe(0);
+  });
+});
