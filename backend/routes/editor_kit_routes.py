@@ -413,6 +413,10 @@ async def set_editor_kit_status(
         # conditional references, invented operators on a v1-stamped draft).
         # This is one half of the two-gate seam: a stored-with-issues draft
         # (P5.3) stays un-promotable until repaired. WARNINGs never block.
+        # No dump is passed: the acroform dump is not stored per-kit yet, so
+        # the dump-only widget-claim rule runs at extraction time only. The
+        # dump becomes a kit artifact at P5.3 (bd h76m.14) -- pass it here
+        # when it lands, closing the widget-claim hole at this gate too.
         lint_errors = [
             f for f in lint_schema(schema) if f.severity == SEVERITY_ERROR
         ]
