@@ -481,9 +481,11 @@ function conditionHasUnknownOperator(group: CompositeCondition): boolean {
  * leaf evaluator the composite buckets AND the legacy one-atom path share).
  * The semantics of every pre-composite operator are byte-identical to the old
  * single-condition shouldShowField switch -- pinned by the v0 vectors in
- * shared/conditional-vectors.json.
+ * shared/conditional-vectors.json. Exported for conditionalFieldCheck, which
+ * must identify WHICH atom of a composite is actually blocking a field to
+ * phrase the voice explanation correctly (fresh-eyes round 2).
  */
-function evaluateAtomicCondition(
+export function evaluateAtomicCondition(
   condition: AtomicCondition,
   fieldValues: Record<string, any>,
   fields?: FormField[],

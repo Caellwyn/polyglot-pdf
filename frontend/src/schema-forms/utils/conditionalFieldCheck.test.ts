@@ -367,13 +367,34 @@ describe('composite-gated fields in the voice locked-field path (bd h76m.8)', ()
     expect(result.accessible).toBe(true);
   });
 
-  it('checkFieldAccess keeps the field blocked when none_of trips', () => {
+  it('checkFieldAccess keeps the field blocked when none_of trips, with POLARITY-correct wording', () => {
     const result = checkFieldAccess('other detail', compositeSchema, {
       grp: ['other'],
       country: 'USA',
     });
     expect(result.accessible).toBe(false);
     expect(result.reason).toBe('field_hidden');
+    // The none_of atom is the ACTUAL blocker: the explanation must say the
+    // trigger must NOT be 'USA' -- never instruct the user to fill 'USA'
+    // (fresh-eyes round 2 polarity bug).
+    expect(result.message).toContain("must NOT be 'USA'");
+    expect(result.message).not.toContain("with the value 'USA'");
+    const countryEntry = result.required_fields?.find(f => f.field_id === 'country');
+    expect(countryEntry?.must_not_be).toBe(true);
+    // The blocking atom is listed FIRST even though it is declared last.
+    expect(result.required_fields?.[0].field_id).toBe('country');
+  });
+
+  it('evaluateFieldAvailability phrases a blocking none_of atom as change-away, not select', () => {
+    const detail = compositeSchema.fields.find(f => f.id === 'detail')!;
+    const locked = evaluateFieldAvailability(
+      detail,
+      { grp: { value: ['other'] }, country: { value: 'USA' } } as any,
+      compositeSchema,
+    );
+    expect(locked.availability).toBe('locked');
+    expect(locked.lockedReason).toContain("must NOT be 'USA'");
+    expect(locked.lockedReason).not.toContain("select 'USA'");
   });
 
   it('evaluateFieldAvailability reports locked with a first-trigger reason, then available when met', () => {
