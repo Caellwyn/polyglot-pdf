@@ -18,7 +18,10 @@ PR so the policy change is reviewable in isolation.
 
 ## What shipped
 
-The merge boundary moved from an **unconditional** "always ping the maintainer to
+Three connected doctrine changes (all from maintainer directives during this
+session), plus the review fixes they surfaced.
+
+**(A) The merge boundary** moved from an **unconditional** "always ping the maintainer to
 merge" to a **conditional fork**. The orchestrator now runs `gh pr merge` itself
 when ALL of: (a) an adversarial reviewer cleared the diff (Codex CLEAN, or the
 Opus-4.8 fallback `NO-GAPS`); (b) CI/required checks green; (c) the PR is NOT
@@ -57,8 +60,54 @@ is an orchestrator judgment call (consequence-bearing or not); the mechanical
 runner never makes judgment calls, so it never merges. That is role-scoping, not
 the old "nobody merges" policy.
 
+**(B) The review loop is now OUTCOME-based, no round cap** (second maintainer
+directive, same session). The former hard ceilings -- `MAX_REVIEW_ROUNDS = 2`
+(Codex), `MAX_FALLBACK_ROUNDS = 2` (Opus fallback), `MAX_FRESH_EYES_ROUNDS = 3`
+(pre-PR fresh-eyes) -- are retired. The loop now stops on OUTCOME, not iteration
+count: keep looping while any finding is a correct blocker; stop (= CLEAN / NO-GAPS)
+only when every remaining finding is incorrect (refuted, with the reason recorded)
+or a true nit (filed as a bead). The maintainer's rationale: once closeout can merge
+independently, code quality -- not iteration budget -- is the bar, and a long
+back-and-forth to get it right is a feature. Pure outcome-based with NO
+non-convergence backstop (maintainer's explicit call); a genuinely stuck finding
+that can neither be fixed nor honestly refuted/deferred escalates via the normal
+step-2 rule, not a round count. The ceiling was doctrine-only (no code enforced it),
+so this is SKILL.md + review-flow.md edits plus a superseded-pointer on the sprint-1
+plan.
+
+**(C) Fixes the review itself surfaced** (this PR ate its own dogfood -- Codex +
+the Opus fallback reviewed it and found real bugs in the auto-merge design):
+- **Merge race:** the auto-merge command now captures the reviewed head SHA
+  (`gh pr view --json headRefOid`) and merges with `gh pr merge --match-head-commit`,
+  so a push landing between the clear and the merge FAILS rather than merging an
+  unreviewed head.
+- **`--admin` deny was a no-op.** The first attempt used `Bash(gh pr merge:* --admin:*)`
+  -- but Claude Code's Bash matcher treats `:*` as TRAILING-only, so a mid-pattern
+  colon is literal and that rule matched nothing; `gh pr merge 301 --admin` slipped
+  straight to the allow rule. Verified via claude-code-guide, then replaced with
+  space-wildcard forms (`gh pr merge --admin *`, `gh pr merge * --admin *`,
+  `gh pr merge *--admin*`) that catch `--admin` in any position. Filed
+  `polyglot-pdf-kibf` for the stronger PreToolUse-hook tokenizer (wildcard flag
+  matching is fragile in general).
+- **Allowlisted `gh pr view`** (the SHA-capture needed it; otherwise the
+  "autonomous" merge path would hit a permission prompt).
+- **Reconciled more stale endpoints** Codex/fallback found beyond the fresh-eyes
+  sweeps: `CLAUDE.md:84`, `planning.md`, `promotion-tiers.md` intro,
+  `docs/standards/testing.md:193` (an auto-loadable tier-2 doc). Out-of-scope
+  Copilot-era staleness in `docs/branch-protection-setup.md` filed as
+  `polyglot-pdf-8jf1`.
+
 ## Lessons
 
+- **A security-interlock permission pattern must be VERIFIED, not assumed.** The
+  `--admin` deny looked right (`Bash(gh pr merge:* --admin:*)`) but was a silent
+  no-op: Claude Code's Bash matcher only honors `:*` as a TRAILING wildcard, so a
+  colon mid-pattern is a literal character and the rule matched nothing. A denied
+  operation you never test is a denied operation you don't actually have. When a
+  settings rule is the thing standing between an agent and a checks-bypassing
+  `--admin` merge, confirm the matcher behavior (claude-code-guide / the docs) and
+  ideally test the evasion forms -- do not eyeball it. Space-wildcards
+  (`gh pr merge * --admin *`) match a flag in arbitrary position; `:*` cannot.
 - **A policy stated once but described in ten places needs all ten reconciled, or
   the contradictions ARE the bug.** Two adversarial fresh-eyes rounds found 11
   stale "ping only / manual merge is the only gate" statements across docs, skills,
