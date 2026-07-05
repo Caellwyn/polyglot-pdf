@@ -97,29 +97,45 @@ describe('isGroupableField', () => {
 });
 
 describe('mergeFields (crit 1: group W-7 reason_a..e)', () => {
-  it('merges 5 separate fields into ONE radio with 5 options, each carrying its pdf_field_name', () => {
+  it('merges W-7 checkboxes into ONE v2 checkbox_group: slug values, per-option pdf, no field-level pdf', () => {
     const schema = w7Schema();
     const ids = ['reason_a', 'reason_b', 'reason_c', 'reason_d', 'reason_e'];
-    const { schema: merged, mergedFieldId } = mergeFields(schema, ids);
+    const { schema: merged, mergedFieldId } = mergeFields(schema, ids, 'checkbox_group');
 
     // Five source fields collapse to one.
     expect(merged.fields).toHaveLength(1);
     const f = merged.fields[0];
     expect(f.id).toBe('reason_a'); // first selected is the primary
     expect(mergedFieldId).toBe('reason_a');
-    expect(f.type).toBe('radio');
+    expect(f.type).toBe('checkbox_group');
+    // v2: a group carries NO field-level pdf_field_name; identity is per-option.
+    expect(f.pdf_field_name).toBeUndefined();
+    // consolidated_widgets is a deleted-in-v2 legacy key.
+    expect((f as unknown as Record<string, unknown>).consolidated_widgets).toBeUndefined();
 
-    // Exactly five options, each carrying its source widget's pdf_field_name.
+    // Exactly five options: SEMANTIC slugs minted from labels, each carrying
+    // its source widget's pdf_field_name.
     expect(f.options).toHaveLength(5);
+    const slugs = f.options!.map(o => o.value);
+    expect(slugs).toEqual(['reason_a', 'reason_b', 'reason_c', 'reason_d', 'reason_e']
+      .map((_, i) => `reason_${'abcde'[i]}`)); // labels 'Reason A'.. -> 'reason_a'..
+    expect(new Set(slugs).size).toBe(5); // unique
     for (let i = 0; i < ids.length; i++) {
       expect(f.options![i].pdf_field_name).toBe(
         `form1[0].#subform[0].reason_${ids[i].slice(-1)}[0]`
       );
-      expect(f.options![i].value).toBe(ids[i]);
     }
+  });
 
-    // consolidated_widgets mirrors the option values.
-    expect(f.consolidated_widgets).toEqual(ids);
+  it('merges into a radio when the group is single-select', () => {
+    const schema = w7Schema();
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b'], 'radio',
+    );
+    const f = merged.fields.find(x => x.id === 'reason_a')!;
+    expect(f.type).toBe('radio');
+    expect(f.pdf_field_name).toBeUndefined();
+    expect(f.options!.map(o => o.value)).toEqual(['reason_a', 'reason_b']);
   });
 
   it('drops merged-away ids from the section field list (leaving only the primary)', () => {
@@ -136,6 +152,7 @@ describe('mergeFields (crit 1: group W-7 reason_a..e)', () => {
       'reason_c', 'reason_a', 'reason_b',
     ]);
     expect(mergedFieldId).toBe('reason_c');
+    // options[0] is the primary; its slug is minted from label 'Reason C'.
     expect(merged.fields.find(f => f.id === 'reason_c')!.options![0].value).toBe('reason_c');
   });
 
@@ -179,6 +196,37 @@ describe('ungroupField (crit 2: reversible)', () => {
 
     // The section slot is restored to the full set, in order.
     expect(unmerged.sections[0].fields).toEqual(ids);
+  });
+
+  it('merge -> save (strip stash) -> reload -> un-merge yields clean standalone fields (crit 2 fallback)', () => {
+    const schema = w7Schema();
+    const ids = ['reason_a', 'reason_b', 'reason_c', 'reason_d', 'reason_e'];
+    // Merge into a v2 checkbox_group, then SAVE (strip the _ungroup stash) --
+    // this is what a reload from disk delivers, forcing the reconstruction
+    // fallback (not the lossless in-session path).
+    const { schema: merged } = mergeFields(schema, ids, 'checkbox_group');
+    const saved = stripEditorState(merged);
+    const group = saved.fields.find(f => f.id === 'reason_a')!;
+    expect((group as unknown as Record<string, unknown>)._ungroup).toBeUndefined();
+
+    const unmerged = ungroupField(saved, 'reason_a');
+
+    // Every reconstructed field is a clean STANDALONE: a checkbox with NO
+    // options and its own pdf_field_name -- the shape a v2 standalone checkbox
+    // requires (lint-clean; the backend model accepts it).
+    expect(unmerged.fields).toHaveLength(5);
+    const reconstructed = unmerged.fields.filter(f => f.section_id === 'reason');
+    expect(reconstructed).toHaveLength(5);
+    for (const f of reconstructed) {
+      expect(f.type).toBe('checkbox');
+      expect(f.options).toBeUndefined();
+      expect(f.pdf_field_name).toBeTruthy();
+      expect(f.pdf_field_name).toMatch(/reason_[a-e]\[0\]$/);
+    }
+    // The five source widgets are all recovered (identity via pdf_field_name).
+    const leaves = reconstructed.map(f => f.pdf_field_name).sort();
+    expect(leaves).toEqual(ids.map(id =>
+      `form1[0].#subform[0].reason_${id.slice(-1)}[0]`).sort());
   });
 
   it('is a no-op on a field that is not un-groupable (single option)', () => {

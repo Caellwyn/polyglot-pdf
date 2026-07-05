@@ -20,6 +20,11 @@ interface FieldEditorProps {
   // Update form-level metadata (version/edition/OMB/expiration -- bd
   // polyglot-pdf-s4dp.2). Optional; when absent the metadata panel is read-only.
   onUpdateMetadata?: (patch: Partial<FormSchema['form_metadata']>) => void;
+  // Author-tier surfaces (bd h76m.10): per-option PDF-widget mapping lives
+  // under an Advanced disclosure only authors see. Editor-tier contractors see
+  // the option value as a read-only chip but not the widget plumbing. Defaults
+  // true so local (non-hosted) editing is full author tier.
+  authorTier?: boolean;
 }
 
 // The editable form-metadata panel (bd polyglot-pdf-s4dp.2). Shown when no field
@@ -169,6 +174,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   onUpdateField,
   onUnmergeField,
   onUpdateMetadata,
+  authorTier = true,
 }) => {
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -620,8 +626,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           </div>
         )}
 
-        {/* Field Options (for select/radio) */}
-        {(field.type === 'select' || field.type === 'radio') && (
+        {/* Field Options (select / radio / checkbox_group). The option VALUE
+            is a read-only slug chip -- an internal join key minted from the
+            label, never free-typed (bd h76m.10); editing the label is how an
+            author renames an option. Per-option PDF-widget mapping is
+            author-tier only, under an Advanced disclosure. */}
+        {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group') && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-gray-900">Options</h4>
@@ -630,46 +640,64 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             {field.options && field.options.length > 0 ? (
               <div className="space-y-2">
                 {field.options.map((option, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <input
-                      type="text"
-                      className="input flex-1"
-                      value={option.label}
-                      onChange={(e) => {
-                        const newOptions = [...(field.options || [])];
-                        newOptions[idx] = { ...option, label: e.target.value };
-                        updateField({ options: newOptions });
-                      }}
-                      placeholder="Option label"
-                    />
-                    <button
-                      className="btn-sm btn-secondary"
-                      onClick={() => {
-                        const newOptions = (field.options || []).filter((_, i) => i !== idx);
-                        updateField({ options: newOptions });
-                      }}
-                    >
-                      Remove
-                    </button>
+                  <div key={idx} className="space-y-1 border-l-2 border-gray-100 pl-2">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        className="input flex-1"
+                        value={option.label}
+                        onChange={(e) => {
+                          const newOptions = [...(field.options || [])];
+                          newOptions[idx] = { ...option, label: e.target.value };
+                          updateField({ options: newOptions });
+                        }}
+                        placeholder="Option label"
+                      />
+                      {option.value && (
+                        <span
+                          className="text-xs font-mono text-gray-500 bg-gray-100 rounded px-1.5 py-0.5"
+                          title="Internal value (slug) -- minted from the label, not editable"
+                        >
+                          {option.value}
+                        </span>
+                      )}
+                      <button
+                        className="btn-sm btn-secondary"
+                        onClick={() => {
+                          const newOptions = (field.options || []).filter((_, i) => i !== idx);
+                          updateField({ options: newOptions });
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    {authorTier && (
+                      <details className="text-xs pl-1">
+                        <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+                          Advanced: PDF widget
+                        </summary>
+                        <input
+                          type="text"
+                          className="input input-sm mt-1 w-full font-mono"
+                          value={option.pdf_field_name || ''}
+                          onChange={(e) => {
+                            const newOptions = [...(field.options || [])];
+                            newOptions[idx] = { ...option, pdf_field_name: e.target.value };
+                            updateField({ options: newOptions });
+                          }}
+                          placeholder="pdf_field_name (widget backing this option)"
+                          aria-label={`Option ${idx + 1} PDF widget`}
+                        />
+                      </details>
+                    )}
                   </div>
                 ))}
-                <button
-                  className="btn btn-secondary w-full text-sm"
-                  onClick={() => {
-                    const newOptions = [...(field.options || []), { label: '', value: '' }];
-                    updateField({ options: newOptions });
-                  }}
-                >
-                  + Add Option
-                </button>
               </div>
             ) : (
-              <button
-                className="btn btn-secondary w-full"
-                onClick={() => updateField({ options: [{ label: '', value: '' }] })}
-              >
-                + Add Options
-              </button>
+              <p className="text-xs text-gray-500">
+                No options. Build a group by selecting fields and using Merge in
+                the field list.
+              </p>
             )}
           </div>
         )}

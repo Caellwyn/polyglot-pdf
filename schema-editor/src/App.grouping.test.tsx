@@ -70,14 +70,15 @@ describe('App group/ungroup wiring (bd polyglot-pdf-s4dp.1)', () => {
     expect(screen.queryByLabelText('Select note for merge')).not.toBeInTheDocument();
   });
 
-  it('merges two ticked fields into one consolidated radio, then un-merges back', async () => {
+  it('merges two ticked fields into one consolidated group, then un-merges back', async () => {
     await openForm();
 
     // Tick both reason fields; the merge bar appears once 2 are selected.
     fireEvent.click(screen.getByLabelText('Select reason_a for merge'));
     fireEvent.click(screen.getByLabelText('Select reason_b for merge'));
 
-    const mergeBtn = await screen.findByRole('button', { name: 'Merge' });
+    // "several" -> a multi-select checkbox_group (bd h76m.10).
+    const mergeBtn = await screen.findByRole('button', { name: 'Merge (several)' });
     fireEvent.click(mergeBtn);
 
     // After merge: the editor opens on the merged primary (reason_a), now a radio
@@ -99,7 +100,7 @@ describe('App group/ungroup wiring (bd polyglot-pdf-s4dp.1)', () => {
   it('disables Merge with only one field ticked', async () => {
     await openForm();
     fireEvent.click(screen.getByLabelText('Select reason_a for merge'));
-    const mergeBtn = await screen.findByRole('button', { name: 'Merge' });
+    const mergeBtn = await screen.findByRole('button', { name: 'Merge (several)' });
     expect(mergeBtn).toBeDisabled();
   });
 
@@ -107,7 +108,7 @@ describe('App group/ungroup wiring (bd polyglot-pdf-s4dp.1)', () => {
     await openForm();
     fireEvent.click(screen.getByLabelText('Select reason_a for merge'));
     fireEvent.click(screen.getByLabelText('Select other_a for merge'));
-    const mergeBtn = await screen.findByRole('button', { name: 'Merge' });
+    const mergeBtn = await screen.findByRole('button', { name: 'Merge (several)' });
     expect(mergeBtn).toBeDisabled();
     expect(screen.getByText(/span multiple sections/i)).toBeInTheDocument();
   });

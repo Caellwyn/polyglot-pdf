@@ -408,12 +408,13 @@ export const App: React.FC = () => {
   const clearGroupSelection = React.useCallback(() => setGroupSelection([]), []);
 
   // Merge the currently-selected fields into one consolidated options[] field
-  // (bd polyglot-pdf-s4dp.1). The first-selected field is the primary whose
-  // identity survives; each selected widget's pdf_field_name moves onto its
-  // option. Selects the merged field and clears the merge selection.
-  const handleMergeFields = React.useCallback(() => {
+  // (bd polyglot-pdf-s4dp.1). `kind` chooses checkbox_group (several boxes)
+  // vs radio (exactly one) -- bd h76m.10. The first-selected field is the
+  // primary whose identity survives; each selected widget's pdf_field_name
+  // moves onto its option. Selects the merged field and clears the selection.
+  const handleMergeFields = React.useCallback((kind: 'checkbox_group' | 'radio') => {
     if (!schema || groupSelection.length < 2) return;
-    const { schema: next, mergedFieldId } = mergeFields(schema, groupSelection);
+    const { schema: next, mergedFieldId } = mergeFields(schema, groupSelection, kind);
     if (next === schema) return; // no-op (invalid selection)
     commitSchema(next);
     setSelectedFieldId(mergedFieldId);
@@ -954,6 +955,7 @@ export const App: React.FC = () => {
                   onUpdateField={handleUpdateField}
                   onUnmergeField={handleUnmergeField}
                   onUpdateMetadata={handleUpdateMetadata}
+                  authorTier={!hosted || role === 'author'}
                 />
               )}
             </div>

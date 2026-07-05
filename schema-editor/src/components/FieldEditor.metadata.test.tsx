@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FieldEditor } from './FieldEditor';
-import type { FormSchema } from '../types/schema';
+import type { FormSchema, FormField } from '../types/schema';
 
 function schemaWith(meta: Partial<FormSchema['form_metadata']>): FormSchema {
   return {
@@ -76,5 +76,56 @@ describe('FieldEditor form-metadata panel (no field selected)', () => {
     render(<FieldEditor field={null} schema={schema} onUpdateField={vi.fn()} onUpdateMetadata={onUpdateMetadata} />);
     fireEvent.change(screen.getByLabelText('Version / Revision'), { target: { value: 'December 2024' } });
     expect(onUpdateMetadata).toHaveBeenCalledWith({ version: 'December 2024', version_confidence: undefined });
+  });
+});
+
+// Option metadata surfacing for v2 groups (bd h76m.10): the option VALUE is a
+// read-only slug chip (never a free-text input), and the per-option PDF widget
+// mapping is author-tier only, under an Advanced disclosure.
+describe('FieldEditor option metadata (bd h76m.10)', () => {
+  function groupField(): FormField {
+    return {
+      id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+      section_id: 's1', read_only: false, required: false,
+      options: [
+        { value: 'white', label: 'White', pdf_field_name: 'w[0]' },
+        { value: 'black', label: 'Black', pdf_field_name: 'b[0]' },
+      ],
+    } as FormField;
+  }
+  function schemaWith(f: FormField): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: [f.id] }],
+      fields: [f],
+    } as FormSchema;
+  }
+
+  it('shows the option value as a read-only chip, never a text input', () => {
+    const f = groupField();
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
+    // The slug appears as text (chip), and there is no input carrying it.
+    expect(screen.getByText('white')).toBeInTheDocument();
+    expect(screen.getByText('black')).toBeInTheDocument();
+    const inputs = screen.queryAllByDisplayValue('white');
+    expect(inputs).toHaveLength(0); // value is not editable
+  });
+
+  it('exposes the per-option PDF widget under Advanced for an author', () => {
+    const f = groupField();
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} authorTier />);
+    expect(screen.getAllByText('Advanced: PDF widget').length).toBe(2);
+    expect(screen.getByDisplayValue('w[0]')).toBeInTheDocument();
+  });
+
+  it('hides the per-option PDF widget from an editor-tier contractor', () => {
+    const f = groupField();
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} authorTier={false} />);
+    expect(screen.queryByText('Advanced: PDF widget')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('w[0]')).not.toBeInTheDocument();
+    // The value chip and label editing remain visible.
+    expect(screen.getByText('white')).toBeInTheDocument();
   });
 });
