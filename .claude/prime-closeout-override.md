@@ -43,8 +43,9 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 the bead(s) — **at PR handoff, after the review loop is clean**, never before the PR
 exists (a bead closed against work that hasn't landed corrupts the tracker).
 Closeout also runs the final `bd dolt push`; do not pre-close or pre-push the
-bead yourself. It pings the maintainer to merge and never merges itself. Work is
+bead yourself. On CLEAN it auto-merges a routine low-risk PR or pings the
+maintainer for a consequence-bearing one (see the merge line above). Work is
 **not** done at `git push` — it is done when closeout has run the PR to clean and
-closed the bead(s). See `docs/doctrine/promotion-tiers.md`,
+either merged it or handed it to the maintainer, and closed the bead(s). See `docs/doctrine/promotion-tiers.md`,
 `docs/doctrine/review-flow.md`, and the `closeout` skill
 (`.claude/skills/closeout/SKILL.md`).

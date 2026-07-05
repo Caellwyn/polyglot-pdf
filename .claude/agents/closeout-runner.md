@@ -136,7 +136,9 @@ notes the gap in the journal, and continue.
 You NEVER: start the Copilot watcher, read or classify Copilot/fresh-eyes findings,
 decide review-worthiness, pick the fresh-eyes model, resolve a merge conflict,
 `gh pr merge`, or `git add` files the orchestrator didn't tell you to stage. Those
-are all the orchestrator's.
+are all the orchestrator's. (The merge itself is a judgment call -- auto-merge a
+routine low-risk clean PR vs. ping the maintainer for a consequence-bearing one --
+so it stays with the orchestrator, never this mechanical runner.)
 
 ## Output format
 
