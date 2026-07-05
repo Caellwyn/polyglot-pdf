@@ -296,8 +296,9 @@ it):
 Fresh-eyes is the **Assessor**; its mandate is gap-exhaustion against the rubric
 ("find every place the changes do NOT meet the criteria"), never approval. The
 cycle is: spawn fresh-eyes (criteria passed in) -> fix the gaps it finds -> re-spawn
-on the updated diff -> ... until a pass returns **`NO-GAPS`**, THEN proceed to
-Step 6 (open the PR).
+on the updated diff -> ... until an **Opus** pass returns **`NO-GAPS`** (clause 5:
+a haiku/sonnet `NO-GAPS` is not terminal -- the final clearing round must be Opus),
+THEN proceed to Step 6 (open the PR).
 
 1. **Pick the fresh-eyes model from diff size (A/B arm B).** Zero-token router --
    size in, model name out, NO risk judgment (the risk call happens inside the
@@ -328,9 +329,13 @@ Step 6 (open the PR).
    the self-escalation clause (a Haiku run that finds the change risky stops and
    recommends a Sonnet re-review). Without it the clause is dormant.
 3. **Read its STATUS line gap verdict and act:**
-   - **`NO-GAPS`** -> the inner loop is done. Collect any out-of-scope bead IDs it
-     filed (it files genuine out-of-scope bugs itself -- it has Bash) for the journal
-     + merge ping, then proceed to Step 6.
+   - **`NO-GAPS`** -> **check clause 5 FIRST: if this clearing round ran on
+     haiku/sonnet, it is NOT terminal** -- do the Opus final round (re-spawn the
+     same reviewer at `model: opus` on the unchanged diff) and require ITS `NO-GAPS`
+     before proceeding. Once an Opus round returns `NO-GAPS` (or this one already
+     ran on Opus / a forced-Opus session), the inner loop is done: collect any
+     out-of-scope bead IDs it filed (it files genuine out-of-scope bugs itself -- it
+     has Bash) for the journal + merge ping, then proceed to Step 6.
    - **`GAPS-FOUND (n)`** -> **fix the gaps before the PR opens.** A rubric-criterion
      FAIL is a criterion failure, not a deferrable nit -- fix it inline (Step 5.5.a's
      "any FAIL -> fix before opening the PR" governs here too); fix other
