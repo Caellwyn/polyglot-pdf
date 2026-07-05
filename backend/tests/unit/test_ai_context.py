@@ -278,12 +278,15 @@ def test_jit_context_empty_section_reports_zero_not_one(monkeypatch):
     assert "0/1" not in result
 
 
-def test_legacy_si_directs_model_to_convey_field_note():
-    """The legacy SI must carry the explain-the-Note directive: help.instructions
-    reaching the SI as a Note: line is not enough -- the model must be TOLD to
-    convey that qualifying context while asking, or it reads the bare field name
-    and the user answers an unqualified question (bd polyglot-pdf-bo4m,
-    hypothesis 3)."""
+def test_legacy_si_renders_note_and_carries_convey_directive():
+    """Two assertions with different strength (bd polyglot-pdf-bo4m):
+    (1) WIRING -- the field's help.instructions is rendered into the SI as a
+    Note: line (schema-dependent; would catch a regression of the jnjj.23
+    nested-help read); (2) TEMPLATE -- the CONSTRAINTS directive telling the
+    model to convey that Note while asking is present. The directive lives in
+    the static SYSTEM_INSTRUCTION template, so assertion (2) alone is
+    schema-independent by design -- it pins the template constant, not the
+    help wiring; (1) is the wiring proof."""
     schema = {
         "form_metadata": {"title": "I-90"},
         "fields": [{
@@ -299,10 +302,13 @@ def test_legacy_si_directs_model_to_convey_field_note():
     assert "briefly convey that context in your own words WHILE asking" in si
 
 
-def test_jit_si_directs_model_to_convey_field_context(monkeypatch):
-    """The JIT SI carries the same convey-the-context directive: the next-field
-    hint now rides help.instructions (frontend formatNextFieldHint, bd bo4m), so
-    the SI must direct the model to voice it while asking."""
+def test_jit_si_template_carries_convey_directive(monkeypatch):
+    """Pins the TEMPLATE CONSTANT only (bd polyglot-pdf-bo4m): the JIT SI's
+    CONSTRAINTS include the convey-the-context directive. This deliberately
+    asserts nothing about help wiring -- on the JIT path the fine print rides
+    the frontend-built next-field hint (covered by
+    frontend/src/__tests__/navigation-hint.test.ts); rendering help inside
+    {next_field_schema} itself is bd polyglot-pdf-jnjj.31's scope."""
     import backend.services.ai_context as ai_context_mod
     monkeypatch.setattr(ai_context_mod, "get_settings", _jit_settings)
 

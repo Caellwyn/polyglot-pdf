@@ -330,6 +330,8 @@ export function isFormComplete(state: SchemaFormState): boolean {
  * if (nextField) {
  *   const hint = formatNextFieldHint(nextField, 3);
  *   // Returns: "Next field to fill is #3: 'Email Address' (type: email, required)"
+ *   // A field with help.instructions also gets:
+ *   //   "... . Context to briefly convey when asking: <instructions>"
  * }
  * ```
  */
