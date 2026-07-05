@@ -2,7 +2,7 @@
 
 What this is
 ------------
-A **deterministic, zero-model-token** router (plan §Change #2, bd
+A **deterministic, zero-model-token** router (plan Change #2, bd
 polyglot-pdf-hrn.4 -- A/B arm B). It reads ``git diff --shortstat`` for the
 branch vs the integration branch, sums insertions + deletions, and prints a
 single model name on stdout:
@@ -11,11 +11,13 @@ single model name on stdout:
   - ``sonnet``  otherwise.
 
 That is the whole contract: **diff size in, model name out.** Closeout's
-Step 6.3 captures the printed name and passes it to the fresh-eyes subagent
-(``model: <picked>``). On a small diff the cheap model does the first pass; the
-fresh-eyes prompt's self-escalation clause (the JUDGMENT half of arm B) lets a
-Haiku run bump itself back to Sonnet when the change is risky despite being
-short. The split is deliberate:
+Step 5.5.b (item 1) captures the printed name and passes it to the fresh-eyes
+subagent (``model: <picked>``) for the EARLY rounds. On a small diff the cheap
+model does the first pass; the fresh-eyes prompt's self-escalation clause (the
+JUDGMENT half of arm B) lets a Haiku run bump itself back to Sonnet when the
+change is risky despite being short. (The FINAL clearing round is forced to Opus
+by the closeout loop regardless of this router's output -- bd polyglot-pdf-dgoa,
+clause 5; this router governs the early rounds only.) The split is deliberate:
 
   - **This script makes NO risk judgment.** Size is the only signal. Adding a
     "is this risky?" check here would force an extra expensive orchestrator

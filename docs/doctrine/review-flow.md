@@ -1,6 +1,6 @@
 # Review-flow doctrine: pre-PR adversarial assess + Codex outer review, looped to clean
 
-*Last updated: 2026-07-04. See [the hrn.9 journal entry](../journal/entries/) for the Copilot->Codex cutover details, and [`planning.md`](planning.md) for the SPEAR Assess doctrine this layers in (bd `polyglot-pdf-7dkb`). The Opus-4.8 reviewer-of-last-resort + the watcher's acknowledgment phase / `NO-ACK` state were added under bd `polyglot-pdf-n6ks`. The auto-merge-vs-ping rule was added under bd `polyglot-pdf-16pj`.*
+*Last updated: 2026-07-05. Three review-hardening safeguards added under bd `polyglot-pdf-dgoa` (after a cross-file interaction regression, bd `polyglot-pdf-bo4m`, passed two Sonnet fresh-eyes rounds and was caught only by the stronger outer review): (1) the fresh-eyes mandate now REQUIRES tracing every changed value/format/contract into its downstream consumers in untouched files; (2) the FINAL confirming pre-PR fresh-eyes round always runs on Opus; (3) when Codex is unavailable, the fallback requires TWO independent clearing reviews, not one. See [the bd bo4m journal entry](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md) for the motivating regression. Earlier: see [the hrn.9 journal entry](../journal/entries/) for the Copilot->Codex cutover details, and [`planning.md`](planning.md) for the SPEAR Assess doctrine this layers in (bd `polyglot-pdf-7dkb`). The Opus-4.8 reviewer-of-last-resort + the watcher's acknowledgment phase / `NO-ACK` state were added under bd `polyglot-pdf-n6ks`. The auto-merge-vs-ping rule was added under bd `polyglot-pdf-16pj`.*
 
 How every change gets reviewed before merge. This is the procedure the
 `/closeout` skill automates; it is the result of several iterations and the
@@ -18,8 +18,11 @@ backstop.
 clean tree
   -> score the exit-criteria rubric       [orchestrator: PASS/FAIL each criterion + evidence; any FAIL -> fix]
   -> INNER LOOP (pre-PR Assess):           [ALWAYS, review-worthy or not]
-       spawn fresh-eyes (criteria passed in, ADVERSARIAL) -> fix gaps -> re-spawn
+       spawn fresh-eyes (criteria passed in, ADVERSARIAL; MUST trace changed
+         values into untouched-file consumers) -> fix gaps -> re-spawn
        ... until NO-GAPS (loop while gaps are correct blockers; no round cap)
+       -> FINAL confirming round on OPUS (the clearing NO-GAPS must come from an
+          Opus pass; earlier rounds route cheaply by diff size)
   -> judge review-worthiness              [orchestrator: does this diff warrant Codex?]
   -> open a NORMAL (non-draft) PR         [scorecard in the PR BODY; if review-worthy: `@codex review` line; Codex auto-reviews on open]
   -> OUTER LOOP (post-PR Codex review):    [review-worthy PRs only]
@@ -27,9 +30,13 @@ clean tree
        ... until CLEAN (loop while findings are correct blockers; no round cap)
        |
        +-- Codex UNAVAILABLE (ERROR quota / TIMEOUT / NO-ACK)
-           -> FALLBACK: Opus-4.8 adversarial review (reviewer of last resort)
-              spawn fresh-eyes-reviewer @ model:opus -> fix -> re-spawn
-              ... until NO-GAPS (loop while gaps are correct blockers; no round cap); same authority as Codex
+           -> FALLBACK: TWO independent Opus-4.8 adversarial reviews (both must clear)
+              primary: spawn fresh-eyes-reviewer @ model:opus -> fix -> re-spawn
+                ... until NO-GAPS (loop while gaps are correct blockers; no round cap)
+              second: independent confirming review on the SAME final diff (fresh
+                Opus, or Sonnet if a 2nd Opus is unavailable) -> must ALSO be
+                NO-GAPS; any fix invalidates both clears and re-runs both
+              -> two independent NO-GAPS on the identical diff = same authority as Codex
   -> close bead + [auto-merge if routine/low-risk & clean | else ping the maintainer]
 ```
 
@@ -69,20 +76,62 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   outside the current bead's criteria as a NEW bead itself (it has `Bash`; the bead
   body carries >= 1 exit criterion + `surfaces` metadata) and lists the filed IDs
   in its output. The executor is not interrupted for out-of-scope finds.
-- **The reviewer of last resort: an Opus-4.8 adversarial review when Codex is
-  unavailable.** Codex can be down three ways -- it posts a quota notice (`ERROR`),
-  it produces no verdict in the window (`TIMEOUT`), or it never reacts to the
-  trigger comment within the 2-minute acknowledgment window (`NO-ACK`). In ALL
-  three the PR must NOT stall, so closeout routes to ONE looped Opus-4.8
-  adversarial review (the same `fresh-eyes-reviewer` agent, spawned with
-  `model: opus`) with the **same authority as a clean Codex review** -- a
-  `NO-GAPS` counts as the adversarial-clear, so it closes the bead and then feeds
-  the same merge decision as a Codex CLEAN (auto-merge a routine low-risk PR, else
-  ping the maintainer). See the "fallback reviewer" subsection below. A review-skipped PR (docs/beads/journal-only) still
-  has no outer loop at all -- there the last fresh-eyes `NO-GAPS` is the record.
+- **The reviewer of last resort: TWO independent Opus-4.8 adversarial reviews when
+  Codex is unavailable (bd dgoa).** Codex can be down three ways -- it posts a quota
+  notice (`ERROR`), it produces no verdict in the window (`TIMEOUT`), or it never
+  reacts to the trigger comment within the 2-minute acknowledgment window
+  (`NO-ACK`). In ALL three the PR must NOT stall, so closeout routes to the Opus
+  fallback (the same `fresh-eyes-reviewer` agent, spawned with `model: opus`). But
+  because the fallback is then the ONLY adversarial gate, ONE pass is not enough:
+  **two independent reviews must BOTH return `NO-GAPS` on the identical final diff**
+  (the primary looped Opus review + a second independent confirming review -- a
+  fresh Opus, or a fresh Sonnet only if a second Opus is unavailable). A fix found
+  by either invalidates both clears and re-runs both. Two agreeing `NO-GAPS`
+  carries the **same authority as a clean Codex review** -- it closes the bead and
+  feeds the same merge decision as a Codex CLEAN (auto-merge a routine low-risk PR,
+  else ping the maintainer), and the ping records that two reviews cleared it +
+  names the second reviewer's model. See the "fallback reviewer" subsection below.
+  A review-skipped PR (docs/beads/journal-only) still has no outer loop at all --
+  there the last fresh-eyes `NO-GAPS` (from the Opus final round) is the record.
 
 ## Why each choice
 
+- **Fresh-eyes MUST trace changed values into their consumers in untouched files
+  (bd dgoa).** The costliest miss is an *interaction* the diff can't show: the
+  changed code is correct in isolation but breaks a downstream reader in a file
+  the diff never touched. bd `polyglot-pdf-bo4m` appended text after a
+  `(field_id: ...)` marker in a voice hint; an untouched backend stripper was
+  end-anchored on that marker being LAST, so it silently stopped stripping and the
+  raw field_id was spoken aloud again -- a clean `NO-GAPS` from two Sonnet rounds
+  that read only the diff. So the reviewer mandate now requires, for every changed
+  string/format/wire-shape/signature/contract, grepping for its consumers (which
+  are NOT in the diff), opening them, and confirming each still works against the
+  new shape -- BEFORE rendering `NO-GAPS`. See `.claude/agents/fresh-eyes-reviewer.md`
+  "What to look for."
+- **The final pre-PR fresh-eyes round always runs on Opus (bd dgoa).** The
+  diff-size router (`pick_review_model.py`) still routes EARLIER rounds cheaply
+  (haiku/sonnet) to save tokens, but a `NO-GAPS` is only terminal when the round
+  that produced it ran on Opus -- the strongest reviewer always gets the last look
+  before the PR opens. The cheaper tiers miss cross-file interaction bugs (the bo4m
+  regression cleared two Sonnet rounds; the stronger tier's trace caught it). This
+  is one guaranteed Opus pass at the end, not a change to the merge decision or the
+  A/B cost accounting for earlier rounds. (If the diff already routed to Opus, or
+  `CLAUDE_CODE_SUBAGENT_MODEL` forces it, no extra pass is needed.)
+- **When Codex is unavailable, the fallback requires TWO independent clearing
+  reviews, not one (bd dgoa).** Codex-down (ERROR/TIMEOUT/NO-ACK) makes the Opus
+  fallback the ONLY adversarial gate, so a single pass is a single point of
+  failure -- the exact path PR #312 relied on. The gate is met only when two
+  independent reviews (the primary looped Opus review + a second independent
+  confirming review -- a fresh Opus, or a fresh Sonnet if a second Opus is
+  unavailable) BOTH return `NO-GAPS` on the identical final diff. A fix found by
+  either invalidates both clears and re-runs both. The merge ping records that two
+  reviews cleared it and names the second reviewer's model. (The operational
+  mechanics -- primary loop then second confirming review, and the read-directly
+  vs. watcher distinction -- are in the "Reviewer of last resort, mechanics" bullet
+  below.) (When Codex IS
+  available, its review + the pre-PR Opus final round already provide two
+  independent looks, so this two-reviewer requirement is specific to the
+  Codex-down fallback.)
 - **The reviewer is OpenAI Codex; it AUTO-REVIEWS on PR open (bd hrn.8/hrn.9).**
   The prepaid GitHub Copilot credits were exhausted, so the repo cut over to
   OpenAI Codex (`chatgpt-codex-connector[bot]`). Codex reviews a PR automatically
@@ -113,28 +162,35 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   not an issue comment, so the eyeballs reaction is unobservable; round 1 goes
   straight to the verdict wait. A Codex that acks on round 2+ gets the full 20-min
   verdict window.
-- **Reviewer of last resort: a looped Opus-4.8 adversarial review when Codex is
-  unavailable.** On `ERROR` (quota), `TIMEOUT` (no verdict), or `NO-ACK` (never
-  started), closeout spawns the `fresh-eyes-reviewer` agent with `model: opus` --
-  passed the bead's exit criteria and pointed at the real post-PR diff -- and loops
-  it (fix gaps -> re-spawn) to `NO-GAPS` -- no round cap, looping while gaps are
-  correct blockers, same outcome-based stop as the Codex loop. A
-  clean fallback has the **same authority as a clean Codex review**: it closes the
-  bead and then feeds the same merge decision (auto-merge a routine low-risk PR,
-  else ping -- and whichever happens, the note to the maintainer records the
-  fallback path and which trigger fired). **Why Opus-4.8:** it is the most capable affordable
-  reviewer once Codex credits are spent -- same model family as the Sonnet
-  fresh-eyes that ALREADY cleared the rubric pre-PR and as the author, but a
-  stronger tier, so this is a genuine fresh adversarial look rather than re-running
-  an already-clean process. A different vendor would cost more for no clear gain.
-  **Why not just trust the pre-PR fresh-eyes `NO-GAPS`** (the old behavior while
-  credits were exhausted)**:** that pass and the author share a model family and
-  ran on the SAME diff with the author's framing fresh in context; the outer review
-  exists precisely to add an independent look, and the Opus fallback preserves that
-  independence (stronger tier, post-PR, adversarial) when Codex can't provide it.
-  The fallback subagent is read directly (its `NO-GAPS` / `GAPS-FOUND` STATUS
-  line), NOT watched by `pr_review_watcher.py` -- that watcher is the GitHub-bot
-  (Codex) path only, same as the Step 5.5 fresh-eyes loop.
+- **Reviewer of last resort, mechanics: TWO independent looped Opus-4.8 reviews
+  when Codex is unavailable (bd dgoa).** On `ERROR` (quota), `TIMEOUT` (no
+  verdict), or `NO-ACK` (never started), closeout spawns the
+  `fresh-eyes-reviewer` agent with `model: opus` -- passed the bead's exit criteria
+  and pointed at the real post-PR diff -- and loops it (fix gaps -> re-spawn) to
+  `NO-GAPS` -- no round cap, looping while gaps are correct blockers, same
+  outcome-based stop as the Codex loop. Then a SECOND independent confirming review
+  (a fresh Opus spawn, or a fresh Sonnet only if a second Opus is unavailable) must
+  ALSO return `NO-GAPS` on the identical final diff; a fix found by either
+  invalidates both clears and re-runs both (the two-review gate above -- Codex-down
+  makes the fallback the only adversarial gate, so one pass is a single point of
+  failure). Two agreeing `NO-GAPS` carry the **same authority as a clean Codex
+  review**: they close the bead and feed the same merge decision (auto-merge a
+  routine low-risk PR, else ping -- and whichever happens, the note to the
+  maintainer records the fallback path, which trigger fired, and that two reviews
+  cleared it + the second reviewer's model). **Why Opus-4.8:** it is the most
+  capable affordable reviewer once Codex credits are spent -- same model family as
+  the Sonnet fresh-eyes that ALREADY cleared the rubric pre-PR and as the author,
+  but a stronger tier, so this is a genuine fresh adversarial look rather than
+  re-running an already-clean process. A different vendor would cost more for no
+  clear gain. **Why not just trust the pre-PR fresh-eyes `NO-GAPS`** (the old
+  behavior while credits were exhausted)**:** that pass and the author share a
+  model family and ran on the SAME diff with the author's framing fresh in context;
+  the outer review exists precisely to add an independent look, and the Opus
+  fallback preserves that independence (stronger tier, post-PR, adversarial) when
+  Codex can't provide it. The fallback subagents are read directly (their `NO-GAPS`
+  / `GAPS-FOUND` STATUS lines), NOT watched by `pr_review_watcher.py` -- that
+  watcher is the GitHub-bot (Codex) path only, same as the Step 5.5 fresh-eyes
+  loop.
 - **Review-worthiness gate.** The orchestrator decides per-PR whether the diff can
   contain a runtime/logic regression. Docs-only / `.beads`-only / journal-only /
   trivial PRs get NO trigger and skip the watch loop entirely -- reviewing them
@@ -199,15 +255,19 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
 The fresh-eyes reviewer is `.claude/agents/fresh-eyes-reviewer.md` (spawn by
 type) or its prompt run as a one-off Sonnet (or diff-size-routed Haiku) subagent.
 It MUST read the real `git diff origin/dev...HEAD`, never a summary -- bugs hide
-in the detail a summary elides. As the SPEAR Assessor it is passed the bead's
-exit criteria and **opens with a rubric scorecard** (PASS/FAIL per criterion),
-then returns up to 8 findings with confidence + how-to-verify, lists any
-out-of-scope beads it filed, and **ends with a STATUS line carrying the gap
-verdict** (`NO-GAPS` / `GAPS-FOUND (n)`) that drives the inner loop. Triage: a
-**rubric-criterion gap is FIXED before the PR opens** (it is a criterion failure,
-never a deferrable nit) -- as is any other high-confidence finding; a genuinely
-out-of-scope bug is filed as a separate bead (fresh-eyes files its own); a
-rejected finding gets its reason recorded. The orchestrator runs this loop to
-`NO-GAPS` pre-PR (no round cap -- loop while gaps are correct blockers),
-folds the adopt/reject/defer breakdown into the journal entry, and carries the
-final scorecard into the PR body's `## Exit criteria` section.
+in the detail a summary elides -- and it MUST **trace every changed
+value/format/contract into its consumers in untouched files** before clearing
+(bd dgoa; the cross-file interaction class the diff cannot show). As the SPEAR
+Assessor it is passed the bead's exit criteria and **opens with a rubric
+scorecard** (PASS/FAIL per criterion), then returns up to 8 findings with
+confidence + how-to-verify, lists any out-of-scope beads it filed, and **ends with
+a STATUS line carrying the gap verdict** (`NO-GAPS` / `GAPS-FOUND (n)`) that drives
+the inner loop. Triage: a **rubric-criterion gap is FIXED before the PR opens** (it
+is a criterion failure, never a deferrable nit) -- as is any other high-confidence
+finding; a genuinely out-of-scope bug is filed as a separate bead (fresh-eyes
+files its own); a rejected finding gets its reason recorded. The orchestrator runs
+this loop to `NO-GAPS` pre-PR (no round cap -- loop while gaps are correct
+blockers), with the **FINAL clearing round always on Opus** (bd dgoa; earlier
+rounds route cheaply by diff size), folds the adopt/reject/defer breakdown into the
+journal entry, and carries the final scorecard into the PR body's `## Exit
+criteria` section.
