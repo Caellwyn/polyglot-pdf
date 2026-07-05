@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts
 
-*Last updated: 2026-07-02. See [../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md](../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md) for the `is_empty`/`is_not_empty` checkbox-group (array-trigger) fix in `shouldShowField` (bd rigd) and the `steered` carry-forward `[]`-alias fix in `updateField` (bd 5k52). Prior 2026-06-29: see [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for the B5 `FieldValue.steered` marker (client-owned validator max-resteer bound) + `SchemaFormStateManager.markFieldsSteered`.*
+*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md](../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -103,15 +103,33 @@ the option set itself is the constraint.
 
 ## Conditional fields
 
-`utils/validation.ts#shouldShowField` evaluates `field.show_if` (a
-`{field, operator, value}` `ConditionalDisplay`); a hidden field renders `null`.
-When the trigger field is a multi-option checkbox group its value is a `string[]`
-of selected option values, so the `equals`/`not_equals` operators compare by
-**membership** (does the selected set include `value`), not strict scalar
-identity — a strict `===`/`!==` against an array never matches, which previously
-left checkbox-group-gated dependents permanently hidden/shown
-(bd polyglot-pdf-vq4m). Scalar (radio/select/text) triggers still use strict
+`utils/validation.ts#shouldShowField` consumes `field.show_if` through
+`utils/normalizeToComposite.ts` (bd h76m.7/h76m.8), so BOTH wire dialects
+evaluate on one path: the legacy single `{field, operator, value}`
+`ConditionalDisplay`, and the schema-v2 composite `{all_of/any_of/none_of}`
+group of such atoms ("(A AND B) AND NOT C" = `all_of:[A,B] + none_of:[C]`).
+A hidden field renders `null`. An absent, malformed, or unknown-operator
+condition falls back to the field's static `hidden` state (fail-open).
+`utils/validation.ts#isFieldRequired` evaluates the same legacy-or-composite
+shape on `field.require_if` (statically required OR a satisfied require_if;
+fail-open = not required). The editor preview mirrors both in
+`schema-editor/src/utils/conditionalVisibility.ts`; the shared vector suite
+(`shared/conditional-vectors.json` — v0 legacy, v2 composite/membership,
+require, and normalize sections) pins the two evaluators against each other
+in CI.
+Membership semantics: the v2 operators `includes`/`not_includes` test whether
+an option slug is in a checkbox-group trigger's selected set (`string[]`, a
+voice-path comma string, or a bare scalar single selection). The legacy
+`equals`/`not_equals` on a group trigger ALSO compare by membership — the
+vq4m hack, quarantined in the atomic leaf evaluator until the P6.2
+strictness flip; a strict `===`/`!==` against an array never matches, which
+previously left checkbox-group-gated dependents permanently hidden/shown
+(bd polyglot-pdf-vq4m). Scalar (radio/select/text) triggers use strict
 identity.
+The voice locked-field path (`utils/conditionalFieldCheck.ts`) explains
+composite gates by listing EVERY atom's trigger in `required_fields` (the
+locked-reason wording names the first trigger, then counts the rest);
+`getDependencyChain` walks all atoms and carries a visited-set cycle guard.
 A field with `unlock_method === "flip_readonly_bit"` becomes **editable even when
 `read_only`** — the unlock is driven by that flag alone (visibility is a separate
 `show_if` decision), the same flag the PDF filler honors to unlock locked widgets
@@ -140,4 +158,4 @@ carries (see [websocket-routing.md](websocket-routing.md)).
 - **`signature`/`address_group`/`table` are stubs** — don't assume all 12
   `FieldType`s render.
 
-*Last updated: 2026-07-02. See [../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md](../journal/entries/2026-07-02-bd-gihj-bugfix-bundle.md) for the `is_empty`/`is_not_empty` checkbox-group (array-trigger) fix in `shouldShowField` (bd rigd) and the `steered` carry-forward `[]`-alias fix in `updateField` (bd 5k52). Prior 2026-06-29: see [../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md](../journal/entries/2026-06-29-bd-jnjj.17-steering-injection.md) for the B5 `FieldValue.steered` marker (client-owned validator max-resteer bound) + `SchemaFormStateManager.markFieldsSteered`.*
+*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md](../journal/entries/2026-07-04-bd-h76m.8-composite-evaluators.md) for closeout details.*
