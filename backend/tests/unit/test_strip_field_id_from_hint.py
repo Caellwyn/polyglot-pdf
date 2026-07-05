@@ -60,6 +60,53 @@ def test_keeps_the_spoken_name_even_when_it_contains_parens():
     assert "field_id" not in out
 
 
+def test_strips_field_id_but_keeps_the_bo4m_note_tail():
+    # bd polyglot-pdf-bo4m: formatNextFieldHint now appends a fine-print note
+    # AFTER the (field_id: ...) group. The strip must remove the id (dx7) but
+    # KEEP the note (it is the context the model must speak). Before this fix the
+    # end-anchored regex failed to match once a note followed, and the raw
+    # field_id was spoken aloud again -- a dx7 regression on every note-bearing
+    # field (Opus fallback review of PR #312).
+    hint = ("Next field to fill is #4: 'Has Your Name Legally Changed?' "
+            "(field_id: 'p1_checkbox4', type: radio). "
+            "Context to briefly convey when asking: Indicate if your name has "
+            "legally changed since your Permanent Resident Card was issued.")
+    out = strip_field_id_from_hint(hint)
+    assert "field_id" not in out and "p1_checkbox4" not in out
+    assert "Context to briefly convey when asking: Indicate if your name" in out
+    assert "  " not in out  # no doubled space where the group was removed
+    assert out == ("Next field to fill is #4: 'Has Your Name Legally Changed?'. "
+                   "Context to briefly convey when asking: Indicate if your name has "
+                   "legally changed since your Permanent Resident Card was issued.")
+
+
+def test_keeps_a_note_tail_that_itself_contains_parens():
+    # The note (help.instructions) can contain its own "()" -- e.g. the A-Number
+    # field's "(A-Number)". Peeling the note off by its fixed lead-in (not by the
+    # last ")") keeps those parens intact while still stripping the field_id group.
+    hint = ("Next field to fill is #1: 'Alien Registration Number' "
+            "(field_id: 'p1_line1_aliennumber', type: text). "
+            "Context to briefly convey when asking: Your alien registration number "
+            "(A-Number) is a 7-9 digit number. It begins with an 'A'.")
+    out = strip_field_id_from_hint(hint)
+    assert "field_id" not in out
+    assert "(A-Number)" in out  # the note's own parens survive
+    assert out.endswith("It begins with an 'A'.")
+
+
+def test_strips_option_parens_group_even_with_a_note_tail():
+    # Combine the two hard cases: an option LABEL with ")" inside the field_id
+    # group ("Other (specify)") AND a note tail. The group must be removed WHOLE
+    # (its inner ")" must not end the strip early) and the note must remain.
+    hint = ("Next field to fill is #2: 'Employment Status' "
+            "(field_id: 'p1_employment', type: select, required, options: [Other (specify), None]). "
+            "Context to briefly convey when asking: Pick the closest match.")
+    out = strip_field_id_from_hint(hint)
+    assert out == ("Next field to fill is #2: 'Employment Status'. "
+                   "Context to briefly convey when asking: Pick the closest match.")
+    assert "field_id" not in out and "options" not in out
+
+
 def test_noop_when_no_field_id_present():
     hint = "Next field to fill is #1: 'First Name'"
     assert strip_field_id_from_hint(hint) == hint

@@ -20,13 +20,25 @@ from backend.models.form_models import FormField, FieldType
 # update_form_fields. So we strip the parenthetical before any hint reaches the
 # SPOKEN path.
 #
-# The parenthetical is the frontend's LAST appended group and always begins with
-# "(field_id:". Its options list can itself contain ")" (e.g. an option value
-# "Other (specify)"), so we must NOT stop at the first ")". We anchor to the END
-# of the string ($): from " (field_id: '<id>'" run to the final ")" at end of
-# line. The field_id value can't contain "'", so '[^']*' bounds the id safely;
-# the remainder (.*) is greedy to the closing ")$". This leaves the spoken name's
-# own parens (e.g. "(A-Number)") -- which come BEFORE the field_id group -- intact.
+# The parenthetical begins with "(field_id:". It USED to be the frontend's last
+# group (so an end-anchored "...\)\s*$" removed it whole -- important because an
+# option LABEL inside the group can itself contain ")", e.g. "Other (specify)",
+# so we must run to the LAST ")" not the first). But formatNextFieldHint now
+# appends an OPTIONAL note tail AFTER the group (bd polyglot-pdf-bo4m):
+#   "... (field_id: 'x', type: text). Context to briefly convey when asking: <help.instructions>"
+# The note is the FINE PRINT the model must SPEAK, so we strip ONLY the field_id
+# group and KEEP the note (dx7 removes the id; bo4m keeps the context).
+#
+# Two problems with a naive fix: end-anchoring to $ fails once a note follows;
+# and the note text itself can contain ")" (e.g. "(A-Number)"), so we cannot just
+# find the last ")" in the whole string. Solution: peel the note tail off FIRST
+# by its fixed, unambiguous lead-in ". Context to briefly convey when asking:",
+# strip the field_id group from the (note-free) head with the original
+# end-anchored, last-")" pattern, then re-append the note. This preserves the
+# dx7 "run to the last ) so an option's own ) doesn't end the match early"
+# guarantee on the head, while keeping the bo4m note intact. The spoken name's
+# own parens (e.g. "(A-Number)") come BEFORE "(field_id:" and are left intact.
+_NOTE_TAIL_RE = re.compile(r"\.\s*Context to briefly convey when asking:.*\Z", re.DOTALL)
 _SPOKEN_HINT_FIELD_ID_RE = re.compile(r"\s*\(field_id:\s*'[^']*'.*\)\s*$")
 
 
@@ -37,12 +49,23 @@ def strip_field_id_from_hint(hint: Optional[str]) -> Optional[str]:
     SPOKEN path -- the field_id Gemini needs for the tool call comes from the
     system instruction's FIELDS block, not the hint (bd polyglot-pdf-dx7).
 
-    Anchored to end-of-string so an options list containing ")" (e.g.
-    "options: [Other (specify)]") is removed whole rather than half-stripped.
+    Removes ONLY the field_id parenthetical -- any "Context to briefly convey
+    when asking: ..." note tail the frontend appended after it
+    (bd polyglot-pdf-bo4m) is deliberately KEPT (it is the fine print the model
+    must speak). The note is peeled off first so the end-anchored field_id strip
+    (which runs to the LAST ")" so an option label's own ")" does not end it
+    early) operates on the note-free head, then the note is re-appended.
     """
     if not hint:
         return hint
-    return _SPOKEN_HINT_FIELD_ID_RE.sub("", hint).strip()
+    note_match = _NOTE_TAIL_RE.search(hint)
+    if note_match:
+        head = hint[: note_match.start()]
+        note = hint[note_match.start():]
+    else:
+        head, note = hint, ""
+    stripped_head = _SPOKEN_HINT_FIELD_ID_RE.sub("", head).strip()
+    return (stripped_head + note).strip()
 
 
 def build_fields_from_schema(schema: Dict[str, Any]) -> List[FormField]:
