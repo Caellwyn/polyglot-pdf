@@ -223,13 +223,26 @@ def _rewrite_atom(atom: dict, trigger: Optional[dict],
     value = atom.get("value")
 
     # option_id (the P5.1-observed invention): a widget path naming the
-    # intended option -- a better resolution key than the shared value.
+    # intended option -- a better resolution key than the (often shared)
+    # value. When present it is AUTHORITATIVE: an unresolvable option_id
+    # drops the condition rather than falling back to the value, which may
+    # coincidentally match a DIFFERENT option and silently rewire the
+    # condition (fresh-eyes round 2, bd furs -- the same never-guess rule
+    # as alias collisions).
     option_id = atom.get("option_id")
     if isinstance(option_id, str) and option_id:
         resolved, ok = _resolve_value(trigger, option_id, resolution)
-        if ok:
-            value = resolved
-            count_alias("option_id")
+        if not ok:
+            repairs.append({
+                "action": "drop-condition", "path": path,
+                "detail": f"option_id {option_id!r} resolves to no option of "
+                          f"trigger {(trigger or {}).get('id')!r} -- condition "
+                          "dropped, field stays visible",
+                "error": True,
+            })
+            return None
+        value = resolved
+        count_alias("option_id")
 
     if operator == "is_selected":
         new_op = _membership_op(trigger)

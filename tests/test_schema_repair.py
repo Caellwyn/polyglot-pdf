@@ -194,6 +194,29 @@ def test_or_pseudo_group_with_option_id_resolves():
     assert not has_errors(lint_schema(repaired))
 
 
+def test_unresolvable_option_id_drops_instead_of_guessing_via_value():
+    """Fresh-eyes round 2 (bd furs): option_id is authoritative when present.
+    An unresolvable option_id must DROP the condition -- falling back to the
+    value could coincidentally match a DIFFERENT option's slug and silently
+    rewire the condition."""
+    fields = [
+        _group(ftype="radio"),
+        {"id": "dep", "type": "text",
+         "show_if": {"operator": "or", "conditions": [
+             # option_id names a widget that is not one of grp's options,
+             # while value happens to equal a VALID sibling slug.
+             {"field": "grp", "operator": "equals", "value": "beta",
+              "option_id": "top[0].ghost[0]"},
+         ]}},
+    ]
+    repaired, repairs = repair(_schema(fields))
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert "show_if" not in dep  # dropped, never guessed
+    drops = [r for r in repairs if r["action"] == "drop-condition"]
+    assert len(drops) == 1 and drops[0]["error"] is True
+    assert "ghost" in drops[0]["detail"]
+
+
 def test_contains_on_group_trigger_gets_membership_reading():
     fields = [
         _group(ftype="checkbox"),
