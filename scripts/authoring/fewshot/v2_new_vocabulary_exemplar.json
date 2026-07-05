@@ -1,0 +1,101 @@
+{
+  "source": "pdf",
+  "schema_version": "2",
+  "form_metadata": {
+    "title": "New-Vocabulary Few-Shot Exemplar",
+    "version": "unknown",
+    "form_number": "FS-1",
+    "page_count": 1
+  },
+  "extraction_info": {
+    "extracted_at": "2026-07-05T00:00:00Z",
+    "extraction_confidence": 0.95,
+    "extractor_version": "fewshot-exemplar",
+    "manual_review_required": true
+  },
+  "sections": [
+    {
+      "id": "sec_a",
+      "label": "Applicant",
+      "order": 1,
+      "fields": [
+        "marital_status",
+        "reasons",
+        "spouse_name",
+        "other_reason_text"
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "id": "marital_status",
+      "name": "Marital status",
+      "spoken_name": "marital status",
+      "type": "radio",
+      "section_id": "sec_a",
+      "pdf_field_name": "form1[0].P1[0].marital[0]",
+      "options": [
+        {
+          "value": "single",
+          "label": "Single",
+          "pdf_on_value": "1"
+        },
+        {
+          "value": "married",
+          "label": "Married",
+          "pdf_on_value": "2"
+        }
+      ]
+    },
+    {
+      "id": "reasons",
+      "name": "Reasons for filing (check all that apply)",
+      "spoken_name": "reasons",
+      "type": "checkbox_group",
+      "section_id": "sec_a",
+      "options": [
+        {
+          "value": "employment",
+          "label": "Employment",
+          "pdf_field_name": "form1[0].P1[0].reason[0]"
+        },
+        {
+          "value": "family",
+          "label": "Family",
+          "pdf_field_name": "form1[0].P1[0].reason[1]"
+        },
+        {
+          "value": "other",
+          "label": "Other",
+          "pdf_field_name": "form1[0].P1[0].reason[2]"
+        }
+      ]
+    },
+    {
+      "id": "spouse_name",
+      "name": "Spouse full name",
+      "spoken_name": "spouse name",
+      "type": "text",
+      "section_id": "sec_a",
+      "pdf_field_name": "form1[0].P1[0].spouse[0]",
+      "show_if": {
+        "field": "marital_status",
+        "operator": "equals",
+        "value": "married"
+      }
+    },
+    {
+      "id": "other_reason_text",
+      "name": "If other, explain",
+      "spoken_name": "other reason",
+      "type": "text",
+      "section_id": "sec_a",
+      "pdf_field_name": "form1[0].P1[0].otherreason[0]",
+      "require_if": {
+        "field": "reasons",
+        "operator": "includes",
+        "value": "other"
+      }
+    }
+  ]
+}
