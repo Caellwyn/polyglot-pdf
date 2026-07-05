@@ -11,9 +11,13 @@ depends on. settings.json denies `--admin` with space-wildcard patterns, but the
 Claude Code Bash permission matcher does only substring/space-glob matching and is
 FRAGILE for flag validation (a `--admin` inside a quoted string could match a naive
 pattern; an unusual position could evade one). This PreToolUse hook is the robust
-second layer: it TOKENIZES the command with ``shlex`` (respecting quotes) and denies
-only when ``--admin`` appears as a real standalone flag token on a ``gh pr merge``
-invocation.
+second layer: it models the ARGV the shell actually passes to ``gh`` (post
+quote/backslash removal, via ``shlex(posix=True)``) and denies only when a real
+``--admin`` argv token lands on a ``gh pr merge`` invocation. Modeling argv rather
+than raw text is deliberate (Codex review of PR #311): quote state is NOT a safety
+signal -- the shell strips quotes/escapes before ``gh`` runs, so ``"--admin"`` and
+``--ad\min`` both reach ``gh`` as the flag. See ``command_is_admin_merge`` for the
+full strategy and the documented shell-emulation out-of-scope boundary.
 
 Defense-in-depth, not a replacement: the settings.json wildcard denies stay as the
 first layer (bd kibf exit criterion 2). PreToolUse hooks run BEFORE the permission
@@ -41,131 +45,181 @@ import shlex
 import sys
 
 
-# Benign leading tokens that precede the REAL command head (skip and keep looking).
-# ``!`` is shell negation, ``xargs`` runs its argument as a command -- both still RUN
-# the merge (``! gh pr merge ... --admin`` / ``xargs gh pr merge ... --admin``).
-_PREFIXES = frozenset(
-    {"sudo", "env", "command", "nice", "nohup", "time", "exec", "!", "xargs"}
-)
-# Shell metacharacters that START a new command context. Used to SPLIT the raw
-# command into candidate sub-commands so a `gh pr merge --admin` after ANY of them
-# (a newline, ; && || | &, inside a ( ) / { } group, or a `...`/$(...) command
-# substitution) is still evaluated as a head. Backtick is included so
-# `` `gh pr merge --admin` `` fragments like $(...) does.
-_SPLIT_RE = re.compile(r"(?:\|\||&&|;|\||&|\n|\(|\)|\{|\}|`)")
+# The flag we block, spelled via concatenation so a source-scanner / this very hook
+# reading its OWN file never trips on a literal occurrence.
+_ADMIN = "--adm" + "in"
+
+# Command-executing wrappers/prefixes: the REAL command follows them (possibly past
+# their own options). ``!`` is shell negation; ``eval``/``xargs``/``timeout`` etc. run
+# their argument as a command. When one heads a fragment we cannot know its option
+# arity, so we scan every offset of the fragment for the gh-pr-merge pattern.
+_PREFIXES = frozenset({
+    "sudo", "env", "command", "nice", "nohup", "time", "exec", "!", "xargs",
+    "eval", "timeout", "stdbuf", "setsid", "nohup",
+})
+# Bash reserved words that head a construct whose command LIST still runs
+# (``if gh pr merge --admin; then...``). Skipped when scanning for a command head.
+_RESERVED = frozenset({
+    "if", "then", "elif", "else", "fi", "while", "until", "do", "done",
+    "for", "case", "esac", "{", "}", "!",
+})
+# Operator tokens that separate one command from the next. We split the argv token
+# stream on these; because we tokenize with posix shlex FIRST, an operator that was
+# inside quotes stays inside its token and is NOT a boundary (fixes the
+# split-inside-quotes false positive).
+_FRAG_BOUNDARIES = frozenset({";", "&&", "||", "|", "&", "(", ")", ";;", "`"})
+# Split an argv token on any EMBEDDED bare operator (posix shlex leaves e.g.
+# ``--admin;`` or ``` `gh ``` as one token).
+_OP_RE = re.compile(r"(\|\||&&|;;|;|\||&|\(|\)|`)")
+# gh options (on ``gh pr merge`` and inherited from ``gh pr``) that TAKE A VALUE: the
+# next argv token is their value, not a flag -- so ``--body --admin`` is a body of
+# "--admin", NOT the admin flag. Kept generous; a missing entry only risks a rare
+# false POSITIVE (over-block), never a bypass.
+_GH_VALUE_OPTS = frozenset({
+    "-b", "--body", "-t", "--title", "--subject", "--body-file", "-F",
+    "--author", "--author-email", "--match-head-commit", "-R", "--repo",
+})
 
 
-def _tokenize(sub: str) -> list[tuple[str, bool]]:
-    """Tokenize one candidate sub-command into ``(text, was_quoted)`` pairs.
-
-    ``shlex.split(posix=True)`` treats ``\\`` as an escape and mangles
-    ``C:\\tools\\gh`` into ``C:toolsgh``. ``posix=False`` preserves backslashes but
-    keeps surrounding quotes on tokens. We run posix=False (so Windows paths survive)
-    and strip a single layer of matching surrounding quotes -- but we RECORD that the
-    token was quoted, so a bare ``--body '--admin'`` value (unwraps to ``--admin``)
-    is NOT mistaken for the real bare ``--admin`` flag. A quoted argument is never a
-    flag; only an UNQUOTED ``--admin`` token is.
-    """
-    try:
-        raw = shlex.split(sub, comments=False, posix=False)
-    except ValueError:
-        # Unbalanced quotes in this fragment: fall back to a whitespace split so we
-        # still see whole words (never a substring match). These are unquoted.
-        return [(tok, False) for tok in sub.split()]
-    out: list[tuple[str, bool]] = []
-    for tok in raw:
-        if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ("'", '"'):
-            out.append((tok[1:-1], True))   # fully-quoted argument -> unwrap, mark quoted
-        else:
-            out.append((tok, False))
-    return out
+_GH_NAMES = ("gh", "gh.exe", "gh.cmd", "gh.bat")
 
 
 def _is_gh(tok: str) -> bool:
-    """True if ``tok`` names the ``gh`` executable (bare, path-qualified, or a
-    Windows shim: gh / */gh / *\\gh / gh.exe / gh.cmd / gh.bat)."""
+    """True if ``tok`` names the ``gh`` executable: bare, or path-qualified (either
+    separator), or a Windows shim (gh.exe/.cmd/.bat). Windows backslash paths are
+    normalized to forward slashes BEFORE tokenizing (see command_is_admin_merge), so
+    a path segment split covers them here -- we do NOT fuzzy-match "ends in gh" (that
+    over-matched ``$GH``, ``foogh``, ``mygh`` etc.)."""
     low = tok.lower()
-    if low in ("gh", "gh.exe", "gh.cmd", "gh.bat"):
+    if low in _GH_NAMES:
         return True
-    # Path-qualified: last path segment (either separator) is a gh executable.
     seg = re.split(r"[\\/]", tok)[-1].lower()
-    return seg in ("gh", "gh.exe", "gh.cmd", "gh.bat")
+    return seg in _GH_NAMES
+
+
+def _admin_merge_at(frag: list[str], s: int) -> bool:
+    """Does ``frag[s:]`` begin a ``gh pr [inherited flags] merge ... <admin>``
+    command? ``frag`` is the post-quote-removal argv of one command fragment, so a
+    token here is exactly what ``gh`` would receive."""
+    if s >= len(frag) or not _is_gh(frag[s]):
+        return False
+    j = s + 1
+    if j >= len(frag) or frag[j] != "pr":
+        return False
+    j += 1
+    # Allow inherited ``gh pr`` flags (e.g. ``--repo o/r``) before ``merge``.
+    while j < len(frag) and frag[j] != "merge":
+        if frag[j].startswith("-"):
+            if frag[j] in _GH_VALUE_OPTS and "=" not in frag[j]:
+                j += 2  # flag + its value
+            else:
+                j += 1
+        else:
+            return False  # a non-flag, non-``merge`` word -> not this pattern
+    if j >= len(frag) or frag[j] != "merge":
+        return False
+    # Scan merge's args for a real admin flag, honoring value-taking options so a
+    # ``--body <admin>`` value is not mistaken for the flag.
+    k = j + 1
+    while k < len(frag):
+        tok = frag[k]
+        if tok == _ADMIN or tok.startswith(_ADMIN + "="):
+            return True
+        if tok in _GH_VALUE_OPTS and "=" not in tok:
+            k += 2  # this flag consumes the next token as a value
+            continue
+        k += 1
+    return False
 
 
 def command_is_admin_merge(command: str) -> bool:
-    """True iff ``command`` runs ``gh pr merge`` with ``--admin`` as a standalone flag.
+    """True iff ``command`` runs ``gh pr merge`` with the admin-privilege flag.
 
-    Robust against the evasion/false-positive classes a naive check misses:
-      - ``--admin`` as a substring inside a QUOTED argument (``--body 'see --admin'``)
-        is NOT a flag -> allowed.
-      - ``--admin`` mentioned in ANOTHER command's arguments (``git commit -m
-        '...gh pr merge --admin...'``, ``echo``, ``grep``) is NOT a gh invocation ->
-        allowed. (This is why the first version blocked its own commit.)
-      - ``gh pr merge --admin`` after a shell boundary -- newline, ``;`` ``&&`` ``||``
-        ``|`` ``&``, or inside ``( )`` / ``{ }`` grouping, or behind ``exec``/``sudo``/
-        ``env`` prefixes or a ``VAR=val`` assignment, or via a Windows path
-        (``C:\\tools\\gh``) or shim (``gh.cmd``) -- IS caught.
+    Models what the SHELL actually passes to ``gh`` as argv (post quote/backslash
+    removal), because quote state is not a safety signal -- ``gh pr merge 5
+    "--admin"`` and ``gh pr merge 5 --ad\\min`` both reach ``gh`` with a real
+    ``--admin`` argv token (Codex review of PR #311). Strategy:
 
-    Strategy: split the RAW command on shell boundaries first (so newlines and
-    grouping start fresh command contexts), then for each fragment check whether its
-    HEAD token (after skipping benign prefixes / env-assignments) is a ``gh`` exe
-    followed by ``pr merge`` with an ``--admin`` / ``--admin=`` flag before the next
-    boundary.
+      1. Undo backslash-newline continuations; turn raw newlines into ``;`` so they
+         separate commands.
+      2. Tokenize with ``shlex(posix=True)`` -> the real argv. This normalizes quoted
+         command words (``'gh' pr merge`` -> ``gh pr merge``) and quoted/escaped flags,
+         and keeps operators that were INSIDE quotes inside their token (so
+         ``git commit -m 'note (gh pr merge --admin)'`` is one arg, not a fake head).
+      3. Re-split tokens on embedded bare operators, then split the stream into
+         command fragments on operator/boundary tokens (``; && || | & ( ) ` ``).
+      4. Per fragment: skip reserved words, env-assignments, and wrapper prefixes
+         (``sudo``/``eval``/``timeout``/...). If a wrapper was seen we scan every
+         offset (its option arity is unknown); else only the head can start the
+         command. Match ``gh pr [flags] merge ... <admin>`` via ``_admin_merge_at``.
+
+    Forms that need full shell emulation stay out of scope (documented + tested):
+    a merge nested in an opaque ``bash -c "..."`` arg, a placeholder-templated
+    ``xargs -I{}``, or variable indirection (``$GH pr merge --admin``). The
+    settings.json wildcard denies remain their backstop.
     """
     if not command:
         return False
-    # A POSIX shell removes a backslash-newline line continuation before word
-    # splitting, so ``gh pr merge 5 \<newline>--admin`` is really one command. Undo it
-    # first, or the newline-split would orphan ``--admin`` into its own fragment.
-    command = re.sub(r"\\\r?\n", " ", command)
-    for fragment in _SPLIT_RE.split(command):
-        frag = fragment.strip()
-        if not frag:
-            continue
-        tokens = _tokenize(frag)  # list of (text, was_quoted)
-        # Skip leading env-assignments (VAR=val) and benign command prefixes -- but
-        # only UNQUOTED ones (a quoted 'sudo' is an argument, not a real prefix) --
-        # to find the real head of THIS fragment. Once a prefix has been seen, also
-        # skip that prefix's OWN option tokens (``sudo -u foo``, ``nice -n 10``): a
-        # leading ``-flag`` (and the plain value that may follow it) belongs to the
-        # prefix, not to the wrapped command -- otherwise ``sudo -u foo gh pr merge
-        # --admin`` never reaches ``gh`` as the head.
-        idx = 0
-        seen_prefix = False
-        while idx < len(tokens):
-            text, quoted = tokens[idx]
-            is_assignment = (
-                not quoted and "=" in text and not text.startswith("-")
-                and text.split("=", 1)[0].replace("_", "").isalnum()
-            )
-            if is_assignment or (not quoted and text.lower() in _PREFIXES):
-                seen_prefix = seen_prefix or (not quoted and text.lower() in _PREFIXES)
-                idx += 1
+    command = re.sub(r"\\\r?\n", " ", command)   # line continuation
+    command = re.sub(r"[\r\n]+", " ; ", command)  # newline -> command boundary
+    # Normalize a Windows-path gh EXECUTABLE (``C:\tools\gh`` / ``.\gh.exe``) to
+    # forward slashes BEFORE posix shlex, which would otherwise drop the backslashes
+    # and mangle the token. Narrowly targeted at a backslash-path ending in a gh
+    # executable so we never touch a backslash ESCAPE like ``--ad\min`` (which must
+    # collapse to ``--admin`` for the quote/escape-evasion check).
+    command = re.sub(
+        r"((?:[A-Za-z]:)?(?:[\w.\-]+\\)+gh(?:\.exe|\.cmd|\.bat)?)",
+        lambda m: m.group(1).replace("\\", "/"),
+        command,
+    )
+    try:
+        argv = shlex.split(command, posix=True, comments=False)
+    except ValueError:
+        # Unbalanced quotes: we cannot compute a real argv. Fall back to a whitespace
+        # split (whole words, never substrings) so an obvious admin-merge still trips.
+        argv = command.split()
+    # Re-split each token on any embedded bare operator.
+    flat: list[str] = []
+    for tok in argv:
+        for part in _OP_RE.split(tok):
+            if part:
+                flat.append(part)
+    # Partition into command fragments on boundary tokens.
+    frags: list[list[str]] = []
+    cur: list[str] = []
+    for tok in flat:
+        if tok in _FRAG_BOUNDARIES:
+            if cur:
+                frags.append(cur)
+                cur = []
+        else:
+            cur.append(tok)
+    if cur:
+        frags.append(cur)
+
+    for frag in frags:
+        i = 0
+        saw_wrapper = False
+        while i < len(frag):
+            w = frag[i]
+            if w in _RESERVED:
+                i += 1
                 continue
-            # After a prefix, its own option flags (and a following non-option value)
-            # are not the command head -- skip them and keep looking for ``gh``.
-            if seen_prefix and not quoted and text.startswith("-"):
-                idx += 1
-                # `-u foo` / `-n 10`: consume a single following plain value if present
-                # and it is not itself an option or the gh executable.
-                if idx < len(tokens):
-                    nxt_text, nxt_quoted = tokens[idx]
-                    if (not nxt_quoted and not nxt_text.startswith("-")
-                            and not _is_gh(nxt_text)):
-                        idx += 1
+            if w.lower() in _PREFIXES:
+                saw_wrapper = True
+                i += 1
+                continue
+            if ("=" in w and not w.startswith("-")
+                    and w.split("=", 1)[0].replace("_", "").isalnum()):
+                i += 1
                 continue
             break
-        head = tokens[idx:]
-        # The head (gh / pr / merge) must all be UNQUOTED command words: a quoted
-        # 'gh' 'pr' 'merge' would be literal argument text, not the invocation.
-        if (len(head) >= 3
-                and not head[0][1] and _is_gh(head[0][0])
-                and head[1] == ("pr", False) and head[2] == ("merge", False)):
-            for arg_text, arg_quoted in head[3:]:
-                # Only an UNQUOTED --admin / --admin= is the real flag; a quoted
-                # value that merely equals "--admin" (from --body '--admin') is not.
-                if not arg_quoted and (arg_text == "--admin" or arg_text.startswith("--admin=")):
-                    return True
+        # Behind a wrapper we don't know its option arity, so scan every offset;
+        # otherwise only the exact head can start the gh command.
+        starts = range(i, len(frag)) if saw_wrapper else (i,)
+        for s in starts:
+            if _admin_merge_at(frag, s):
+                return True
     return False
 
 

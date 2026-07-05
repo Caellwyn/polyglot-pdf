@@ -17,23 +17,25 @@ adds the robust layer: a PreToolUse hook that tokenizes the command.
 
 ## What shipped
 
-- **`scripts/block_admin_merge_hook.py`** -- a PreToolUse hook. Reads the Bash
-  command from `tool_input.command`, SPLITS it on all shell boundaries (`\n ; && ||
-  | & ( ) { }`) so each fragment is a fresh command context, tokenizes each fragment
-  robustly (`shlex posix=False` so Windows backslash paths survive, + a single
-  quote-unwrap), skips benign leading prefixes (`sudo`/`env`/`exec`/`!`/`VAR=val`),
-  and DENIES only when a `gh` executable (incl. path-qualified and `gh.cmd`/`gh.bat`
-  shims) heads the fragment as `gh pr merge` with an `--admin`/`--admin=` flag. On
-  anything else -- a legit merge, a `--admin` substring inside a quoted argument,
-  `gh pr merge --admin` merely NAMED in another command's arguments, a non-Bash
-  tool, malformed stdin -- it exits 0 with no output, so the normal permission flow
-  (including the settings.json denies) still applies. It never emits
-  `permissionDecision: "allow"`, so it can only ADD a restriction, never remove one.
+- **`scripts/block_admin_merge_hook.py`** -- a PreToolUse hook that models the ARGV
+  the shell actually passes to `gh`. It undoes line continuations + turns newlines
+  into command boundaries, normalizes a Windows-path `gh` executable to forward
+  slashes, tokenizes with `shlex(posix=True)` (the real post-quote-removal argv),
+  re-splits on embedded operators, partitions into command fragments on
+  operator/boundary tokens (`; && || | & ( ) \``), skips reserved words
+  (`if`/`then`/...), env-assignments, and wrapper prefixes (`sudo`/`eval`/`timeout`/
+  `xargs`/...), then matches `gh pr [inherited flags] merge ... --admin` -- honoring
+  gh's value-taking options so `--body --admin` (a body of "--admin") is NOT the
+  flag. DENIES only a real admin-merge; on anything else (legit merge, `--admin`
+  inside a quoted arg, `gh pr merge --admin` named in another command's args, a word
+  ending in "gh", a non-Bash tool, malformed stdin) it exits 0 with no output, so
+  the normal permission flow (incl. the settings.json denies) still applies. Never
+  emits `permissionDecision: "allow"`, so it can only ADD a restriction.
 - **`.claude/settings.json`** -- wired the hook as a `PreToolUse` hook with
   `matcher: "Bash"`. The three `--admin` wildcard denies are KEPT as the first layer
   (defense-in-depth; bd kibf exit criterion 2). Force-push / `bd dolt push --force`
   denies untouched.
-- **`tests/test_block_admin_merge_hook.py`** -- 62 tests pinning the detection core
+- **`tests/test_block_admin_merge_hook.py`** -- 78 tests pinning the detection core
   (block forms incl. subshell/brace-group/negation/exec, embedded newline, Windows
   backslash path + `.cmd`/`.bat` shims, env-assignment and separator prefixes, and
   `--admin=`; allow forms incl. the quoted-string evasion, the `gh pr merge --admin`
@@ -74,7 +76,7 @@ emits the deny JSON; a legit `--squash --match-head-commit` merge emits nothing.
   2 more: backtick/`$(...)`/`xargs` (added `` ` `` to the split set + `xargs` to the
   prefixes) and a false POSITIVE where a bare-quoted `--body '--admin'` value
   unwrapped to look like the flag (fixed by having `_tokenize` return `(text,
-  was_quoted)` pairs so a quoted arg is never treated as a flag). 62 tests pin all of
+  was_quoted)` pairs so a quoted arg is never treated as a flag). 78 tests pin all of
   it. **Lesson: a security guard over shell strings needs boundary-splitting +
   head-anchoring + quote-tracking, not a flat token scan -- and it must be tested
   against the wrapping idioms (subshell, newline, path, negation, substitution),
@@ -88,7 +90,7 @@ emits the deny JSON; a legit `--squash --match-head-commit` merge emits nothing.
   splitting) was orphaning `--admin` into its own fragment -- fixed by stripping
   `\<newline>` before the boundary split. Both came with false-positive guards
   (`sudo -u foo systemctl...`, `nice -n 10 gh pr view`, `sudo apt install gh` still
-  pass). 62 tests.
+  pass).
 - **Draw and TEST the scope boundary explicitly.** Some forms (`bash -c "gh pr merge
   ... --admin"`, `xargs -I{} gh pr merge {} --admin`, `GH=gh; $GH pr merge --admin`)
   run a merge but the gh command is nested in an opaque arg, placeholder-templated,
@@ -97,6 +99,23 @@ emits the deny JSON; a legit `--squash --match-head-commit` merge emits nothing.
   out of scope with a pinning test (`test_templated_or_nested_forms_are_documented_
   out_of_scope`) asserting they return False, and the settings.json wildcard denies
   remain their backstop. A known, tested boundary beats an unbounded ambition.
+- **The Codex OUTER review found a DESIGN FLAW four fresh-eyes rounds missed:
+  quote state is not a safety signal.** After 4 pre-PR fresh-eyes rounds returned
+  NO-GAPS, Codex (on PR #311) found 7 more issues, the core one being architectural:
+  the hook used "was this token quoted?" to decide a `--admin` was a safe value --
+  but the shell REMOVES quotes/backslashes before `gh` runs, so `gh pr merge
+  "--admin"` and `gh pr merge --ad\min` both reach `gh` with a real `--admin` argv
+  token. The whole quote-tracking approach was wrong-headed. Fix = model the ARGV
+  the shell builds: tokenize with `shlex(posix=True)` (which does exactly the shell's
+  quote/escape removal), so what the check sees IS what `gh` receives. This also
+  fixed a false POSITIVE (splitting the RAW string on `(`/backtick fired inside
+  quoted args like `git commit -m 'note (gh pr merge --admin)'`) -- tokenizing FIRST
+  keeps in-quote operators inside their token. **Lesson: for a shell-command security
+  guard, model the executed argv, never the surface syntax; and different reviewers
+  find different bug classes -- the outer adversarial review earned its place even
+  after the inner loop went clean.** The redesign also promoted two
+  formerly-out-of-scope forms (`xargs -I{}`, some `$VAR`-free templating) to caught,
+  and fixed a greedy `endswith("gh")` that would have false-positived `$GH`/`foogh`.
 - **PreToolUse hooks are a real security layer, not advisory.** Per the docs they
   run BEFORE the permission-mode check and cannot be bypassed even under
   `bypassPermissions`; a hook can tighten but never loosen what permission rules
@@ -113,5 +132,5 @@ emits the deny JSON; a legit `--squash --match-head-commit` merge emits nothing.
 
 - `scripts/block_admin_merge_hook.py` -- new PreToolUse hook.
 - `.claude/settings.json` -- PreToolUse wiring (wildcard denies retained).
-- `tests/test_block_admin_merge_hook.py` -- new; 62 tests.
+- `tests/test_block_admin_merge_hook.py` -- new; 78 tests.
 - `docs/journal/entries/2026-07-05-bd-kibf-...md` -- this entry.

@@ -67,16 +67,27 @@ BLOCK = [
     "nice -n 10 gh pr merge 5 --admin",          # nice with -n value before gh
     "sudo -E gh pr merge 5 --admin",             # sudo with a valueless flag
     "gh pr merge 5 \\\n--admin",                 # backslash-newline line continuation
+    # Round-5 / Codex-found forms (argv-modeling redesign). Quote/backslash removal
+    # happens before gh runs, so these all reach gh with a real --admin argv token:
+    'gh pr merge 301 "--admin"',                 # quoted flag -> real --admin (Codex F1)
+    "gh pr merge 301 --ad\\min",                 # backslash-escaped flag (Codex F1)
+    "'gh' pr merge 301 --admin",                 # quoted command word (Codex F2)
+    "g\\h pr merge 301 --admin",                 # escaped command word (Codex F2)
+    "gh pr --repo o/r merge 5 --admin",          # inherited gh-pr flag before merge (Codex F4)
+    "if gh pr merge 5 --admin; then :; fi",      # reserved-word head (Codex F5)
+    "eval gh pr merge 5 --admin",                # eval wrapper (Codex F6)
+    "timeout 30 gh pr merge 5 --admin",          # timeout wrapper (Codex F6)
+    "xargs -I{} gh pr merge {} --admin",         # xargs -I placeholder (now caught)
 ]
-# OUT OF SCOPE (documented, not blocked): forms where the gh command is TEMPLATED or
-# nested inside an opaque argument, which would need full recursive shell emulation
-# to detect -- the settings.json wildcard denies remain the backstop for these:
+# OUT OF SCOPE (documented, not blocked): the gh command is nested inside an opaque
+# argument or reached via runtime variable expansion, which a static argv model
+# cannot resolve without emulating a shell. The settings.json wildcard denies are the
+# backstop for these:
 #   - `bash -c "gh pr merge 5 --admin"` / `sh -c "..."`  (merge is a quoted -c arg)
-#   - `xargs -I{} gh pr merge {} --admin`               (gh command is placeholder-templated)
-#   - `GH=gh; $GH pr merge 5 --admin`                   (variable indirection)
+#   - `$GH pr merge 5 --admin`                           (gh reached via a shell variable)
 OUT_OF_SCOPE = [
     'bash -c "gh pr merge 5 --admin"',
-    "xargs -I{} gh pr merge {} --admin",
+    "$GH pr merge 5 --admin",
 ]
 
 ALLOW = [
@@ -110,6 +121,14 @@ ALLOW = [
     "gh pr merge 301 --body '--admin'",
     "gh pr merge 301 --body \"--admin\"",
     "gh pr merge 301 --title '--admin' --body ok",
+    # Round-5 argv-model false-positive guards:
+    "gh pr merge 301 --body --admin",            # unquoted, but VALUE of --body (not the flag)
+    "git commit -m 'note (gh pr merge 301 --admin)'",  # operator INSIDE a quoted arg (Codex F3)
+    "echo '`gh pr merge 301 --admin`'",          # backtick inside a quoted arg
+    "foogh pr merge 5 --admin",                  # word ending in 'gh' is not the gh exe
+    "mygh pr merge 5 --admin",                   # same
+    "$GH pr merge 5 --admin",                    # $GH is a variable, not gh (also in OUT_OF_SCOPE)
+    "gh pr merge 301 --administrator",           # longer flag, not --admin
 ]
 
 
