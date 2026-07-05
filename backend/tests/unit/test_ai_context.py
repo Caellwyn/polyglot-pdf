@@ -276,3 +276,51 @@ def test_jit_context_empty_section_reports_zero_not_one(monkeypatch):
     # Manifest present but section empty -> 0/0, NOT the "x/1" fallback.
     assert "0/0" in result
     assert "0/1" not in result
+
+
+def test_legacy_si_directs_model_to_convey_field_note():
+    """The legacy SI must carry the explain-the-Note directive: help.instructions
+    reaching the SI as a Note: line is not enough -- the model must be TOLD to
+    convey that qualifying context while asking, or it reads the bare field name
+    and the user answers an unqualified question (bd polyglot-pdf-bo4m,
+    hypothesis 3)."""
+    schema = {
+        "form_metadata": {"title": "I-90"},
+        "fields": [{
+            "id": "p1_checkbox4", "name": "Has Your Name Legally Changed?",
+            "type": "radio",
+            "help": {"instructions": "Indicate if your name has legally changed "
+                     "since your Permanent Resident Card was issued."},
+        }],
+    }
+    si = build_form_context(schema, {}, "English")
+    # The Note itself is rendered (jnjj.23) AND the directive to convey it exists.
+    assert "Note: Indicate if your name has legally changed" in si
+    assert "briefly convey that context in your own words WHILE asking" in si
+
+
+def test_jit_si_directs_model_to_convey_field_context(monkeypatch):
+    """The JIT SI carries the same convey-the-context directive: the next-field
+    hint now rides help.instructions (frontend formatNextFieldHint, bd bo4m), so
+    the SI must direct the model to voice it while asking."""
+    import backend.services.ai_context as ai_context_mod
+    monkeypatch.setattr(ai_context_mod, "get_settings", _jit_settings)
+
+    schema = {
+        "source": "web",
+        "jit_mode": True,
+        "form_metadata": {"title": "I-90 Test"},
+        "fields": [
+            {"id": "firstName", "name": "First Name", "spoken_name": "first name",
+             "type": "text", "required": True},
+        ],
+        "manifest": {
+            "current_section": {
+                "section_id": "sec1", "section_label": "Names",
+                "fields": [{"field_id": "firstName", "spoken_name": "first name"}],
+            },
+            "previous_sections": [],
+        },
+    }
+    si = build_form_context(schema, {}, "English")
+    assert "briefly convey that context in your own words WHILE asking" in si

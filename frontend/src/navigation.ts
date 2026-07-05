@@ -347,8 +347,16 @@ export function formatNextFieldHint(
     ? `, options: [${field.options.map(o => o.label).join(', ')}]`
     : '';
 
+  // Field fine-print (help.instructions) rides the hint so the qualifying
+  // context reaches the model on the channel it acts on per turn (initiating
+  // message / confirm_field next-field hint / manual-update hint), not only
+  // as a Note: line buried in the SI field dump (bd polyglot-pdf-bo4m).
+  const noteSuffix = field.help?.instructions
+    ? `. Context to briefly convey when asking: ${field.help.instructions}`
+    : '';
+
   // CRITICAL: Include field_id so Gemini knows exactly which field to update
-  return `Next field to fill is ${orderPrefix}: '${field.name}' (field_id: '${field.id}', type: ${field.type}${requiredSuffix}${optionsSuffix})`;
+  return `Next field to fill is ${orderPrefix}: '${field.name}' (field_id: '${field.id}', type: ${field.type}${requiredSuffix}${optionsSuffix})${noteSuffix}`;
 }
 
 /**

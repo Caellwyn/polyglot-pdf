@@ -544,6 +544,26 @@ describe('SchemaFormStateManager', () => {
       expect((payload as any).resume).toBe(true)
     })
 
+    // === bd polyglot-pdf-bo4m: field.help must survive the handshake wire ===
+    // The backend rebuilds the SI from THIS payload (stateless backend), and
+    // help.instructions feeds the SI's "Note:" line -- if the handshake
+    // stripped help, the voice AI would lose every field's fine print.
+    it('legacy payload schema fields carry the help block intact', () => {
+      const schema = createTestSchema()
+      schema.fields[0].help = {
+        instructions: 'Indicate if your name has legally changed since your ' +
+          'Permanent Resident Card was issued.',
+        format_hint: 'Yes / No / N/A'
+      }
+      const state = SchemaFormStateManager.init(schema)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state) as any
+      const sent = payload.schema.fields.find((f: any) => f.id === 'field-1')
+      expect(sent.help).toBeDefined()
+      expect(sent.help.instructions).toContain('Permanent Resident Card')
+      expect(sent.help.format_hint).toBe('Yes / No / N/A')
+    })
+
     // === bd polyglot-pdf-p68s (jnjj.45d): full_schema = the WHOLE form ===
     // The legacy `schema` is the current section only (2 fields); full_schema
     // must carry every field across every section for the secretary catalog.
