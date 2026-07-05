@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-07-04. bd h76m.2: the checkbox branch now canonicalizes a comma-separated string value on an options-bearing field into the list shape before filling (the voice path's historical group format). See [the h76m.2 journal entry](../journal/entries/2026-07-04-bd-h76m.2-voice-checkbox-group-comma-fill.md) for closeout details.*
+*Last updated: 2026-07-05. See [the h76m.17 journal entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for closeout details.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -33,9 +33,20 @@ builds a `field_id → pdf_field_name` map + a `field_id → field` lookup from
 - **text / number / etc.** — `fresh_widget.field_value = str(value)` then
   `widget.update()`.
 - **radio** — find the selected `option` by `value`, fill each option's
-  `pdf_field_name` widget on/off.
-- **checkbox** — a `bool` fills one widget; a `list` is a checkbox *group* (fill
-  each selected option's widget). A `str` value on an options-bearing checkbox
+  `pdf_field_name` widget on/off. An option with NO `pdf_field_name` of its
+  own may instead carry `pdf_on_value` (schema v2, bd `h76m.17`): the shared
+  field-level `pdf_field_name` is one true-AcroForm radio field whose kid
+  widgets differ only by on-state, and the filler writes `/V` + `/AS`
+  directly (xref surgery) onto the kid whose appearance table carries that
+  state (`find_widget_by_state`) -- only the SELECTED option writes; a radio
+  field holds one value, so there is no per-kid Off pass.
+- **checkbox / checkbox_group** — a `bool` fills one widget; a `list` is a
+  checkbox *group* (fill each selected option's widget). The v2
+  `checkbox_group` TYPE (bd `h76m.17`) shares this branch -- it is the same
+  options-bearing multi-select, explicit in the type instead of inferred from
+  `options[]`; before that routing it fell to the scalar path and printed
+  blank (v2 forbids the field-level `pdf_field_name` the scalar path needs).
+  A `str` value on an options-bearing checkbox
   field is first split on commas into the list shape (bd `polyglot-pdf-h76m.2`):
   the voice path historically stored a group selection as one comma-separated
   string of option values, and without the split it fell to the
@@ -45,6 +56,12 @@ builds a `field_id → pdf_field_name` map + a `field_id → field` lookup from
   the defensive layer for sessions whose stored values predate that fix.
 
 ### The widget gotchas (scar tissue)
+
+- **Same-name kids: re-fetch by xref, not name.** `fill_widget` re-fetches a
+  fresh widget from the page to dodge PyMuPDF weakrefs; radio kids of a
+  shared AcroForm field all carry the SAME `field_name`, so the re-fetch
+  matches by `xref` first (name stays as fallback) or it would grab the
+  wrong sibling (bd `h76m.17`).
 
 - **Must pass the page that contains the widget.** `fill_widget` re-fetches a
   **fresh** widget from `page.widgets()` by `field_name` before writing — PyMuPDF
