@@ -14,6 +14,13 @@ import {
 } from './fieldGrouping';
 import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
 
+// These tests construct and assert LEGACY single conditions; show_if's type is
+// now the legacy-or-composite union (bd h76m.8), so narrow explicitly at the
+// assertion sites.
+function asAtom(cond: FormField['show_if']): ConditionalDisplay {
+  return cond as ConditionalDisplay;
+}
+
 // A faithful local mirror of the runtime's frontend shouldShowField scalar-trigger
 // semantics (frontend/src/schema-forms/utils/validation.ts), so these tests pin
 // RUNTIME behavior -- whether a remapped condition actually fires -- not just the
@@ -329,7 +336,7 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
 
     const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
     const mixed = merged.fields.find(f => f.id === 'mixed')!;
-    expect(mixed.show_if!.field).toBe('reason_a'); // show_if rewritten
+    expect(asAtom(mixed.show_if).field).toBe('reason_a'); // show_if rewritten
     expect(mixed.controls_fields).toBe(controls); // untouched array kept by reference
   });
 
@@ -516,7 +523,7 @@ describe('Opus fallback review fixes', () => {
     const unmerged = ungroupField(schema, 'p3_race');
     const detail = unmerged.fields.find(f => f.id === 'detail')!;
     expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
-    expect(unmerged.fields.some(f => f.id === detail.show_if!.field)).toBe(true);
+    expect(unmerged.fields.some(f => f.id === asAtom(detail.show_if).field)).toBe(true);
   });
 
   // A whole-group "is the group populated" condition must NORMALIZE to an operator
@@ -559,9 +566,9 @@ describe('Opus fallback review fixes', () => {
     expect(detail.show_if).toEqual({ field: 'asian', operator: 'not_equals', value: true });
     expect(unmerged.fields.some(f => f.id === 'asian')).toBe(true);
     // runtime oracle: shown UNLESS asian is checked.
-    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(false);  // selected -> hidden
-    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(true);  // unchecked -> shown
-    expect(runtimeShowIf(detail.show_if!, {})).toBe(true);                // untouched -> shown
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: true })).toBe(false);  // selected -> hidden
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: false })).toBe(true);  // unchecked -> shown
+    expect(runtimeShowIf(asAtom(detail.show_if), {})).toBe(true);                // untouched -> shown
   });
 
   it('runtime: equals <matched option> -> is_checked shows iff that option is checked', () => {
@@ -569,8 +576,8 @@ describe('Opus fallback review fixes', () => {
     const unmerged = ungroupField(schema, 'p3_race');
     const detail = unmerged.fields.find(f => f.id === 'detail')!;
     expect(detail.show_if).toEqual({ field: 'asian', operator: 'is_checked' });
-    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(true);
-    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(false);
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: true })).toBe(true);
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: false })).toBe(false);
   });
 
   it("excludes an empty-string option value from the option map: not_equals '' stays a whole-group check", () => {
@@ -717,5 +724,92 @@ describe('Opus fallback review fixes', () => {
     const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
     // a self-referential show_if (radio gated on its own value) is unreachable; dropped
     expect(merged.fields[0].show_if).toBeUndefined();
+  });
+});
+
+// P3.1 require_if parity (bd h76m.8 + fresh-eyes bd polyglot-pdf-319g): the
+// PRIMARY's own require_if must be rewritten/pruned exactly like its show_if,
+// and an untouched require_if must survive a merge -> un-merge round trip.
+describe('require_if handling in merge/un-merge (bd 319g)', () => {
+  it("rewrites the primary's require_if referencing a merged-away sibling (self-ref drops)", () => {
+    const schema = w7Schema();
+    // Primary reason_a required-when sibling reason_b is checked: post-merge
+    // that is self-referential (b is an option of the merged field) -> drop.
+    schema.fields[0].require_if = { field: 'reason_b', operator: 'is_checked' };
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const primary = merged.fields.find(f => f.id === 'reason_a')!;
+    expect(primary.require_if).toBeUndefined();
+    expect(primary.options?.length).toBe(2);
+  });
+
+  it("retargets a DEPENDENT's require_if onto the primary and restores it on un-merge", () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'dep', name: 'Dep', type: 'text', section_id: 'reason',
+      pdf_field_name: 'dep[0]', read_only: false, required: false,
+      require_if: { field: 'reason_b', operator: 'is_checked' },
+    } as FormField);
+    schema.sections[0].fields.push('dep');
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const dep = merged.fields.find(f => f.id === 'dep')!;
+    // Selection operator on a merged-away widget -> equals <option value>.
+    expect(asAtom(dep.require_if as FormField['show_if']).field).toBe('reason_a');
+    expect(asAtom(dep.require_if as FormField['show_if']).operator).toBe('equals');
+
+    const unmerged = ungroupField(merged, 'reason_a');
+    const depBack = unmerged.fields.find(f => f.id === 'dep')!;
+    expect(depBack.require_if).toEqual({ field: 'reason_b', operator: 'is_checked' });
+  });
+
+  it('an untouched require_if survives merge -> un-merge verbatim (sentinel round-trip)', () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'bystander', name: 'Bystander', type: 'text', section_id: 'reason',
+      pdf_field_name: 'by[0]', read_only: false, required: false,
+      // References a field OUTSIDE the merge; also give it a show_if that IS
+      // rewritten, so its rewrite record carries had_require_if=true with no
+      // recorded require_if -- the sentinel combination that used to clobber.
+      require_if: { field: 'reason_e', operator: 'is_checked' },
+      show_if: { field: 'reason_b', operator: 'is_checked' },
+    } as FormField);
+    schema.sections[0].fields.push('bystander');
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const mid = merged.fields.find(f => f.id === 'bystander')!;
+    expect(mid.require_if).toEqual({ field: 'reason_e', operator: 'is_checked' });
+
+    const unmerged = ungroupField(merged, 'reason_a');
+    const back = unmerged.fields.find(f => f.id === 'bystander')!;
+    expect(back.require_if).toEqual({ field: 'reason_e', operator: 'is_checked' });
+    expect(back.show_if).toEqual({ field: 'reason_b', operator: 'is_checked' });
+  });
+
+  it('rewrites composite show_if atoms on a dependent, preserving the composite shape', () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'combo', name: 'Combo', type: 'text', section_id: 'reason',
+      pdf_field_name: 'combo[0]', read_only: false, required: false,
+      show_if: {
+        all_of: [{ field: 'reason_b', operator: 'is_checked' }],
+        none_of: [{ field: 'reason_e', operator: 'is_checked' }],
+      },
+    } as FormField);
+    schema.sections[0].fields.push('combo');
+
+    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
+    const combo = merged.fields.find(f => f.id === 'combo')!;
+    expect(combo.show_if).toEqual({
+      all_of: [{ field: 'reason_a', operator: 'equals', value: 'reason_b' }],
+      none_of: [{ field: 'reason_e', operator: 'is_checked' }],
+    });
+
+    const unmerged = ungroupField(merged, 'reason_a');
+    const comboBack = unmerged.fields.find(f => f.id === 'combo')!;
+    expect(comboBack.show_if).toEqual({
+      all_of: [{ field: 'reason_b', operator: 'is_checked' }],
+      none_of: [{ field: 'reason_e', operator: 'is_checked' }],
+    });
   });
 });

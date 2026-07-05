@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { checkFieldAccess, getDependencyChain } from './conditionalFieldCheck';
+import { checkFieldAccess, evaluateFieldAvailability, getDependencyChain } from './conditionalFieldCheck';
 import type { FormSchema, FormField } from '../types/schema';
 
 describe('conditionalFieldCheck', () => {
@@ -293,5 +293,147 @@ describe('conditionalFieldCheck', () => {
       // Should direct to spouse_name, which will then direct to marital_status
       expect(spouseDateResult.required_fields?.[0].spoken_name).toBe('spouse name');
     });
+  });
+});
+
+// P3.1 (bd h76m.8): a COMPOSITE-gated field must behave correctly in the
+// voice locked-field path -- the exit-criterion-3 coverage. The locked-field
+// path is checkFieldAccess (tool-call gating + Gemini explanations) and
+// evaluateFieldAvailability (the locked/hidden state webFormConnection reports
+// back to the voice AI).
+describe('composite-gated fields in the voice locked-field path (bd h76m.8)', () => {
+  const compositeSchema: FormSchema = {
+    source: 'pdf',
+    form_metadata: { title: 'W7-ish', form_number: 'W-7', version: '1.0', language: 'en' },
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: ['grp', 'country', 'detail'] },
+    ],
+    fields: [
+      {
+        id: 'grp',
+        name: 'Reason for submitting',
+        spoken_name: 'reason for submitting',
+        type: 'checkbox',
+        group_kind: 'checkbox',
+        section_id: 's1',
+        options: [
+          { value: 'e_dependent', label: 'Dependent' },
+          { value: 'f_spouse', label: 'Spouse' },
+          { value: 'other', label: 'Other' },
+        ],
+      } as FormField,
+      {
+        id: 'country',
+        name: 'Country of citizenship',
+        spoken_name: 'country of citizenship',
+        type: 'text',
+        section_id: 's1',
+      } as FormField,
+      {
+        // Shown when 'other' is ticked AND country is not USA:
+        // all_of[includes other] + none_of[equals USA].
+        id: 'detail',
+        name: 'Other detail',
+        spoken_name: 'other detail',
+        type: 'text',
+        section_id: 's1',
+        show_if: {
+          all_of: [{ field: 'grp', operator: 'includes', value: 'other' }],
+          none_of: [{ field: 'country', operator: 'equals', value: 'USA' }],
+        },
+      } as FormField,
+    ],
+  } as FormSchema;
+
+  it('checkFieldAccess blocks the field while the composite is unmet and lists EVERY trigger', () => {
+    const result = checkFieldAccess('other detail', compositeSchema, {
+      grp: ['e_dependent'],
+      country: 'Canada',
+    });
+
+    expect(result.accessible).toBe(false);
+    expect(result.reason).toBe('field_hidden');
+    // Both atoms' triggers surface for the voice explanation.
+    expect(result.required_fields?.map(f => f.field_id)).toEqual(['grp', 'country']);
+    expect(result.message).toContain("'reason for submitting'");
+    expect(result.message).toContain('1 more condition');
+  });
+
+  it('checkFieldAccess opens the field when the whole composite is satisfied', () => {
+    const result = checkFieldAccess('other detail', compositeSchema, {
+      grp: ['other', 'e_dependent'],
+      country: 'Canada',
+    });
+    expect(result.accessible).toBe(true);
+  });
+
+  it('checkFieldAccess keeps the field blocked when none_of trips, with POLARITY-correct wording', () => {
+    const result = checkFieldAccess('other detail', compositeSchema, {
+      grp: ['other'],
+      country: 'USA',
+    });
+    expect(result.accessible).toBe(false);
+    expect(result.reason).toBe('field_hidden');
+    // The none_of atom is the ACTUAL blocker: the explanation must say the
+    // trigger must NOT be 'USA' -- never instruct the user to fill 'USA'
+    // (fresh-eyes round 2 polarity bug).
+    expect(result.message).toContain("must NOT be 'USA'");
+    expect(result.message).not.toContain("with the value 'USA'");
+    const countryEntry = result.required_fields?.find(f => f.field_id === 'country');
+    expect(countryEntry?.must_not_be).toBe(true);
+    // The blocking atom is listed FIRST even though it is declared last.
+    expect(result.required_fields?.[0].field_id).toBe('country');
+  });
+
+  it('evaluateFieldAvailability phrases a blocking none_of atom as change-away, not select', () => {
+    const detail = compositeSchema.fields.find(f => f.id === 'detail')!;
+    const locked = evaluateFieldAvailability(
+      detail,
+      { grp: { value: ['other'] }, country: { value: 'USA' } } as any,
+      compositeSchema,
+    );
+    expect(locked.availability).toBe('locked');
+    expect(locked.lockedReason).toContain("must NOT be 'USA'");
+    expect(locked.lockedReason).not.toContain("select 'USA'");
+  });
+
+  it('evaluateFieldAvailability reports locked with a first-trigger reason, then available when met', () => {
+    const detail = compositeSchema.fields.find(f => f.id === 'detail')!;
+
+    const locked = evaluateFieldAvailability(
+      detail,
+      { grp: { value: [] }, country: { value: 'Canada' } } as any,
+      compositeSchema,
+    );
+    expect(locked.availability).toBe('locked');
+    expect(locked.lockedReason).toContain("'reason for submitting'");
+    expect(locked.lockedReason).toContain("select 'other'");
+    expect(locked.lockedReason).toContain('1 more condition');
+
+    const available = evaluateFieldAvailability(
+      detail,
+      { grp: { value: ['other'] }, country: { value: 'Canada' } } as any,
+      compositeSchema,
+    );
+    expect(available.availability).toBe('available');
+  });
+
+  it('getDependencyChain walks every composite trigger and survives cycles', () => {
+    const detail = compositeSchema.fields.find(f => f.id === 'detail')!;
+    const deps = getDependencyChain(detail, compositeSchema, {});
+    expect(deps.map(d => d.id).sort()).toEqual(['country', 'grp']);
+
+    // Cycle: a shows-if b, b shows-if a -- must terminate, not recurse forever.
+    const cyclic: FormSchema = {
+      ...compositeSchema,
+      fields: [
+        { id: 'a', name: 'A', spoken_name: 'a', type: 'text', section_id: 's1',
+          show_if: { field: 'b', operator: 'is_not_empty' } } as FormField,
+        { id: 'b', name: 'B', spoken_name: 'b', type: 'text', section_id: 's1',
+          show_if: { field: 'a', operator: 'is_not_empty' } } as FormField,
+      ],
+    } as FormSchema;
+    const cycleDeps = getDependencyChain(cyclic.fields[0], cyclic, {});
+    expect(cycleDeps.map(d => d.id)).toEqual(['b']);
   });
 });

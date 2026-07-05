@@ -12,6 +12,7 @@ import { CheckboxField } from "./fields/CheckboxField";
 import { DateField } from "./fields/DateField";
 import { SelectField } from "./fields/SelectField";
 import { validateField, shouldShowField } from "../utils/validation";
+import { normalizeToComposite } from "../utils/normalizeToComposite";
 
 export interface FieldRendererProps {
   field: FormField;
@@ -48,15 +49,23 @@ export function FieldRenderer({
     field.conditional_behavior?.unlock_method === "flip_readonly_bit" ||
     field.conditional_logic?.unlock_method === "flip_readonly_bit";
 
-  // Debug conditional unlocking
+  // Debug conditional unlocking. show_if may be a legacy single condition OR
+  // a v2 composite group (bd h76m.8) -- log its atoms with current values.
   if (field.read_only && shouldUnlock) {
+    const group = normalizeToComposite(field.show_if);
+    const atoms = group
+      ? [...(group.all_of ?? []), ...(group.any_of ?? []), ...(group.none_of ?? [])]
+      : [];
     console.log(`[FieldRenderer] [unlock] Unlocking field ${field.id}:`, {
       read_only: field.read_only,
       shouldUnlock,
       show_if: field.show_if,
-      triggerField: field.show_if?.field,
-      triggerValue: field.show_if?.field ? allFieldValues[field.show_if.field] : undefined,
-      expectedValue: field.show_if?.value
+      conditions: atoms.map((atom) => ({
+        triggerField: atom.field,
+        triggerValue: allFieldValues[atom.field],
+        operator: atom.operator,
+        expectedValue: atom.value,
+      })),
     });
   }
 

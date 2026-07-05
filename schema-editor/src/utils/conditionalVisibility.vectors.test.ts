@@ -11,7 +11,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { shouldShowField } from './conditionalVisibility';
+import { isFieldRequired, shouldShowField } from './conditionalVisibility';
 import { normalizeToComposite } from './normalizeToComposite';
 import type { FormField } from '../types/schema';
 import rawSuite from '../../../shared/conditional-vectors.json';
@@ -32,6 +32,8 @@ interface NormalizeCase {
 
 const suite = rawSuite as unknown as {
   vectors: Vector[];
+  vectorsV2: Vector[];
+  require: Vector[];
   normalize: NormalizeCase[];
 };
 
@@ -61,6 +63,48 @@ describe('shared conditional vectors (editor shouldShowField)', () => {
         vector.field,
       ] as unknown as FormField[];
       expect(shouldShowField(field, vector.fieldValues, fields)).toBe(expected);
+    });
+  }
+});
+
+// P3.1 (bd h76m.8): composite + membership semantics, pinned by the same
+// shared file once both evaluators were rewired through normalizeToComposite.
+describe('shared v2 vectors (editor shouldShowField, composite + membership)', () => {
+  it('suite has v2 cases', () => {
+    expect(suite.vectorsV2.length).toBeGreaterThan(0);
+  });
+
+  for (const vector of suite.vectorsV2) {
+    const expected =
+      typeof vector.expect === 'boolean' ? vector.expect : vector.expect.editor;
+    it(`${vector.name} -> ${expected}`, () => {
+      const field = vector.field as unknown as FormField;
+      const fields = [
+        ...(vector.fields ?? []),
+        vector.field,
+      ] as unknown as FormField[];
+      expect(shouldShowField(field, vector.fieldValues, fields)).toBe(expected);
+    });
+  }
+});
+
+// P3.1 (bd h76m.8): require_if evaluation (isFieldRequired) over the same
+// shared file.
+describe('shared require vectors (editor isFieldRequired)', () => {
+  it('suite has require cases', () => {
+    expect(suite.require.length).toBeGreaterThan(0);
+  });
+
+  for (const vector of suite.require) {
+    const expected =
+      typeof vector.expect === 'boolean' ? vector.expect : vector.expect.editor;
+    it(`${vector.name} -> ${expected}`, () => {
+      const field = vector.field as unknown as FormField;
+      const fields = [
+        ...(vector.fields ?? []),
+        vector.field,
+      ] as unknown as FormField[];
+      expect(isFieldRequired(field, vector.fieldValues, fields)).toBe(expected);
     });
   }
 });
