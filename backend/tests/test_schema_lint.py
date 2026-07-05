@@ -21,6 +21,7 @@ import pytest
 from backend.services.schema_lint import (
     SEVERITY_ERROR,
     SEVERITY_WARNING,
+    field_id_of,
     has_errors,
     lint_schema,
     summarize,
@@ -392,3 +393,54 @@ def test_archived_broken_w7_draft_lints_red():
     assert "option-value-duplicate" in rules
     named = " ".join(f.message for f in findings)
     assert "is_selected" in named and "contains_any" in named
+
+
+# ---------------------------------------------------------------------------
+# field_id_of + as_dict: the editor's ValidationPanel focuses a finding by the
+# field id carried in its path (bd h76m.11, P4.3). One Python implementation.
+# ---------------------------------------------------------------------------
+
+def test_field_id_of_extracts_the_anchored_field():
+    assert field_id_of("fields[3] (id=picker).show_if") == "picker"
+    assert field_id_of("fields[0] (id=dep).controls_fields[2]") == "dep"
+    # show-if-cycle warnings use the "fields (id=X)" (no index) path shape.
+    assert field_id_of("fields (id=loop_a)") == "loop_a"
+
+
+def test_field_id_of_returns_none_for_unanchored_paths():
+    # Non-field paths (schema root, dump widget claims) have no id to focus.
+    assert field_id_of("$") is None
+    assert field_id_of("widget 'topmostSubform[0].Page1[0].f1[0]'") is None
+    # A field with no id key renders as "(id=None)" -- nothing to focus.
+    assert field_id_of("fields[0] (id=None).show_if") is None
+    assert field_id_of("") is None
+
+
+def test_as_dict_carries_the_derived_field_id():
+    fields = [
+        _select(),
+        {"id": "dep", "type": "text",
+         "show_if": {"field": "picker", "operator": "is_selected", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    assert findings, "expected the unknown-operator finding"
+    d = findings[0].as_dict()
+    assert set(d) == {"severity", "rule", "path", "message", "field_id"}
+    assert d["field_id"] == "dep"
+    assert d["rule"] == "unknown-operator"
+
+
+def test_archived_broken_w7_draft_findings_all_carry_field_focus():
+    """Every finding the W-7 draft produces anchors to a real field (P4.3's
+    'lists N findings with field focus'): each field_id resolves to a field in
+    the draft, so the panel can jump to every one."""
+    draft = json.loads(
+        (_FIXTURES / "w7_broken_draft.json").read_text(encoding="utf-8")
+    )
+    ids = {f["id"] for f in draft["fields"] if isinstance(f, dict) and "id" in f}
+    findings = lint_schema(draft)
+    dicts = [f.as_dict() for f in findings]
+    assert dicts, "the broken draft must produce findings"
+    for d in dicts:
+        assert d["field_id"] is not None, f"unfocusable finding: {d['path']}"
+        assert d["field_id"] in ids, f"finding points at a missing field: {d}"

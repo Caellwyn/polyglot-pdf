@@ -963,9 +963,19 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Bottom: Validation Panel */}
+      {/* Bottom: Validation Panel. Findings come from the backend's single
+          Python linter (bd h76m.11); clicking a field-anchored finding focuses
+          that field (and, in preview mode, drops back to edit so the selection
+          is visible). */}
       {schema && (
-        <ValidationPanel schema={schema} />
+        <ValidationPanel
+          schema={schema}
+          onSelectField={(fieldId) => {
+            setViewMode('edit');
+            setSelectedFieldId(fieldId);
+          }}
+          onAuthError={handleAuthExpired}
+        />
       )}
     </div>
   );

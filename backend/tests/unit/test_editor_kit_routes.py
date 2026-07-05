@@ -720,6 +720,83 @@ def test_put_schema_rejects_formless_bodies(client):
     assert r.status_code == 422
 
 
+# --- POST /lint: load-time findings for the editor (bd h76m.11, P4.3) --------
+
+
+def test_lint_endpoint_is_token_gated(client):
+    c, _store, _root = client
+    # Missing/wrong token -> 401 (the gate is on every editor route).
+    assert c.post("/api/editor/lint", json={"fields": []}).status_code == 401
+    assert c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "wrong"},
+        json={"fields": []},
+    ).status_code == 401
+
+
+def test_lint_clean_schema_reports_zero_findings(client):
+    c, _store, _root = client
+    r = c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=VALID_SCHEMA,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {"findings": [], "errorCount": 0, "warningCount": 0}
+
+
+def test_lint_reports_findings_with_field_focus(client):
+    # The core P4.3 exit criterion, at the endpoint: a defective draft comes
+    # back as findings each carrying the field_id the panel focuses on click.
+    c, _store, _root = client
+    schema = {
+        "source": "pdf",
+        "form_metadata": {"title": "T", "version": "unknown"},
+        "sections": [],
+        "fields": [
+            {"id": "picker", "type": "select",
+             "options": [{"value": "alpha", "label": "Alpha"}]},
+            {"id": "dep", "type": "text",
+             "show_if": {"field": "picker", "operator": "is_selected",
+                         "value": "alpha"}},
+        ],
+    }
+    r = c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=schema,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["errorCount"] >= 1
+    finding = next(f for f in body["findings"] if f["rule"] == "unknown-operator")
+    assert finding["field_id"] == "dep"
+    assert finding["severity"] == "ERROR"
+    assert "path" in finding and "message" in finding
+
+
+def test_lint_never_4xxs_on_a_malformed_draft(client):
+    # A structurally-broken draft (the thing the contractor needs findings for)
+    # must lint, not error: lint_schema never raises, so the route stays 200
+    # with a condition-malformed finding rather than a 422.
+    c, _store, _root = client
+    schema = {
+        "source": "pdf",
+        "fields": [
+            {"id": "bad", "type": "text", "show_if": "not-an-object"},
+        ],
+    }
+    r = c.post(
+        "/api/editor/lint",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=schema,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert any(f["rule"] == "condition-malformed" for f in body["findings"])
+
+
 # --- POST status: the publish gate -------------------------------------------
 
 
