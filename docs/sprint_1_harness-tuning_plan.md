@@ -172,6 +172,10 @@ nit from a blocker):
 - **File remaining true nits as one follow-up bead and proceed to closeout.** These
   deferred-nit beads are **prime candidates for a later multi-bead cleanup PR**.
 - **Hard ceiling** (e.g. 3 loops) → escalate to maintainer rather than loop forever.
+  (SUPERSEDED 2026-07-04, bd `polyglot-pdf-16pj`: the hard round ceiling is retired
+  in favor of an outcome-based loop-stop — loop while findings are correct blockers,
+  stop when they are incorrect or nit-file-able. See
+  [`review-flow.md`](doctrine/review-flow.md) + the closeout skill.)
 
 So #3 is **decision-rule prose in the skill** + the deferred-nit bead convention, not a
 new classifier script.

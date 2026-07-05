@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> demo
 
-*Last updated: 2026-06-10.*
+*Last updated: 2026-07-04.*
 
 How code promotes from a working branch to the running demo. **This project has
 NO active production environment** -- the demo remote is the live, outward-facing
@@ -14,7 +14,7 @@ applied here. Deploys here are LOCAL/MANUAL via shell scripts, not branch-trigge
 worktree (feature branch)        one bead's work; where the agent commits
         |  PR (reviewed: Codex + fresh-eyes, looped to clean)
         v
-dev                              integration branch + PR base; maintainer merges
+dev                              integration branch + PR base; auto-merge if routine/low-risk & clean, else maintainer merges
         |  deploy-demo.sh (front + backend; gated -- see below)
         v
 demo remote server               the live demo (polyglot-demo-aa709); NO prod beyond this
@@ -23,8 +23,9 @@ demo remote server               the live demo (polyglot-demo-aa709); NO prod be
 - **Feature branches** always branch off freshly-pulled `dev`. A bead never spans
   PRs (one bead = one branch = one PR); a PR may bundle several small whole beads
   and closes at least one. See [`workflow.md`](workflow.md#bead-lifecycle).
-- **`dev`** is the integration branch and the PR base. A PR -> `dev` merge is the
-  maintainer's `gh pr merge` (see "The merge gate"). The agent MAY autonomously
+- **`dev`** is the integration branch and the PR base. A PR -> `dev` merge is
+  autonomous for a routine low-risk PR that reviewed CLEAN, else the maintainer's
+  `gh pr merge` (see "The merge gate"). The agent MAY autonomously
   **sync the local root checkout to `dev`** (pull / fast-forward to `origin/dev`)
   -- that is not a merge.
 - **The demo remote** is the live target. Promotion to it is `deploy-demo.sh`,
@@ -32,11 +33,16 @@ demo remote server               the live demo (polyglot-demo-aa709); NO prod be
 
 ## The merge gate
 
-The repo's GitHub ruleset sets **allow_auto_merge=false**, so a PR -- even a
-green, reviewed, ready one -- cannot merge itself. The maintainer clicks merge.
-This is the single human gate on integration; it is why the review flow
-([`review-flow.md`](review-flow.md)) runs fully autonomously up to the point of
-pinging the maintainer to merge.
+The repo's GitHub ruleset sets **allow_auto_merge=false**, so a PR cannot merge
+*itself* on green -- someone must run the merge. Who runs it depends on the
+**auto-merge rule** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs.
+maintainer merge"): a routine, low-risk PR that an **adversarial** reviewer cleared
+CLEAN with green checks is **merged autonomously** (`gh pr merge`) at the end of the
+review flow; a **consequence-bearing** PR (affects operational cost / user-facing
+features / downstream disruption / substantial multi-surface rework / an approved
+plan) is instead **pinged to the maintainer**, who clicks merge. The consequence
+line is the same as the step-2 escalation line; when unsure, ping. Full flow:
+[`review-flow.md`](review-flow.md).
 
 ## The demo-deploy gate (autonomy increase 2026-06-10)
 

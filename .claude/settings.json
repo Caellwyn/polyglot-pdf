@@ -5,7 +5,9 @@
       "Bash(git push -f:*)",
       "Bash(git push --force-with-lease:*)",
       "Bash(git push *+*:*)",
-      "Bash(gh pr merge:*)",
+      "Bash(gh pr merge --admin *)",
+      "Bash(gh pr merge * --admin *)",
+      "Bash(gh pr merge *--admin*)",
       "Bash(firebase:*)",
       "Bash(npx firebase:*)",
       "Bash(bd dolt push --force:*)"
@@ -69,7 +71,10 @@
       "Bash(git stash:*)",
       "Bash(gh pr create:*)",
       "Bash(gh pr comment:*)",
-      "Bash(gh pr ready:*)"
+      "Bash(gh pr ready:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr merge:*)"
     ]
   },
   "hooks": {

@@ -39,7 +39,9 @@ What it does NOT do (the judgment boundary)
   the orchestrator decides mechanical-vs-structural -- SKILL Step 7);
 - pick the fresh-eyes model, write journal prose, or ``git add`` (staging is the
   orchestrator's content decision);
-- ``gh pr merge`` (never -- the maintainer's alone);
+- ``gh pr merge`` (not this script's job -- the merge decision is an orchestrator
+  judgment call at closeout Step 8.2: auto-merge a routine low-risk clean PR, else
+  ping the maintainer);
 - start the Codex watcher (it PRINTS the command; the orchestrator launches it
   as a ``run_in_background`` task so the harness wake-up wiring works).
 

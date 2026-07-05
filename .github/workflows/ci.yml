@@ -1,10 +1,11 @@
 # Informational CI -- runs the three test suites on every PR.
 #
 # NON-BLOCKING BY DESIGN (bd polyglot-pdf-uov.3): this workflow reports status
-# but is NOT a required check. The manual-merge gate (the maintainer clicks
-# every merge) and the inert required_deployments ruleset stay the only merge
-# controls; do NOT add this job to branch-protection required checks without a
-# separate decision. Its job is fast signal on a PR, not a gate.
+# but is NOT a required check. The merge gate (auto-merge for a routine low-risk
+# PR that reviewed CLEAN, else a maintainer merge -- bd polyglot-pdf-16pj) and the
+# inert required_deployments ruleset stay the only merge controls; do NOT add this
+# job to branch-protection required checks without a separate decision. Its job is
+# fast signal on a PR, not a gate.
 #
 # xfail/xpass policy: a spec-test that documents a known defect is marked xfail
 # (pytest) or test.fails (vitest) and counts as PASS -- neither runner sets a

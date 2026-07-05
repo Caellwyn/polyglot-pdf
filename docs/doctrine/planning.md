@@ -1,6 +1,6 @@
 # Planning doctrine: SPEAR, exit rubrics, and model tiering
 
-*Last updated: 2026-06-11.*
+*Last updated: 2026-07-04.*
 
 How a feature gets scoped, planned, executed, assessed, and resolved here. This
 doc is the conceptual home; three skills are its mechanical encodings --
@@ -133,7 +133,7 @@ volume work. Expensive models **never bug-hunt or grep.**
 
 | Tier | Models | Where |
 |------|--------|-------|
-| **Decision gates** | Fable / Opus | **Plan** (scope, rubric, MECE decomposition, the How-pushback), **Assess** (the orchestrator's pre-PR rubric scorecard + gap/nit triage), **escalation + Resolve judgment** (the orchestrator's judgment calls and the merge-ping handoff). |
+| **Decision gates** | Fable / Opus | **Plan** (scope, rubric, MECE decomposition, the How-pushback), **Assess** (the orchestrator's pre-PR rubric scorecard + gap/nit triage), **escalation + Resolve judgment** (the orchestrator's judgment calls, incl. the merge decision -- auto-merge or ping). |
 | **Execution** | Sonnet | Building a bead's changes; the fresh-eyes assessor pass. |
 | **Search + mechanical** | Haiku / Explore | Codebase ground-truth fan-out, file location, mechanical glue (the `closeout-runner` tail). |
 
@@ -163,5 +163,6 @@ Assess is a **recursive adversarial fresh-eyes loop run BEFORE the PR opens**
 mandate is gap-exhaustion -- "find every place the changes do NOT meet the
 criteria" -- never approval-seeking. The full procedure (the closeout Step 5.5
 scorecard, the inner fresh-eyes loop, the Codex outer review and its no-credits
-fallback) lives in [`review-flow.md`](review-flow.md). Resolve is the maintainer's
-merge, unchanged.
+fallback) lives in [`review-flow.md`](review-flow.md). Resolve ends in the merge
+decision: a routine low-risk PR that reviewed CLEAN auto-merges, a
+consequence-bearing one is the maintainer's merge (bd `polyglot-pdf-16pj`).

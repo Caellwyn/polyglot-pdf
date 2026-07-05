@@ -1,6 +1,6 @@
 ---
 name: closeout
-description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then the SPEAR pre-PR Assess (rubric scorecard + a recursive adversarial fresh-eyes loop scored against the bead's exit criteria, looped to no-gap), then open a NORMAL (non-draft) PR and loop the Codex outer review until clean, then close the bead + ping the maintainer to merge. NO draft PRs. The only thing it never does autonomously is the final merge (that is the maintainer's). Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
+description: Run the project's sprint-closeout checklist autonomously -- beads housekeeping, doc-freshness, journal scaffold, test suite, then the SPEAR pre-PR Assess (rubric scorecard + a recursive adversarial fresh-eyes loop scored against the bead's exit criteria, looped to no-gap), then open a NORMAL (non-draft) PR and loop the Codex outer review until clean, then close the bead and either auto-merge (routine low-risk PR that reviewed CLEAN) or ping the maintainer (consequence-bearing PR). NO draft PRs. It never force-pushes or force-pushes dolt. Use at the end of every sprint/bead once the code is committed and the working tree is clean. Optional argument: the bead id (e.g. /closeout myproject-ab12).
 ---
 
 # Sprint closeout
@@ -38,9 +38,9 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 ## Hard rules (read before doing anything)
 
 - **Codex AUTO-REVIEWS on PR open; round 2+ re-reviews need an `@codex review` COMMENT (opt-in per PR).** Round 1 fires automatically when the PR opens -- no trigger call; include an `@codex review` line in the PR BODY as a belt-and-suspenders nudge. Round 2+ (after a fix-push) need an explicit `@codex review` issue comment (`gh api repos/<owner>/<repo>/issues/$PR/comments -f 'body=@codex review'`, as the gh-authenticated user), capturing its `created_at` as that round's `--since` floor. **The trigger string is EXACTLY `@codex review`** -- `@codex please commit ...` would instead invoke Codex's commit path (see AGENTS.md "If you are reviewing a PR"). **For a PR that does not warrant a review** (see the Step 6 review-worthiness gate), omit the `@codex review` line from the body and skip the whole watch loop; a docs-only / beads-only / journal-only / trivial PR gets no review. (Codex's prepaid-Copilot predecessor was retired at bd hrn.8/hrn.9 -- never use the `requested_reviewers` reviewer API; that fires Copilot, whose credits are exhausted.)
-- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. The adversarial fresh-eyes assess loop runs PRE-PR (Step 5.5) regardless of review-worthiness; Codex is the OUTER review that runs once the PR opens, ONLY when the PR is review-worthy (it auto-reviews on open; the body carries an `@codex review` nudge). The human gate is NOT the PR-open -- it is the maintainer's final **manual merge** (`allow_auto_merge=false`, so the PR can't merge itself). Do NOT idle waiting for a "go" to open the PR.
+- **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. The adversarial fresh-eyes assess loop runs PRE-PR (Step 5.5) regardless of review-worthiness; Codex is the OUTER review that runs once the PR opens, ONLY when the PR is review-worthy (it auto-reviews on open; the body carries an `@codex review` nudge). The final gate is the merge decision (Step 8.2): a routine low-risk PR that reviewed CLEAN auto-merges; a consequence-bearing one is pinged to the maintainer. Do NOT idle waiting for a "go" to open the PR.
 - **NEVER use a draft PR + ready-flip.** A draft adds a state flip for no benefit. Always open normal; never trigger a redundant review of content Codex already approved.
-- **The one thing you must NOT do autonomously: merge.** Never run `gh pr merge`. Everything up to and including pinging the maintainer that the PR is clean is autonomous; the merge is the maintainer's alone.
+- **Merge is autonomous for routine low-risk PRs; the maintainer's for consequence-bearing ones (autonomy increase 2026-07-04).** Once the review is CLEAN and CI is green, apply the auto-merge rule (CLAUDE.md "Auto-merge vs. maintainer merge"): if the PR is NOT consequence-bearing, **run `gh pr merge` yourself** (Step 8.2). If it IS consequence-bearing -- proves the bead direction impossible / substantially changes an approved plan / affects operational cost / affects user-facing features / risks downstream disruption / needs substantial multi-surface rework -- do NOT merge; **ping the maintainer** that the PR is clean and ready for their merge. When unsure which side of the line, treat it as consequence-bearing and ping. Force-push and `bd dolt push --force` stay barred regardless.
 - **Loop Codex until it reports CLEAN (only if the PR is review-worthy).** A fix-push does NOT re-trigger Codex on its own -- you MUST post a fresh `@codex review` comment to request each re-review. Adopt -> push -> re-comment `@codex review` (capture the new comment's `created_at` as the floor) -> re-watch -> repeat until clean; only then is Codex done. Codex signals CLEAN with a 👍 (`+1`) reaction on its summary comment (canonical), with "Didn't find any major issues" / exact `LGTM` as fallbacks. Handle all `pr_review_watcher.py` states: CLEAN/COMMENTS exit 0, ERROR exit 1, TIMEOUT exit 2, **NO-ACK exit 4**, CLOSE-FAILED exit 3. **Never treat ERROR/TIMEOUT/NO-ACK as clean -- but they no longer dead-end at the maintainer either: `ERROR` (quota), `TIMEOUT` (no verdict), and `NO-ACK` (Codex never reacted to the trigger within the 2-min window) all route to the Opus-4.8 fallback reviewer (Step 7.5).** A PR that skipped review per the Step 6 gate has no loop at all.
 - **Codex's "begun work" signal is an eyeballs (👀 / `eyes`) reaction on the trigger comment -- distinct from the 👍 (`+1`) CLEAN verdict.** The re-watch (round 2+) carries `--ack-timeout-min 2` so the watcher waits up to 2 minutes for that eyeballs reaction on the trigger COMMENT; if it never appears (Codex is "taking a lunch break") the watch exits `NO-ACK` and you route to the fallback (Step 7.5), rather than blocking on the full 20-min verdict timeout. **Round 1 does NOT use the ack phase** -- its trigger is the PR body (not an issue comment), so the eyes reaction is unobservable; round 1 goes straight to the verdict wait.
 - **Never leave a `pr_review_watcher.py` background process running once it is no longer needed** -- i.e. once Codex reports CLEAN OR the branch is merged. The watcher self-exits at every terminal state (CLEAN/COMMENTS/ERROR/TIMEOUT/NO-ACK), so a watch you READ is already gone; the hazard is an orphaned watch you launched and walked away from. It runs as a `run_in_background` **Bash** task (no `TaskStop` handle) -- if one is still alive at CLEAN or merge, kill it by PID. ERROR/TIMEOUT/NO-ACK do NOT mean "keep watching": that watch has already exited; route to the Opus-4.8 fallback (Step 7.5) rather than spawning a fresh watcher that would then linger.
@@ -339,10 +339,16 @@ Step 6 (open the PR).
      `model: sonnet`; count it for `--haiku-escalations`.
    - **A subagent TIMEOUT/ERROR** (no verdict returned) -> **surface to the
      maintainer; NEVER silently skip the assess.** Silence is not `NO-GAPS`.
-4. **Ceiling: `MAX_FRESH_EYES_ROUNDS = 3`.** If round 3 still returns
-   `GAPS-FOUND`, STOP and escalate to the maintainer (summarize the persistent
-   gaps) rather than looping forever -- reaching the ceiling is an escalation, never
-   an auto-pass.
+4. **Loop-stop rule -- OUTCOME-based, no round cap** (maintainer directive
+   2026-07-04; the former `MAX_FRESH_EYES_ROUNDS = 3` is retired). Keep spawning
+   fresh-eyes and fixing as long as each round's gaps are **correct and blocking.**
+   STOP (the assess is `NO-GAPS`) when every remaining gap is either **incorrect**
+   (refuted against the code -- record why) or a **true nit** better filed as a bead
+   than fixed here. Fix every correct blocker and re-spawn, however many rounds it
+   takes -- do NOT stop on round count. A gap you can neither fix nor honestly
+   classify as incorrect/nit is the signal to escalate (normal step-2), not a round
+   ceiling. (A subagent TIMEOUT/ERROR is still surfaced per the bullet above --
+   silence is never `NO-GAPS`.)
 
 Commit any gap fixes (and fold the assess outcome -- the rubric scorecard, the
 fresh-eyes round count, the adopt/reject/defer breakdown, and any filed bead IDs --
@@ -407,7 +413,7 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
 **Fresh-eyes is NOT a round-1 reviewer here** -- it ran (and looped to `NO-GAPS`) pre-PR in Step 5.5; its triage breakdown and any filed out-of-scope beads are already recorded. Step 7 is the Codex OUTER review only. **Wait for Codex's round-1 verdict, then fix its findings:**
 
 - **Codex round 1:** `pr_review_watcher.py` reports one of FOUR terminal states (exit codes: CLEAN/COMMENTS=0, ERROR=1, TIMEOUT=2, **CLOSE-FAILED=3** when `--close-on-clean` was passed and the deterministic close itself failed). **NO-ACK (exit 4) cannot occur on round 1** -- the round-1 command omits `--ack-timeout-min` because the trigger is the PR body, not an issue comment, so no ack phase runs. Handle the four round-1 states:
-  - **CLEAN** (👍 reaction / no findings) -> Codex already happy. **If `--close-on-clean` was passed, the watcher has ALREADY closed the bead(s)** -- do NOT make a separate `--close-only` call (that would be the removed second turn). Go to Step 8 (the bead is already closed; Step 8 just does telemetry + the merge ping). (Because fresh-eyes ran and cleared pre-PR in Step 5.5, there are no pending fresh-eyes fixes to race a round-1 CLEAN -- the old fresh-eyes-race caveat no longer applies, so `--close-on-clean` is safe on the round-1 watch.)
+  - **CLEAN** (👍 reaction / no findings) -> Codex already happy. **If `--close-on-clean` was passed, the watcher has ALREADY closed the bead(s)** -- do NOT make a separate `--close-only` call (that would be the removed second turn). Go to Step 8 (the bead is already closed; Step 8 does telemetry + the merge decision -- auto-merge or ping per Step 8.2). (Because fresh-eyes ran and cleared pre-PR in Step 5.5, there are no pending fresh-eyes fixes to race a round-1 CLEAN -- the old fresh-eyes-race caveat no longer applies, so `--close-on-clean` is safe on the round-1 watch.)
   - **CLOSE-FAILED** (exit 3) -> the review WAS clean but the mechanical bead-close failed (the watcher prints the `closeout_finish.py` error). Do NOT ping "ready to merge"; triage the close (re-run `closeout_finish.py --bead <id> --close-only` by hand, or surface to the maintainer if it's a `bd`/network failure). The review verdict still stands -- only the close needs fixing.
   - **COMMENTS** -> the watcher already printed the comment bodies; **you** (the orchestrator) judge each one nit-vs-blocker per the decision rule below, then adopt blockers inline / defer true nits to a bead.
   - **ERROR** (quota/failure) or **TIMEOUT** (no completed review in the window) -> **Codex is unavailable; do NOT surface to the maintainer and do NOT auto-clear. Route to the Opus-4.8 fallback reviewer (Step 7.5).** A quota error won't clear for hours, a timeout means Codex is not engaging -- in both cases the PR should not stall, so the reviewer-of-last-resort takes over. (Never interpret silence/timeout as CLEAN; the fallback is a real review, not an auto-pass.)
@@ -422,11 +428,29 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
 
 **Deferred-nit bead convention.** File **one** bead per closeout collecting that PR's true nits (not one bead per nit): title `chore(nits): deferred review nits from PR #<n>`, body listing each Codex nit with its `codex` source + file:line, and tag it with the arm that deferred it via `bd create ... --metadata '{"arm":"C"}'` (the JSON-string form `bd` expects -- see hrn.4/hrn.5's own `arm` metadata) so the telemetry audit can later check whether any deferred "nit" turned out to be a real bug (the nit-turned-blocker rate, charged to the deferring arm -- see Step 8.5). Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md). Count them for Step 8.5's `--deferred-nits`.
 
-**Hard loop ceiling.** The Codex adopt-and-loop cycle is bounded at **`MAX_REVIEW_ROUNDS = 2`** rounds (formerly 3, then `MAX_COPILOT_ROUNDS`; lowered to 2 to cut Codex credit burn -- bd hrn.9/9us). If Codex still reports COMMENTS after 2 rounds of you addressing blockers, **stop looping and escalate to the maintainer** (do not loop forever): summarize the still-open findings, what you changed each round, and why they persist, and let the maintainer decide. Reaching the ceiling is an escalation, never an auto-clear -- never treat "I'm tired of looping" as CLEAN. (Round 1 from Step 6 counts as round 1; the re-watch loop below is round 2. **Why 2, not 3:** PR #118's review history showed round 1 carries most of the critical value -- the real bugs -- round 2 catches siblings of round-1 findings, and round 3+ was largely re-litigation that burned credits for little gain. Keep Codex's per-review depth aggressive; just cap the iterations.)
+**Loop-stop rule -- OUTCOME-based, no round cap (maintainer directive 2026-07-04).**
+There is **no hard round ceiling** on the Codex adopt-and-loop cycle (the former
+`MAX_REVIEW_ROUNDS = 2` is retired). Because closeout can now merge routine PRs
+autonomously, the bar is code quality, not iteration budget: **keep looping as long
+as each round's findings are correct and are blockers.** A lengthy back-and-forth
+to get the code right is expected and fine. You **STOP looping (the review is
+effectively CLEAN)** on a round when EVERY remaining finding is one of:
+  - **incorrect** -- the finding is wrong, refuted, or a false positive (you verified
+    it against the code; record the refutation so the maintainer can audit it); or
+  - **a true nit, not a blocker** -- real but non-blocking, better filed as a
+    deferred-nit bead than fixed in this PR (per the nit-vs-blocker rule + the
+    deferred-nit bead convention above).
+If any finding is a correct blocker, **fix it and loop again** -- however many
+rounds that takes. Do NOT stop because "it's been N rounds"; the only stop is "no
+correct blocker remains." Reaching CLEAN this way is a real clear, never "I'm tired
+of looping." (Ambiguous still counts as a blocker -- keep looping. There is
+deliberately no auto-escalation on round count; a genuinely stuck loop -- a finding
+you can neither fix nor honestly classify as incorrect/nit -- is itself the signal
+to escalate, per the normal step-2 rule.)
 
 **A/B control (arm C OFF).** The `CLOSEOUT_LOOP_MODE` env var forces the control arm:
-- unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker, ceiling 2.
-- `zero` (**arm C OFF / control**) -> the old behavior: do NOT defer nits to a bead; fix or explicitly reject every Codex finding inline before looping (no deferral, so `--deferred-nits 0`). Same ceiling.
+- unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker (under the outcome-based loop-stop -- no round cap).
+- `zero` (**arm C OFF / control**) -> the old behavior: do NOT defer nits to a bead; fix or explicitly reject every Codex finding inline before looping (no deferral, so `--deferred-nits 0`). Same outcome-based loop-stop (the arm distinction is nit-deferral vs. no-deferral, not a round count).
 **Note whether arm C was active** (it was, if `CLOSEOUT_LOOP_MODE` is unset/`blockers`); Step 8.5 combines the active arms into the single `--arm` value and applies the Phase-A default.
 
 Commit the combined fixes, then **push once and loop Codex to clean:**
@@ -436,7 +460,7 @@ Commit the combined fixes, then **push once and loop Codex to clean:**
    `TS=$(gh api repos/<owner>/<repo>/issues/<pr#>/comments -f 'body=@codex review' --jq '.created_at')`
 4. **Re-watch with `--reviewer codex --since "$TS"`** (`run_in_background`), scoping detection to THIS round. Carry `--close-on-clean <bead-id>` (one per bead) on the re-watch too, so whichever round reaches CLEAN closes the bead(s) deterministically:
    `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --reviewer codex --since "$TS" --ack-timeout-min 2 --close-on-clean <bead-id> [...]`
-   Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-comment `@codex review`(capture TS) -> re-watch loop **until Codex reports CLEAN or you hit `MAX_REVIEW_ROUNDS` (2)**, whichever comes first. At the ceiling, escalate to the maintainer (per the decision rule above) rather than looping again. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
+   Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-comment `@codex review`(capture TS) -> re-watch loop **until no correct blocker remains** (the outcome-based loop-stop rule above -- every remaining finding is incorrect or a true nit): that state IS CLEAN. There is no round cap; keep fixing correct blockers however many rounds it takes. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
 ### Merge-conflict resolution in the loop (A/B arm-agnostic -- bd polyglot-pdf-hrn.6)
 
@@ -519,27 +543,35 @@ strong model -- the self-escalation clause stays dormant). Read its STATUS line:
   maintainer. A failure of the LAST-resort reviewer is a genuine stop (there is no
   further fallback), so this is the one branch that escalates.
 
-**Hard loop ceiling `MAX_FALLBACK_ROUNDS = 2`** (mirrors `MAX_REVIEW_ROUNDS`). If
-the Opus fallback still returns `GAPS-FOUND` after 2 rounds of you addressing
-blockers, STOP and escalate to the maintainer (summarize the persistent gaps)
-rather than looping forever. Reaching the ceiling is an escalation, never an
-auto-clear.
+**Loop-stop rule -- OUTCOME-based, no round cap** (maintainer directive
+2026-07-04; the former `MAX_FALLBACK_ROUNDS = 2` is retired, mirroring the Codex
+loop). Keep re-spawning the Opus fallback and fixing as long as each round's
+`GAPS-FOUND` items are **correct blockers.** STOP (the fallback is CLEAN) when every
+remaining gap is **incorrect** (refuted -- record why) or a **true nit** (file a
+bead). No round cap; fix every correct blocker and re-spawn however many rounds it
+takes. The escalation branch is a `BLOCKED`/TIMEOUT/ERROR from this last-resort
+reviewer (above) or a gap you can neither fix nor honestly classify -- never a round
+count.
 
 (The fallback subagent is read its STATUS line directly -- it is NOT watched by
 `pr_review_watcher.py`, which only handles the GitHub-bot Codex path. Same as the
 Step 5.5 fresh-eyes loop.)
 
-## Step 8 -- Close the bead + ping the maintainer to merge
+## Step 8 -- Close the bead + auto-merge or ping
 
 Once Codex is CLEAN (👍 / no findings) -- OR the Opus-4.8 fallback returned `NO-GAPS` (Step 7.5, when Codex was unavailable) -- or review was skipped per the Step 6 gate -- and the pre-PR assess (Step 5.5) is already complete, finish autonomously:
 
 0. **Confirm no `pr_review_watcher.py` is still running.** It should already have been killed when Codex went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `pr_review_watcher` process running past CLEAN or past merge.
 1. **Close the bead(s)** this PR resolves at PR handoff -- **but only if they are not already closed.** For a **review-worthy** PR the watcher's `--close-on-clean` already closed them when the Codex review went CLEAN (Step 7); do NOT re-close (a redundant `bd close` is a no-op but a wasted turn). Close here ONLY when the watcher did NOT: a **review-skipped** PR (where `closeout_finish.py --close-beads` already closed in the single run, so nothing to do here either); a recovery after a **CLOSE-FAILED** that you then fixed; or an **Opus-4.8 fallback `NO-GAPS`** (Step 7.5 -- the watcher's Codex-only close did NOT fire, so you close by hand here). When you do close by hand: one `scripts/bd_safe.py close <full-id> --reason "..."` per bead (at least one; all of them if the PR bundled several). If you're unsure, `bd show <id>` -- a re-close of an already-closed bead is harmless but skip it.
-2. **Ping the maintainer to merge** with a summary written **for the product owner in plain language -- no jargon, no acronyms** (this is the maintainer's standing checkpoint AND the audit surface for the escalation rule; see CLAUDE.md "Escalation vs. autonomy"). Include: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, the review outcome (Codex rounds, final = CLEAN; **OR, if Codex was unavailable, that the review went via the Opus-4.8 fallback and why -- quota / timeout / no-ack**), and the PR URL. **Then LIST each judgment call you made autonomously this PR and briefly DEFEND it** -- what you chose, and why it was yours to decide rather than escalate. Make these easy to scan; this defended decision list is where the maintainer catches anything that was decided but should have been escalated.
+2. **Decide the merge: auto-merge or ping** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs. maintainer merge"). Auto-merge requires ALL of: (a) an **adversarial reviewer cleared the diff** -- Codex CLEAN, or the Step-7.5 Opus-4.8 fallback `NO-GAPS`; (b) CI / required checks green; (c) the PR is **not consequence-bearing**. Judge (c): does it prove the bead direction impossible / substantially change an approved plan / affect operational cost / affect user-facing features / risk downstream disruption / need substantial multi-surface rework? (Same line as the step-2 escalation triggers; when unsure, treat as consequence-bearing.)
+   - **All three hold -> AUTO-MERGE.** Capture the exact head SHA the review + CI cleared (`HEAD_SHA="$(gh pr view <pr#> --json headRefOid -q .headRefOid)"` -- this is the commit Codex/fallback reviewed and CI ran on), confirm CI/required checks are green (`gh pr checks <pr#>`), then merge **pinned to that SHA**: `gh pr merge <pr#> --squash --match-head-commit "$HEAD_SHA"` (match the repo's merge style). The `--match-head-commit` guard makes the merge FAIL rather than silently merge an unreviewed head if anything pushed to the branch between the clear and the merge (the review-race). NEVER pass `--admin` (it bypasses the very checks gate condition (b) relies on; it is also settings-denied). Then post a SHORT plain-language note to the maintainer: what shipped + bead id(s), and the defended-decision list (below). This is a notification, not a request -- the merge is done. If the merge fails on the SHA match, a new commit landed -> re-review that commit before retrying, do NOT drop the guard.
+   - **Any of the three fails -> PING, do not merge.** That includes: consequence-bearing; review NOT clean; checks red; **or a review-SKIPPED PR** (docs-only / beads-only / trivial per the Step 6 gate) -- a skipped PR had no adversarial review, so condition (a) is unmet and it is NOT auto-merge-eligible even though it's low-risk; hand it to the maintainer. Also ping when you're simply unsure which side of the line the PR is on. Hand the maintainer a "clean and ready for your merge" summary and stop.
+
+   Either way the summary is **for the product owner in plain language -- no jargon, no acronyms** (the maintainer's standing checkpoint AND the escalation-rule audit surface; see CLAUDE.md "Escalation vs. autonomy"). Include: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, the review outcome (Codex rounds, final = CLEAN; **OR, if Codex was unavailable, that the review went via the Opus-4.8 fallback and why -- quota / timeout / no-ack**), the PR URL, and **whether you auto-merged or are handing it back**. **Then LIST each judgment call you made autonomously this PR -- INCLUDING the merge decision itself -- and briefly DEFEND it.** Make these easy to scan; this defended decision list is where the maintainer catches anything that was decided (or merged) but should have been escalated.
 
 **Do NOT go back and rewrite the PR body after review.** The fresh-eyes triage breakdown and the Codex-round count already live in the **journal entry** (Step 3, the canonical chronological record) and the **merge ping** (Step 8.2, what the maintainer actually reads). Re-editing the PR description with `gh pr edit` after the PR is approved is a **wasted model turn** generating prose for a surface nobody reads -- the initial `gh pr create --body` (Step 6) is the only body write. Whatever you put there at open time stands; the durable record is the journal.
 
-The PR is already a normal, mergeable PR -- there is no flip step. The merge is the maintainer's: **never run `gh pr merge` yourself.** Pinging the maintainer is the autonomous endpoint.
+The PR is already a normal, mergeable PR -- there is no flip step. For a routine low-risk PR that reviewed CLEAN, **you merge it** (`gh pr merge`) and notify; for a consequence-bearing PR, pinging the maintainer is the autonomous endpoint. Force-push and `bd dolt push --force` are never yours regardless.
 
 ## Step 8.5 -- Record the harness telemetry row (deterministic)
 

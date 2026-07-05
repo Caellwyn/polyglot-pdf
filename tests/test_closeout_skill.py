@@ -15,9 +15,12 @@ body invariants that, if broken, would silently change how the skill runs:
     (Codex AUTO-REVIEWS on open -- round 1 needs no comment, just an `@codex
     review` nudge in the PR body -- in parallel with fresh-eyes), fix the combined
     issues, loop Codex until CLEAN via an `@codex review` comment per re-review
-    round, then close the bead + ping Josh to merge. NO drafts and NO ready-flip.
-    Regression guards assert both the old "hard stop before `gh pr create`" wording
-    AND the draft/ready-flip wording are gone. (Codex replaced Copilot at bd hrn.9.)
+    round, then close the bead and make the merge decision: auto-merge a routine
+    low-risk PR that reviewed CLEAN, else ping the maintainer for a
+    consequence-bearing one (bd 16pj). NO drafts and NO ready-flip. Regression
+    guards assert the old "hard stop before `gh pr create`" wording, the
+    draft/ready-flip wording, AND the old blanket "never run `gh pr merge`" ban are
+    all gone. (Codex replaced Copilot at bd hrn.9.)
 """
 
 import pathlib
@@ -157,15 +160,24 @@ def test_codex_loops_until_clean(body):
     assert "timeout" in lo, "skill must handle pr_review_watcher's TIMEOUT state"
 
 
-def test_ping_to_merge_is_the_autonomous_endpoint(body):
-    # The autonomous endpoint is: Copilot clean -> close bead -> ping the
-    # maintainer to merge. There is no ready-flip (no draft). The merge is the
-    # maintainer's (allow_auto_merge=false) and the skill must forbid auto-merge.
+def test_merge_endpoint_is_auto_merge_or_ping(body):
+    # Autonomy increase (bd polyglot-pdf-16pj, 2026-07-04): the endpoint is a
+    # FORK, not an unconditional ping. A routine low-risk PR that an adversarial
+    # reviewer cleared CLEAN with green checks is AUTO-MERGED (gh pr merge); a
+    # consequence-bearing PR is pinged to the maintainer. There is still no
+    # ready-flip (no draft), and force-push stays barred.
     lo = body.lower()
-    assert "ping" in lo and "maintainer" in lo
-    assert "allow_auto_merge" in body  # the interlock that keeps merge manual
-    assert "gh pr merge" in body and re.search(r"never run `gh pr merge`", lo), \
-        "skill must explicitly forbid running gh pr merge"
+    # Both arms of the fork must be present.
+    assert "ping" in lo and "maintainer" in lo, "ping arm must remain"
+    assert "gh pr merge" in body and "auto-merge" in lo, \
+        "skill must describe the auto-merge arm"
+    assert "consequence-bearing" in lo, \
+        "skill must gate auto-merge on the consequence-bearing test"
+    # The skill must NOT reinstate the old blanket ban on merging.
+    assert not re.search(r"never run `gh pr merge`", lo), \
+        "the blanket 'never run gh pr merge' ban was removed under bd 16pj"
+    # Force-push / force dolt-push stay barred regardless of the merge change.
+    assert "force" in lo, "force-push must still be called out as barred"
     # Regression guards: neither the old hard-stop NOR the draft/ready-flip
     # design may reappear.
     assert "hard stop before `gh pr create`" not in lo

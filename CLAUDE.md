@@ -81,8 +81,9 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    Codex's commit path instead. **Do NOT use the `requested_reviewers` reviewer
    API** -- that fires Copilot (retired here). Docs/beads/journal-only PRs skip the
    review. Codex's CLEAN signal is a 👍 (`+1`) reaction on its summary comment;
-   closeout loops Codex to clean (re-commenting `@codex review` each round) and the
-   maintainer merges. No draft
+   closeout loops Codex to clean (re-commenting `@codex review` each round), then
+   auto-merges a routine low-risk PR or pings the maintainer for a
+   consequence-bearing one (see "Auto-merge vs. maintainer merge"). No draft
    PRs; never hand-poll Codex. See the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).
 3. **In a worktree, run every git command via `git -C <worktree-path>`** --
@@ -159,21 +160,55 @@ Run this decision procedure for any choice you face:
 
 1. **Is it on the NEVER list?** -> Don't do it yourself, and don't ask permission
    to do it yourself. You never `git push --force` (the safe `--force-with-lease`
-   is likewise reserved for the maintainer) and never run `gh pr merge`. The
-   maintainer clicks every PR merge; dev merges go through PR + review.
-   (Deliberately conservative while autonomy ramps up.) **Pinging the maintainer
-   that a PR is ready for them to merge is NOT "asking to merge"** -- it's the
-   handoff that ends closeout, and it stays required (see "Closeout" below).
+   is likewise reserved for the maintainer). Force-pushing and `bd dolt push
+   --force` stay hard-barred regardless of review state.
+   - **`gh pr merge` is NO LONGER on the NEVER list** (autonomy increase
+     2026-07-04): you MAY merge a PR yourself, but ONLY under the **auto-merge
+     rule** below. This is a gated permission, not a blanket one -- merging a PR
+     that fails any gate, or a consequence-bearing PR, is the violation. See
+     "Auto-merge vs. maintainer merge" immediately below.
    - **Demo deploy is NO LONGER on the NEVER list** (autonomy increase 2026-06-10):
      you MAY run `deploy-demo.sh`, but it is a **per-instance ASK** (step 2 below),
      never standing pre-authorization, and only after the test gates in
      "Deployment / promotion" below. Running it without an explicit per-instance
      yes is the violation.
-   - **Syncing the LOCAL ROOT repo to `dev` is now autonomous** -- pulling /
+   - **Syncing the LOCAL ROOT repo to `dev` is autonomous** -- pulling /
      fast-forwarding the main checkout to `origin/dev`, and running the local test
-     stack (`scripts/dev-local.ps1` / the `/run-local` skill), need no ask. This is
-     NOT "merging into dev" (a PR -> dev merge is still the maintainer's
-     `gh pr merge`, above).
+     stack (`scripts/dev-local.ps1` / the `/run-local` skill), need no ask.
+
+**Auto-merge vs. maintainer merge (autonomy increase 2026-07-04).** The maintainer
+takes the product-owner seat, not the engineering-lead seat: routine, low-risk PRs
+that a **separate model -- including an adversarial one -- has reviewed CLEAN** are
+**merged autonomously**, not handed back for a click. You run `gh pr merge` yourself
+when **ALL** of these hold:
+   - **An adversarial reviewer cleared the diff.** Codex reported CLEAN, OR the
+     Step-7.5 Opus-4.8 fallback reviewer returned `NO-GAPS` (when Codex was
+     unavailable -- quota / timeout / no-ack -- the fallback has the same authority
+     as a clean Codex review), OR -- once Codex is retired entirely -- the pre-PR
+     adversarial fresh-eyes assess loop's no-gap is the review of record. A separate
+     model, adversarially, found it clean. **A review-SKIPPED PR does NOT satisfy
+     this** -- no adversarial review ran, so it pings (below).
+   - **CI / required status checks are green.**
+   - **The PR is NOT consequence-bearing** (see the list below).
+
+**Consequence-bearing PRs are STILL the maintainer's merge -- ping, do not merge**
+(and usually escalate mid-work per step 2). A PR is consequence-bearing when it:
+   - proves the bead's original direction impossible, OR substantially changes a
+     maintainer-approved plan;
+   - affects **operational costs**;
+   - affects **user-facing features**;
+   - carries substantial risk of **downstream disruption**;
+   - requires **substantial reworking that touches multiple surfaces**.
+
+   This is the SAME line as the step-2 escalation triggers (consequence beyond the
+   sprint; product/direction calls) -- the merge boundary and the escalation
+   boundary are one line. When a PR is consequence-bearing, pinging the maintainer
+   that it is clean and ready for their merge is the handoff that ends closeout (not
+   "asking to merge"). When unsure which side of the line a PR is on, treat it as
+   consequence-bearing and ping. **Never** merge a PR whose review wasn't CLEAN,
+   whose checks are red, or that skipped review under the docs-only gate -- those
+   ping too. (Deliberately conservative while this ramps; it will loosen if it
+   over-pings.)
 2. **Does it make a longer-term commitment the bead doesn't explicitly call for,
    or is it a product-owner call?** -> Escalate (ask). This is the case you ask:
    - **A longer-term / cross-cutting commitment not explicit in the bead** -- a
@@ -373,8 +408,10 @@ the conversation.
      confirm the change actually works there -- the deploy isn't "done" until the
      running demo is verified.
 - **Syncing the local root repo to `dev`** (pull / fast-forward the main checkout
-  to `origin/dev`) is autonomous -- no ask. Merging a PR INTO `dev` is not (that
-  is the maintainer's `gh pr merge`).
+  to `origin/dev`) is autonomous -- no ask. Merging a PR INTO `dev` is autonomous
+  ONLY under the auto-merge rule (adversarial-review CLEAN + green checks +
+  not consequence-bearing -- see "Auto-merge vs. maintainer merge" in Critical
+  rules); a consequence-bearing PR is still the maintainer's `gh pr merge`.
 
 ### Doc maintenance
 - Tier-1 and tier-2 docs are CURRENT STATE ONLY -- no `Previously:` chains, no
@@ -388,6 +425,14 @@ the conversation.
 
 **Every PR ships through the `/closeout` skill. No PR is "done" until closeout has
 run on it to clean.** Run `/closeout` **once per PR**, not once per bead.
+
+**Do NOT ask "should I run closeout?" -- just run it.** When the bead is complete
+and the pre-PR fresh-eyes assess loop is no-gap, running closeout is the obvious
+next step, not a decision the maintainer needs to weigh in on (maintainer directive
+2026-07-04: "I don't want to be asked that"). Asking to close out is the
+over-escalation anti-pattern -- decide it and proceed. (If something in the work
+itself is genuinely blocking -- a step-2 product/direction call -- escalate *that*
+specific thing, but that is never phrased as "should I closeout?".)
 
 **Bead/PR contract:** every PR closes **at least one** bead (never zero). A bead
 must **not** span multiple PRs -- if a bead would need more than one PR, split it
@@ -428,8 +473,13 @@ Do NOT hand-roll the review cycle. In particular:
   re-spawned until no gap remains, with the fixes committed before the PR opens. Codex
   is the **outer** review that runs after the PR opens (review-worthy PRs only); you
   loop Codex until it reports `CLEAN`. The two layers are serial, not parallel.
-- Closeout then **closes the bead(s)** the PR resolves and **pings the maintainer
-  to merge** -- it never merges (that's the maintainer's).
+- Once the review is `CLEAN`, closeout **closes the bead(s)** the PR resolves and
+  then **either auto-merges or pings**, per the auto-merge rule (see "Auto-merge vs.
+  maintainer merge" in Critical rules): a routine, low-risk PR that a separate
+  adversarial model cleared CLEAN with green checks is **merged autonomously**
+  (`gh pr merge`); a **consequence-bearing** PR is instead handed to the maintainer
+  with a "clean and ready to merge" ping. Force-pushes and `bd dolt push --force`
+  remain barred either way.
 
 The full checklist (beads housekeeping, doc-freshness, journal entry, tests, the
 pre-PR fresh-eyes assess loop + the PR + the Codex outer-review loop) lives in
