@@ -43,6 +43,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 from typing import Any, Optional
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -192,7 +193,8 @@ def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
 
 def _try_repair(draft_path: str) -> tuple[str, str]:
     """Run schema_repair when it exists (P5.2); returns (draft_path, note).
-    A repaired draft is written next to the input with a .repaired.json suffix."""
+    The repaired draft goes to a TEMP file (never beside the input -- a
+    fixture input must not grow siblings in the repo)."""
     repair_py = os.path.join(_HERE, "schema_repair.py")
     if not os.path.exists(repair_py):
         return draft_path, "-"
@@ -202,15 +204,19 @@ def _try_repair(draft_path: str) -> tuple[str, str]:
     with open(draft_path, encoding="utf-8") as fh:
         schema = json.load(fh)
     repaired, repairs = mod.repair(schema)  # the P5.2 contract
-    out = os.path.splitext(draft_path)[0] + ".repaired.json"
-    with open(out, "w", encoding="utf-8") as fh:
+    fd, out = tempfile.mkstemp(
+        suffix=".repaired.json",
+        prefix=os.path.splitext(os.path.basename(draft_path))[0] + "_")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(repaired, fh, indent=2)
-    return out, f"{len(repairs)} repair(s)"
+    substantive = [r for r in repairs if r["action"] != "alias-hit-rate"]
+    return out, f"{len(substantive)} repair(s)"
 
 
 def evaluate_form(form: dict, draft_path: Optional[str],
                   extract: bool, model: str,
-                  group_candidates: bool = False) -> dict:
+                  group_candidates: bool = False,
+                  do_repair: bool = True) -> dict:
     """Run [extract ->] repair -> lint -> roundtrip -> score for one form."""
     name = form["name"]
     row: dict[str, Any] = {"form": name, "draft": draft_path}
@@ -237,8 +243,17 @@ def evaluate_form(form: dict, draft_path: Optional[str],
         row["draft"] = draft_path
         row["baseline"] = True
 
-    draft_path, repair_note = _try_repair(draft_path)
-    row["repair"] = repair_note
+    # Repair runs on real DRAFTS only (the extract->repair->lint pipeline);
+    # a gold-baseline row measures the gold as shipped, and --no-repair lets
+    # the harness demonstrate the PRE-repair defect profile (the P2.2
+    # broken-draft-scores-RED record).
+    repair_ran = False
+    if do_repair and not row.get("baseline"):
+        draft_path, repair_note = _try_repair(draft_path)
+        row["repair"] = repair_note
+        repair_ran = repair_note != "-"
+    else:
+        row["repair"] = "-"
 
     with open(draft_path, encoding="utf-8") as fh:
         draft = json.load(fh)
@@ -265,14 +280,17 @@ def evaluate_form(form: dict, draft_path: Optional[str],
 
     # Verdict: RED on any lint ERROR, a failed structural assertion, a
     # non-conforming value convention, or choice fill below the epic's 95%
-    # gate. (Convention/lint are the columns the broken W-7 draft must go
-    # RED on -- the P2.2 exit criterion.)
+    # gate. The value-convention column measures the V1 widget-leaf value
+    # convention, which the repair pass deliberately replaces with v2 slugs
+    # -- so it counts toward RED only when repair did NOT run on this row
+    # (post-repair, lint's slug/duplicate/reference rules + roundtrip are
+    # the gates).
     conv_pct = row["value_convention"].get("pct")
     choice_pct = row["choice_fill"].get("pct")
     red = (
         row["lint_errors"] > 0
         or (row.get("structural") and not row["structural"]["passed"])
-        or (conv_pct is not None and conv_pct < 100.0)
+        or (not repair_ran and conv_pct is not None and conv_pct < 100.0)
         or (choice_pct is not None and choice_pct < 95.0)
     )
     row["verdict"] = "RED" if red else "OK"
@@ -334,6 +352,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="(with --extract) include the deterministic "
                          "pre-grouping candidates block -- the bd h76m.12 "
                          "ablation arm")
+    ap.add_argument("--no-repair", action="store_true",
+                    help="skip the P5.2 repair step (measure the raw draft's "
+                         "pre-repair defect profile)")
     ap.add_argument("--draft-dir", default=None,
                     help="directory of drafts to score, one <form>.json per form")
     ap.add_argument("--form", default=None,
@@ -359,7 +380,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             cand = os.path.join(args.draft_dir, f"{form['name']}.json")
             draft = cand if os.path.exists(cand) else None
         rows.append(evaluate_form(form, draft, args.extract, args.model,
-                                  group_candidates=args.group_candidates))
+                                  group_candidates=args.group_candidates,
+                                  do_repair=not args.no_repair))
 
     print(render_table(rows))
     if any(r.get("baseline") for r in rows):

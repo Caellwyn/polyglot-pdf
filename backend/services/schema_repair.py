@@ -1,0 +1,495 @@
+"""Post-LLM schema repair pass (bd h76m.13, P5.2; absorbs bd 4c58).
+
+Extraction models invent conditional vocabulary when the schema cannot say
+what they mean (the W-7 failure: is_selected/contains_any referencing raw
+widget names; the P5.1 ablation added `or` with option_id-bearing atoms).
+This pass deterministically rewrites what is rewritable into the FINAL v2
+vocabulary and drops -- loudly, recorded -- what is not:
+
+- option.value slugs: choice fields whose option values violate the v2 slug
+  convention (or collide within the field) get slugs minted from their
+  labels (conditional_vocabulary.mint_unique_slugs); old value / widget
+  leaf / label -> new slug maps drive the reference rewrites below.
+- alias table (ALIASES, beside the registry): the observed invented
+  operators -- is_selected -> includes/equals (by trigger kind),
+  contains_any -> any_of of membership atoms, or -> any_of of its inner
+  atoms. The table encodes the LLMs' INVENTED vocabulary as an input
+  contract: log its hit rate per extraction and expect the P1.2
+  contract-from-model few-shot to drive it toward zero (review at P6; an
+  alias that still fires belongs in the prompt, not the table, forever).
+- condition value resolution: full widget path / leaf / label / stale
+  option value -> the trigger option's CURRENT value. An atom whose
+  operator or value cannot be resolved is DROPPED with a recorded ERROR --
+  the field stays visible (fail-open, matching the runtime's
+  unknown-operator fallback).
+- hallucinated widgets FAIL LOUDLY: with a dump supplied, an option
+  pdf_field_name matching no dump widget raises RepairError (nothing
+  downstream can fix an invented widget).
+
+Pure function: repair(schema, dump=None) -> (repaired_copy, repairs).
+`repairs` entries: {"action", "path", "detail", "error": bool}. The caller
+records them under _bakeoff.authoring.repairs (extract_form does) and the
+editor's one-click "Repair all" (P5.3) serves THIS implementation, so CLI
+and editor output are equal by construction.
+
+CLI:  python scripts/authoring/schema_repair.py --in DRAFT.json --out FIXED.json
+
+ASCII only.
+"""
+from __future__ import annotations
+
+import copy
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from backend.models import conditional_vocabulary as vocab
+
+_CHOICE_TYPES = frozenset({"select", "radio", "checkbox_group"})
+_GROUP_MEMBERSHIP_TYPES = frozenset({"checkbox_group", "checkbox"})
+_NO_VALUE_OPS = frozenset(
+    n for n, s in vocab.OPERATORS.items() if s.value_arity == "none"
+)
+
+
+class RepairError(ValueError):
+    """A defect repair cannot fix and must not paper over (hallucinated
+    widgets: the draft references a widget the PDF does not have)."""
+
+
+def _leaf(name: Optional[str]) -> Optional[str]:
+    if not isinstance(name, str) or not name:
+        return None
+    return name.split(".")[-1]
+
+
+def _is_choice_field(f: dict) -> bool:
+    """Choice = option-bearing selection field, incl. the v1 checkbox-group
+    modeling (type checkbox WITH 2+ options)."""
+    ftype = str(f.get("type"))
+    options = f.get("options")
+    if not isinstance(options, list) or len(options) < 2:
+        return False
+    return ftype in _CHOICE_TYPES or ftype == "checkbox"
+
+
+def _membership_trigger(f: dict) -> bool:
+    """True when a condition on this trigger selects FROM A SET (multi-select
+    group) -- rewrites use includes; single-select triggers keep equals."""
+    ftype = str(f.get("type"))
+    if ftype == "checkbox_group":
+        return True
+    # v1 group modeling: type checkbox with options (+ optional group_kind).
+    return ftype == "checkbox" and isinstance(f.get("options"), list) and bool(f.get("options"))
+
+
+# --------------------------------------------------------------------------- #
+# Step 1: option-value slugs.
+# --------------------------------------------------------------------------- #
+
+def _mint_slugs(fields: List[dict], repairs: List[dict]) -> Dict[str, Dict[str, str]]:
+    """Mint v2 slugs for choice fields whose option values violate the slug
+    convention or collide. Returns per-field resolution maps: any known alias
+    of an option (old value, widget full path, widget leaf, label) -> the
+    option's CURRENT value."""
+    resolution: Dict[str, Dict[str, str]] = {}
+    for i, f in enumerate(fields):
+        if not isinstance(f, dict):
+            continue
+        fid = str(f.get("id"))
+        options = f.get("options") if isinstance(f.get("options"), list) else []
+        dict_opts = [o for o in options if isinstance(o, dict)]
+        if not dict_opts:
+            continue
+
+        res: Dict[str, str] = {}
+        needs_mint = False
+        if _is_choice_field(f):
+            values = [str(o.get("value")) for o in dict_opts if o.get("value") is not None]
+            invalid = any(not vocab.is_valid_option_slug(v) for v in values)
+            missing = any(o.get("value") in (None, "") for o in dict_opts)
+            dupes = len(set(values)) != len(values)
+            needs_mint = invalid or missing or dupes
+
+        if needs_mint:
+            labels = [
+                str(o.get("label") or o.get("value") or "option") for o in dict_opts
+            ]
+            slugs = vocab.mint_unique_slugs(labels)
+            renames = []
+            for o, slug in zip(dict_opts, slugs):
+                old = o.get("value")
+                if old is not None and str(old) != slug:
+                    renames.append(f"{old!r} -> {slug!r}")
+                if old is not None:
+                    res[str(old)] = slug
+                o["value"] = slug
+            if renames:
+                repairs.append({
+                    "action": "mint-option-slugs",
+                    "path": f"fields[{i}] (id={fid})",
+                    "detail": "; ".join(renames[:10]),
+                    "error": False,
+                })
+
+        # Register every alias -> CURRENT value (post-mint or untouched).
+        for o in dict_opts:
+            cur = o.get("value")
+            if cur is None:
+                continue
+            cur = str(cur)
+            res.setdefault(cur, cur)
+            pfn = o.get("pdf_field_name")
+            if isinstance(pfn, str) and pfn:
+                res[pfn] = cur
+                res[_leaf(pfn)] = cur
+            label = o.get("label")
+            if isinstance(label, str) and label:
+                res[label] = cur
+        if res:
+            resolution[fid] = res
+    return resolution
+
+
+# --------------------------------------------------------------------------- #
+# Step 2: conditional rewrites (aliases + value resolution).
+# --------------------------------------------------------------------------- #
+
+def _resolve_value(trigger: Optional[dict], value: Any,
+                   resolution: Dict[str, Dict[str, str]]) -> Tuple[Any, bool]:
+    """Resolve a condition value against the trigger's option aliases.
+    Returns (resolved, ok). Non-option triggers pass values through."""
+    if trigger is None:
+        return value, True
+    fid = str(trigger.get("id"))
+    res = resolution.get(fid)
+    if not res:
+        # Trigger has no options -- nothing to resolve against.
+        return value, not _is_choice_field(trigger)
+    v = str(value)
+    if v in res:
+        return res[v], True
+    lv = _leaf(v)
+    if lv and lv in res:
+        return res[lv], True
+    return value, False
+
+
+def _membership_op(trigger: Optional[dict]) -> str:
+    """The registry-valid membership operator for this trigger: `includes`
+    only where the compat matrix allows it (checkbox_group); on a v1-typed
+    group (type checkbox with options) the valid spelling is `equals`, whose
+    evaluator branch does membership on array values (the vq4m semantics the
+    P6.1 migration later rewrites to includes when it retypes the field)."""
+    if trigger is None or not _membership_trigger(trigger):
+        return "equals"
+    ttype = str(trigger.get("type"))
+    if ttype in vocab.OPERATORS["includes"].trigger_types:
+        return "includes"
+    return "equals"
+
+
+# Trigger-compat rewrites for REGISTRY-VALID operators sitting on a trigger
+# type the compat matrix forbids (e.g. `contains` on a checkbox trigger --
+# its historical array-membership reading; `includes` on a v1-typed group).
+_COMPAT_MEMBERSHIP_OPS = frozenset({"contains", "includes"})
+_COMPAT_NEGATED_OPS = frozenset({"not_includes"})
+
+
+def _rewrite_atom(atom: dict, trigger: Optional[dict],
+                  resolution: Dict[str, Dict[str, str]],
+                  path: str, repairs: List[dict],
+                  count_alias: Callable[[str], None]) -> Optional[dict]:
+    """Rewrite one atomic condition dict. Returns the clean atom, or None
+    when it must be dropped (recorded ERROR; fail-open)."""
+    operator = str(atom.get("operator") or "")
+    value = atom.get("value")
+
+    # option_id (the P5.1-observed invention): a widget path naming the
+    # intended option -- a better resolution key than the shared value.
+    option_id = atom.get("option_id")
+    if isinstance(option_id, str) and option_id:
+        resolved, ok = _resolve_value(trigger, option_id, resolution)
+        if ok:
+            value = resolved
+            count_alias("option_id")
+
+    if operator == "is_selected":
+        new_op = _membership_op(trigger)
+        count_alias("is_selected")
+        repairs.append({
+            "action": "alias-operator", "path": path,
+            "detail": f"is_selected -> {new_op}", "error": False,
+        })
+        operator = new_op
+    elif operator not in vocab.ALLOWED_OPERATORS:
+        repairs.append({
+            "action": "drop-condition", "path": path,
+            "detail": f"unknown operator {operator!r} (no alias) -- condition "
+                      "dropped, field stays visible",
+            "error": True,
+        })
+        return None
+
+    # Trigger-compat pass: a registry-valid operator on a trigger type the
+    # compat matrix forbids. Known membership misspellings rewrite; the v1
+    # is_checked-on-group idiom is lint-tolerated and left for the P6.1
+    # migration; anything else drops (fail-open).
+    spec = vocab.OPERATORS.get(operator)
+    ttype = str(trigger.get("type")) if trigger else None
+    if (spec is not None and ttype
+            and ttype in vocab.CONDITION_TRIGGER_TYPES
+            and ttype not in spec.trigger_types):
+        if operator in _COMPAT_MEMBERSHIP_OPS and _is_choice_field(trigger):
+            new_op = _membership_op(trigger)
+            repairs.append({
+                "action": "alias-operator", "path": path,
+                "detail": f"{operator} on {ttype!r} trigger -> {new_op} "
+                          "(membership reading)", "error": False,
+            })
+            count_alias(f"{operator}@{ttype}")
+            operator = new_op
+        elif operator in _COMPAT_NEGATED_OPS and _is_choice_field(trigger):
+            repairs.append({
+                "action": "alias-operator", "path": path,
+                "detail": f"{operator} on {ttype!r} trigger -> not_equals "
+                          "(membership reading)", "error": False,
+            })
+            count_alias(f"{operator}@{ttype}")
+            operator = "not_equals"
+        elif operator == "is_checked" and _is_choice_field(trigger):
+            pass  # v1 idiom, lint-tolerated; P6.1 migrates it
+        else:
+            repairs.append({
+                "action": "drop-condition", "path": path,
+                "detail": f"operator {operator!r} is not valid on a {ttype!r} "
+                          "trigger and has no safe rewrite -- condition "
+                          "dropped, field stays visible",
+                "error": True,
+            })
+            return None
+
+    if operator in _NO_VALUE_OPS:
+        return {"field": atom.get("field"), "operator": operator}
+
+    values = value if isinstance(value, list) else [value]
+    resolved_values = []
+    for v in values:
+        rv, ok = _resolve_value(trigger, v, resolution)
+        if not ok:
+            repairs.append({
+                "action": "drop-condition", "path": path,
+                "detail": f"value {v!r} resolves to no option of trigger "
+                          f"{(trigger or {}).get('id')!r} -- condition dropped, "
+                          "field stays visible",
+                "error": True,
+            })
+            return None
+        if rv != v:
+            repairs.append({
+                "action": "rewrite-condition-value", "path": path,
+                "detail": f"{v!r} -> {rv!r}", "error": False,
+            })
+        resolved_values.append(rv)
+
+    out: dict = {"field": atom.get("field"), "operator": operator}
+    out["value"] = resolved_values if isinstance(value, list) else resolved_values[0]
+    return out
+
+
+def _rewrite_condition(cond: Any, owner_path: str, fields_by_id: Dict[str, dict],
+                       resolution: Dict[str, Dict[str, str]],
+                       repairs: List[dict],
+                       count_alias: Callable[[str], None]) -> Any:
+    """Rewrite a show_if/require_if of ANY observed shape into clean v2:
+    atom, ConditionGroup, contains_any atom, or the `or`/`and` pseudo-group
+    ({operator: or, conditions: [...]}). None stays None; a shape with no
+    surviving atoms becomes None (fail-open)."""
+    if not isinstance(cond, dict):
+        return cond
+
+    def trigger_of(atom: dict) -> Optional[dict]:
+        ref = atom.get("field")
+        return fields_by_id.get(ref) if isinstance(ref, str) else None
+
+    # Already-composite v2 group: rewrite bucket members in place.
+    buckets = vocab.CONDITION_GROUP_BUCKETS & cond.keys()
+    if buckets and not (
+        {"field", "operator"} & cond.keys()
+    ):
+        new_group: dict = {}
+        for bucket in sorted(buckets):
+            members = cond.get(bucket)
+            if not isinstance(members, list):
+                continue
+            kept = []
+            for j, member in enumerate(members):
+                if not isinstance(member, dict):
+                    continue
+                atom = _rewrite_atom(member, trigger_of(member), resolution,
+                                     f"{owner_path}.{bucket}[{j}]", repairs,
+                                     count_alias)
+                if atom is not None:
+                    kept.append(atom)
+            if kept:
+                new_group[bucket] = kept
+        return new_group or None
+
+    operator = str(cond.get("operator") or "")
+
+    # The or/and pseudo-group invention: {operator: or|and, conditions: [...]}.
+    inner = cond.get("conditions")
+    if operator in ("or", "and") and isinstance(inner, list):
+        count_alias(operator)
+        bucket = "any_of" if operator == "or" else "all_of"
+        repairs.append({
+            "action": "alias-operator", "path": owner_path,
+            "detail": f"pseudo-group '{operator}' -> {bucket}", "error": False,
+        })
+        kept = []
+        for j, member in enumerate(inner):
+            if not isinstance(member, dict):
+                continue
+            atom = _rewrite_atom(member, trigger_of(member), resolution,
+                                 f"{owner_path}.conditions[{j}]", repairs,
+                                 count_alias)
+            if atom is not None:
+                kept.append(atom)
+        return {bucket: kept} if kept else None
+
+    # contains_any: any_of membership over the value list.
+    if operator == "contains_any":
+        count_alias("contains_any")
+        repairs.append({
+            "action": "alias-operator", "path": owner_path,
+            "detail": "contains_any -> any_of membership", "error": False,
+        })
+        values = cond.get("value")
+        values = values if isinstance(values, list) else [values]
+        trigger = trigger_of(cond)
+        kept = []
+        for v in values:
+            atom = _rewrite_atom(
+                {"field": cond.get("field"),
+                 "operator": _membership_op(trigger), "value": v},
+                trigger, resolution, owner_path, repairs, count_alias)
+            if atom is not None:
+                kept.append(atom)
+        if not kept:
+            return None
+        return {"any_of": kept} if len(kept) > 1 else kept[0]
+
+    # Plain (possibly aliased) atom.
+    return _rewrite_atom(cond, trigger_of(cond), resolution, owner_path,
+                         repairs, count_alias)
+
+
+# --------------------------------------------------------------------------- #
+# Step 3: hallucinated-widget check (dump given -> fail loudly).
+# --------------------------------------------------------------------------- #
+
+def _check_widgets_exist(fields: List[dict], dump: dict) -> None:
+    names = [
+        e.get("name") for e in (dump.get("fields") or [])
+        if isinstance(e, dict) and isinstance(e.get("name"), str)
+    ]
+    name_set = set(names)
+
+    def exists(claim: str) -> bool:
+        return claim in name_set or any(n.endswith("." + claim) for n in names)
+
+    hallucinated = []
+    for f in fields:
+        if not isinstance(f, dict):
+            continue
+        for claim in [f.get("pdf_field_name")] + [
+            o.get("pdf_field_name") for o in (f.get("options") or [])
+            if isinstance(o, dict)
+        ]:
+            if isinstance(claim, str) and claim and not exists(claim):
+                hallucinated.append(f"{f.get('id')}: {claim}")
+    if hallucinated:
+        raise RepairError(
+            "draft references widgets the PDF does not have (repair cannot "
+            "invent mappings): " + "; ".join(hallucinated[:10]))
+
+
+# --------------------------------------------------------------------------- #
+# Entry point.
+# --------------------------------------------------------------------------- #
+
+def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]:
+    """Deterministic, idempotent repair toward the v2 vocabulary.
+
+    Returns (repaired_copy, repairs). Raises RepairError on hallucinated
+    widgets (only checkable when a dump is supplied)."""
+    repaired = copy.deepcopy(schema)
+    repairs: List[dict] = []
+    fields = [f for f in (repaired.get("fields") or []) if isinstance(f, dict)]
+
+    if dump is not None:
+        _check_widgets_exist(fields, dump)
+
+    alias_hits: Dict[str, int] = {}
+
+    def count_alias(name: str) -> None:
+        alias_hits[name] = alias_hits.get(name, 0) + 1
+
+    resolution = _mint_slugs(fields, repairs)
+    fields_by_id = {str(f.get("id")): f for f in fields}
+
+    for i, f in enumerate(fields):
+        fid = str(f.get("id"))
+        for kind in ("show_if", "require_if"):
+            if kind not in f or f.get(kind) is None:
+                continue
+            new_cond = _rewrite_condition(
+                f.get(kind), f"fields[{i}] (id={fid}).{kind}",
+                fields_by_id, resolution, repairs, count_alias)
+            if new_cond is None:
+                f.pop(kind, None)
+            else:
+                f[kind] = new_cond
+
+        controls = f.get("controls_fields")
+        if isinstance(controls, list):
+            kept_controls = []
+            for j, control in enumerate(controls):
+                if not isinstance(control, dict):
+                    continue
+                path = f"fields[{i}] (id={fid}).controls_fields[{j}]"
+                atom = _rewrite_atom(
+                    {"field": fid,
+                     "operator": control.get("operator", "equals"),
+                     "value": control.get("value"),
+                     **({"option_id": control["option_id"]}
+                        if isinstance(control.get("option_id"), str) else {})},
+                    f, resolution, path, repairs, count_alias)
+                if atom is None:
+                    repairs.append({
+                        "action": "drop-control", "path": path,
+                        "detail": "trigger condition unrepairable -- control "
+                                  "entry dropped (dead at runtime anyway)",
+                        "error": True,
+                    })
+                    continue
+                control["operator"] = atom["operator"]
+                if "value" in atom:
+                    control["value"] = atom["value"]
+                control.pop("option_id", None)
+                kept_controls.append(control)
+            if kept_controls:
+                f["controls_fields"] = kept_controls
+            else:
+                f.pop("controls_fields", None)
+
+    if alias_hits:
+        repairs.append({
+            "action": "alias-hit-rate", "path": "$",
+            "detail": ", ".join(f"{k}={v}" for k, v in sorted(alias_hits.items())),
+            "error": False,
+        })
+    return repaired, repairs
+
+
+def alias_hit_count(repairs: List[dict]) -> int:
+    """Total invented-vocabulary hits this pass (the P6 decay metric)."""
+    return sum(1 for r in repairs if r["action"] == "alias-operator")
