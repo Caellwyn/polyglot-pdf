@@ -357,6 +357,17 @@ def test_shared_radio_refuses_pdf_name_unsafe_on_state(monkeypatch):
     )
     resp = asyncio.run(fill_pdf(req))
     assert resp.status_code == 200  # refused + skipped, never a corrupt write
+    # And PROVE nothing was written: both kids stay Off (fresh-eyes round 2 --
+    # status-only would not catch a bypassed guard writing the corrupt token).
+    doc = fitz.open(stream=resp.body, filetype="pdf")
+    try:
+        page = doc[0]
+        for w in page.widgets() or []:
+            as_key = doc.xref_get_key(w.xref, "AS")
+            as_val = as_key[1] if isinstance(as_key, (list, tuple)) and len(as_key) > 1 else None
+            assert as_val in ("/Off", "Off", None), f"unsafe on-state was written: {as_val}"
+    finally:
+        doc.close()
 
 
 @_i90_present
