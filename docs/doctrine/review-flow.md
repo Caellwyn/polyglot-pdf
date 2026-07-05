@@ -1,6 +1,6 @@
 # Review-flow doctrine: pre-PR adversarial assess + Codex outer review, looped to clean
 
-*Last updated: 2026-06-16. See [the hrn.9 journal entry](../journal/entries/) for the Copilot->Codex cutover details, and [`planning.md`](planning.md) for the SPEAR Assess doctrine this layers in (bd `polyglot-pdf-7dkb`). The Opus-4.8 reviewer-of-last-resort + the watcher's acknowledgment phase / `NO-ACK` state were added under bd `polyglot-pdf-n6ks`.*
+*Last updated: 2026-07-04. See [the hrn.9 journal entry](../journal/entries/) for the Copilot->Codex cutover details, and [`planning.md`](planning.md) for the SPEAR Assess doctrine this layers in (bd `polyglot-pdf-7dkb`). The Opus-4.8 reviewer-of-last-resort + the watcher's acknowledgment phase / `NO-ACK` state were added under bd `polyglot-pdf-n6ks`. The auto-merge-vs-ping rule was added under bd `polyglot-pdf-16pj`.*
 
 How every change gets reviewed before merge. This is the procedure the
 `/closeout` skill automates; it is the result of several iterations and the
@@ -171,7 +171,15 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   the rebase first so the branch is left clean. Full procedure + the inline-vs-
   escalate boundary: the closeout skill's Step-7 "Merge-conflict resolution in the
   loop" (bd polyglot-pdf-hrn.6).
-- **Never run `gh pr merge`.** The merge is the maintainer's alone.
+- **Merge is autonomous for routine low-risk PRs, the maintainer's for
+  consequence-bearing ones** (autonomy increase 2026-07-04). Once review is CLEAN
+  and checks are green, a PR that is NOT consequence-bearing is merged with
+  `gh pr merge`; a consequence-bearing PR (proves the bead direction impossible /
+  substantially changes an approved plan / affects operational cost / affects
+  user-facing features / risks downstream disruption / needs substantial
+  multi-surface rework) is pinged to the maintainer instead. Same line as the
+  step-2 escalation triggers; when unsure, ping. Full rule: CLAUDE.md "Auto-merge
+  vs. maintainer merge". Force-push / `bd dolt push --force` stay barred.
 
 ## Fresh-eyes specifics
 

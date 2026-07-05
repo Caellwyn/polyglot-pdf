@@ -16,15 +16,18 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 - **PR into `dev`** — opened and driven by the `/closeout` skill (NOT
   `gh pr create` by hand). Reviewed in two serial layers — a pre-PR adversarial
   fresh-eyes assess loop (scored against the bead's exit criteria), then Codex as
-  the outer post-PR review when the PR is review-worthy — looped to clean. The
-  maintainer clicks merge (auto-merge is disabled).
+  the outer post-PR review when the PR is review-worthy — looped to clean. On
+  CLEAN, closeout **auto-merges a routine low-risk PR** (`gh pr merge`) or **pings
+  the maintainer** for a consequence-bearing one (autonomy increase 2026-07-04;
+  CLAUDE.md "Auto-merge vs. maintainer merge").
 - **Demo deploy** — there is NO `main`/prod tier; the demo remote is the live
   target. Deploys are manual (`deploy-demo.sh`, not branch-triggered). The agent
   MAY run the demo deploy, but only after a local test of the change, with
   explicit per-instance maintainer permission, and a post-deploy test-drive (the
   three-part gate in [`docs/doctrine/promotion-tiers.md`](../docs/doctrine/promotion-tiers.md)).
-  Syncing the local root to `dev` is autonomous; merging a PR into `dev` is the
-  maintainer's.
+  Syncing the local root to `dev` is autonomous; merging a PR into `dev` is
+  autonomous for a routine low-risk PR under the auto-merge rule, the maintainer's
+  for a consequence-bearing one.
 
 **Before saying "done":**
 

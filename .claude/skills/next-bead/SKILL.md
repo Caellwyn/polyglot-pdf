@@ -154,7 +154,8 @@ exists to prevent.
 > "Escalation vs. autonomy" step 2.
 
 When the work is done, ship it through **`/closeout`** (which closes the bead(s)
-and pings the maintainer to merge -- this skill never merges).
+and then auto-merges a routine low-risk PR or pings the maintainer for a
+consequence-bearing one -- this skill itself never merges).
 
 ## What this skill never does
 

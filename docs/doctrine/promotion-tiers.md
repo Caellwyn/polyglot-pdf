@@ -1,6 +1,6 @@
 # Promotion-tiers doctrine: worktree -> local -> dev -> demo
 
-*Last updated: 2026-06-10.*
+*Last updated: 2026-07-04.*
 
 How code promotes from a working branch to the running demo. **This project has
 NO active production environment** -- the demo remote is the live, outward-facing
@@ -32,11 +32,16 @@ demo remote server               the live demo (polyglot-demo-aa709); NO prod be
 
 ## The merge gate
 
-The repo's GitHub ruleset sets **allow_auto_merge=false**, so a PR -- even a
-green, reviewed, ready one -- cannot merge itself. The maintainer clicks merge.
-This is the single human gate on integration; it is why the review flow
-([`review-flow.md`](review-flow.md)) runs fully autonomously up to the point of
-pinging the maintainer to merge.
+The repo's GitHub ruleset sets **allow_auto_merge=false**, so a PR cannot merge
+*itself* on green -- someone must run the merge. Who runs it depends on the
+**auto-merge rule** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs.
+maintainer merge"): a routine, low-risk PR that an **adversarial** reviewer cleared
+CLEAN with green checks is **merged autonomously** (`gh pr merge`) at the end of the
+review flow; a **consequence-bearing** PR (affects operational cost / user-facing
+features / downstream disruption / substantial multi-surface rework / an approved
+plan) is instead **pinged to the maintainer**, who clicks merge. The consequence
+line is the same as the step-2 escalation line; when unsure, ping. Full flow:
+[`review-flow.md`](review-flow.md).
 
 ## The demo-deploy gate (autonomy increase 2026-06-10)
 
