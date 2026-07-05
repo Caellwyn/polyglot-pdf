@@ -1,0 +1,1418 @@
+{
+  "source": "pdf",
+  "form_metadata": {
+    "title": "Application for IRS Individual Taxpayer Identification Number",
+    "form_number": "W-7",
+    "page_count": 1,
+    "edition_date": "Rev. December 2024",
+    "version": "December 2024",
+    "version_confidence": 0.9,
+    "omb_number": "1545-0074",
+    "agency": "U.S. Citizenship and Immigration Services",
+    "language": "en"
+  },
+  "parts": [
+    {
+      "id": "part_1",
+      "label": "Application and Reason",
+      "order": 1,
+      "section_ids": [
+        "section_application_reason"
+      ]
+    },
+    {
+      "id": "part_2",
+      "label": "Applicant Information",
+      "order": 2,
+      "section_ids": [
+        "section_applicant_identity",
+        "section_applicant_address",
+        "section_other_information"
+      ]
+    },
+    {
+      "id": "part_3",
+      "label": "Signature",
+      "order": 3,
+      "section_ids": [
+        "section_signature"
+      ]
+    },
+    {
+      "id": "part_4",
+      "label": "Acceptance Agent's Use ONLY",
+      "order": 4,
+      "section_ids": [
+        "section_agent_use"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "section_application_reason",
+      "label": "Application Type and Reason for Submission",
+      "order": 1,
+      "fields": [
+        "application_type",
+        "reason_for_submitting",
+        "relationship_to_citizen",
+        "citizen_resident_name",
+        "citizen_resident_ssn_itin",
+        "treaty_country",
+        "treaty_article"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "section_applicant_identity",
+      "label": "Applicant's Identity",
+      "order": 2,
+      "fields": [
+        "applicant_first_name",
+        "applicant_middle_name",
+        "applicant_last_name",
+        "birth_first_name",
+        "birth_middle_name",
+        "birth_last_name"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "section_applicant_address",
+      "label": "Applicant's Addresses",
+      "order": 3,
+      "fields": [
+        "mailing_address_street",
+        "mailing_address_city_etc",
+        "foreign_address_street",
+        "foreign_address_city_etc"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "section_other_information",
+      "label": "Birth and Other Information",
+      "order": 4,
+      "fields": [
+        "date_of_birth",
+        "country_of_birth",
+        "city_state_province_of_birth",
+        "gender",
+        "country_of_citizenship",
+        "foreign_tax_id",
+        "us_visa_info",
+        "identification_document_type",
+        "id_doc_issued_by",
+        "id_doc_number",
+        "id_doc_unlabeled_field",
+        "id_doc_exp_date",
+        "date_of_entry_us",
+        "has_previous_itin_irsn",
+        "previous_itin_1",
+        "previous_itin_2",
+        "previous_itin_3",
+        "previous_irsn_1",
+        "previous_irsn_2",
+        "previous_irsn_3",
+        "previous_itin_first_name",
+        "previous_itin_middle_name",
+        "previous_itin_last_name",
+        "college_university_company",
+        "college_city_state",
+        "length_of_stay"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "section_signature",
+      "label": "Sign Here",
+      "order": 5,
+      "fields": [
+        "applicant_signature",
+        "applicant_signature_date",
+        "applicant_phone",
+        "delegate_name",
+        "delegate_relationship"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "section_agent_use",
+      "label": "Acceptance Agent's Use ONLY",
+      "order": 6,
+      "fields": [
+        "agent_signature",
+        "agent_name_title",
+        "agent_signature_date",
+        "agent_phone",
+        "agent_fax"
+      ],
+      "page_numbers": [
+        1
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "id": "application_type",
+      "name": "Application type (check one box):",
+      "spoken_name": "Application type",
+      "type": "radio",
+      "section_id": "section_application_reason",
+      "pdf_field_name": null,
+      "pdf_position": {
+        "page": 0,
+        "x": 678,
+        "y": 128,
+        "width": 12,
+        "height": 12
+      },
+      "validation": {
+        "required": false
+      },
+      "options": [
+        {
+          "value": "2",
+          "label": "Apply for a new ITIN",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]"
+        },
+        {
+          "value": "1",
+          "label": "Renew an existing ITIN",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[1]"
+        }
+      ]
+    },
+    {
+      "id": "reason_for_submitting",
+      "name": "Reason you're submitting Form W-7.",
+      "spoken_name": "Reason for submitting Form W-7",
+      "type": "checkbox",
+      "section_id": "section_application_reason",
+      "pdf_field_name": null,
+      "pdf_position": {
+        "page": 0,
+        "x": 156,
+        "y": 256,
+        "width": 12,
+        "height": 12
+      },
+      "validation": {
+        "required": false
+      },
+      "options": [
+        {
+          "value": "1",
+          "label": "a Nonresident alien required to get an ITIN to claim tax treaty benefit (you must also check and complete box h (see instructions))",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_2[0]"
+        },
+        {
+          "value": "1",
+          "label": "b Nonresident alien filing a U.S. federal tax return",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_3[0]"
+        },
+        {
+          "value": "1",
+          "label": "c U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_4[0]"
+        },
+        {
+          "value": "1",
+          "label": "d Dependent of U.S. citizen/resident alien",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_5[0]"
+        },
+        {
+          "value": "1",
+          "label": "e Spouse of U.S. citizen/resident alien",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_6[0]"
+        },
+        {
+          "value": "1",
+          "label": "f Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception (if claiming an exception, you must also check and complete box h (see instructions))",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_7[0]"
+        },
+        {
+          "value": "1",
+          "label": "g Dependent/spouse of a nonresident alien holding a U.S. visa",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[0]"
+        },
+        {
+          "value": "1",
+          "label": "h Other (see instructions)",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_9[0]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "is_selected",
+          "value": "topmostSubform[0].Page1[0].c1_5[0]",
+          "shows": [
+            "relationship_to_citizen"
+          ]
+        },
+        {
+          "operator": "is_selected",
+          "value": "topmostSubform[0].Page1[0].c1_5[0]",
+          "shows": [
+            "citizen_resident_name",
+            "citizen_resident_ssn_itin"
+          ]
+        },
+        {
+          "operator": "is_selected",
+          "value": "topmostSubform[0].Page1[0].c1_6[0]",
+          "shows": [
+            "citizen_resident_name",
+            "citizen_resident_ssn_itin"
+          ]
+        },
+        {
+          "operator": "is_selected",
+          "value": "topmostSubform[0].Page1[0].c1_2[0]",
+          "shows": [
+            "treaty_country",
+            "treaty_article"
+          ]
+        },
+        {
+          "operator": "is_selected",
+          "value": "topmostSubform[0].Page1[0].c1_7[0]",
+          "shows": [
+            "treaty_country",
+            "treaty_article"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "relationship_to_citizen",
+      "name": "If d, enter relationship to U.S. citizen/resident alien",
+      "spoken_name": "Relationship to U.S. citizen or resident alien",
+      "type": "text",
+      "section_id": "section_application_reason",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_01[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 528,
+        "y": 312,
+        "width": 270,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "reason_for_submitting",
+        "operator": "contains",
+        "value": "topmostSubform[0].Page1[0].c1_5[0]"
+      }
+    },
+    {
+      "id": "citizen_resident_name",
+      "name": "If d or e, enter name of U.S. citizen/resident alien",
+      "spoken_name": "Name of U.S. citizen or resident alien",
+      "type": "text",
+      "section_id": "section_application_reason",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_02[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 528,
+        "y": 330,
+        "width": 135,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "reason_for_submitting",
+        "operator": "contains_any",
+        "value": [
+          "topmostSubform[0].Page1[0].c1_5[0]",
+          "topmostSubform[0].Page1[0].c1_6[0]"
+        ]
+      }
+    },
+    {
+      "id": "citizen_resident_ssn_itin",
+      "name": "If d or e, enter SSN/ITIN of U.S. citizen/resident alien",
+      "spoken_name": "SSN or ITIN of U.S. citizen or resident alien",
+      "type": "text",
+      "section_id": "section_application_reason",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_03[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 663,
+        "y": 330,
+        "width": 135,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "reason_for_submitting",
+        "operator": "contains_any",
+        "value": [
+          "topmostSubform[0].Page1[0].c1_5[0]",
+          "topmostSubform[0].Page1[0].c1_6[0]"
+        ]
+      }
+    },
+    {
+      "id": "treaty_country",
+      "name": "Additional information for a and f: Enter treaty country",
+      "spoken_name": "Treaty country",
+      "type": "text",
+      "section_id": "section_application_reason",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_04[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 420,
+        "y": 438,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "reason_for_submitting",
+        "operator": "contains_any",
+        "value": [
+          "topmostSubform[0].Page1[0].c1_2[0]",
+          "topmostSubform[0].Page1[0].c1_7[0]"
+        ]
+      }
+    },
+    {
+      "id": "treaty_article",
+      "name": "and treaty article number",
+      "spoken_name": "Treaty article number",
+      "type": "text",
+      "section_id": "section_application_reason",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_05[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 663,
+        "y": 438,
+        "width": 135,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "reason_for_submitting",
+        "operator": "contains_any",
+        "value": [
+          "topmostSubform[0].Page1[0].c1_2[0]",
+          "topmostSubform[0].Page1[0].c1_7[0]"
+        ]
+      }
+    },
+    {
+      "id": "applicant_first_name",
+      "name": "1a First name",
+      "spoken_name": "Applicant's first name",
+      "type": "text",
+      "section_id": "section_applicant_identity",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_06[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 456,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "applicant_middle_name",
+      "name": "Middle name",
+      "spoken_name": "Applicant's middle name",
+      "type": "text",
+      "section_id": "section_applicant_identity",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_07[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 393,
+        "y": 456,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "applicant_last_name",
+      "name": "Last name",
+      "spoken_name": "Applicant's last name",
+      "type": "text",
+      "section_id": "section_applicant_identity",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_08[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 627,
+        "y": 456,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "birth_first_name",
+      "name": "1b First name",
+      "spoken_name": "First name at birth",
+      "type": "text",
+      "section_id": "section_applicant_identity",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_09[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 486,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "birth_middle_name",
+      "name": "Middle name",
+      "spoken_name": "Middle name at birth",
+      "type": "text",
+      "section_id": "section_applicant_identity",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_10[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 393,
+        "y": 486,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "birth_last_name",
+      "name": "Last name",
+      "spoken_name": "Last name at birth",
+      "type": "text",
+      "section_id": "section_applicant_identity",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_11[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 627,
+        "y": 486,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "mailing_address_street",
+      "name": "2 Street address, apartment number, or rural route number.",
+      "spoken_name": "Mailing address street",
+      "type": "text",
+      "section_id": "section_applicant_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_12[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 516,
+        "width": 684,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "mailing_address_city_etc",
+      "name": "City or town, state or province, and country. Include ZIP code or postal code where appropriate.",
+      "spoken_name": "Mailing address city, state, province, country, and postal code",
+      "type": "text",
+      "section_id": "section_applicant_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_13[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 540,
+        "width": 684,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "foreign_address_street",
+      "name": "3 Street address, apartment number, or rural route number. Don't use a P.O. box number.",
+      "spoken_name": "Foreign address street",
+      "type": "text",
+      "section_id": "section_applicant_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_14[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 576,
+        "width": 684,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "foreign_address_city_etc",
+      "name": "City or town, state or province, and country. Include postal code where appropriate.",
+      "spoken_name": "Foreign address city, state, province, country, and postal code",
+      "type": "text",
+      "section_id": "section_applicant_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_15[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 600,
+        "width": 684,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "date_of_birth",
+      "name": "4 Date of birth (month / day / year)",
+      "spoken_name": "Date of birth",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Line4_ReadOrder[0].f1_17[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 636,
+        "width": 108,
+        "height": 18
+      },
+      "validation": {
+        "required": false,
+        "pattern": "MM/DD/YYYY"
+      },
+      "max_length": 8
+    },
+    {
+      "id": "country_of_birth",
+      "name": "Country of birth",
+      "spoken_name": "Country of birth",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_18[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 276,
+        "y": 636,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "city_state_province_of_birth",
+      "name": "City and state or province (optional)",
+      "spoken_name": "City and state or province of birth",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_19[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 444,
+        "y": 636,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "gender",
+      "name": "5",
+      "spoken_name": "Gender",
+      "type": "radio",
+      "section_id": "section_other_information",
+      "pdf_field_name": null,
+      "pdf_position": {
+        "page": 0,
+        "x": 612,
+        "y": 630,
+        "width": 12,
+        "height": 12
+      },
+      "validation": {
+        "required": false
+      },
+      "options": [
+        {
+          "value": "1",
+          "label": "Male",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]"
+        },
+        {
+          "value": "2",
+          "label": "Female",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]"
+        }
+      ]
+    },
+    {
+      "id": "country_of_citizenship",
+      "name": "6a Country(ies) of citizenship",
+      "spoken_name": "Country of citizenship",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_20[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 660,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "foreign_tax_id",
+      "name": "6b Foreign tax I.D. number (if any)",
+      "spoken_name": "Foreign tax ID number",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_21[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 327,
+        "y": 660,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "us_visa_info",
+      "name": "6c Type of U.S. visa (if any), number, and expiration date",
+      "spoken_name": "U.S. visa information",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_22[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 495,
+        "y": 660,
+        "width": 348,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "identification_document_type",
+      "name": "6d Identification document(s) submitted.",
+      "spoken_name": "Identification document type",
+      "type": "radio",
+      "section_id": "section_other_information",
+      "pdf_field_name": null,
+      "pdf_position": {
+        "page": 0,
+        "x": 174,
+        "y": 684,
+        "width": 12,
+        "height": 12
+      },
+      "validation": {
+        "required": false
+      },
+      "options": [
+        {
+          "value": "1",
+          "label": "Passport",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[0]"
+        },
+        {
+          "value": "2",
+          "label": "Driver's license/State I.D.",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[1]"
+        },
+        {
+          "value": "3",
+          "label": "USCIS documentation",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[2]"
+        },
+        {
+          "value": "4",
+          "label": "Other",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[3]"
+        }
+      ]
+    },
+    {
+      "id": "id_doc_issued_by",
+      "name": "Issued by:",
+      "spoken_name": "ID document issued by",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_23[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 195,
+        "y": 708,
+        "width": 108,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "id_doc_number",
+      "name": "Number:",
+      "spoken_name": "ID document number",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_24[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 309,
+        "y": 708,
+        "width": 108,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "id_doc_unlabeled_field",
+      "name": "ID Document Unlabeled Field",
+      "spoken_name": "ID Document Unlabeled Field",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_25[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 423,
+        "y": 708,
+        "width": 108,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "id_doc_exp_date",
+      "name": "Exp. date:",
+      "spoken_name": "ID document expiration date",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_26[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 537,
+        "y": 708,
+        "width": 108,
+        "height": 18
+      },
+      "validation": {
+        "required": false,
+        "pattern": "MM/DD/YYYY"
+      },
+      "max_length": 8
+    },
+    {
+      "id": "date_of_entry_us",
+      "name": "Date of entry into the United States (MM/DD/YYYY):",
+      "spoken_name": "Date of entry into the United States",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_27[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 651,
+        "y": 708,
+        "width": 108,
+        "height": 18
+      },
+      "validation": {
+        "required": false,
+        "pattern": "MM/DD/YYYY"
+      },
+      "max_length": 8
+    },
+    {
+      "id": "has_previous_itin_irsn",
+      "name": "6e Have you previously received an ITIN or an Internal Revenue Service Number (IRSN)?",
+      "spoken_name": "Have you previously received an ITIN or IRSN",
+      "type": "radio",
+      "section_id": "section_other_information",
+      "pdf_field_name": null,
+      "pdf_position": {
+        "page": 0,
+        "x": 174,
+        "y": 738,
+        "width": 12,
+        "height": 12
+      },
+      "validation": {
+        "required": false
+      },
+      "options": [
+        {
+          "value": "1",
+          "label": "No/Don't know. Skip line 6f.",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[0]"
+        },
+        {
+          "value": "2",
+          "label": "Yes. Complete line 6f.",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[1]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "2",
+          "shows": [
+            "previous_itin_1",
+            "previous_itin_2",
+            "previous_itin_3",
+            "previous_irsn_1",
+            "previous_irsn_2",
+            "previous_irsn_3",
+            "previous_itin_first_name",
+            "previous_itin_middle_name",
+            "previous_itin_last_name"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "previous_itin_1",
+      "name": "6f Enter ITIN",
+      "spoken_name": "Previous ITIN first three digits",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_28[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 195,
+        "y": 762,
+        "width": 41,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 3,
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_itin_2",
+      "name": "6f Enter ITIN",
+      "spoken_name": "Previous ITIN middle two digits",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_29[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 242,
+        "y": 762,
+        "width": 27,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 2,
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_itin_3",
+      "name": "6f Enter ITIN",
+      "spoken_name": "Previous ITIN last four digits",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_30[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 275,
+        "y": 762,
+        "width": 54,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 4,
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_irsn_1",
+      "name": "6f Enter IRSN",
+      "spoken_name": "Previous IRSN first three digits",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_31[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 347,
+        "y": 762,
+        "width": 41,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 3,
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_irsn_2",
+      "name": "6f Enter IRSN",
+      "spoken_name": "Previous IRSN middle two digits",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_32[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 394,
+        "y": 762,
+        "width": 27,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 2,
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_irsn_3",
+      "name": "6f Enter IRSN",
+      "spoken_name": "Previous IRSN last four digits",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_33[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 427,
+        "y": 762,
+        "width": 54,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 4,
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_itin_first_name",
+      "name": "and name under which it was issued First name",
+      "spoken_name": "First name under which previous ITIN or IRSN was issued",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_34[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 195,
+        "y": 786,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_itin_middle_name",
+      "name": "Middle name",
+      "spoken_name": "Middle name under which previous ITIN or IRSN was issued",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_35[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 429,
+        "y": 786,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "previous_itin_last_name",
+      "name": "Last name",
+      "spoken_name": "Last name under which previous ITIN or IRSN was issued",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_36[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 663,
+        "y": 786,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "show_if": {
+        "field": "has_previous_itin_irsn",
+        "operator": "equals",
+        "value": "2"
+      }
+    },
+    {
+      "id": "college_university_company",
+      "name": "6g Name of college/university or company (see instructions)",
+      "spoken_name": "Name of college, university, or company",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_37[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 810,
+        "width": 324,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "college_city_state",
+      "name": "City and state",
+      "spoken_name": "College city and state",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_38[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 489,
+        "y": 810,
+        "width": 216,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "length_of_stay",
+      "name": "Length of stay",
+      "spoken_name": "Length of stay",
+      "type": "text",
+      "section_id": "section_other_information",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_39[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 711,
+        "y": 810,
+        "width": 168,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "applicant_signature",
+      "name": "Signature of applicant (if delegate, see instructions)",
+      "spoken_name": "Signature of applicant or delegate",
+      "type": "signature",
+      "section_id": "section_signature",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_40[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 876,
+        "width": 324,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "applicant_signature_date",
+      "name": "Date (month / day / year)",
+      "spoken_name": "Applicant signature date",
+      "type": "text",
+      "section_id": "section_signature",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_41[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 489,
+        "y": 876,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false,
+        "pattern": "MM/DD/YYYY"
+      }
+    },
+    {
+      "id": "applicant_phone",
+      "name": "Phone number",
+      "spoken_name": "Applicant phone number",
+      "type": "text",
+      "section_id": "section_signature",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_46[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 657,
+        "y": 876,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 10
+    },
+    {
+      "id": "delegate_name",
+      "name": "Name of delegate, if applicable (type or print)",
+      "spoken_name": "Name of delegate",
+      "type": "text",
+      "section_id": "section_signature",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_42[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 900,
+        "width": 324,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "delegate_relationship",
+      "name": "Delegate's relationship to applicant",
+      "spoken_name": "Delegate's relationship to applicant",
+      "type": "radio",
+      "section_id": "section_signature",
+      "pdf_field_name": null,
+      "pdf_position": {
+        "page": 0,
+        "x": 504,
+        "y": 900,
+        "width": 12,
+        "height": 12
+      },
+      "validation": {
+        "required": false
+      },
+      "options": [
+        {
+          "value": "1",
+          "label": "Parent",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[0]"
+        },
+        {
+          "value": "2",
+          "label": "Power of attorney",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[1]"
+        },
+        {
+          "value": "3",
+          "label": "Court-appointed guardian",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[2]"
+        }
+      ]
+    },
+    {
+      "id": "agent_signature",
+      "name": "Signature",
+      "spoken_name": "Acceptance agent signature",
+      "type": "signature",
+      "section_id": "section_agent_use",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_43[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 930,
+        "width": 324,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "agent_signature_date",
+      "name": "Date (month / day / year)",
+      "spoken_name": "Acceptance agent signature date",
+      "type": "text",
+      "section_id": "section_agent_use",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_44[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 489,
+        "y": 930,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false,
+        "pattern": "MM/DD/YYYY"
+      }
+    },
+    {
+      "id": "agent_phone",
+      "name": "Phone",
+      "spoken_name": "Acceptance agent phone number",
+      "type": "text",
+      "section_id": "section_agent_use",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 657,
+        "y": 930,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      },
+      "max_length": 11
+    },
+    {
+      "id": "agent_fax",
+      "name": "Fax",
+      "spoken_name": "Acceptance agent fax number",
+      "type": "text",
+      "section_id": "section_agent_use",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_48[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 657,
+        "y": 948,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "agent_name_title",
+      "name": "Name and title (type or print)",
+      "spoken_name": "Acceptance agent name and title",
+      "type": "text",
+      "section_id": "section_agent_use",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_45[0]",
+      "pdf_position": {
+        "page": 0,
+        "x": 159,
+        "y": 954,
+        "width": 162,
+        "height": 18
+      },
+      "validation": {
+        "required": false
+      }
+    }
+  ],
+  "supplements": [],
+  "_bakeoff": {
+    "arm": "claude-hybrid-plain",
+    "model": "gemini-2.5-pro",
+    "backend": "gemini",
+    "enriched": false,
+    "fewshot": false,
+    "pdf_sent": true,
+    "disabled_signals": [],
+    "order_caveat": false,
+    "tokens": {
+      "input": 5628,
+      "output": 12946
+    },
+    "authoring": {
+      "tool": "extract_form.py",
+      "prompt": "plain",
+      "positions_filled": 0,
+      "instructions_filled": 0,
+      "instructions_enriched": 0,
+      "schema_valid": false,
+      "validation": "FormSchema validation failed: 9 validation errors for FormSchema\nfields.1.controls_fields.0.operator\n  Input should be 'equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_checked', 'is_empty', 'is_not_empty', 'in' or 'not_in' [type=enum, input_value='is_selected', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/enum\nfields.1.controls_fields.1.operator\n  Input should be 'equ"
+    }
+  }
+}

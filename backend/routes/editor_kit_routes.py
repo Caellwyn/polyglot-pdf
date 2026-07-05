@@ -56,6 +56,7 @@ import structlog
 from backend.config import get_settings
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
+from backend.services.schema_lint import SEVERITY_ERROR, lint_schema
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
@@ -405,6 +406,33 @@ async def set_editor_kit_status(
                 status_code=422,
                 detail="Schema is missing extraction_info (required for PDF "
                        "forms), so it cannot be marked complete",
+            )
+        # Lint gate (bd h76m.5, P2.1): zero lint ERRORs to promote. Pydantic
+        # above enforces the wire contract; lint catches the class of defect
+        # that PARSES but misbehaves (duplicate option values, unresolved
+        # conditional references, invented operators on a v1-stamped draft).
+        # This is one half of the two-gate seam: a stored-with-issues draft
+        # (P5.3) stays un-promotable until repaired. WARNINGs never block.
+        # No dump is passed: the acroform dump is not stored per-kit yet, so
+        # the dump-only widget-claim rule runs at extraction time only. The
+        # dump becomes a kit artifact at P5.3 (bd h76m.14) -- pass it here
+        # when it lands, closing the widget-claim hole at this gate too.
+        lint_errors = [
+            f for f in lint_schema(schema) if f.severity == SEVERITY_ERROR
+        ]
+        if lint_errors:
+            # Cap the finding list BEFORE appending the "and N more" tail so a
+            # long list can never truncate away the count of what was elided.
+            shown = "; ".join(
+                f"[{f.rule}] {f.path}: {f.message}" for f in lint_errors[:8]
+            )[:1400]
+            more = len(lint_errors) - 8
+            if more > 0:
+                shown += f"; ... and {more} more"
+            raise HTTPException(
+                status_code=409,
+                detail=f"Schema has {len(lint_errors)} lint error(s), so it "
+                       f"cannot be marked complete: {shown}",
             )
 
     next_meta = {**(meta or {}), "status": body.status}

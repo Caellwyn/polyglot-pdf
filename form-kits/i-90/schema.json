@@ -5034,8 +5034,7 @@
           "value": "P7_checkbox7[1]",
           "shows": [],
           "unlocks": [
-            "p7_checkbox7extend",
-            "p7_checkbox7extend[1]"
+            "p7_checkbox7extend"
           ],
           "makes_required": []
         }

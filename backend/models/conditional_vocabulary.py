@@ -8,8 +8,10 @@ polyglot-pdf-h76m.3, P1.1 of the schema-v2 epic). Consumers:
 - scripts/bakeoff/schema_contract.py (P1.2) -- the machine core of the
   extraction contract is RENDERED from this registry, so the prompt the LLM
   sees and the validator that judges its output cannot drift.
-- scripts/authoring/schema_lint.py (P2.1) and schema_repair.py (P5.2) --
-  lint rules and the invented-operator alias table sit beside this registry.
+- backend/services/schema_lint.py (P2.1) and schema_repair.py (P5.2) --
+  lint rules and the invented-operator alias table read this registry (the
+  lint core lives in backend/ so the promotion gate imports it in-process;
+  scripts/authoring/extract_form.py imports it via the repo root).
 
 Deliberately import-free of form_models: the registry speaks in the STRING
 values of the enums (FieldType/ConditionalOperator), so form_models can import

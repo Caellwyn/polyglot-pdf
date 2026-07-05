@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-07-02 (bd polyglot-pdf-puu8: `/ws/audio` + `/ws/echo` are now dev-only behind the `.env.DEV` marker gate; noted that the prod build ships only `index.html`). Also 2026-07-02, dead-code cleanup (bd polyglot-pdf-o0pc): dropped the removed `PROACTIVE_AUDIO` constant from the tunables list and added the dev-only `POST /dev/console-log` route to the route table. Prior: 2026-07-01, added the author-tier onboarding/extraction routes (bd 92qe.3) and the token-gated `/api/editor/*` hosted-editor surface to the route table (bd polyglot-pdf-92qe.1), and the single-kit read routes (`/api/form-kits/{kit_id}/schema` and `.../pdf`, bd polyglot-pdf-sbfk). The `USE_PREMIUM_MODEL` row records the backend-aware standard-tier id (Vertex vs AI Studio) that `_resolve_model` selects (bd polyglot-pdf-a079); see [journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md](journal/entries/2026-06-15-bd-a079-demo-vertex-ai-switch.md). This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-h76m.5: the Mark-complete publish gate now also requires zero schema-lint ERRORs; see the `/api/editor/kits/{kit_id}/status` row). See [journal/entries/2026-07-05-bd-h76m.5-schema-lint.md](journal/entries/2026-07-05-bd-h76m.5-schema-lint.md) for closeout details. This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -72,7 +72,7 @@ Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | GET | `/api/editor/kits/{kit_id}/schema`, `.../pdf` | Draft-capable single-kit reads for the hosted editor. Token-gated. |
 | PUT | `/api/editor/kits/{kit_id}/schema` | Save an edited schema back to the store (lenient draft save). Token-gated. |
-| POST | `/api/editor/kits/{kit_id}/status` | Flip draft/complete; promotion validates against the Pydantic `FormSchema` (the publish gate). Token-gated. |
+| POST | `/api/editor/kits/{kit_id}/status` | Flip draft/complete; promotion validates against the Pydantic `FormSchema` AND requires zero schema-lint ERRORs (`backend/services/schema_lint.py`; violations 409 naming the findings -- bd h76m.5). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
 | POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |

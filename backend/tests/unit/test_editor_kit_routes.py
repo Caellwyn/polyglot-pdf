@@ -764,6 +764,44 @@ def test_mark_complete_requires_a_schema(client):
     assert r.status_code == 409
 
 
+def test_mark_complete_lint_gate_409s_naming_findings(client):
+    """bd h76m.5 (P2.1): zero lint ERRORs to promote. A schema that PARSES
+    (duplicate option values are legal to Pydantic on a v1 schema -- the
+    shipped-f1040 bug class) must still be refused at the publish gate, with
+    the findings named so the editor can fix them."""
+    from backend.models.form_models import FormSchema
+
+    c, _store, root = client
+    linty = json.loads(json.dumps(VALID_SCHEMA))  # deep copy
+    linty["sections"][0]["fields"].append("picker")
+    linty["fields"].append({
+        "id": "picker", "name": "Picker", "spoken_name": "picker",
+        "type": "select", "section_id": "s1",
+        "options": [
+            {"value": "same", "label": "A"},
+            {"value": "same", "label": "B"},
+        ],
+    })
+    # Sanity: this schema passes the Pydantic gate (v1 tolerance) -- the lint
+    # gate is the ONLY thing standing between it and the voice app.
+    FormSchema.model_validate(linty)
+
+    _make_kit(root, "linty", schema=linty)
+    r = c.post(
+        "/api/editor/kits/linty/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert "lint error" in detail
+    assert "option-value-duplicate" in detail  # names the rule
+    assert "picker" in detail                  # names the field
+    # The kit stays draft.
+    meta = json.loads((root / "linty" / "metadata.json").read_text())
+    assert meta["status"] == "draft"
+
+
 def test_mark_complete_validates_against_form_contract(client):
     c, _store, root = client
     # Structurally-broken schema: promotion is refused with the validation detail
