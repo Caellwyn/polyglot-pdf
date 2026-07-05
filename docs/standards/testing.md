@@ -189,8 +189,10 @@ are gitignored.
 
 **CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
 backend pytest suite (`-m "not external"`) plus both vitest suites on every PR.
-It is **not** a required status check: the manual-merge gate (the maintainer
-clicks every merge) stays the only merge control, and deploys stay manual
+It is **not** a required status check: the merge gate is the closeout merge
+decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
+merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge
+vs. maintainer merge"), and deploys stay manual
 ([config-deployment.md](../components/config-deployment.md)). The **local**
 suite, enforced per-PR by [`/closeout`](../doctrine/review-flow.md) (which runs
 the backend suite before opening the PR), remains the real gate.

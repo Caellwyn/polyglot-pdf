@@ -339,10 +339,16 @@ Step 6 (open the PR).
      `model: sonnet`; count it for `--haiku-escalations`.
    - **A subagent TIMEOUT/ERROR** (no verdict returned) -> **surface to the
      maintainer; NEVER silently skip the assess.** Silence is not `NO-GAPS`.
-4. **Ceiling: `MAX_FRESH_EYES_ROUNDS = 3`.** If round 3 still returns
-   `GAPS-FOUND`, STOP and escalate to the maintainer (summarize the persistent
-   gaps) rather than looping forever -- reaching the ceiling is an escalation, never
-   an auto-pass.
+4. **Loop-stop rule -- OUTCOME-based, no round cap** (maintainer directive
+   2026-07-04; the former `MAX_FRESH_EYES_ROUNDS = 3` is retired). Keep spawning
+   fresh-eyes and fixing as long as each round's gaps are **correct and blocking.**
+   STOP (the assess is `NO-GAPS`) when every remaining gap is either **incorrect**
+   (refuted against the code -- record why) or a **true nit** better filed as a bead
+   than fixed here. Fix every correct blocker and re-spawn, however many rounds it
+   takes -- do NOT stop on round count. A gap you can neither fix nor honestly
+   classify as incorrect/nit is the signal to escalate (normal step-2), not a round
+   ceiling. (A subagent TIMEOUT/ERROR is still surfaced per the bullet above --
+   silence is never `NO-GAPS`.)
 
 Commit any gap fixes (and fold the assess outcome -- the rubric scorecard, the
 fresh-eyes round count, the adopt/reject/defer breakdown, and any filed bead IDs --
@@ -422,7 +428,25 @@ Push the branch (`git push -u origin <branch>` after `git fetch origin && git pu
 
 **Deferred-nit bead convention.** File **one** bead per closeout collecting that PR's true nits (not one bead per nit): title `chore(nits): deferred review nits from PR #<n>`, body listing each Codex nit with its `codex` source + file:line, and tag it with the arm that deferred it via `bd create ... --metadata '{"arm":"C"}'` (the JSON-string form `bd` expects -- see hrn.4/hrn.5's own `arm` metadata) so the telemetry audit can later check whether any deferred "nit" turned out to be a real bug (the nit-turned-blocker rate, charged to the deferring arm -- see Step 8.5). Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md). Count them for Step 8.5's `--deferred-nits`.
 
-**Hard loop ceiling.** The Codex adopt-and-loop cycle is bounded at **`MAX_REVIEW_ROUNDS = 2`** rounds (formerly 3, then `MAX_COPILOT_ROUNDS`; lowered to 2 to cut Codex credit burn -- bd hrn.9/9us). If Codex still reports COMMENTS after 2 rounds of you addressing blockers, **stop looping and escalate to the maintainer** (do not loop forever): summarize the still-open findings, what you changed each round, and why they persist, and let the maintainer decide. Reaching the ceiling is an escalation, never an auto-clear -- never treat "I'm tired of looping" as CLEAN. (Round 1 from Step 6 counts as round 1; the re-watch loop below is round 2. **Why 2, not 3:** PR #118's review history showed round 1 carries most of the critical value -- the real bugs -- round 2 catches siblings of round-1 findings, and round 3+ was largely re-litigation that burned credits for little gain. Keep Codex's per-review depth aggressive; just cap the iterations.)
+**Loop-stop rule -- OUTCOME-based, no round cap (maintainer directive 2026-07-04).**
+There is **no hard round ceiling** on the Codex adopt-and-loop cycle (the former
+`MAX_REVIEW_ROUNDS = 2` is retired). Because closeout can now merge routine PRs
+autonomously, the bar is code quality, not iteration budget: **keep looping as long
+as each round's findings are correct and are blockers.** A lengthy back-and-forth
+to get the code right is expected and fine. You **STOP looping (the review is
+effectively CLEAN)** on a round when EVERY remaining finding is one of:
+  - **incorrect** -- the finding is wrong, refuted, or a false positive (you verified
+    it against the code; record the refutation so the maintainer can audit it); or
+  - **a true nit, not a blocker** -- real but non-blocking, better filed as a
+    deferred-nit bead than fixed in this PR (per the nit-vs-blocker rule + the
+    deferred-nit bead convention above).
+If any finding is a correct blocker, **fix it and loop again** -- however many
+rounds that takes. Do NOT stop because "it's been N rounds"; the only stop is "no
+correct blocker remains." Reaching CLEAN this way is a real clear, never "I'm tired
+of looping." (Ambiguous still counts as a blocker -- keep looping. There is
+deliberately no auto-escalation on round count; a genuinely stuck loop -- a finding
+you can neither fix nor honestly classify as incorrect/nit -- is itself the signal
+to escalate, per the normal step-2 rule.)
 
 **A/B control (arm C OFF).** The `CLOSEOUT_LOOP_MODE` env var forces the control arm:
 - unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker, ceiling 2.
@@ -436,7 +460,7 @@ Commit the combined fixes, then **push once and loop Codex to clean:**
    `TS=$(gh api repos/<owner>/<repo>/issues/<pr#>/comments -f 'body=@codex review' --jq '.created_at')`
 4. **Re-watch with `--reviewer codex --since "$TS"`** (`run_in_background`), scoping detection to THIS round. Carry `--close-on-clean <bead-id>` (one per bead) on the re-watch too, so whichever round reaches CLEAN closes the bead(s) deterministically:
    `REPO="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; PY="$REPO/backend/.venv/Scripts/python.exe"; "$PY" "$REPO/scripts/pr_review_watcher.py" <pr#> --reviewer codex --since "$TS" --ack-timeout-min 2 --close-on-clean <bead-id> [...]`
-   Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-comment `@codex review`(capture TS) -> re-watch loop **until Codex reports CLEAN or you hit `MAX_REVIEW_ROUNDS` (2)**, whichever comes first. At the ceiling, escalate to the maintainer (per the decision rule above) rather than looping again. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
+   Repeat the COMMENTS -> (judge nit-vs-blocker) -> fix blockers / defer nits -> push -> re-comment `@codex review`(capture TS) -> re-watch loop **until no correct blocker remains** (the outcome-based loop-stop rule above -- every remaining finding is incorrect or a true nit): that state IS CLEAN. There is no round cap; keep fixing correct blockers however many rounds it takes. (Round 1 in Step 6 takes no `--since` -- it has no prior round to exclude. The re-watch ALWAYS does.)
 
 ### Merge-conflict resolution in the loop (A/B arm-agnostic -- bd polyglot-pdf-hrn.6)
 
@@ -519,11 +543,15 @@ strong model -- the self-escalation clause stays dormant). Read its STATUS line:
   maintainer. A failure of the LAST-resort reviewer is a genuine stop (there is no
   further fallback), so this is the one branch that escalates.
 
-**Hard loop ceiling `MAX_FALLBACK_ROUNDS = 2`** (mirrors `MAX_REVIEW_ROUNDS`). If
-the Opus fallback still returns `GAPS-FOUND` after 2 rounds of you addressing
-blockers, STOP and escalate to the maintainer (summarize the persistent gaps)
-rather than looping forever. Reaching the ceiling is an escalation, never an
-auto-clear.
+**Loop-stop rule -- OUTCOME-based, no round cap** (maintainer directive
+2026-07-04; the former `MAX_FALLBACK_ROUNDS = 2` is retired, mirroring the Codex
+loop). Keep re-spawning the Opus fallback and fixing as long as each round's
+`GAPS-FOUND` items are **correct blockers.** STOP (the fallback is CLEAN) when every
+remaining gap is **incorrect** (refuted -- record why) or a **true nit** (file a
+bead). No round cap; fix every correct blocker and re-spawn however many rounds it
+takes. The escalation branch is a `BLOCKED`/TIMEOUT/ERROR from this last-resort
+reviewer (above) or a gap you can neither fix nor honestly classify -- never a round
+count.
 
 (The fallback subagent is read its STATUS line directly -- it is NOT watched by
 `pr_review_watcher.py`, which only handles the GitHub-bot Codex path. Same as the

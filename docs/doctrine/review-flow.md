@@ -19,17 +19,17 @@ clean tree
   -> score the exit-criteria rubric       [orchestrator: PASS/FAIL each criterion + evidence; any FAIL -> fix]
   -> INNER LOOP (pre-PR Assess):           [ALWAYS, review-worthy or not]
        spawn fresh-eyes (criteria passed in, ADVERSARIAL) -> fix gaps -> re-spawn
-       ... until NO-GAPS (ceiling MAX_FRESH_EYES_ROUNDS = 3)
+       ... until NO-GAPS (loop while gaps are correct blockers; no round cap)
   -> judge review-worthiness              [orchestrator: does this diff warrant Codex?]
   -> open a NORMAL (non-draft) PR         [scorecard in the PR BODY; if review-worthy: `@codex review` line; Codex auto-reviews on open]
   -> OUTER LOOP (post-PR Codex review):    [review-worthy PRs only]
        watch Codex (ack window 2 min) -> fix -> push -> re-comment `@codex review`
-       ... until Codex reports CLEAN (ceiling MAX_REVIEW_ROUNDS = 2)
+       ... until CLEAN (loop while findings are correct blockers; no round cap)
        |
        +-- Codex UNAVAILABLE (ERROR quota / TIMEOUT / NO-ACK)
            -> FALLBACK: Opus-4.8 adversarial review (reviewer of last resort)
               spawn fresh-eyes-reviewer @ model:opus -> fix -> re-spawn
-              ... until NO-GAPS (ceiling MAX_FALLBACK_ROUNDS = 2); same authority as Codex
+              ... until NO-GAPS (loop while gaps are correct blockers; no round cap); same authority as Codex
   -> close bead + [auto-merge if routine/low-risk & clean | else ping the maintainer]
 ```
 
@@ -58,8 +58,11 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   rubric and its mandate is gap-exhaustion ("find every place the changes do NOT
   meet the criteria"), never approval. Each pass ends with a gap verdict --
   `NO-GAPS` (terminal) or `GAPS-FOUND (n)`. On `GAPS-FOUND`, the orchestrator fixes
-  the gaps, commits, and re-spawns; the loop runs until `NO-GAPS` or the ceiling
-  `MAX_FRESH_EYES_ROUNDS = 3` (at which point it escalates, never auto-passes).
+  the gaps, commits, and re-spawns; the loop runs -- with **no round cap** -- until
+  every remaining gap is incorrect (refuted) or a true nit (filed as a bead), which
+  is `NO-GAPS`. Any correct blocker means fix-and-re-spawn, however many rounds it
+  takes (maintainer directive 2026-07-04, bd `polyglot-pdf-16pj`); a gap that can be
+  neither fixed nor honestly refuted/deferred escalates, never a round count.
   A subagent TIMEOUT/ERROR surfaces to the orchestrator -- silence is never read as
   `NO-GAPS`.
 - **Out-of-scope bugs are filed, not escalated.** Fresh-eyes files a genuine bug
@@ -114,7 +117,8 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   unavailable.** On `ERROR` (quota), `TIMEOUT` (no verdict), or `NO-ACK` (never
   started), closeout spawns the `fresh-eyes-reviewer` agent with `model: opus` --
   passed the bead's exit criteria and pointed at the real post-PR diff -- and loops
-  it (fix gaps -> re-spawn) to `NO-GAPS`, ceiling `MAX_FALLBACK_ROUNDS = 2`. A
+  it (fix gaps -> re-spawn) to `NO-GAPS` -- no round cap, looping while gaps are
+  correct blockers, same outcome-based stop as the Codex loop. A
   clean fallback has the **same authority as a clean Codex review**: it closes the
   bead and then feeds the same merge decision (auto-merge a routine low-risk PR,
   else ping -- and whichever happens, the note to the maintainer records the
@@ -204,6 +208,6 @@ verdict** (`NO-GAPS` / `GAPS-FOUND (n)`) that drives the inner loop. Triage: a
 never a deferrable nit) -- as is any other high-confidence finding; a genuinely
 out-of-scope bug is filed as a separate bead (fresh-eyes files its own); a
 rejected finding gets its reason recorded. The orchestrator runs this loop to
-`NO-GAPS` pre-PR (ceiling 3 rounds),
+`NO-GAPS` pre-PR (no round cap -- loop while gaps are correct blockers),
 folds the adopt/reject/defer breakdown into the journal entry, and carries the
 final scorecard into the PR body's `## Exit criteria` section.
