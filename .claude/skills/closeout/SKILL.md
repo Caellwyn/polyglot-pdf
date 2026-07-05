@@ -587,25 +587,28 @@ its STATUS line:
 
 **Loop-stop rule -- OUTCOME-based, no round cap** (maintainer directive
 2026-07-04; the former `MAX_FALLBACK_ROUNDS = 2` is retired, mirroring the Codex
-loop). Keep re-spawning the Opus fallback and fixing as long as each round's
-`GAPS-FOUND` items are **correct blockers.** STOP (the fallback is CLEAN) when every
-remaining gap is **incorrect** (refuted -- record why) or a **true nit** (file a
-bead). No round cap; fix every correct blocker and re-spawn however many rounds it
-takes. The escalation branch is a `BLOCKED`/TIMEOUT/ERROR from this last-resort
-reviewer (above) or a gap you can neither fix nor honestly classify -- never a round
-count.
+loop). This governs EACH review's own loop (the primary Opus loop, and -- if it
+finds blockers -- the second confirming review's). Keep re-spawning that review and
+fixing as long as each round's `GAPS-FOUND` items are **correct blockers.** STOP
+that review (it is CLEAN) when every remaining gap is **incorrect** (refuted --
+record why) or a **true nit** (file a bead). No round cap; fix every correct blocker
+and re-spawn however many rounds it takes. **A single review reaching CLEAN is not
+the GATE** -- the Codex-down gate still requires BOTH independent reviews CLEAN on
+the identical final diff (above); a fix in either loop invalidates both clears. The
+escalation branch is a `BLOCKED`/TIMEOUT/ERROR from a last-resort reviewer (above)
+or a gap you can neither fix nor honestly classify -- never a round count.
 
-(The fallback subagent is read its STATUS line directly -- it is NOT watched by
+(The fallback subagents are read their STATUS lines directly -- they are NOT watched by
 `pr_review_watcher.py`, which only handles the GitHub-bot Codex path. Same as the
 Step 5.5 fresh-eyes loop.)
 
 ## Step 8 -- Close the bead + auto-merge or ping
 
-Once Codex is CLEAN (👍 / no findings) -- OR the Opus-4.8 fallback returned `NO-GAPS` (Step 7.5, when Codex was unavailable) -- or review was skipped per the Step 6 gate -- and the pre-PR assess (Step 5.5) is already complete, finish autonomously:
+Once Codex is CLEAN (👍 / no findings) -- OR the Opus-4.8 fallback gate cleared (Step 7.5: TWO independent `NO-GAPS`, when Codex was unavailable) -- or review was skipped per the Step 6 gate -- and the pre-PR assess (Step 5.5) is already complete, finish autonomously:
 
 0. **Confirm no `pr_review_watcher.py` is still running.** It should already have been killed when Codex went CLEAN (Step 7); if any watcher is still alive here -- or later, once you observe the branch has been merged -- kill it now. Never leave a `pr_review_watcher` process running past CLEAN or past merge.
-1. **Close the bead(s)** this PR resolves at PR handoff -- **but only if they are not already closed.** For a **review-worthy** PR the watcher's `--close-on-clean` already closed them when the Codex review went CLEAN (Step 7); do NOT re-close (a redundant `bd close` is a no-op but a wasted turn). Close here ONLY when the watcher did NOT: a **review-skipped** PR (where `closeout_finish.py --close-beads` already closed in the single run, so nothing to do here either); a recovery after a **CLOSE-FAILED** that you then fixed; or an **Opus-4.8 fallback `NO-GAPS`** (Step 7.5 -- the watcher's Codex-only close did NOT fire, so you close by hand here). When you do close by hand: one `scripts/bd_safe.py close <full-id> --reason "..."` per bead (at least one; all of them if the PR bundled several). If you're unsure, `bd show <id>` -- a re-close of an already-closed bead is harmless but skip it.
-2. **Decide the merge: auto-merge or ping** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs. maintainer merge"). Auto-merge requires ALL of: (a) an **adversarial reviewer cleared the diff** -- Codex CLEAN, or the Step-7.5 Opus-4.8 fallback `NO-GAPS`; (b) CI / required checks green; (c) the PR is **not consequence-bearing**. Judge (c): does it prove the bead direction impossible / substantially change an approved plan / affect operational cost / affect user-facing features / risk downstream disruption / need substantial multi-surface rework? (Same line as the step-2 escalation triggers; when unsure, treat as consequence-bearing.)
+1. **Close the bead(s)** this PR resolves at PR handoff -- **but only if they are not already closed.** For a **review-worthy** PR the watcher's `--close-on-clean` already closed them when the Codex review went CLEAN (Step 7); do NOT re-close (a redundant `bd close` is a no-op but a wasted turn). Close here ONLY when the watcher did NOT: a **review-skipped** PR (where `closeout_finish.py --close-beads` already closed in the single run, so nothing to do here either); a recovery after a **CLOSE-FAILED** that you then fixed; or an **Opus-4.8 fallback gate cleared** (Step 7.5 -- TWO independent `NO-GAPS`; the watcher's Codex-only close did NOT fire, so you close by hand here). When you do close by hand: one `scripts/bd_safe.py close <full-id> --reason "..."` per bead (at least one; all of them if the PR bundled several). If you're unsure, `bd show <id>` -- a re-close of an already-closed bead is harmless but skip it.
+2. **Decide the merge: auto-merge or ping** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs. maintainer merge"). Auto-merge requires ALL of: (a) an **adversarial reviewer cleared the diff** -- Codex CLEAN, or the Step-7.5 Opus-4.8 fallback gate (TWO independent `NO-GAPS`, when Codex was unavailable); (b) CI / required checks green; (c) the PR is **not consequence-bearing**. Judge (c): does it prove the bead direction impossible / substantially change an approved plan / affect operational cost / affect user-facing features / risk downstream disruption / need substantial multi-surface rework? (Same line as the step-2 escalation triggers; when unsure, treat as consequence-bearing.)
    - **All three hold -> AUTO-MERGE.** Capture the exact head SHA the review + CI cleared (`HEAD_SHA="$(gh pr view <pr#> --json headRefOid -q .headRefOid)"` -- this is the commit Codex/fallback reviewed and CI ran on), confirm CI/required checks are green (`gh pr checks <pr#>`), then merge **pinned to that SHA**: `gh pr merge <pr#> --squash --match-head-commit "$HEAD_SHA"` (match the repo's merge style). The `--match-head-commit` guard makes the merge FAIL rather than silently merge an unreviewed head if anything pushed to the branch between the clear and the merge (the review-race). NEVER pass `--admin` (it bypasses the very checks gate condition (b) relies on; it is also settings-denied). Then post a SHORT plain-language note to the maintainer: what shipped + bead id(s), and the defended-decision list (below). This is a notification, not a request -- the merge is done. If the merge fails on the SHA match, a new commit landed -> re-review that commit before retrying, do NOT drop the guard.
    - **Any of the three fails -> PING, do not merge.** That includes: consequence-bearing; review NOT clean; checks red; **or a review-SKIPPED PR** (docs-only / beads-only / trivial per the Step 6 gate) -- a skipped PR had no adversarial review, so condition (a) is unmet and it is NOT auto-merge-eligible even though it's low-risk; hand it to the maintainer. Also ping when you're simply unsure which side of the line the PR is on. Hand the maintainer a "clean and ready for your merge" summary and stop.
 

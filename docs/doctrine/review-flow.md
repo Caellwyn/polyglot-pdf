@@ -125,7 +125,10 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   confirming review -- a fresh Opus, or a fresh Sonnet if a second Opus is
   unavailable) BOTH return `NO-GAPS` on the identical final diff. A fix found by
   either invalidates both clears and re-runs both. The merge ping records that two
-  reviews cleared it and names the second reviewer's model. (When Codex IS
+  reviews cleared it and names the second reviewer's model. (The operational
+  mechanics -- primary loop then second confirming review, and the read-directly
+  vs. watcher distinction -- are in the "Reviewer of last resort, mechanics" bullet
+  below.) (When Codex IS
   available, its review + the pre-PR Opus final round already provide two
   independent looks, so this two-reviewer requirement is specific to the
   Codex-down fallback.)
@@ -159,28 +162,35 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   not an issue comment, so the eyeballs reaction is unobservable; round 1 goes
   straight to the verdict wait. A Codex that acks on round 2+ gets the full 20-min
   verdict window.
-- **Reviewer of last resort: a looped Opus-4.8 adversarial review when Codex is
-  unavailable.** On `ERROR` (quota), `TIMEOUT` (no verdict), or `NO-ACK` (never
-  started), closeout spawns the `fresh-eyes-reviewer` agent with `model: opus` --
-  passed the bead's exit criteria and pointed at the real post-PR diff -- and loops
-  it (fix gaps -> re-spawn) to `NO-GAPS` -- no round cap, looping while gaps are
-  correct blockers, same outcome-based stop as the Codex loop. A
-  clean fallback has the **same authority as a clean Codex review**: it closes the
-  bead and then feeds the same merge decision (auto-merge a routine low-risk PR,
-  else ping -- and whichever happens, the note to the maintainer records the
-  fallback path and which trigger fired). **Why Opus-4.8:** it is the most capable affordable
-  reviewer once Codex credits are spent -- same model family as the Sonnet
-  fresh-eyes that ALREADY cleared the rubric pre-PR and as the author, but a
-  stronger tier, so this is a genuine fresh adversarial look rather than re-running
-  an already-clean process. A different vendor would cost more for no clear gain.
-  **Why not just trust the pre-PR fresh-eyes `NO-GAPS`** (the old behavior while
-  credits were exhausted)**:** that pass and the author share a model family and
-  ran on the SAME diff with the author's framing fresh in context; the outer review
-  exists precisely to add an independent look, and the Opus fallback preserves that
-  independence (stronger tier, post-PR, adversarial) when Codex can't provide it.
-  The fallback subagent is read directly (its `NO-GAPS` / `GAPS-FOUND` STATUS
-  line), NOT watched by `pr_review_watcher.py` -- that watcher is the GitHub-bot
-  (Codex) path only, same as the Step 5.5 fresh-eyes loop.
+- **Reviewer of last resort, mechanics: TWO independent looped Opus-4.8 reviews
+  when Codex is unavailable (bd dgoa).** On `ERROR` (quota), `TIMEOUT` (no
+  verdict), or `NO-ACK` (never started), closeout spawns the
+  `fresh-eyes-reviewer` agent with `model: opus` -- passed the bead's exit criteria
+  and pointed at the real post-PR diff -- and loops it (fix gaps -> re-spawn) to
+  `NO-GAPS` -- no round cap, looping while gaps are correct blockers, same
+  outcome-based stop as the Codex loop. Then a SECOND independent confirming review
+  (a fresh Opus spawn, or a fresh Sonnet only if a second Opus is unavailable) must
+  ALSO return `NO-GAPS` on the identical final diff; a fix found by either
+  invalidates both clears and re-runs both (the two-review gate above -- Codex-down
+  makes the fallback the only adversarial gate, so one pass is a single point of
+  failure). Two agreeing `NO-GAPS` carry the **same authority as a clean Codex
+  review**: they close the bead and feed the same merge decision (auto-merge a
+  routine low-risk PR, else ping -- and whichever happens, the note to the
+  maintainer records the fallback path, which trigger fired, and that two reviews
+  cleared it + the second reviewer's model). **Why Opus-4.8:** it is the most
+  capable affordable reviewer once Codex credits are spent -- same model family as
+  the Sonnet fresh-eyes that ALREADY cleared the rubric pre-PR and as the author,
+  but a stronger tier, so this is a genuine fresh adversarial look rather than
+  re-running an already-clean process. A different vendor would cost more for no
+  clear gain. **Why not just trust the pre-PR fresh-eyes `NO-GAPS`** (the old
+  behavior while credits were exhausted)**:** that pass and the author share a
+  model family and ran on the SAME diff with the author's framing fresh in context;
+  the outer review exists precisely to add an independent look, and the Opus
+  fallback preserves that independence (stronger tier, post-PR, adversarial) when
+  Codex can't provide it. The fallback subagents are read directly (their `NO-GAPS`
+  / `GAPS-FOUND` STATUS lines), NOT watched by `pr_review_watcher.py` -- that
+  watcher is the GitHub-bot (Codex) path only, same as the Step 5.5 fresh-eyes
+  loop.
 - **Review-worthiness gate.** The orchestrator decides per-PR whether the diff can
   contain a runtime/logic regression. Docs-only / `.beads`-only / journal-only /
   trivial PRs get NO trigger and skip the watch loop entirely -- reviewing them
