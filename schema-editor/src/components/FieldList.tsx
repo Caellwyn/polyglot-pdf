@@ -17,7 +17,7 @@ interface FieldListProps {
   groupSelection?: string[];
   onToggleGroupSelection?: (fieldId: string) => void;
   onClearGroupSelection?: () => void;
-  onMergeFields?: () => void;
+  onMergeFields?: (kind: 'checkbox_group' | 'radio') => void;
 }
 
 export const FieldList: React.FC<FieldListProps> = ({
@@ -448,10 +448,19 @@ export const FieldList: React.FC<FieldListProps> = ({
             type="button"
             className="btn-sm btn-primary disabled:opacity-50"
             disabled={reason !== null}
-            onClick={() => onMergeFields?.()}
-            title={reasonText}
+            onClick={() => onMergeFields?.('checkbox_group')}
+            title="Several boxes can be checked at once (multi-select checkbox group)"
           >
-            Merge
+            Merge (several)
+          </button>
+          <button
+            type="button"
+            className="btn-sm btn-primary disabled:opacity-50"
+            disabled={reason !== null}
+            onClick={() => onMergeFields?.('radio')}
+            title="Exactly one box is checked (single-select radio group)"
+          >
+            Merge (exactly one)
           </button>
           <button
             type="button"

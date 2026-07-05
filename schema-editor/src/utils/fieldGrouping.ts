@@ -3,8 +3,8 @@
 // extraction as N separate radio/checkbox fields; the human must be able to
 // MERGE them into one consolidated options[] field (each option carrying its
 // source widget's pdf_field_name) and UN-merge back. The backend model + runtime
-// already consume this consolidated shape (FieldOption.pdf_field_name,
-// consolidated_widgets[]); this module is purely an editor-side mutation.
+// already consume this consolidated shape (FieldOption.pdf_field_name); this
+// module is purely an editor-side mutation.
 //
 // LOSSLESS, SEMANTICS-AWARE design (Codex review on PR #256):
 //   - Merge STASHES each source field's complete original FormField, plus the
@@ -15,20 +15,22 @@
 //     and runtime ignore the extra _ungroup key.
 //   - Merge REWRITES dependent conditionals with the CORRECT runtime semantics:
 //     a reference that selected a now-merged-away widget ("is_checked" on that
-//     widget) becomes "equals <that widget's option value>" on the consolidated
-//     radio, because the merged field's runtime value is the selected option's
-//     value (see frontend shouldShowField). A bare id swap would leave an
-//     is_checked condition that never fires against a radio. Un-merge restores the
-//     original conditions from the stash.
+//     widget) becomes a reference to that widget's option slug on the group --
+//     "includes <slug>" for a checkbox_group (multi-select) or "equals <slug>"
+//     for a radio (single-select), because the group's runtime value is its
+//     selected option(s). A bare id swap would leave an is_checked condition
+//     that never fires against a group. Un-merge restores the originals.
 //   - Guards: only radio/checkbox fields that (a) are not already consolidated and
 //     (b) carry a pdf_field_name are groupable; a merge is rejected if the
 //     selection spans more than one section (which would silently move a field
 //     across the Form > Parts > Sections hierarchy).
 //
-// SHAPE (same structure as i-90's hand-built consolidated fields): the merged
-// field is a radio with options[] (each { value, label, pdf_field_name }) +
-// consolidated_widgets[]. option.value is the source field's id; the runtime
-// matches on option.value regardless of the token it holds.
+// SHAPE (schema v2, bd h76m.10): the merged field is a checkbox_group (multi-
+// select) or radio (single-select) with options[] (each
+// { value, label, pdf_field_name }). option.value is a SEMANTIC slug minted
+// from the label -- unique per field, lowercase-ascii; widget identity lives
+// ONLY on option.pdf_field_name, and the group carries NO field-level
+// pdf_field_name (the backend model rejects one on a group).
 
 import type {
   FormField,
@@ -38,6 +40,7 @@ import type {
   CompositeConditionalDisplay,
   ConditionalDisplay,
   ConditionalControl,
+  ConditionalOperator,
   FieldCondition,
 } from '../types/schema';
 
@@ -63,10 +66,54 @@ const CONTROL_ACTION_KEYS: ControlActionKey[] = [
 ];
 
 // "Selection" operators -- conditions that test whether a (checkbox/radio) widget
-// is the selected one. When that widget is merged into a consolidated radio, the
-// runtime value becomes the selected option's value, so these must convert to
-// `equals <option value>` rather than keep a widget-level is_checked/equals.
+// is the selected one. When that widget is merged into a consolidated group, the
+// runtime value becomes the selected option(s), so these must convert to a
+// membership/equality reference on the group rather than keep a widget-level op.
 const SELECTION_OPERATORS = new Set(['is_checked', 'equals', 'is_not_empty']);
+
+// The NEGATIVE selection predicates -- "this widget is NOT selected" on a source
+// checkbox. On the merged group these must become the NEGATIVE reference
+// (not_includes <slug> for a checkbox_group, not_equals <slug> for a radio),
+// NOT be left as a widget-level not_equals/is_empty that is either v2-invalid on
+// a group or silently re-scoped to "no options selected" (Codex PR #310 round 3).
+//   not_equals true  -> box is unchecked
+//   not_equals <on>  -> box is unchecked (widget on-value form)
+//   is_empty         -> box is unchecked
+const NEGATIVE_SELECTION_OPERATORS = new Set(['not_equals', 'is_empty']);
+
+// v2 option-slug minting (bd h76m.10): mirror backend
+// conditional_vocabulary.mint_option_slug / mint_unique_slugs. Merge mints
+// SEMANTIC slugs from labels (lowercase ascii [a-z0-9_-], unique per field)
+// instead of the old source-field-id convention, so the consolidated group is
+// v2-lint-clean (option-value-slug rule) and its widget identity lives only in
+// option.pdf_field_name.
+export function mintOptionSlug(label: string, fallback = 'option'): string {
+  const ascii = (label || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '') // strip combining accents
+    // eslint-disable-next-line no-control-regex
+    .replace(/[^\x00-\x7f]/g, '') // drop remaining non-ascii
+    .toLowerCase();
+  const slug = ascii.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return slug || fallback;
+}
+
+export function mintUniqueSlugs(labels: string[]): string[] {
+  const used = new Set<string>();
+  return labels.map(label => {
+    const base = mintOptionSlug(label);
+    let candidate = base;
+    let n = 1;
+    while (used.has(candidate)) candidate = `${base}_${++n}`;
+    used.add(candidate);
+    return candidate;
+  });
+}
+
+// The kind of consolidated group a merge produces (bd h76m.10): a
+// checkbox_group is multi-select (membership conditionals), a radio is
+// single-select (equality conditionals).
+export type MergeKind = 'checkbox_group' | 'radio';
 
 // Best human-readable label for a source field becoming one option.
 function optionLabelFor(field: FormField): string {
@@ -166,13 +213,30 @@ function rewriteShowIf(
   cond: ConditionalDisplay,
   mergedAwayToValue: Map<string, string>,
   primaryId: string,
+  membership: boolean,
 ): ConditionalDisplay | null {
   if (!mergedAwayToValue.has(cond.field)) return null; // not pointing at a merged-away field
   const optionValue = mergedAwayToValue.get(cond.field)!;
   if (SELECTION_OPERATORS.has(cond.operator)) {
-    return { field: primaryId, operator: 'equals', value: optionValue };
+    // "this widget is selected" -> the group holds the widget's option slug.
+    // checkbox_group is multi-select, so membership (includes) is the correct
+    // operator; a radio is single-select, so equality (bd h76m.10).
+    return membership
+      ? { field: primaryId, operator: 'includes', value: optionValue }
+      : { field: primaryId, operator: 'equals', value: optionValue };
   }
-  // A non-selection operator (e.g. is_empty) keeps its operator but retargets.
+  if (NEGATIVE_SELECTION_OPERATORS.has(cond.operator)) {
+    // "this widget is NOT selected" -> the group does NOT hold the slug.
+    // checkbox_group -> not_includes <slug>; radio -> not_equals <slug>
+    // (Codex PR #310 round 3). Leaving the widget-level not_equals/is_empty
+    // would be v2-invalid on a group or silently mean "no options selected".
+    return membership
+      ? { field: primaryId, operator: 'not_includes', value: optionValue }
+      : { field: primaryId, operator: 'not_equals', value: optionValue };
+  }
+  // A genuinely non-selection operator (contains/greater_than/...) keeps its
+  // operator but retargets. These do not arise from a checkbox source in
+  // practice; preserved best-effort.
   return { ...cond, field: primaryId };
 }
 
@@ -204,6 +268,7 @@ function rewriteCondition(
   cond: FieldCondition,
   mergedAwayToValue: Map<string, string>,
   primaryId: string,
+  membership: boolean,
 ): FieldCondition {
   if (isCompositeCondition(cond)) {
     const out: CompositeConditionalDisplay = {};
@@ -211,13 +276,48 @@ function rewriteCondition(
       const members = cond[bucket];
       if (members) {
         out[bucket] = members.map(
-          atom => rewriteShowIf(atom, mergedAwayToValue, primaryId) ?? atom,
+          atom => rewriteShowIf(atom, mergedAwayToValue, primaryId, membership) ?? atom,
         );
       }
     }
     return out;
   }
-  return rewriteShowIf(cond, mergedAwayToValue, primaryId) ?? cond;
+  return rewriteShowIf(cond, mergedAwayToValue, primaryId, membership) ?? cond;
+}
+
+// Field IDs of dependents whose show_if / require_if references a specific
+// option slug of `triggerFieldId` (bd h76m.10, Codex PR #310). Deleting such an
+// option must NOT silently strip the condition -- for a positive trigger
+// (includes/equals) that would flip the dependent from correctly-hidden to
+// shown-for-everyone (round-2 finding). So the editor BLOCKS the delete and
+// tells the author to retarget the dependent first, keeping the schema
+// ref-clean without a silent semantic change. Returns the referencing field
+// ids (empty = safe to delete).
+export function optionValueReferencedBy(
+  schema: FormSchema,
+  triggerFieldId: string,
+  optionSlug: string,
+): string[] {
+  const refs = (cond: FieldCondition | undefined): boolean => {
+    for (const atom of conditionAtomsOf(cond)) {
+      if (atom.field === triggerFieldId && String(atom.value) === optionSlug) {
+        return true;
+      }
+    }
+    return false;
+  };
+  return schema.fields
+    .filter(f => f.id !== triggerFieldId && (refs(f.show_if) || refs(f.require_if)))
+    .map(f => f.id);
+}
+
+// Flatten a legacy-or-composite condition to its atomic conditions.
+function conditionAtomsOf(cond: FieldCondition | undefined): ConditionalDisplay[] {
+  if (!cond) return [];
+  if (isCompositeCondition(cond)) {
+    return CONDITION_BUCKETS.flatMap(b => cond[b] ?? []);
+  }
+  return [cond];
 }
 
 // Rewrite every dependent field's show_if / controls_fields that referenced a
@@ -228,6 +328,7 @@ function rewriteReferences(
   fields: FormField[],
   mergedAwayToValue: Map<string, string>,
   primaryId: string,
+  membership: boolean,
 ): { fields: FormField[]; rewrites: UngroupStash['rewrites'] } {
   const rewrites: UngroupStash['rewrites'] = [];
   const mergedAway = new Set(mergedAwayToValue.keys());
@@ -253,14 +354,14 @@ function rewriteReferences(
 
     if (f.show_if && conditionReferencesAny(f.show_if, mergedAway)) {
       record.show_if = f.show_if; // original
-      next.show_if = rewriteCondition(f.show_if, mergedAwayToValue, primaryId);
+      next.show_if = rewriteCondition(f.show_if, mergedAwayToValue, primaryId, membership);
       changed = true;
       recorded = true;
     }
 
     if (f.require_if && conditionReferencesAny(f.require_if, mergedAway)) {
       record.require_if = f.require_if; // original
-      next.require_if = rewriteCondition(f.require_if, mergedAwayToValue, primaryId);
+      next.require_if = rewriteCondition(f.require_if, mergedAwayToValue, primaryId, membership);
       changed = true;
       recorded = true;
     }
@@ -306,7 +407,11 @@ function rewriteReferences(
 // options[] field. Returns the original schema unchanged if the selection is
 // invalid (see mergeBlockReason). The first id is the primary whose identity
 // survives.
-export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult {
+export function mergeFields(
+  schema: FormSchema,
+  fieldIds: string[],
+  kind: MergeKind = 'radio',
+): MergeResult {
   if (mergeBlockReason(schema, fieldIds) !== null) {
     return { schema, mergedFieldId: fieldIds[0] ?? null };
   }
@@ -319,14 +424,21 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
 
   const primary = distinct[0];
   const mergedIds = new Set(distinct.map(f => f.id));
+  // checkbox_group is multi-select -> membership (includes) conditionals;
+  // radio is single-select -> equality (bd h76m.10).
+  const membership = kind === 'checkbox_group';
 
-  // option.value = source id (stable/unique); each merged-away id maps to its
-  // option value so dependent conditionals can be rewritten with correct semantics.
+  // option.value = a SEMANTIC slug minted from each source's label (v2
+  // convention, bd h76m.10), unique per field. Widget identity moves to
+  // option.pdf_field_name only. Each merged-away id maps to ITS slug so
+  // dependent conditionals rewrite to the correct option reference.
+  const slugs = mintUniqueSlugs(distinct.map(f => optionLabelFor(f)));
+  const idToSlug = new Map(distinct.map((f, i) => [f.id, slugs[i]]));
   const mergedAwayToValue = new Map<string, string>();
-  for (const f of distinct.slice(1)) mergedAwayToValue.set(f.id, f.id);
+  for (const f of distinct.slice(1)) mergedAwayToValue.set(f.id, idToSlug.get(f.id)!);
 
-  const options: FieldOption[] = distinct.map(f => ({
-    value: f.id,
+  const options: FieldOption[] = distinct.map((f, i) => ({
+    value: slugs[i],
     label: optionLabelFor(f),
     pdf_field_name: f.pdf_field_name,
     source_type: f.type,
@@ -359,7 +471,11 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   const carriedControls: ConditionalControl[] = [];
   for (const f of distinct.slice(1)) {
     for (const ctrl of f.controls_fields || []) {
-      carriedControls.push({ ...remapControlTargets(ctrl), operator: 'equals', value: f.id });
+      carriedControls.push({
+        ...remapControlTargets(ctrl),
+        operator: membership ? 'includes' : 'equals',
+        value: idToSlug.get(f.id)!,
+      });
     }
   }
 
@@ -371,7 +487,7 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
     if (!mergedIds.has(f.id)) survivors.push(f);
   }
   const { fields: rewrittenSurvivors, rewrites } = rewriteReferences(
-    survivors, mergedAwayToValue, primary.id,
+    survivors, mergedAwayToValue, primary.id, membership,
   );
 
   // The PRIMARY's own references to merged-away siblings must be rewritten too
@@ -392,7 +508,7 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
     if (!condition || !conditionReferencesAny(condition, new Set(mergedAwayToValue.keys()))) {
       return condition;
     }
-    const rewritten = rewriteCondition(condition, mergedAwayToValue, primary.id);
+    const rewritten = rewriteCondition(condition, mergedAwayToValue, primary.id, membership);
     if (isCompositeCondition(rewritten)) {
       const pruned: CompositeConditionalDisplay = {};
       let atomCount = 0;
@@ -422,10 +538,15 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   // widget-level selection operator (is_checked) would never fire against a
   // radio, so re-key it to "equals the primary's option value" -- the same fix
   // applied to carried non-primary controls (Opus fallback review, round 2).
+  const primarySlug = idToSlug.get(primary.id)!;
   const primaryControls = (primary.controls_fields || []).map(ctrl => {
     const remapped = remapControlTargets(ctrl);
     return SELECTION_OPERATORS.has(ctrl.operator)
-      ? { ...remapped, operator: 'equals' as const, value: primary.id }
+      ? {
+          ...remapped,
+          operator: (membership ? 'includes' : 'equals') as ConditionalOperator,
+          value: primarySlug,
+        }
       : remapped;
   });
 
@@ -438,11 +559,17 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   const mergedControls = [...primaryControls, ...carriedControls];
   const mergedField = {
     ...primary,
-    type: 'radio',
+    type: kind,
     options,
-    consolidated_widgets: distinct.map(f => f.id),
     [STASH_KEY]: stash,
   } as unknown as Record<string, unknown>;
+  // A v2 group carries NO field-level pdf_field_name -- per-box identity lives
+  // on option.pdf_field_name (backend model rejects a group with one). The
+  // primary's own widget became options[0].pdf_field_name above.
+  delete mergedField.pdf_field_name;
+  // consolidated_widgets is a deleted-in-v2 legacy key (derivable, inconsistent
+  // even in gold); do not carry it onto the merged group (bd h76m.10).
+  delete mergedField.consolidated_widgets;
   if (primaryShowIf) mergedField.show_if = primaryShowIf;
   else delete mergedField.show_if;
   if (primaryRequireIf) mergedField.require_if = primaryRequireIf;
@@ -658,6 +785,18 @@ function normalizeWholeGroupOperator(cond: ConditionalDisplay): ConditionalDispl
       // is_empty; an unmatched non-empty equals stays equals (unsatisfiable ->
       // hidden, the correct "no such option" result).
       return emptyValue ? 'is_empty' : 'equals';
+    case 'includes':
+      // Only an UNMATCHED includes reaches here (a matched one is exact in the
+      // remapFallbackAtom IF branch). Membership on a now-standalone boolean
+      // checkbox is meaningless; an unmatched option can never be selected, so
+      // the intent is unsatisfiable -> hidden. `equals <value>` on a boolean is
+      // never true (the box holds true/false, not the slug) -> hidden, correct.
+      return 'equals';
+    case 'not_includes':
+      // Symmetric: an unmatched not_includes was always true (the option can
+      // never be present). `not_equals <value>` on a boolean is always true ->
+      // always show, replicating the original semantics.
+      return 'not_equals';
     default:
       return cond.operator; // comparison/contains operators: preserve (best effort)
   }
@@ -675,18 +814,26 @@ function remapFallbackAtom(
   const matchedOptionId = cond.value !== undefined && cond.value !== null
     ? valueToReconstructedId.get(String(cond.value))
     : undefined;
-  if (matchedOptionId && (cond.operator === 'equals' || cond.operator === 'not_equals')) {
+  // Operators that reference a SPECIFIC option by value: equals/not_equals
+  // (radio single-select) AND includes/not_includes (checkbox_group
+  // membership, bd h76m.10). All four un-merge to the same per-option
+  // checkbox condition -- omitting includes/not_includes left a dangling
+  // membership op on a now-standalone boolean checkbox that never fired
+  // (fresh-eyes P4.2).
+  const positiveOption = cond.operator === 'equals' || cond.operator === 'includes';
+  const negativeOption = cond.operator === 'not_equals' || cond.operator === 'not_includes';
+  if (matchedOptionId && (positiveOption || negativeOption)) {
     // A SPECIFIC option: the inverse for a single option is exact, targeting that
     // option's reconstructed checkbox.
-    //   equals <optValue>     -> is_checked        (shown when that option is set)
-    //   not_equals <optValue> -> not_equals true   (shown UNLESS that option is set)
+    //   selected(option)     -> is_checked        (shown when that option is set)
+    //   NOT selected(option) -> not_equals true   (shown UNLESS that option is set)
     // not_equals must use `not_equals true`, NOT `is_empty`: shouldShowField's
     // is_empty is true only for null/undefined/'' -- an EXPLICITLY unchecked
     // checkbox stores `false`, which is_empty reads as false, so the dependent
     // would be permanently hidden once the box is touched. `not_equals true`
     // reads false===checked, true===unchecked-or-absent -- the correct inverse
     // (bd polyglot-pdf-cjby, fresh-eyes r3).
-    return cond.operator === 'equals'
+    return positiveOption
       ? { field: matchedOptionId, operator: 'is_checked' }
       : { field: matchedOptionId, operator: 'not_equals', value: true };
   }
@@ -718,13 +865,15 @@ function remapFallbackDependent(
   let changed = false;
   const next: FormField = { ...f };
 
-  // show_if may be legacy or a v2 composite (bd h76m.8): remap atom-wise,
-  // preserving the stored shape.
-  if (f.show_if && conditionReferencesAny(f.show_if, new Set([fieldId]))) {
-    if (isCompositeCondition(f.show_if)) {
+  // Remap a show_if/require_if that referenced the now-split consolidated
+  // field, atom-wise, preserving the stored shape (legacy or v2 composite --
+  // bd h76m.8). show_if AND require_if get the SAME treatment (Codex PR #310
+  // round 2: require_if was previously left dangling).
+  const remapCond = (cond: FieldCondition): FieldCondition => {
+    if (isCompositeCondition(cond)) {
       const out: CompositeConditionalDisplay = {};
       for (const bucket of CONDITION_BUCKETS) {
-        const members = f.show_if[bucket];
+        const members = cond[bucket];
         if (members) {
           out[bucket] = members.map(atom =>
             atom.field === fieldId
@@ -733,12 +882,17 @@ function remapFallbackDependent(
           );
         }
       }
-      next.show_if = out;
-    } else {
-      next.show_if = remapFallbackAtom(
-        f.show_if, valueToReconstructedId, primaryReconstructedId,
-      );
+      return out;
     }
+    return remapFallbackAtom(cond, valueToReconstructedId, primaryReconstructedId);
+  };
+
+  if (f.show_if && conditionReferencesAny(f.show_if, new Set([fieldId]))) {
+    next.show_if = remapCond(f.show_if);
+    changed = true;
+  }
+  if (f.require_if && conditionReferencesAny(f.require_if, new Set([fieldId]))) {
+    next.require_if = remapCond(f.require_if);
     changed = true;
   }
 

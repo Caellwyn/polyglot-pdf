@@ -11,6 +11,7 @@ import {
   isGroupableField,
   mergeBlockReason,
   stripEditorState,
+  optionValueReferencedBy,
 } from './fieldGrouping';
 import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
 
@@ -97,29 +98,45 @@ describe('isGroupableField', () => {
 });
 
 describe('mergeFields (crit 1: group W-7 reason_a..e)', () => {
-  it('merges 5 separate fields into ONE radio with 5 options, each carrying its pdf_field_name', () => {
+  it('merges W-7 checkboxes into ONE v2 checkbox_group: slug values, per-option pdf, no field-level pdf', () => {
     const schema = w7Schema();
     const ids = ['reason_a', 'reason_b', 'reason_c', 'reason_d', 'reason_e'];
-    const { schema: merged, mergedFieldId } = mergeFields(schema, ids);
+    const { schema: merged, mergedFieldId } = mergeFields(schema, ids, 'checkbox_group');
 
     // Five source fields collapse to one.
     expect(merged.fields).toHaveLength(1);
     const f = merged.fields[0];
     expect(f.id).toBe('reason_a'); // first selected is the primary
     expect(mergedFieldId).toBe('reason_a');
-    expect(f.type).toBe('radio');
+    expect(f.type).toBe('checkbox_group');
+    // v2: a group carries NO field-level pdf_field_name; identity is per-option.
+    expect(f.pdf_field_name).toBeUndefined();
+    // consolidated_widgets is a deleted-in-v2 legacy key.
+    expect((f as unknown as Record<string, unknown>).consolidated_widgets).toBeUndefined();
 
-    // Exactly five options, each carrying its source widget's pdf_field_name.
+    // Exactly five options: SEMANTIC slugs minted from labels, each carrying
+    // its source widget's pdf_field_name.
     expect(f.options).toHaveLength(5);
+    const slugs = f.options!.map(o => o.value);
+    expect(slugs).toEqual(['reason_a', 'reason_b', 'reason_c', 'reason_d', 'reason_e']
+      .map((_, i) => `reason_${'abcde'[i]}`)); // labels 'Reason A'.. -> 'reason_a'..
+    expect(new Set(slugs).size).toBe(5); // unique
     for (let i = 0; i < ids.length; i++) {
       expect(f.options![i].pdf_field_name).toBe(
         `form1[0].#subform[0].reason_${ids[i].slice(-1)}[0]`
       );
-      expect(f.options![i].value).toBe(ids[i]);
     }
+  });
 
-    // consolidated_widgets mirrors the option values.
-    expect(f.consolidated_widgets).toEqual(ids);
+  it('merges into a radio when the group is single-select', () => {
+    const schema = w7Schema();
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b'], 'radio',
+    );
+    const f = merged.fields.find(x => x.id === 'reason_a')!;
+    expect(f.type).toBe('radio');
+    expect(f.pdf_field_name).toBeUndefined();
+    expect(f.options!.map(o => o.value)).toEqual(['reason_a', 'reason_b']);
   });
 
   it('drops merged-away ids from the section field list (leaving only the primary)', () => {
@@ -136,6 +153,7 @@ describe('mergeFields (crit 1: group W-7 reason_a..e)', () => {
       'reason_c', 'reason_a', 'reason_b',
     ]);
     expect(mergedFieldId).toBe('reason_c');
+    // options[0] is the primary; its slug is minted from label 'Reason C'.
     expect(merged.fields.find(f => f.id === 'reason_c')!.options![0].value).toBe('reason_c');
   });
 
@@ -179,6 +197,70 @@ describe('ungroupField (crit 2: reversible)', () => {
 
     // The section slot is restored to the full set, in order.
     expect(unmerged.sections[0].fields).toEqual(ids);
+  });
+
+  it('merge -> save (strip stash) -> reload -> un-merge yields clean standalone fields (crit 2 fallback)', () => {
+    const schema = w7Schema();
+    const ids = ['reason_a', 'reason_b', 'reason_c', 'reason_d', 'reason_e'];
+    // Merge into a v2 checkbox_group, then SAVE (strip the _ungroup stash) --
+    // this is what a reload from disk delivers, forcing the reconstruction
+    // fallback (not the lossless in-session path).
+    const { schema: merged } = mergeFields(schema, ids, 'checkbox_group');
+    const saved = stripEditorState(merged);
+    const group = saved.fields.find(f => f.id === 'reason_a')!;
+    expect((group as unknown as Record<string, unknown>)._ungroup).toBeUndefined();
+
+    const unmerged = ungroupField(saved, 'reason_a');
+
+    // Every reconstructed field is a clean STANDALONE: a checkbox with NO
+    // options and its own pdf_field_name -- the shape a v2 standalone checkbox
+    // requires (lint-clean; the backend model accepts it).
+    expect(unmerged.fields).toHaveLength(5);
+    const reconstructed = unmerged.fields.filter(f => f.section_id === 'reason');
+    expect(reconstructed).toHaveLength(5);
+    for (const f of reconstructed) {
+      expect(f.type).toBe('checkbox');
+      expect(f.options).toBeUndefined();
+      expect(f.pdf_field_name).toBeTruthy();
+      expect(f.pdf_field_name).toMatch(/reason_[a-e]\[0\]$/);
+    }
+    // The five source widgets are all recovered (identity via pdf_field_name).
+    const leaves = reconstructed.map(f => f.pdf_field_name).sort();
+    expect(leaves).toEqual(ids.map(id =>
+      `form1[0].#subform[0].reason_${id.slice(-1)}[0]`).sort());
+  });
+
+  it('un-merges a checkbox_group dependent AFTER save/reload without dangling includes (fresh-eyes P4.2)', () => {
+    const schema = w7Schema();
+    // A dependent shown when the (soon-to-be-merged) reason_b box is checked.
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: 'is_checked' },
+    } as FormField);
+    schema.sections[0].fields.push('detail');
+
+    // Merge into a checkbox_group -> the dependent's show_if becomes a
+    // membership op (includes <reason_b's slug>) on the group.
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    const mergedDetail = merged.fields.find(f => f.id === 'detail')!;
+    expect(asAtom(mergedDetail.show_if).operator).toBe('includes');
+
+    // SAVE (strip stash) -> RELOAD -> un-merge via the fallback path.
+    const saved = stripEditorState(merged);
+    const unmerged = ungroupField(saved, 'reason_a');
+    const back = unmerged.fields.find(f => f.id === 'detail')!;
+
+    // The membership op must be remapped to a boolean-checkbox condition on the
+    // reconstructed reason_b field -- NOT left as a dangling `includes` that a
+    // standalone boolean checkbox can never satisfy.
+    const atom = asAtom(back.show_if);
+    expect(atom.operator).not.toBe('includes');
+    expect(atom.operator).toBe('is_checked');
+    // It targets a reconstructed standalone field that actually exists.
+    expect(unmerged.fields.some(f => f.id === atom.field && f.type === 'checkbox')).toBe(true);
   });
 
   it('is a no-op on a field that is not un-groupable (single option)', () => {
@@ -811,5 +893,137 @@ describe('require_if handling in merge/un-merge (bd 319g)', () => {
       all_of: [{ field: 'reason_b', operator: 'is_checked' }],
       none_of: [{ field: 'reason_e', operator: 'is_checked' }],
     });
+  });
+});
+
+// Negative selection predicates ("box is UNCHECKED") must convert to the
+// negative group reference on merge (Codex PR #310 round 3), else a group gets
+// a v2-invalid not_equals / a re-scoped is_empty.
+describe('merge converts negative selection predicates (Codex PR #310 round 3)', () => {
+  function schemaWithDep(op: ConditionalDisplay['operator'], value?: unknown): FormSchema {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: op, ...(value !== undefined ? { value } : {}) },
+    } as unknown as FormField);
+    schema.sections[0].fields.push('detail');
+    return schema;
+  }
+
+  it('not_equals true on a source checkbox -> not_includes <slug> for a checkbox_group', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('not_equals', true), ['reason_a', 'reason_b'], 'checkbox_group',
+    );
+    const atom = asAtom(merged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).toBe('not_includes');
+    expect(atom.field).toBe('reason_a');
+    expect(atom.value).toBe('reason_b'); // slug minted from label 'Reason B'
+  });
+
+  it('is_empty on a source checkbox -> not_includes <slug> for a checkbox_group', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('is_empty'), ['reason_a', 'reason_b'], 'checkbox_group',
+    );
+    const atom = asAtom(merged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).toBe('not_includes');
+    expect(atom.value).toBe('reason_b');
+  });
+
+  it('radio merge uses not_equals <slug> for the negative predicate', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('not_equals', true), ['reason_a', 'reason_b'], 'radio',
+    );
+    const atom = asAtom(merged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).toBe('not_equals');
+    expect(atom.value).toBe('reason_b');
+  });
+
+  it('un-merge inverts not_includes back to a boolean-checkbox condition', () => {
+    const { schema: merged } = mergeFields(
+      schemaWithDep('not_equals', true), ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    const saved = stripEditorState(merged);
+    const unmerged = ungroupField(saved, 'reason_a');
+    const atom = asAtom(unmerged.fields.find(f => f.id === 'detail')!.show_if);
+    expect(atom.operator).not.toBe('not_includes'); // not dangling on a boolean box
+    // negative option predicate inverts to `not_equals true` (unchecked).
+    expect(atom.operator).toBe('not_equals');
+    expect(atom.value).toBe(true);
+  });
+});
+
+// require_if must be remapped in the un-merge FALLBACK exactly like show_if
+// (bd h76m.10, Codex PR #310 round 2): it was previously left dangling.
+describe('un-merge fallback remaps require_if too (Codex PR #310 round 2)', () => {
+  it('remaps a checkbox_group dependent require_if after save/reload/un-merge', () => {
+    const schema = w7Schema();
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      require_if: { field: 'reason_b', operator: 'is_checked' },
+    } as FormField);
+    schema.sections[0].fields.push('detail');
+
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    expect(asAtom(merged.fields.find(f => f.id === 'detail')!.require_if).operator).toBe('includes');
+
+    const saved = stripEditorState(merged);
+    const unmerged = ungroupField(saved, 'reason_a');
+    const back = asAtom(unmerged.fields.find(f => f.id === 'detail')!.require_if);
+    // No dangling includes on a now-standalone boolean checkbox.
+    expect(back.operator).not.toBe('includes');
+    expect(back.operator).toBe('is_checked');
+    expect(unmerged.fields.some(f => f.id === back.field && f.type === 'checkbox')).toBe(true);
+  });
+});
+
+// Deleting a group option that a dependent references must be BLOCKED, not
+// silently rewritten (bd h76m.10, Codex PR #310 round 2): a silent strip would
+// flip a positive-trigger dependent from correctly-hidden to shown-for-all.
+describe('optionValueReferencedBy (Codex PR #310)', () => {
+  function groupSchema(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep', 'dep2', 'combo'] }],
+      fields: [
+        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
+          ] },
+        { id: 'dep', name: 'Dep', type: 'text', section_id: 's1', read_only: false, required: false,
+          show_if: { field: 'grp', operator: 'includes', value: 'b' } },
+        { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false, required: false,
+          require_if: { field: 'grp', operator: 'includes', value: 'b' } },
+        { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false, required: false,
+          show_if: { all_of: [{ field: 'grp', operator: 'includes', value: 'a' }] } },
+      ],
+    } as unknown as FormSchema;
+  }
+
+  it('lists every dependent that references the slug via show_if OR require_if', () => {
+    expect(optionValueReferencedBy(groupSchema(), 'grp', 'b').sort()).toEqual(['dep', 'dep2']);
+  });
+
+  it('finds a reference inside a composite condition', () => {
+    expect(optionValueReferencedBy(groupSchema(), 'grp', 'a')).toEqual(['combo']);
+  });
+
+  it('returns empty when no dependent references the slug (safe to delete)', () => {
+    expect(optionValueReferencedBy(groupSchema(), 'grp', 'no_such_slug')).toEqual([]);
+  });
+
+  it('ignores references to the SAME slug on a different trigger field', () => {
+    const s = groupSchema();
+    s.fields.push({ id: 'other', name: 'Other', type: 'checkbox_group', section_id: 's1',
+      read_only: false, required: false,
+      options: [{ value: 'b', label: 'B', pdf_field_name: 'ob[0]' }] } as unknown as FormField);
+    // 'dep' references grp.b, not other.b -> deleting other.b is unblocked.
+    expect(optionValueReferencedBy(s, 'other', 'b')).toEqual([]);
   });
 });

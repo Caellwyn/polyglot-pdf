@@ -7,7 +7,7 @@ import type {
   ConditionalOperator,
   ControlActionKey,
 } from '../types/schema';
-import { canUngroup } from '../utils/fieldGrouping';
+import { canUngroup, mintUniqueSlugs, optionValueReferencedBy } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
 
 interface FieldEditorProps {
@@ -20,6 +20,11 @@ interface FieldEditorProps {
   // Update form-level metadata (version/edition/OMB/expiration -- bd
   // polyglot-pdf-s4dp.2). Optional; when absent the metadata panel is read-only.
   onUpdateMetadata?: (patch: Partial<FormSchema['form_metadata']>) => void;
+  // Author-tier surfaces (bd h76m.10): per-option PDF-widget mapping lives
+  // under an Advanced disclosure only authors see. Editor-tier contractors see
+  // the option value as a read-only chip but not the widget plumbing. Defaults
+  // true so local (non-hosted) editing is full author tier.
+  authorTier?: boolean;
 }
 
 // The editable form-metadata panel (bd polyglot-pdf-s4dp.2). Shown when no field
@@ -110,6 +115,7 @@ const FIELD_TYPES: FieldType[] = [
   'select',
   'radio',
   'checkbox',
+  'checkbox_group',
   'signature',
 ];
 
@@ -169,6 +175,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   onUpdateField,
   onUnmergeField,
   onUpdateMetadata,
+  authorTier = true,
 }) => {
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -223,21 +230,46 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-gray-900">Basic Properties</h4>
 
-          {/* Field Type */}
-          <div>
-            <label className="label">Field Type</label>
-            <select
-              className="input"
-              value={field.type}
-              onChange={(e) => updateField({ type: e.target.value as FieldType })}
-            >
-              {FIELD_TYPES.map(type => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Field Type. A field that already carries options[] is a GROUP
+              (checkbox_group / a consolidated radio); raw-switching its type
+              would strand the options or mint a model-invalid group, so the
+              picker is read-only for groups -- change the group via Merge /
+              Ungroup instead. checkbox_group is only OFFERED as a target to
+              authors, since building a valid one requires per-option PDF
+              mapping (Codex PR #310 round 2). */}
+          {(() => {
+            const isGroup = !!field.options && field.options.length > 0;
+            const typeChoices = FIELD_TYPES.filter(
+              t => t !== 'checkbox_group' || authorTier || field.type === 'checkbox_group',
+            );
+            return (
+              <div>
+                <label className="label">Field Type</label>
+                <select
+                  className="input disabled:opacity-60"
+                  aria-label="Field Type"
+                  value={field.type}
+                  disabled={isGroup}
+                  title={isGroup
+                    ? 'This is a group (has options). Change it via Merge / Ungroup, not a type switch.'
+                    : undefined}
+                  onChange={(e) => updateField({ type: e.target.value as FieldType })}
+                >
+                  {typeChoices.map(type => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                {isGroup && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Group type is set by Merge (several = checkbox group, exactly
+                    one = radio) and reversed by Ungroup.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Spoken Name */}
           <div>
@@ -433,7 +465,14 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           />
         </div>
 
-        {/* Controls Fields (trigger-side: this field's value affects others) */}
+        {/* Controls Fields (trigger-side: this field's value affects others).
+            HIDDEN for a checkbox_group (Codex PR #310 round 3): this legacy
+            editor writes {operator:'equals', value:''} and offers no membership
+            operators, which is v2-invalid on a group trigger (the registry
+            allows only includes/not_includes/emptiness there). controls_fields
+            is deprecated (deleted at P6.2), so hiding it beats teaching a
+            dead editor group semantics. */}
+        {field.type !== 'checkbox_group' && (
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-gray-900">
             Controls Fields
@@ -601,6 +640,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             + Add Control
           </button>
         </div>
+        )}
 
         {/* Un-group: split a consolidated options[] field back into one field
             per widget (bd polyglot-pdf-s4dp.1). Rendered for ANY consolidated
@@ -620,8 +660,12 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           </div>
         )}
 
-        {/* Field Options (for select/radio) */}
-        {(field.type === 'select' || field.type === 'radio') && (
+        {/* Field Options (select / radio / checkbox_group). The option VALUE
+            is a read-only slug chip -- an internal join key minted from the
+            label, never free-typed (bd h76m.10); editing the label is how an
+            author renames an option. Per-option PDF-widget mapping is
+            author-tier only, under an Advanced disclosure. */}
+        {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group') && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-gray-900">Options</h4>
@@ -630,59 +674,140 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             {field.options && field.options.length > 0 ? (
               <div className="space-y-2">
                 {field.options.map((option, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <input
-                      type="text"
-                      className="input flex-1"
-                      value={option.label}
-                      onChange={(e) => {
-                        const newOptions = [...(field.options || [])];
-                        newOptions[idx] = { ...option, label: e.target.value };
-                        updateField({ options: newOptions });
-                      }}
-                      placeholder="Option label"
-                    />
-                    <button
-                      className="btn-sm btn-secondary"
-                      onClick={() => {
-                        const newOptions = (field.options || []).filter((_, i) => i !== idx);
-                        updateField({ options: newOptions });
-                      }}
-                    >
-                      Remove
-                    </button>
+                  <div key={idx} className="space-y-1 border-l-2 border-gray-100 pl-2">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        className="input flex-1"
+                        value={option.label}
+                        onChange={(e) => {
+                          const label = e.target.value;
+                          const newOptions = [...(field.options || [])];
+                          // Re-mint the slug from the new label, unique across
+                          // the OTHER options (the value is a read-only chip;
+                          // renaming the label is how it changes). bd h76m.10.
+                          const otherLabels = newOptions
+                            .filter((_, i) => i !== idx)
+                            .map(o => o.label || '');
+                          const value = mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
+                          newOptions[idx] = { ...option, label, value };
+                          updateField({ options: newOptions });
+                        }}
+                        placeholder="Option label"
+                      />
+                      {option.value && (
+                        <span
+                          className="text-xs font-mono text-gray-500 bg-gray-100 rounded px-1.5 py-0.5"
+                          title="Internal value (slug) -- minted from the label, not editable"
+                        >
+                          {option.value}
+                        </span>
+                      )}
+                      {(() => {
+                        // A dependent gated on this option's slug would dangle
+                        // (or, if silently stripped, flip from hidden to
+                        // shown-for-everyone). Block the delete and name the
+                        // dependents so the author retargets them first
+                        // (Codex PR #310 round 2).
+                        const referencedBy = option.value
+                          ? optionValueReferencedBy(schema, field.id, String(option.value))
+                          : [];
+                        // A choice field (select/radio/checkbox_group) needs >= 2
+                        // options in v2; removing at the floor would make a valid
+                        // group unsaveable/unpromotable in one click. Structural
+                        // splits go through Ungroup, not option-by-option Remove
+                        // (Codex PR #310 round 3).
+                        const atFloor =
+                          field.type !== 'checkbox' &&
+                          (field.options?.length ?? 0) <= 2;
+                        const blocked = referencedBy.length > 0 || atFloor;
+                        const reason = referencedBy.length > 0
+                          ? `Used by a condition on: ${referencedBy.join(', ')}. Retarget those first.`
+                          : atFloor
+                            ? 'A group needs at least two options. Ungroup to split it instead.'
+                            : undefined;
+                        return (
+                          <button
+                            className="btn-sm btn-secondary disabled:opacity-50"
+                            disabled={blocked}
+                            title={reason}
+                            onClick={() => {
+                              const newOptions = (field.options || []).filter((_, i) => i !== idx);
+                              updateField({ options: newOptions });
+                            }}
+                          >
+                            Remove
+                          </button>
+                        );
+                      })()}
+                    </div>
+                    {authorTier && (
+                      <details className="text-xs pl-1">
+                        <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+                          Advanced: PDF widget
+                        </summary>
+                        <input
+                          type="text"
+                          className="input input-sm mt-1 w-full font-mono"
+                          value={option.pdf_field_name || ''}
+                          onChange={(e) => {
+                            const newOptions = [...(field.options || [])];
+                            newOptions[idx] = { ...option, pdf_field_name: e.target.value };
+                            updateField({ options: newOptions });
+                          }}
+                          placeholder="pdf_field_name (widget backing this option)"
+                          aria-label={`Option ${idx + 1} PDF widget`}
+                        />
+                      </details>
+                    )}
                   </div>
                 ))}
-                <button
-                  className="btn btn-secondary w-full text-sm"
-                  onClick={() => {
-                    const newOptions = [...(field.options || []), { label: '', value: '' }];
-                    updateField({ options: newOptions });
-                  }}
-                >
-                  + Add Option
-                </button>
+                {(authorTier || field.type === 'select') && (
+                  <button
+                    className="btn btn-secondary w-full text-sm"
+                    onClick={() => {
+                      const opts = field.options || [];
+                      const value = mintUniqueSlugs(
+                        [...opts.map(o => o.label || ''), 'option'],
+                      ).slice(-1)[0];
+                      updateField({ options: [...opts, { label: '', value }] });
+                    }}
+                  >
+                    + Add Option
+                  </button>
+                )}
               </div>
-            ) : (
+            ) : (authorTier || field.type === 'select') ? (
               <button
                 className="btn btn-secondary w-full"
-                onClick={() => updateField({ options: [{ label: '', value: '' }] })}
+                onClick={() =>
+                  updateField({
+                    options: [{ label: '', value: mintUniqueSlugs(['option'])[0] }],
+                  })
+                }
               >
-                + Add Options
+                + Add Option
               </button>
+            ) : (
+              <p className="text-xs text-gray-500">No options.</p>
             )}
           </div>
         )}
 
-        {/* Debug Info */}
-        <details className="text-xs">
-          <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
-            Advanced / Debug
-          </summary>
-          <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-xs">
-            {JSON.stringify(field, null, 2)}
-          </pre>
-        </details>
+        {/* Debug Info -- author-tier only: the raw dump exposes every
+            option's pdf_field_name (the widget plumbing the per-option
+            Advanced disclosure gates), so an editor-tier contractor must not
+            see it either (Codex PR #310). */}
+        {authorTier && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+              Advanced / Debug
+            </summary>
+            <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-xs">
+              {JSON.stringify(field, null, 2)}
+            </pre>
+          </details>
+        )}
       </div>
     </div>
   );
