@@ -13,13 +13,13 @@ polyglot-pdf-h76m.3, P1.1 of the schema-v2 epic). Consumers:
 
 Deliberately import-free of form_models: the registry speaks in the STRING
 values of the enums (FieldType/ConditionalOperator), so form_models can import
-this module without a cycle. A sync test (P1.2) pins registry <-> enum
-agreement; until then _known-set helpers below let form_models assert it
-cheaply at import time.
+this module without a cycle. form_models raises at IMPORT time if the registry
+and its enums disagree (see the sync guard below its enum definitions); the
+P1.2 contract test adds the rendered-contract layer on top.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, List, Optional
+from dataclasses import dataclass
+from typing import Dict, FrozenSet, List
 import re
 import unicodedata
 
@@ -158,13 +158,21 @@ def mint_unique_slugs(labels: List[str]) -> List[str]:
     """Mint slugs for a field's option labels, deduped with _2/_3... suffixes.
 
     Duplicate labels within one field are rare but legal on real forms (e.g.
-    two 'Other' boxes); the Nth duplicate gets a stable positional suffix.
+    two 'Other' boxes); the Nth duplicate gets a stable positional suffix. The
+    suffix is bumped past any slug ALREADY minted in this batch, so a distinct
+    label whose natural slug collides with a suffixed one (['Other', 'Other',
+    'Other 2'] -> other, other_2, other_2_2) cannot manufacture a duplicate
+    (bd polyglot-pdf-986p).
     """
-    seen: Dict[str, int] = {}
+    used: set = set()
     result: List[str] = []
     for label in labels:
         base = mint_option_slug(label)
-        count = seen.get(base, 0) + 1
-        seen[base] = count
-        result.append(base if count == 1 else f"{base}_{count}")
+        candidate = base
+        n = 1
+        while candidate in used:
+            n += 1
+            candidate = f"{base}_{n}"
+        used.add(candidate)
+        result.append(candidate)
     return result

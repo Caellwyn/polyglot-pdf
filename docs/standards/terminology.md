@@ -85,10 +85,14 @@ both dialects parse.
 | **includes / not_includes** | Group-membership operators: "option slug X is (not) in the checkbox_group trigger's selected set". In v2, `equals` on a group trigger is a validation ERROR -- the undocumented equals-means-membership evaluator hack (bd vq4m) is retired vocabulary. |
 | **is_checked** | Bool sugar on a standalone checkbox ONLY. "Any box of the group ticked" is `is_not_empty` (the is_checked dual fate -- `backend/tests/fixtures/is_checked_dual_fate.json`). |
 
-Deprecated-in-v2 (parse-with-warning until the P6.2 flip, then deleted):
-`controls_fields` (trigger-side action lists; dead at runtime),
-`conditional_fields` (v2 parse ERROR), `group_kind` /
-`consolidated_widgets` (superseded by the `checkbox_group` type).
+Retired-or-retiring vocabulary, with the exact current enforcement:
+`controls_fields` (trigger-side action lists; dead at runtime) parses under
+v2 with a `DeprecationWarning`; `conditional_fields` is a v2 parse ERROR;
+`group_kind` is conceptually superseded by the `checkbox_group` type but
+still parses silently in both dialects (its deletion is P6.2 work, no v2
+gate yet); `consolidated_widgets` was never a modeled field at all (it
+appears only in kit JSON / SI-exclusion lists) and is likewise slated for
+P6.2 deletion.
 
 ## Field IDs and brackets
 

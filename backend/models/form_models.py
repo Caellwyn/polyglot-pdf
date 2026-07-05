@@ -99,6 +99,28 @@ class ConditionalOperator(str, Enum):
     NOT_INCLUDES = "not_includes"
 
 
+# Import-time registry sync guard: the vocabulary registry speaks in enum
+# STRING values (it cannot import this module -- cycle), so a desync between
+# the two would otherwise surface only when a validator hits the "unknown
+# operator" branch at runtime. Fail at import instead. Plain raise, not
+# assert: asserts vanish under python -O.
+if vocab.ALLOWED_OPERATORS != {op.value for op in ConditionalOperator}:
+    raise RuntimeError(
+        "conditional_vocabulary.OPERATORS is out of sync with "
+        "ConditionalOperator: registry-only="
+        f"{sorted(vocab.ALLOWED_OPERATORS - {op.value for op in ConditionalOperator})}, "
+        f"enum-only={sorted({op.value for op in ConditionalOperator} - vocab.ALLOWED_OPERATORS)}"
+    )
+if not (vocab.CHOICE_FIELD_TYPES | vocab.CONDITION_TRIGGER_TYPES) <= {
+    ft.value for ft in FieldType
+}:
+    raise RuntimeError(
+        "conditional_vocabulary field-type sets name types missing from "
+        "FieldType: "
+        f"{sorted((vocab.CHOICE_FIELD_TYPES | vocab.CONDITION_TRIGGER_TYPES) - {ft.value for ft in FieldType})}"
+    )
+
+
 class SupplementType(str, Enum):
     ## Not fully implemented yet
     """Types of supplement pages for overflow content"""
@@ -242,6 +264,43 @@ class ConditionGroup(BaseModel):
 # error aggregation; discrimination is structural (a group has buckets and
 # forbids extras, an atom requires field+operator).
 FieldCondition = Union[ConditionGroup, ConditionalDisplay]
+
+_ATOM_KEYS = frozenset({"field", "operator"})
+
+
+def _reject_mixed_condition_keys(value):
+    """Refuse a condition dict that mixes atom keys with bucket keys.
+
+    Without this, {"field": ..., "operator": ..., "all_of": [...]} would parse
+    as a ConditionalDisplay (which tolerates extra keys, unlike ConditionGroup)
+    and SILENTLY DROP the bucket -- a half-migrated show_if would ship with
+    part of its logic gone and no error (fresh-eyes finding, bd h76m.3). Extra
+    keys that are not bucket keys stay tolerated (stored editor drafts carry
+    benign strays); only the ambiguous atom+bucket mix is refused. Applies
+    recursively to bucket members so the same mix cannot hide one level down.
+    """
+    if isinstance(value, dict):
+        buckets = vocab.CONDITION_GROUP_BUCKETS & value.keys()
+        if buckets and _ATOM_KEYS & value.keys():
+            raise ValueError(
+                "condition mixes atomic keys (field/operator) with composite "
+                f"buckets ({', '.join(sorted(buckets))}) -- use ONE shape: a "
+                "single {field, operator, value} condition OR a "
+                "{all_of/any_of/none_of} group of them"
+            )
+        for bucket in buckets:
+            members = value[bucket]
+            if isinstance(members, list):
+                for member in members:
+                    if isinstance(member, dict) and (
+                        vocab.CONDITION_GROUP_BUCKETS & member.keys()
+                    ):
+                        raise ValueError(
+                            f"condition group bucket '{bucket}' members must be "
+                            "atomic {field, operator, value} conditions -- "
+                            "nesting (or stray bucket keys) is not allowed"
+                        )
+    return value
 
 
 def iter_condition_atoms(condition: Optional["FieldCondition"]) -> List[ConditionalDisplay]:
@@ -530,6 +589,14 @@ class FormField(BaseModel):
         None,
         description="Which supplement to overflow to (for long narratives or repeating fields)"
     )
+
+    @field_validator('show_if', 'require_if', mode='before')
+    @classmethod
+    def _no_mixed_condition_shapes(cls, v):
+        """Loudly refuse the ambiguous atom+bucket key mix (see
+        _reject_mixed_condition_keys) instead of letting the tolerant legacy
+        member of the Union win and silently drop the buckets."""
+        return _reject_mixed_condition_keys(v)
 
     @field_validator('options', mode='before')
     @classmethod

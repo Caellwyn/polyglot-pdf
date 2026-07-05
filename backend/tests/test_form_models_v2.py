@@ -364,6 +364,53 @@ def test_condition_group_rejects_nesting():
         )
 
 
+def test_mixed_atom_and_bucket_keys_rejected_loudly():
+    # {"field", "operator", "all_of"} must NOT win the Union as a tolerant
+    # ConditionalDisplay and silently drop the bucket (fresh-eyes finding).
+    doc = valid_v2_doc()
+    doc["fields"][1]["show_if"] = {
+        "field": "grp",
+        "operator": "includes",
+        "value": "other",
+        "all_of": [{"field": "grp", "operator": "is_not_empty"}],
+    }
+    assert_v2_error(doc, "mixes atomic keys")
+    # Same mix hidden inside a bucket member is refused too.
+    doc["fields"][1]["show_if"] = {
+        "all_of": [
+            {
+                "field": "grp",
+                "operator": "includes",
+                "value": "other",
+                "any_of": [{"field": "grp", "operator": "is_not_empty"}],
+            }
+        ]
+    }
+    assert_v2_error(doc, "must be atomic")
+    # And it guards v1 documents identically (the validator is not v2-gated).
+    doc["fields"][1]["show_if"] = {
+        "field": "grp",
+        "operator": "equals",
+        "value": "1",
+        "none_of": [{"field": "grp", "operator": "is_empty"}],
+    }
+    del doc["schema_version"]
+    with pytest.raises(ValidationError, match="mixes atomic keys"):
+        validate(doc)
+
+
+def test_benign_extra_keys_on_legacy_condition_still_tolerated():
+    # Stored editor drafts carry stray non-bucket keys; those keep parsing.
+    doc = valid_v2_doc()
+    doc["fields"][1]["require_if"] = {
+        "field": "grp",
+        "operator": "is_not_empty",
+        "note": "legacy annotation",
+    }
+    schema = validate(doc)
+    assert isinstance(schema.get_field("dep").require_if, ConditionalDisplay)
+
+
 def test_legacy_dict_does_not_parse_as_group():
     doc = valid_v2_doc()
     schema = validate(doc)
@@ -485,6 +532,11 @@ def test_mint_unique_slugs_dedupes_stably():
         "other_2",
         "other_3",
     ]
+    # A distinct label whose natural slug lands on a suffixed one must not
+    # collide (bd polyglot-pdf-986p): the batch-wide used-set wins.
+    minted = vocab.mint_unique_slugs(["Other", "Other", "Other 2"])
+    assert minted == ["other", "other_2", "other_2_2"]
+    assert len(set(minted)) == len(minted)
 
 
 def test_minted_slugs_pass_the_v2_validator():
