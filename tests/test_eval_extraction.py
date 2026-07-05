@@ -158,5 +158,33 @@ def test_held_out_form_and_note_are_committed():
     note = (kit / "NOTE.md").read_text(encoding="utf-8")
     assert "HELD OUT" in note
     assert "flat" in note.lower()  # the flat-model fit analysis
+    # The fit check's ONE documented exception (line 3b's nested condition,
+    # fresh-eyes round 1) must stay disclosed -- a note claiming total
+    # flatness would be factually wrong against the form's own instructions.
+    assert "all_of(llc" in note
     # No schema may ever ship for it (tuning against it defeats the purpose).
     assert not (kit / "schema.json").exists()
+
+
+def test_held_out_note_widget_claims_match_the_real_pdf():
+    """Anchor the NOTE's widget claims to the actual PDF so the analysis can
+    never silently drift from the form it describes (fresh-eyes round 1: the
+    first draft of the note had the LLC box mis-mapped)."""
+    fitz = pytest.importorskip("fitz")
+    kit = _REPO / "form-kits" / "w9-heldout"
+    note = (kit / "NOTE.md").read_text(encoding="utf-8")
+
+    doc = fitz.open(str(kit / "form.pdf"))
+    try:
+        checkboxes = {
+            (w.field_name or "").split(".")[-1]
+            for page in doc for w in (page.widgets() or [])
+            if w.field_type_string == "CheckBox"
+        }
+    finally:
+        doc.close()
+
+    expected = {f"c1_1[{i}]" for i in range(7)} | {"c1_2[0]"}
+    assert checkboxes == expected  # the form IS what the note says it is
+    for leaf in sorted(expected):
+        assert leaf in note, f"NOTE.md no longer names {leaf}"

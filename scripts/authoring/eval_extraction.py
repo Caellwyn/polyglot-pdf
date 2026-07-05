@@ -80,7 +80,12 @@ _FORMS: list[dict[str, Any]] = [
         "name": "f1040",
         "pdf": os.path.join(_kit("f1040"), "form.pdf"),
         "gold": os.path.join(_kit("f1040"), "schema.json"),
-        "widgets": None,  # no pinned group (kit is red on lint today, bd h76m.5)
+        # No pinned group YET: the natural anchor (filing status) is exactly
+        # the shipped corruption (duplicate option values, bd h76m.5) AND its
+        # widget names repeat across PDF pages (c1_8[0]/c1_8[1] appear twice),
+        # so a leaf-keyed coverage assertion is ambiguous by construction.
+        # Pin it at P6.1 when f1040 is re-extracted with full-path identity.
+        "widgets": None,
     },
     {
         "name": "w9-heldout",
