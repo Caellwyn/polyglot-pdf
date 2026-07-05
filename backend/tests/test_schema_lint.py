@@ -127,6 +127,33 @@ def test_ref_unresolved_field_trips_once():
     assert "'ghost'" in findings[0].message
 
 
+def test_operator_trigger_trips_once():
+    fields = [
+        {"id": "freetext", "type": "text"},
+        {"id": "dep", "type": "text",
+         # includes is a checkbox_group membership operator; a text trigger
+         # has no evaluator branch for it (Codex PR #302).
+         "show_if": {"field": "freetext", "operator": "includes", "value": "x"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    assert _rules(findings) == ["operator-trigger"]
+    assert "'includes'" in findings[0].message
+
+
+def test_v1_is_checked_on_option_bearing_trigger_is_tolerated():
+    # The shipped vq4m-era idiom (i-90 uses is_checked on radio groups);
+    # P6.1 migrates it to is_not_empty. Tolerated on v1, an error on v2.
+    fields = [
+        {"id": "grp", "type": "radio",
+         "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}]},
+        {"id": "dep", "type": "text",
+         "show_if": {"field": "grp", "operator": "is_checked"}},
+    ]
+    assert lint_schema(_schema(fields)) == []
+    findings = lint_schema(_schema(fields, version="2"))
+    assert _rules(findings) == ["operator-trigger"]
+
+
 def test_ref_option_value_trips_once():
     fields = [
         _select(),
@@ -219,11 +246,46 @@ def test_empty_string_value_is_the_v1_emptiness_idiom_not_a_bad_option_ref():
     assert lint_schema(_schema(fields)) == []
 
 
-def test_vestigial_value_on_no_value_operator_is_tolerated():
+def test_vestigial_value_on_no_value_operator_is_tolerated_on_v1_only():
     fields = [
         _select(),
         {"id": "dep", "type": "text",
          "show_if": {"field": "picker", "operator": "is_not_empty", "value": "x"}},
+    ]
+    # v1: the operator ignores the stray value -- tolerated.
+    assert lint_schema(_schema(fields)) == []
+    # v2: the model rejects this exact shape as an arity error, and lint must
+    # agree on the Pydantic-rejected raw-draft path (Codex PR #302).
+    findings = lint_schema(_schema(fields, version="2"))
+    assert _rules(findings) == ["value-arity"]
+
+
+def test_empty_composite_buckets_are_malformed():
+    # ConditionGroup requires at least one non-empty bucket; the raw-draft
+    # path must report the same shape instead of passing it clean.
+    fields = [
+        {"id": "dep", "type": "text", "show_if": {"all_of": []}},
+    ]
+    findings = lint_schema(_schema(fields))
+    assert _rules(findings) == ["condition-malformed"]
+
+
+def test_plain_string_options_get_value_hygiene_checks():
+    # Legacy options: ["A", "B"] -- the string IS the value (the frontend's
+    # optionValue() contract), so duplicates and commas must still be caught.
+    dup = [{"id": "p", "type": "select", "options": ["same", "same"]}]
+    findings = lint_schema(_schema(dup))
+    assert _rules(findings) == ["option-value-duplicate"]
+
+    comma = [{"id": "p", "type": "select", "options": ["a,b", "c"]}]
+    findings = lint_schema(_schema(comma))
+    assert _rules(findings) == ["option-value-comma"]
+
+    # And condition values resolve against string options too.
+    fields = [
+        {"id": "p", "type": "select", "options": ["alpha", "beta"]},
+        {"id": "dep", "type": "text",
+         "show_if": {"field": "p", "operator": "equals", "value": "alpha"}},
     ]
     assert lint_schema(_schema(fields)) == []
 
@@ -255,7 +317,9 @@ def test_composite_v2_group_with_valid_atoms_is_clean():
 
 def test_lint_never_raises_on_garbage():
     assert has_errors(lint_schema("not even a dict"))
-    assert lint_schema({"fields": "oops"}) == []  # non-dict fields are skipped
+    assert lint_schema({"fields": "oops"}) == []  # non-list fields -> empty
+    assert lint_schema({"fields": 123}) == []     # non-iterable too (PR #302)
+    assert lint_schema({"fields": [None, 42, "x"]}) == []  # non-dict members
     assert lint_schema({}) == []
 
 

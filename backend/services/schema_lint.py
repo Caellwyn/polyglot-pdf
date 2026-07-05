@@ -28,6 +28,10 @@ Rules (stable ids; one finding per violation site):
 - option-value-slug     ERROR   (v2 only) option value is not a valid slug
 - ref-unresolved-field  ERROR   a condition or control action references a
                                 non-existent field id
+- operator-trigger      ERROR   operator is not valid on the trigger field's
+                                type (one v1 tolerance: is_checked on an
+                                option-bearing trigger, the shipped vq4m-era
+                                idiom that P6.1 migrates to is_not_empty)
 - ref-option-value      ERROR   an option-referencing condition value is not
                                 one of the trigger field's option values
 - condition-malformed   ERROR   a show_if/require_if is not a dict / an atom
@@ -118,6 +122,7 @@ def _walk_condition(
         return [(path, cond)]
 
     atoms: List[Tuple[str, Dict[str, Any]]] = []
+    problems_before = len(out)
     for bucket in sorted(buckets):
         members = cond.get(bucket)
         if not isinstance(members, list):
@@ -142,6 +147,15 @@ def _walk_condition(
                 ))
                 continue
             atoms.append((member_path, member))
+    if not atoms and len(out) == problems_before:
+        # All buckets present but empty (e.g. {"all_of": []}): ConditionGroup
+        # rejects this shape (at least one non-empty bucket), so the raw-draft
+        # path must report it too (Codex PR #302).
+        out.append(LintFinding(
+            SEVERITY_ERROR, "condition-malformed", path,
+            "composite condition has no conditions (at least one non-empty "
+            "bucket of all_of/any_of/none_of is required)",
+        ))
     return atoms
 
 
@@ -152,8 +166,9 @@ def _check_atom(
     out: List[LintFinding],
     fields_by_id: Dict[str, Dict[str, Any]],
     resolve_trigger: bool,
+    is_v2: bool,
 ) -> None:
-    """Operator/arity/reference checks for one atomic condition dict.
+    """Operator/arity/reference/compatibility checks for one atomic condition.
 
     resolve_trigger: show_if/require_if atoms name their trigger via
     atom['field'] (resolved from fields_by_id); a controls_fields entry's
@@ -191,10 +206,46 @@ def _check_atom(
             ))
             return
 
+    # Operator/trigger compatibility (Codex PR #302): for v1 schemas lint is
+    # the ONLY gate that can catch a mismatch (the model's compat validator
+    # runs on v2-stamped schemas only), and the runtime evaluator has no
+    # branch for e.g. `includes` on a text trigger. ONE version-gated
+    # tolerance: v1 `is_checked` on an option-bearing trigger is the shipped
+    # vq4m-era idiom ("any box checked"; i-90 uses it on radio groups) --
+    # the P6.1 migration rewrites it to is_not_empty.
+    trigger_type = trigger_field.get("type") if trigger_field else None
+    if isinstance(trigger_type, str) and trigger_type:
+        tolerated_v1_idiom = (
+            not is_v2
+            and operator == "is_checked"
+            and trigger_type in (vocab.CHOICE_FIELD_TYPES | {"checkbox"})
+        )
+        if trigger_type not in vocab.CONDITION_TRIGGER_TYPES:
+            if not tolerated_v1_idiom:
+                out.append(LintFinding(
+                    SEVERITY_ERROR, "operator-trigger", atom_path,
+                    f"field type {trigger_type!r} cannot trigger conditions",
+                ))
+                return
+        elif trigger_type not in spec.trigger_types and not tolerated_v1_idiom:
+            out.append(LintFinding(
+                SEVERITY_ERROR, "operator-trigger", atom_path,
+                f"operator {operator!r} is not valid on a {trigger_type!r} "
+                f"trigger (valid on: {', '.join(sorted(spec.trigger_types))})",
+            ))
+            return
+
     value = atom.get("value")
     if spec.value_arity == "none":
-        # A vestigial value on a no-value operator is tolerated (v1 drafts
-        # carry them); the operator ignores it, so it is not even a warning.
+        # A vestigial value on a no-value operator is tolerated on v1 drafts
+        # (the operator ignores it) but is a real arity error on a v2-stamped
+        # schema -- the model rejects that exact shape, and lint must agree
+        # on the Pydantic-rejected raw-draft path (Codex PR #302).
+        if is_v2 and value is not None:
+            out.append(LintFinding(
+                SEVERITY_ERROR, "value-arity", atom_path,
+                f"operator {operator!r} takes no value (found one)",
+            ))
         return
     if spec.value_arity == "list":
         if not isinstance(value, list) or not value:
@@ -219,10 +270,14 @@ def _check_atom(
         and str(trigger_field.get("type")) in vocab.CHOICE_FIELD_TYPES
     ):
         options = trigger_field.get("options") or []
+        # Both runtime option shapes: {value,label} dicts and legacy plain
+        # strings (a string option's value is the string itself -- same
+        # contract as the frontend's optionValue()).
         option_values = {
-            str(o.get("value"))
+            str(o.get("value")) if isinstance(o, dict) else str(o)
             for o in options
-            if isinstance(o, dict) and o.get("value") is not None
+            if (isinstance(o, dict) and o.get("value") is not None)
+            or isinstance(o, str)
         }
         if option_values:
             for v in values:
@@ -252,10 +307,17 @@ def _check_options(
         return
     seen_values: Dict[str, int] = {}
     for i, o in enumerate(options):
-        if not isinstance(o, dict):
-            continue  # plain-string options (legacy demo shape) have no keys to lint
         opt_path = f"{field_path}.options[{i}]"
-        value = o.get("value")
+        if isinstance(o, str):
+            # Legacy plain-string option: the string IS the value (the
+            # frontend's optionValue() contract), so the value-hygiene rules
+            # apply to it directly (Codex PR #302 -- skipping these let
+            # duplicate/comma defects through in string-option schemas).
+            value = o
+        elif isinstance(o, dict):
+            value = o.get("value")
+        else:
+            continue
         if value is None or (isinstance(value, str) and value.strip() == ""):
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-missing", opt_path,
@@ -425,7 +487,13 @@ def lint_schema(
         )]
 
     is_v2 = str(schema.get("schema_version")) == vocab.SCHEMA_VERSION_V2
-    fields = [f for f in (schema.get("fields") or []) if isinstance(f, dict)]
+    raw_fields = schema.get("fields")
+    if not isinstance(raw_fields, list):
+        # A non-list fields value (123, true, "oops") is malformed input, and
+        # lint never throws on malformed input -- treat as empty (Codex PR
+        # #302: iterating a non-iterable crashed the never-throws contract).
+        raw_fields = []
+    fields = [f for f in raw_fields if isinstance(f, dict)]
     fields_by_id: Dict[str, Dict[str, Any]] = {
         f["id"]: f for f in fields if isinstance(f.get("id"), str)
     }
@@ -440,7 +508,7 @@ def lint_schema(
                 f.get(kind), f"{field_path}.{kind}", out
             ):
                 _check_atom(atom_path, atom, None, out, fields_by_id,
-                            resolve_trigger=True)
+                            resolve_trigger=True, is_v2=is_v2)
 
         controls = f.get("controls_fields")
         if isinstance(controls, list):
@@ -455,7 +523,7 @@ def lint_schema(
                     "value": control.get("value"),
                 }
                 _check_atom(control_path, atom, f, out, fields_by_id,
-                            resolve_trigger=False)
+                            resolve_trigger=False, is_v2=is_v2)
                 for action in ("shows", "hides", "unlocks", "locks",
                                "makes_required", "makes_optional"):
                     targets = control.get(action)
