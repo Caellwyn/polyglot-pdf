@@ -91,6 +91,18 @@ regression case asks WITH the qualifier, and the mechanism now delivers
   deleted tracked files (restored with `git checkout`) -- check directory
   contents before recursive deletes.
 
+## Doc freshness
+
+- **Bumped:** `docs/standards/si-reduction.md` (the SI-shape contract; both
+  templates gained the convey-the-note CONSTRAINTS line, and the
+  `{next_field_hint}` content now carries `help.instructions`).
+- **Reviewed and left:** the other freshness-flagged docs tracking
+  `backend/config.py` (config-deployment, context-compression, tool-call-flow,
+  logging-and-cost, risk-rating, validation-delegation, voice-and-vad) -- this
+  branch's config.py change is two SI CONSTRAINTS lines; none of those docs'
+  subject matter (env vars, compression, tool sequence, cost invariant, VAD)
+  is affected. Their staleness predates this branch (other tracked files).
+
 ## Related open work
 
 - bd `polyglot-pdf-jnjj.31` (P3): the JIT `next_field_schema` block still

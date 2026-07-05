@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-06-17. The legacy SI now renders the canonical nested `help` block (`help.instructions`/`help.format_hint`), which it previously dropped on real forms (bd polyglot-pdf-jnjj.23); see [../journal/entries/2026-06-17-bd-jnjj.23-render-nested-help-block.md](../journal/entries/2026-06-17-bd-jnjj.23-render-nested-help-block.md). Earlier: A2 (bd polyglot-pdf-jnjj.9) repaired the JIT path the "JIT-path correctness" note below describes. Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2).*
+*Last updated: 2026-07-05. Both templates' CONSTRAINTS now direct the model to briefly convey a field's Note / hint-carried context WHILE asking (bd polyglot-pdf-bo4m; the qualifying fine print was rendered but not voiced); the per-turn `{next_field_hint}` string built by the frontend (`formatNextFieldHint`) now appends `help.instructions` as "Context to briefly convey when asking: ...". See [../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md). Earlier: the legacy SI renders the canonical nested `help` block (`help.instructions`/`help.format_hint`) (bd polyglot-pdf-jnjj.23); A2 (bd polyglot-pdf-jnjj.9) repaired the JIT path the "JIT-path correctness" note below describes. Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2).*
 
 This is the FROZEN interface that the SI-reduction pillar (A) and the
 cheap-model-validator pillar (B) build against, so multiple agents can work in
