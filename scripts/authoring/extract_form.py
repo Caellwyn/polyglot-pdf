@@ -461,6 +461,27 @@ def _validate_schema(schema: dict) -> tuple[bool, str]:
         return False, f"FormSchema validation failed: {str(exc)[:400]}"
 
 
+def _lint_schema(schema: dict, dump: dict | None) -> dict:
+    """Run backend/services/schema_lint over the draft (bd h76m.5, P2.1).
+
+    Returns the JSON-ready report stored under _bakeoff.authoring.lint:
+    {errors, warnings, findings[]}. Import failure degrades gracefully (same
+    contract as _validate_schema's fallback) so the tool still runs standalone.
+    """
+    try:
+        sys.path.insert(0, _REPO)
+        from backend.services.schema_lint import lint_schema  # noqa: E402
+    except Exception as exc:  # pragma: no cover - env-dependent
+        return {"errors": None, "warnings": None,
+                "skipped": f"schema_lint unavailable: {exc}"}
+    findings = lint_schema(schema, dump)
+    return {
+        "errors": sum(1 for f in findings if f.severity == "ERROR"),
+        "warnings": sum(1 for f in findings if f.severity == "WARNING"),
+        "findings": [f.as_dict() for f in findings],
+    }
+
+
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             model: str = "claude-opus-4-8", keep_dump: bool = False,
             instructions_pdf: str | None = None) -> dict:
@@ -492,6 +513,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs
         #     while the dump still exists (it is removed in the finally below).
         instructions_filled = _extract_instructions_from_dump(schema, dump_path)
+
+        # Keep the dump IN MEMORY for the lint pass at step 4 (the temp file is
+        # removed in the finally below; the dump powers the widget-claim rule).
+        with open(dump_path, encoding="utf-8") as fh:
+            dump_data = json.load(fh)
     finally:
         if not keep_dump and os.path.exists(dump_path):
             os.remove(dump_path)
@@ -521,15 +547,20 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     if instructions_pdf:
         instructions_enriched = _enrich_instructions_from_pdf(schema, instructions_pdf)
 
-    # 4. Normalize required-but-missing scalars to draft defaults, then validate.
+    # 4. Normalize required-but-missing scalars to draft defaults, then validate
+    #    + lint (bd h76m.5: the lint findings ride in the draft's provenance
+    #    block and print below; exit semantics stay validation-driven until the
+    #    P5.3 tri-state exit lands).
     _normalize_for_schema(schema)
     ok, detail = _validate_schema(schema)
+    lint_report = _lint_schema(schema, dump_data)
     schema.setdefault("_bakeoff", {})["authoring"] = {
         "tool": "extract_form.py", "prompt": "plain" if plain else "enriched",
         "positions_filled": positions_filled,
         "instructions_filled": instructions_filled,
         "instructions_enriched": instructions_enriched,
         "schema_valid": ok, "validation": detail,
+        "lint": lint_report,
     }
 
     with open(out_path, "w", encoding="utf-8") as fh:
@@ -542,6 +573,18 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         instr_note += f" + {instructions_enriched} from instructions PDF"
     print(f"[{status}] wrote {out_path} -- {nf} fields, prompt="
           f"{'plain' if plain else 'enriched'}{instr_note}; {detail}")
+    if lint_report.get("skipped"):
+        print(f"lint: skipped ({lint_report['skipped']})", file=sys.stderr)
+    else:
+        print(f"lint: {lint_report['errors']} error(s), "
+              f"{lint_report['warnings']} warning(s)"
+              + (" -- findings recorded in _bakeoff.authoring.lint"
+                 if lint_report["findings"] else ""))
+        for finding in lint_report["findings"][:10]:
+            print(f"  {finding['severity']} [{finding['rule']}] "
+                  f"{finding['path']}: {finding['message']}")
+        if len(lint_report["findings"]) > 10:
+            print(f"  ... and {len(lint_report['findings']) - 10} more (see the draft)")
     if not ok:
         print("WARNING: the draft did not validate; inspect before editing.",
               file=sys.stderr)
