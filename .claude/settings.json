@@ -71,6 +71,7 @@
       "Bash(gh pr create:*)",
       "Bash(gh pr comment:*)",
       "Bash(gh pr ready:*)",
+      "Bash(gh pr view:*)",
       "Bash(gh pr checks:*)",
       "Bash(gh pr merge:*)"
     ]
