@@ -86,3 +86,4 @@ backend/.venv
 # Local project-scoped MCP server config (e.g. the gemini-docs MCP). Machine-
 # local developer setup, not shared project state -- keep it out of the tree.
 .mcp.json
+scripts/authoring/outputs/
