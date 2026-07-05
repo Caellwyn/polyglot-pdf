@@ -349,6 +349,21 @@ Step 6 (open the PR).
    classify as incorrect/nit is the signal to escalate (normal step-2), not a round
    ceiling. (A subagent TIMEOUT/ERROR is still surfaced per the bullet above --
    silence is never `NO-GAPS`.)
+5. **The FINAL confirming round MUST run on Opus** (maintainer directive
+   2026-07-05, bd polyglot-pdf-dgoa). The diff-size router (step 1) routes the
+   EARLIER rounds cheaply (haiku/sonnet) -- that stays. But a `NO-GAPS` is only
+   terminal when the round that produced it ran on **Opus**: before you treat the
+   inner loop as done, if the clearing round ran on haiku or sonnet, **re-spawn the
+   SAME reviewer with `model: opus` on the unchanged diff** and require ITS verdict
+   to be `NO-GAPS` too. If that Opus round finds gaps, they are real -- fix and
+   continue the loop (the next clearing round again ends on Opus). Rationale: the
+   strongest reviewer always gets the last look before the PR opens, because the
+   cheaper tiers miss cross-file interaction bugs (a Sonnet `NO-GAPS` shipped the
+   bd bo4m regression; only the stronger tier's trace caught it). This does NOT
+   change the merge decision or the A/B cost accounting for the earlier rounds --
+   it is one guaranteed Opus pass at the end. (When the diff is already routed to
+   Opus, or `CLAUDE_CODE_SUBAGENT_MODEL` forces Opus, the clearing round already
+   satisfies this -- no extra pass.)
 
 Commit any gap fixes (and fold the assess outcome -- the rubric scorecard, the
 fresh-eyes round count, the adopt/reject/defer breakdown, and any filed bead IDs --
@@ -522,19 +537,46 @@ adversarial review by an **Opus-4.8 subagent** -- the most capable affordable
 reviewer once Codex credits are spent, a fresh independent look from a stronger
 tier than the Sonnet fresh-eyes that already cleared the rubric pre-PR.
 
-**Spawn the SAME `fresh-eyes-reviewer` agent with `model: opus`** (not a new agent
--- its adversarial gap-exhaustion SI is exactly the reviewer-of-last-resort
-mandate). The prompt MUST (a) include the bead's `## Exit criteria` verbatim;
-(b) name the branch; (c) tell it to read the REAL post-PR diff
-(`git diff origin/dev...HEAD`), never a summary; (d) NOT mention Haiku (it is the
-strong model -- the self-escalation clause stays dormant). Read its STATUS line:
+**Two independent clearing reviews are required, not one** (maintainer directive
+2026-07-05, bd polyglot-pdf-dgoa). When Codex is down, the fallback is the ONLY
+adversarial gate, so a single Opus pass is a single point of failure -- the exact
+path PR #312 relied on when its regression could have slipped had that one pass
+missed it. The gate is met only when **TWO independent reviews BOTH return
+`NO-GAPS` on the same final diff**: the primary looped Opus review below, plus a
+**second independent confirming review** on the settled diff (a fresh Opus spawn
+-- a new subagent with no shared context -- OR a fresh Sonnet spawn; use Sonnet
+only when a second Opus is unavailable, and note which in the merge ping). The
+second reviewer reviews the SAME final commit the first one cleared; if it finds a
+correct blocker, that gap is real -- fix it, then BOTH reviews must clear again on
+the new diff (a fix invalidates a prior clear). Only when two independent passes
+agree `NO-GAPS` on the identical final diff is the Codex-down gate satisfied.
 
-- **`NO-GAPS`** -> the fallback review is CLEAN, with the **same authority as a
-  clean Codex review.** Close the bead(s) by hand -- one
-  `scripts/bd_safe.py close <full-id> --reason "..."` per bead (the watcher's
-  `--close-on-clean` is Codex-specific and did not fire) -- then go to Step 8.
-  The merge ping (Step 8.2) MUST note the review went via the Opus-4.8 fallback
-  because Codex was unavailable (which trigger fired: quota / timeout / no-ack).
+**The primary review: spawn the SAME `fresh-eyes-reviewer` agent with
+`model: opus`** (not a new agent -- its adversarial gap-exhaustion SI is exactly
+the reviewer-of-last-resort mandate). The prompt MUST (a) include the bead's
+`## Exit criteria` verbatim; (b) name the branch; (c) tell it to read the REAL
+post-PR diff (`git diff origin/dev...HEAD`), never a summary; (d) NOT mention
+Haiku (it is the strong model -- the self-escalation clause stays dormant). Read
+its STATUS line:
+
+- **`NO-GAPS`** -> the PRIMARY fallback review is CLEAN, but that is only ONE of
+  the two required passes. **Now run the second independent confirming review**
+  (fresh Opus spawn, or fresh Sonnet if a second Opus is unavailable) on the SAME
+  final commit, with the same prompt requirements (a)-(d):
+  - **Second review `NO-GAPS`** -> the two-reviewer gate is met, with the **same
+    authority as a clean Codex review.** Close the bead(s) by hand -- one
+    `scripts/bd_safe.py close <full-id> --reason "..."` per bead (the watcher's
+    `--close-on-clean` is Codex-specific and did not fire) -- then go to Step 8.
+    The merge ping (Step 8.2) MUST note the review went via the Opus-4.8 fallback
+    because Codex was unavailable (which trigger fired: quota / timeout / no-ack),
+    AND that TWO independent reviews cleared it (naming the second reviewer's
+    model).
+  - **Second review `GAPS-FOUND`** -> its correct blockers are real (the first
+    reviewer missed them -- exactly why two are required). Fix inline / defer true
+    nits, commit, push, then **BOTH reviews must clear again on the new diff** (a
+    fix invalidates the prior clear): re-spawn the primary Opus loop to `NO-GAPS`,
+    then the second confirming review, until two independent passes agree on the
+    identical final diff.
 - **`GAPS-FOUND (n)`** -> fix blockers inline / defer true nits (the SAME
   nit-vs-blocker rule as Step 7), commit, push (`git pull --rebase origin
   <branch>` first), then **re-spawn the Opus fallback** on the updated diff. This

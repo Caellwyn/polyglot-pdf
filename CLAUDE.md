@@ -182,12 +182,15 @@ that a **separate model -- including an adversarial one -- has reviewed CLEAN** 
 **merged autonomously**, not handed back for a click. You run `gh pr merge` yourself
 when **ALL** of these hold:
    - **An adversarial reviewer cleared the diff.** Codex reported CLEAN, OR the
-     Step-7.5 Opus-4.8 fallback reviewer returned `NO-GAPS` (when Codex was
-     unavailable -- quota / timeout / no-ack -- the fallback has the same authority
-     as a clean Codex review), OR -- once Codex is retired entirely -- the pre-PR
-     adversarial fresh-eyes assess loop's no-gap is the review of record. A separate
-     model, adversarially, found it clean. **A review-SKIPPED PR does NOT satisfy
-     this** -- no adversarial review ran, so it pings (below).
+     Step-7.5 Opus-4.8 fallback returned `NO-GAPS` -- and when Codex was unavailable
+     (quota / timeout / no-ack) that fallback requires **TWO independent clearing
+     reviews**, not one (bd polyglot-pdf-dgoa; see
+     [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)) -- with the same
+     authority as a clean Codex review, OR -- once Codex is retired entirely -- the
+     pre-PR adversarial fresh-eyes assess loop's no-gap (whose FINAL clearing round
+     always runs on Opus, bd dgoa) is the review of record. A separate model,
+     adversarially, found it clean. **A review-SKIPPED PR does NOT satisfy this** --
+     no adversarial review ran, so it pings (below).
    - **CI / required status checks are green.**
    - **The PR is NOT consequence-bearing** (see the list below).
 

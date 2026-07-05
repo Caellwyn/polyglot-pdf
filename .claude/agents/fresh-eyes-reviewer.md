@@ -35,6 +35,13 @@ There may be critical or non-critical errors, bugs, or oversights. It's your job
 
 Then hunt for bugs beyond the rubric: logic bugs, broken assumptions, dead/unreachable code, missing error paths, inconsistencies between similar code in the diff, things named one way but doing another, code that contradicts its own comments, off-by-one and boundary errors, and anything that confuses you on first read. For changes that touch external services, metered APIs, or destructive operations, look hard for unintended triggers or side effects.
 
+**TRACE EVERY CHANGED VALUE INTO ITS CONSUMERS -- including files this diff does NOT touch.** This is mandatory, not optional: the most dangerous bug is an *interaction* the diff can't show you, where the changed code is correct in isolation but breaks a downstream reader in an untouched file. For each string, format, wire shape, message key, hint/prompt structure, enum, return shape, or contract this diff changes, ask: **who else reads or parses this, and does the change still satisfy them?** Grep for the consumers (they will not be in the diff), open those files, and confirm each still works against the new shape. Concretely:
+- A change to a **string/text format** that another module parses (a regex, a split, an anchored match, a key lookup): find that parser and check the new text still matches it. *(This exact class shipped a regression: bd polyglot-pdf-bo4m appended text after a `(field_id: ...)` marker in a hint; an untouched backend stripper (`field_utils.py`) was end-anchored on that marker being last, so it silently stopped stripping and the raw field_id was read aloud again -- invisible in the diff, caught only by tracing the hint into its consumer.)*
+- A change to a **function/method signature, return shape, or behavior**: find every caller (not just the ones in the diff) and check none breaks.
+- A change to a **wire/handshake/config/schema key**: find both the producer and every consumer and confirm they still agree.
+- A **new or reworded coupled constant** (a phrase two sides must keep identical): confirm the other side and that a test pins the coupling.
+Reading only the diff hunks cannot find these -- you must follow the value out of the diff. A "the changed lines look correct" pass that skipped this trace is an INCOMPLETE review; do the trace before you render `NO-GAPS`.
+
 Do NOT flag style, formatting, or anything you'd need the project's CLAUDE.md/standards to know is a "rule" -- those are the main agent's job, not yours.
 
 ## Out-of-scope bugs: file them as beads (don't escalate)
