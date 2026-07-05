@@ -729,6 +729,18 @@ function normalizeWholeGroupOperator(cond: ConditionalDisplay): ConditionalDispl
       // is_empty; an unmatched non-empty equals stays equals (unsatisfiable ->
       // hidden, the correct "no such option" result).
       return emptyValue ? 'is_empty' : 'equals';
+    case 'includes':
+      // Only an UNMATCHED includes reaches here (a matched one is exact in the
+      // remapFallbackAtom IF branch). Membership on a now-standalone boolean
+      // checkbox is meaningless; an unmatched option can never be selected, so
+      // the intent is unsatisfiable -> hidden. `equals <value>` on a boolean is
+      // never true (the box holds true/false, not the slug) -> hidden, correct.
+      return 'equals';
+    case 'not_includes':
+      // Symmetric: an unmatched not_includes was always true (the option can
+      // never be present). `not_equals <value>` on a boolean is always true ->
+      // always show, replicating the original semantics.
+      return 'not_equals';
     default:
       return cond.operator; // comparison/contains operators: preserve (best effort)
   }
@@ -746,18 +758,26 @@ function remapFallbackAtom(
   const matchedOptionId = cond.value !== undefined && cond.value !== null
     ? valueToReconstructedId.get(String(cond.value))
     : undefined;
-  if (matchedOptionId && (cond.operator === 'equals' || cond.operator === 'not_equals')) {
+  // Operators that reference a SPECIFIC option by value: equals/not_equals
+  // (radio single-select) AND includes/not_includes (checkbox_group
+  // membership, bd h76m.10). All four un-merge to the same per-option
+  // checkbox condition -- omitting includes/not_includes left a dangling
+  // membership op on a now-standalone boolean checkbox that never fired
+  // (fresh-eyes P4.2).
+  const positiveOption = cond.operator === 'equals' || cond.operator === 'includes';
+  const negativeOption = cond.operator === 'not_equals' || cond.operator === 'not_includes';
+  if (matchedOptionId && (positiveOption || negativeOption)) {
     // A SPECIFIC option: the inverse for a single option is exact, targeting that
     // option's reconstructed checkbox.
-    //   equals <optValue>     -> is_checked        (shown when that option is set)
-    //   not_equals <optValue> -> not_equals true   (shown UNLESS that option is set)
+    //   selected(option)     -> is_checked        (shown when that option is set)
+    //   NOT selected(option) -> not_equals true   (shown UNLESS that option is set)
     // not_equals must use `not_equals true`, NOT `is_empty`: shouldShowField's
     // is_empty is true only for null/undefined/'' -- an EXPLICITLY unchecked
     // checkbox stores `false`, which is_empty reads as false, so the dependent
     // would be permanently hidden once the box is touched. `not_equals true`
     // reads false===checked, true===unchecked-or-absent -- the correct inverse
     // (bd polyglot-pdf-cjby, fresh-eyes r3).
-    return cond.operator === 'equals'
+    return positiveOption
       ? { field: matchedOptionId, operator: 'is_checked' }
       : { field: matchedOptionId, operator: 'not_equals', value: true };
   }

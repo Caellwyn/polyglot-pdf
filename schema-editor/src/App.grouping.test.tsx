@@ -81,8 +81,8 @@ describe('App group/ungroup wiring (bd polyglot-pdf-s4dp.1)', () => {
     const mergeBtn = await screen.findByRole('button', { name: 'Merge (several)' });
     fireEvent.click(mergeBtn);
 
-    // After merge: the editor opens on the merged primary (reason_a), now a radio
-    // with an Options section that has an Ungroup control.
+    // After merge: the editor opens on the merged primary (reason_a), now a
+    // checkbox_group with an Options section that has an Ungroup control.
     const ungroupBtn = await screen.findByRole('button', { name: 'Ungroup' });
     expect(ungroupBtn).toBeInTheDocument();
 

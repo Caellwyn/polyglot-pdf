@@ -229,6 +229,39 @@ describe('ungroupField (crit 2: reversible)', () => {
       `form1[0].#subform[0].reason_${id.slice(-1)}[0]`).sort());
   });
 
+  it('un-merges a checkbox_group dependent AFTER save/reload without dangling includes (fresh-eyes P4.2)', () => {
+    const schema = w7Schema();
+    // A dependent shown when the (soon-to-be-merged) reason_b box is checked.
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: 'is_checked' },
+    } as FormField);
+    schema.sections[0].fields.push('detail');
+
+    // Merge into a checkbox_group -> the dependent's show_if becomes a
+    // membership op (includes <reason_b's slug>) on the group.
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    const mergedDetail = merged.fields.find(f => f.id === 'detail')!;
+    expect(asAtom(mergedDetail.show_if).operator).toBe('includes');
+
+    // SAVE (strip stash) -> RELOAD -> un-merge via the fallback path.
+    const saved = stripEditorState(merged);
+    const unmerged = ungroupField(saved, 'reason_a');
+    const back = unmerged.fields.find(f => f.id === 'detail')!;
+
+    // The membership op must be remapped to a boolean-checkbox condition on the
+    // reconstructed reason_b field -- NOT left as a dangling `includes` that a
+    // standalone boolean checkbox can never satisfy.
+    const atom = asAtom(back.show_if);
+    expect(atom.operator).not.toBe('includes');
+    expect(atom.operator).toBe('is_checked');
+    // It targets a reconstructed standalone field that actually exists.
+    expect(unmerged.fields.some(f => f.id === atom.field && f.type === 'checkbox')).toBe(true);
+  });
+
   it('is a no-op on a field that is not un-groupable (single option)', () => {
     const schema = w7Schema();
     schema.fields = [{
