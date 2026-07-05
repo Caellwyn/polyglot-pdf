@@ -103,12 +103,21 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 			CRITICAL: Must pass the page that contains this widget to avoid "weakly-referenced object no longer exists" errors.
 			"""
-			# Get fresh widget reference from the page (avoids weak reference issues)
+			# Get fresh widget reference from the page (avoids weak reference issues).
+			# Match by XREF first: radio KIDS of a shared AcroForm field all carry the
+			# SAME field_name (bd h76m.17), so a name-only re-fetch would grab the
+			# first sibling instead of the kid the caller selected. Name match stays
+			# as the fallback for callers passing a widget from another page snapshot.
 			fresh_widget = None
 			for w in page.widgets() or []:
-				if w.field_name == widget.field_name:
+				if w.xref == widget.xref:
 					fresh_widget = w
 					break
+			if not fresh_widget:
+				for w in page.widgets() or []:
+					if w.field_name == widget.field_name:
+						fresh_widget = w
+						break
 
 			if not fresh_widget:
 				_log.warning("fresh_widget_not_found", widget_name=widget.field_name)
@@ -172,6 +181,30 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 						return (widget, page)
 
 			return (None, None)
+
+		def find_widget_by_state(field_name: str, on_state: str):
+			"""Find the radio KID matching an 'on' appearance state (bd h76m.17).
+
+			A true-AcroForm radio group is ONE field name shared by several kid
+			widgets, each distinguished only by its on-state (the v2 mapping:
+			field-level pdf_field_name + per-option pdf_on_value). Writing the
+			state onto the MATCHING kid sets /V and that kid's /AS correctly.
+			Falls back to the first name-match so an unexpected appearance table
+			still records the field value.
+
+			Returns: tuple of (widget, page) or (None, None)
+			"""
+			fallback = (None, None)
+			for page_index in range(doc.page_count):
+				page = doc[page_index]
+				for widget in page.widgets() or []:
+					name = widget.field_name or ""
+					if name == field_name or name.endswith(field_name):
+						if fallback == (None, None):
+							fallback = (widget, page)
+						if get_button_on_state(widget) == on_state:
+							return (widget, page)
+			return fallback
 
 		def apply_field_flag_changes(widget, field_obj: Optional[Dict[str, Any]]) -> None:
 			"""Apply PDF field flag changes for a read-only field that unlocks on fill.
@@ -264,6 +297,53 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				for option in options:
 					option_pdf_field = option.get("pdf_field_name")
 					if not option_pdf_field:
+						# v2 shared-field radio kid (bd h76m.17): the option carries
+						# only pdf_on_value; the field-level pdf_field_name is the
+						# shared AcroForm field. Only the SELECTED option writes --
+						# a radio field holds ONE value, so deselected kids need no
+						# Off pass (unlike the per-widget style below).
+						shared_pdf_field = field_obj.get("pdf_field_name")
+						on_state = option.get("pdf_on_value")
+						if not shared_pdf_field or not on_state:
+							continue
+						if option.get("value") != value:
+							continue
+						widget, page = find_widget_by_state(shared_pdf_field, on_state)
+						if not widget or not page:
+							_log.warning(
+								"radio_shared_widget_not_found",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=shared_pdf_field,
+							)
+							continue
+						try:
+							apply_field_flag_changes(widget, field_obj)
+							# Direct xref write instead of fill_widget: the state goes
+							# on the KID annotation (V + AS), which is deterministic
+							# and avoids PyMuPDF's flaky Widget weakrefs; the viewer
+							# regenerates appearances exactly as for the XFA-style
+							# checkbox path above.
+							doc.xref_set_key(widget.xref, "V", f"/{on_state}")
+							doc.xref_set_key(widget.xref, "AS", f"/{on_state}")
+							field_filled = True
+							filled_count += 1
+							_log.debug(
+								"radio_selected_shared",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=shared_pdf_field,
+								# never log value/on_state pairing to selection -- bd hjo
+							)
+						except Exception as exc:
+							_log.error(
+								"radio_fill_error",
+								kit=request.kit_id,
+								field_id=field_id,
+								pdf_field=shared_pdf_field,
+								error=str(exc),
+							)
+							error_count += 1
 						continue
 
 					widget, page = find_widget(option_pdf_field)
@@ -300,7 +380,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					_log.warning("radio_widget_not_found", kit=request.kit_id, field_id=field_id)
 					skipped_count += 1
 
-			elif field_type == "checkbox":
+			elif field_type in ("checkbox", "checkbox_group"):
 				_log.debug("checkbox_processing", kit=request.kit_id, field_id=field_id, value_type=type(value).__name__)  # never log value -- bd hjo
 				# Defensive shape canonicalization (bd polyglot-pdf-h76m.2): the
 				# voice path historically stored a checkbox-GROUP selection as one
@@ -311,6 +391,11 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				# without this split it falls to the unsupported-value branch and
 				# the group silently stays empty on the printed PDF. Option values
 				# never contain commas (schema contract), so the split is safe.
+				# The v2 checkbox_group TYPE (bd h76m.17) shares this branch: it is
+				# the same options-bearing multi-select, explicit in the type
+				# instead of inferred from options[]; without this routing a group
+				# fell to the scalar path and printed BLANK (v2 forbids the
+				# field-level pdf_field_name the scalar path needs).
 				# Only options-bearing fields qualify: a standalone checkbox has
 				# no options to match the parts against. Boolean-INTENT strings
 				# ("true"/"false", the literal forms config.py documents for a

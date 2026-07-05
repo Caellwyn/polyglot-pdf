@@ -164,7 +164,10 @@ def validate_field_value(field: Dict[str, Any], value: Any) -> List[ValidationEr
         return _validate_text(field, value, field_id, field_name)
     elif field_type in ["select", "radio"]:
         return _validate_select(field, value, field_id, field_name)
-    elif field_type == "checkbox":
+    elif field_type in ["checkbox", "checkbox_group"]:
+        # checkbox_group (schema v2, bd h76m.17) shares the checkbox path:
+        # _validate_checkbox handles both the standalone-bool shape and the
+        # options-bearing group shape (list OR voice-path comma string).
         return _validate_checkbox(field, value, field_id, field_name)
 
     return []
