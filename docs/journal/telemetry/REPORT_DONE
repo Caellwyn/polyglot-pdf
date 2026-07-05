@@ -1,0 +1,10 @@
+Harness A/B experiment closed 2026-07-04 (bd polyglot-pdf-hrn.17).
+Final report: docs/journal/telemetry/FINAL_REPORT.md
+
+This sentinel makes harness_ledger.py's phase_directive() return a terminal
+"experiment closed" line instead of the "arm_BC > 10 -- write the FINAL report"
+nag that would otherwise fire on every closeout (the arm counter is derived by
+counting rows, which are never deleted, so arm_BC stays > 10 permanently).
+
+Delete this file to re-open the experiment (e.g. a clean B-vs-C rerun that holds
+each independent arm to its > 10 threshold).

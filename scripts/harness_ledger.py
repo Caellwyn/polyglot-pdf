@@ -87,6 +87,14 @@ TELEMETRY_DIR = REPO_ROOT / "docs" / "journal" / "telemetry"
 # Legacy path kept for backwards-compat reads; new writes go to TELEMETRY_DIR.
 LEDGER_PATH = REPO_ROOT / "docs" / "journal" / "harness_ledger.jsonl"
 EXPERIMENT_STATE_PATH = REPO_ROOT / ".beads" / "experiment_state.json"
+# Committed sentinel dropped when the FINAL report is written (bd polyglot-pdf-hrn.17).
+# The arm counter is derived by counting rows, and rows are never deleted, so the
+# arm_BC>10 "write the report" directive would otherwise fire on every future
+# closeout forever. When this file exists in TELEMETRY_DIR, phase_directive
+# short-circuits to a terminal "experiment closed" message. Delete it to re-open
+# the experiment. Kept as a bare filename (not a frozen path) so a monkeypatched
+# TELEMETRY_DIR in tests is honored -- the path is derived at call time.
+REPORT_DONE_FILENAME = "REPORT_DONE"
 
 VALID_ARMS = ("A", "B", "C", "BC")
 VALID_COST_CATEGORIES = ("production", "audit")
@@ -535,7 +543,7 @@ def load_experiment_state(path: Path = EXPERIMENT_STATE_PATH) -> dict:
     return default
 
 
-def phase_directive(state: dict) -> str:
+def phase_directive(state: dict, sentinel: Path | None = None) -> str:
     """Return the next-step directive string for the current counts.
 
     Thresholds are the plan's (section Change #1, "Experiment-state counter"):
@@ -546,7 +554,23 @@ def phase_directive(state: dict) -> str:
     Checked most-advanced-state-first (BC -> independent arms -> Phase A) so a
     session deep into the experiment gets its current directive, not an earlier
     phase's.
+
+    Once the FINAL report is written the REPORT_DONE sentinel exists; because the
+    counter is derived by counting (never-deleted) rows, arm_BC>10 would nag the
+    write-the-report directive on every future closeout otherwise. The sentinel
+    short-circuits to a terminal "experiment closed" line (bd polyglot-pdf-hrn.17).
+    ``sentinel`` defaults to ``TELEMETRY_DIR/REPORT_DONE`` derived at call time so a
+    monkeypatched TELEMETRY_DIR (tests) is honored rather than a frozen import-time path.
     """
+    if sentinel is None:
+        sentinel = TELEMETRY_DIR / REPORT_DONE_FILENAME
+    if sentinel.is_file():
+        return (
+            "Harness A/B experiment CLOSED -- see "
+            "docs/journal/telemetry/FINAL_REPORT.md. Arm B+C adopted as the "
+            "standing default; no per-closeout experiment action. (Delete "
+            "docs/journal/telemetry/REPORT_DONE to re-open.)"
+        )
     if state.get("arm_BC", 0) > 10:
         return "Combined arm done (arm_BC > 10) -- write the FINAL report."
     if state.get("arm_B", 0) > 10 and state.get("arm_C", 0) > 10:

@@ -439,18 +439,41 @@ class TestExperimentState:
         assert json.loads(cache.read_text(encoding="utf-8")) == state
 
     def test_phase_transitions_and_directives(self, tmp_path):
+        # Isolate the threshold->directive mapping from the real REPORT_DONE
+        # sentinel (which exists in the repo now that the experiment is closed):
+        # point `sentinel` at a path that does not exist so the count-based
+        # branches are exercised.
+        no_sentinel = tmp_path / "REPORT_DONE_absent"
+        d = lambda s: ledger.phase_directive(s, sentinel=no_sentinel)
         # Phase A: baseline_A <= 15.
         s = {"baseline_A": 15, "arm_B": 0, "arm_C": 0, "arm_BC": 0, "phase": "A"}
-        assert "Phase A (baseline)" in ledger.phase_directive(s)
+        assert "Phase A (baseline)" in d(s)
         # baseline_A > 15 -> start B/C.
         s["baseline_A"] = 16
-        assert "start B/C toggling" in ledger.phase_directive(s)
+        assert "start B/C toggling" in d(s)
         # arm_B > 10 and arm_C > 10 -> report / maybe BC.
         s.update({"arm_B": 11, "arm_C": 11})
-        assert "Independent arms done" in ledger.phase_directive(s)
+        assert "Independent arms done" in d(s)
         # arm_BC > 10 -> final report (most-advanced wins even with other counts high).
         s["arm_BC"] = 11
-        assert "FINAL report" in ledger.phase_directive(s)
+        assert "FINAL report" in d(s)
+
+    def test_report_done_sentinel_closes_experiment(self, tmp_path, monkeypatch):
+        # With the sentinel present, the directive short-circuits regardless of
+        # how high the arm counts are -- the write-the-report nag stops firing.
+        s = {"baseline_A": 200, "arm_B": 11, "arm_C": 11, "arm_BC": 99, "phase": "report"}
+        present = tmp_path / "REPORT_DONE"
+        present.write_text("closed", encoding="utf-8")
+        out = ledger.phase_directive(s, sentinel=present)
+        assert "experiment CLOSED" in out
+        assert "FINAL report" not in out
+        # Default sentinel path is derived from a (monkeypatched) TELEMETRY_DIR at
+        # call time, so a closed experiment dir short-circuits without an explicit arg.
+        tdir = tmp_path / "telemetry"
+        tdir.mkdir()
+        (tdir / ledger.REPORT_DONE_FILENAME).write_text("closed", encoding="utf-8")
+        monkeypatch.setattr(ledger, "TELEMETRY_DIR", tdir)
+        assert "experiment CLOSED" in ledger.phase_directive(s)
 
 
 # --------------------------------------------------------------------------- #
