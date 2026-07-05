@@ -100,7 +100,24 @@ def _mint_slugs(fields: List[dict], repairs: List[dict]) -> Dict[str, Dict[str, 
         if not dict_opts:
             continue
 
+        # Alias -> value map with COLLISION tracking (fresh-eyes, PR review):
+        # an alias key (old value, widget path/leaf, label) claimed by two
+        # DIFFERENT options is ambiguous -- registering last-writer-wins would
+        # silently rewire a condition to the wrong option (the shared old
+        # value "1" is exactly the W-7 corruption). Collided keys are removed
+        # so an ambiguous reference falls through to the fail-open drop path
+        # (recorded ERROR) instead of a silent guess.
         res: Dict[str, str] = {}
+        collided: set = set()
+
+        def _register(key: Any, slug: str) -> None:
+            if not isinstance(key, str) or not key:
+                return
+            if key in res and res[key] != slug:
+                collided.add(key)
+            else:
+                res[key] = slug
+
         needs_mint = False
         if _is_choice_field(f):
             values = [str(o.get("value")) for o in dict_opts if o.get("value") is not None]
@@ -120,7 +137,7 @@ def _mint_slugs(fields: List[dict], repairs: List[dict]) -> Dict[str, Dict[str, 
                 if old is not None and str(old) != slug:
                     renames.append(f"{old!r} -> {slug!r}")
                 if old is not None:
-                    res[str(old)] = slug
+                    _register(str(old), slug)
                 o["value"] = slug
             if renames:
                 repairs.append({
@@ -136,14 +153,16 @@ def _mint_slugs(fields: List[dict], repairs: List[dict]) -> Dict[str, Dict[str, 
             if cur is None:
                 continue
             cur = str(cur)
-            res.setdefault(cur, cur)
+            _register(cur, cur)
             pfn = o.get("pdf_field_name")
             if isinstance(pfn, str) and pfn:
-                res[pfn] = cur
-                res[_leaf(pfn)] = cur
+                _register(pfn, cur)
+                _register(_leaf(pfn), cur)
             label = o.get("label")
             if isinstance(label, str) and label:
-                res[label] = cur
+                _register(label, cur)
+        for key in collided:
+            res.pop(key, None)
         if res:
             resolution[fid] = res
     return resolution

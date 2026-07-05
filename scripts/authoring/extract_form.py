@@ -482,9 +482,10 @@ def _repair_schema(schema: dict, dump: dict | None) -> tuple[dict, dict]:
     except RepairError as exc:
         print(f"REPAIR-FAILED: {exc}", file=sys.stderr)
         return schema, {"failed": str(exc)[:400]}
+    substantive = [r for r in repairs if r["action"] != "alias-hit-rate"]
     return repaired, {
-        "applied": sum(1 for r in repairs if not r.get("error")),
-        "dropped": sum(1 for r in repairs if r.get("error")),
+        "applied": sum(1 for r in substantive if not r.get("error")),
+        "dropped": sum(1 for r in substantive if r.get("error")),
         "alias_hits": alias_hit_count(repairs),
         "repairs": repairs,
     }

@@ -228,6 +228,46 @@ def test_slug_minting_rewrites_conditional_references():
     assert not has_errors(lint_schema(repaired))
 
 
+def test_colliding_alias_never_mis_resolves():
+    """Fresh-eyes finding (PR review): two options sharing an old value ("1",
+    the W-7 corruption) must NOT let a condition referencing that value be
+    silently rewired to whichever option registered last -- the ambiguous
+    reference drops fail-open with a recorded ERROR instead."""
+    fields = [
+        {"id": "grp", "type": "checkbox_group", "options": [
+            {"value": "1", "label": "First Reason", "pdf_field_name": "c1[0]"},
+            {"value": "1", "label": "Second Reason", "pdf_field_name": "c2[0]"},
+        ]},
+        {"id": "dep", "type": "text",
+         "show_if": {"field": "grp", "operator": "includes", "value": "1"}},
+    ]
+    repaired, repairs = repair(_schema(fields))
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert "show_if" not in dep  # dropped, not guessed
+    assert any(r["action"] == "drop-condition" and r["error"] for r in repairs)
+    # UNAMBIGUOUS aliases of the same field still resolve (widget leaf).
+    fields[1]["show_if"] = {"field": "grp", "operator": "includes",
+                            "value": "c2[0]"}
+    repaired, _ = repair(_schema(fields))
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep["show_if"]["value"] == "second_reason"
+
+
+def test_colliding_labels_also_drop_ambiguous_references():
+    fields = [
+        {"id": "grp", "type": "checkbox_group", "options": [
+            {"value": "opt_a", "label": "Other", "pdf_field_name": "c1[0]"},
+            {"value": "opt_b", "label": "Other", "pdf_field_name": "c2[0]"},
+        ]},
+        {"id": "dep", "type": "text",
+         "show_if": {"field": "grp", "operator": "includes", "value": "Other"}},
+    ]
+    repaired, repairs = repair(_schema(fields))
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert "show_if" not in dep
+    assert any(r["action"] == "drop-condition" and r["error"] for r in repairs)
+
+
 def test_valid_slugs_are_left_alone():
     fields = [_group()]  # values alpha/beta are already valid slugs
     repaired, repairs = repair(_schema(fields))
