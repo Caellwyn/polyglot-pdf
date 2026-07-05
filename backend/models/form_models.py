@@ -8,10 +8,14 @@ Designed to handle USCIS immigration forms with complex structures.
 @date 2025-11-01
 """
 
+import warnings
+
 from typing import Optional, List, Dict, Any, Literal, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from enum import Enum
+
+from . import conditional_vocabulary as vocab
 
 
 # ============================================================================
@@ -50,6 +54,11 @@ class FieldType(str, Enum):
     SELECT = "select"
     RADIO = "radio"
     CHECKBOX = "checkbox"
+    # v2 (bd h76m.3): a multi-select group of checkboxes as ONE logical field
+    # whose options[] carry per-box PDF identity; value shape is List[str] of
+    # option slugs. In v2 CHECKBOX means a STANDALONE boolean (options
+    # forbidden); the old one-checkbox-field-per-box modeling migrates here.
+    CHECKBOX_GROUP = "checkbox_group"
     SIGNATURE = "signature"
     ADDRESS_GROUP = "address_group"
     TABLE = "table"
@@ -82,6 +91,12 @@ class ConditionalOperator(str, Enum):
     IS_NOT_EMPTY = "is_not_empty"  # Added for completeness
     IN = "in"  # Value in list
     NOT_IN = "not_in"  # Value not in list
+    # v2 group-membership operators (bd h76m.3): "option <value> is (not) in
+    # the checkbox_group trigger's selected set". These retire the undocumented
+    # equals-means-membership evaluator hack (bd vq4m) -- in a v2 schema,
+    # equals on a checkbox_group trigger is a validation error.
+    INCLUDES = "includes"
+    NOT_INCLUDES = "not_includes"
 
 
 class SupplementType(str, Enum):
@@ -182,9 +197,71 @@ class ConditionalDisplay(BaseModel):
     """
     field: str = Field(description="Field ID to check")
     operator: ConditionalOperator
-    value: Union[str, int, float, bool, List[Union[str, int, float, bool]]] = Field(
-        description="Value to compare against (can be a list for IN/NOT_IN operators)"
+    value: Optional[Union[str, int, float, bool, List[Union[str, int, float, bool]]]] = Field(
+        None,
+        description="Value to compare against (a list for IN/NOT_IN; omitted for "
+                    "the no-value operators is_checked/is_empty/is_not_empty)"
     )
+
+
+class ConditionGroup(BaseModel):
+    """
+    v2 composite condition (bd h76m.3): one level of boolean structure over
+    atomic conditions. "(A AND B) AND NOT C" = all_of:[A,B] + none_of:[C].
+
+    FLAT BY CONSTRUCTION: bucket members are atomic ConditionalDisplay
+    conditions -- a nested group is a validation error (its dict has no
+    'field'/'operator'), and extra="forbid" keeps a legacy single condition
+    from mis-parsing as an empty group. Nesting can later be admitted inside
+    all_of without a wire break; until then depth <= 1 is the contract
+    (mirrored by the P3.0 normalizeToComposite helper on the TS side).
+
+    Semantics: visible when ALL of all_of hold, AND at least one of any_of
+    holds (when present), AND none of none_of hold. An omitted bucket is
+    vacuously satisfied; at least one bucket must be present and non-empty.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    all_of: Optional[List[ConditionalDisplay]] = None
+    any_of: Optional[List[ConditionalDisplay]] = None
+    none_of: Optional[List[ConditionalDisplay]] = None
+
+    @model_validator(mode="after")
+    def _at_least_one_bucket(self):
+        if not (self.all_of or self.any_of or self.none_of):
+            raise ValueError(
+                "ConditionGroup must carry at least one non-empty bucket "
+                "(all_of / any_of / none_of)"
+            )
+        return self
+
+
+# A field-level condition on the wire: either the legacy single condition
+# (v1, normalized to a one-atom group by readers via normalizeToComposite /
+# iter_condition_atoms) or a v2 composite group. Union order matters only for
+# error aggregation; discrimination is structural (a group has buckets and
+# forbids extras, an atom requires field+operator).
+FieldCondition = Union[ConditionGroup, ConditionalDisplay]
+
+
+def iter_condition_atoms(condition: Optional["FieldCondition"]) -> List[ConditionalDisplay]:
+    """Flatten a legacy-or-composite condition to its atomic conditions.
+
+    The Python-side reader normalization (plan P1.1): None -> []; a legacy
+    single condition -> [it]; a ConditionGroup -> its buckets concatenated.
+    Consumers that only need "which fields/operators does this reference"
+    (reference validation, cycle detection, lint) use this instead of
+    special-casing the two shapes.
+    """
+    if condition is None:
+        return []
+    if isinstance(condition, ConditionalDisplay):
+        return [condition]
+    atoms: List[ConditionalDisplay] = []
+    for bucket in (condition.all_of, condition.any_of, condition.none_of):
+        if bucket:
+            atoms.extend(bucket)
+    return atoms
 
 
 class ConditionalControl(BaseModel):
@@ -262,6 +339,14 @@ class FieldOption(BaseModel):
         description='Multi-language labels (e.g., {"es": "Soltero", "zh": "\u5355\u8eab"})'
     )
     pdf_field_name: Optional[str] = Field(None, description="Original PDF field backing this option")
+    pdf_on_value: Optional[str] = Field(
+        None,
+        description="The PDF 'on' state name selecting this option (v2, bd h76m.3). "
+                    "For true-AcroForm radio groups the kids share ONE field name "
+                    "(on the FIELD's pdf_field_name) and differ only by this state; "
+                    "for per-widget checkbox groups it is the widget's on_value "
+                    "(usually with option-level pdf_field_name)."
+    )
 
 
 class TableColumn(BaseModel):
@@ -357,9 +442,19 @@ class FormField(BaseModel):
     group_label: Optional[str] = Field(None, description="Group display name")
     group_kind: Optional[GroupKind] = Field(None, description="Type of group if applicable")
 
-    # Conditional display
-    show_if: Optional[ConditionalDisplay] = Field(
+    # Conditional display. v1: a single {field, operator, value} condition.
+    # v2 (bd h76m.3): additionally accepts a composite ConditionGroup
+    # {all_of/any_of/none_of}; readers normalize the legacy shape to a
+    # one-atom group (iter_condition_atoms here, normalizeToComposite in TS).
+    show_if: Optional[FieldCondition] = Field(
         None, description="Reactive logic: defines if this field should be shown."
+    )
+
+    # v2 (bd h76m.3): condition under which this field becomes REQUIRED --
+    # sits beside show_if with the same legacy/composite shape and the same
+    # evaluator machinery; replaces controls_fields.makes_required.
+    require_if: Optional[FieldCondition] = Field(
+        None, description="Reactive logic: defines when this field is required."
     )
 
     # Conditional control (trigger-side)
@@ -462,8 +557,8 @@ class FormField(BaseModel):
     @field_validator('options')
     @classmethod
     def validate_options(cls, v, info):
-        """Ensure options are provided for select/radio/checkbox types"""
-        if info.data.get('type') in [FieldType.SELECT, FieldType.RADIO]:
+        """Ensure options are provided for choice field types"""
+        if info.data.get('type') in [FieldType.SELECT, FieldType.RADIO, FieldType.CHECKBOX_GROUP]:
             if not v:
                 raise ValueError(f"Options required for {info.data.get('type')} field type")
         return v
@@ -526,11 +621,165 @@ class ExtractionInfo(BaseModel):
 # Complete Form Schema
 # ============================================================================
 
+def _v2_condition_problems(
+    owner: str,
+    kind: str,
+    condition: Optional[FieldCondition],
+    fields_by_id: Dict[str, "FormField"],
+) -> List[str]:
+    """v2 checks for one show_if/require_if: operator/trigger compatibility,
+    value arity, and option-slug references, per the vocabulary registry."""
+    problems: List[str] = []
+    for atom in iter_condition_atoms(condition):
+        where = f"{owner}.{kind} ({atom.operator.value} on '{atom.field}')"
+        spec = vocab.OPERATORS.get(atom.operator.value)
+        if spec is None:
+            # Unreachable through the enum; guards registry/enum drift.
+            problems.append(f"{where}: operator not in the v2 registry")
+            continue
+
+        trigger = fields_by_id.get(atom.field)
+        if trigger is None:
+            problems.append(f"{where}: references non-existent field '{atom.field}'")
+            continue
+        if trigger.type.value not in vocab.CONDITION_TRIGGER_TYPES:
+            problems.append(
+                f"{where}: field type '{trigger.type.value}' cannot trigger conditions"
+            )
+            continue
+        if trigger.type.value not in spec.trigger_types:
+            allowed = ", ".join(sorted(spec.trigger_types))
+            problems.append(
+                f"{where}: operator '{atom.operator.value}' is not valid on a "
+                f"'{trigger.type.value}' trigger (valid on: {allowed})"
+            )
+            continue
+
+        if spec.value_arity == "none":
+            if atom.value is not None:
+                problems.append(
+                    f"{where}: operator takes no value (found {atom.value!r})"
+                )
+            continue
+        if spec.value_arity == "list":
+            if not isinstance(atom.value, list) or not atom.value:
+                problems.append(f"{where}: operator requires a non-empty list value")
+                continue
+            atom_values = atom.value
+        else:  # scalar
+            if atom.value is None or isinstance(atom.value, list):
+                problems.append(f"{where}: operator requires a single scalar value")
+                continue
+            atom_values = [atom.value]
+
+        if (
+            spec.value_must_be_trigger_option
+            and trigger.type.value in vocab.CHOICE_FIELD_TYPES
+            and trigger.options
+        ):
+            slugs = {opt.value for opt in trigger.options}
+            for val in atom_values:
+                if str(val) not in slugs:
+                    problems.append(
+                        f"{where}: value {val!r} is not an option slug of "
+                        f"'{trigger.id}' (options: {', '.join(sorted(slugs))})"
+                    )
+    return problems
+
+
+def _collect_v2_problems(schema: "FormSchema") -> List[str]:
+    """All schema-v2 strictness rules (bd h76m.3). Only called when
+    schema_version == '2'; each problem names the offending field path."""
+    problems: List[str] = []
+    fields_by_id = {f.id: f for f in schema.fields}
+    is_pdf = schema.source == FormSource.PDF
+
+    for i, f in enumerate(schema.fields):
+        path = f"fields[{i}] (id={f.id})"
+
+        if f.type == FieldType.CHECKBOX:
+            if f.options:
+                problems.append(
+                    f"{path}: a v2 checkbox is a standalone boolean; options are "
+                    f"forbidden (model the group as type=checkbox_group)"
+                )
+            if is_pdf and not f.pdf_field_name:
+                problems.append(
+                    f"{path}: a standalone checkbox on a PDF form requires a "
+                    f"field-level pdf_field_name"
+                )
+
+        elif f.type.value in vocab.CHOICE_FIELD_TYPES:
+            opts = f.options or []
+            if len(opts) < 2:
+                problems.append(
+                    f"{path}: {f.type.value} requires at least 2 options (found {len(opts)})"
+                )
+            values = [o.value for o in opts]
+            for o in opts:
+                if not vocab.is_valid_option_slug(o.value):
+                    problems.append(
+                        f"{path}: option value {o.value!r} is not a v2 slug "
+                        f"(lowercase ascii [a-z0-9_-], no commas/spaces; "
+                        f"mint from the label)"
+                    )
+            dupes = sorted({v for v in values if values.count(v) > 1})
+            if dupes:
+                problems.append(
+                    f"{path}: duplicate option values {dupes} (option values must "
+                    f"be unique per field)"
+                )
+            if is_pdf:
+                if f.type == FieldType.CHECKBOX_GROUP and f.pdf_field_name:
+                    problems.append(
+                        f"{path}: a checkbox_group carries NO field-level "
+                        f"pdf_field_name; per-box identity lives on "
+                        f"options[].pdf_field_name"
+                    )
+                if f.type in (FieldType.CHECKBOX_GROUP, FieldType.RADIO):
+                    for o in opts:
+                        fillable = bool(o.pdf_field_name) or bool(
+                            f.pdf_field_name and o.pdf_on_value
+                        )
+                        if not fillable:
+                            problems.append(
+                                f"{path}: option {o.value!r} is not PDF-fillable -- "
+                                f"needs option pdf_field_name, or a field-level "
+                                f"pdf_field_name plus option pdf_on_value"
+                            )
+                elif f.type == FieldType.SELECT and not f.pdf_field_name:
+                    problems.append(
+                        f"{path}: a select on a PDF form requires a field-level "
+                        f"pdf_field_name"
+                    )
+
+        if f.conditional_fields:
+            problems.append(
+                f"{path}: legacy conditional_fields is not part of schema v2 "
+                f"(express the dependency as show_if on the target fields)"
+            )
+
+        problems.extend(_v2_condition_problems(path, "show_if", f.show_if, fields_by_id))
+        problems.extend(_v2_condition_problems(path, "require_if", f.require_if, fields_by_id))
+
+    return problems
+
+
 class FormSchema(BaseModel):
     """Complete form schema"""
     # Metadata
     source: FormSource
     form_metadata: FormMetadata
+
+    # Wire-format version (bd h76m.3). None/'1' = legacy v1 (tolerant: the
+    # pre-v2 group modeling and conditional shapes parse unchanged); '2'
+    # opts in to the strict v2 rules (checkbox_group modeling, option slugs,
+    # option-value uniqueness, operator/trigger compatibility). The v1 read
+    # window closes at the P6.2 strictness flip.
+    schema_version: Optional[str] = Field(
+        None,
+        description="Schema wire-format version: None/'1' legacy, '2' strict v2."
+    )
 
     # Structure (hierarchical: parts contain sections, or just sections if no parts)
     sections: List[FormSection]
@@ -559,6 +808,47 @@ class FormSchema(BaseModel):
         if info.data.get('source') == FormSource.PDF and not v:
             raise ValueError("extraction_info required for PDF forms")
         return v
+
+    @field_validator('schema_version', mode='before')
+    @classmethod
+    def _coerce_schema_version(cls, v):
+        """Accept int or str; reject versions this model does not speak."""
+        if v is None:
+            return v
+        v = str(v)
+        if v not in (vocab.SCHEMA_VERSION_V1, vocab.SCHEMA_VERSION_V2):
+            raise ValueError(
+                f"schema_version must be '{vocab.SCHEMA_VERSION_V1}' or "
+                f"'{vocab.SCHEMA_VERSION_V2}' (got {v!r})"
+            )
+        return v
+
+    @model_validator(mode='after')
+    def _enforce_v2_rules(self):
+        """Apply the strict v2 rules when the schema opts in (bd h76m.3).
+
+        v1 schemas (schema_version None/'1') pass through untouched -- the
+        shipped kits must keep validating unchanged until the P6.2 flip. A v2
+        schema carrying the deprecated trigger-side controls_fields parses
+        (demote-not-delete until P6.2) but raises a DeprecationWarning.
+        """
+        if self.schema_version != vocab.SCHEMA_VERSION_V2:
+            return self
+        if any(f.controls_fields for f in self.fields):
+            warnings.warn(
+                "controls_fields is deprecated in schema v2 (dead at runtime; "
+                "the editor derives the trigger-side view from show_if) and is "
+                "deleted at the strictness flip",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        problems = _collect_v2_problems(self)
+        if problems:
+            raise ValueError(
+                "schema v2 validation failed:\n"
+                + "\n".join(f"- {p}" for p in problems)
+            )
+        return self
 
     def get_field(self, field_id: str) -> Optional[FormField]:
         """Get a field by ID"""
@@ -670,10 +960,46 @@ class FormSchema(BaseModel):
                     if section_id not in all_section_ids:
                         errors.append(f"Part '{part.id}' references non-existent section '{section_id}'")
 
-        # Validate conditional display references
+        # Validate conditional display references (legacy single conditions
+        # and v2 composite groups both flatten through iter_condition_atoms).
+        condition_edges: Dict[str, set] = {}
         for field in self.fields:
-            if field.show_if and field.show_if.field not in all_field_ids:
-                errors.append(f"Field '{field.id}' show_if references non-existent field '{field.show_if.field}'")
+            triggers = set()
+            for kind, condition in (("show_if", field.show_if), ("require_if", field.require_if)):
+                for atom in iter_condition_atoms(condition):
+                    triggers.add(atom.field)
+                    if atom.field not in all_field_ids:
+                        errors.append(
+                            f"Field '{field.id}' {kind} references non-existent field '{atom.field}'"
+                        )
+            if triggers:
+                condition_edges[field.id] = triggers
+
+        # show_if/require_if cycle detection (warning, not error): a field
+        # whose visibility depends -- directly or transitively -- on itself
+        # can never settle deterministically (bd h76m.3).
+        def _find_cycle(start: str) -> Optional[List[str]]:
+            stack: List[tuple] = [(start, [start])]
+            while stack:
+                node, path = stack.pop()
+                for nxt in condition_edges.get(node, ()):
+                    if nxt == start:
+                        return path + [start]
+                    if nxt not in path:
+                        stack.append((nxt, path + [nxt]))
+            return None
+
+        reported: set = set()
+        for field_id in condition_edges:
+            if field_id in reported:
+                continue
+            cycle = _find_cycle(field_id)
+            if cycle:
+                reported.update(cycle)
+                warnings.append(
+                    "Conditional cycle: " + " -> ".join(cycle)
+                    + " (visibility depends on itself)"
+                )
 
         # Validate supplement references
         if self.supplements:
