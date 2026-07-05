@@ -449,8 +449,8 @@ you can neither fix nor honestly classify as incorrect/nit -- is itself the sign
 to escalate, per the normal step-2 rule.)
 
 **A/B control (arm C OFF).** The `CLOSEOUT_LOOP_MODE` env var forces the control arm:
-- unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker, ceiling 2.
-- `zero` (**arm C OFF / control**) -> the old behavior: do NOT defer nits to a bead; fix or explicitly reject every Codex finding inline before looping (no deferral, so `--deferred-nits 0`). Same ceiling.
+- unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker (under the outcome-based loop-stop -- no round cap).
+- `zero` (**arm C OFF / control**) -> the old behavior: do NOT defer nits to a bead; fix or explicitly reject every Codex finding inline before looping (no deferral, so `--deferred-nits 0`). Same outcome-based loop-stop (the arm distinction is nit-deferral vs. no-deferral, not a round count).
 **Note whether arm C was active** (it was, if `CLOSEOUT_LOOP_MODE` is unset/`blockers`); Step 8.5 combines the active arms into the single `--arm` value and applies the Phase-A default.
 
 Commit the combined fixes, then **push once and loop Codex to clean:**

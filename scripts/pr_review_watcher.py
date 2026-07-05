@@ -84,9 +84,10 @@ Terminal states (printed as the final line: "RESULT: <STATE>")
               and EXTRACTS the comment bodies, but it does NOT judge nit
               vs. blocker -- a script can't reliably tell them apart. That call,
               the address-and-loop decision, the deferred-nit bead, and the
-              loop ceiling all live in the ORCHESTRATOR's closeout Step 7
-              (A/B arm C, bd polyglot-pdf-hrn.5); this watcher deliberately
-              owns only the cheap, deterministic half.
+              outcome-based loop-stop (loop while findings are correct blockers;
+              no round cap -- bd polyglot-pdf-16pj) all live in the ORCHESTRATOR's
+              closeout Step 7 (A/B arm C, bd polyglot-pdf-hrn.5); this watcher
+              deliberately owns only the cheap, deterministic half.
   CLEAN    -- review complete, no findings (the common case). Also covers a
               PR that was closed WITHOUT being merged while nothing was pending.
   MERGED   -- the PR was merged while watching (the merge event lands in the

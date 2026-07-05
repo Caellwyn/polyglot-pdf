@@ -38,7 +38,10 @@ per-bead**:
 - **Assess** becomes a recursive **adversarial fresh-eyes loop** run BEFORE the
   PR opens: the assessor's mandate is "find every place the changes do NOT meet
   the rubric criteria" (gap-exhaustion), never "check for approval". Loop until
-  no gap is found (ceiling 3 rounds). Codex, when credits exist, stays as the
+  no gap is found (SUPERSEDED 2026-07-04, bd `polyglot-pdf-16pj`: the former
+  "ceiling 3 rounds" is retired -- the loop is now outcome-based with no round cap,
+  looping while findings are correct blockers; see
+  [`review-flow.md`](doctrine/review-flow.md)). Codex, when credits exist, stays as the
   outer post-PR review; while credits are exhausted (until ~2026-06-15) the
   fresh-eyes gap-free verdict is the review record. fresh-eyes also files
   out-of-scope bugs as new beads directly instead of escalating them.
@@ -78,7 +81,8 @@ epic. No runtime code is touched.
   first; file a bead if drift is observed.
 - Separate service accounts per agent role -- not warranted at this project
   size; audit trail comes from branch/PR naming.
-- A formal iteration cap parameter for builders -- the existing review-loop
-  ceilings suffice.
+- A formal iteration cap parameter for builders -- the review loop is
+  outcome-based (loop while findings are correct blockers; bd `polyglot-pdf-16pj`),
+  which is the stop condition, not an iteration count.
 - Retro-filling exit criteria across the ~250-bead backlog in bulk -- the
   claim-time gate retrofits lazily.
