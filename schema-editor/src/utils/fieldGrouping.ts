@@ -375,18 +375,24 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   );
 
   // The PRIMARY's own references to merged-away siblings must be rewritten too
-  // (it is excluded from `survivors`). show_if / copy_to retarget to the primary;
-  // its own controls' target arrays are remapped (Opus fallback review).
-  let primaryShowIf = primary.show_if;
-  if (primaryShowIf && conditionReferencesAny(primaryShowIf, new Set(mergedAwayToValue.keys()))) {
-    // A primary gated on a sibling option would become self-referential (the
-    // radio shown only when it equals one of its own option values -- an
-    // unreachable field, since it is hidden until set). Drop the
-    // self-referential part instead of emitting an unsatisfiable condition
-    // (Opus fallback review, round 2). For a composite (bd h76m.8) that means
-    // dropping self-referential ATOMS bucket-wise; a group left with no atoms
-    // (or a legacy condition that became self-referential) drops entirely.
-    const rewritten = rewriteCondition(primaryShowIf, mergedAwayToValue, primary.id);
+  // (it is excluded from `survivors`). show_if / require_if / copy_to retarget
+  // to the primary; its own controls' target arrays are remapped (Opus
+  // fallback review; require_if parity from fresh-eyes bd polyglot-pdf-319g).
+  //
+  // A primary gated on a sibling option would become self-referential (the
+  // radio shown/required only when it equals one of its own option values --
+  // unreachable, since it is hidden/unset until set). Drop the
+  // self-referential part instead of emitting an unsatisfiable condition
+  // (Opus fallback review, round 2). For a composite (bd h76m.8) that means
+  // dropping self-referential ATOMS bucket-wise; a group left with no atoms
+  // (or a legacy condition that became self-referential) drops entirely.
+  const rewritePrimaryCondition = (
+    condition: FieldCondition | undefined,
+  ): FieldCondition | undefined => {
+    if (!condition || !conditionReferencesAny(condition, new Set(mergedAwayToValue.keys()))) {
+      return condition;
+    }
+    const rewritten = rewriteCondition(condition, mergedAwayToValue, primary.id);
     if (isCompositeCondition(rewritten)) {
       const pruned: CompositeConditionalDisplay = {};
       let atomCount = 0;
@@ -397,11 +403,12 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
           atomCount += kept.length;
         }
       }
-      primaryShowIf = atomCount > 0 ? pruned : undefined;
-    } else {
-      primaryShowIf = rewritten.field !== primary.id ? rewritten : undefined;
+      return atomCount > 0 ? pruned : undefined;
     }
-  }
+    return rewritten.field !== primary.id ? rewritten : undefined;
+  };
+  const primaryShowIf = rewritePrimaryCondition(primary.show_if);
+  const primaryRequireIf = rewritePrimaryCondition(primary.require_if);
   let primaryCopyTo = primary.copy_to;
   if (primaryCopyTo && primaryCopyTo.some(id => mergedAwayToValue.has(id))) {
     const out: string[] = [];
@@ -438,6 +445,8 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   } as unknown as Record<string, unknown>;
   if (primaryShowIf) mergedField.show_if = primaryShowIf;
   else delete mergedField.show_if;
+  if (primaryRequireIf) mergedField.require_if = primaryRequireIf;
+  else delete mergedField.require_if;
   if (primaryCopyTo) mergedField.copy_to = primaryCopyTo;
   else delete mergedField.copy_to;
   if (mergedControls.length > 0) mergedField.controls_fields = mergedControls;

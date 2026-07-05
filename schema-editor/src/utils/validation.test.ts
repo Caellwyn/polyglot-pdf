@@ -66,6 +66,36 @@ describe('validateSchema conditional-reference checks (bd polyglot-pdf-y61i)', (
     expect(errors.some(e => e.message.includes('controls_fields references non-existent field'))).toBe(false);
   });
 
+  it('flags composite show_if and require_if atoms referencing non-existent fields (bd h76m.8)', () => {
+    const schema = schemaWith([
+      field('dependent', {
+        show_if: { all_of: [{ field: 'ghost_a', operator: 'is_not_empty' }] },
+        require_if: { field: 'ghost_b', operator: 'is_checked' },
+      }),
+      field('trigger'),
+    ]);
+
+    const errors = validateSchema(schema);
+
+    expect(errors.some(e => e.message.includes('show_if references non-existent field: ghost_a'))).toBe(true);
+    expect(errors.some(e => e.message.includes('require_if references non-existent field: ghost_b'))).toBe(true);
+  });
+
+  it('does NOT flag composite/require_if references that resolve (incl. forward refs)', () => {
+    const schema = schemaWith([
+      field('dependent', {
+        show_if: { any_of: [{ field: 'trigger', operator: 'is_not_empty' }] },
+        require_if: { none_of: [{ field: 'later', operator: 'is_checked' }] },
+      }),
+      field('trigger'),
+      field('later'),
+    ]);
+
+    const errors = validateSchema(schema);
+
+    expect(errors.some(e => e.message.includes('references non-existent field'))).toBe(false);
+  });
+
   it('STILL flags a show_if that targets a field that does not exist anywhere', () => {
     const schema = schemaWith([
       field('dependent', { show_if: { field: 'ghost', operator: 'equals', value: 'yes' } }),
