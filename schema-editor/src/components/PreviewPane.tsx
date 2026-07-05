@@ -19,7 +19,7 @@
 
 import { useMemo, useState } from 'react';
 import type { FormField, FormSchema, FormSection } from '../types/schema';
-import { shouldShowField } from '../utils/conditionalVisibility';
+import { isFieldRequired, shouldShowField } from '../utils/conditionalVisibility';
 
 interface PreviewPaneProps {
   schema: FormSchema;
@@ -117,6 +117,7 @@ export default function PreviewPane({ schema }: PreviewPaneProps) {
                 <PreviewField
                   key={field.id}
                   field={field}
+                  required={isFieldRequired(field, values, schema.fields)}
                   value={values[field.id]}
                   onSetValue={v => setValue(field.id, v)}
                   onToggleOption={optValue => toggleCheckboxOption(field, optValue)}
@@ -136,6 +137,10 @@ export default function PreviewPane({ schema }: PreviewPaneProps) {
 
 interface PreviewFieldProps {
   field: FormField;
+  /** Live required state: static `required` OR a satisfied require_if (bd
+   *  h76m.9 -- the preview must obey the "Required when" card, not just the
+   *  static flag). */
+  required: boolean;
   value: PreviewValue;
   onSetValue: (value: PreviewValue) => void;
   onToggleOption: (optionValue: string) => void;
@@ -148,11 +153,12 @@ function rendersSingleControl(field: FormField): boolean {
   const hasOptions = !!field.options && field.options.length > 0;
   if (field.type === 'radio') return false;
   if (field.type === 'checkbox') return !hasOptions; // lone checkbox is single
+  if (field.type === 'checkbox_group') return false; // per-option labels (v2)
   if (field.type === 'signature' || field.type === 'table') return false;
   return true; // text/textarea/select/date/number/tel/email
 }
 
-function PreviewField({ field, value, onSetValue, onToggleOption }: PreviewFieldProps) {
+function PreviewField({ field, required, value, onSetValue, onToggleOption }: PreviewFieldProps) {
   const label = field.label || field.spoken_name || field.name || field.id;
   const disabled = field.read_only;
   const single = rendersSingleControl(field);
@@ -161,7 +167,7 @@ function PreviewField({ field, value, onSetValue, onToggleOption }: PreviewField
   const caption = (
     <>
       <span>{label}</span>
-      {field.required && <span className="text-red-500" title="required">*</span>}
+      {required && <span className="text-red-500" title="required">*</span>}
       {field.read_only && <span className="text-xs text-gray-400">(read-only)</span>}
     </>
   );
@@ -176,6 +182,7 @@ function PreviewField({ field, value, onSetValue, onToggleOption }: PreviewField
       )}
       <PreviewInput
         field={field}
+        required={required}
         value={value}
         disabled={disabled}
         inputId={inputId}
@@ -223,8 +230,16 @@ function PreviewInput({ field, value, disabled, inputId, onSetValue, onToggleOpt
   }
 
   // CHECKBOX: a group (options[]) multi-selects into an array; a lone checkbox
-  // (no options) is a single boolean.
-  if (field.type === 'checkbox') {
+  // (no options) is a single boolean. The v2 checkbox_group TYPE (bd h76m.9)
+  // is the same multi-select group, explicit in the type instead of inferred
+  // from options[].
+  if (field.type === 'checkbox' || field.type === 'checkbox_group') {
+    // A checkbox_group with NO options is malformed schema data (the backend
+    // requires >= 2); show the same notice as an optionless radio instead of
+    // falling through to the lone-checkbox "Yes" render (fresh-eyes round 1).
+    if (field.type === 'checkbox_group' && options.length === 0) {
+      return <p className="text-xs text-amber-600">No options defined for this group.</p>;
+    }
     if (options.length > 0) {
       const selected = Array.isArray(value) ? value : [];
       return (

@@ -84,6 +84,9 @@ export type FieldType =
   | 'select'
   | 'radio'
   | 'checkbox'
+  // v2 (bd h76m.3/h76m.9): ONE logical multi-select question whose options[]
+  // carry per-box PDF identity; value shape is a list of option slugs.
+  | 'checkbox_group'
   | 'signature'
   | 'table';
 

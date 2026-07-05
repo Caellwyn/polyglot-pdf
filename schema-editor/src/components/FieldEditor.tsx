@@ -4,11 +4,11 @@ import type {
   FieldType,
   FormSchema,
   ConditionalControl,
-  ConditionalDisplay,
   ConditionalOperator,
   ControlActionKey,
 } from '../types/schema';
 import { canUngroup } from '../utils/fieldGrouping';
+import { ConditionBuilder } from './ConditionBuilder';
 
 interface FieldEditorProps {
   field: FormField | null;
@@ -209,16 +209,6 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     updateControlAt(idx, updates);
   };
 
-  // show_if may be a v2 composite {all_of/any_of/none_of} group (bd h76m.8).
-  // This editor's condition UI is the LEGACY single-condition editor; the
-  // composite builder ships in P4.1 (bd h76m.9). Until then a composite
-  // renders as a read-only summary so this UI cannot silently corrupt it.
-  const legacyShowIf: ConditionalDisplay | undefined =
-    field.show_if && !('all_of' in field.show_if) && !('any_of' in field.show_if) &&
-    !('none_of' in field.show_if)
-      ? (field.show_if as ConditionalDisplay)
-      : undefined;
-  const compositeShowIf = field.show_if && !legacyShowIf ? field.show_if : undefined;
 
   return (
     <div className="h-full overflow-auto custom-scrollbar">
@@ -419,131 +409,28 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           )}
         </div>
 
-        {/* Conditional Logic */}
+        {/* Conditional Logic (bd h76m.9): composite builder cards for
+            show_if ("Shown when") and require_if ("Required when"). */}
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-gray-900">
             Conditional Logic
-            <span className="text-xs text-gray-500 ml-2">(Show If)</span>
           </h4>
 
-          {compositeShowIf ? (
-            <div className="space-y-3 p-3 bg-gray-50 rounded-md">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-700">Show this field when:</span>
-                <button
-                  className="btn-sm btn-secondary"
-                  onClick={() => updateField({ show_if: undefined })}
-                >
-                  Remove
-                </button>
-              </div>
-              <p className="text-xs text-amber-600">
-                This field uses a COMPOUND condition (all of / at least one of /
-                none of) and is read-only here until the compound-condition
-                builder ships. Remove and re-add it to replace it with a simple
-                condition.
-              </p>
-              <pre className="text-xs text-gray-600 whitespace-pre-wrap break-all">
-                {JSON.stringify(compositeShowIf, null, 2)}
-              </pre>
-            </div>
-          ) : legacyShowIf ? (
-            <div className="space-y-3 p-3 bg-gray-50 rounded-md">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-700">Show this field when:</span>
-                <button
-                  className="btn-sm btn-secondary"
-                  onClick={() => updateField({ show_if: undefined })}
-                >
-                  Remove
-                </button>
-              </div>
+          <ConditionBuilder
+            title="Shown when"
+            condition={field.show_if}
+            selfId={field.id}
+            schema={schema}
+            onChange={(next) => updateField({ show_if: next })}
+          />
 
-              {isArrayValuedOperator(legacyShowIf.operator) && (
-                <p className="text-xs text-amber-600">
-                  This condition uses the "{legacyShowIf.operator.replace(/_/g, ' ')}"
-                  operator (a list value) and is read-only here until a list-value
-                  editor exists. Remove and re-add it to change it.
-                </p>
-              )}
-
-              <div>
-                <label className="label">Trigger Field</label>
-                <select
-                  className="input"
-                  value={legacyShowIf.field}
-                  disabled={isArrayValuedOperator(legacyShowIf.operator)}
-                  onChange={(e) =>
-                    updateField({
-                      show_if: { ...legacyShowIf, field: e.target.value },
-                    })
-                  }
-                >
-                  <option value="">Select field...</option>
-                  {schema.fields.map(f => (
-                    <option key={f.id} value={f.id}>
-                      {f.spoken_name || f.id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Operator</label>
-                <select
-                  className="input"
-                  value={legacyShowIf.operator}
-                  disabled={isArrayValuedOperator(legacyShowIf.operator)}
-                  onChange={(e) =>
-                    updateField({
-                      show_if: { ...legacyShowIf, operator: e.target.value as any },
-                    })
-                  }
-                >
-                  {operatorOptionsFor(legacyShowIf.operator).map(op => (
-                    <option key={op} value={op}>
-                      {op.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Value</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={
-                    Array.isArray(legacyShowIf.value)
-                      ? legacyShowIf.value.join(', ')
-                      : legacyShowIf.value ?? ''
-                  }
-                  disabled={isArrayValuedOperator(legacyShowIf.operator)}
-                  onChange={(e) =>
-                    updateField({
-                      show_if: { ...legacyShowIf, value: e.target.value },
-                    })
-                  }
-                  placeholder="Expected value"
-                />
-              </div>
-            </div>
-          ) : (
-            <button
-              className="btn btn-secondary w-full"
-              onClick={() =>
-                updateField({
-                  show_if: {
-                    field: '',
-                    operator: 'equals',
-                    value: '',
-                  },
-                })
-              }
-            >
-              + Add Conditional Logic
-            </button>
-          )}
+          <ConditionBuilder
+            title="Required when"
+            condition={field.require_if}
+            selfId={field.id}
+            schema={schema}
+            onChange={(next) => updateField({ require_if: next })}
+          />
         </div>
 
         {/* Controls Fields (trigger-side: this field's value affects others) */}
