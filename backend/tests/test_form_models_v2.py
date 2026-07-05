@@ -233,6 +233,13 @@ def test_v2_legacy_single_show_if_still_accepted():
             lambda doc: doc["fields"][0]["options"].pop(),
             ("fields[0] (id=grp)", "at least 2 options"),
         ),
+        # checkbox_group with NO options at all still reaches the aggregated
+        # v2 report with its field path (validate_options deliberately does
+        # not fire for checkbox_group -- Codex PR #299)
+        (
+            lambda doc: doc["fields"][0].pop("options"),
+            ("fields[0] (id=grp)", "at least 2 options (found 0)"),
+        ),
         # non-slug option value
         (
             lambda doc: doc["fields"][0]["options"][1].update(value="Other Reason"),
@@ -350,6 +357,27 @@ def test_unknown_operator_rejected_naming_allowed_set():
 # ConditionGroup shape rules
 # ---------------------------------------------------------------------------
 
+def test_value_taking_operator_requires_value_in_every_dialect():
+    # equals with no value was rejected before value became Optional and must
+    # stay rejected -- including on the v1 path (Codex PR #299).
+    with pytest.raises(ValidationError, match="requires a value"):
+        ConditionalDisplay.model_validate({"field": "x", "operator": "equals"})
+    with pytest.raises(ValidationError, match="requires a value"):
+        ConditionalDisplay.model_validate({"field": "x", "operator": "in"})
+    # No-value operators may omit it (the reason for the Optional), and the
+    # v1 kits' historical value:true on is_checked still parses.
+    ConditionalDisplay.model_validate({"field": "x", "operator": "is_checked"})
+    ConditionalDisplay.model_validate(
+        {"field": "x", "operator": "is_checked", "value": True}
+    )
+
+
+def test_slug_pattern_uses_fullmatch():
+    assert not vocab.is_valid_option_slug("valid\n")  # Codex PR #299
+    assert not vocab.is_valid_option_slug("two words")
+    assert vocab.is_valid_option_slug("valid")
+
+
 def test_condition_group_requires_a_bucket():
     with pytest.raises(ValidationError, match="at least one non-empty bucket"):
         ConditionGroup()
@@ -418,13 +446,18 @@ def test_legacy_dict_does_not_parse_as_group():
     assert isinstance(legacy, ConditionalDisplay)
 
 
-def test_schema_version_coercion_and_rejection():
+def test_schema_version_coercion_and_legacy_tolerance():
     doc = valid_v2_doc()
     doc["schema_version"] = 2  # int coerces
     assert validate(doc).schema_version == "2"
-    doc["schema_version"] = "3"
-    with pytest.raises(ValidationError, match="schema_version must be"):
-        validate(doc)
+    # Any non-'2' stamp takes the LEGACY path (stored drafts carry '1.0'
+    # from before this key was modeled; rejecting them would break the v1
+    # tolerance -- Codex PR #299). Prove it by pairing a stray stamp with
+    # content only v2 rejects.
+    doc["fields"][0]["options"][1]["value"] = "dependent_spouse"  # dupe
+    for stamp in ("1.0", "3", 1.0):
+        doc["schema_version"] = stamp
+        assert validate(doc).schema_version == str(stamp)
 
 
 # ---------------------------------------------------------------------------

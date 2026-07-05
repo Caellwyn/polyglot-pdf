@@ -225,6 +225,25 @@ class ConditionalDisplay(BaseModel):
                     "the no-value operators is_checked/is_empty/is_not_empty)"
     )
 
+    @model_validator(mode="after")
+    def _value_required_unless_no_value_operator(self):
+        """value stays REQUIRED for value-taking operators in every dialect.
+
+        value became Optional only so the no-value operators (is_checked /
+        is_empty / is_not_empty) can be authored without a dummy value; an
+        equals/in/... condition with no value was rejected before this field
+        relaxed and must stay rejected, or a malformed legacy condition
+        parses and evaluates wrongly downstream (Codex PR #299).
+        """
+        spec = vocab.OPERATORS.get(self.operator.value)
+        if spec is not None and spec.value_arity != "none" and self.value is None:
+            raise ValueError(
+                f"operator '{self.operator.value}' requires a value "
+                f"(only {', '.join(sorted(n for n, s in vocab.OPERATORS.items() if s.value_arity == 'none'))} "
+                f"may omit it)"
+            )
+        return self
+
 
 class ConditionGroup(BaseModel):
     """
@@ -624,8 +643,16 @@ class FormField(BaseModel):
     @field_validator('options')
     @classmethod
     def validate_options(cls, v, info):
-        """Ensure options are provided for choice field types"""
-        if info.data.get('type') in [FieldType.SELECT, FieldType.RADIO, FieldType.CHECKBOX_GROUP]:
+        """Ensure options are provided for select/radio types.
+
+        Deliberately NOT extended to checkbox_group: a v2 group with missing/
+        empty options must fall through to _collect_v2_problems, whose
+        aggregated report carries the 'fields[i] (id=...)' path and the
+        schema's OTHER v2 violations in one error (Codex PR #299). Raising
+        here would abort that aggregation with a generic per-field error.
+        select/radio keep the historical field-level check (v1 parity).
+        """
+        if info.data.get('type') in [FieldType.SELECT, FieldType.RADIO]:
             if not v:
                 raise ValueError(f"Options required for {info.data.get('type')} field type")
         return v
@@ -879,16 +906,17 @@ class FormSchema(BaseModel):
     @field_validator('schema_version', mode='before')
     @classmethod
     def _coerce_schema_version(cls, v):
-        """Accept int or str; reject versions this model does not speak."""
+        """Coerce to str; any stamp other than '2' takes the legacy path.
+
+        Stored drafts in the wild carry stamps like '1.0' that predate this
+        field being modeled at all (it was ignored as an extra key) --
+        rejecting them would break the very v1 tolerance this bead promises
+        (Codex PR #299). Only the exact '2' activates the strict rules; the
+        P6.2 strictness flip is where non-v2 stamps become errors.
+        """
         if v is None:
             return v
-        v = str(v)
-        if v not in (vocab.SCHEMA_VERSION_V1, vocab.SCHEMA_VERSION_V2):
-            raise ValueError(
-                f"schema_version must be '{vocab.SCHEMA_VERSION_V1}' or "
-                f"'{vocab.SCHEMA_VERSION_V2}' (got {v!r})"
-            )
-        return v
+        return str(v)
 
     @model_validator(mode='after')
     def _enforce_v2_rules(self):

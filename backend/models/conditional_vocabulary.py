@@ -132,8 +132,12 @@ _SLUG_SEPARATOR_RUNS = re.compile(r"[^a-z0-9]+")
 
 
 def is_valid_option_slug(value: str) -> bool:
-    """True when value satisfies the v2 option-slug convention."""
-    return bool(OPTION_SLUG_PATTERN.match(value))
+    """True when value satisfies the v2 option-slug convention.
+
+    fullmatch, not match: with match() a trailing '\\n' sneaks past '$'
+    (Python regex allows $ before a final newline -- Codex PR #299).
+    """
+    return bool(OPTION_SLUG_PATTERN.fullmatch(value))
 
 
 def mint_option_slug(label: str, fallback: str = "option") -> str:
