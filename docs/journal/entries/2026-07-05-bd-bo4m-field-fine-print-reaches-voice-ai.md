@@ -119,6 +119,31 @@ is precisely the behavior the bead reported missing.
   deleted tracked files (restored with `git checkout`) -- check directory
   contents before recursive deletes.
 
+## Regression caught + fixed in review (the dx7 interaction)
+
+The Opus-4.8 fallback reviewer (Codex was quota-exhausted on PR #312) caught a
+real blocking regression my two fresh-eyes rounds missed: appending the note
+AFTER the `(field_id: ...)` parenthetical broke `strip_field_id_from_hint`
+(`backend/services/field_utils.py`). That stripper (bd polyglot-pdf-dx7) removes
+the technical `(field_id: 'x', type: ...)` group from the SPOKEN hint so the
+model never reads the raw field_id aloud; its regex was **end-anchored** (`\)$`)
+because the parenthetical used to be the last thing on the line. My note tail
+moved it off the end, so on EVERY note-bearing field the strip silently no-oped
+and the field_id was spoken again -- the exact dx7 bug, re-opened on precisely
+the fields this bead targets. (The SI "never read field IDs aloud" directive
+independently masked it in the harness, which is why the live runs looked clean.)
+
+Fix: `strip_field_id_from_hint` now peels the note tail off first by its fixed
+lead-in (`. Context to briefly convey when asking:`), runs the original
+end-anchored, last-`)` field_id strip on the note-free head (preserving the dx7
+guarantee that an option label's own `)` -- e.g. "Other (specify)" -- doesn't end
+the match early), then re-appends the note. Three regression tests added to
+`test_strip_field_id_from_hint.py` (note kept + id stripped; note with its own
+parens survives; option-paren group + note both handled). The FE/BE coupling on
+that lead-in phrase is now commented on both sides. Re-verified live: the
+unconfounded A-Number run conveys the fine print AND the transcript never
+contains `p1_line1_aliennumber` / `field_id`.
+
 ## Doc freshness
 
 - **Bumped:** `docs/standards/si-reduction.md` (the SI-shape contract; both

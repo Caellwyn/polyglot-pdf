@@ -353,6 +353,10 @@ export function formatNextFieldHint(
   // context reaches the model on the channel it acts on per turn (initiating
   // message / confirm_field next-field hint / manual-update hint), not only
   // as a Note: line buried in the SI field dump (bd polyglot-pdf-bo4m).
+  // The lead-in phrase below is a CONTRACT with the backend spoken-hint
+  // stripper (backend/services/field_utils.py strip_field_id_from_hint), which
+  // peels this note off by this exact phrase so it can strip the (field_id: ...)
+  // group without eating the note. Keep the two in sync if you reword it.
   const noteSuffix = field.help?.instructions
     ? `. Context to briefly convey when asking: ${field.help.instructions}`
     : '';
