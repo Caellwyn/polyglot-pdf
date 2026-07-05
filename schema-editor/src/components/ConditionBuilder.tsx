@@ -77,6 +77,12 @@ function isGroupTrigger(field: FormField | undefined): boolean {
 // The v2 operator/trigger compatibility matrix, editor side (mirrors
 // backend/models/conditional_vocabulary.py OPERATORS -- keep in sync; the
 // P2.1 lint re-checks server-side, this just keeps the dropdown honest).
+// Deliberate widening vs the backend registry (fresh-eyes round 1): a LEGACY
+// checkbox-with-options trigger also gets includes/not_includes. The backend
+// scopes those to type=checkbox_group, but a v2-stamped schema cannot carry a
+// checkbox-with-options field AT ALL (v2 forbids options on checkbox), so the
+// pairing can never reach v2 validation -- while in v1 schemas membership is
+// exactly what the P3.1 evaluators implement for that shape.
 export function operatorsForTrigger(field: FormField | undefined): ConditionalOperator[] {
   if (!field) return ['is_empty', 'is_not_empty'];
   if (isGroupTrigger(field)) {
@@ -317,6 +323,21 @@ interface ConditionRowProps {
 function ConditionRow({ atom, bucket, index, selfId, schema, onChangeRow, onRemoveRow }: ConditionRowProps) {
   const trigger = schema.fields.find(f => f.id === atom.field);
   const validOperators = operatorsForTrigger(trigger);
+  // A stored value can reference an option that no longer exists on the
+  // trigger (its options were edited AFTER this rule was authored). The
+  // builder never EMITS such a value, but it must SURFACE a stored one
+  // loudly instead of rendering an unresolvable select (fresh-eyes round 1;
+  // the P2.1 server-side lint flags the same orphan at promotion).
+  const choice = isChoiceTrigger(trigger) && !NO_VALUE_OPERATORS.has(atom.operator);
+  const staleScalar =
+    choice && !LIST_VALUED_OPERATORS.has(atom.operator) &&
+    !trigger!.options!.some(o => o.value === atom.value)
+      ? String(atom.value ?? '')
+      : null;
+  const staleListMembers =
+    choice && LIST_VALUED_OPERATORS.has(atom.operator) && Array.isArray(atom.value)
+      ? atom.value.filter((v: string) => !trigger!.options!.some(o => o.value === v))
+      : [];
   // An existing rule with an off-matrix operator (legacy data) still displays
   // itself -- else the select silently falls back and rewrites a stored rule.
   const operatorChoices = validOperators.includes(atom.operator)
@@ -370,7 +391,10 @@ function ConditionRow({ atom, bucket, index, selfId, schema, onChangeRow, onRemo
               role="group"
               aria-label={`${rowLabel}: options`}
             >
-              {trigger!.options!.map(opt => {
+              {[
+                ...trigger!.options!,
+                ...staleListMembers.map(v => ({ value: v, label: `(missing option) ${v}` })),
+              ].map(opt => {
                 const selected = Array.isArray(atom.value) && atom.value.includes(opt.value);
                 return (
                   <label key={opt.value} className="text-xs flex items-center gap-1">
@@ -392,18 +416,29 @@ function ConditionRow({ atom, bucket, index, selfId, schema, onChangeRow, onRemo
               })}
             </div>
           ) : (
-            <select
-              className="input input-sm w-40"
-              aria-label={`${rowLabel}: value`}
-              value={String(atom.value ?? '')}
-              onChange={(e) => onChangeRow({ ...atom, value: e.target.value })}
-            >
-              {trigger!.options!.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <>
+              <select
+                className="input input-sm w-40"
+                aria-label={`${rowLabel}: value`}
+                value={String(atom.value ?? '')}
+                onChange={(e) => onChangeRow({ ...atom, value: e.target.value })}
+              >
+                {staleScalar !== null && (
+                  <option value={staleScalar}>{`(missing option) ${staleScalar}`}</option>
+                )}
+                {trigger!.options!.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {staleScalar !== null && (
+                <p className="text-xs text-amber-600 w-full pl-2" role="alert">
+                  This rule references option '{staleScalar}', which no longer
+                  exists on the trigger field -- pick a current option.
+                </p>
+              )}
+            </>
           )
         ) : LIST_VALUED_OPERATORS.has(atom.operator) ? (
           <input

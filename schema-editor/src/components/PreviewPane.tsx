@@ -228,6 +228,12 @@ function PreviewInput({ field, value, disabled, inputId, onSetValue, onToggleOpt
   // is the same multi-select group, explicit in the type instead of inferred
   // from options[].
   if (field.type === 'checkbox' || field.type === 'checkbox_group') {
+    // A checkbox_group with NO options is malformed schema data (the backend
+    // requires >= 2); show the same notice as an optionless radio instead of
+    // falling through to the lone-checkbox "Yes" render (fresh-eyes round 1).
+    if (field.type === 'checkbox_group' && options.length === 0) {
+      return <p className="text-xs text-amber-600">No options defined for this group.</p>;
+    }
     if (options.length > 0) {
       const selected = Array.isArray(value) ? value : [];
       return (

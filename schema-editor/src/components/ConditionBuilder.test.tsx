@@ -302,3 +302,44 @@ describe('operatorsForTrigger mirrors the backend v2 compat matrix', () => {
     );
   });
 });
+
+// Fresh-eyes round 1: a stored value referencing an option that no longer
+// exists on the trigger must be SURFACED loudly (never silently rewritten,
+// never rendered as an unresolvable select).
+describe('ConditionBuilder: stale stored option values are surfaced (EC3 hardening)', () => {
+  it('flags a scalar value whose option was removed from the trigger', () => {
+    render(
+      <Harness initial={{ field: 'radio_b', operator: 'equals', value: 'gone' }} />,
+    );
+    const valueSelect = screen.getByLabelText('all_of row 1: value') as HTMLSelectElement;
+    expect(valueSelect.value).toBe('gone'); // still displayed, not silently snapped
+    expect(screen.getByRole('alert').textContent).toContain("'gone'");
+    // Picking a real option heals the rule.
+    fireEvent.change(valueSelect, { target: { value: 'b2' } });
+    expect(lastCondition).toEqual({ field: 'radio_b', operator: 'equals', value: 'b2' });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('renders stale list members as removable checklist entries', () => {
+    render(
+      <Harness initial={{ field: 'radio_b', operator: 'in', value: ['b1', 'ghost'] }} />,
+    );
+    const staleBox = screen.getByLabelText(
+      'all_of row 1: option (missing option) ghost',
+    ) as HTMLInputElement;
+    expect(staleBox.checked).toBe(true);
+    fireEvent.click(staleBox); // untick removes the orphan
+    expect(lastCondition).toEqual({ field: 'radio_b', operator: 'in', value: ['b1'] });
+  });
+});
+
+describe('PreviewPane: malformed checkbox_group with zero options', () => {
+  it('shows the no-options notice instead of a lone-checkbox render', () => {
+    const schema = makeSchema();
+    schema.fields = schema.fields.map(f =>
+      f.id === 'grp_a' ? { ...f, options: [] } : f,
+    );
+    render(<PreviewPane schema={schema} />);
+    expect(screen.getByText('No options defined for this group.')).toBeTruthy();
+  });
+});
