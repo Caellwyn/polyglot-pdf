@@ -1,0 +1,19 @@
+{
+  "description": "The is_checked DUAL FATE, encoded once (bd h76m.3 / plan P1.1+P6.1): on a STANDALONE checkbox trigger is_checked is kept as bool sugar; on a checkbox_group trigger it is INVALID in v2 and the P6.1 migration rewrites it to is_not_empty. This fixture is consumed by BOTH the operator-compat validator tests (backend/tests/test_form_models_v2.py) and the migration tests (P6.1, migrate_schema_v2) so the two rule sets agree by construction, not by parallel maintenance.",
+  "cases": [
+    {
+      "name": "standalone-checkbox-keeps-is_checked",
+      "trigger_type": "checkbox",
+      "operator": "is_checked",
+      "valid_in_v2": true,
+      "migration": { "operator": "is_checked", "unchanged": true }
+    },
+    {
+      "name": "checkbox-group-is_checked-invalid-rewrites-to-is_not_empty",
+      "trigger_type": "checkbox_group",
+      "operator": "is_checked",
+      "valid_in_v2": false,
+      "migration": { "operator": "is_not_empty", "unchanged": false }
+    }
+  ]
+}
