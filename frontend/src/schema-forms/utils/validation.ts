@@ -6,6 +6,11 @@
 
 import type { FormField, ValidationRules } from "../types/schema";
 import { unwrapFieldValue } from "./fieldValue";
+import {
+  normalizeToComposite,
+  type AtomicCondition,
+  type CompositeCondition,
+} from "./normalizeToComposite";
 
 /**
  * Digit-only presets: input is a sequence of digits but is spoken/written with
@@ -454,24 +459,37 @@ function formatDate(date: Date): string {
   });
 }
 
+// The operators evaluateAtomicCondition handles. An operator outside this set
+// anywhere in a condition makes the WHOLE condition unintelligible, and
+// shouldShowField/isFieldRequired fall back to the field's static state --
+// preserving the pre-composite behavior where a single unknown operator fell
+// through to `!field.hidden` (fail-open; mirrors the editor evaluator).
+const KNOWN_OPERATORS = new Set([
+  "equals", "not_equals", "contains", "greater_than", "less_than",
+  "is_checked", "is_empty", "is_not_empty", "in", "not_in",
+  "includes", "not_includes",
+]);
+
+function conditionHasUnknownOperator(group: CompositeCondition): boolean {
+  return [group.all_of, group.any_of, group.none_of].some(
+    (bucket) => bucket?.some((atom) => !KNOWN_OPERATORS.has(atom.operator)),
+  );
+}
+
 /**
- * Check if a field should be shown based on conditional logic
- *
- * @param field - The field to check
- * @param fieldValues - Current form values (may contain FieldValue wrappers)
- * @returns true if field should be shown
+ * Evaluate ONE atomic condition against the current values (bd h76m.8: the
+ * leaf evaluator the composite buckets AND the legacy one-atom path share).
+ * The semantics of every pre-composite operator are byte-identical to the old
+ * single-condition shouldShowField switch -- pinned by the v0 vectors in
+ * shared/conditional-vectors.json.
  */
-export function shouldShowField(
-  field: FormField,
+function evaluateAtomicCondition(
+  condition: AtomicCondition,
   fieldValues: Record<string, any>,
   fields?: FormField[],
 ): boolean {
-  if (!field.show_if) {
-    return !field.hidden; // No conditional logic, use default hidden state
-  }
-
   // Bug Fix: Unwrap FieldValue object before comparing
-  const triggerValue = unwrapFieldValue(fieldValues[field.show_if.field]);
+  const triggerValue = unwrapFieldValue(fieldValues[condition.field]);
 
   // A checkbox-group trigger's selected set arrives in TWO shapes (bd
   // polyglot-pdf-vq4m): a string[] from the interactive CheckboxField renderer, OR
@@ -488,7 +506,12 @@ export function shouldShowField(
   // "Springfield, IL" must NOT be split (Codex PR #259). When `fields` is not
   // provided (the trigger field cannot be resolved), only the array shape is
   // treated as a set -- a comma-string falls through to strict scalar compare.
-  const triggerField = fields?.find((f) => f.id === field.show_if!.field);
+  //
+  // QUARANTINED until the P6.2 strictness flip (bd h76m.16): the equals/
+  // not_equals membership branches below are the vq4m hack -- v2 schemas
+  // express membership with includes/not_includes, and the backend rejects
+  // equals-on-group at parse for v2 documents.
+  const triggerField = fields?.find((f) => f.id === condition.field);
   const triggerIsCheckboxGroup = triggerField?.group_kind === "checkbox";
   const selectedSet = ((): string[] | null => {
     if (Array.isArray(triggerValue)) {
@@ -504,34 +527,48 @@ export function shouldShowField(
     return null;
   })();
 
-  switch (field.show_if.operator) {
+  // v2 membership: is the named option slug in the group's selected set? A
+  // single selection may arrive as a bare scalar (voice path, one box) --
+  // compare by string identity there; an empty/absent selection includes
+  // nothing.
+  const membershipIncludes = (): boolean => {
+    if (selectedSet) {
+      return selectedSet.includes(String(condition.value));
+    }
+    if (triggerValue === null || triggerValue === undefined || triggerValue === "") {
+      return false;
+    }
+    return String(triggerValue) === String(condition.value);
+  };
+
+  switch (condition.operator) {
     case "equals":
       if (selectedSet) {
-        return selectedSet.includes(String(field.show_if.value));
+        return selectedSet.includes(String(condition.value));
       }
-      return triggerValue === field.show_if.value;
+      return triggerValue === condition.value;
 
     case "not_equals":
       if (selectedSet) {
-        return !selectedSet.includes(String(field.show_if.value));
+        return !selectedSet.includes(String(condition.value));
       }
-      return triggerValue !== field.show_if.value;
+      return triggerValue !== condition.value;
 
     case "contains":
       // Handle checkbox groups (arrays) - check if specific option is selected.
       // Compare as strings: the array is string[] and show_if.value is a
       // string|number|boolean union, so coerce the needle to string to match.
       if (Array.isArray(triggerValue)) {
-        return triggerValue.includes(String(field.show_if.value));
+        return triggerValue.includes(String(condition.value));
       }
       // Handle text fields - substring matching
-      return String(triggerValue).includes(String(field.show_if.value));
+      return String(triggerValue).includes(String(condition.value));
 
     case "greater_than":
-      return Number(triggerValue) > Number(field.show_if.value);
+      return Number(triggerValue) > Number(condition.value);
 
     case "less_than":
-      return Number(triggerValue) < Number(field.show_if.value);
+      return Number(triggerValue) < Number(condition.value);
 
     case "is_checked":
       // Handle both single checkboxes (boolean) and checkbox groups (arrays)
@@ -559,20 +596,108 @@ export function shouldShowField(
       // Membership compared as strings: the value list is a mixed
       // string|number|boolean array and triggerValue is a different union, so
       // normalize both sides to string for a stable comparison.
-      if (Array.isArray(field.show_if.value)) {
-        return field.show_if.value.map(String).includes(String(triggerValue));
+      if (Array.isArray(condition.value)) {
+        return condition.value.map(String).includes(String(triggerValue));
       }
       return false;
 
     case "not_in":
-      if (Array.isArray(field.show_if.value)) {
-        return !field.show_if.value.map(String).includes(String(triggerValue));
+      if (Array.isArray(condition.value)) {
+        return !condition.value.map(String).includes(String(triggerValue));
       }
       return false;
 
+    case "includes":
+      return membershipIncludes();
+
+    case "not_includes":
+      return !membershipIncludes();
+
     default:
-      return !field.hidden;
+      // Unreachable: callers gate on KNOWN_OPERATORS first. Fail open.
+      return true;
   }
+}
+
+/**
+ * Evaluate a canonical composite condition (bd h76m.8): ALL of all_of hold,
+ * AND at least one of any_of holds (when present), AND none of none_of hold.
+ * An omitted bucket is vacuously satisfied.
+ */
+function evaluateConditionGroup(
+  group: CompositeCondition,
+  fieldValues: Record<string, any>,
+  fields?: FormField[],
+): boolean {
+  if (
+    group.all_of &&
+    !group.all_of.every((c) => evaluateAtomicCondition(c, fieldValues, fields))
+  ) {
+    return false;
+  }
+  if (
+    group.any_of &&
+    group.any_of.length > 0 &&
+    !group.any_of.some((c) => evaluateAtomicCondition(c, fieldValues, fields))
+  ) {
+    return false;
+  }
+  if (
+    group.none_of &&
+    group.none_of.some((c) => evaluateAtomicCondition(c, fieldValues, fields))
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Check if a field should be shown based on conditional logic
+ *
+ * Since bd h76m.8 the condition is consumed through normalizeToComposite, so
+ * a legacy single condition and a v2 {all_of/any_of/none_of} group evaluate
+ * through ONE path. Absent/malformed conditions and conditions carrying an
+ * unknown operator fall back to the field's static hidden state (fail-open,
+ * unchanged from the pre-composite behavior).
+ *
+ * @param field - The field to check
+ * @param fieldValues - Current form values (may contain FieldValue wrappers)
+ * @returns true if field should be shown
+ */
+export function shouldShowField(
+  field: FormField,
+  fieldValues: Record<string, any>,
+  fields?: FormField[],
+): boolean {
+  const group = normalizeToComposite(field.show_if);
+  if (!group) {
+    return !field.hidden; // No (or malformed) conditional logic
+  }
+  if (conditionHasUnknownOperator(group)) {
+    return !field.hidden;
+  }
+  return evaluateConditionGroup(group, fieldValues, fields);
+}
+
+/**
+ * Whether a field is REQUIRED right now (bd h76m.8): statically required via
+ * validation.required, or dynamically via a satisfied require_if condition
+ * (same legacy-or-composite shape as show_if). Fail-open here means NOT
+ * required -- a malformed/unknown-operator require_if never blocks the user.
+ */
+export function isFieldRequired(
+  field: FormField,
+  fieldValues: Record<string, any>,
+  fields?: FormField[],
+): boolean {
+  if (field.validation?.required) {
+    return true;
+  }
+  const group = normalizeToComposite(field.require_if);
+  if (!group || conditionHasUnknownOperator(group)) {
+    return false;
+  }
+  return evaluateConditionGroup(group, fieldValues, fields);
 }
 
 /**

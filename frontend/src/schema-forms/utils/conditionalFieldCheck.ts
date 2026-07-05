@@ -5,9 +5,32 @@
  * Provides human-readable dependency information for Gemini error responses.
  */
 
-import type { FormField, FormSchema, FieldValue, FieldAvailability } from "../types/schema";
+import type {
+  ConditionalDisplay,
+  FieldAvailability,
+  FieldValue,
+  FormField,
+  FormSchema,
+} from "../types/schema";
 import { unwrapFieldValue } from "./fieldValue";
+import { normalizeToComposite } from "./normalizeToComposite";
 import { shouldShowField } from "./validation";
+
+/**
+ * Flatten a legacy-or-composite condition to its atomic conditions (bd
+ * h76m.8). [] when the condition is absent or malformed -- callers that only
+ * explain/walk dependencies then have nothing to name, which matches the
+ * evaluator's fail-open "treated as visible" behavior for those shapes.
+ */
+function conditionAtoms(condition: unknown): ConditionalDisplay[] {
+  const group = normalizeToComposite(condition);
+  if (!group) return [];
+  return [
+    ...(group.all_of ?? []),
+    ...(group.any_of ?? []),
+    ...(group.none_of ?? []),
+  ] as ConditionalDisplay[];
+}
 
 export interface FieldAccessResult {
   /** Whether the field can be accessed/updated */
@@ -64,24 +87,37 @@ export function checkFieldAccess(
     const isVisible = shouldShowField(field, fieldValues, schema.fields);
 
     if (!isVisible) {
-      // Field is hidden - determine what needs to be filled first
-      const triggerFieldId = field.show_if.field;
-      const triggerField = schema.fields.find(f => f.id === triggerFieldId);
+      // Field is hidden - determine what needs to be filled first. A v2
+      // composite condition contributes one required_fields entry per atom
+      // whose trigger resolves; the message names the first one (and counts
+      // the rest) so the one-atom legacy wording is unchanged (bd h76m.8).
+      const resolved = conditionAtoms(field.show_if)
+        .map((atom) => ({
+          atom,
+          trigger: schema.fields.find(f => f.id === atom.field),
+        }))
+        .filter((r): r is { atom: ConditionalDisplay; trigger: FormField } => !!r.trigger);
 
-      if (triggerField) {
-        const currentValue = unwrapFieldValue(fieldValues[triggerFieldId]);
-        const requiredValue = field.show_if.value;
+      if (resolved.length > 0) {
+        const first = resolved[0];
+        const moreSuffix =
+          resolved.length > 1
+            ? ` (this field has ${resolved.length - 1} more condition${resolved.length > 2 ? "s" : ""} on: ${resolved
+                .slice(1)
+                .map((r) => `'${r.trigger.spoken_name || r.trigger.name}'`)
+                .join(", ")})`
+            : "";
 
         return {
           accessible: false,
           reason: "field_hidden",
-          message: `The field '${spokenName}' is not yet available. First, you need to fill the field '${triggerField.spoken_name}' with the value '${requiredValue}'.`,
-          required_fields: [{
-            field_id: triggerFieldId,
-            spoken_name: triggerField.spoken_name || triggerField.name,
-            required_value: requiredValue,
-            current_value: currentValue
-          }]
+          message: `The field '${spokenName}' is not yet available. First, you need to fill the field '${first.trigger.spoken_name}' with the value '${first.atom.value}'.${moreSuffix}`,
+          required_fields: resolved.map((r) => ({
+            field_id: r.atom.field,
+            spoken_name: r.trigger.spoken_name || r.trigger.name,
+            required_value: r.atom.value,
+            current_value: unwrapFieldValue(fieldValues[r.atom.field]),
+          })),
         };
       }
 
@@ -123,23 +159,27 @@ export function checkFieldAccess(
 export function getDependencyChain(
   field: FormField,
   schema: FormSchema,
-  fieldValues: Record<string, any>
+  fieldValues: Record<string, any>,
+  seen?: Set<string>
 ): FormField[] {
   const dependencies: FormField[] = [];
+  // Guard against conditional cycles (A shows-if B shows-if A): without the
+  // visited set the recursion never terminates. The backend now WARNS on such
+  // cycles (validate_all_references, bd h76m.3) but must not crash the client.
+  const visited = seen ?? new Set<string>([field.id]);
 
-  if (!field.show_if) {
-    return dependencies; // No dependencies
-  }
+  // Walk EVERY atom of a legacy-or-composite condition (bd h76m.8) -- a
+  // composite-gated field depends on all its trigger fields.
+  for (const atom of conditionAtoms(field.show_if)) {
+    if (visited.has(atom.field)) continue;
+    const triggerField = schema.fields.find(f => f.id === atom.field);
+    if (!triggerField) continue;
 
-  // Get immediate dependency
-  const triggerFieldId = field.show_if.field;
-  const triggerField = schema.fields.find(f => f.id === triggerFieldId);
-
-  if (triggerField) {
+    visited.add(triggerField.id);
     dependencies.push(triggerField);
 
     // Recursively check if trigger field has dependencies
-    const nestedDeps = getDependencyChain(triggerField, schema, fieldValues);
+    const nestedDeps = getDependencyChain(triggerField, schema, fieldValues, visited);
     dependencies.push(...nestedDeps);
   }
 
@@ -184,25 +224,40 @@ export function evaluateFieldAvailability(
     const isVisible = shouldShowField(field, fieldValues, schema.fields);
 
     if (!isVisible) {
-      // Field is conditionally hidden - find the blocking field
-      const triggerFieldId = field.show_if.field;
-      const triggerField = schema.fields.find(f => f.id === triggerFieldId);
+      // Field is conditionally hidden - find the blocking field(s). For a v2
+      // composite the reason names the first resolvable atom's trigger and
+      // counts the remaining conditions; the one-atom legacy wording is
+      // unchanged (bd h76m.8).
+      const resolved = conditionAtoms(field.show_if)
+        .map((atom) => ({
+          atom,
+          trigger: schema.fields.find(f => f.id === atom.field),
+        }))
+        .filter((r): r is { atom: ConditionalDisplay; trigger: FormField } => !!r.trigger);
 
-      if (triggerField) {
-        const currentValue = unwrapFieldValue(fieldValues[triggerFieldId]?.value);
-        const requiredValue = field.show_if.value;
-        const operator = field.show_if.operator || 'equals';
+      if (resolved.length > 0) {
+        const { atom, trigger } = resolved[0];
+        const triggerName = trigger.spoken_name || trigger.name;
+        const requiredValue = atom.value;
+        const operator = atom.operator || 'equals';
 
-        // Build human-readable reason
+        // Build human-readable reason. 'includes' (v2 membership) reads the
+        // same as equals: pick that option on the trigger field.
         let reason: string;
-        if (operator === 'equals') {
-          reason = `Complete the '${triggerField.spoken_name || triggerField.name}' field first and select '${requiredValue}'.`;
+        if (operator === 'equals' || operator === 'includes') {
+          reason = `Complete the '${triggerName}' field first and select '${requiredValue}'.`;
         } else if (operator === 'not_equals') {
-          reason = `Complete the '${triggerField.spoken_name || triggerField.name}' field first. It must NOT be '${requiredValue}'.`;
+          reason = `Complete the '${triggerName}' field first. It must NOT be '${requiredValue}'.`;
         } else if (operator === 'is_checked') {
-          reason = `Check the '${triggerField.spoken_name || triggerField.name}' checkbox first.`;
+          reason = `Check the '${triggerName}' checkbox first.`;
         } else {
-          reason = `Complete the '${triggerField.spoken_name || triggerField.name}' field first.`;
+          reason = `Complete the '${triggerName}' field first.`;
+        }
+        if (resolved.length > 1) {
+          reason += ` (${resolved.length - 1} more condition${resolved.length > 2 ? 's' : ''} on: ${resolved
+            .slice(1)
+            .map((r) => `'${r.trigger.spoken_name || r.trigger.name}'`)
+            .join(', ')})`;
         }
 
         return {

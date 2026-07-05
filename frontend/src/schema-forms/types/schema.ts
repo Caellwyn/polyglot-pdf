@@ -45,7 +45,11 @@ export type ConditionalOperator =
   | "is_empty"
   | "is_not_empty"
   | "in"
-  | "not_in";
+  | "not_in"
+  // v2 group-membership operators (bd h76m.8): "option slug is (not) in the
+  // checkbox_group trigger's selected set". Mirror backend ConditionalOperator.
+  | "includes"
+  | "not_includes";
 
 export type GroupKind = "checkbox" | "radio";
 
@@ -99,8 +103,23 @@ export interface ValidationRules {
 export interface ConditionalDisplay {
   field: string; // Field ID to check
   operator: ConditionalOperator;
-  value: string | number | boolean | Array<string | number | boolean>;
+  // Optional since schema v2: the no-value operators (is_checked / is_empty /
+  // is_not_empty) omit it (mirrors backend ConditionalDisplay, bd h76m.8).
+  value?: string | number | boolean | Array<string | number | boolean> | null;
 }
+
+// v2 composite condition (bd h76m.8): ONE level of all_of/any_of/none_of
+// buckets of atomic conditions -- "(A AND B) AND NOT C" = all_of:[A,B] +
+// none_of:[C]. Evaluators consume conditions ONLY through normalizeToComposite
+// (which also lifts the legacy single-condition shape to a one-atom group).
+export interface CompositeConditionalDisplay {
+  all_of?: ConditionalDisplay[];
+  any_of?: ConditionalDisplay[];
+  none_of?: ConditionalDisplay[];
+}
+
+// What a schema may carry on show_if / require_if: either wire dialect.
+export type FieldCondition = ConditionalDisplay | CompositeConditionalDisplay;
 
 export interface ConditionalControl {
   operator: ConditionalOperator;
@@ -193,8 +212,11 @@ export interface FormField {
   group_label?: string;
   group_kind?: GroupKind;
 
-  // Conditional display
-  show_if?: ConditionalDisplay;
+  // Conditional display: legacy single condition OR v2 composite group.
+  show_if?: FieldCondition;
+  // v2 (bd h76m.8): condition under which this field becomes REQUIRED --
+  // same shape and evaluator machinery as show_if.
+  require_if?: FieldCondition;
   controls_fields?: ConditionalControl[];
   conditional_behavior?: ConditionalBehavior;
   /** Legacy alias for conditional_behavior; still emitted by generated form-kit schemas. */

@@ -14,6 +14,13 @@ import {
 } from './fieldGrouping';
 import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
 
+// These tests construct and assert LEGACY single conditions; show_if's type is
+// now the legacy-or-composite union (bd h76m.8), so narrow explicitly at the
+// assertion sites.
+function asAtom(cond: FormField['show_if']): ConditionalDisplay {
+  return cond as ConditionalDisplay;
+}
+
 // A faithful local mirror of the runtime's frontend shouldShowField scalar-trigger
 // semantics (frontend/src/schema-forms/utils/validation.ts), so these tests pin
 // RUNTIME behavior -- whether a remapped condition actually fires -- not just the
@@ -329,7 +336,7 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
 
     const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
     const mixed = merged.fields.find(f => f.id === 'mixed')!;
-    expect(mixed.show_if!.field).toBe('reason_a'); // show_if rewritten
+    expect(asAtom(mixed.show_if).field).toBe('reason_a'); // show_if rewritten
     expect(mixed.controls_fields).toBe(controls); // untouched array kept by reference
   });
 
@@ -516,7 +523,7 @@ describe('Opus fallback review fixes', () => {
     const unmerged = ungroupField(schema, 'p3_race');
     const detail = unmerged.fields.find(f => f.id === 'detail')!;
     expect(detail.show_if).toEqual({ field: 'p3_race', operator: 'is_checked' });
-    expect(unmerged.fields.some(f => f.id === detail.show_if!.field)).toBe(true);
+    expect(unmerged.fields.some(f => f.id === asAtom(detail.show_if).field)).toBe(true);
   });
 
   // A whole-group "is the group populated" condition must NORMALIZE to an operator
@@ -559,9 +566,9 @@ describe('Opus fallback review fixes', () => {
     expect(detail.show_if).toEqual({ field: 'asian', operator: 'not_equals', value: true });
     expect(unmerged.fields.some(f => f.id === 'asian')).toBe(true);
     // runtime oracle: shown UNLESS asian is checked.
-    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(false);  // selected -> hidden
-    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(true);  // unchecked -> shown
-    expect(runtimeShowIf(detail.show_if!, {})).toBe(true);                // untouched -> shown
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: true })).toBe(false);  // selected -> hidden
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: false })).toBe(true);  // unchecked -> shown
+    expect(runtimeShowIf(asAtom(detail.show_if), {})).toBe(true);                // untouched -> shown
   });
 
   it('runtime: equals <matched option> -> is_checked shows iff that option is checked', () => {
@@ -569,8 +576,8 @@ describe('Opus fallback review fixes', () => {
     const unmerged = ungroupField(schema, 'p3_race');
     const detail = unmerged.fields.find(f => f.id === 'detail')!;
     expect(detail.show_if).toEqual({ field: 'asian', operator: 'is_checked' });
-    expect(runtimeShowIf(detail.show_if!, { asian: true })).toBe(true);
-    expect(runtimeShowIf(detail.show_if!, { asian: false })).toBe(false);
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: true })).toBe(true);
+    expect(runtimeShowIf(asAtom(detail.show_if), { asian: false })).toBe(false);
   });
 
   it("excludes an empty-string option value from the option map: not_equals '' stays a whole-group check", () => {

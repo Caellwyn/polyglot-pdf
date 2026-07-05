@@ -18,6 +18,11 @@
 // for parity even though the preview only produces arrays).
 
 import type { FormField, ConditionalDisplay } from '../types/schema';
+import {
+  normalizeToComposite,
+  type AtomicCondition,
+  type CompositeCondition,
+} from './normalizeToComposite';
 
 // Resolve the selected-option SET when the trigger value is multi-valued (a
 // checkbox group), else null (a plain scalar, for which strict identity is
@@ -45,16 +50,31 @@ function selectedSetFor(
   return null;
 }
 
-// Evaluate a single show_if condition against the current preview values.
-// Returns true when the dependent field should be VISIBLE.
+// Evaluate a single ATOMIC condition against the current preview values (the
+// leaf evaluator the composite buckets and the legacy one-atom path share
+// since bd h76m.8). Returns true when the condition holds. Accepts the
+// structural atom shape normalizeToComposite emits; the legacy
+// ConditionalDisplay satisfies it.
 export function evaluateCondition(
-  cond: ConditionalDisplay,
+  cond: AtomicCondition | ConditionalDisplay,
   fieldValues: Record<string, unknown>,
   fields: FormField[],
 ): boolean {
   const triggerValue = fieldValues[cond.field];
   const triggerField = fields.find(f => f.id === cond.field);
   const selectedSet = selectedSetFor(triggerValue, triggerField);
+
+  // v2 membership: is the named option slug in the group's selected set? A
+  // single selection may arrive as a bare scalar -- compare by string
+  // identity there; an empty/absent selection includes nothing. Mirrors the
+  // runtime evaluator (frontend validation.ts, bd h76m.8).
+  const membershipIncludes = (): boolean => {
+    if (selectedSet) return selectedSet.includes(String(cond.value));
+    if (triggerValue === null || triggerValue === undefined || triggerValue === '') {
+      return false;
+    }
+    return String(triggerValue) === String(cond.value);
+  };
 
   switch (cond.operator) {
     case 'equals':
@@ -103,6 +123,12 @@ export function evaluateCondition(
       }
       return false;
 
+    case 'includes':
+      return membershipIncludes();
+
+    case 'not_includes':
+      return !membershipIncludes();
+
     default:
       // Unknown operator: match the runtime, which falls back to the field's
       // static hidden state. evaluateCondition has no field handle, so return
@@ -112,23 +138,73 @@ export function evaluateCondition(
 }
 
 // The operators evaluateCondition handles explicitly. An operator outside this
-// set hits the default branch, where the runtime falls back to the field's static
-// hidden state rather than unconditionally showing.
+// set ANYWHERE in a condition makes the whole condition unintelligible and the
+// caller falls back to the field's static hidden state rather than
+// unconditionally showing (mirrors the runtime, bd h76m.8).
 const KNOWN_OPERATORS = new Set([
   'equals', 'not_equals', 'contains', 'greater_than', 'less_than',
   'is_checked', 'is_empty', 'is_not_empty', 'in', 'not_in',
+  'includes', 'not_includes',
 ]);
 
-// Whether a field should be shown given the current preview values. A field with
-// no show_if is visible unless explicitly hidden; otherwise its show_if decides.
+function conditionHasUnknownOperator(group: CompositeCondition): boolean {
+  return [group.all_of, group.any_of, group.none_of].some(
+    (bucket) => bucket?.some((atom) => !KNOWN_OPERATORS.has(atom.operator)),
+  );
+}
+
+// Evaluate a canonical composite condition (bd h76m.8): ALL of all_of hold,
+// AND at least one of any_of holds (when present), AND none of none_of hold.
+// An omitted bucket is vacuously satisfied. Mirrors the runtime evaluator.
+function evaluateConditionGroup(
+  group: CompositeCondition,
+  fieldValues: Record<string, unknown>,
+  fields: FormField[],
+): boolean {
+  if (group.all_of && !group.all_of.every(c => evaluateCondition(c, fieldValues, fields))) {
+    return false;
+  }
+  if (
+    group.any_of &&
+    group.any_of.length > 0 &&
+    !group.any_of.some(c => evaluateCondition(c, fieldValues, fields))
+  ) {
+    return false;
+  }
+  if (group.none_of && group.none_of.some(c => evaluateCondition(c, fieldValues, fields))) {
+    return false;
+  }
+  return true;
+}
+
+// Whether a field should be shown given the current preview values. Since bd
+// h76m.8 the condition is consumed through normalizeToComposite, so a legacy
+// single condition and a v2 {all_of/any_of/none_of} group evaluate through
+// ONE path. Absent/malformed conditions and conditions carrying an unknown
+// operator fall back to the field's static hidden state (fail-open).
 export function shouldShowField(
   field: FormField,
   fieldValues: Record<string, unknown>,
   fields: FormField[],
 ): boolean {
-  if (!field.show_if) return !field.hidden;
-  // Unknown operator: mirror the runtime's default (!field.hidden), not an
-  // unconditional show (fresh-eyes finding 2).
-  if (!KNOWN_OPERATORS.has(field.show_if.operator)) return !field.hidden;
-  return evaluateCondition(field.show_if, fieldValues, fields);
+  const group = normalizeToComposite(field.show_if);
+  if (!group) return !field.hidden;
+  if (conditionHasUnknownOperator(group)) return !field.hidden;
+  return evaluateConditionGroup(group, fieldValues, fields);
+}
+
+// Whether a field is REQUIRED right now (bd h76m.8): statically required, or
+// dynamically via a satisfied require_if (same legacy-or-composite shape as
+// show_if). Fail-open means NOT required. Mirrors the runtime's
+// isFieldRequired; the editor's FormField carries `required` as a plain
+// boolean rather than validation.required.
+export function isFieldRequired(
+  field: FormField,
+  fieldValues: Record<string, unknown>,
+  fields: FormField[],
+): boolean {
+  if (field.required) return true;
+  const group = normalizeToComposite(field.require_if);
+  if (!group || conditionHasUnknownOperator(group)) return false;
+  return evaluateConditionGroup(group, fieldValues, fields);
 }

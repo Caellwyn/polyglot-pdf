@@ -35,8 +35,10 @@ import type {
   FormSchema,
   FieldOption,
   ControlActionKey,
+  CompositeConditionalDisplay,
   ConditionalDisplay,
   ConditionalControl,
+  FieldCondition,
 } from '../types/schema';
 
 // Field types that can participate in a merge group. A consolidated options[]
@@ -88,11 +90,13 @@ interface UngroupStash {
   // their pre-merge values, so un-merge can restore them verbatim.
   rewrites: Array<{
     fieldId: string;
-    show_if?: ConditionalDisplay;
+    show_if?: FieldCondition;
+    require_if?: FieldCondition;
     controls_fields?: ConditionalControl[];
     copy_to?: string[];
     // sentinels distinguishing "had no key" from "key not rewritten" on restore.
     had_show_if: boolean;
+    had_require_if?: boolean;
     had_controls: boolean;
     had_copy_to: boolean;
   }>;
@@ -172,6 +176,50 @@ function rewriteShowIf(
   return { ...cond, field: primaryId };
 }
 
+// v2 composite awareness (bd h76m.8): a condition on the wire is either the
+// legacy single shape or a {all_of/any_of/none_of} group; merge rewriting must
+// walk both WITHOUT changing the stored shape (legacy stays legacy, composite
+// stays composite -- normalization is the evaluators' job, not the editor's).
+const CONDITION_BUCKETS = ['all_of', 'any_of', 'none_of'] as const;
+
+function isCompositeCondition(cond: FieldCondition): cond is CompositeConditionalDisplay {
+  return CONDITION_BUCKETS.some(
+    b => (cond as CompositeConditionalDisplay)[b] !== undefined,
+  );
+}
+
+// True when any atom of the (legacy or composite) condition references one of
+// the given field ids.
+function conditionReferencesAny(cond: FieldCondition, ids: Set<string>): boolean {
+  if (isCompositeCondition(cond)) {
+    return CONDITION_BUCKETS.some(
+      b => (cond[b] ?? []).some(atom => ids.has(atom.field)),
+    );
+  }
+  return ids.has(cond.field);
+}
+
+// Rewrite a legacy-or-composite condition atom-wise, preserving its shape.
+function rewriteCondition(
+  cond: FieldCondition,
+  mergedAwayToValue: Map<string, string>,
+  primaryId: string,
+): FieldCondition {
+  if (isCompositeCondition(cond)) {
+    const out: CompositeConditionalDisplay = {};
+    for (const bucket of CONDITION_BUCKETS) {
+      const members = cond[bucket];
+      if (members) {
+        out[bucket] = members.map(
+          atom => rewriteShowIf(atom, mergedAwayToValue, primaryId) ?? atom,
+        );
+      }
+    }
+    return out;
+  }
+  return rewriteShowIf(cond, mergedAwayToValue, primaryId) ?? cond;
+}
+
 // Rewrite every dependent field's show_if / controls_fields that referenced a
 // merged-away field. Returns the rewritten fields AND a record of what changed
 // (so un-merge can restore the originals). mergedAwayToValue maps each
@@ -198,19 +246,23 @@ function rewriteReferences(
     let changed = false;
     const next: FormField = { ...f };
     const record: UngroupStash['rewrites'][number] = {
-      fieldId: f.id, had_show_if: !!f.show_if, had_controls: !!f.controls_fields,
-      had_copy_to: !!f.copy_to,
+      fieldId: f.id, had_show_if: !!f.show_if, had_require_if: !!f.require_if,
+      had_controls: !!f.controls_fields, had_copy_to: !!f.copy_to,
     };
     let recorded = false;
 
-    if (f.show_if && mergedAway.has(f.show_if.field)) {
-      const rewritten = rewriteShowIf(f.show_if, mergedAwayToValue, primaryId);
-      if (rewritten) {
-        record.show_if = f.show_if; // original
-        next.show_if = rewritten;
-        changed = true;
-        recorded = true;
-      }
+    if (f.show_if && conditionReferencesAny(f.show_if, mergedAway)) {
+      record.show_if = f.show_if; // original
+      next.show_if = rewriteCondition(f.show_if, mergedAwayToValue, primaryId);
+      changed = true;
+      recorded = true;
+    }
+
+    if (f.require_if && conditionReferencesAny(f.require_if, mergedAway)) {
+      record.require_if = f.require_if; // original
+      next.require_if = rewriteCondition(f.require_if, mergedAwayToValue, primaryId);
+      changed = true;
+      recorded = true;
     }
 
     // copy_to is a plain string[] of target field ids (unused in current real
@@ -326,13 +378,29 @@ export function mergeFields(schema: FormSchema, fieldIds: string[]): MergeResult
   // (it is excluded from `survivors`). show_if / copy_to retarget to the primary;
   // its own controls' target arrays are remapped (Opus fallback review).
   let primaryShowIf = primary.show_if;
-  if (primaryShowIf && mergedAwayToValue.has(primaryShowIf.field)) {
-    const rw = rewriteShowIf(primaryShowIf, mergedAwayToValue, primary.id);
+  if (primaryShowIf && conditionReferencesAny(primaryShowIf, new Set(mergedAwayToValue.keys()))) {
     // A primary gated on a sibling option would become self-referential (the
     // radio shown only when it equals one of its own option values -- an
-    // unreachable field, since it is hidden until set). Drop it instead of
-    // emitting an unsatisfiable condition (Opus fallback review, round 2).
-    primaryShowIf = rw && rw.field !== primary.id ? rw : undefined;
+    // unreachable field, since it is hidden until set). Drop the
+    // self-referential part instead of emitting an unsatisfiable condition
+    // (Opus fallback review, round 2). For a composite (bd h76m.8) that means
+    // dropping self-referential ATOMS bucket-wise; a group left with no atoms
+    // (or a legacy condition that became self-referential) drops entirely.
+    const rewritten = rewriteCondition(primaryShowIf, mergedAwayToValue, primary.id);
+    if (isCompositeCondition(rewritten)) {
+      const pruned: CompositeConditionalDisplay = {};
+      let atomCount = 0;
+      for (const bucket of CONDITION_BUCKETS) {
+        const kept = (rewritten[bucket] ?? []).filter(atom => atom.field !== primary.id);
+        if (kept.length > 0) {
+          pruned[bucket] = kept;
+          atomCount += kept.length;
+        }
+      }
+      primaryShowIf = atomCount > 0 ? pruned : undefined;
+    } else {
+      primaryShowIf = rewritten.field !== primary.id ? rewritten : undefined;
+    }
   }
   let primaryCopyTo = primary.copy_to;
   if (primaryCopyTo && primaryCopyTo.some(id => mergedAwayToValue.has(id))) {
@@ -431,13 +499,20 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
       }
       const r = restoreById.get(f.id);
       if (r) {
+        // Restore ONLY the keys the merge actually rewrote (the record holds
+        // their pre-merge originals). A key that was present but untouched has
+        // its had_* sentinel true with no recorded value -- assigning that
+        // undefined would clobber the field's live value (bd h76m.8); a key
+        // the field never had is deleted defensively.
         const restored = { ...f };
-        if (r.had_show_if) restored.show_if = r.show_if;
-        else delete (restored as Record<string, unknown>).show_if;
-        if (r.had_controls) restored.controls_fields = r.controls_fields;
-        else delete (restored as Record<string, unknown>).controls_fields;
-        if (r.had_copy_to) restored.copy_to = r.copy_to;
-        else delete (restored as Record<string, unknown>).copy_to;
+        if (r.show_if !== undefined) restored.show_if = r.show_if;
+        else if (!r.had_show_if) delete (restored as Record<string, unknown>).show_if;
+        if (r.require_if !== undefined) restored.require_if = r.require_if;
+        else if (r.had_require_if === false) delete (restored as Record<string, unknown>).require_if;
+        if (r.controls_fields !== undefined) restored.controls_fields = r.controls_fields;
+        else if (!r.had_controls) delete (restored as Record<string, unknown>).controls_fields;
+        if (r.copy_to !== undefined) restored.copy_to = r.copy_to;
+        else if (!r.had_copy_to) delete (restored as Record<string, unknown>).copy_to;
         newFields.push(restored);
       } else {
         newFields.push(f);
@@ -579,6 +654,51 @@ function normalizeWholeGroupOperator(cond: ConditionalDisplay): ConditionalDispl
   }
 }
 
+// Remap ONE atomic condition that referenced the consolidated field to the
+// reconstructed split fields (the inverse of mergeFields' rewriteShowIf).
+// Returns the remapped atom; callers only invoke it for atoms whose .field is
+// the consolidated id.
+function remapFallbackAtom(
+  cond: ConditionalDisplay,
+  valueToReconstructedId: Map<string, string>,
+  primaryReconstructedId: string,
+): ConditionalDisplay {
+  const matchedOptionId = cond.value !== undefined && cond.value !== null
+    ? valueToReconstructedId.get(String(cond.value))
+    : undefined;
+  if (matchedOptionId && (cond.operator === 'equals' || cond.operator === 'not_equals')) {
+    // A SPECIFIC option: the inverse for a single option is exact, targeting that
+    // option's reconstructed checkbox.
+    //   equals <optValue>     -> is_checked        (shown when that option is set)
+    //   not_equals <optValue> -> not_equals true   (shown UNLESS that option is set)
+    // not_equals must use `not_equals true`, NOT `is_empty`: shouldShowField's
+    // is_empty is true only for null/undefined/'' -- an EXPLICITLY unchecked
+    // checkbox stores `false`, which is_empty reads as false, so the dependent
+    // would be permanently hidden once the box is touched. `not_equals true`
+    // reads false===checked, true===unchecked-or-absent -- the correct inverse
+    // (bd polyglot-pdf-cjby, fresh-eyes r3).
+    return cond.operator === 'equals'
+      ? { field: matchedOptionId, operator: 'is_checked' }
+      : { field: matchedOptionId, operator: 'not_equals', value: true };
+  }
+  // Whole-group / unmatched: retarget to the primary so it does not dangle,
+  // and NORMALIZE the operator so it fires correctly against a standalone
+  // BOOLEAN checkbox. Preserving the original operator silently misfires:
+  // `not_equals ''` / `is_not_empty` on an unchecked checkbox (value false)
+  // is `false !== '' ` / `false !== ""` == always TRUE, so the dependent
+  // would show permanently (real i-90 case: p1_line6c_aptsteflrnumber's
+  // `not_equals ''` on the consolidated p1_unit_type6c_unit). Map the intent
+  // to a checkbox-sane operator instead (bd polyglot-pdf-v444, fresh-eyes).
+  const normalizedOp = normalizeWholeGroupOperator(cond);
+  // is_checked / is_empty are value-less operators (shouldShowField ignores
+  // value for them); a value-carrying operator (equals/not_equals/...) keeps
+  // its original value so the comparison is unchanged.
+  const valueLess = normalizedOp === 'is_checked' || normalizedOp === 'is_empty';
+  return valueLess
+    ? { field: primaryReconstructedId, operator: normalizedOp }
+    : { ...cond, field: primaryReconstructedId, operator: normalizedOp };
+}
+
 function remapFallbackDependent(
   f: FormField,
   fieldId: string,
@@ -589,42 +709,26 @@ function remapFallbackDependent(
   let changed = false;
   const next: FormField = { ...f };
 
-  if (f.show_if && f.show_if.field === fieldId) {
-    const cond = f.show_if;
-    const matchedOptionId = cond.value !== undefined && cond.value !== null
-      ? valueToReconstructedId.get(String(cond.value))
-      : undefined;
-    if (matchedOptionId && (cond.operator === 'equals' || cond.operator === 'not_equals')) {
-      // A SPECIFIC option: the inverse for a single option is exact, targeting that
-      // option's reconstructed checkbox.
-      //   equals <optValue>     -> is_checked        (shown when that option is set)
-      //   not_equals <optValue> -> not_equals true   (shown UNLESS that option is set)
-      // not_equals must use `not_equals true`, NOT `is_empty`: shouldShowField's
-      // is_empty is true only for null/undefined/'' -- an EXPLICITLY unchecked
-      // checkbox stores `false`, which is_empty reads as false, so the dependent
-      // would be permanently hidden once the box is touched. `not_equals true`
-      // reads false===checked, true===unchecked-or-absent -- the correct inverse
-      // (bd polyglot-pdf-cjby, fresh-eyes r3).
-      next.show_if = cond.operator === 'equals'
-        ? { field: matchedOptionId, operator: 'is_checked' }
-        : { field: matchedOptionId, operator: 'not_equals', value: true };
+  // show_if may be legacy or a v2 composite (bd h76m.8): remap atom-wise,
+  // preserving the stored shape.
+  if (f.show_if && conditionReferencesAny(f.show_if, new Set([fieldId]))) {
+    if (isCompositeCondition(f.show_if)) {
+      const out: CompositeConditionalDisplay = {};
+      for (const bucket of CONDITION_BUCKETS) {
+        const members = f.show_if[bucket];
+        if (members) {
+          out[bucket] = members.map(atom =>
+            atom.field === fieldId
+              ? remapFallbackAtom(atom, valueToReconstructedId, primaryReconstructedId)
+              : atom,
+          );
+        }
+      }
+      next.show_if = out;
     } else {
-      // Whole-group / unmatched: retarget to the primary so it does not dangle,
-      // and NORMALIZE the operator so it fires correctly against a standalone
-      // BOOLEAN checkbox. Preserving the original operator silently misfires:
-      // `not_equals ''` / `is_not_empty` on an unchecked checkbox (value false)
-      // is `false !== '' ` / `false !== ""` == always TRUE, so the dependent
-      // would show permanently (real i-90 case: p1_line6c_aptsteflrnumber's
-      // `not_equals ''` on the consolidated p1_unit_type6c_unit). Map the intent
-      // to a checkbox-sane operator instead (bd polyglot-pdf-v444, fresh-eyes).
-      const normalizedOp = normalizeWholeGroupOperator(cond);
-      // is_checked / is_empty are value-less operators (shouldShowField ignores
-      // value for them); a value-carrying operator (equals/not_equals/...) keeps
-      // its original value so the comparison is unchanged.
-      const valueLess = normalizedOp === 'is_checked' || normalizedOp === 'is_empty';
-      next.show_if = valueLess
-        ? { field: primaryReconstructedId, operator: normalizedOp }
-        : { ...cond, field: primaryReconstructedId, operator: normalizedOp };
+      next.show_if = remapFallbackAtom(
+        f.show_if, valueToReconstructedId, primaryReconstructedId,
+      );
     }
     changed = true;
   }

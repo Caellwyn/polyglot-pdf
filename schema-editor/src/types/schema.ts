@@ -62,7 +62,10 @@ export interface FormField {
   help?: FieldHelp;
   validation?: ValidationRules;
   options?: FieldOption[];
-  show_if?: ConditionalDisplay;
+  show_if?: FieldCondition;
+  // v2 (bd h76m.8): condition under which this field becomes REQUIRED --
+  // same shape and evaluator machinery as show_if.
+  require_if?: FieldCondition;
   controls_fields?: ConditionalControl[];
   conditional_logic?: any;
   conditional_behavior?: any;
@@ -123,6 +126,19 @@ export interface ConditionalDisplay {
   value?: any;
 }
 
+// v2 composite condition (bd h76m.8): ONE level of all_of/any_of/none_of
+// buckets of atomic conditions. Evaluators consume conditions ONLY through
+// normalizeToComposite (which lifts the legacy single shape to a one-atom
+// group). Mirrors frontend/src/schema-forms/types/schema.ts.
+export interface CompositeConditionalDisplay {
+  all_of?: ConditionalDisplay[];
+  any_of?: ConditionalDisplay[];
+  none_of?: ConditionalDisplay[];
+}
+
+// What a schema may carry on show_if / require_if: either wire dialect.
+export type FieldCondition = ConditionalDisplay | CompositeConditionalDisplay;
+
 export type ConditionalOperator =
   | 'equals'
   | 'not_equals'
@@ -133,7 +149,11 @@ export type ConditionalOperator =
   | 'is_empty'
   | 'is_not_empty'
   | 'in'
-  | 'not_in';
+  | 'not_in'
+  // v2 group-membership operators (bd h76m.8): "option slug is (not) in the
+  // checkbox_group trigger's selected set". Mirror backend ConditionalOperator.
+  | 'includes'
+  | 'not_includes';
 
 // A single conditional-control rule. controls_fields is an ARRAY of these on a
 // field -- matching the real schema data (e.g. schemas/i-90/i-90_schema.json:488),

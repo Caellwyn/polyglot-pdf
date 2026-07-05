@@ -1,4 +1,17 @@
 import type { FormSchema, FormField, FieldStatus, ValidationError } from '../types/schema';
+import { normalizeToComposite } from './normalizeToComposite';
+
+// Flatten a legacy-or-composite condition to its atomic conditions (bd
+// h76m.8) for reference checking. [] for absent/malformed shapes.
+function conditionAtoms(condition: unknown) {
+  const group = normalizeToComposite(condition);
+  if (!group) return [];
+  return [
+    ...(group.all_of ?? []),
+    ...(group.any_of ?? []),
+    ...(group.none_of ?? []),
+  ];
+}
 
 /**
  * Check if a field is complete (has all required info for editor workflow)
@@ -79,15 +92,21 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
       }
     }
 
-    // Check conditional logic references (against the full id set -- forward refs OK)
-    if (field.show_if?.field) {
-      const targetExists = fieldIds.has(field.show_if.field);
-      if (!targetExists) {
-        errors.push({
-          field_id: field.id,
-          message: `show_if references non-existent field: ${field.show_if.field}`,
-          type: 'warning',
-        });
+    // Check conditional logic references (against the full id set -- forward
+    // refs OK). show_if/require_if may be legacy single conditions or v2
+    // composite groups (bd h76m.8): every atom's trigger must resolve.
+    for (const [kind, condition] of [
+      ['show_if', field.show_if],
+      ['require_if', field.require_if],
+    ] as const) {
+      for (const atom of conditionAtoms(condition)) {
+        if (!fieldIds.has(atom.field)) {
+          errors.push({
+            field_id: field.id,
+            message: `${kind} references non-existent field: ${atom.field}`,
+            type: 'warning',
+          });
+        }
       }
     }
 

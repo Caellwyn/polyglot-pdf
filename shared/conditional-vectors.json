@@ -2,6 +2,235 @@
   "description": "Shared conditional-semantics vector suite (bd polyglot-pdf-h76m.1, P0.1). Pins TODAY'S show_if evaluation semantics of BOTH evaluators -- the voice runtime (frontend/src/schema-forms/utils/validation.ts shouldShowField) and the editor preview (schema-editor/src/utils/conditionalVisibility.ts shouldShowField) -- BEFORE the schema-v2 composite-logic rework changes anything. This file is the anti-drift contract: any semantic change must be made in both evaluators AND here, deliberately, or CI turns red. Includes the vq4m equals-as-membership hack on checkbox-group triggers, the comma-string gating (voice path), and known warts (String() coercions, no trim on is_empty). Do not 'fix' an expectation to make a code change pass -- a red runner means the evaluators and this contract disagree, which is exactly the drift this suite exists to catch.",
   "expectShape": "expect is either a boolean (both evaluators agree -- the normal case) or {frontend, editor} (a field shape where the two evaluators GENUINELY DIVERGE today; pinned honestly rather than papered over). Divergences stem from the comma-split gate: the runtime keys on group_kind === 'checkbox', the editor keys on type === 'checkbox' with non-empty options[] (its FormField type has no group_kind). The editor also never unwraps FieldValue objects (a runtime storage detail).",
   "normalizeShape": "The `normalize` section (bd h76m.7, P3.0) pins normalizeToComposite -- the shape-only coexistence contract duplicated verbatim in frontend/src/schema-forms/utils/normalizeToComposite.ts and schema-editor/src/utils/normalizeToComposite.ts. Each case is {name, input?, expect}: input omitted means undefined; expect is the canonical composite group or null (null = 'always shown', which is also the FAIL-OPEN result for every malformed shape -- those cases also emit a console.warn). Normalize NEVER rewrites operators or values; semantics stay in the leaf evaluators until P6.2.",
+  "vectorsV2Shape": "The `vectorsV2` section (bd h76m.8, P3.1) pins the COMPOSITE + membership semantics both evaluators gained when they were rewired through normalizeToComposite: {all_of/any_of/none_of} groups, the includes/not_includes group-membership operators, unknown-operator fallback inside composites, and show_if-overrides-hidden for satisfied composites. Same case shape as `vectors`. The `require` section pins isFieldRequired (static required OR a satisfied require_if of either dialect; fail-open = NOT required). Static-required vector fields carry BOTH validation.required (runtime) and required (editor) so one expectation fits both islands.",
+  "vectorsV2": [
+    {
+      "name": "v2-all_of-both-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "all_of": [{ "field": "t1", "operator": "equals", "value": "a" }, { "field": "t2", "operator": "equals", "value": "b" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }, { "id": "t2", "type": "text", "label": "T2" }],
+      "fieldValues": { "t1": "a", "t2": "b" },
+      "expect": true
+    },
+    {
+      "name": "v2-all_of-one-false",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "all_of": [{ "field": "t1", "operator": "equals", "value": "a" }, { "field": "t2", "operator": "equals", "value": "b" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }, { "id": "t2", "type": "text", "label": "T2" }],
+      "fieldValues": { "t1": "a", "t2": "x" },
+      "expect": false
+    },
+    {
+      "name": "v2-any_of-one-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "any_of": [{ "field": "t1", "operator": "equals", "value": "a" }, { "field": "t2", "operator": "equals", "value": "b" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }, { "id": "t2", "type": "text", "label": "T2" }],
+      "fieldValues": { "t1": "x", "t2": "b" },
+      "expect": true
+    },
+    {
+      "name": "v2-any_of-none-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "any_of": [{ "field": "t1", "operator": "equals", "value": "a" }, { "field": "t2", "operator": "equals", "value": "b" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }, { "id": "t2", "type": "text", "label": "T2" }],
+      "fieldValues": { "t1": "x", "t2": "y" },
+      "expect": false
+    },
+    {
+      "name": "v2-none_of-none-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "none_of": [{ "field": "t1", "operator": "equals", "value": "a" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "x" },
+      "expect": true
+    },
+    {
+      "name": "v2-none_of-one-true",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "none_of": [{ "field": "t1", "operator": "equals", "value": "a" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "a" },
+      "expect": false
+    },
+    {
+      "name": "v2-A-and-B-and-not-C-satisfied",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "all_of": [{ "field": "a", "operator": "equals", "value": "1" }, { "field": "b", "operator": "is_not_empty" }], "none_of": [{ "field": "c", "operator": "is_checked" }] } },
+      "fields": [{ "id": "a", "type": "text", "label": "A" }, { "id": "b", "type": "text", "label": "B" }, { "id": "c", "type": "checkbox", "label": "C" }],
+      "fieldValues": { "a": "1", "b": "filled", "c": false },
+      "expect": true
+    },
+    {
+      "name": "v2-A-and-B-and-not-C-blocked-by-C",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "all_of": [{ "field": "a", "operator": "equals", "value": "1" }, { "field": "b", "operator": "is_not_empty" }], "none_of": [{ "field": "c", "operator": "is_checked" }] } },
+      "fields": [{ "id": "a", "type": "text", "label": "A" }, { "id": "b", "type": "text", "label": "B" }, { "id": "c", "type": "checkbox", "label": "C" }],
+      "fieldValues": { "a": "1", "b": "filled", "c": true },
+      "expect": false
+    },
+    {
+      "name": "v2-all_of-true-but-any_of-empty-vacuous",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "all_of": [{ "field": "t1", "operator": "equals", "value": "a" }], "any_of": [] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "a" },
+      "expect": true
+    },
+    {
+      "name": "v2-composite-unknown-operator-falls-back-to-not-hidden",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "all_of": [{ "field": "t1", "operator": "is_selected", "value": "a" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "a" },
+      "expect": true
+    },
+    {
+      "name": "v2-composite-unknown-operator-hidden-stays-hidden",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "hidden": true, "show_if": { "all_of": [{ "field": "t1", "operator": "is_selected", "value": "a" }, { "field": "t1", "operator": "equals", "value": "a" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "a" },
+      "expect": false
+    },
+    {
+      "name": "v2-satisfied-composite-overrides-static-hidden",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "hidden": true, "show_if": { "all_of": [{ "field": "t1", "operator": "equals", "value": "a" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "a" },
+      "expect": true
+    },
+    {
+      "name": "v2-includes-array-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": ["spouse", "other"] },
+      "expect": true
+    },
+    {
+      "name": "v2-includes-array-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": ["spouse"] },
+      "expect": false
+    },
+    {
+      "name": "v2-includes-comma-string-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": "spouse, other" },
+      "expect": true
+    },
+    {
+      "name": "v2-includes-scalar-single-selection-hit",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": "other" },
+      "expect": true
+    },
+    {
+      "name": "v2-includes-scalar-single-selection-miss",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": "spouse" },
+      "expect": false
+    },
+    {
+      "name": "v2-includes-empty-selection",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": [] },
+      "expect": false
+    },
+    {
+      "name": "v2-includes-undefined-trigger",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": {},
+      "expect": false
+    },
+    {
+      "name": "v2-not_includes-selected",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "not_includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": ["other"] },
+      "expect": false
+    },
+    {
+      "name": "v2-not_includes-not-selected",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "not_includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": ["spouse"] },
+      "expect": true
+    },
+    {
+      "name": "v2-not_includes-empty-selection",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "field": "grp", "operator": "not_includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": [] },
+      "expect": true
+    },
+    {
+      "name": "v2-any_of-includes-the-contains_any-pattern",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "show_if": { "any_of": [{ "field": "grp", "operator": "includes", "value": "e_dependent" }, { "field": "grp", "operator": "includes", "value": "f_spouse" }] } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "e_dependent", "label": "E" }, { "value": "f_spouse", "label": "F" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": ["f_spouse"] },
+      "expect": true
+    }
+  ],
+  "require": [
+    {
+      "name": "require-static-required",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": true, "validation": { "required": true } },
+      "fields": [],
+      "fieldValues": {},
+      "expect": true
+    },
+    {
+      "name": "require-not-required-no-condition",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false },
+      "fields": [],
+      "fieldValues": {},
+      "expect": false
+    },
+    {
+      "name": "require_if-legacy-satisfied",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false, "require_if": { "field": "t1", "operator": "equals", "value": "yes" } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "yes" },
+      "expect": true
+    },
+    {
+      "name": "require_if-legacy-unsatisfied",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false, "require_if": { "field": "t1", "operator": "equals", "value": "yes" } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "no" },
+      "expect": false
+    },
+    {
+      "name": "require_if-composite-satisfied",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false, "require_if": { "all_of": [{ "field": "t1", "operator": "is_not_empty" }], "none_of": [{ "field": "t2", "operator": "equals", "value": "exempt" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }, { "id": "t2", "type": "text", "label": "T2" }],
+      "fieldValues": { "t1": "x", "t2": "normal" },
+      "expect": true
+    },
+    {
+      "name": "require_if-composite-blocked-by-none_of",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false, "require_if": { "all_of": [{ "field": "t1", "operator": "is_not_empty" }], "none_of": [{ "field": "t2", "operator": "equals", "value": "exempt" }] } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }, { "id": "t2", "type": "text", "label": "T2" }],
+      "fieldValues": { "t1": "x", "t2": "exempt" },
+      "expect": false
+    },
+    {
+      "name": "require_if-includes-on-group",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false, "require_if": { "field": "grp", "operator": "includes", "value": "other" } },
+      "fields": [{ "id": "grp", "type": "checkbox", "label": "Group", "group_kind": "checkbox", "options": [{ "value": "spouse", "label": "Spouse" }, { "value": "other", "label": "Other" }] }],
+      "fieldValues": { "grp": ["other"] },
+      "expect": true
+    },
+    {
+      "name": "require_if-unknown-operator-fails-open-to-not-required",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false, "require_if": { "field": "t1", "operator": "is_selected", "value": "x" } },
+      "fields": [{ "id": "t1", "type": "text", "label": "T1" }],
+      "fieldValues": { "t1": "x" },
+      "expect": false
+    },
+    {
+      "name": "require_if-malformed-fails-open-to-not-required",
+      "field": { "id": "dep", "type": "text", "label": "Dependent", "required": false, "require_if": { "all_of": [] } },
+      "fields": [],
+      "fieldValues": {},
+      "expect": false
+    }
+  ],
   "normalize": [
     {
       "name": "null-input",

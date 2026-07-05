@@ -4,6 +4,7 @@ import type {
   FieldType,
   FormSchema,
   ConditionalControl,
+  ConditionalDisplay,
   ConditionalOperator,
   ControlActionKey,
 } from '../types/schema';
@@ -207,6 +208,17 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
     };
     updateControlAt(idx, updates);
   };
+
+  // show_if may be a v2 composite {all_of/any_of/none_of} group (bd h76m.8).
+  // This editor's condition UI is the LEGACY single-condition editor; the
+  // composite builder ships in P4.1 (bd h76m.9). Until then a composite
+  // renders as a read-only summary so this UI cannot silently corrupt it.
+  const legacyShowIf: ConditionalDisplay | undefined =
+    field.show_if && !('all_of' in field.show_if) && !('any_of' in field.show_if) &&
+    !('none_of' in field.show_if)
+      ? (field.show_if as ConditionalDisplay)
+      : undefined;
+  const compositeShowIf = field.show_if && !legacyShowIf ? field.show_if : undefined;
 
   return (
     <div className="h-full overflow-auto custom-scrollbar">
@@ -414,7 +426,28 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             <span className="text-xs text-gray-500 ml-2">(Show If)</span>
           </h4>
 
-          {field.show_if ? (
+          {compositeShowIf ? (
+            <div className="space-y-3 p-3 bg-gray-50 rounded-md">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700">Show this field when:</span>
+                <button
+                  className="btn-sm btn-secondary"
+                  onClick={() => updateField({ show_if: undefined })}
+                >
+                  Remove
+                </button>
+              </div>
+              <p className="text-xs text-amber-600">
+                This field uses a COMPOUND condition (all of / at least one of /
+                none of) and is read-only here until the compound-condition
+                builder ships. Remove and re-add it to replace it with a simple
+                condition.
+              </p>
+              <pre className="text-xs text-gray-600 whitespace-pre-wrap break-all">
+                {JSON.stringify(compositeShowIf, null, 2)}
+              </pre>
+            </div>
+          ) : legacyShowIf ? (
             <div className="space-y-3 p-3 bg-gray-50 rounded-md">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-700">Show this field when:</span>
@@ -426,9 +459,9 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 </button>
               </div>
 
-              {isArrayValuedOperator(field.show_if.operator) && (
+              {isArrayValuedOperator(legacyShowIf.operator) && (
                 <p className="text-xs text-amber-600">
-                  This condition uses the "{field.show_if.operator.replace(/_/g, ' ')}"
+                  This condition uses the "{legacyShowIf.operator.replace(/_/g, ' ')}"
                   operator (a list value) and is read-only here until a list-value
                   editor exists. Remove and re-add it to change it.
                 </p>
@@ -438,11 +471,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 <label className="label">Trigger Field</label>
                 <select
                   className="input"
-                  value={field.show_if.field}
-                  disabled={isArrayValuedOperator(field.show_if.operator)}
+                  value={legacyShowIf.field}
+                  disabled={isArrayValuedOperator(legacyShowIf.operator)}
                   onChange={(e) =>
                     updateField({
-                      show_if: { ...field.show_if!, field: e.target.value },
+                      show_if: { ...legacyShowIf, field: e.target.value },
                     })
                   }
                 >
@@ -459,15 +492,15 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 <label className="label">Operator</label>
                 <select
                   className="input"
-                  value={field.show_if.operator}
-                  disabled={isArrayValuedOperator(field.show_if.operator)}
+                  value={legacyShowIf.operator}
+                  disabled={isArrayValuedOperator(legacyShowIf.operator)}
                   onChange={(e) =>
                     updateField({
-                      show_if: { ...field.show_if!, operator: e.target.value as any },
+                      show_if: { ...legacyShowIf, operator: e.target.value as any },
                     })
                   }
                 >
-                  {operatorOptionsFor(field.show_if.operator).map(op => (
+                  {operatorOptionsFor(legacyShowIf.operator).map(op => (
                     <option key={op} value={op}>
                       {op.replace(/_/g, ' ')}
                     </option>
@@ -481,14 +514,14 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   type="text"
                   className="input"
                   value={
-                    Array.isArray(field.show_if.value)
-                      ? field.show_if.value.join(', ')
-                      : field.show_if.value ?? ''
+                    Array.isArray(legacyShowIf.value)
+                      ? legacyShowIf.value.join(', ')
+                      : legacyShowIf.value ?? ''
                   }
-                  disabled={isArrayValuedOperator(field.show_if.operator)}
+                  disabled={isArrayValuedOperator(legacyShowIf.operator)}
                   onChange={(e) =>
                     updateField({
-                      show_if: { ...field.show_if!, value: e.target.value },
+                      show_if: { ...legacyShowIf, value: e.target.value },
                     })
                   }
                   placeholder="Expected value"
