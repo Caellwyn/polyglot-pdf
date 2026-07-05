@@ -91,6 +91,16 @@
       "expect": null
     },
     {
+      "name": "MALFORMED-nested-group-in-any_of-bucket",
+      "input": { "any_of": [{ "none_of": [{ "field": "a", "operator": "equals", "value": 1 }] }] },
+      "expect": null
+    },
+    {
+      "name": "bucket-member-stray-keys-dropped",
+      "input": { "all_of": [{ "field": "a", "operator": "equals", "value": 1, "junk": "stray" }] },
+      "expect": { "all_of": [{ "field": "a", "operator": "equals", "value": 1 }] }
+    },
+    {
       "name": "MALFORMED-bucket-not-an-array",
       "input": { "all_of": { "field": "a", "operator": "equals", "value": 1 } },
       "expect": null

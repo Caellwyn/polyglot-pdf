@@ -106,8 +106,24 @@ describe('shared normalize vectors (editor normalizeToComposite)', () => {
 // evaluating the normalized one-atom group's atom must equal evaluating the
 // original legacy show_if through TODAY'S evaluator.
 describe('property: evaluate(normalize(show_if)) == evaluate(show_if)', () => {
-  for (const vector of suite.vectors) {
-    if (!vector.field.show_if) continue;
+  // Domain: LEGACY-shaped show_if only (every v0 vector today). A future
+  // vector with a composite show_if belongs to the P3.1 v2 suite, not this
+  // one-atom rebuild -- the shape guard keeps such an addition from turning
+  // this property into a confusing .all_of[0] crash (fresh-eyes nit).
+  const legacyVectors = suite.vectors.filter(
+    (v) =>
+      v.field.show_if &&
+      typeof (v.field.show_if as Record<string, unknown>).field === 'string',
+  );
+
+  it('covers every condition-bearing v0 vector', () => {
+    expect(legacyVectors.length).toBeGreaterThan(0);
+    expect(legacyVectors.length).toBe(
+      suite.vectors.filter((v) => v.field.show_if).length,
+    );
+  });
+
+  for (const vector of legacyVectors) {
     it(vector.name, () => {
       const field = vector.field as unknown as FormField;
       const fields = [
