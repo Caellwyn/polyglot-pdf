@@ -154,7 +154,7 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
   the tool response at `:917-918`) to compute the next field's full schema. That
   delegates to
   `manifest_service.get_next_field_schema(part_data=self._schema, current_field_id)`
-  (`form_filling_service.py:935-938`), which finds "next" by INDEX within
+  (inside `get_next_field_schema_for_jit`, `form_filling_service.py:1681`), which finds "next" by INDEX within
   `part_data["fields"]` (`manifest_service.py:78-94`) -- it never consults the
   manifest. But in JIT mode `self._schema["fields"]` is `[first_field_schema]`
   (length 1, `websocket_routes.py:671`), so the index lookup returns
