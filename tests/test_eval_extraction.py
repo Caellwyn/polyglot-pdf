@@ -166,14 +166,29 @@ def test_coverage_fails_on_double_claim():
 
 @needs_w7
 def test_broken_w7_draft_scores_red_on_convention_and_lint():
+    # do_repair=False: this pins the PRE-repair defect profile (the P2.2 exit
+    # criterion); the post-repair outcome is pinned separately below and in
+    # tests/test_schema_repair.py (bd h76m.13).
     form = next(f for f in ev._FORMS if f["name"] == "w7")
-    row = ev.evaluate_form(form, str(_BROKEN_DRAFT), extract=False, model="-")
+    row = ev.evaluate_form(form, str(_BROKEN_DRAFT), extract=False, model="-",
+                           do_repair=False)
     assert row["verdict"] == "RED"
     # The two columns the exit criterion names:
     assert row["lint_errors"] > 0
     assert row["value_convention"]["pct"] < 100.0
     # And the structural anchor catches the identity collapse too.
     assert row["structural"]["passed"] is False
+
+
+@needs_w7
+def test_broken_w7_draft_repairs_clean_in_the_default_pipeline():
+    # bd h76m.13 (P5.2): with the repair step active (the default), the same
+    # broken draft comes out lint-ERROR-free -- the extract -> repair -> lint
+    # pipeline working end to end inside the harness.
+    form = next(f for f in ev._FORMS if f["name"] == "w7")
+    row = ev.evaluate_form(form, str(_BROKEN_DRAFT), extract=False, model="-")
+    assert row["lint_errors"] == 0
+    assert row["repair"] != "-"  # the repair step actually ran
 
 
 @needs_w7

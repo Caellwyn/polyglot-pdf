@@ -47,6 +47,45 @@ def test_broken_schema_reports_findings_as_plain_dicts():
     assert "dep" in finding["path"]
 
 
+def test_repair_schema_report_counts_exclude_the_summary_entry():
+    """bd h76m.13: _repair_schema's applied/dropped counts must exclude the
+    synthetic alias-hit-rate summary entry (fresh-eyes round 1 -- it inflated
+    'applied' by one whenever any alias fired)."""
+    schema = {
+        "source": "pdf",
+        "fields": [
+            {"id": "grp", "type": "checkbox_group", "options": [
+                {"value": "alpha", "label": "Alpha", "pdf_field_name": "a[0]"},
+                {"value": "beta", "label": "Beta", "pdf_field_name": "b[0]"},
+            ]},
+            {"id": "dep", "type": "text",
+             "show_if": {"field": "grp", "operator": "is_selected",
+                         "value": "alpha"}},
+        ],
+    }
+    repaired, report = ef._repair_schema(schema, None)
+    assert report["alias_hits"] == 1
+    # ONE substantive repair (the alias rewrite); the summary entry is not
+    # counted as applied.
+    assert report["applied"] == 1
+    assert report["dropped"] == 0
+    dep = next(f for f in repaired["fields"] if f["id"] == "dep")
+    assert dep["show_if"]["operator"] == "includes"
+
+
+def test_repair_schema_fails_loudly_but_returns_the_draft_on_hallucination():
+    schema = {"source": "pdf", "fields": [
+        {"id": "grp", "type": "checkbox_group", "options": [
+            {"value": "alpha", "label": "Alpha", "pdf_field_name": "a[0]"},
+            {"value": "beta", "label": "Beta", "pdf_field_name": "ghost[0]"},
+        ]},
+    ]}
+    dump = {"fields": [{"name": "top[0].a[0]"}]}
+    out, report = ef._repair_schema(schema, dump)
+    assert out is schema  # unrepaired draft continues through the pipeline
+    assert "ghost[0]" in report["failed"]
+
+
 def test_dump_reaches_the_widget_claim_rule():
     schema = {
         "source": "pdf",

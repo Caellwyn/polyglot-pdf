@@ -461,6 +461,36 @@ def _validate_schema(schema: dict) -> tuple[bool, str]:
         return False, f"FormSchema validation failed: {str(exc)[:400]}"
 
 
+def _repair_schema(schema: dict, dump: dict | None) -> tuple[dict, dict]:
+    """Run the deterministic repair pass (bd h76m.13, P5.2) over the draft.
+
+    Returns (schema_to_continue_with, report). The report rides in
+    _bakeoff.authoring.repair: {applied, repairs[], alias_hits} or
+    {skipped}/{failed}. Import failure degrades gracefully (same contract as
+    _validate_schema/_lint_schema). A RepairError (hallucinated widgets) is
+    LOUD -- stderr + failed report -- but still writes the unrepaired draft
+    for inspection (P5.3 owns exit semantics)."""
+    try:
+        sys.path.insert(0, _REPO)
+        from backend.services.schema_repair import (  # noqa: E402
+            RepairError, alias_hit_count, repair,
+        )
+    except Exception as exc:  # pragma: no cover - env-dependent
+        return schema, {"skipped": f"schema_repair unavailable: {exc}"}
+    try:
+        repaired, repairs = repair(schema, dump)
+    except RepairError as exc:
+        print(f"REPAIR-FAILED: {exc}", file=sys.stderr)
+        return schema, {"failed": str(exc)[:400]}
+    substantive = [r for r in repairs if r["action"] != "alias-hit-rate"]
+    return repaired, {
+        "applied": sum(1 for r in substantive if not r.get("error")),
+        "dropped": sum(1 for r in substantive if r.get("error")),
+        "alias_hits": alias_hit_count(repairs),
+        "repairs": repairs,
+    }
+
+
 def _lint_schema(schema: dict, dump: dict | None) -> dict:
     """Run backend/services/schema_lint over the draft (bd h76m.5, P2.1).
 
@@ -554,11 +584,12 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     if instructions_pdf:
         instructions_enriched = _enrich_instructions_from_pdf(schema, instructions_pdf)
 
-    # 4. Normalize required-but-missing scalars to draft defaults, then validate
-    #    + lint (bd h76m.5: the lint findings ride in the draft's provenance
-    #    block and print below; exit semantics stay validation-driven until the
-    #    P5.3 tri-state exit lands).
+    # 4. Normalize required-but-missing scalars to draft defaults, REPAIR (bd
+    #    h76m.13: deterministic invented-vocabulary rewrites; the report rides
+    #    in provenance), then validate + lint (bd h76m.5). Exit semantics stay
+    #    validation-driven until the P5.3 tri-state exit lands.
     _normalize_for_schema(schema)
+    schema, repair_report = _repair_schema(schema, dump_data)
     ok, detail = _validate_schema(schema)
     lint_report = _lint_schema(schema, dump_data)
     schema.setdefault("_bakeoff", {})["authoring"] = {
@@ -567,6 +598,7 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "instructions_filled": instructions_filled,
         "instructions_enriched": instructions_enriched,
         "schema_valid": ok, "validation": detail,
+        "repair": repair_report,
         "lint": lint_report,
     }
 
@@ -580,6 +612,14 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         instr_note += f" + {instructions_enriched} from instructions PDF"
     print(f"[{status}] wrote {out_path} -- {nf} fields, prompt="
           f"{'plain' if plain else 'enriched'}{instr_note}; {detail}")
+    if repair_report.get("skipped"):
+        print(f"repair: skipped ({repair_report['skipped']})", file=sys.stderr)
+    elif repair_report.get("failed"):
+        print(f"repair: FAILED ({repair_report['failed']})", file=sys.stderr)
+    else:
+        print(f"repair: {repair_report['applied']} applied, "
+              f"{repair_report['dropped']} dropped-with-error, "
+              f"alias hits: {repair_report['alias_hits']}")
     if lint_report.get("skipped"):
         print(f"lint: skipped ({lint_report['skipped']})", file=sys.stderr)
     else:
