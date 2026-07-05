@@ -81,8 +81,9 @@ epic (`polyglot-pdf-gfb`); until each lands, fall back to the cited code path.
    Codex's commit path instead. **Do NOT use the `requested_reviewers` reviewer
    API** -- that fires Copilot (retired here). Docs/beads/journal-only PRs skip the
    review. Codex's CLEAN signal is a 👍 (`+1`) reaction on its summary comment;
-   closeout loops Codex to clean (re-commenting `@codex review` each round) and the
-   maintainer merges. No draft
+   closeout loops Codex to clean (re-commenting `@codex review` each round), then
+   auto-merges a routine low-risk PR or pings the maintainer for a
+   consequence-bearing one (see "Auto-merge vs. maintainer merge"). No draft
    PRs; never hand-poll Codex. See the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).
 3. **In a worktree, run every git command via `git -C <worktree-path>`** --
@@ -180,9 +181,13 @@ takes the product-owner seat, not the engineering-lead seat: routine, low-risk P
 that a **separate model -- including an adversarial one -- has reviewed CLEAN** are
 **merged autonomously**, not handed back for a click. You run `gh pr merge` yourself
 when **ALL** of these hold:
-   - **An adversarial reviewer cleared the diff.** Codex reported CLEAN (while Codex
-     is available), OR -- once Codex is retired -- the pre-PR adversarial fresh-eyes
-     assess loop reached no-gap. A separate model, adversarially, found it clean.
+   - **An adversarial reviewer cleared the diff.** Codex reported CLEAN, OR the
+     Step-7.5 Opus-4.8 fallback reviewer returned `NO-GAPS` (when Codex was
+     unavailable -- quota / timeout / no-ack -- the fallback has the same authority
+     as a clean Codex review), OR -- once Codex is retired entirely -- the pre-PR
+     adversarial fresh-eyes assess loop's no-gap is the review of record. A separate
+     model, adversarially, found it clean. **A review-SKIPPED PR does NOT satisfy
+     this** -- no adversarial review ran, so it pings (below).
    - **CI / required status checks are green.**
    - **The PR is NOT consequence-bearing** (see the list below).
 

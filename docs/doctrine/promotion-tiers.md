@@ -14,7 +14,7 @@ applied here. Deploys here are LOCAL/MANUAL via shell scripts, not branch-trigge
 worktree (feature branch)        one bead's work; where the agent commits
         |  PR (reviewed: Codex + fresh-eyes, looped to clean)
         v
-dev                              integration branch + PR base; maintainer merges
+dev                              integration branch + PR base; auto-merge if routine/low-risk & clean, else maintainer merges
         |  deploy-demo.sh (front + backend; gated -- see below)
         v
 demo remote server               the live demo (polyglot-demo-aa709); NO prod beyond this
@@ -23,8 +23,9 @@ demo remote server               the live demo (polyglot-demo-aa709); NO prod be
 - **Feature branches** always branch off freshly-pulled `dev`. A bead never spans
   PRs (one bead = one branch = one PR); a PR may bundle several small whole beads
   and closes at least one. See [`workflow.md`](workflow.md#bead-lifecycle).
-- **`dev`** is the integration branch and the PR base. A PR -> `dev` merge is the
-  maintainer's `gh pr merge` (see "The merge gate"). The agent MAY autonomously
+- **`dev`** is the integration branch and the PR base. A PR -> `dev` merge is
+  autonomous for a routine low-risk PR that reviewed CLEAN, else the maintainer's
+  `gh pr merge` (see "The merge gate"). The agent MAY autonomously
   **sync the local root checkout to `dev`** (pull / fast-forward to `origin/dev`)
   -- that is not a merge.
 - **The demo remote** is the live target. Promotion to it is `deploy-demo.sh`,
