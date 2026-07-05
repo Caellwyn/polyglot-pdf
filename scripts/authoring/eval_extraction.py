@@ -108,18 +108,26 @@ def _leaf(name: Optional[str]) -> Optional[str]:
 
 
 def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
-    """Every listed widget leaf claimed by exactly one (field, option) with a
-    distinct claiming value; `consolidated` reports whether ONE field's options
-    carry them all (the v2 target shape). Modeling-agnostic -- see module doc."""
+    """Every listed widget leaf claimed exactly once, and every claimed box
+    ADDRESSABLE the way the filler actually selects it. Modeling-agnostic --
+    see module doc. Three rules (semantics settled across two Opus-fallback
+    review rounds on PR #304):
+
+    1. Coverage: each pinned widget claimed by exactly one field (via a
+       claiming option or a field-level pdf_field_name).
+    2. Within-FIELD claim-value distinctness: the filler addresses a choice
+       selection by option value WITHIN its field, so two pinned boxes of one
+       field sharing a value are indistinguishable (the W-7 all-values-"1"
+       collapse). Values may legitimately repeat ACROSS fields (radio kids
+       sharing on-value "1", standalone bools -- flagging those was the
+       round-2 false positive, bd kak8).
+    3. Mapped options on field-level claimants: a field that claims a pinned
+       widget at field level but carries dict options with NO pdf mapping is
+       broken on the interactive path (the renderer stores option values the
+       filler then cannot map to a widget) -- the round-1 bypass shape.
+    """
     claims: dict[str, list[tuple[str, Optional[str]]]] = {w: [] for w in widget_leaves}
-    # The distinctness pool: the values a filler would use to ADDRESS each
-    # claimed box. Option-level claims contribute their option value. A
-    # FIELD-level claim by an option-bearing field contributes that field's
-    # option values too -- otherwise a draft hanging each box off a
-    # field-level pdf_field_name while its options collapse to one shared
-    # value ("1" x8, the W-7 failure family) would pass on identity while
-    # failing addressability (Opus fallback review, PR #304).
-    pool: list[str] = []
+    problems: list[str] = []
     for f in schema.get("fields", []) or []:
         if not isinstance(f, dict):
             continue
@@ -127,6 +135,7 @@ def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
         fl = _leaf(f.get("pdf_field_name"))
         options = f.get("options") if isinstance(f.get("options"), list) else []
         option_leaves = set()
+        field_claim_values: list[str] = []
         for o in options:
             if not isinstance(o, dict):
                 continue
@@ -136,27 +145,36 @@ def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
                 value = str(o.get("value")) if o.get("value") is not None else None
                 claims[ol].append((fid, value))
                 if value is not None:
-                    pool.append(value)
+                    field_claim_values.append(value)
+        # Rule 2: within-field distinctness of claiming values.
+        within_dupes = sorted({v for v in field_claim_values
+                               if field_claim_values.count(v) > 1})
+        if within_dupes:
+            problems.append(
+                f"field {fid!r}: claiming option values not distinct within "
+                f"the field: {within_dupes}")
         # A field-level claim that merely restates one of its own options'
         # widgets (the groups-of-one convention) is not a second claim.
         if fl in claims and fl not in option_leaves:
             claims[fl].append((fid, None))
-            for o in options:
-                if isinstance(o, dict) and o.get("value") is not None:
-                    pool.append(str(o.get("value")))
-                elif isinstance(o, str):
-                    pool.append(o)
+            # Rule 3: options on a field-level claimant must be PDF-mapped.
+            unmapped = [
+                str(o.get("value")) for o in options
+                if isinstance(o, dict)
+                and not o.get("pdf_field_name") and not o.get("pdf_on_value")
+            ]
+            if unmapped:
+                problems.append(
+                    f"field {fid!r} claims {fl!r} at field level but carries "
+                    f"unmapped options {sorted(set(unmapped))} -- unfillable "
+                    f"on the interactive path")
 
-    problems: list[str] = []
     for w, claimants in claims.items():
         if not claimants:
             problems.append(f"{w}: not claimed by any field/option")
         elif len(claimants) > 1:
             problems.append(f"{w}: claimed {len(claimants)} times "
                             f"({', '.join(fid for fid, _ in claimants)})")
-    dupes = sorted({v for v in pool if pool.count(v) > 1})
-    if dupes:
-        problems.append(f"claiming option values not distinct: {dupes}")
 
     owner_fields = {fid for cl in claims.values() for fid, _ in cl}
     consolidated = len(owner_fields) == 1 and all(len(c) == 1 for c in claims.values())
