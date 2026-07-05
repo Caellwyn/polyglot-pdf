@@ -7,7 +7,7 @@ import type {
   ConditionalOperator,
   ControlActionKey,
 } from '../types/schema';
-import { canUngroup } from '../utils/fieldGrouping';
+import { canUngroup, mintUniqueSlugs, stripOptionRefs } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
 
 interface FieldEditorProps {
@@ -115,6 +115,7 @@ const FIELD_TYPES: FieldType[] = [
   'select',
   'radio',
   'checkbox',
+  'checkbox_group',
   'signature',
 ];
 
@@ -647,8 +648,16 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         className="input flex-1"
                         value={option.label}
                         onChange={(e) => {
+                          const label = e.target.value;
                           const newOptions = [...(field.options || [])];
-                          newOptions[idx] = { ...option, label: e.target.value };
+                          // Re-mint the slug from the new label, unique across
+                          // the OTHER options (the value is a read-only chip;
+                          // renaming the label is how it changes). bd h76m.10.
+                          const otherLabels = newOptions
+                            .filter((_, i) => i !== idx)
+                            .map(o => o.label || '');
+                          const value = mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
+                          newOptions[idx] = { ...option, label, value };
                           updateField({ options: newOptions });
                         }}
                         placeholder="Option label"
@@ -664,8 +673,19 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                       <button
                         className="btn-sm btn-secondary"
                         onClick={() => {
+                          const removed = option.value;
                           const newOptions = (field.options || []).filter((_, i) => i !== idx);
-                          updateField({ options: newOptions });
+                          // Removing an option can orphan a dependent condition
+                          // that referenced its slug (show_if/require_if
+                          // includes/equals <slug>). Strip those atoms so the
+                          // saved schema stays ref-clean (Codex PR #310).
+                          const patched = removed
+                            ? stripOptionRefs(schema, field.id, String(removed))
+                            : { fields: schema.fields };
+                          onUpdateField({ ...field, options: newOptions });
+                          for (const f of patched.fields) {
+                            if (f.id !== field.id) onUpdateField(f);
+                          }
                         }}
                       >
                         Remove
@@ -692,25 +712,48 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     )}
                   </div>
                 ))}
+                <button
+                  className="btn btn-secondary w-full text-sm"
+                  onClick={() => {
+                    const opts = field.options || [];
+                    const value = mintUniqueSlugs(
+                      [...opts.map(o => o.label || ''), 'option'],
+                    ).slice(-1)[0];
+                    updateField({ options: [...opts, { label: '', value }] });
+                  }}
+                >
+                  + Add Option
+                </button>
               </div>
             ) : (
-              <p className="text-xs text-gray-500">
-                No options. Build a group by selecting fields and using Merge in
-                the field list.
-              </p>
+              <button
+                className="btn btn-secondary w-full"
+                onClick={() =>
+                  updateField({
+                    options: [{ label: '', value: mintUniqueSlugs(['option'])[0] }],
+                  })
+                }
+              >
+                + Add Option
+              </button>
             )}
           </div>
         )}
 
-        {/* Debug Info */}
-        <details className="text-xs">
-          <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
-            Advanced / Debug
-          </summary>
-          <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-xs">
-            {JSON.stringify(field, null, 2)}
-          </pre>
-        </details>
+        {/* Debug Info -- author-tier only: the raw dump exposes every
+            option's pdf_field_name (the widget plumbing the per-option
+            Advanced disclosure gates), so an editor-tier contractor must not
+            see it either (Codex PR #310). */}
+        {authorTier && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+              Advanced / Debug
+            </summary>
+            <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-xs">
+              {JSON.stringify(field, null, 2)}
+            </pre>
+          </details>
+        )}
       </div>
     </div>
   );

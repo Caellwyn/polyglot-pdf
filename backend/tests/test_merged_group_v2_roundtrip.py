@@ -120,6 +120,12 @@ def test_merged_group_round_trips_a_real_fill():
     assert resp.status_code == 200
 
     states = _as_states_by_leaf(resp.body, _ALL_LEAVES)
+    # Guard against a vacuous pass: if the fixture widget names ever drift,
+    # states would be empty and the loop below would assert nothing (Codex
+    # PR #310). Require every expected widget to be present first.
+    assert set(states) == set(_ALL_LEAVES), (
+        f"not all race widgets resolved: {sorted(states)}"
+    )
     picked = {"P3_checkbox7_White[0]", "P3_checkbox7_Black[0]"}
     for leaf, state in states.items():
         if leaf in picked:

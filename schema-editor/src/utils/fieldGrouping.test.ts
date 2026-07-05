@@ -11,6 +11,7 @@ import {
   isGroupableField,
   mergeBlockReason,
   stripEditorState,
+  stripOptionRefs,
 } from './fieldGrouping';
 import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
 
@@ -892,5 +893,57 @@ describe('require_if handling in merge/un-merge (bd 319g)', () => {
       all_of: [{ field: 'reason_b', operator: 'is_checked' }],
       none_of: [{ field: 'reason_e', operator: 'is_checked' }],
     });
+  });
+});
+
+// Removing a group option must not orphan a dependent that referenced its slug
+// (bd h76m.10, Codex PR #310). stripOptionRefs is the helper the FieldEditor
+// Remove action calls.
+describe('stripOptionRefs (Codex PR #310)', () => {
+  function groupSchema(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep', 'dep2', 'combo'] }],
+      fields: [
+        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
+          ] },
+        { id: 'dep', name: 'Dep', type: 'text', section_id: 's1', read_only: false, required: false,
+          show_if: { field: 'grp', operator: 'includes', value: 'b' } },
+        { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false, required: false,
+          require_if: { field: 'grp', operator: 'includes', value: 'b' } },
+        { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false, required: false,
+          show_if: { all_of: [
+            { field: 'grp', operator: 'includes', value: 'a' },
+            { field: 'grp', operator: 'includes', value: 'b' },
+          ] } },
+      ],
+    } as unknown as FormSchema;
+  }
+
+  it('drops a single-condition show_if / require_if that referenced the deleted slug', () => {
+    const { fields } = stripOptionRefs(groupSchema(), 'grp', 'b');
+    expect(fields.find(f => f.id === 'dep')!.show_if).toBeUndefined();
+    expect(fields.find(f => f.id === 'dep2')!.require_if).toBeUndefined();
+  });
+
+  it('drops only the matching ATOM inside a composite, keeping the rest', () => {
+    const { fields } = stripOptionRefs(groupSchema(), 'grp', 'b');
+    const combo = fields.find(f => f.id === 'combo')!.show_if as { all_of?: unknown[] };
+    expect(combo.all_of).toHaveLength(1);
+    expect(combo.all_of![0]).toEqual({ field: 'grp', operator: 'includes', value: 'a' });
+  });
+
+  it('leaves conditions on OTHER fields untouched', () => {
+    const s = groupSchema();
+    const { fields } = stripOptionRefs(s, 'grp', 'no_such_slug');
+    // nothing referenced 'no_such_slug' -> every field is the same reference.
+    for (const f of fields) {
+      expect(f).toBe(s.fields.find(x => x.id === f.id));
+    }
   });
 });

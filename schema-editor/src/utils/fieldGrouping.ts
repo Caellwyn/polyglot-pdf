@@ -3,8 +3,8 @@
 // extraction as N separate radio/checkbox fields; the human must be able to
 // MERGE them into one consolidated options[] field (each option carrying its
 // source widget's pdf_field_name) and UN-merge back. The backend model + runtime
-// already consume this consolidated shape (FieldOption.pdf_field_name,
-// consolidated_widgets[]); this module is purely an editor-side mutation.
+// already consume this consolidated shape (FieldOption.pdf_field_name); this
+// module is purely an editor-side mutation.
 //
 // LOSSLESS, SEMANTICS-AWARE design (Codex review on PR #256):
 //   - Merge STASHES each source field's complete original FormField, plus the
@@ -262,6 +262,62 @@ function rewriteCondition(
     return out;
   }
   return rewriteShowIf(cond, mergedAwayToValue, primaryId, membership) ?? cond;
+}
+
+// Remove any show_if / require_if ATOM that references a specific option slug
+// of `triggerFieldId` (bd h76m.10, Codex PR #310). Called when an author
+// deletes an option from a choice field: a dependent gated on
+// `{field: triggerFieldId, operator: includes/equals/..., value: <deleted
+// slug>}` would otherwise dangle (a ref-option-value lint error + a condition
+// that can never match). A condition left with no atoms is dropped entirely
+// (the field reverts to always-shown / statically-required). Returns the full
+// field list (only the affected dependents differ by reference).
+export function stripOptionRefs(
+  schema: FormSchema,
+  triggerFieldId: string,
+  deletedSlug: string,
+): { fields: FormField[] } {
+  const targetsDeleted = (atom: ConditionalDisplay): boolean =>
+    atom.field === triggerFieldId && String(atom.value) === deletedSlug;
+
+  const stripCondition = (cond: FieldCondition | undefined): FieldCondition | undefined => {
+    if (!cond) return cond;
+    if (isCompositeCondition(cond)) {
+      const out: CompositeConditionalDisplay = {};
+      let atomCount = 0;
+      let removedAny = false;
+      for (const bucket of CONDITION_BUCKETS) {
+        const members = cond[bucket];
+        if (members) {
+          const kept = members.filter(a => !targetsDeleted(a));
+          if (kept.length !== members.length) removedAny = true;
+          if (kept.length > 0) {
+            out[bucket] = kept;
+            atomCount += kept.length;
+          }
+        }
+      }
+      // No atom removed -> return the SAME reference (callers diff by identity
+      // to skip untouched fields).
+      if (!removedAny) return cond;
+      return atomCount > 0 ? out : undefined;
+    }
+    return targetsDeleted(cond) ? undefined : cond;
+  };
+
+  const fields = schema.fields.map(f => {
+    if (f.id === triggerFieldId) return f; // the trigger itself is untouched
+    const nextShow = stripCondition(f.show_if);
+    const nextReq = stripCondition(f.require_if);
+    if (nextShow === f.show_if && nextReq === f.require_if) return f;
+    const next: FormField = { ...f };
+    if (nextShow) next.show_if = nextShow;
+    else delete (next as unknown as Record<string, unknown>).show_if;
+    if (nextReq) next.require_if = nextReq;
+    else delete (next as unknown as Record<string, unknown>).require_if;
+    return next;
+  });
+  return { fields };
 }
 
 // Rewrite every dependent field's show_if / controls_fields that referenced a
