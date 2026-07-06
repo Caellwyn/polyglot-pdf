@@ -629,16 +629,45 @@ def test_update_coerces_hallucinated_id_to_current_field():
     assert result["form_state"].get("p1_line2_acctidentifier") == "123456789012"
 
 
-def test_update_coerces_valid_but_different_id_to_current_field():
-    """The 8vy3 ordering drift: model sends a VALID but WRONG id while the turn is
-    for the current field -> coerce onto the current field (cross-field intent goes
-    to the secretary, never update_form_fields)."""
+def test_update_manifest_known_id_is_honored_after_reconnect():
+    """Codex PR #321 P1: after a DTI reconnect (GoAway / mid-section) the fresh
+    handshake carries only field 1's full schema and _dti_extra_fields was
+    cleared -- previously-delivered fields survive ONLY as manifest field_id
+    entries. A post-reconnect correction to such a field must be HONORED (not
+    coerced onto the current field): _is_known_field_id also resolves manifest
+    ids. The unmerged target is then cleanly rejected by validation (an in-band
+    error the model recovers from), never silently misfiled."""
+    svc = _dti_service_with_current_field("p1_line3b_givenname")
+    # Reconnect state: extras cleared; the earlier field exists only in the manifest.
+    svc._dti_extra_fields = {}
+    svc._schema["manifest"] = {"current_section": {
+        "section_id": "s1", "section_label": "S1",
+        "fields": [{"field_id": "p1_line3a_familyname", "spoken_name": "family name"},
+                   {"field_id": "p1_line3b_givenname", "spoken_name": "given name"}],
+    }}
+    assert svc._is_known_field_id("p1_line3a_familyname") is True
+    result = svc.handle_update_fields_tool_call(
+        "sess", {"p1_line3a_familyname": "Vasquez"})
+    # NOT coerced onto the current field; the manifest-known-but-unmerged target
+    # is rejected in-band by validation (schema absent), never misfiled.
+    assert "p1_line3b_givenname" not in (result.get("form_state") or {})
+    assert result["applied_fields"] == []
+    assert result.get("unknown_fields") == ["p1_line3a_familyname"]
+
+
+def test_update_known_but_different_id_is_honored():
+    """A RESOLVABLE id is AUTHORITATIVE (bd polyglot-pdf-8vy3, live-run evidence
+    2026-07-05): the model legitimately targets a PREVIOUS field when the user
+    corrects it after its confirm advanced the pointer. The original blanket
+    coercion re-pointed those corrections onto the CURRENT field, silently
+    corrupting it (a 30q continuous run misfiled 5 fields this way while every id
+    the model sent was correct). Known-id updates apply to the NAMED field."""
     svc = _dti_service_with_current_field("p1_checkbox4")
-    # p1_line3a_familyname is a real field elsewhere, but the turn is for p1_checkbox4.
+    # p1_line3a_familyname is a real, previously-merged field: a late correction.
     svc._dti_extra_fields = {"p1_line3a_familyname": {"id": "p1_line3a_familyname", "name": "fam", "type": "text"}}
-    result = svc.handle_update_fields_tool_call("sess", {"p1_line3a_familyname": "No"})
-    assert result["applied_fields"] == ["p1_checkbox4"]
-    assert "p1_line3a_familyname" not in (result.get("form_state") or {})
+    result = svc.handle_update_fields_tool_call("sess", {"p1_line3a_familyname": "Vasquez"})
+    assert result["applied_fields"] == ["p1_line3a_familyname"]
+    assert "p1_checkbox4" not in (result.get("form_state") or {})
 
 
 def test_update_matching_id_is_not_coerced():
@@ -753,3 +782,71 @@ def test_manual_field_update_clears_current_field_pointer():
         svc.send_manual_field_update("p1_line3a_familyname", "Family Name", "Vasquez",
                                      "next (field_id: 'p1_line3b_givenname')"))
     assert svc._current_field_id is None
+
+
+# ---------------------------------------------------------------------------
+# bd polyglot-pdf-ezg2: after a manual edit the pointer must be RE-ESTABLISHED
+# for the next field (not just cleared) -- the client sends the next field's
+# schema with manual_field_update, and the service merges it like the confirm
+# path does, so the immediately-following voice answer coerces.
+# ---------------------------------------------------------------------------
+
+def _dti_service_for_manual_edit():
+    import asyncio  # noqa: F401  (used by callers)
+    from backend.services.form_filling_service import FormFillingService
+    from backend.config import Settings
+    settings = Settings(); settings.USE_DTI = True
+    svc = FormFillingService(live_ai=None, settings=settings)
+    svc._schema = {"fields": [{"id": "p1_line3a_familyname",
+                               "name": "Family Name", "type": "text"}]}
+    svc._current_field_id = "p1_line3a_familyname"
+    svc._audio_handler = None  # no-op delegate; we assert pointer/pool state only
+    return svc
+
+
+def test_manual_field_update_reestablishes_pointer_from_next_field_schema():
+    """ezg2 exit criterion: manual edit of field N with the next field's schema ->
+    pointer re-established to N+1 AND N+1 enters the validation pool, so a voice
+    update_form_fields for N+1 with a drifted/hallucinated id is coerced onto N+1."""
+    import asyncio
+    svc = _dti_service_for_manual_edit()
+    next_schema = {"id": "p1_line3b_givenname", "name": "Given Name", "type": "text"}
+    asyncio.get_event_loop().run_until_complete(
+        svc.send_manual_field_update("p1_line3a_familyname", "Family Name", "Vasquez",
+                                     "next (field_id: 'p1_line3b_givenname')",
+                                     next_field_schema=next_schema))
+    assert svc._current_field_id == "p1_line3b_givenname"
+    # The very next voice answer arrives with a drifted id -> coerced onto N+1,
+    # applied (N+1 is in the pool via the merge), never unknown_fields.
+    result = svc.handle_update_fields_tool_call("sess", {"p1_line1_givenname": "Maria"})
+    assert result["applied_fields"] == ["p1_line3b_givenname"]
+    assert not result.get("unknown_fields")
+
+
+def test_manual_field_update_without_schema_leaves_pointer_cleared():
+    """A manual edit with NO next_field_schema (legacy client, or the form is
+    complete) keeps the strictly-safer h1bn behavior: pointer stays cleared."""
+    import asyncio
+    svc = _dti_service_for_manual_edit()
+    asyncio.get_event_loop().run_until_complete(
+        svc.send_manual_field_update("p1_line3a_familyname", "Family Name", "Vasquez",
+                                     "next (field_id: 'p1_line3b_givenname')"))
+    assert svc._current_field_id is None
+
+
+def test_manual_field_update_non_dti_ignores_next_field_schema():
+    """USE_DTI off -> the rider schema is ignored entirely: no pointer, no pool
+    merge (guards the non-DTI blast radius)."""
+    import asyncio
+    from backend.services.form_filling_service import FormFillingService
+    from backend.config import Settings
+    settings = Settings(); settings.USE_DTI = False
+    svc = FormFillingService(live_ai=None, settings=settings)
+    svc._current_field_id = "whatever"
+    svc._audio_handler = None
+    asyncio.get_event_loop().run_until_complete(
+        svc.send_manual_field_update("f1", "Field One", "v",
+                                     next_field_schema={"id": "f2", "name": "Two",
+                                                        "type": "text"}))
+    assert svc._current_field_id is None
+    assert "f2" not in svc._dti_extra_fields

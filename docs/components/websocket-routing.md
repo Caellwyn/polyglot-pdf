@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the `confirm_field_response.section_complete` sub-flag (bd njvh) into the control-channel table; verified accurate against current code otherwise). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-ezg2: the `manual_field_update` arm reads an optional `next_field_schema` and threads it to `send_manual_field_update`, which re-establishes the DTI current-field pointer via `merge_field_schema`). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the `confirm_field_response.section_complete` sub-flag (bd njvh) into the control-channel table; verified accurate against current code otherwise -- see [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md)). Prior: 2026-07-02 (bd polyglot-pdf-puu8: `/ws/echo` + `/ws/audio` are now dev-only -- handshake rejected in prod behind the `backend/.env.DEV` marker gate; `/ws/fill` unchanged).*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -86,7 +86,7 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `form_state` | apply client field list → `form_state_ack` (backend echoes applied ids only; client owns state) |
 | `next_field_hint` | forward a hint to Gemini → `hint_ack` |
 | `form_state_response` / `field_value_response` / `next_field_hint_response` / `section_info_response` / `confirm_field_response` | resolve a pending backend→frontend async request (`confirm_field_response` carries `{recorded, reason}` for the synchronous confirm round-trip, bd polyglot-pdf-wpw.2, plus an optional `section_complete` flag the WS route reads and threads to the confirm handler so it skips the racing next-field-hint at a section boundary, bd njvh -- see ws-protocol.md for the field) |
-| `manual_field_update` | user manually edited a field → forwarded to Gemini (keeps context in sync) |
+| `manual_field_update` | user manually edited a field → forwarded to Gemini (keeps context in sync); in DTI mode an optional `next_field_schema` rider re-establishes the current-field pointer + validation entry via `merge_field_schema` (bd polyglot-pdf-ezg2) |
 | `read_disclaimer` | send disclaimer initiating message in a language → `disclaimer_read_initiated` |
 | `completion_message` | send a prompt that should make Gemini speak → `completion_ack` |
 | `recovery_prompt` | level 1/2/3 stall-recovery prompt → `recovery_prompt_ack` |

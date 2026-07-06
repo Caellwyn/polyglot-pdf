@@ -2,11 +2,11 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: fixed the broken
+*Last updated: 2026-07-05 (bd polyglot-pdf-ctu8 prep: the Live API hard-bounds trigger_tokens to [5000, 128000] at connect -- Vertex 1007, wire-verified; `_build_live_config` now clamps the derived/configured trigger into that range and re-asserts window < trigger after the clamp -- the derived I-90 DTI trigger ~2800 was below the minimum and killed every DTI+compression connect on Vertex). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: fixed the broken
 link to the exploration plan, which had moved to `docs/archive/`, and added the
 go/no-go brief that followed it; the derivation formula, gating (`USE_DTI` +
 `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR`), and parameter defaults in
-`_build_live_config` were verified still accurate, no other corrections needed).
+`_build_live_config` were verified still accurate).
 See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 > **STATUS (2026-06-12): WORKING on BOTH models -- eviction confirmed on SDK 2.8.0.**
@@ -169,7 +169,29 @@ therefore wrong for any form whose floor differs. So when `USE_DTI` and
 floor   = (len(rendered SI) + len(serialized tool declarations)) / 4   # ~ tokens
 window  = floor  + CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS
 trigger = window + CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS
+trigger = clamp(trigger, 5000, 128000)   # Live API hard bound -- see below
 ```
+
+**The Live API enforces `trigger_tokens` within `[5000, 128000]`** (wire-verified
+2026-07-05: Vertex closes the connect with `1007 "Context window trigger tokens
+must be within [5000, 128000]"` -- the session never opens). The DTI-derived I-90
+trigger (~2800) is BELOW that minimum, so `_build_live_config` clamps the trigger
+into the legal range and logs `compression_trigger_clamped_to_api_bounds`. When
+the DERIVED trigger is raised by the clamp, the derived window is RE-TUNED with
+it (`window = max(derived, trigger - TRIGGER_MARGIN)`, logged as
+`compression_window_retuned_with_clamped_trigger`): keeping the raw
+floor+headroom window (~2200) under a 5000 trigger makes each eviction chop
+~2800 tokens down to just above the SI floor -- stripping the current-field
+guidance DTI depends on (measured 2026-07-05: the 5000/2200 run drifted
+post-eviction; wider windows stayed coherent). The retune preserves the
+derivation's margin semantic: only ~margin tokens are evicted per cycle.
+**CAVEAT: the retuned I-90 derive pair (5000/4400) is an untested interim** --
+the only live-validated coherent configuration is the explicit 5000/3500 (the
+clean 30-question continuous run, 2026-07-05); `ctu8`'s sweep must validate or
+replace the retuned value before the DTI+compression flags flip on. The old
+2800/2200 "winning calibration" numbers were measured on AI Studio before this
+bound existed on the connect path; any sweep (`ctu8`) must place triggers at
+>= 5000 and sweep the WINDOW as the independent variable.
 
 The floor is the **rendered (filled) SI plus the tool declarations** -- both
 unevictable, both re-billed every turn -- NOT the SI template alone.

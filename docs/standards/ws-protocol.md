@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`schemaFormState.ts` line-number citations, which had drifted from code growth across several intervening commits -- no wire-type or handshake-key name changed). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-ezg2: `manual_field_update` gains an optional DTI-mode `next_field_schema` rider -- see the client->backend table row). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`schemaFormState.ts` line-number citations, which had drifted from code growth across several intervening commits -- no wire-type or handshake-key name changed; see [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md)). Prior: 2026-07-02 (bd polyglot-pdf-ceyt: this doc's message-type union is now pinned by contract tests -- backend/tests/contract/test_websocket_protocol.py diffs these tables against the code, so renaming or dropping a wire type fails a test; also documented the previously-missing `dti_mode_enabled` session_ready key those tests caught).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -144,7 +144,7 @@ Built/sent in `webFormConnection.ts`; dispatched on `obj.get("type")` in
 | `section_info_response` | webFormConnection.ts:1176 (+others) | Reply with section metadata. |
 | `field_value_response` | webFormConnection.ts:1429 | Reply to backend `get_field_value`. |
 | `confirm_field_response` | webFormConnection.ts:2147 | Reply to backend `confirm_field`. Carries `recorded` (+ optional `reason`), and -- when this confirm completed a section that has a NEXT section to advance to -- an optional `section_complete: true` flag so the backend skips the next-field-hint round-trip that would race the FE's `switchToSection` teardown (bd polyglot-pdf-njvh). This is a SUB-FIELD of the confirm reply, distinct from the SI-reduction epic's planned top-level `section_complete` event (see `section_completed` above + the reserved extension points). |
-| `manual_field_update` | webFormConnection.ts:2463 | User edited a field directly. |
+| `manual_field_update` | webFormConnection.ts:2468 | User edited a field directly. Carries `next_field_hint` and -- in DTI mode -- an optional `next_field_schema` (the next unconfirmed field's full schema, no user values), so the backend can re-establish the DTI current-field coercion pointer + validation entry that the edit's pointer-clear would otherwise strand (a manual edit skips the `confirm_field` round-trip that normally carries the next schema; bd polyglot-pdf-ezg2). Both computed from the POST-edit persisted state. |
 | `manual_section_switch` | webFormConnection.ts:3109 | User-initiated section switch. |
 | `completion_message` | webFormConnection.ts:2166 (+others) | Form/section completion message to the AI. |
 | `recovery_prompt` | webFormConnection.ts:2574 | Escalating recovery prompt (level 1-3). |

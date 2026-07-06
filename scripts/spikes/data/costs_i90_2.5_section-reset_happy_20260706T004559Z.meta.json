@@ -1,0 +1,154 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90",
+  "arm": "section-reset",
+  "path": "happy",
+  "questions": 4,
+  "compression": false,
+  "trigger": null,
+  "window": null,
+  "continuous": false,
+  "schema_scope": "per-section",
+  "started": "20260706T004559Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.094
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields"
+    ],
+    "2": [],
+    "3": [
+      "confirm_field",
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields"
+    ],
+    "4": [
+      "confirm_field",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ]
+  },
+  "prompt_curve": [
+    1648,
+    2052,
+    2109,
+    2653,
+    2734,
+    2859,
+    2958,
+    3080,
+    3179,
+    3805,
+    3886,
+    4016,
+    4113,
+    4240,
+    4337
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "system_instruction_chars": 6178,
+  "greeting_tokens": 1897,
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "p1_line1_aliennumber",
+    "p1_line2_acctidentifier",
+    "p1_line3a_familyname"
+  ],
+  "fill_accuracy": {
+    "matched": 4,
+    "total": 4,
+    "accuracy": 1.0,
+    "detail": [
+      {
+        "field_id": "p1_line1_aliennumber",
+        "expected": "12345678",
+        "written": "12345678",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line2_acctidentifier",
+        "expected": "123456789012",
+        "written": "123456789012",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3a_familyname",
+        "expected": "Vasquez",
+        "written": "Vasquez",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3b_givenname",
+        "expected": "Maria",
+        "written": "Maria",
+        "ok": true,
+        "scored": "exact"
+      }
+    ]
+  },
+  "field_value_lookups": []
+}

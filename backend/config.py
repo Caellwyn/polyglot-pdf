@@ -658,8 +658,17 @@ class Settings(BaseModel):
 	# same render_field_guidance() that delivers fields 2..N in the confirm_field
 	# response. The caller passes "" in non-DTI mode (legacy/JIT still carry field
 	# data in the SI), so this suffix is a no-op there.
+	# The re-verify carve-out names ALREADY-CONFIRMED fields specifically, and the
+	# first field is explicitly pinned to the normal per-field workflow: the old
+	# "DO NOT verify previous fields - move directly to asking for the next field"
+	# wording let the model read field 1 (no previous fields exist) as exempt from
+	# the read-back + 'Is that correct?' step, so it auto-confirmed field 1 without
+	# re-asking (bd polyglot-pdf-choa).
 	INITIATING_MESSAGE: str = (
-		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. DO NOT verify previous fields - move directly to asking for the next field.{current_field_guidance}"
+		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. "
+		"Do NOT re-verify fields that were already confirmed earlier - start by asking for this field. "
+		"This field follows the normal workflow like every other: after the user answers, fill it, "
+		"read the value back, ask 'Is that correct?', and confirm only after the user says yes.{current_field_guidance}"
 	)
 
 	# === RESUME INITIATING MESSAGE TEMPLATE ===

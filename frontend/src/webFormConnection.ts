@@ -2470,8 +2470,47 @@ export class WebFormConnection {
       return;
     }
 
-    // Compute next field hint after this manual update
-    const nextFieldHint = this.computeNextFieldHintString();
+    // Refresh this.state from the persisted snapshot BEFORE computing the next
+    // field (bd polyglot-pdf-ezg2). The manual-edit path (connection.ts
+    // onManualEdit) applies the edit to a separate state object and SAVES it to
+    // sessionStorage, but does NOT mutate this.state -- so a stale this.state
+    // would compute the just-edited (auto-confirmed) field as still "next" and
+    // point Gemini back at it. load() is the same source-of-truth sessionStorage
+    // read this class uses elsewhere; the edit handler just wrote the
+    // authoritative post-edit state there. (The refresh is ALSO required by the
+    // maybeEmitFormComplete dirty-check below -- fresh-eyes finding, jnjj.16.)
+    const persisted = SchemaFormStateManager.load();
+    if (persisted) this.state = persisted;
+
+    // Compute the next field ONCE and derive BOTH the hint and (for DTI) the
+    // schema from it, so they can never refer to different fields -- same rule
+    // as handleGetNextFieldHintRequest (Codex PR #229).
+    const nextField = isFormComplete(this.state)
+      ? null
+      : computeNextField(this.state, { skipConfirmed: true });
+    if (this.callbacks.onNextField) {
+      this.callbacks.onNextField(nextField ? nextField.id : null);
+    }
+    const nextFieldHint = nextField
+      ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined)
+      : null;
+
+    // Keep the recovery-prompt hint current (same side effect as
+    // handleGetNextFieldHintRequest): a stall-recovery prompt after a manual
+    // edit must name the POST-edit next field, not the pre-edit one.
+    if (nextFieldHint) {
+      sessionStorage.setItem('vff_last_field_hint', nextFieldHint);
+    }
+
+    // DTI (bd polyglot-pdf-ezg2): a manual edit never triggers the confirm_field
+    // next-field round-trip that normally carries the next field's schema, so
+    // supply it here -- the backend re-establishes the current-field coercion
+    // pointer + validation entry from it (form_filling_service.
+    // send_manual_field_update -> merge_field_schema).
+    let nextFieldSchema: unknown = undefined;
+    if (this.dtiModeEnabled && nextField) {
+      nextFieldSchema = getFieldSchema(nextField.id, this.state.schema);
+    }
 
     this.send({
       type: 'manual_field_update',
@@ -2479,6 +2518,7 @@ export class WebFormConnection {
       field_name: fieldName,
       value: value,
       next_field_hint: nextFieldHint,  // Include next field guidance
+      ...(nextFieldSchema ? { next_field_schema: nextFieldSchema } : {}),
     });
 
     // B4 (bd polyglot-pdf-jnjj.16): a manual edit can land on an ALREADY-complete
@@ -2486,18 +2526,8 @@ export class WebFormConnection {
     // run for a manual edit, so without this the edited value would bypass the
     // full-form validator pass and be submittable unchecked. maybeEmitFormComplete
     // is guarded (only re-emits when the form is complete AND a value changed), so
-    // a manual edit that does not complete the form is a no-op here.
-    //
-    // CRITICAL: refresh this.state from the persisted snapshot FIRST. The manual-edit
-    // path (connection.ts onManualEdit) applies the edit to a separate state object
-    // and SAVES it to sessionStorage, but does NOT mutate this.state -- so without
-    // this reload the dirty-snapshot would still read the PRE-edit values, match
-    // formCompleteSnapshot, and suppress the re-emit, leaving the edit-after-complete
-    // bypass open (fresh-eyes finding, PR for jnjj.16). load() is the same
-    // source-of-truth sessionStorage read this class uses elsewhere; the edit handler
-    // just wrote the authoritative post-edit state there.
-    const persisted = SchemaFormStateManager.load();
-    if (persisted) this.state = persisted;
+    // a manual edit that does not complete the form is a no-op here. this.state
+    // was refreshed from the persisted snapshot above.
     this.maybeEmitFormComplete();
   }
 

@@ -446,10 +446,16 @@ async def _handle_fill_session(
 					field_name = obj.get("field_name")
 					value = obj.get("value")
 					next_field_hint = obj.get("next_field_hint")  # Optional hint for next field
+					# DTI (bd polyglot-pdf-ezg2): the next field's schema rides along so the
+					# backend can re-establish the current-field coercion pointer + the
+					# validation entry (a manual edit skips the confirm_field round-trip
+					# that normally carries it). Optional; absent from legacy clients.
+					next_field_schema = obj.get("next_field_schema")
 					if not field_id or field_name is None:
 						await websocket.send_json({"type": "error", "code": "invalid_update", "reason": "field_id_and_name_required"})
 					else:
-						await service.send_manual_field_update(field_id, field_name, value, next_field_hint)
+						await service.send_manual_field_update(field_id, field_name, value, next_field_hint,
+						                                       next_field_schema=next_field_schema)
 						# No acknowledgment needed - fire-and-forget notification
 					continue
 				elif mtype == "read_disclaimer":

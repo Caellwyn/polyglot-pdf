@@ -98,6 +98,9 @@ class CallbackHandler:
         # onto the JUST-CONFIRMED field, overwriting it. merge_field_schema re-sets the
         # pointer when the new field's schema arrives.
         self._clear_current_field = None
+        # Resolver for "does this id name a field the session has seen?" -- gates
+        # the confirm-side coercion (known ids are authoritative, bd 8vy3).
+        self._is_known_field = None
 
     def set_tool_handlers(
         self,
@@ -112,6 +115,7 @@ class CallbackHandler:
         get_current_field_id=None,
         get_use_dti=None,
         clear_current_field=None,
+        is_known_field=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -125,6 +129,7 @@ class CallbackHandler:
         self._get_current_field_id = get_current_field_id
         self._get_use_dti = get_use_dti
         self._clear_current_field = clear_current_field
+        self._is_known_field = is_known_field
     
     async def send_form_update(
         self,
@@ -702,7 +707,13 @@ class CallbackHandler:
         use_dti = self._get_use_dti() if self._get_use_dti else False
         if use_dti and self._get_current_field_id is not None:
             current_field_id = self._get_current_field_id()
-            if current_field_id and field_id != current_field_id:
+            # A RESOLVABLE id is authoritative (bd polyglot-pdf-8vy3, symmetric with
+            # the update-side gate): the model may legitimately confirm a PREVIOUS
+            # field it just re-filled (a late correction). Only an empty or UNKNOWN
+            # id -- the hallucination mode -- is coerced onto the current field.
+            sent_is_known = bool(field_id) and (
+                self._is_known_field(field_id) if self._is_known_field else False)
+            if current_field_id and field_id != current_field_id and not sent_is_known:
                 # Log ONLY the schema-validated current field id, NEVER the raw model
                 # field_id -- it is raw tool input and can carry the user's answer if
                 # the model swaps args (Codex PR #264 P0, no-PII policy). Symmetric with

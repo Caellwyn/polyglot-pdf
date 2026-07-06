@@ -1,0 +1,703 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90",
+  "arm": "dti",
+  "path": "happy",
+  "questions": 30,
+  "compression": true,
+  "trigger": 2800,
+  "window": 2200,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260706T004214Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.0
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.469
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.532
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.593
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.266
+    },
+    {
+      "q": 9,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 11,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 12,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 13,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 15,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 19,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 19,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 20,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 20,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 21,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 21,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 22,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 22,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 23,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 23,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 29,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 29,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 30,
+      "label": "value",
+      "stalled": true,
+      "latency_s": null
+    },
+    {
+      "q": 30,
+      "label": "confirm",
+      "stalled": true,
+      "latency_s": null
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields"
+    ],
+    "2": [],
+    "3": [
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "4": [
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "5": [
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "6": [
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "7": [
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "8": [
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "9": [],
+    "10": [],
+    "11": [],
+    "12": [
+      "confirm_field"
+    ],
+    "13": [],
+    "14": [],
+    "15": [],
+    "16": [],
+    "17": [],
+    "18": [],
+    "19": [],
+    "20": [],
+    "21": [],
+    "22": [],
+    "23": [],
+    "24": [],
+    "25": [],
+    "26": [],
+    "27": [],
+    "28": [],
+    "29": [],
+    "30": []
+  },
+  "prompt_curve": [
+    1102,
+    1466,
+    1523,
+    2072,
+    2265,
+    2330,
+    2537,
+    2668,
+    2721,
+    2912,
+    3041,
+    3093,
+    3291,
+    3428,
+    3482,
+    3588,
+    3845,
+    3896,
+    4112,
+    4233,
+    4290,
+    4786
+  ],
+  "errors": [
+    {
+      "level": "error",
+      "event": "gemini_session_connection_closed",
+      "fields": {
+        "reason": "1000 None. The operation was cancelled.",
+        "event_count": "246",
+        "intentional_shutdown": "False"
+      }
+    }
+  ],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "system_instruction_chars": 4010,
+  "greeting_tokens": 1311,
+  "eviction_drops": [],
+  "client_confirmed_fields": [
+    "p1_line1_aliennumber",
+    "p1_line2_acctidentifier",
+    "p1_line3a_familyname",
+    "p1_line3b_givenname",
+    "p1_line3c_middlename",
+    "p1_checkbox4",
+    "p1_line6a_incareofname"
+  ],
+  "fill_accuracy": {
+    "matched": 11,
+    "total": 30,
+    "accuracy": 0.3667,
+    "detail": [
+      {
+        "field_id": "p1_line1_aliennumber",
+        "expected": "12345678",
+        "written": "12345678",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line2_acctidentifier",
+        "expected": "123456789012",
+        "written": "123456789012",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3a_familyname",
+        "expected": "Vasquez",
+        "written": "Vasquez",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3b_givenname",
+        "expected": "Maria",
+        "written": "Maria",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3c_middlename",
+        "expected": "Elena",
+        "written": "Elena",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_checkbox4",
+        "expected": "P1_checkbox4[1]",
+        "written": "P1_checkbox4[1]",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6a_incareofname",
+        "expected": "Daniel Vasquez",
+        "written": "Daniel Vasquez",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6b_streetnumbername",
+        "expected": "1234 Maple Street",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_unit_type6c_unit",
+        "expected": "P1_checkbox6c_Unit[0]",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6c_aptsteflrnumber",
+        "expected": "12B",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6d_cityortown",
+        "expected": "Austin",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6e_state",
+        "expected": "TX",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6f_zipcode",
+        "expected": "73701",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6g_province",
+        "expected": "",
+        "written": null,
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6h_postalcode",
+        "expected": "",
+        "written": null,
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6i_country",
+        "expected": "United States",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7a_streetnumbername",
+        "expected": "1234 Maple Street",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_unit_type7b_unit",
+        "expected": "P1_checkbox7b_Unit[0]",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7b_aptsteflrnumber",
+        "expected": "12B",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7c_cityortown",
+        "expected": "Austin",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7d_state",
+        "expected": "TX",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7e_zipcode",
+        "expected": "73701",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7f_province",
+        "expected": "",
+        "written": null,
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7g_postalcode",
+        "expected": "",
+        "written": null,
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7h_country",
+        "expected": "United States",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line8_male",
+        "expected": "P1_Line8_female[0]",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line9_dateofbirth",
+        "expected": "03/05/1990",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line10_citytownofbirth",
+        "expected": "Guadalajara",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line11_countryofbirth",
+        "expected": "Mexico",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line12_mothergivenname",
+        "expected": "Rosa",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      }
+    ]
+  },
+  "field_value_lookups": []
+}

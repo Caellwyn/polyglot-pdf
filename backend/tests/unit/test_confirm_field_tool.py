@@ -505,6 +505,18 @@ class TestConfirmFieldCoercion:
         assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line1_aliennumber"
 
     @pytest.mark.asyncio
+    async def test_confirm_known_but_different_id_is_honored(self, callback_handler, mock_coordinator):
+        # bd polyglot-pdf-8vy3 (symmetric with the update-side gate): a RESOLVABLE
+        # id is authoritative -- the model may legitimately confirm a PREVIOUS field
+        # it just re-filled (a late correction after the pointer advanced). Only an
+        # empty/unknown id coerces.
+        self._wire(callback_handler, current_field_id="p1_checkbox4")
+        callback_handler._is_known_field = lambda fid: fid == "p1_line3a_familyname"
+        await callback_handler._handle_confirm_field_tool(
+            {"field_id": "p1_line3a_familyname", "confirmation_method": "verbal"})
+        assert mock_coordinator.request_confirm_field.call_args.args[0] == "p1_line3a_familyname"
+
+    @pytest.mark.asyncio
     async def test_confirm_no_coercion_without_current_field(self, callback_handler, mock_coordinator):
         # current field unknown -> use the model's id as-is.
         self._wire(callback_handler, current_field_id=None)
