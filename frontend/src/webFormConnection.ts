@@ -189,6 +189,7 @@ export class WebFormConnection {
   private isProcessingAudio = false;
   private enableAutoReconnect = false; // Only enable after first successful connection
   private dtiModeEnabled = false; // DTI: send next field's full schema on hint response (bd polyglot-pdf-jnjj.22)
+  private continuousSessionEnabled = false; // Whole form as ONE session; suppress section advance (bd polyglot-pdf-x8rt)
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   // Real re-entrancy guard for a section switch, DISTINCT from isSectionSwitching
   // (bd polyglot-pdf-aun / WS-D). isSectionSwitching is the auto-reconnect
@@ -674,7 +675,7 @@ export class WebFormConnection {
    * Handle session_ready message from backend
    */
   private handleSessionReady(message: any): void {
-    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad } = message;
+    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad, continuous_session_enabled } = message;
 
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
@@ -685,6 +686,16 @@ export class WebFormConnection {
       if (jit_mode_enabled) {
         console.log('[WebFormConnection] [OK] JIT mode enabled by backend');
       }
+    }
+
+    // Continuous-session mode (bd polyglot-pdf-x8rt): when on, the client builds a
+    // whole-form handshake and stops advancing sections (see proceedSectionSwitch /
+    // handlePrepareSectionSwitchRequest). Store it on state so the handshake builder
+    // and navigation read it. Default false when the backend omits the field.
+    this.state = SchemaFormStateManager.setContinuousSession(this.state, continuous_session_enabled === true);
+    this.continuousSessionEnabled = continuous_session_enabled === true;
+    if (this.continuousSessionEnabled) {
+      console.log('[WebFormConnection] [OK] Continuous-session mode enabled by backend');
     }
 
     // DTI mode (bd polyglot-pdf-jnjj.22): when on, the client supplies each next
@@ -1186,6 +1197,21 @@ export class WebFormConnection {
 
     console.log('[WebFormConnection] handlePrepareSectionSwitchRequest START', { requestId, identifier });
 
+    // Continuous-session mode (bd polyglot-pdf-x8rt): sections do not exist as a
+    // navigation unit -- reject any AI-initiated switch. The backend drops the
+    // switch_section tool in continuous mode, so this should never fire; this is the
+    // client-side backstop against a stray call resetting the one session we keep.
+    if (this.continuousSessionEnabled) {
+      console.warn('[WebFormConnection] prepare_section_switch rejected -- continuous-session mode has no sections');
+      this.send({
+        type: "section_info_response",
+        request_id: requestId,
+        section_info: null,
+        error: 'Section switching is disabled in continuous-session mode',
+      });
+      return;
+    }
+
     // This is the AI-INITIATED switch path (Gemini called switch_section -> backend
     // prepare_section_switch -> here -> section_info_response -> backend restarts
     // -> section_switched). If a switch is ALREADY in flight (e.g. a manual switch
@@ -1617,7 +1643,15 @@ export class WebFormConnection {
     // suppress that. So: section_complete == (current section done) AND (a next
     // section exists) -- exactly the switchToSection branch below.
     const nextField = computeNextField(this.state, { skipConfirmed: true });
-    const nextSectionForAck = nextField
+    // Continuous-session mode (bd polyglot-pdf-x8rt): there are NO sections to
+    // advance to -- computeNextField spans the whole form, so !nextField means the
+    // WHOLE FORM is done, not a section boundary. Force nextSectionForAck to null so
+    // sectionComplete stays false (no spurious section_complete WS message) and the
+    // completion branch below takes the form-complete path (onFormComplete), not the
+    // section-switch path. Without this, currentSectionId stays pinned at section 1
+    // while getNextSection reports a real "section 2", misdetecting whole-form
+    // completion as a section boundary (fresh-eyes gap 2).
+    const nextSectionForAck = (nextField || this.continuousSessionEnabled)
       ? null
       : SchemaFormStateManager.getNextSection(this.state);
     const sectionComplete = !nextField && !!nextSectionForAck;
@@ -1746,6 +1780,16 @@ export class WebFormConnection {
    * switch itself, so the gate B5 adds wraps one call.
    */
   private async proceedSectionSwitch(sectionId: string): Promise<void> {
+    // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form is one session,
+    // so there is no section to advance to -- suppress the client auto-advance
+    // entirely. computeNextField spans the whole form in this mode, so it never
+    // reports "section complete, next section available" that would reach here;
+    // this guard is the belt-and-suspenders backstop.
+    if (this.continuousSessionEnabled) {
+      console.log('[WebFormConnection] Continuous mode: suppressing section advance to', sectionId);
+      return;
+    }
+
     // B5 (bd polyglot-pdf-jnjj.17): gate the switch on the validator round-trip
     // (contract 4 ordering). Park the switch and wait for a validation_result:
     //   - clean verdict   -> resolvePendingSectionSwitch -> switch runs;
@@ -3157,29 +3201,45 @@ export class WebFormConnection {
       // watchdog stays armed until then.
       this.isSectionSwitching = false;
 
-      // Compute initial field hint (first unfilled field in this section)
-      const initialFieldHint = this.computeNextFieldHintString();
+      // Continuous-session mode (bd polyglot-pdf-x8rt): startSection is the REAL
+      // session-start path (switchToFirstSection calls it right after the user
+      // accepts the disclaimer), NOT just the auto-reconnect path (handleOpen).
+      // The raw single-section handshake below would chop the form back into
+      // sections -- defeating continuous mode on the session that actually fills
+      // the form. So in continuous mode, send the SAME whole-form handshake
+      // handleOpen builds (getHandshakePayload -> getJITHandshakePayload ->
+      // buildContinuousManifest): one synthetic section, every field,
+      // total_sections=1. currentState was already switched into this.state above.
+      if (this.continuousSessionEnabled) {
+        this.send(
+          SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage, this.hasConnectedOnce)
+        );
+        this.hasConnectedOnce = true;
+      } else {
+        // Compute initial field hint (first unfilled field in this section)
+        const initialFieldHint = this.computeNextFieldHintString();
 
-      // Send handshake with section metadata and initial field hint
-      this.send({
-        type: "handshake",
-        schema: sectionSchema,
-        // FULL form schema for the secretary catalog (bd polyglot-pdf-p68s /
-        // jnjj.45d). Re-sent on the section-switch handshake so the backend's
-        // in-session cache survives the reconnect (stateless invariant); schema
-        // only, no PII. It is the whole form, unchanged across sections.
-        full_schema: currentState.schema,
-        current_values: sectionValues,
-        fill_language: this.fillLanguage,
-        // Section metadata
-        section_id: targetSection.id,
-        section_number: targetSection.order,
-        total_sections: currentState.schema.sections.length,
-        section_label: targetSection.label,
-        previous_spoken_names: previousSpokenNames,
-        // Include initial field hint so backend can use it immediately
-        initial_field_hint: initialFieldHint,
-      });
+        // Send handshake with section metadata and initial field hint
+        this.send({
+          type: "handshake",
+          schema: sectionSchema,
+          // FULL form schema for the secretary catalog (bd polyglot-pdf-p68s /
+          // jnjj.45d). Re-sent on the section-switch handshake so the backend's
+          // in-session cache survives the reconnect (stateless invariant); schema
+          // only, no PII. It is the whole form, unchanged across sections.
+          full_schema: currentState.schema,
+          current_values: sectionValues,
+          fill_language: this.fillLanguage,
+          // Section metadata
+          section_id: targetSection.id,
+          section_number: targetSection.order,
+          total_sections: currentState.schema.sections.length,
+          section_label: targetSection.label,
+          previous_spoken_names: previousSpokenNames,
+          // Include initial field hint so backend can use it immediately
+          initial_field_hint: initialFieldHint,
+        });
+      }
 
       // Do NOT release the guard here: the switch is terminally DONE only when the
       // backend replies `session_ready` (-> handleSessionReady -> completeSectionSwitch),
@@ -3334,6 +3394,12 @@ export class WebFormConnection {
    * @param wsUrl - Backend WebSocket URL (REQUIRED - no default to prevent localhost fallback in production)
    */
   async completeSection(wsUrl: string): Promise<void> {
+    // Continuous-session mode (bd polyglot-pdf-x8rt): no sections to complete or
+    // advance -- this would call startSection on a real next-section id, restarting
+    // the session we keep open. Defense-in-depth: completeSection has no UI caller
+    // today, but guarding it keeps every section-mutation entry point consistent so
+    // a future caller can't bypass the continuous-mode contract.
+    if (this.continuousSessionEnabled) return;
     if (!wsUrl) {
       throw new Error('wsUrl is required for completeSection - must pass the connected backend URL');
     }

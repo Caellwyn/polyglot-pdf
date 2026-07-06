@@ -78,6 +78,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// continuous audio and the manual PTT control does not apply -- the toggle is
 	// disabled and the displayed mode reflects native VAD (not a stale "PTT").
 	const [nativeVad, setNativeVad] = useState(false)
+	// Continuous-session mode (bd polyglot-pdf-x8rt): when on, the form is one
+	// session with no sections to navigate -- the section-picker dropdown is hidden
+	// so a user cannot trigger a manual section switch (which would reset the
+	// session we deliberately keep open). Read from the persisted form state, which
+	// handleSessionReady sets from the backend flag.
+	const [continuousSession, setContinuousSession] = useState(false)
 	const [isHoldingPushToTalk, setIsHoldingPushToTalk] = useState(false)
 	const [isCollapsed, setIsCollapsed] = useState(false)
 	// Live mic-energy meter (bd polyglot-pdf-s3zv). `micEnergy` is the worklet's
@@ -301,6 +307,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		const isConnected = status.toLowerCase() === 'connected' ||
 			status.toLowerCase().startsWith('connected ')
 		setNativeVad(isConnected ? connectionManager.isNativeVad() : false)
+		// Continuous-session mode is set on the persisted state by handleSessionReady.
+		try {
+			setContinuousSession(SchemaFormStateManager.load()?.continuousSessionEnabled === true)
+		} catch {
+			setContinuousSession(false)
+		}
 	}, [connectionManager, status])
 
 	// Keep status ref updated
@@ -1430,21 +1442,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					</div>
 
 
-					{/* Section Navigation */}
+					{/* Section Navigation. In continuous-session mode (bd polyglot-pdf-x8rt)
+					    there are no sections to navigate -- render the label + field
+					    counter but NOT the clickable dropdown, so a manual section switch
+					    (which would reset the one continuous session) is unreachable. */}
 					<div className="vff-section-nav">
 						<div
 							className="vff-section-display"
-							onClick={() => setShowSectionDropdown(!showSectionDropdown)}
+							onClick={continuousSession ? undefined : () => setShowSectionDropdown(!showSectionDropdown)}
+							style={continuousSession ? { cursor: 'default' } : undefined}
 						>
 							<span className="vff-section-label">
 								{getCurrentSectionLabel()}
 							</span>
-							<span className="vff-dropdown-arrow">{showSectionDropdown ? '▲' : '▼'}</span>
+							{!continuousSession && (
+								<span className="vff-dropdown-arrow">{showSectionDropdown ? '▲' : '▼'}</span>
+							)}
 						</div>
 						<div className="vff-field-counter">
 							📊 {sectionFieldCount.filled} of {sectionFieldCount.total} fields completed
 						</div>
-						{showSectionDropdown && (
+						{!continuousSession && showSectionDropdown && (
 							<div className="vff-section-dropdown">
 								{schema.sections?.map((section) => (
 									<div

@@ -2,12 +2,8 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-ctu8 prep: the Live API hard-bounds trigger_tokens to [5000, 128000] at connect -- Vertex 1007, wire-verified; `_build_live_config` now clamps the derived/configured trigger into that range and re-asserts window < trigger after the clamp -- the derived I-90 DTI trigger ~2800 was below the minimum and killed every DTI+compression connect on Vertex). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: fixed the broken
-link to the exploration plan, which had moved to `docs/archive/`, and added the
-go/no-go brief that followed it; the derivation formula, gating (`USE_DTI` +
-`CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR`), and parameter defaults in
-`_build_live_config` were verified still accurate).
-See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-06 (bd polyglot-pdf-x8rt: the sliding-window "candidate" shipped as an opt-in continuous-session mode -- ctu8 validated window 3500; see the Verdict + SHIPPED note below. Prior 2026-07-05, bd polyglot-pdf-ctu8 prep: the Live API hard-bounds trigger_tokens to [5000, 128000] at connect -- Vertex 1007, wire-verified; `_build_live_config` clamps the derived/configured trigger into that range and re-asserts window < trigger after the clamp -- the derived I-90 DTI trigger ~2800 was below the minimum and killed every DTI+compression connect on Vertex).
+See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
 > **STATUS (2026-06-12): WORKING on BOTH models -- eviction confirmed on SDK 2.8.0.**
 > Sliding-window eviction is real and reliable on `gemini-3.1-flash-live-preview`
@@ -83,6 +79,21 @@ models). Do not assume the answer in either direction; the maintainer's earlier 
 digging also found **text-in tokens dominated total cost** in production traffic
 (the system-instruction + tool-context re-sends), so the per-reset text re-send cost
 is a first-class term in that comparison, not a footnote.
+
+**Verdict + SHIPPED (bd `polyglot-pdf-ctu8` + `polyglot-pdf-x8rt`):** under DTI the
+SI floor is ~one field, so the "SI dominates -> compression is a wash" ceiling
+above lifts and the sliding window becomes the winner. `ctu8` measured continuous
+DTI + a **3500-token window** on the real I-90 at ~$1.15/174q vs ~$2.32 for section
+resets, AND more coherent (83% fill vs 47% at a too-tight 3000, where aggressive
+eviction strips guidance). `x8rt` then shipped the "sliding window (candidate)"
+column as a real, opt-in **continuous-session mode** (`CONTINUOUS_SESSION`, default
+off; see [../standards/ws-protocol.md](../standards/ws-protocol.md) and
+[schema-forms.md](schema-forms.md)): the whole form runs as ONE session (frontend
+builds a single whole-form handshake, `switch_section` is dropped, section metadata
+suppressed) bounded by the window. It composes with the GoAway pre-emptive resume
+(`l3a.2`, shipped) so a continuous session survives the ~13-15 min duration cap.
+The section-reset machinery stays intact and is the default; retiring it is a
+separate call after the continuous flow is validated on the demo.
 
 ## How eviction actually behaves (measured, SDK 2.8.0, 3.1)
 

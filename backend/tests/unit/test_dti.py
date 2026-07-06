@@ -308,6 +308,47 @@ def _service_with_settings(use_dti: bool):
     return svc, captured
 
 
+def test_continuous_session_forces_use_dti():
+    """bd polyglot-pdf-x8rt: CONTINUOUS_SESSION implies USE_DTI (the whole-form
+    handshake + section suppression only cohere with the DTI SI). Setting
+    CONTINUOUS_SESSION without USE_DTI is a broken hybrid, so the validator forces
+    USE_DTI on. Neither flag defaults on."""
+    from backend.config import Settings
+
+    forced = Settings(CONTINUOUS_SESSION=True, USE_DTI=False)
+    assert forced.USE_DTI is True, "CONTINUOUS_SESSION must force USE_DTI on"
+    # Defaults untouched: neither flag is on unless asked for.
+    default = Settings()
+    assert default.CONTINUOUS_SESSION is False
+    assert default.USE_DTI is False
+    # DTI without continuous is left as-is (no reverse coupling).
+    dti_only = Settings(USE_DTI=True, CONTINUOUS_SESSION=False)
+    assert dti_only.USE_DTI is True and dti_only.CONTINUOUS_SESSION is False
+
+
+def test_continuous_session_drops_switch_section_tool():
+    """bd polyglot-pdf-x8rt: in continuous-session mode the whole form is ONE
+    session, so switch_section must NOT be offered to the model (a stray call
+    would reset the session we deliberately keep open). With the flag OFF the
+    tool is present as normal."""
+    from backend.services.form_filling_service import FormFillingService
+    from backend.config import Settings
+
+    def _names(continuous: bool):
+        settings = Settings()
+        settings.CONTINUOUS_SESSION = continuous
+        svc = FormFillingService(live_ai=None, settings=settings)
+        return {d.get("name") for d in svc._build_tool_declarations()}
+
+    off = _names(continuous=False)
+    on = _names(continuous=True)
+    # Sanity: the tool exists in the base declarations (else the test proves nothing).
+    assert "switch_section" in off
+    # Continuous mode drops ONLY switch_section; every other tool is retained.
+    assert "switch_section" not in on
+    assert off - on == {"switch_section"}
+
+
 @pytest.mark.asyncio
 async def test_initiating_message_carries_field1_guidance_in_dti():
     """Exit criterion 1: in DTI mode the initiating message carries field 1's

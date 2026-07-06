@@ -107,11 +107,18 @@ export function computeNextField(
   // Get current section to limit field search
   const currentSection = state.schema.sections?.find(s => s.id === state.currentSectionId);
 
+  // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form is one session,
+  // so the next-field search spans EVERY field in schema order -- never
+  // section-scoped. Without this the search would stop at the first section's last
+  // field and the continuous fill would stall (there is no section advance to
+  // carry it onward).
   // Filter to only fields in current section
   const currentSectionFieldIds = new Set(currentSection?.fields || []);
-  const fieldsToCheck = currentSectionFieldIds.size > 0
-    ? state.schema.fields.filter(f => currentSectionFieldIds.has(f.id))
-    : state.schema.fields; // Fallback to all fields if no section structure
+  const fieldsToCheck = state.continuousSessionEnabled
+    ? state.schema.fields
+    : currentSectionFieldIds.size > 0
+      ? state.schema.fields.filter(f => currentSectionFieldIds.has(f.id))
+      : state.schema.fields; // Fallback to all fields if no section structure
 
   console.log('[computeNextField] [search] Current section:', {
     sectionId: state.currentSectionId,

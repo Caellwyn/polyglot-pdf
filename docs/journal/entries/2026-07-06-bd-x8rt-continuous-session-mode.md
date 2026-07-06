@@ -1,0 +1,119 @@
+---
+date: 2026-07-06
+bead: polyglot-pdf-x8rt
+title: "Production continuous-session mode: whole form as one DTI+compression session (replaces section resets)"
+tags: [performance, refactor]
+---
+
+## Trigger
+
+ctu8 proved a continuous DTI session with a ~3500 compression window is cheaper
+AND more coherent than the section-reset mechanism, and the maintainer called the
+cutover. But the cutover turned out NOT to be a flag flip: production had no
+continuous-session mode. Section switching is driven by the FRONTEND advancing
+through `schema.sections` and the MODEL calling `switch_section` -- neither gated
+by `USE_DTI` or the compression flags. The ctu8 experiment faked "continuous"
+with a harness-only flag that fed the whole form as one synthetic section.
+Flipping the flags alone would have shipped DTI-in-sections (the coexistence case
+we explicitly did not want), not the continuous replacement.
+
+## What shipped
+
+A real `CONTINUOUS_SESSION` feature (default off; section-reset path untouched
+when off) across backend + frontend + the demo deploy:
+
+- **Backend** (`config.py`, `websocket_routes.py`, `form_filling_service.py`):
+  the flag; `session_ready` carries `continuous_session_enabled`; the
+  `switch_section` tool is dropped from the declarations when continuous (a stray
+  call can't reset the session we keep open); the "Section N of M" metadata is
+  suppressed in the DTI initiating message (which also drops the derived
+  next-section confirmation-policy line). No SI-template edits -- the DTI SI
+  already carries no section guidance.
+- **Frontend** (`schemaFormState.ts`, `manifestUtils.ts`, `navigation.ts`,
+  `webFormConnection.ts`): `continuousSessionEnabled` state (init + migration +
+  setter, mirroring `jitModeEnabled`); `buildContinuousManifest` builds one
+  synthetic `continuous` section carrying EVERY field in schema order;
+  `getJITHandshakePayload` uses it with `total_sections=1`; both section-advance
+  paths are suppressed (`proceedSectionSwitch` early-returns,
+  `handlePrepareSectionSwitchRequest` rejects).
+- **Deploy** (`deploy-demo.sh`): the demo backend env now sets
+  `USE_DTI+CONTINUOUS_SESSION+CONTEXT_COMPRESSION_ENABLED+TRIGGER_MARGIN_TOKENS=1500`.
+  The margin=1500 lands the window at the ctu8-VALIDATED 3500 (5000 Vertex-clamped
+  trigger - 1500); the default margin (600) would have derived the UNTESTED 4400.
+  Reversible by dropping the four vars.
+- **Tests**: `buildContinuousManifest` (FE, 3) + `switch_section`-drop (BE, 1).
+
+Fresh-eyes assess: (recorded at closeout).
+
+## Lessons
+
+- **`computeNextField` was section-scoped and would have stalled the fill at
+  section 1.** It filtered to the current section's fields; in continuous mode
+  there is no section advance to carry the fill onward, so it would have returned
+  null at the first section's last field and stopped. Fixed to span the whole form
+  when `continuousSessionEnabled`. The general trap: a "run it all as one" mode has
+  to audit every place that was implicitly section-scoped, not just the obvious
+  handshake + advance seams.
+- **The flag flip and the window value are two separate things.** Enabling
+  continuous mode does NOT set the window to the validated 3500 -- the per-form
+  derivation + Vertex clamp lands it at 4400 unless `TRIGGER_MARGIN_TOKENS` is set
+  to 1500. Shipping the flags without the margin would have run an untested window.
+- **"Cut over" hid a multi-surface feature.** The honest scope was frontend
+  handshake + navigation + both advance paths + backend flag/tool/metadata, not a
+  config toggle. Surfacing that as an escalation (rather than silently expanding)
+  let the maintainer choose to build it properly.
+
+## Doc freshness
+
+`docs/standards/ws-protocol.md` updated: the `session_ready` table gains the
+`continuous_session_enabled` key (the contract test
+`test_session_ready_keys_match_doc` pins this and caught the omission), stamp
+bumped. `docs/components/context-compression.md` updated: the "sliding window
+(candidate)" column it described now SHIPPED as the opt-in continuous-session
+mode (ctu8 window 3500), so a Verdict + SHIPPED note was added and the stamp
+bumped -- it tracks `config.py`/`form_filling_service.py`, which this branch
+changed. The other docs prep flagged STALE (auth, jit-schema, voice-ai,
+stateless-architecture, terminology, etc.) were already stale from the DTI-fix +
+GoAway commits on dev (PR #321/#331, 2026-07-05) BEFORE this branch; this branch's
+default-off flag does not change their current-state prose, so they are out of
+scope here (the closeout rule: a doc stale from files your branch didn't
+behavior-change is not yours to fix).
+
+## Pre-PR fresh-eyes rounds (section-switch holes)
+
+The pre-PR adversarial assess ran FOUR rounds -- continuous mode had more
+section-switch trigger surfaces than the initial build covered, and each round
+found the ones the previous missed:
+
+1. AI `switch_section` tool + client auto-advance -- initial build (tool dropped;
+   `proceedSectionSwitch`/`handlePrepareSectionSwitchRequest` suppressed).
+2. **Round 1:** the `VoiceOverlay` section-picker dropdown (a 3rd trigger) --
+   hidden in continuous mode.
+3. **Round 2 (critical):** `startSection` -- the REAL post-disclaimer session-start
+   path (`switchToFirstSection` -> `startSection`) -- built its own raw
+   single-section handshake, bypassing `buildContinuousManifest`, so the whole-form
+   handshake was DEAD CODE on the session that fills the form. Fixed to send the
+   whole-form handshake; VERIFIED LIVE (WS interceptor: post-disclaimer handshake =
+   `handshake_jit`, `total_sections=1`, 132 fields, section `continuous`). Round 2
+   also fixed the `SchemaForm` Next/Prev buttons + a whole-form-completion
+   misdetection (`nextSectionForAck`).
+4. **Round 3:** `handleSubmit` -- pressing Enter in a field navigated sections
+   (native form submit reaching `handleNextSection`), ungated. Fixed + a
+   defense-in-depth guard on the shared mutation points (`handleNextSection`,
+   `handlePreviousSection`, `completeSection`).
+
+Every section-mutation entry point is now guarded. `SchemaForm.tsx` has no
+component test (pre-existing); filed as `polyglot-pdf-r8yy`.
+
+## Files touched
+
+Backend: `config.py`, `routes/websocket_routes.py`,
+`services/form_filling_service.py`. Frontend:
+`schema-forms/state/schemaFormState.ts`, `schema-forms/utils/manifestUtils.ts`,
+`navigation.ts`, `webFormConnection.ts`,
+`schema-forms/components/SchemaForm.tsx`, `demo/VoiceOverlay.tsx`. Deploy:
+`deploy-demo.sh`. Docs: `standards/ws-protocol.md`,
+`components/context-compression.md` + this entry. Tests:
+`backend/tests/unit/test_dti.py`,
+`frontend/src/schema-forms/utils/manifestUtils.test.ts`,
+`frontend/src/webFormConnection.confirmloop.test.ts`.

@@ -151,6 +151,18 @@ class Settings(BaseModel):
 	# precedence) but reuses JIT's confirm_field plumbing. Env-gated, default off.
 	USE_DTI: bool = os.getenv("USE_DTI", "false").lower() == "true"
 
+	# === Continuous-session mode (bd polyglot-pdf-x8rt) ===
+	# When on, the whole form runs as ONE Gemini session bounded by the compression
+	# window, instead of chopping the form into sections and resetting the session
+	# at each boundary. The frontend builds a single whole-form handshake (one
+	# synthetic "continuous" section carrying every field) and stops advancing
+	# sections; the backend drops the switch_section tool and the "Section N of M"
+	# metadata so the model never tries to navigate sections. Implies DTI (the SI
+	# that carries no section guidance) + CONTEXT_COMPRESSION_ENABLED (the window
+	# that bounds the now-unbroken context). Env-gated, default off; the
+	# section-reset path is unchanged when off.
+	CONTINUOUS_SESSION: bool = os.getenv("CONTINUOUS_SESSION", "false").lower() == "true"
+
 	# === VAD (Voice Activity Detection) Settings ===
 	# Gemini Live API automatic activity detection sensitivity
 	# START_SENSITIVITY: How quickly Gemini detects speech start
@@ -254,6 +266,16 @@ class Settings(BaseModel):
 		if (self.CONTEXT_COMPRESSION_ENABLED
 				and self.CONTEXT_COMPRESSION_WINDOW_TOKENS >= self.CONTEXT_COMPRESSION_TRIGGER_TOKENS):
 			self.CONTEXT_COMPRESSION_WINDOW_TOKENS = max(1, self.CONTEXT_COMPRESSION_TRIGGER_TOKENS // 2)
+		# Continuous-session mode (bd polyglot-pdf-x8rt) IMPLIES DTI: the whole-form
+		# handshake + section-advance suppression only cohere with the DTI SI (which
+		# carries no section guidance) and the per-field drip. CONTINUOUS_SESSION
+		# without USE_DTI is a broken hybrid -- the frontend would section-chop the
+		# handshake (jitModeEnabled is off) while the client suppresses advancing. So
+		# force USE_DTI on and log loudly, rather than serve that inconsistent state.
+		if self.CONTINUOUS_SESSION and not self.USE_DTI:
+			print("[config] WARNING: CONTINUOUS_SESSION requires USE_DTI; forcing "
+				  "USE_DTI=true (continuous mode needs the DTI SI + per-field drip).")
+			self.USE_DTI = True
 		return self
 
 	# Tool declarations for web forms (stateless, client-managed)
