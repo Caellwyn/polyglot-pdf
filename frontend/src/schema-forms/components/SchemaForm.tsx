@@ -336,6 +336,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       return;
     }
 
+    // Continuous-session mode (bd polyglot-pdf-x8rt): no sections to advance.
+    // Defense-in-depth -- callers (the Next button, handleSubmit's Enter path) are
+    // already gated, but guarding the shared mutation point too means a future
+    // caller can't reintroduce the section-desync without tripping this.
+    if (state.continuousSessionEnabled) return;
+
     // Use section-based navigation
     const nextSection = SchemaFormStateManager.getNextSection(state);
     if (!nextSection) return;
@@ -388,8 +394,16 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       return;
     }
 
-    // Check if there's a next section - if so, don't submit, just navigate
-    const nextSection = SchemaFormStateManager.getNextSection(state);
+    // Check if there's a next section - if so, don't submit, just navigate.
+    // Continuous-session mode (bd polyglot-pdf-x8rt): the form is one session with
+    // no sections to navigate, so SKIP this branch -- otherwise pressing Enter in a
+    // field (native form submit) would flip the visible section away from the live
+    // continuous voice session (the schema still HAS sections; continuity is a
+    // client-side session concern). This is the Enter-key sibling of hiding the
+    // Previous/Next buttons above.
+    const nextSection = state.continuousSessionEnabled
+      ? null
+      : SchemaFormStateManager.getNextSection(state);
     if (nextSection) {
       console.log('[handleSubmit] Next section exists - triggering navigation instead of submit');
       handleNextSection();
