@@ -108,6 +108,13 @@ def unclaimed_button_widgets(
         widgets = entry.get("widgets")
         if not isinstance(widgets, list) or not widgets:
             widgets = [{}]
+        # A SHARED-name group (one dump name, >1 kid) must be modeled with the
+        # name on the FIELD and only pdf_on_value on each option -- putting the
+        # shared name on every option's pdf_field_name trips dump-widget-multiclaim
+        # (Opus fallback, PR #328). shared_name tells the picker which shape to
+        # build: kid -> option.pdf_on_value (+ field pdf_field_name); distinct
+        # widget -> option.pdf_field_name.
+        shared_name = len(widgets) > 1
         for w in widgets:
             w = w if isinstance(w, dict) else {}
             on_value = w.get("on_value")
@@ -124,5 +131,6 @@ def unclaimed_button_widgets(
                 "on_value": on_value,
                 "tooltip": w.get("tu"),
                 "page": rect.get("page"),
+                "shared_name": shared_name,
             })
     return out

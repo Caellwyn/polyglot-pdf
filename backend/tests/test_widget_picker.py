@@ -35,9 +35,11 @@ def test_returns_button_widgets_no_field_claims():
     assert [w["name"] for w in got] == [
         "form1[0].reason[0]", "form1[0].reason[1]", "form1[0].reason[2]",
     ]
-    # Each carries the mint inputs (name / on_value / tooltip / page).
+    # Each carries the mint inputs (name / on_value / tooltip / page) + the
+    # shared_name flag (False here -- each box is its own single-widget name).
     assert got[0] == {"name": "form1[0].reason[0]", "type": "checkbox",
-                      "on_value": "1", "tooltip": "Employment", "page": 0}
+                      "on_value": "1", "tooltip": "Employment", "page": 0,
+                      "shared_name": False}
 
 
 def test_excludes_option_claimed_widgets_via_dot_suffix():
@@ -91,6 +93,14 @@ def test_shared_name_radio_surfaces_every_kid():
     assert [(w["on_value"], w["tooltip"]) for w in got] == [
         ("M", "Male"), ("F", "Female"),
     ]
+    # shared_name=True tells the picker to model the option with pdf_on_value +
+    # the field pdf_field_name (NOT option.pdf_field_name, which would multiclaim).
+    assert all(w["shared_name"] is True for w in got)
+
+
+def test_distinct_name_widgets_are_not_shared_name():
+    got = unclaimed_button_widgets({"fields": []}, _DUMP)
+    assert all(w["shared_name"] is False for w in got)
 
 
 def test_shared_name_radio_partial_claim_leaves_the_rest():

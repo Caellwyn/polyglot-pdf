@@ -202,8 +202,13 @@ const WidgetPicker: React.FC<{
   // exit criterion.
   existingValues: string[];
   onLoad: () => Promise<UnclaimedWidget[]>;
+  // Append the picked widget as an option. For a SHARED-name group kid, the
+  // caller must also set the field-level pdf_field_name (carried in
+  // fieldPdfFieldName) and the option carries only pdf_on_value; for a distinct
+  // widget the option carries pdf_field_name and fieldPdfFieldName is undefined.
   onPick: (opt: { label: string; value: string;
-                  pdf_field_name: string; pdf_on_value?: string }) => void;
+                  pdf_field_name?: string; pdf_on_value?: string },
+           fieldPdfFieldName?: string) => void;
 }> = ({ existingValues, onLoad, onPick }) => {
   const [open, setOpen] = React.useState(false);
   const [widgets, setWidgets] = React.useState<UnclaimedWidget[] | null>(null);
@@ -240,12 +245,21 @@ const WidgetPicker: React.FC<{
     let value = base;
     let n = 1;
     while (used.has(value)) value = `${base}_${++n}`;
-    onPick({
-      label,
-      value,
-      pdf_field_name: w.name,
-      ...(w.on_value ? { pdf_on_value: w.on_value } : {}),
-    });
+    if (w.shared_name) {
+      // Shared-name group kid: the option carries ONLY pdf_on_value; the field
+      // carries pdf_field_name=name. Putting the shared name on each option's
+      // pdf_field_name would trip dump-widget-multiclaim (Opus fallback).
+      onPick(
+        { label, value, ...(w.on_value ? { pdf_on_value: w.on_value } : {}) },
+        w.name,
+      );
+    } else {
+      // Distinct-name widget: the option carries its own pdf_field_name.
+      onPick({
+        label, value, pdf_field_name: w.name,
+        ...(w.on_value ? { pdf_on_value: w.on_value } : {}),
+      });
+    }
   };
 
   if (!open) {
@@ -948,8 +962,16 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   <WidgetPicker
                     existingValues={(field.options || []).map(o => o.value || '')}
                     onLoad={onLoadUnclaimedWidgets}
-                    onPick={(opt) =>
-                      updateField({ options: [...(field.options || []), opt] })
+                    onPick={(opt, fieldPdfFieldName) =>
+                      updateField({
+                        options: [...(field.options || []), opt],
+                        // A shared-name group carries the widget name on the
+                        // FIELD (set it if not already present); a checkbox_group
+                        // never does (v2), so only radio reaches here with one.
+                        ...(fieldPdfFieldName && !field.pdf_field_name
+                          ? { pdf_field_name: fieldPdfFieldName }
+                          : {}),
+                      })
                     }
                   />
                 )}

@@ -206,11 +206,17 @@ class RepairResponse(BaseModel):
 class UnclaimedWidget(BaseModel):
     """One PDF button widget the schema does not yet claim (bd nivy, P5.3c)."""
 
-    name: str                        # the widget's PDF field name (-> option.pdf_field_name)
+    name: str                        # the widget's PDF field name
     type: Optional[str] = None       # checkbox | radio
     on_value: Optional[str] = None   # the widget's non-Off state (-> option.pdf_on_value)
     tooltip: Optional[str] = None    # the /TU tooltip, a suggested label
     page: Optional[int] = None       # 0-indexed page (for the author's orientation)
+    # True when this is one kid of a SHARED-name group (one dump name, >1 kid):
+    # the option gets pdf_on_value + the FIELD carries pdf_field_name=name. False
+    # for a distinct-name widget: the option carries pdf_field_name=name. Putting
+    # the shared name on every option's pdf_field_name would trip the widget-claim
+    # lint rule (bd nivy fresh-eyes / Opus fallback).
+    shared_name: bool = False
 
 
 class UnclaimedWidgetsResponse(BaseModel):

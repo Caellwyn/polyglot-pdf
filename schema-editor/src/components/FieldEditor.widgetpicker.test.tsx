@@ -89,6 +89,41 @@ describe('FieldEditor Add from PDF widgets picker', () => {
     expect(added.value).toBe('family_2');
   });
 
+  it('shared-name radio kid: option gets pdf_on_value, FIELD gets pdf_field_name (Opus fallback)', async () => {
+    // A true shared-name radio group kid (shared_name=true): the picker must put
+    // the widget name on the FIELD and only pdf_on_value on the option -- putting
+    // the shared name on option.pdf_field_name would multiclaim (lint ERROR).
+    const radio: FormField = {
+      id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio', section_id: 's1',
+      options: [{ value: 'male', label: 'Male', pdf_on_value: 'M' }],
+      // note: no field-level pdf_field_name yet -- the pick must set it.
+    } as unknown as FormField;
+    const shared: UnclaimedWidget[] = [
+      { name: 'form1[0].sex[0]', type: 'radio', on_value: 'F', tooltip: 'Female',
+        page: 0, shared_name: true },
+    ];
+    const onUpdateField = vi.fn();
+    render(
+      <FieldEditor
+        field={radio}
+        schema={makeSchema([radio])}
+        onUpdateField={onUpdateField}
+        authorTier
+        onLoadUnclaimedWidgets={vi.fn().mockResolvedValue(shared)}
+      />,
+    );
+    fireEvent.click(screen.getByText('+ Add from PDF widgets'));
+    fireEvent.click(await screen.findByText('Female'));
+    const updated = onUpdateField.mock.calls[0][0] as FormField;
+    // The field now carries the shared widget name...
+    expect(updated.pdf_field_name).toBe('form1[0].sex[0]');
+    const added = updated.options![1];
+    // ...and the added option carries ONLY pdf_on_value, NOT pdf_field_name.
+    expect(added.pdf_on_value).toBe('F');
+    expect(added.pdf_field_name).toBeUndefined();
+    expect(added.value).toBe('female');
+  });
+
   it('shows a friendly note when there are no unclaimed widgets', async () => {
     render(
       <FieldEditor

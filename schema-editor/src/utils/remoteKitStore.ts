@@ -227,11 +227,15 @@ export async function repairKit(kitId: string): Promise<RepairReport> {
 /** One PDF button widget the schema does not yet claim (bd polyglot-pdf-nivy,
  * P5.3c) -- a candidate the "Add from PDF widgets" picker offers. */
 export interface UnclaimedWidget {
-  name: string;              // widget PDF field name (-> option.pdf_field_name)
+  name: string;              // widget PDF field name
   type?: string | null;      // checkbox | radio
   on_value?: string | null;  // the widget's on state (-> option.pdf_on_value)
   tooltip?: string | null;   // /TU tooltip, a suggested label
   page?: number | null;      // 0-indexed page
+  // A kid of a SHARED-name group (one name, >1 kid): the option gets pdf_on_value
+  // and the FIELD carries pdf_field_name=name. False -> a distinct-name widget:
+  // the option carries pdf_field_name=name (bd nivy).
+  shared_name?: boolean;
 }
 
 /** The kit's unclaimed PDF button widgets for the widget picker. Author tier;

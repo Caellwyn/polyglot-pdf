@@ -68,7 +68,17 @@ runner (the local vitest fork-pool hangs -- see the v96b entry).
 
 ## Review fixes (pre-PR)
 
-Three real bugs caught before the PR. (0, fresh-eyes) `unclaimed_button_widgets`
+Four real bugs caught before the PR. (0b, Opus fallback) Even after surfacing
+every shared-name kid, the picker built the WRONG v2 shape for them: it set
+`option.pdf_field_name = <shared name>` on EVERY option, so two options of one
+radio field claimed the same widget name -> `dump-widget-multiclaim` ERROR (the
+result was NOT lint-clean). The correct shared-name shape puts the name on the
+FIELD and only `pdf_on_value` on each option. Fixed: the backend candidate now
+carries a `shared_name` flag (true when a dump entry has >1 kid); the picker
+branches -- a shared-name kid sets `option.pdf_on_value` and lifts the widget
+name onto the FIELD's `pdf_field_name`; a distinct-name widget keeps
+`option.pdf_field_name`. Verified: the picker-built shared-name group lints 0/0.
+(0, fresh-eyes) `unclaimed_button_widgets`
 read only `widgets[0]` of a dump entry, so a TRUE single-name AcroForm radio
 group (one field name, N kids differing only by `on_value` -- a documented v2
 shape on USCIS/legal forms) surfaced only its FIRST kid, and once any option
