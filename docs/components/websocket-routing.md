@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the `confirm_field_response.section_complete` sub-flag (bd njvh) into the control-channel table; verified accurate against current code otherwise). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-ezg2: the `manual_field_update` arm reads an optional `next_field_schema` and threads it to `send_manual_field_update`, which re-establishes the DTI current-field pointer via `merge_field_schema`). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the `confirm_field_response.section_complete` sub-flag (bd njvh) into the control-channel table; verified accurate against current code otherwise -- see [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md)). Prior: 2026-07-02 (bd polyglot-pdf-puu8: `/ws/echo` + `/ws/audio` are now dev-only -- handshake rejected in prod behind the `backend/.env.DEV` marker gate; `/ws/fill` unchanged).*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser

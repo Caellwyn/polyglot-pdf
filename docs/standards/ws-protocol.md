@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`schemaFormState.ts` line-number citations, which had drifted from code growth across several intervening commits -- no wire-type or handshake-key name changed). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-ezg2: `manual_field_update` gains an optional DTI-mode `next_field_schema` rider -- see the client->backend table row). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`schemaFormState.ts` line-number citations, which had drifted from code growth across several intervening commits -- no wire-type or handshake-key name changed; see [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md)). Prior: 2026-07-02 (bd polyglot-pdf-ceyt: this doc's message-type union is now pinned by contract tests -- backend/tests/contract/test_websocket_protocol.py diffs these tables against the code, so renaming or dropping a wire type fails a test; also documented the previously-missing `dti_mode_enabled` session_ready key those tests caught).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
