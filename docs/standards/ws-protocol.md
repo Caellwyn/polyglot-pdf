@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-ezg2: `manual_field_update` gains an optional DTI-mode `next_field_schema` rider -- see the client->backend table row). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`schemaFormState.ts` line-number citations, which had drifted from code growth across several intervening commits -- no wire-type or handshake-key name changed; see [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md)). Prior: 2026-07-02 (bd polyglot-pdf-ceyt: this doc's message-type union is now pinned by contract tests -- backend/tests/contract/test_websocket_protocol.py diffs these tables against the code, so renaming or dropping a wire type fails a test; also documented the previously-missing `dti_mode_enabled` session_ready key those tests caught).*
+*Last updated: 2026-07-06 (bd polyglot-pdf-x8rt: `session_ready` gains a `continuous_session_enabled` key -- see the Handshake acknowledgement table). Prior: 2026-07-05 (bd polyglot-pdf-ezg2: `manual_field_update` gains an optional DTI-mode `next_field_schema` rider -- see the client->backend table row). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: refreshed all `websocket_routes.py`/`webFormConnection.ts`/`schemaFormState.ts` line-number citations, which had drifted from code growth across several intervening commits -- no wire-type or handshake-key name changed; see [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md)). Prior: 2026-07-02 (bd polyglot-pdf-ceyt: this doc's message-type union is now pinned by contract tests -- backend/tests/contract/test_websocket_protocol.py diffs these tables against the code, so renaming or dropping a wire type fails a test; also documented the previously-missing `dti_mode_enabled` session_ready key those tests caught).*
 
 This is the FROZEN wire contract for the `/ws/fill` WebSocket: the handshake
 schema the backend reads on every (re)connect, plus the `{"type": "..."}`
@@ -76,6 +76,7 @@ The backend replies with `session_ready` (lines 896-911):
 | `jit_mode_enabled` | bool | Mirrors backend `USE_JIT_SCHEMA`; tells the client which handshake mode to build next time. |
 | `dti_mode_enabled` | bool | Mirrors backend `USE_DTI`; consumed by the client's `handleSessionReady` destructure (sent-but-undocumented until the ceyt contract tests caught it). |
 | `native_vad` | bool | Mirrors `not DISABLE_GEMINI_VAD`; when true the client streams continuous audio and stops sending manual activity signals (bd polyglot-pdf-333). |
+| `continuous_session_enabled` | bool | Mirrors backend `CONTINUOUS_SESSION`; when true the client builds a single whole-form handshake and stops advancing sections, so the whole form runs as one compression-bounded session (bd polyglot-pdf-x8rt). |
 
 ---
 

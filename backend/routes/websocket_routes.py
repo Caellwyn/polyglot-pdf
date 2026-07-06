@@ -910,6 +910,10 @@ async def fill_form_from_schema(
 		# next field's full schema on next_field_hint_response (bd polyglot-pdf-jnjj.22).
 		"jit_mode_enabled": settings.USE_JIT_SCHEMA or settings.USE_DTI,  # Signal manifest-first handshake
 		"dti_mode_enabled": settings.USE_DTI,  # Signal Dynamic Turn Injection (client supplies next-field schema)
+		# Continuous-session mode (bd polyglot-pdf-x8rt): tell the client to build a
+		# single whole-form handshake and stop advancing sections, so the whole form
+		# runs as one compression-bounded session.
+		"continuous_session_enabled": settings.CONTINUOUS_SESSION,
 		# Native-VAD mode toggle (bd polyglot-pdf-333): when True, Gemini's own VAD
 		# drives turns -- the frontend must stop sending manual activity signals and
 		# stream continuous audio. Mirror of the backend DISABLE_GEMINI_VAD flag.

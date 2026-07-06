@@ -187,6 +187,18 @@ class FormFillingService:
                            .get("current_section") or {}).get("fields") or []
         return any(mf.get("field_id") == field_id for mf in manifest_fields)
 
+    def _build_tool_declarations(self):
+        """Tool declarations for this session (a deepcopy so callers never mutate
+        the shared settings list). In continuous-session mode (bd
+        polyglot-pdf-x8rt) the switch_section tool is dropped: the whole form is
+        one session, so there is nothing to switch to, and offering the tool would
+        let a stray model call reset the session we are deliberately keeping open.
+        """
+        declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
+        if getattr(self._settings, "CONTINUOUS_SESSION", False):
+            declarations = [d for d in declarations if d.get("name") != "switch_section"]
+        return declarations
+
     async def start_session(
         self,
         websocket: WebSocket,
@@ -318,7 +330,7 @@ class FormFillingService:
         )
 
         # Use web form tool declarations (stateless)
-        tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
+        tool_declarations = self._build_tool_declarations()
 
         if self._live_ai is not None:
             # Set session context for token logging
@@ -597,11 +609,17 @@ class FormFillingService:
             # Pass the REAL title or None (not a "Form" default) so render_section_metadata's
             # "nothing substantive -> return ''" guard can fire on a metadata-less session.
             form_title = (self._schema or {}).get("form_metadata", {}).get("title") or None
+            # Continuous-session mode (bd polyglot-pdf-x8rt): the whole form is one
+            # session with no sections to navigate, so suppress the "Section N of M"
+            # progress line -- telling the model it is on "section 1 of 8" with no
+            # switch_section tool is confusing. Keep the form title + previous-names
+            # (still useful context); only the section counters are dropped.
+            continuous = getattr(self._settings, "CONTINUOUS_SESSION", False)
             block = render_section_metadata(
                 form_title=form_title,
-                section_number=sm.get("section_number"),
-                total_sections=sm.get("total_sections"),
-                section_label=sm.get("section_label"),
+                section_number=None if continuous else sm.get("section_number"),
+                total_sections=None if continuous else sm.get("total_sections"),
+                section_label=None if continuous else sm.get("section_label"),
                 previous_spoken_names=sm.get("previous_spoken_names"),
             )
             if block:
@@ -787,7 +805,7 @@ class FormFillingService:
         
         # Restart Gemini session (doesn't re-accept WebSocket)
         # Use deepcopy to avoid mutating the original declarations
-        tool_declarations = deepcopy(self._settings.TOOL_DECLARATIONS)
+        tool_declarations = self._build_tool_declarations()
 
         # Re-register the same callbacks used at session creation
         # (form_filling_service.py:155). set_callbacks is synchronous -- do not
