@@ -224,6 +224,48 @@ def test_dump_multiclaim_by_two_options_of_one_field():
 
 
 # ---------------------------------------------------------------------------
+# Under-claim: a dump widget NO field maps to (extraction dropped it).
+# bd polyglot-pdf-w0eq, P6.1c.
+# ---------------------------------------------------------------------------
+
+def test_unclaimed_fillable_widget_warns():
+    # The stochastic-drop bug: the dump has a text widget no field claims. A
+    # WARNING (not ERROR) so it never breaks the store-with-issues exit code.
+    fields = [{"id": "a", "type": "text", "pdf_field_name": "f1[0]"}]
+    dump = {"fields": [
+        {"name": "top[0].f1[0]", "logical_type": "text"},
+        {"name": "top[0].f2[0]", "logical_type": "text"},  # unclaimed
+    ]}
+    findings = lint_schema(_schema(fields), dump)
+    assert _rules(findings) == ["dump-widget-unclaimed"]
+    assert findings[0].severity == "WARNING"
+    assert "f2[0]" in findings[0].path
+    assert not has_errors(findings)
+
+
+def test_unclaimed_button_widget_is_not_a_finding():
+    # A decorative reset/print button is legitimately unmodeled -- not a gap.
+    fields = [{"id": "a", "type": "text", "pdf_field_name": "f1[0]"}]
+    dump = {"fields": [
+        {"name": "top[0].f1[0]", "logical_type": "text"},
+        {"name": "top[0].reset[0]", "logical_type": "button"},
+    ]}
+    assert lint_schema(_schema(fields), dump) == []
+
+
+def test_all_widgets_claimed_emits_no_unclaimed_finding():
+    fields = [
+        {"id": "a", "type": "text", "pdf_field_name": "f1[0]"},
+        {"id": "b", "type": "text", "pdf_field_name": "f2[0]"},
+    ]
+    dump = {"fields": [
+        {"name": "top[0].f1[0]", "logical_type": "text"},
+        {"name": "top[0].f2[0]", "logical_type": "text"},
+    ]}
+    assert lint_schema(_schema(fields), dump) == []
+
+
+# ---------------------------------------------------------------------------
 # Deliberate non-findings: the tolerances that keep shipped v1 kits clean.
 # ---------------------------------------------------------------------------
 

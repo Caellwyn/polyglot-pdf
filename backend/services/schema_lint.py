@@ -444,6 +444,20 @@ def _dump_names(dump: Dict[str, Any]) -> List[str]:
     ]
 
 
+def _dump_logical_type(dump: Dict[str, Any], name: str) -> Optional[str]:
+    """The `logical_type` the AcroForm dump recorded for widget `name` (checkbox
+    / radio / text / button / ...), or None if absent. Used by the under-claim
+    rule to exclude decorative buttons from the coverage check."""
+    entries = dump.get("fields") if isinstance(dump, dict) else None
+    if not isinstance(entries, list):
+        return None
+    for e in entries:
+        if isinstance(e, dict) and e.get("name") == name:
+            lt = e.get("logical_type")
+            return lt if isinstance(lt, str) else None
+    return None
+
+
 def _match_dump_names(claim: str, dump_names: List[str]) -> List[str]:
     """Resolve a schema pdf_field_name to dump widget names.
 
@@ -501,6 +515,26 @@ def _check_dump_claims(
         # field-level + a single option of the SAME field is the benign
         # groups-of-one convention (standalone checkbox describing its widget
         # in both places) -- not a finding.
+
+    # Under-claim: a real AcroForm widget that NO field maps to. The LLM
+    # extraction pass stochastically omits a field entirely (w7 / w7-2 are the
+    # same PDF, yet a re-extraction drops a different widget each run); without
+    # this the loss was silent, since the block above only flagged OVER-claim
+    # (bd polyglot-pdf-w0eq, P6.1c). A WARNING, not an ERROR: some widgets are
+    # legitimately unmodeled (reset/print buttons), and the extractor's
+    # deterministic coverage backfill claims the rest -- so a clean extraction
+    # emits none of these. Fillable widgets only (buttons excluded): an unfilled
+    # decorative button is not a coverage defect.
+    fillable_unclaimed = sorted(
+        n for n in dump_names
+        if n not in claims and _dump_logical_type(dump, n) != "button"
+    )
+    for name in fillable_unclaimed:
+        out.append(LintFinding(
+            SEVERITY_WARNING, "dump-widget-unclaimed", f"widget {name!r}",
+            "no field maps to this AcroForm widget (extraction likely dropped "
+            "it) -- backfill or model it explicitly",
+        ))
 
 
 # ---------------------------------------------------------------------------

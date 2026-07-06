@@ -137,3 +137,129 @@ def test_backfill_leaves_degenerate_when_no_dump_match(tmp_path):
     }]}
     assert ef._backfill_positions(schema, dump) == 0
     assert not ef._has_usable_position(schema["fields"][0]["pdf_position"])
+
+
+# --- _correct_group_checkbox_type (bd polyglot-pdf-w0eq, P6.1c) -------------- #
+
+def _write_logical_dump(tmp_path, name_to_logical):
+    """Minimal dump carrying per-widget logical_type + a rect (so the same file
+    also feeds _backfill_unclaimed_widgets)."""
+    dump = {"fields": [
+        {"name": n, "logical_type": lt,
+         "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}]}
+        for n, lt in name_to_logical.items()
+    ]}
+    p = tmp_path / "ldump.json"
+    p.write_text(json.dumps(dump), encoding="utf-8")
+    return str(p)
+
+
+def test_retype_radio_to_checkbox_group_when_all_members_checkbox(tmp_path):
+    """The W-7 case: 3 distinct checkbox widgets the LLM consolidated into ONE
+    field but mistyped `radio` -> corrected to checkbox_group (the dump proves
+    every member is a checkbox)."""
+    dump = _write_logical_dump(tmp_path, {
+        "c1_2[0]": "checkbox", "c1_3[0]": "checkbox", "c1_4[0]": "checkbox"})
+    schema = {"fields": [{
+        "id": "reason", "type": "radio",
+        "options": [{"value": "a", "pdf_field_name": "c1_2[0]"},
+                    {"value": "b", "pdf_field_name": "c1_3[0]"},
+                    {"value": "c", "pdf_field_name": "c1_4[0]"}],
+    }]}
+    assert ef._correct_group_checkbox_type(schema, dump) == 1
+    assert schema["fields"][0]["type"] == "checkbox_group"
+
+
+def test_retype_leaves_a_genuine_radio_alone(tmp_path):
+    """A field whose members are radio widgets in the dump is a real single-select
+    -- NOT retyped."""
+    dump = _write_logical_dump(tmp_path, {
+        "r[0]": "radio", "r[1]": "radio"})
+    schema = {"fields": [{
+        "id": "sex", "type": "radio",
+        "options": [{"value": "m", "pdf_field_name": "r[0]"},
+                    {"value": "f", "pdf_field_name": "r[1]"}],
+    }]}
+    assert ef._correct_group_checkbox_type(schema, dump) == 0
+    assert schema["fields"][0]["type"] == "radio"
+
+
+def test_retype_is_idempotent_and_skips_already_grouped(tmp_path):
+    dump = _write_logical_dump(tmp_path, {"a[0]": "checkbox", "b[0]": "checkbox"})
+    schema = {"fields": [{
+        "id": "g", "type": "checkbox_group",
+        "options": [{"value": "a", "pdf_field_name": "a[0]"},
+                    {"value": "b", "pdf_field_name": "b[0]"}],
+    }]}
+    assert ef._correct_group_checkbox_type(schema, dump) == 0
+
+
+def test_retype_skips_when_a_member_is_unresolved(tmp_path):
+    """Conservative: if ANY member widget is absent from the dump (can't confirm
+    it's a checkbox), the field is left untouched."""
+    dump = _write_logical_dump(tmp_path, {"a[0]": "checkbox"})  # b[0] absent
+    schema = {"fields": [{
+        "id": "g", "type": "radio",
+        "options": [{"value": "a", "pdf_field_name": "a[0]"},
+                    {"value": "b", "pdf_field_name": "b[0]"}],
+    }]}
+    assert ef._correct_group_checkbox_type(schema, dump) == 0
+    assert schema["fields"][0]["type"] == "radio"
+
+
+# --- _backfill_unclaimed_widgets (bd polyglot-pdf-w0eq, P6.1c) --------------- #
+
+def test_backfill_adds_a_field_for_an_unclaimed_widget(tmp_path):
+    """The core coverage fix: a fillable dump widget NO field claims is added
+    back as a basic field, filed into the section covering its page."""
+    dump = _write_logical_dump(tmp_path, {
+        "claimed[0]": "text", "orphan[0]": "text"})
+    schema = {
+        "fields": [{"id": "a", "type": "text", "pdf_field_name": "claimed[0]"}],
+        "sections": [{"id": "sec1", "page_numbers": [1], "fields": ["a"]}],
+    }
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 1
+    added = [f for f in schema["fields"] if f["pdf_field_name"] == "orphan[0]"]
+    assert len(added) == 1
+    assert added[0]["type"] == "text"
+    assert added[0]["section_id"] == "sec1"
+    # The section's fields[] list learns about the recovered field too.
+    assert added[0]["id"] in schema["sections"][0]["fields"]
+
+
+def test_backfill_types_a_checkbox_widget_with_a_self_option(tmp_path):
+    """A recovered checkbox widget gets a groups-of-one self-option so it is
+    fillable (and lint-accepted)."""
+    dump = _write_logical_dump(tmp_path, {"box[0]": "checkbox"})
+    schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 1
+    f = schema["fields"][0]
+    assert f["type"] == "checkbox"
+    assert f["options"][0]["pdf_field_name"] == "box[0]"
+
+
+def test_backfill_excludes_decorative_buttons(tmp_path):
+    """A button widget (reset/print) is NOT a coverage defect -- never backfilled."""
+    dump = _write_logical_dump(tmp_path, {"btn[0]": "button"})
+    schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 0
+
+
+def test_backfill_is_a_noop_when_all_widgets_claimed(tmp_path):
+    dump = _write_logical_dump(tmp_path, {"a[0]": "text"})
+    schema = {"fields": [{"id": "a", "type": "text", "pdf_field_name": "a[0]"}],
+              "sections": [{"id": "s", "page_numbers": [1], "fields": ["a"]}]}
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 0
+
+
+def test_backfill_claim_is_suffix_aware(tmp_path):
+    """A field claiming the bare leaf 'x[0]' covers the fully-qualified dump name
+    'topmostSubform[0].Page1[0].x[0]' -- so it is NOT re-backfilled."""
+    dump = {"fields": [{
+        "name": "topmostSubform[0].Page1[0].x[0]", "logical_type": "text",
+        "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}],
+    }]}
+    p = tmp_path / "d.json"; p.write_text(json.dumps(dump), encoding="utf-8")
+    schema = {"fields": [{"id": "a", "type": "text", "pdf_field_name": "x[0]"}],
+              "sections": [{"id": "s", "page_numbers": [1], "fields": ["a"]}]}
+    assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
