@@ -328,6 +328,15 @@ export const App: React.FC = () => {
     commitSchema(newSchema);
   }, [schema, commitSchema]);
 
+  // Replace the whole field list at once (bd polyglot-pdf-432u): used when an
+  // edit needs to touch MULTIPLE fields atomically, e.g. retargeting every
+  // dependent's show_if/require_if after an option-slug rename -- unlike
+  // handleUpdateField, which can only patch the single field being edited.
+  const handleUpdateFields = React.useCallback((fields: FormField[]) => {
+    if (!schema) return;
+    commitSchema({ ...schema, fields });
+  }, [schema, commitSchema]);
+
   // Update form-level metadata (version, edition, OMB, expiration -- bd
   // polyglot-pdf-s4dp.2). Merges the patch into form_metadata so a human can
   // correct an auto-extracted version (or fill one a version-less form lacked).
@@ -957,6 +966,7 @@ export const App: React.FC = () => {
                   onUpdateField={handleUpdateField}
                   onUnmergeField={handleUnmergeField}
                   onUpdateMetadata={handleUpdateMetadata}
+                  onUpdateFields={handleUpdateFields}
                   authorTier={!hosted || role === 'author'}
                 />
               )}

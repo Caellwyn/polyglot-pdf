@@ -12,6 +12,7 @@ import {
   mergeBlockReason,
   stripEditorState,
   optionValueReferencedBy,
+  retargetOptionValueReferences,
 } from './fieldGrouping';
 import type { FormSchema, FormField, ConditionalDisplay } from '../types/schema';
 
@@ -1025,5 +1026,84 @@ describe('optionValueReferencedBy (Codex PR #310)', () => {
       options: [{ value: 'b', label: 'B', pdf_field_name: 'ob[0]' }] } as unknown as FormField);
     // 'dep' references grp.b, not other.b -> deleting other.b is unblocked.
     expect(optionValueReferencedBy(s, 'other', 'b')).toEqual([]);
+  });
+});
+
+// Renaming a referenced option's LABEL re-mints its slug (bd polyglot-pdf-432u).
+// Unlike Remove (blocked by optionValueReferencedBy above), rename cannot block
+// per-keystroke -- so every dependent's show_if/require_if that pointed at the
+// old slug must be retargeted to the new one atomically with the rename,
+// leaving no dangling reference.
+describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
+  function groupSchema(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep', 'dep2', 'combo'] }],
+      fields: [
+        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
+          ] },
+        { id: 'dep', name: 'Dep', type: 'text', section_id: 's1', read_only: false, required: false,
+          show_if: { field: 'grp', operator: 'includes', value: 'b' } },
+        { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false, required: false,
+          require_if: { field: 'grp', operator: 'includes', value: 'b' } },
+        { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false, required: false,
+          show_if: { all_of: [{ field: 'grp', operator: 'includes', value: 'a' }] } },
+      ],
+    } as unknown as FormSchema;
+  }
+
+  it('retargets a legacy show_if AND require_if from the old slug to the new one', () => {
+    const s = groupSchema();
+    const next = retargetOptionValueReferences(s.fields, 'grp', 'b', 'whyte');
+    const dep = next.find(f => f.id === 'dep')!;
+    const dep2 = next.find(f => f.id === 'dep2')!;
+    expect(asAtom(dep.show_if).value).toBe('whyte');
+    expect(asAtom(dep2.require_if).value).toBe('whyte');
+    // No dependent is left pointing at the stale slug.
+    expect(optionValueReferencedBy({ ...s, fields: next }, 'grp', 'b')).toEqual([]);
+    expect(optionValueReferencedBy({ ...s, fields: next }, 'grp', 'whyte').sort()).toEqual(['dep', 'dep2']);
+  });
+
+  it('retargets a reference inside a composite condition', () => {
+    const s = groupSchema();
+    const next = retargetOptionValueReferences(s.fields, 'grp', 'a', 'alpha');
+    const combo = next.find(f => f.id === 'combo')!;
+    expect((combo.show_if as { all_of: ConditionalDisplay[] }).all_of[0].value).toBe('alpha');
+    expect(optionValueReferencedBy({ ...s, fields: next }, 'grp', 'a')).toEqual([]);
+    expect(optionValueReferencedBy({ ...s, fields: next }, 'grp', 'alpha')).toEqual(['combo']);
+  });
+
+  it('leaves fields with no reference to the old slug untouched (same object identity)', () => {
+    const s = groupSchema();
+    const next = retargetOptionValueReferences(s.fields, 'grp', 'b', 'whyte');
+    const combo = next.find(f => f.id === 'combo')!;
+    // 'combo' references grp.a, not grp.b -> retargeting b leaves it untouched.
+    expect(combo).toBe(s.fields.find(f => f.id === 'combo'));
+  });
+
+  it('ignores references to the SAME slug on a different trigger field', () => {
+    const s = groupSchema();
+    s.fields.push({ id: 'other', name: 'Other', type: 'checkbox_group', section_id: 's1',
+      read_only: false, required: false,
+      options: [{ value: 'b', label: 'B', pdf_field_name: 'ob[0]' }] } as unknown as FormField);
+    const next = retargetOptionValueReferences(s.fields, 'other', 'b', 'whyte');
+    // 'dep' references grp.b, not other.b -> unaffected by retargeting other's slug.
+    const dep = next.find(f => f.id === 'dep')!;
+    expect(asAtom(dep.show_if).value).toBe('b');
+  });
+
+  it('is a no-op (same array identity) when the slug is unchanged', () => {
+    const s = groupSchema();
+    expect(retargetOptionValueReferences(s.fields, 'grp', 'b', 'b')).toBe(s.fields);
+  });
+
+  it('is a no-op (same array identity) when no dependent references the old slug', () => {
+    const s = groupSchema();
+    expect(retargetOptionValueReferences(s.fields, 'grp', 'no_such_slug', 'whatever')).toBe(s.fields);
   });
 });

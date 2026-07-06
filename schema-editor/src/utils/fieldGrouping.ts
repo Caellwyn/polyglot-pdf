@@ -320,6 +320,76 @@ function conditionAtomsOf(cond: FieldCondition | undefined): ConditionalDisplay[
   return [cond];
 }
 
+// Rewrite a single legacy-or-composite condition, retargeting any atom that
+// points at (triggerFieldId, oldSlug) to (triggerFieldId, newSlug). Preserves
+// the condition's shape (legacy stays legacy, composite stays composite);
+// returns the SAME object if nothing in it referenced the old slug (so callers
+// can skip a field-level update when unchanged).
+function retargetCondition(
+  cond: FieldCondition,
+  triggerFieldId: string,
+  oldSlug: string,
+  newSlug: string,
+): FieldCondition {
+  const retargetAtom = (atom: ConditionalDisplay): ConditionalDisplay =>
+    atom.field === triggerFieldId && String(atom.value) === oldSlug
+      ? { ...atom, value: newSlug }
+      : atom;
+  if (isCompositeCondition(cond)) {
+    const out: CompositeConditionalDisplay = {};
+    for (const bucket of CONDITION_BUCKETS) {
+      const members = cond[bucket];
+      if (members) out[bucket] = members.map(retargetAtom);
+    }
+    return out;
+  }
+  return retargetAtom(cond);
+}
+
+// Renaming an option's LABEL re-mints its slug (option.value) from the new
+// label on every keystroke (bd h76m.10) -- but unlike the Remove button
+// (guarded by optionValueReferencedBy, which BLOCKS deleting a referenced
+// option), a per-keystroke BLOCK on rename is unworkable: typing a new label
+// necessarily passes through intermediate slugs, and blocking would make a
+// referenced option's label impossible to edit at all (bd polyglot-pdf-432u).
+// So rename REWRITES every dependent's show_if/require_if (legacy or
+// composite) that pointed at the old slug to the new one, atomically with the
+// rename -- keeping the schema ref-clean without freezing the label. Mirrors
+// optionValueReferencedBy's scan (show_if + require_if only, matching the
+// delete guard's scope) but retargets instead of merely detecting. Returns the
+// SAME array (identity-stable) when no field referenced the old slug, so
+// callers can skip a no-op schema commit; otherwise a new array with only the
+// retargeted fields replaced (untouched fields keep their original identity).
+export function retargetOptionValueReferences(
+  fields: FormField[],
+  triggerFieldId: string,
+  oldSlug: string,
+  newSlug: string,
+): FormField[] {
+  if (oldSlug === newSlug) return fields;
+  let anyChanged = false;
+  const next = fields.map(f => {
+    if (f.id === triggerFieldId) return f;
+    let changed = false;
+    const updated: FormField = { ...f };
+    if (f.show_if && conditionAtomsOf(f.show_if).some(
+      a => a.field === triggerFieldId && String(a.value) === oldSlug,
+    )) {
+      updated.show_if = retargetCondition(f.show_if, triggerFieldId, oldSlug, newSlug);
+      changed = true;
+    }
+    if (f.require_if && conditionAtomsOf(f.require_if).some(
+      a => a.field === triggerFieldId && String(a.value) === oldSlug,
+    )) {
+      updated.require_if = retargetCondition(f.require_if, triggerFieldId, oldSlug, newSlug);
+      changed = true;
+    }
+    if (changed) anyChanged = true;
+    return changed ? updated : f;
+  });
+  return anyChanged ? next : fields;
+}
+
 // Rewrite every dependent field's show_if / controls_fields that referenced a
 // merged-away field. Returns the rewritten fields AND a record of what changed
 // (so un-merge can restore the originals). mergedAwayToValue maps each

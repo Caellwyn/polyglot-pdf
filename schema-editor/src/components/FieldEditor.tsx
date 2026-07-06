@@ -7,7 +7,12 @@ import type {
   ConditionalOperator,
   ControlActionKey,
 } from '../types/schema';
-import { canUngroup, mintUniqueSlugs, optionValueReferencedBy } from '../utils/fieldGrouping';
+import {
+  canUngroup,
+  mintUniqueSlugs,
+  optionValueReferencedBy,
+  retargetOptionValueReferences,
+} from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
 
 interface FieldEditorProps {
@@ -17,6 +22,13 @@ interface FieldEditorProps {
   // Un-merge a consolidated options[] field back into separate per-widget fields
   // (bd polyglot-pdf-s4dp.1). Optional so the editor still renders without it.
   onUnmergeField?: (fieldId: string) => void;
+  // Commit a schema-wide field list, e.g. after retargeting dependents' show_if
+  // / require_if to an option's freshly-renamed slug (bd polyglot-pdf-432u).
+  // Separate from onUpdateField, which can only patch the SINGLE field being
+  // edited -- a rename can touch OTHER fields' conditions too. Optional so the
+  // editor still renders without it (falls back to leaving dependents
+  // unretargeted, same as before this fix).
+  onUpdateFields?: (fields: FormField[]) => void;
   // Update form-level metadata (version/edition/OMB/expiration -- bd
   // polyglot-pdf-s4dp.2). Optional; when absent the metadata panel is read-only.
   onUpdateMetadata?: (patch: Partial<FormSchema['form_metadata']>) => void;
@@ -175,6 +187,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   onUpdateField,
   onUnmergeField,
   onUpdateMetadata,
+  onUpdateFields,
   authorTier = true,
 }) => {
   if (!field) {
@@ -689,9 +702,40 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           const otherLabels = newOptions
                             .filter((_, i) => i !== idx)
                             .map(o => o.label || '');
+                          const oldValue = option.value;
                           const value = mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
                           newOptions[idx] = { ...option, label, value };
-                          updateField({ options: newOptions });
+                          const updatedField = { ...field, options: newOptions };
+                          // A dependent's show_if/require_if can reference this
+                          // option by its OLD slug. Unlike Remove (which BLOCKS
+                          // deleting a referenced option), rename can't block --
+                          // this onChange fires on every keystroke, and typing a
+                          // new label necessarily passes through intermediate
+                          // slugs, so a per-keystroke block would make a
+                          // referenced option's label un-editable. Instead,
+                          // retarget every referencing condition to the new slug
+                          // atomically with the rename, keeping the schema
+                          // ref-clean without freezing the field (bd
+                          // polyglot-pdf-432u). Both the field's own rename AND
+                          // the dependents' retarget must land in ONE commit --
+                          // two separate onUpdateField/onUpdateFields calls would
+                          // race (the second overwrites the first's result via
+                          // the undo history's functional setState) -- so when
+                          // onUpdateFields is available, splice the renamed field
+                          // into the retargeted list and commit once; only fall
+                          // back to the single-field path when it is absent (no
+                          // dependents can be retargeted without it anyway).
+                          if (onUpdateFields && oldValue && oldValue !== value) {
+                            const withRename = schema.fields.map(f =>
+                              f.id === field.id ? updatedField : f,
+                            );
+                            const retargeted = retargetOptionValueReferences(
+                              withRename, field.id, String(oldValue), value,
+                            );
+                            onUpdateFields(retargeted);
+                          } else {
+                            updateField({ options: newOptions });
+                          }
                         }}
                         placeholder="Option label"
                       />

@@ -470,7 +470,12 @@ class FormFillingService:
                 return field
         return self._dti_extra_fields.get(field_id)
 
-    async def send_initiating_message(self, spoken_language: str, next_field_hint: str):
+    async def send_initiating_message(
+        self,
+        spoken_language: str,
+        next_field_hint: str,
+        force_resume: bool = False,
+    ):
         """
         Send initiating message to Gemini to prompt conversation in specific language.
 
@@ -480,6 +485,15 @@ class FormFillingService:
         Args:
             spoken_language: Language for Gemini to speak (e.g., "Spanish", "French")
             next_field_hint: Next unfilled field hint (e.g., "firstName (First Name)")
+            force_resume: When True, use RESUME_INITIATING_MESSAGE regardless of
+                _is_resume_session (bd polyglot-pdf-bhem). restart_gemini_session
+                passes this after a Level-3 farewell reconnect: the ORIGINAL
+                connection may have been a fresh (non-resume) start, so
+                _is_resume_session alone would pick the greeting template and
+                re-greet the user after a restart they didn't initiate. Does not
+                touch _is_resume_session itself, which build_form_context_message
+                also reads (as is_reconnect) to gate the SI's RESUME override note
+                -- that is a separate concern from this bead's scope.
         """
         if self._live_ai is None:
             # No-op when live AI is not configured (used in unit tests)
@@ -551,9 +565,13 @@ class FormFillingService:
 
         # On mid-section reconnects use the resume template so Gemini skips
         # the greeting and section re-introduction (bd polyglot-pdf-vmxx).
+        # force_resume overrides _is_resume_session for restart_gemini_session's
+        # Level-3-farewell restart, where the ORIGINAL connection may have been a
+        # fresh (non-resume) start (bd polyglot-pdf-bhem).
+        use_resume_template = force_resume or self._is_resume_session
         template = (
             self._settings.RESUME_INITIATING_MESSAGE
-            if self._is_resume_session
+            if use_resume_template
             else self._settings.INITIATING_MESSAGE
         )
         # Append the DTI metadata block AFTER the formatted template (not a new
@@ -571,7 +589,7 @@ class FormFillingService:
         _log.info("send_initiating_message",
                  session_id=self._session_id,
                  spoken_language=spoken_language,
-                 is_resume=self._is_resume_session,
+                 is_resume=use_resume_template,
                  message_length=len(message))
 
         # Send to Gemini via session.send_client_content()
@@ -761,16 +779,18 @@ class FormFillingService:
         # as the section-switch and session-start paths do (bd polyglot-pdf-h1bn,
         # closing the gap the fu1h audit flagged). send_initiating_message resolves the
         # field from the hint's id; with no hint it falls back gracefully (renders no
-        # guidance block rather than a wrong field). It uses whichever template
-        # _is_resume_session selects -- which is the GREETING template on a
-        # first-connect Level-3 restart (the resume flag was set at the original fresh
-        # connect), so the user hears a re-greeting; refining that to the resume
-        # template is bd polyglot-pdf-bhem. Non-DTI restarts are unaffected (block empty).
+        # guidance block rather than a wrong field). force_resume=True always selects
+        # the RESUME template here (bd polyglot-pdf-bhem): a restart is always a
+        # continuation from the user's perspective, even when the ORIGINAL connection
+        # was a fresh (non-resume) start and _is_resume_session is still False --
+        # without this, that case would re-greet the user after the restart. Non-DTI
+        # restarts are unaffected (block empty).
         if getattr(self._settings, "USE_DTI", False):
             try:
                 await self.send_initiating_message(
                     self._spoken_language,
                     next_field_hint or "the first unfilled field",
+                    force_resume=True,
                 )
             except Exception as exc:
                 _log.error("restart_gemini_session_initiating_message_failed",

@@ -258,8 +258,8 @@ async def test_restart_fires_initiating_message_in_dti(monkeypatch):
     service._settings.USE_DTI = True
     sent = []
 
-    async def _capture(spoken, hint):
-        sent.append((spoken, hint))
+    async def _capture(spoken, hint, force_resume=False):
+        sent.append((spoken, hint, force_resume))
 
     monkeypatch.setattr(service, "send_initiating_message", _capture)
 
@@ -267,6 +267,10 @@ async def test_restart_fires_initiating_message_in_dti(monkeypatch):
 
     assert len(sent) == 1, "DTI restart must fire the initiating message"
     assert sent[0][1] == "name (field_id: 'name')"
+    # bd polyglot-pdf-bhem: restart must force the RESUME template so a Level-3
+    # farewell reconnect never re-greets the user, even when the ORIGINAL
+    # connection was a fresh (non-resume) start.
+    assert sent[0][2] is True, "restart must pass force_resume=True"
 
 
 @pytest.mark.asyncio
@@ -279,11 +283,71 @@ async def test_restart_does_not_fire_initiating_message_in_non_dti(monkeypatch):
     service._settings.USE_DTI = False
     sent = []
 
-    async def _capture(spoken, hint):
-        sent.append((spoken, hint))
+    async def _capture(spoken, hint, force_resume=False):
+        sent.append((spoken, hint, force_resume))
 
     monkeypatch.setattr(service, "send_initiating_message", _capture)
 
     await service.restart_gemini_session(next_field_hint="name (Full Name)")
 
     assert sent == [], "non-DTI restart must not fire an initiating message"
+
+
+@pytest.mark.asyncio
+async def test_restart_uses_resume_template_even_after_fresh_original_connect():
+    """bd polyglot-pdf-bhem: after a Level-3 farewell + restart_gemini_session, the
+    initiating message must use RESUME_INITIATING_MESSAGE (no re-greeting) even
+    though the ORIGINAL session was a fresh (non-resume) connect, i.e.
+    _is_resume_session is False. Exercises the real send_initiating_message (not
+    monkeypatched) so the actual message text sent to Gemini is asserted on."""
+    from backend.config import Settings
+    service = _make_service_ready_for_restart()
+    service._settings = Settings()
+    service._settings.USE_DTI = True
+
+    # The ORIGINAL connection was a fresh start, not a resume (set at start_session
+    # time in the real flow -- see websocket_routes.py:196).
+    service._is_resume_session = False
+
+    sent = []
+
+    async def _capture_send_client_content(message):
+        sent.append(message)
+
+    service._live_ai.send_client_content = _capture_send_client_content
+
+    await service.restart_gemini_session(next_field_hint="name (field_id: 'name')")
+
+    assert len(sent) == 1, "restart must fire exactly one initiating message"
+    message = sent[0].lower()
+    assert "greet user warmly" not in message, (
+        "restart after a fresh original connect must NOT re-greet the user"
+    )
+    assert "do not greet" in message or "not greet" in message, (
+        "restart must use the RESUME template's explicit skip-greeting instruction"
+    )
+    # _is_resume_session itself is untouched (force_resume overrides the template
+    # pick without mutating the flag build_form_context_message also reads).
+    assert service._is_resume_session is False
+
+
+@pytest.mark.asyncio
+async def test_non_restart_fresh_session_still_greets():
+    """Sanity: a normal (non-restart) fresh-connect initiating message is
+    unchanged by bd polyglot-pdf-bhem -- it still uses the greeting template."""
+    service = _make_service_ready_for_restart()
+    service._is_resume_session = False
+
+    sent = []
+
+    async def _capture_send_client_content(message):
+        sent.append(message)
+
+    service._live_ai.send_client_content = _capture_send_client_content
+
+    await service.send_initiating_message("English", "First Name")
+
+    assert len(sent) == 1
+    assert "greet" in sent[0].lower(), (
+        "a fresh non-restart session must still greet the user"
+    )
