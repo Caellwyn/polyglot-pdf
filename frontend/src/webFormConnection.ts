@@ -2393,6 +2393,14 @@ export class WebFormConnection {
     // reconnect failure (bd polyglot-pdf-jf6w.3).
     if (this.status === "disconnected") {
       this.setStatus("disconnected", "handleClose:intentional");
+    } else if (this.reconnectTimer) {
+      // A reconnect is ALREADY scheduled -- do not drive a second one (bd
+      // polyglot-pdf-l3a.2, Opus fresh-eyes). On a failed GoAway pre-emptive
+      // reconnect, the connect().catch fallback has already called
+      // attemptReconnect() (scheduling reconnectTimer + counting the attempt) by
+      // the time this onclose lands in a real browser; falling through here would
+      // double-count the attempt and halve the retry budget. attemptReconnect's own
+      // clear makes the timer safe; this guard keeps the attempt COUNT honest.
     } else if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.attemptReconnect();
     } else {
@@ -2408,6 +2416,20 @@ export class WebFormConnection {
    * Attempt to reconnect with exponential backoff
    */
   private attemptReconnect(): void {
+    // Idempotent scheduling (bd polyglot-pdf-l3a.2, Opus fresh-eyes): if a
+    // reconnect is ALREADY scheduled, do not stack a second one. Two drivers can
+    // race to here on a failed GoAway pre-emptive reconnect -- the connect().catch
+    // fallback and the failed socket's onclose in handleClose fire in separate
+    // browser tasks, and without this guard each would schedule its own timer
+    // (leaking the first, which still fires) and double-increment reconnectAttempts,
+    // halving the retry budget and opening duplicate sockets. Clearing here also
+    // makes any future double-call of attemptReconnect safe, not just the GoAway
+    // path.
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     this.reconnectAttempts++;
     this.setStatus("reconnecting", "attemptReconnect");
 
@@ -2417,6 +2439,15 @@ export class WebFormConnection {
     );
 
     this.reconnectTimer = window.setTimeout(() => {
+      // Null the handle as soon as the timer FIRES so `this.reconnectTimer` means
+      // "a reconnect is pending" and nothing more (bd polyglot-pdf-l3a.2, Opus
+      // fresh-eyes): setTimeout leaves its id in place after firing, so without
+      // this a fired-but-not-yet-reconnected timer would read as "pending" and the
+      // handleClose idempotence guard would wrongly skip the NEXT outage's
+      // reconnect. Cleared here (not after connect) because connect() is what starts
+      // the new socket; a drop of THAT socket must be free to schedule the next
+      // attempt.
+      this.reconnectTimer = null;
       // Use the URL we successfully connected to (not the default localhost)
       if (this.connectedUrl) {
         this.connect(this.connectedUrl);

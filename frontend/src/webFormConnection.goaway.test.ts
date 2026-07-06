@@ -56,12 +56,31 @@ class MockWebSocket {
     this.onopen?.()
   }
 
-  // Simulate the server rejecting/failing the connection: onerror then onclose,
-  // mirroring how connect() settles a failed socket (handleError + reject).
+  // Simulate the server rejecting/failing the connection: onerror then onclose in
+  // the SAME synchronous turn. NOTE: real browsers fire onerror and onclose as
+  // SEPARATE macrotasks, so a promise rejection queued in onerror runs its .catch
+  // BEFORE onclose -- errorAsync() below models that ordering. Use error() only
+  // where the interleaving does not matter.
   error() {
     this.onerror?.({})
     this.readyState = MockWebSocket.CLOSED
     this.onclose?.({ code: 1006, reason: '', wasClean: false })
+  }
+
+  // Real-browser ordering: onerror now (fires connect()'s handleError + reject, so
+  // the .catch microtask is queued), onclose on a LATER macrotask. This is what
+  // lets a test observe the failed-GoAway-reconnect double-drive: the .catch runs
+  // (and may schedule a reconnect) between onerror and onclose (bd polyglot-pdf-l3a.2,
+  // Opus fresh-eyes). Returns a promise that resolves after onclose has fired.
+  errorAsync(): Promise<void> {
+    this.onerror?.({})
+    this.readyState = MockWebSocket.CLOSED
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        this.onclose?.({ code: 1006, reason: '', wasClean: false })
+        resolve()
+      }, 0)
+    })
   }
 
   send = (() => {}) as (data: any) => void
@@ -252,18 +271,29 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
       expect(MockWebSocket.instances.length).toBe(2)
 
-      // That socket FAILS before it opens. connect() rejects; handleError must NOT
-      // flash "error" (guard suppresses it), and the .catch falls back to
-      // attemptReconnect -> "reconnecting" + a backoff timer.
-      MockWebSocket.instances[1].error()
+      // That socket FAILS before it opens, with REAL browser ordering (onerror now,
+      // onclose a macrotask later). connect() rejects; handleError must NOT flash
+      // "error" (guard suppresses it), and the .catch falls back to attemptReconnect
+      // -> "reconnecting" + a backoff timer.
+      const closed = MockWebSocket.instances[1].errorAsync()
       await Promise.resolve() // let the connect() .catch microtask run
       await Promise.resolve()
       expect(conn.getStatus()).toBe('reconnecting')
       // The guard was released so the fallback (and any later GoAway) is not
       // permanently coalesced.
       expect((conn as any).goAwayReconnectInFlight).toBe(false)
+      // Exactly ONE reconnect attempt was counted so far (the .catch fallback).
+      expect((conn as any).reconnectAttempts).toBe(1)
 
-      // The backoff fires a fresh reconnect socket (attempt 1 at 1000ms).
+      // Now the LATER onclose macrotask lands. In a real browser this is where the
+      // double-drive bug lived: handleClose used to fall through to a SECOND
+      // attemptReconnect. It must now be a no-op (a reconnect is already scheduled).
+      vi.advanceTimersByTime(0)
+      await closed
+      expect((conn as any).reconnectAttempts).toBe(1) // NOT 2 -- no double-drive
+
+      // The backoff fires exactly ONE fresh reconnect socket (attempt 1 at 1000ms),
+      // not two concurrent ones.
       vi.advanceTimersByTime(1000)
       expect(MockWebSocket.instances.length).toBe(3)
     })
@@ -276,13 +306,55 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
 
       await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
-      MockWebSocket.instances[1].error()
+      const closed = MockWebSocket.instances[1].errorAsync()
       await Promise.resolve()
       await Promise.resolve()
+      vi.advanceTimersByTime(0)
+      await closed
 
       // The whole point of the gap fix: status is NOT the misleading "connected"
       // (dead socket) it would have been if the .catch merely cleared the guard.
       expect(conn.getStatus()).not.toBe('connected')
+    })
+  })
+
+  // Async-token-gap coverage (Opus fresh-eyes Finding 3): in production getToken is
+  // always registered, so the reconnect connect() suspends on `await getToken()`
+  // with this.ws already nulled. If the OLD (closing) socket's onclose lands during
+  // that gap, handleClose must stand down on the guard (not auto-reconnect), and the
+  // pending token resolving must still yield exactly one clean reconnect.
+  describe('reconnect with a pending async token', () => {
+    it('stands down on the old socket close during the token await, then reconnects once', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      const first = MockWebSocket.instances[0]
+
+      // Register a getToken that we control: the reconnect connect() will suspend
+      // here with this.ws === null.
+      let releaseToken!: (t: string) => void
+      conn.setGetToken(() => new Promise<string>((res) => { releaseToken = res }))
+
+      // GoAway -> handleGoAwayReconnect nulls this.ws, closes `first`, calls
+      // connect() which suspends on the pending token. No new socket yet.
+      await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
+      expect(MockWebSocket.instances.length).toBe(1)
+
+      // The OLD socket's onclose lands during the token gap (this.ws is null).
+      // handleClose must NOT schedule an auto-reconnect -- the guard stands it down.
+      first.readyState = MockWebSocket.CLOSED
+      ;(first.onclose as any)?.({ code: 1006, reason: '', wasClean: false })
+      expect((conn as any).reconnectTimer).toBeNull()
+
+      // Token resolves -> connect() proceeds and opens exactly one new socket, which
+      // completes the reconnect (guard clears, status connected).
+      releaseToken('tok')
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(MockWebSocket.instances.length).toBe(2)
+      MockWebSocket.instances[1].open()
+      expect((conn as any).goAwayReconnectInFlight).toBe(false)
+      expect(conn.getStatus()).toBe('connected')
     })
   })
 })
