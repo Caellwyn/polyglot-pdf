@@ -35,39 +35,42 @@ the W-7 "reason for submitting" boxes `c1_2[0]..c1_9[0]` (8 separate checkbox
 widgets, logical_type=checkbox in the dump; a radio is one field whose kids share
 a name -- these are not that).
 
-## Fixes (all deterministic, all unit-tested; no API dependency)
+## Fixes (both deterministic, unit-tested; no API dependency)
 
 1. **Lint under-claim WARNING** (`schema_lint._check_dump_claims` +
-   `_dump_logical_type`): a fillable dump widget claimed by zero fields is now a
-   `dump-widget-unclaimed` WARNING. Fillable only -- decorative buttons
-   (logical_type=button) are excluded. WARNING, not ERROR, so it never breaks the
-   store-with-issues exit code; a clean extraction (post-backfill) emits none.
+   `is_fillable_widget`): a fillable dump widget claimed by zero fields is now a
+   `dump-widget-unclaimed` WARNING. Fillable only -- decorative buttons AND
+   machine barcodes (PDF417/QR) are excluded. WARNING, not ERROR, so it never
+   breaks the store-with-issues exit code; a clean extraction (post-backfill)
+   emits none.
 2. **Deterministic coverage backfill** (`extract_form._backfill_unclaimed_widgets`,
-   pipeline step 3e): after the LLM pass, any unclaimed fillable dump widget is
-   appended as a basic field -- typed from its dump `logical_type`, positioned
-   from the dump rect, filed into the section covering its page (else the last
-   section); a recovered checkbox/radio gets a groups-of-one self-option so it is
-   fillable + lint-accepted. Coverage is now deterministic regardless of LLM
-   omissions. The recovered field is functional-but-plain (placeholder label); a
-   human editor refines it -- the point is that NO widget silently vanishes.
-3. **Group-checkbox retype** (`extract_form._correct_group_checkbox_type`, step
-   3d): a consolidated 2+-option field whose EVERY member widget is
-   logical_type=checkbox in the dump is retyped `radio` -> `checkbox_group`. This
-   satisfies the original P2.2 assertion (the W-7 reason group: 8 options,
-   `c1_2[0]..c1_9[0]`, distinct slugs) DETERMINISTICALLY, not by sampling luck. A
-   genuine radio (logical_type=radio) or any unresolved member leaves the field
-   untouched (conservative).
+   pipeline step 3d): after the LLM pass, any unclaimed fillable dump widget is
+   appended as a basic field -- typed from its dump `logical_type` to a
+   zero-option-valid v2 type (checkbox for a toggle widget, text otherwise),
+   positioned from the dump rect, filed into the section covering its page (a
+   `recovered_fields` bucket is created if the schema has none). Coverage is now
+   deterministic regardless of LLM omissions. The recovered field is
+   functional-but-plain (placeholder label); a human editor refines it -- the
+   point is that NO widget silently vanishes.
+
+**A third fix -- a deterministic radio->checkbox_group retype -- was BUILT then
+REMOVED** (see round-4 note below): widget type cannot distinguish a single-select
+radio from a multi-select group (both are checkbox widgets in these forms), so the
+rule corrupted i-90's 16 legitimate radios. Radio-vs-group is a semantic call from
+the printed label, correctly left to the LLM (the `--group-candidates` hint already
+routes that decision to the model).
 
 ## Verification
 
 - The under-claim computation exactly identifies the dropped widgets on the two
   divergent w7-2 samples (`f1_16[0]`, `f1_25[0]`); the backfill closes each gap to
-  0-unclaimed, valid + lint-clean; the retype turns the mistyped W-7 reason group
-  into a passing P2.2 checkbox_group (all 6 consolidated groups confirmed all-
-  checkbox against the dump, which has zero radios).
-- Tests: `backend/tests/test_schema_lint.py` (+3 under-claim),
-  `tests/test_extract_form_backfill.py` (+4 retype, +5 backfill).
-- Full backend + tools suite: 1684 passed, 3 skipped, 0 failures.
+  0-unclaimed, valid + lint-clean. On the real i-90 kit: exactly the 4 genuinely-
+  missing `P2_checkbox3[1..4]` checkboxes are recovered, all 16 legitimate radios
+  preserved, 0 barcode false-positives, model_validate + lint clean.
+- Tests: `backend/tests/test_schema_lint.py` (+3 under-claim, +1 real-kit barcode
+  regression), `tests/test_extract_form_backfill.py` (backfill + v2-validity +
+  bucket-accrual + barcode/button exclusion).
+- Full backend + tools suite: 1689 passed, 3 skipped, 0 failures.
 
 ## Pre-PR fresh-eyes fixes (folded in)
 
@@ -141,6 +144,30 @@ Round 3 found two producer/consumer string-mismatch gaps, both fixed:
    the dumper emits `"combobox"`/`"listbox"`/`"signature"`. Harmless today (both
    fell through to the text default) but misleading; fixed to the real strings +
    added `signature` -> text. New test drives the real dumper strings.
+
+## Pre-PR fresh-eyes round 4 (the retype removal)
+
+Round 4 ran the real pipeline order against the shipped i-90 and found the
+`_correct_group_checkbox_type` retype produced an INVALID v2 schema. Investigation
+showed the root cause was deeper than a missing cleanup step: **the retype
+heuristic is fundamentally wrong.** "All member widgets are checkboxes -> make it a
+checkbox_group" cannot distinguish a single-select radio from a multi-select group,
+because BOTH are implemented with checkbox widgets in these PDFs. i-90 has 16
+legitimate radios (sex, ethnicity, eye/hair color, reason-for-application "select
+only one", ...) built on checkbox widgets; the retype wrongly converted 9 of them,
+then their dependent `in`/`equals` conditions became invalid on the (wrongly) group
+trigger. Radio-vs-group is a SEMANTIC judgment from the printed label ("select one"
+vs "select all that apply"), which the `--group-candidates` hint already asks the
+LLM to make. A mechanical override fights the model's correct judgment.
+
+Maintainer decision (2026-07-06): DROP the retype entirely; keep the two genuine
+fixes (backfill + under-claim lint). Consequence: the original P2.2 exit criterion
+(the W-7 reason group must be a checkbox_group) is no longer enforced
+deterministically -- a fresh extraction types it from the label (a lone live sample
+typed it `radio`, which may in fact be correct for "check one reason"). This is
+consistent with the bead's redirect away from "make P2.2 pass" toward "fix the
+extraction problem"; whether the W-7 reason is semantically single- or multi-select
+is a form-reading call left to the LLM, not a deterministic rule.
 
 ## Scope note
 

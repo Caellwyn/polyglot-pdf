@@ -139,11 +139,10 @@ def test_backfill_leaves_degenerate_when_no_dump_match(tmp_path):
     assert not ef._has_usable_position(schema["fields"][0]["pdf_position"])
 
 
-# --- _correct_group_checkbox_type (bd polyglot-pdf-w0eq, P6.1c) -------------- #
+# --- _backfill_unclaimed_widgets (bd polyglot-pdf-w0eq, P6.1c) --------------- #
 
 def _write_logical_dump(tmp_path, name_to_logical):
-    """Minimal dump carrying per-widget logical_type + a rect (so the same file
-    also feeds _backfill_unclaimed_widgets)."""
+    """Minimal dump carrying per-widget logical_type + a rect."""
     dump = {"fields": [
         {"name": n, "logical_type": lt,
          "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}]}
@@ -152,62 +151,6 @@ def _write_logical_dump(tmp_path, name_to_logical):
     p = tmp_path / "ldump.json"
     p.write_text(json.dumps(dump), encoding="utf-8")
     return str(p)
-
-
-def test_retype_radio_to_checkbox_group_when_all_members_checkbox(tmp_path):
-    """The W-7 case: 3 distinct checkbox widgets the LLM consolidated into ONE
-    field but mistyped `radio` -> corrected to checkbox_group (the dump proves
-    every member is a checkbox)."""
-    dump = _write_logical_dump(tmp_path, {
-        "c1_2[0]": "checkbox", "c1_3[0]": "checkbox", "c1_4[0]": "checkbox"})
-    schema = {"fields": [{
-        "id": "reason", "type": "radio",
-        "options": [{"value": "a", "pdf_field_name": "c1_2[0]"},
-                    {"value": "b", "pdf_field_name": "c1_3[0]"},
-                    {"value": "c", "pdf_field_name": "c1_4[0]"}],
-    }]}
-    assert ef._correct_group_checkbox_type(schema, dump) == 1
-    assert schema["fields"][0]["type"] == "checkbox_group"
-
-
-def test_retype_leaves_a_genuine_radio_alone(tmp_path):
-    """A field whose members are radio widgets in the dump is a real single-select
-    -- NOT retyped."""
-    dump = _write_logical_dump(tmp_path, {
-        "r[0]": "radio", "r[1]": "radio"})
-    schema = {"fields": [{
-        "id": "sex", "type": "radio",
-        "options": [{"value": "m", "pdf_field_name": "r[0]"},
-                    {"value": "f", "pdf_field_name": "r[1]"}],
-    }]}
-    assert ef._correct_group_checkbox_type(schema, dump) == 0
-    assert schema["fields"][0]["type"] == "radio"
-
-
-def test_retype_is_idempotent_and_skips_already_grouped(tmp_path):
-    dump = _write_logical_dump(tmp_path, {"a[0]": "checkbox", "b[0]": "checkbox"})
-    schema = {"fields": [{
-        "id": "g", "type": "checkbox_group",
-        "options": [{"value": "a", "pdf_field_name": "a[0]"},
-                    {"value": "b", "pdf_field_name": "b[0]"}],
-    }]}
-    assert ef._correct_group_checkbox_type(schema, dump) == 0
-
-
-def test_retype_skips_when_a_member_is_unresolved(tmp_path):
-    """Conservative: if ANY member widget is absent from the dump (can't confirm
-    it's a checkbox), the field is left untouched."""
-    dump = _write_logical_dump(tmp_path, {"a[0]": "checkbox"})  # b[0] absent
-    schema = {"fields": [{
-        "id": "g", "type": "radio",
-        "options": [{"value": "a", "pdf_field_name": "a[0]"},
-                    {"value": "b", "pdf_field_name": "b[0]"}],
-    }]}
-    assert ef._correct_group_checkbox_type(schema, dump) == 0
-    assert schema["fields"][0]["type"] == "radio"
-
-
-# --- _backfill_unclaimed_widgets (bd polyglot-pdf-w0eq, P6.1c) --------------- #
 
 def test_backfill_adds_a_field_for_an_unclaimed_widget(tmp_path):
     """The core coverage fix: a fillable dump widget NO field claims is added

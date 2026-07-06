@@ -188,50 +188,16 @@ def _extract_instructions_from_dump(schema: dict, dump_path: str) -> int:
     return filled
 
 
-def _correct_group_checkbox_type(schema: dict, dump_path: str) -> int:
-    """Retype a consolidated multi-option field to `checkbox_group` when the dump
-    proves every member widget is a checkbox (bd polyglot-pdf-w0eq, P6.1c).
-
-    The LLM sometimes consolidates a run of independent checkbox widgets (e.g. the
-    W-7 "reason for submitting" boxes c1_2[0]..c1_9[0]) into ONE field but types it
-    `radio` -- a single-select shape that is wrong for distinct checkbox widgets (a
-    radio is one AcroForm field whose kids share a name; these are 8 separate
-    checkbox fields). The dump carries the ground-truth `logical_type` per widget
-    name, so the correction is deterministic: a 2+-option field whose EVERY option
-    resolves to a dump widget with logical_type == "checkbox" is a checkbox_group,
-    never a radio. A genuine radio (logical_type == "radio") is left untouched, as
-    is any field with an option we cannot resolve in the dump (conservative: only
-    retype when the dump positively confirms all members are checkboxes).
-
-    Idempotent (a field already typed checkbox_group is skipped) and free. Returns
-    the number of fields retyped."""
-    try:
-        with open(dump_path, encoding="utf-8") as fh:
-            dump = json.load(fh)
-    except OSError:
-        return 0
-    name_to_logical: dict[str, str] = {}
-    for f in dump.get("fields", []):
-        nm = f.get("name")
-        if nm and nm not in name_to_logical:
-            name_to_logical[nm] = f.get("logical_type") or ""
-
-    retyped = 0
-    for field in schema.get("fields", []):
-        if field.get("type") == "checkbox_group":
-            continue  # already correct
-        options = field.get("options") or []
-        if len(options) < 2:
-            continue  # a group needs 2+ members
-        names = [o.get("pdf_field_name") for o in options]
-        if not all(names):
-            continue  # every option must name a widget to judge it
-        logicals = [name_to_logical.get(n) for n in names]
-        # Retype ONLY when the dump positively confirms every member is a checkbox.
-        if all(lt == "checkbox" for lt in logicals):
-            field["type"] = "checkbox_group"
-            retyped += 1
-    return retyped
+# NOTE: an earlier version had a deterministic `_correct_group_checkbox_type`
+# that retyped a consolidated all-checkbox-widget field radio->checkbox_group.
+# It was REMOVED (bd polyglot-pdf-w0eq): widget type cannot distinguish a
+# single-select radio from a multi-select group -- both are implemented with
+# checkbox widgets in these forms (i-90 has 16 legitimate radios built on
+# checkbox widgets that the rule wrongly converted). Radio-vs-group is a SEMANTIC
+# judgment from the printed label ("select one" vs "select all that apply") that
+# only the LLM can make; the --group-candidates hint already routes that decision
+# to the model. A mechanical override fights the model's correct judgment, so we
+# do not do it.
 
 
 # logical_type (from the AcroForm dump) -> schema FieldType for a backfilled
@@ -749,19 +715,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #     while the dump still exists (it is removed in the finally below).
         instructions_filled = _extract_instructions_from_dump(schema, dump_path)
 
-        # 3d. Deterministically retype a consolidated multi-checkbox field the LLM
-        #     mistyped `radio` to `checkbox_group`, using the dump's ground-truth
-        #     per-widget logical_type (bd polyglot-pdf-w0eq, P6.1c). The W-7 reason
-        #     boxes (c1_2[0]..c1_9[0]) are 8 distinct checkbox widgets, so their
-        #     consolidated field is a checkbox_group, not a single-select radio.
-        group_retyped = _correct_group_checkbox_type(schema, dump_path)
-
-        # 3e. Deterministically backfill any fillable dump widget NO field claims
+        # 3d. Deterministically backfill any fillable dump widget NO field claims
         #     (bd polyglot-pdf-w0eq, P6.1c). The LLM pass stochastically omits a
         #     field (w7 / w7-2 are the same PDF, yet each re-extraction drops a
         #     different widget); this guarantees every widget is covered instead
-        #     of trusting the model to enumerate all of them. Runs AFTER retyping
-        #     so a recovered checkbox isn't then re-grouped.
+        #     of trusting the model to enumerate all of them.
         widgets_backfilled = _backfill_unclaimed_widgets(schema, dump_path)
 
         # Keep the dump IN MEMORY for the lint pass at step 4 (the temp file is
@@ -811,7 +769,6 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "positions_filled": positions_filled,
         "instructions_filled": instructions_filled,
         "instructions_enriched": instructions_enriched,
-        "group_retyped": group_retyped,
         "widgets_backfilled": widgets_backfilled,
         "schema_valid": ok, "validation": detail,
         "repair": repair_report,
