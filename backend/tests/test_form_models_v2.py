@@ -200,6 +200,29 @@ def test_v2_radio_shared_pdf_field_with_on_values_validates():
     validate(v2_schema([radio]))
 
 
+def test_v2_checkbox_group_pdf_on_value_only_option_is_not_fillable():
+    """A checkbox_group option carrying ONLY pdf_on_value (the shared-NAME shape,
+    no option pdf_field_name) is NOT fillable -- that shape is radio-only, and a
+    checkbox_group may not carry the field-level pdf_field_name it would need
+    anyway (bd polyglot-pdf-f6lj). The fillability rule must reject it via the
+    checkbox_group-specific 'needs its own pdf_field_name' path, NOT accept it
+    through a dead field-level-name-plus-on_value clause.
+
+    (No field-level pdf_field_name is set here, so this exercises the fillability
+    rule in isolation rather than the separate :827 'checkbox_group carries no
+    field-level pdf_field_name' rejection.)"""
+    grp = group_field("cbg")
+    for o in grp["options"]:
+        o.pop("pdf_field_name", None)
+        o["pdf_on_value"] = "a"  # a shared-name-style on-state, no own name
+    assert_v2_error(
+        v2_schema([grp]),
+        "id=cbg",
+        "not PDF-fillable",
+        "needs its own pdf_field_name",
+    )
+
+
 def test_v2_web_source_skips_pdf_mapping_rules():
     # No extraction_info / pdf names anywhere: pdf-mapping rules are gated on
     # source == pdf, the rest of v2 still applies.
