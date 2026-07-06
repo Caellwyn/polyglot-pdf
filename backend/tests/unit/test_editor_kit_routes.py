@@ -960,6 +960,68 @@ def test_repair_schemaless_kit_is_404(client):
     assert r.status_code == 404
 
 
+# --- GET /unclaimed-widgets: the widget picker (bd polyglot-pdf-nivy) ---------
+
+_WIDGET_DUMP = {
+    "fields": [
+        {"name": "form1[0].reason[0]", "logical_type": "checkbox",
+         "widgets": [{"type": "checkbox", "on_value": "1", "tu": "Employment",
+                      "rect": {"page": 0}}]},
+        {"name": "form1[0].reason[1]", "logical_type": "checkbox",
+         "widgets": [{"type": "checkbox", "on_value": "2", "tu": "Family",
+                      "rect": {"page": 0}}]},
+    ]
+}
+
+
+def test_unclaimed_widgets_lists_unclaimed_buttons(client):
+    c, store, root = client
+    schema = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+              "sections": [], "fields": [{"id": "reasons",
+              "type": "checkbox_group", "options": [
+                  {"value": "employment", "label": "Employment",
+                   "pdf_field_name": "form1[0].reason[0]"}]}]}
+    _make_kit(root, "fresh", status="draft", schema=schema)
+    _run(store.put_json_artifact("fresh", _WIDGET_DUMP, "acroform.json"))
+    r = c.get(
+        "/api/editor/kits/fresh/unclaimed-widgets",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r.status_code == 200, r.text
+    widgets = r.json()["widgets"]
+    # reason[0] is claimed; only reason[1] is offered.
+    assert [w["name"] for w in widgets] == ["form1[0].reason[1]"]
+    assert widgets[0]["on_value"] == "2" and widgets[0]["tooltip"] == "Family"
+
+
+def test_unclaimed_widgets_empty_without_a_dump(client):
+    c, _store, root = client
+    _make_kit(root, "fresh", status="draft", schema=VALID_SCHEMA)  # no dump artifact
+    r = c.get(
+        "/api/editor/kits/fresh/unclaimed-widgets",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"widgets": []}
+
+
+def test_unclaimed_widgets_requires_author(client):
+    c, _store, root = client
+    _make_kit(root, "fresh", status="draft", schema=VALID_SCHEMA)
+    assert c.get(
+        "/api/editor/kits/fresh/unclaimed-widgets",
+        headers={"X-Editor-Token": "edit-tok"},
+    ).status_code == 403
+
+
+def test_unclaimed_widgets_unknown_kit_404(client):
+    c, _store, _root = client
+    assert c.get(
+        "/api/editor/kits/ghost/unclaimed-widgets",
+        headers={"X-Editor-Token": "auth-tok"},
+    ).status_code == 404
+
+
 # --- POST status: the publish gate -------------------------------------------
 
 

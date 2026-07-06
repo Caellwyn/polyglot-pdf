@@ -62,6 +62,7 @@ from backend.services.schema_lint import (
 from backend.services.schema_repair import (
     RepairError, alias_hit_count, repair as repair_schema,
 )
+from backend.services.widget_picker import unclaimed_button_widgets
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
@@ -200,6 +201,25 @@ class RepairResponse(BaseModel):
     repairs: list[dict]   # the full repair report (verbatim from schema_repair)
     errorCount: int       # lint ERRORs remaining after repair
     warningCount: int     # lint WARNINGs remaining after repair
+
+
+class UnclaimedWidget(BaseModel):
+    """One PDF button widget the schema does not yet claim (bd nivy, P5.3c)."""
+
+    name: str                        # the widget's PDF field name (-> option.pdf_field_name)
+    type: Optional[str] = None       # checkbox | radio
+    on_value: Optional[str] = None   # the widget's non-Off state (-> option.pdf_on_value)
+    tooltip: Optional[str] = None    # the /TU tooltip, a suggested label
+    page: Optional[int] = None       # 0-indexed page (for the author's orientation)
+
+
+class UnclaimedWidgetsResponse(BaseModel):
+    """The kit's unclaimed button widgets for the "Add from PDF widgets" picker.
+
+    Empty when the kit has no persisted AcroForm dump (pre-v96b kits) -- the
+    picker then simply shows nothing to add."""
+
+    widgets: list[UnclaimedWidget]
 
 
 def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
@@ -529,6 +549,43 @@ async def repair_editor_kit(
         applied=applied, dropped=dropped, aliasHits=alias_hit_count(repairs),
         repairs=repairs, errorCount=error_count, warningCount=warning_count,
     )
+
+
+@router.get("/kits/{kit_id}/unclaimed-widgets",
+            response_model=UnclaimedWidgetsResponse)
+async def get_unclaimed_widgets(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+) -> UnclaimedWidgetsResponse:
+    """The kit's PDF button widgets that no field/option claims (bd nivy, P5.3c).
+
+    Powers the author-tier "Add from PDF widgets" picker: when the extractor
+    missed a checkbox/radio box, the box exists in the persisted AcroForm dump
+    (acroform.json, bd v96b) but nothing in the schema claims it. This returns
+    those unclaimed button widgets so the author can add one to a group.
+
+    Author tier (it feeds an edit that adds a PDF-mapped option -- an author-only
+    capability, matching the per-option pdf_field_name editor). A kit with no
+    persisted dump (pre-v96b) returns an empty list -- the picker shows nothing.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+    schema_file, _pdf = _resolve_meta_names(meta)
+    try:
+        schema = await store.load_schema(kit_id, schema_file)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Kit {kit_id} has no schema"
+        ) from exc
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to load schema") from exc
+
+    dump = await _load_kit_dump(store, kit_id)
+    widgets = [UnclaimedWidget(**w) for w in unclaimed_button_widgets(schema, dump)]
+    _log.info("editor_unclaimed_widgets", kit_id=kit_id, role=role,
+              count=len(widgets), has_dump=dump is not None)
+    return UnclaimedWidgetsResponse(widgets=widgets)
 
 
 @router.post("/kits/{kit_id}/status")

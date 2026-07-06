@@ -14,6 +14,7 @@ import {
   retargetOptionValueReferences,
 } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
+import type { UnclaimedWidget } from '../utils/remoteKitStore';
 
 interface FieldEditorProps {
   field: FormField | null;
@@ -37,6 +38,11 @@ interface FieldEditorProps {
   // the option value as a read-only chip but not the widget plumbing. Defaults
   // true so local (non-hosted) editing is full author tier.
   authorTier?: boolean;
+  // "Add from PDF widgets" picker (bd polyglot-pdf-nivy, P5.3c): fetch the kit's
+  // unclaimed PDF button widgets so the author can add a missed checkbox/radio
+  // box to a group. Optional -- provided only in hosted author mode on an open
+  // kit; when absent the picker is not offered (local mode has no backend dump).
+  onLoadUnclaimedWidgets?: () => Promise<UnclaimedWidget[]>;
 }
 
 // The editable form-metadata panel (bd polyglot-pdf-s4dp.2). Shown when no field
@@ -181,6 +187,107 @@ const CONTROL_ACTIONS: { key: ControlActionKey; label: string }[] = [
   { key: 'makes_optional', label: 'Makes optional' },
 ];
 
+// "Add from PDF widgets" picker (bd polyglot-pdf-nivy, P5.3c). A self-contained
+// sub-component (own hooks) so it can live inside the options section without
+// tangling FieldEditor's early `if (!field)` return. Lists the kit's unclaimed
+// PDF button widgets; selecting one appends an option (a slug minted from the
+// widget's tooltip/leaf label, the widget name on option.pdf_field_name, and its
+// on-state on option.pdf_on_value).
+const WidgetPicker: React.FC<{
+  existingLabels: string[];
+  onLoad: () => Promise<UnclaimedWidget[]>;
+  onPick: (opt: { label: string; value: string;
+                  pdf_field_name: string; pdf_on_value?: string }) => void;
+}> = ({ existingLabels, onLoad, onPick }) => {
+  const [open, setOpen] = React.useState(false);
+  const [widgets, setWidgets] = React.useState<UnclaimedWidget[] | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const openPicker = React.useCallback(async () => {
+    setOpen(true);
+    setLoading(true);
+    setError(null);
+    try {
+      setWidgets(await onLoad());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load PDF widgets');
+    } finally {
+      setLoading(false);
+    }
+  }, [onLoad]);
+
+  // A readable default label from the tooltip, else the widget's leaf name.
+  const labelFor = (w: UnclaimedWidget): string => {
+    if (w.tooltip && w.tooltip.trim()) return w.tooltip.trim();
+    const leaf = w.name.split('.').pop() || w.name;
+    return leaf;
+  };
+
+  const pick = (w: UnclaimedWidget) => {
+    const label = labelFor(w);
+    // Mint a slug unique against the field's EXISTING option labels + this one,
+    // so adding a widget can't manufacture a duplicate option value.
+    const value = mintUniqueSlugs([...existingLabels, label]).slice(-1)[0];
+    onPick({
+      label,
+      value,
+      pdf_field_name: w.name,
+      ...(w.on_value ? { pdf_on_value: w.on_value } : {}),
+    });
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="btn btn-secondary w-full text-sm"
+        onClick={() => void openPicker()}
+      >
+        + Add from PDF widgets
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-md p-2 space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-700">
+          Unclaimed PDF widgets
+        </span>
+        <button
+          type="button"
+          className="text-xs text-gray-500 hover:text-gray-700"
+          onClick={() => setOpen(false)}
+        >
+          Close
+        </button>
+      </div>
+      {loading && <p className="text-xs text-gray-500">Loading...</p>}
+      {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
+      {!loading && !error && widgets && widgets.length === 0 && (
+        <p className="text-xs text-gray-500">
+          No unclaimed PDF widgets -- every button is already mapped.
+        </p>
+      )}
+      {!loading && widgets && widgets.map((w) => (
+        <button
+          key={w.name}
+          type="button"
+          className="w-full text-left text-xs p-1.5 rounded hover:bg-gray-100 flex items-center justify-between gap-2"
+          onClick={() => pick(w)}
+          title={`Add ${w.name} as an option`}
+        >
+          <span className="truncate">{labelFor(w)}</span>
+          <span className="font-mono text-gray-400 shrink-0">
+            {w.type}{w.page != null ? ` p${w.page + 1}` : ''}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export const FieldEditor: React.FC<FieldEditorProps> = ({
   field,
   schema,
@@ -189,6 +296,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   onUpdateMetadata,
   onUpdateFields,
   authorTier = true,
+  onLoadUnclaimedWidgets,
 }) => {
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -819,6 +927,20 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   >
                     + Add Option
                   </button>
+                )}
+                {/* Add a missed checkbox/radio box from the PDF's unclaimed
+                    widgets (bd nivy). Author-tier hosted only (the callback is
+                    provided then); group fields only (a select's options are not
+                    per-widget). */}
+                {onLoadUnclaimedWidgets
+                  && (field.type === 'checkbox_group' || field.type === 'radio') && (
+                  <WidgetPicker
+                    existingLabels={(field.options || []).map(o => o.label || '')}
+                    onLoad={onLoadUnclaimedWidgets}
+                    onPick={(opt) =>
+                      updateField({ options: [...(field.options || []), opt] })
+                    }
+                  />
                 )}
               </div>
             ) : (authorTier || field.type === 'select') ? (
