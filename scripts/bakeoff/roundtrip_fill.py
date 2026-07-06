@@ -62,6 +62,14 @@ import fitz  # PyMuPDF
 # Production-faithful widget write helpers (mirrors pdf_fill_routes.py)
 # --------------------------------------------------------------------------- #
 
+# A shared-field radio on-state goes into a RAW /Name token; production
+# (pdf_fill_routes.py _PDF_NAME_UNSAFE, bd h76m.17) REFUSES to write one carrying
+# PDF-Name-unsafe characters, leaving the field unfilled. Mirror that exact
+# charset here so the harness scores an unsafe on-state the SAME way production
+# does (unfilled), not by writing a corrupt xref (bd polyglot-pdf-bvmu parity).
+_PDF_NAME_UNSAFE = re.compile(r"[\s/#()<>\[\]{}%]")
+
+
 def _pdf_name_unescape(s: Optional[str]) -> str:
     """Decode PDF name #XX hex escapes (e.g. '#20APT#20' -> ' APT ').
 
@@ -247,8 +255,13 @@ def _target_widgets_for_field(field: dict) -> list[tuple[str, str]]:
             if sel.get("pdf_field_name"):
                 targets.append((sel["pdf_field_name"], "choice"))
             elif sel.get("pdf_on_value") and field.get("pdf_field_name"):
-                marker = f"{field['pdf_field_name']}\x00{sel['pdf_on_value']}"
-                targets.append((marker, "choice_shared"))
+                # Mirror production's refusal (pdf_fill_routes.py, bd h76m.17): an
+                # on-state with PDF-Name-unsafe chars is NOT written -- emit no
+                # target so the harness leaves it unfilled, exactly as production
+                # does, instead of writing a corrupt /Name token (bd bvmu).
+                if not _PDF_NAME_UNSAFE.search(sel["pdf_on_value"]):
+                    marker = f"{field['pdf_field_name']}\x00{sel['pdf_on_value']}"
+                    targets.append((marker, "choice_shared"))
     elif ftype in ("checkbox", "checkbox_group"):
         if opts:
             selected = set(val or [])

@@ -51,6 +51,20 @@ gold, which is still v1 -- schema_version None, type "checkbox" not
 criterion is about the FILLER logic, which the synthetic v2 fields exercise
 directly. Full backend+harness suite 1596 passed / 3 skipped.
 
+## Fresh-eyes finding (adopted): the _PDF_NAME_UNSAFE parity gap
+
+The pre-PR Opus assess caught a real, in-scope parity gap the first cut missed:
+production's shared-radio write path (pdf_fill_routes.py `_PDF_NAME_UNSAFE`, bd
+h76m.17) REFUSES to write an on-state carrying PDF-Name-unsafe chars
+(`[\s/#()<>\[\]{}%]`), leaving the field unfilled -- but the harness had no such
+guard, so an unsafe `pdf_on_value` (e.g. "has space/slash", production's own
+test case) would be attempted by the harness while production skips it -> the
+two scorers DISAGREE, defeating the harness's purpose. Fixed by mirroring the
+exact `_PDF_NAME_UNSAFE` regex + skipping the target (emitting nothing, so it
+scores unfilled) in `_target_widgets_for_field`, matching production's
+`continue`. +1 test asserting an unsafe on-state yields no target. (7 tests
+total now.)
+
 ## Note (subagent process hiccup, not a work defect)
 
 The implementing subagent's final turn ended without a clean report (it got

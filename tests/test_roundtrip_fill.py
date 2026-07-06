@@ -214,6 +214,25 @@ def test_target_widgets_shared_radio_missing_field_level_name_yields_nothing():
     assert rf._target_widgets_for_field(field) == []
 
 
+def test_target_widgets_shared_radio_unsafe_on_state_yields_nothing():
+    """Production (pdf_fill_routes.py _PDF_NAME_UNSAFE, bd h76m.17) REFUSES to
+    write a shared-radio on-state carrying PDF-Name-unsafe chars, leaving the
+    field unfilled. The harness must mirror that -- emit NO target for the
+    unsafe on-state -- so it scores the same (unfilled), not by writing a
+    corrupt /Name token (bd polyglot-pdf-bvmu parity). synth_value picks
+    options[0], so its on-value 'has space/slash' is the one under test."""
+    field = {
+        "id": "marital",
+        "type": "radio",
+        "pdf_field_name": "grp[0]",
+        "options": [
+            {"value": "single", "label": "Single", "pdf_on_value": "has space/slash"},
+            {"value": "married", "label": "Married", "pdf_on_value": "2"},
+        ],
+    }
+    assert rf._target_widgets_for_field(field) == []
+
+
 # --------------------------------------------------------------------------- #
 # score_value_convention must also recognize checkbox_group
 # --------------------------------------------------------------------------- #
