@@ -36,7 +36,11 @@ from backend.utils.field_validator import validate_field_value
 _KIT_ROOT = Path(__file__).resolve().parents[2] / "form-kits" / "i-90"
 
 _RACE_FIELD_ID = "p3_race"
-_RACE_SELECTED = ["P3_checkbox7_White[0]", "P3_checkbox7_Black[0]"]
+# Option VALUES (schema-v2 slugs, bd polyglot-pdf-c5r8) for White and Black --
+# what a fill request sends; each resolves to its own widget via
+# option.pdf_field_name. The widget LEAVES are unchanged by the migration.
+_RACE_SELECTED = ["white", "black_or_african_american"]
+_RACE_SELECTED_LEAVES = ["P3_checkbox7_White[0]", "P3_checkbox7_Black[0]"]
 _RACE_ALL_LEAVES = [
     "P3_checkbox7_White[0]", "P3_checkbox7_Asian[0]", "P3_checkbox7_Black[0]",
     "P3_checkbox7_Indian[0]", "P3_checkbox7_Hawaiian[0]",
@@ -106,12 +110,12 @@ def test_checkbox_group_type_fills_per_option_widgets():
 
     states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
     assert set(states) == set(_RACE_ALL_LEAVES)
-    for leaf in _RACE_SELECTED:
+    for leaf in _RACE_SELECTED_LEAVES:
         assert states[leaf] not in ("/Off", "Off", None), (
             f"{leaf} did not fill -- checkbox_group fell out of the group "
             "branch (bd h76m.17 blank-print regression)"
         )
-    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED):
+    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED_LEAVES):
         assert states[leaf] in ("/Off", "Off"), f"{leaf} should not be selected"
 
 
@@ -120,7 +124,7 @@ def test_checkbox_group_voice_comma_string_round_trips():
     """The voice-path comma string canonicalizes for checkbox_group too."""
     pdf = _fill(_v2_group_schema(), {_RACE_FIELD_ID: ", ".join(_RACE_SELECTED)})
     states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
-    for leaf in _RACE_SELECTED:
+    for leaf in _RACE_SELECTED_LEAVES:
         assert states[leaf] not in ("/Off", "Off", None)
 
 

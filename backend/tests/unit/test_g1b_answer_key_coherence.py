@@ -92,7 +92,8 @@ def test_name_change_coherence_holds_in_all_cases():
     field must be filled -- otherwise it is the original 'Yes but identical name'
     artifact. The persona is 'No', so this must hold across injected cases too."""
     prev = ("p1_line5a_familyname", "p1_line5b_givenname", "p1_line5c_middlename")
-    yes_label = _label_of("p1_checkbox4", "P1_checkbox4[0]")  # "Yes (Proceed ...)"
+    yes_label = _label_of(
+        "p1_checkbox4", "yes_proceed_to_item_numbers_5_a_5_c")  # "Yes (Proceed ...)"
     for size in (20, 40, 132):
         for case in build_corpus(size):
             d = {f["field_id"]: f["value"] for f in case.fields}
@@ -106,7 +107,11 @@ def test_english_interpreter_coherence_holds_in_all_cases():
     interpreter must NOT be populated -- otherwise it is the self-cert-vs-
     interpreter artifact. The persona uses the interpreter-read-to-me statement."""
     interp = ("p6_line1a_interpretersfamilyname", "p6_line1b_interpretersgivenname")
-    eng_label = _label_of("p5_checkbox1a", "P5_Checkbox1a[0]")  # "I can read ..."
+    eng_label = _label_of(
+        "p5_checkbox1a",
+        "i_can_read_and_understand_english_and_i_have_read_and_understand_every_"
+        "question_and_instruction_on_this_application_and_my_answer_to_every_"
+        "question")  # "I can read ..."
     for size in (20, 40, 132):
         for case in build_corpus(size):
             d = {f["field_id"]: f["value"] for f in case.fields}
@@ -221,7 +226,7 @@ def test_show_if_gated_reason_field_is_na_for_plain_lpr():
     the production renderer hides it for a plain LPR and rejects hidden updates, so
     a real client cannot send it -- it must be NA here (Codex review, PR #253)."""
     assert ANSWER_KEY["p2_checkbox2[5]"] is None
-    assert ANSWER_KEY["p2_checkbox1"] == "P2_checkbox1[0]"  # plain LPR
+    assert ANSWER_KEY["p2_checkbox1"] == "lawful_permanent_resident"  # plain LPR
     for size in (20, 40, 132):
         for case in build_corpus(size):
             assert "p2_checkbox2[5]" not in {f["field_id"] for f in case.fields}

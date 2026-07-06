@@ -32,9 +32,17 @@ from backend.routes.pdf_fill_routes import PDFFillRequest, fill_pdf
 _KIT_ROOT = Path(__file__).resolve().parents[2] / "form-kits" / "i-90"
 
 # The I-90 Race checkbox group: a real multi-select whose options each map to
-# their own PDF widget (the group representation this epic is about).
+# their own PDF widget (the group representation this epic is about). Since the
+# schema-v2 migration (bd polyglot-pdf-c5r8) each option's VALUE is a semantic
+# slug (e.g. "white") that the filler resolves to its own widget via
+# option.pdf_field_name; the widget LEAVES below are unchanged (only option.value
+# migrated).
 _RACE_FIELD_ID = "p3_race"
-_RACE_SELECTED = ["P3_checkbox7_White[0]", "P3_checkbox7_Black[0]"]
+# Option VALUES (schema-v2 slugs) for White and Black -- what a fill request sends.
+_RACE_SELECTED = ["white", "black_or_african_american"]
+# The widget leaves those two options resolve to (order-matched to _RACE_SELECTED),
+# used to assert /AS on-states in the saved PDF.
+_RACE_SELECTED_LEAVES = ["P3_checkbox7_White[0]", "P3_checkbox7_Black[0]"]
 _RACE_ALL_LEAVES = [
     "P3_checkbox7_White[0]", "P3_checkbox7_Asian[0]", "P3_checkbox7_Black[0]",
     "P3_checkbox7_Indian[0]", "P3_checkbox7_Hawaiian[0]",
@@ -83,23 +91,26 @@ def test_comma_string_group_value_round_trips():
 
     states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
     assert set(states) == set(_RACE_ALL_LEAVES), "not all race widgets resolved"
-    for leaf in _RACE_SELECTED:
+    for leaf in _RACE_SELECTED_LEAVES:
         assert states[leaf] not in ("/Off", "Off", None), (
             f"{leaf} did not fill -- the comma-string group value was not "
             "canonicalized (regression of bd polyglot-pdf-h76m.2)"
         )
-    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED):
+    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED_LEAVES):
         assert states[leaf] in ("/Off", "Off"), f"{leaf} should not be selected"
 
 
 def test_single_no_comma_string_group_value_fills_one_widget():
     """A single selection arriving as a bare string fills exactly its widget."""
-    selected = "P3_checkbox7_Asian[0]"
+    selected = "asian"                       # schema-v2 slug for the Asian option
+    selected_leaf = "P3_checkbox7_Asian[0]"  # the widget it resolves to
     pdf = _fill_race(selected)
 
     states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
-    assert states[selected] not in ("/Off", "Off", None), f"{selected} did not fill"
-    for leaf in set(_RACE_ALL_LEAVES) - {selected}:
+    assert states[selected_leaf] not in ("/Off", "Off", None), (
+        f"{selected_leaf} did not fill"
+    )
+    for leaf in set(_RACE_ALL_LEAVES) - {selected_leaf}:
         assert states[leaf] in ("/Off", "Off"), f"{leaf} should not be selected"
 
 
@@ -108,9 +119,9 @@ def test_list_group_value_still_fills():
     pdf = _fill_race(list(_RACE_SELECTED))
 
     states = _as_states_by_leaf(pdf, _RACE_ALL_LEAVES)
-    for leaf in _RACE_SELECTED:
+    for leaf in _RACE_SELECTED_LEAVES:
         assert states[leaf] not in ("/Off", "Off", None), f"{leaf} did not fill"
-    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED):
+    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED_LEAVES):
         assert states[leaf] in ("/Off", "Off"), f"{leaf} should not be selected"
 
 

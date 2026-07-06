@@ -129,7 +129,10 @@ def assert_v2_error(doc: dict, *needles: str):
 # Exit criterion 1: shipped v1 kits validate UNCHANGED
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+# i-90 is now v2 (migrated at P6.1b, bd c5r8); the remaining shipped kits stay v1
+# until P6.1c re-extracts them. i-90's own v2-validity is pinned by
+# tests/test_i90_migrated_baseline.py.
+@pytest.mark.parametrize("kit", ["w7", "w7-2", "f1040"])
 def test_v1_kit_validates_unchanged(kit):
     schema = validate(load_kit(kit))
     assert schema.schema_version is None  # no stamp -> legacy path
@@ -140,11 +143,16 @@ def test_v1_kit_validates_unchanged(kit):
             assert isinstance(field.show_if, ConditionalDisplay)
 
 
+def test_migrated_i90_kit_is_v2():
+    # The shipped i-90 was migrated to v2 at P6.1b.
+    assert validate(load_kit("i-90")).schema_version == "2"
+
+
 def test_v1_kit_dump_keeps_legacy_show_if_shape():
-    schema = validate(load_kit("i-90"))
+    schema = validate(load_kit("w7"))  # a still-v1 kit (i-90 is v2 now)
     dumped = schema.model_dump(mode="json", exclude_none=True)
     with_show_if = [f for f in dumped["fields"] if "show_if" in f]
-    assert with_show_if, "i-90 should carry show_if fields"
+    assert with_show_if, "w7 should carry show_if fields"
     for f in with_show_if:
         assert set(f["show_if"]) <= {"field", "operator", "value"}
 
@@ -551,9 +559,11 @@ def test_v2_controls_fields_parses_with_deprecation_warning():
 
 
 def test_v1_controls_fields_stays_silent():
+    # w7 (still v1) carries controls_fields entries -- a v1 kit must not raise the
+    # deprecation warning (that fires only on a v2-stamped schema). i-90 is v2 now.
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error", DeprecationWarning)
-        validate(load_kit("i-90"))  # carries 13 controls_fields entries
+        validate(load_kit("w7"))
 
 
 # ---------------------------------------------------------------------------

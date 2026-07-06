@@ -75,17 +75,24 @@ def _unwrap_single_option_checkbox(f: Dict[str, Any]) -> bool:
     """A v1 checkbox with EXACTLY ONE option is a standalone boolean box, which
     v2 models as a plain `checkbox` with NO options (its identity is the
     field-level pdf_field_name). Lift the single option's pdf_field_name onto the
-    field if the field lacks one, then drop options[]. Returns True if changed."""
+    field if the field lacks one, then drop options[].
+
+    Returns the OLD single-option value (or None) so pass 2 can rewrite any
+    condition that referenced it to the standalone-checkbox idiom is_checked --
+    otherwise `equals <that leaf>` becomes a dangling ref against the now-boolean
+    trigger (never fires), silently breaking the dependent's visibility
+    (evaluator-equivalence catch, bd c5r8)."""
     if f.get("type") != "checkbox":
-        return False
+        return None
     opts = f.get("options")
     if not isinstance(opts, list) or len(opts) != 1:
-        return False
+        return None
     opt = opts[0]
+    old_value = str(opt.get("value")) if isinstance(opt, dict) and opt.get("value") is not None else None
     if isinstance(opt, dict) and not f.get("pdf_field_name") and opt.get("pdf_field_name"):
         f["pdf_field_name"] = opt["pdf_field_name"]
     f.pop("options", None)
-    return True
+    return old_value
 
 
 def _mint_field_slugs(f: Dict[str, Any]) -> Tuple[Dict[str, str], List[str]]:
@@ -334,6 +341,10 @@ def migrate(schema: Dict[str, Any],
     # combobox options from the dump; mint slugs; record group ids.
     slug_maps: Dict[str, Dict[str, str]] = {}
     group_ids: set = set()
+    # trigger id -> its old single-option value, for standalone-unwrapped
+    # checkboxes: a condition `equals <that value>` on it must become is_checked
+    # (the value vanished with the unwrap; a bare equals would dangle -- bd c5r8).
+    standalone_old_value: Dict[str, str] = {}
     for f in fields:
         fid = f.get("id")
         if _is_group_checkbox(f):
@@ -344,9 +355,11 @@ def migrate(schema: Dict[str, Any],
             if isinstance(fid, str):
                 group_ids.add(fid)
                 report["checkbox_groups"].append(fid)
-        elif _unwrap_single_option_checkbox(f):
-            if isinstance(fid, str):
+        else:
+            unwrapped_old = _unwrap_single_option_checkbox(f)
+            if unwrapped_old is not None and isinstance(fid, str):
                 report["standalone_unwrapped"].append(fid)
+                standalone_old_value[fid] = unwrapped_old
         # A choice field with < 2 options is invalid in v2. Recover options from
         # the PDF dump when available (the i-90 height comboboxes mis-typed as
         # option-less radios); else report it for the dump-bearing caller.
@@ -388,8 +401,29 @@ def migrate(schema: Dict[str, Any],
                     report.setdefault("unresolved_trigger_refs", []).append(
                         {"in": f.get("id"), "kind": kind, "trigger": trig})
                 before = (atom.get("operator"), copy.deepcopy(atom.get("value")))
-                _rewrite_atom_value(atom, _slug_map_for(trig),
-                                    _trigger_type(trig))
+                # Standalone-unwrap ref fixup (bd c5r8): an atom `equals <old
+                # single-option value>` on a trigger that was unwrapped to a
+                # standalone checkbox loses its referent (the option is gone, the
+                # trigger is now boolean), so a bare equals would dangle. Rewrite
+                # `equals <that value>` to the standalone-checkbox idiom
+                # is_checked. A `not_equals` on such a trigger has NO clean v2
+                # idiom ("checkbox unchecked" is neither is_empty -- which is
+                # false on a boolean false -- nor a negated is_checked), so it is
+                # REPORTED for human conversion rather than mis-rewritten. i-90
+                # has only equals cases.
+                is_standalone_ref = (
+                    isinstance(trig, str) and trig in standalone_old_value
+                    and str(atom.get("value")) == standalone_old_value[trig])
+                if is_standalone_ref and atom.get("operator") == "equals":
+                    atom["operator"] = "is_checked"
+                    atom.pop("value", None)
+                elif is_standalone_ref and atom.get("operator") == "not_equals":
+                    report.setdefault("standalone_not_equals_refs", []).append(
+                        {"in": f.get("id"), "kind": kind, "trigger": trig})
+                    # leave the atom for the human; do not run the generic rewrite
+                else:
+                    _rewrite_atom_value(atom, _slug_map_for(trig),
+                                        _trigger_type(trig))
                 if (atom.get("operator"), atom.get("value")) != before:
                     report["operators_rewritten"] += 1
 
@@ -415,8 +449,9 @@ def migrate(schema: Dict[str, Any],
         for control in controls:
             if not isinstance(control, dict):
                 continue
-            unmirrored = _unmirrored_targets(control, trigger_id, trig_type,
-                                             trig_slug_map, fields_by_id)
+            unmirrored = _unmirrored_targets(
+                control, trigger_id, trig_type, trig_slug_map, fields_by_id,
+                standalone_old_value.get(trigger_id) if isinstance(trigger_id, str) else None)
             if unmirrored:
                 # Keep the unmirrored edge for the human -- but MIGRATE its
                 # operator+value to v2 (slug + group operator) like a show_if
@@ -448,13 +483,20 @@ def migrate(schema: Dict[str, Any],
 
 
 def _control_condition(control: Dict[str, Any], trigger_id: Any,
-                       trigger_type: Optional[str],
-                       slug_map: Dict[str, str]) -> Dict[str, Any]:
+                       trigger_type: Optional[str], slug_map: Dict[str, str],
+                       standalone_old_val: Optional[str] = None) -> Dict[str, Any]:
     """The equivalent show_if atom a controls_fields edge implies, NORMALIZED to
-    v2 (same operator/value rewrites the target-side atoms got). This is what a
-    mirroring target-side condition must MATCH."""
-    atom = {"field": trigger_id, "operator": control.get("operator", "equals"),
-            "value": control.get("value")}
+    v2 with the SAME rewrites the target-side atoms got (so a true mirror matches).
+    Includes the standalone-unwrap fixup: `equals <the unwrapped trigger's old
+    value>` -> is_checked, matching what pass 2 did to the target's show_if (bd
+    c5r8) -- without it a genuinely-mirrored edge on a standalone checkbox would
+    fail to match and be needlessly kept."""
+    op = control.get("operator", "equals")
+    val = control.get("value")
+    if (standalone_old_val is not None and op == "equals"
+            and str(val) == standalone_old_val):
+        return {"field": trigger_id, "operator": "is_checked"}
+    atom = {"field": trigger_id, "operator": op, "value": val}
     _rewrite_atom_value(atom, slug_map, trigger_type)
     return atom
 
@@ -476,11 +518,13 @@ def _target_mirrors(target: Dict[str, Any], want: Dict[str, Any]) -> bool:
 
 def _unmirrored_targets(control: Dict[str, Any], trigger_id: Any,
                         trigger_type: Optional[str], slug_map: Dict[str, str],
-                        fields_by_id: Dict[str, dict]) -> List[str]:
+                        fields_by_id: Dict[str, dict],
+                        standalone_old_val: Optional[str] = None) -> List[str]:
     """Target ids of a controls_fields edge whose target does NOT carry a
     condition MATCHING the edge's implied condition (field+operator+value). An
     empty list means every target truly mirrors the edge (safe to drop it)."""
-    want = _control_condition(control, trigger_id, trigger_type, slug_map)
+    want = _control_condition(control, trigger_id, trigger_type, slug_map,
+                              standalone_old_val)
     targets: List[str] = []
     for key in _ACTION_KEYS:
         vals = control.get(key)
@@ -494,6 +538,23 @@ def _unmirrored_targets(control: Dict[str, Any], trigger_id: Any,
     return unmirrored
 
 
+def _load_dump(pdf: Optional[str], dump_json: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The AcroForm dump for combobox-option recovery: from a --pdf (run
+    acroform_dump) or a pre-made --dump JSON. None when neither is given."""
+    if dump_json:
+        with open(dump_json, encoding="utf-8") as fh:
+            return json.load(fh)
+    if pdf:
+        # scripts/bakeoff on sys.path (the repo-root insert at import handles
+        # backend; add bakeoff for acroform_dump).
+        bakeoff = os.path.join(_REPO, "scripts", "bakeoff")
+        if bakeoff not in sys.path:
+            sys.path.insert(0, bakeoff)
+        import acroform_dump  # noqa: E402
+        return acroform_dump.dump_pdf(pdf)
+    return None
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Migrate a v1 form schema to v2.")
     ap.add_argument("--in", dest="inp", required=True, help="input v1 schema.json")
@@ -501,6 +562,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--archive", default=None,
                     help="write the pre-migration schema here "
                          "(schema_archived.json backup convention)")
+    # A choice field mis-typed as an option-less combobox (the i-90 height
+    # dropdowns) needs the PDF's choices to recover its options -- without a dump
+    # such a field is left option-less and reported (needs_options). Supply the
+    # form's PDF (--pdf, runs acroform_dump) or a pre-made dump JSON (--dump).
+    ap.add_argument("--pdf", default=None,
+                    help="the form PDF (for combobox-option recovery via acroform_dump)")
+    ap.add_argument("--dump", default=None,
+                    help="a pre-made acroform_dump JSON (alternative to --pdf)")
+    ap.add_argument("--report", default=None,
+                    help="write the FULL migration report JSON here (audit trail)")
     args = ap.parse_args(argv)
 
     with open(args.inp, encoding="utf-8") as fh:
@@ -510,9 +581,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         with open(args.archive, "w", encoding="utf-8") as fh:
             json.dump(schema, fh, indent=2)
 
-    migrated, report = migrate(schema)
+    dump = _load_dump(args.pdf, args.dump)
+    migrated, report = migrate(schema, dump)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(migrated, fh, indent=2)
+    if args.report:
+        # The FULL report (all keys) -- the audit trail (fresh-eyes/bd ztf1: a
+        # hand-trimmed report hides real facts like options_from_dump).
+        with open(args.report, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=2)
 
     print(f"[migrated] {args.inp} -> {args.out}")
     print(f"  checkbox_groups: {len(report['checkbox_groups'])}; "

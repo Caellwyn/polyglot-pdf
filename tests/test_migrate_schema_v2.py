@@ -75,6 +75,33 @@ def test_checkbox_with_one_option_becomes_standalone_checkbox():
     assert "c" in rep["standalone_unwrapped"]
 
 
+def test_equals_on_a_standalone_unwrapped_checkbox_becomes_is_checked():
+    # bd c5r8: when a 1-option checkbox unwraps to standalone, its option value
+    # vanishes -- a dependent's `equals <that value>` would DANGLE (never fire on
+    # the now-boolean trigger). It must become is_checked (the standalone idiom).
+    trigger = {"id": "cb", "type": "checkbox", "options": [
+        {"value": "CB[0]", "label": "Yes", "pdf_field_name": "form.CB[0]"}]}
+    dep = {"id": "d", "type": "text", "pdf_field_name": "D[0]",
+           "show_if": {"field": "cb", "operator": "equals", "value": "CB[0]"}}
+    out, _ = mig.migrate(_v1([trigger, dep]))
+    si = out["fields"][1]["show_if"]
+    assert si["operator"] == "is_checked"
+    assert "value" not in si
+
+
+def test_not_equals_on_a_standalone_unwrapped_checkbox_is_reported():
+    # not_equals on a standalone checkbox has no clean v2 idiom -> REPORTED for a
+    # human, not mis-rewritten (bd c5r8). i-90 has none.
+    trigger = {"id": "cb", "type": "checkbox", "options": [
+        {"value": "CB[0]", "label": "Yes", "pdf_field_name": "form.CB[0]"}]}
+    dep = {"id": "d", "type": "text", "pdf_field_name": "D[0]",
+           "show_if": {"field": "cb", "operator": "not_equals", "value": "CB[0]"}}
+    out, rep = mig.migrate(_v1([trigger, dep]))
+    assert rep.get("standalone_not_equals_refs")
+    # The atom is left for the human (unchanged operator).
+    assert out["fields"][1]["show_if"]["operator"] == "not_equals"
+
+
 # --- the SHARED is_checked dual-fate fixture (agree by construction) ---------
 
 def test_is_checked_dual_fate_matches_shared_fixture():
@@ -232,9 +259,14 @@ def _i90_dump():
     return acroform_dump.dump_pdf(str(_I90_PDF))
 
 
-@pytest.mark.skipif(not _I90.exists(), reason="i-90 kit not present")
+_ARCHIVED = _REPO / "form-kits" / "i-90" / "schema_archived.json"
+
+
+@pytest.mark.skipif(not _ARCHIVED.exists(), reason="i-90 v1 archive not present")
 def test_migrated_i90_validates_v2_lints_clean_and_is_idempotent():
-    orig = json.loads(_I90.read_text(encoding="utf-8"))
+    # Migrate from the ARCHIVED v1 original (the committed schema.json is now the
+    # migrated v2 result, bd c5r8 -- migrating IT would hit the idempotent no-op).
+    orig = json.loads(_ARCHIVED.read_text(encoding="utf-8"))
     dump = _i90_dump()
     migrated, report = mig.migrate(orig, dump)
     # Validates as v2.
