@@ -52,7 +52,15 @@ values visible at their printed positions on page 1; voice session stayed
 connected across modal open/close; 767 frontend tests pass; `build:schema`
 green.
 
-Fresh-eyes assess outcome: (folded in after the Step-5.5 loop below).
+Fresh-eyes assess outcome (2 rounds): round 1 (sonnet, arm B picker)
+GAPS-FOUND(1) -- ADOPTED: preview backdrop z-index 1000 sat under the voice
+panels (9999/10000), leaving the voice overlay interactive on top of the modal;
+fixed to 10500 and verified live (bead polyglot-pdf-ro6u, filed by the reviewer,
+closed as fixed-inline). REFUTED: its secondary "missing !pdfUrl alert" claim --
+the preview button renders inside the existing `{pdfUrl && ...}` block, so the
+no-pdfUrl click is unreachable. Round 2 (Opus clearing round, bd dgoa rule):
+NO-GAPS -- both rubric criteria re-verified independently against the code and
+the built dist. Deferred: none.
 
 ## Lessons
 
