@@ -62,10 +62,15 @@ describe('FieldEditor Add from PDF widgets picker', () => {
     expect(added.pdf_on_value).toBe('2');
   });
 
-  it('mints a UNIQUE slug when the label collides with an existing option', async () => {
+  it('mints a UNIQUE slug against existing option VALUES, not labels (fresh-eyes)', async () => {
+    // The existing option's VALUE is 'family' but its LABEL is different
+    // ('Family member') -- minting against labels would miss this collision and
+    // produce a duplicate 'family' value (an option-value-duplicate lint ERROR).
+    // The picker must dedupe against the VALUE.
     const group: FormField = {
       ...GROUP,
-      options: [{ value: 'family', label: 'Family', pdf_field_name: 'form1[0].r[0]' }],
+      options: [{ value: 'family', label: 'Family member',
+                  pdf_field_name: 'form1[0].r[0]' }],
     } as unknown as FormField;
     const onUpdateField = vi.fn();
     render(
@@ -78,9 +83,9 @@ describe('FieldEditor Add from PDF widgets picker', () => {
       />,
     );
     fireEvent.click(screen.getByText('+ Add from PDF widgets'));
-    fireEvent.click(await screen.findByText('Family'));
+    fireEvent.click(await screen.findByText('Family'));  // widget tooltip 'Family' -> slug 'family'
     const added = (onUpdateField.mock.calls[0][0] as FormField).options![1];
-    // A second "Family" must not duplicate the existing 'family' value.
+    // 'family' is taken by the existing option's VALUE -> the new one bumps.
     expect(added.value).toBe('family_2');
   });
 

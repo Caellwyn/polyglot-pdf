@@ -66,6 +66,25 @@ slug on label collision, empty-state note, gating without the callback, inline
 error); touched suites green; typecheck clean. Full FE suite via CI's Linux
 runner (the local vitest fork-pool hangs -- see the v96b entry).
 
+## Review fixes (pre-PR)
+
+Two real bugs caught before the PR: (1) fresh-eyes -- the WidgetPicker minted the
+new option slug unique against existing option LABELS, but `option-value-duplicate`
+keys on VALUE, so a hand-edited value colliding with the new label's slug would
+slip through as a duplicate-value ERROR (breaking the lint-clean criterion);
+fixed to dedup against existing option VALUES. (2) typecheck -- `FieldOption`
+(frontend type) lacked `pdf_on_value`, which the picker sets from the dump's
+`on_value`; added it (the backend model already has it) so a picked box
+round-trips fillable. Both verified: the collision case mints `family_2` and the
+result lints 0/0.
+
+## Doc-freshness note
+
+closeout_prep flagged the usual tier-2 docs as STALE. Reviewed: `schema-forms.md`
+tracks `frontend/src/schema-forms/types/schema.ts` (the VOICE app), not the
+`schema-editor/src/types/schema.ts` this diff edited (a different app) -- and no
+other doc tracks a file this diff touched. Pre-existing drift, left as-is.
+
 ## Unblocks
 
 P5.3 is now complete across all three sub-beads (`v96b` + `zgln` + `nivy`). P6.1

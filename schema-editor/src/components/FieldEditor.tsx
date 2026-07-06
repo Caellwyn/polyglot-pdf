@@ -9,6 +9,7 @@ import type {
 } from '../types/schema';
 import {
   canUngroup,
+  mintOptionSlug,
   mintUniqueSlugs,
   optionValueReferencedBy,
   retargetOptionValueReferences,
@@ -194,11 +195,16 @@ const CONTROL_ACTIONS: { key: ControlActionKey; label: string }[] = [
 // widget's tooltip/leaf label, the widget name on option.pdf_field_name, and its
 // on-state on option.pdf_on_value).
 const WidgetPicker: React.FC<{
-  existingLabels: string[];
+  // The field's EXISTING option VALUES (not labels): the new slug must be unique
+  // against these, since option.value is what the lint duplicate-value rule keys
+  // on. Minting against labels would miss a hand-edited value that collides
+  // (fresh-eyes) -> an option-value-duplicate ERROR, breaking the lint-clean
+  // exit criterion.
+  existingValues: string[];
   onLoad: () => Promise<UnclaimedWidget[]>;
   onPick: (opt: { label: string; value: string;
                   pdf_field_name: string; pdf_on_value?: string }) => void;
-}> = ({ existingLabels, onLoad, onPick }) => {
+}> = ({ existingValues, onLoad, onPick }) => {
   const [open, setOpen] = React.useState(false);
   const [widgets, setWidgets] = React.useState<UnclaimedWidget[] | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -226,9 +232,14 @@ const WidgetPicker: React.FC<{
 
   const pick = (w: UnclaimedWidget) => {
     const label = labelFor(w);
-    // Mint a slug unique against the field's EXISTING option labels + this one,
-    // so adding a widget can't manufacture a duplicate option value.
-    const value = mintUniqueSlugs([...existingLabels, label]).slice(-1)[0];
+    // Mint the slug from the label, then bump it past every EXISTING option value
+    // (option-value-duplicate keys on value, not label) so adding a widget can
+    // never manufacture a duplicate -- even against a hand-edited value.
+    const used = new Set(existingValues);
+    const base = mintOptionSlug(label);
+    let value = base;
+    let n = 1;
+    while (used.has(value)) value = `${base}_${++n}`;
     onPick({
       label,
       value,
@@ -935,7 +946,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 {onLoadUnclaimedWidgets
                   && (field.type === 'checkbox_group' || field.type === 'radio') && (
                   <WidgetPicker
-                    existingLabels={(field.options || []).map(o => o.label || '')}
+                    existingValues={(field.options || []).map(o => o.value || '')}
                     onLoad={onLoadUnclaimedWidgets}
                     onPick={(opt) =>
                       updateField({ options: [...(field.options || []), opt] })
