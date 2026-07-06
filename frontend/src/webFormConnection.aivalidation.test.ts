@@ -204,6 +204,89 @@ describe('WebFormConnection client-side AI-value validation (bd polyglot-pdf-wpw
   })
 })
 
+// Checkbox-GROUP enum validation must run even though NO shipped form-kit sets
+// group_kind (bd polyglot-pdf-5jvn). Before the fix, isStringEnumField's checkbox
+// branch required group_kind === "checkbox", which the real i-90 p3_race field
+// never sets (it is type:"checkbox" with a plain options array) -- so an
+// AI-invented race option skipped validateOptionMembership entirely, landed as
+// confirmed-pending, and was only silently dropped at PDF-fill time. The fix
+// aligns isStringEnumField's checkbox-group detection to the SAME rule already
+// used by canonicalizeAiCheckboxGroupValue and the CheckboxField renderer:
+// options.length > 0, not a group_kind requirement.
+describe('WebFormConnection checkbox-group enum validation (bd polyglot-pdf-5jvn)', () => {
+  // Mirrors the real form-kits/i-90 p3_race field: type "checkbox", an options
+  // array, and deliberately NO group_kind.
+  const RACE_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [
+      {
+        id: 'p3_race',
+        name: 'Race (Select all applicable)',
+        spoken_name: 'race',
+        type: 'checkbox',
+        options: [
+          { value: 'P3_checkbox7_White[0]', label: 'White' },
+          { value: 'P3_checkbox7_Asian[0]', label: 'Asian' },
+          { value: 'P3_checkbox7_Black[0]', label: 'Black or African American' },
+        ],
+      },
+    ],
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['p3_race'] }],
+  } as unknown as FormSchema
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  it('rejects an AI-invented option on a real shipped checkbox-group field (no group_kind)', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(RACE_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    // Keyed by field id ('p3_race') -- handleFieldUpdate matches on field.name
+    // OR field.id, and this schema's `name` is the display label, not 'race'.
+    fireFieldUpdate(ws, { p3_race: 'P3_checkbox7_MadeUp[0]' })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).not.toContain('p3_race')
+
+    const completions = sentMessages(ws).filter(m => m.type === 'completion_message')
+    expect(completions).toHaveLength(1)
+  })
+
+  it('accepts a VALID p3_race option', async () => {
+    const onFieldUpdate = vi.fn()
+    const conn = new WebFormConnection(RACE_SCHEMA, { onFieldUpdate })
+    await conn.connect('wss://example/ws/fill')
+    const ws = lastWs()
+    ws.send.mockClear()
+    onFieldUpdate.mockClear()
+
+    fireFieldUpdate(ws, { p3_race: 'P3_checkbox7_White[0]' })
+
+    const applied = onFieldUpdate.mock.calls.flatMap(
+      (c: any[]) => (c[0] as Array<{ fieldId: string }>).map(u => u.fieldId)
+    )
+    expect(applied).toContain('p3_race')
+  })
+})
+
 // The session-wide cap must stop a model that ALTERNATES invalid values between
 // fields (Codex PR #145): each field switch resets the per-field counter, so the
 // per-field cap alone would let it prompt forever. The session-wide cap is not

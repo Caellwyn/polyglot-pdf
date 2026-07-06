@@ -57,6 +57,28 @@ const SCHEMA: FormSchema = {
   parts: [{ id: 'p1', label: 'P1', order: 1, sections: ['s1', 's2'] }],
 } as unknown as FormSchema
 
+// A 3-section variant for the bd polyglot-pdf-k726 mismatch test: the parked
+// client switch targets s2 (N->N+1 boundary), and the AI targets an UNRELATED
+// section s3 -- a jump switch_section can make that the 2-section SCHEMA above
+// cannot express. A distinct version forces SchemaFormStateManager.init to
+// build fresh state instead of reusing the 2-section SCHEMA's cached state
+// (init() reuses `existing` whenever form_number+version match, per beforeEach).
+const SCHEMA_3SECTION: FormSchema = {
+  source: 'web',
+  form_metadata: { form_number: 'I-90', version: '2' },
+  fields: [
+    { id: 'f1', name: 'f1', spoken_name: 'F1', type: 'text' },
+    { id: 'f2', name: 'f2', spoken_name: 'F2', type: 'text' },
+    { id: 'f3', name: 'f3', spoken_name: 'F3', type: 'text' },
+  ],
+  sections: [
+    { id: 's1', label: 'S1', order: 1, fields: ['f1'] },
+    { id: 's2', label: 'S2', order: 2, fields: ['f2'] },
+    { id: 's3', label: 'S3', order: 3, fields: ['f3'] },
+  ],
+  parts: [{ id: 'p1', label: 'P1', order: 1, sections: ['s1', 's2', 's3'] }],
+} as unknown as FormSchema
+
 function installSessionStorage() {
   const store: Record<string, string> = {}
   global.sessionStorage = {
@@ -312,6 +334,83 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     ;(conn as any).handleSectionSwitched({ section_number: 2 })
     expect((conn as any).switchInFlight).toBe(false)
     expect(conn.getStatus()).toBe('connected')
+  })
+
+  it('AI-initiated switch to an UNRELATED section CANCELS the now-stale parked client switch (bd polyglot-pdf-k726)', async () => {
+    // Gemini's switch_section can target an ARBITRARY section by order/label. When the
+    // AI switches to section M (here s3) while the client is parked to auto-advance
+    // N->N+1 (s1->s2), the AI has AUTHORITATIVELY relocated the session to M -- so the
+    // parked N->N+1 boundary is now STALE and must be CANCELLED. Running it later would
+    // reconnect-switch the user OUT of M (tearing down the AI's session) once the parked
+    // gate's fail-OPEN timer fires AFTER the AI switch completes -- see the adverse-order
+    // test below. Cancelling is the safe outcome, not a silent drop of a valid advance
+    // (the advance is no longer valid once the AI moved the session).
+    SchemaFormStateManager.save(SchemaFormStateManager.init(SCHEMA_3SECTION))
+    const errors: Error[] = []
+    const conn = new WebFormConnection(SCHEMA_3SECTION, { onError: (e) => errors.push(e) })
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    const sendSpy = (conn as any).ws.send
+
+    // 1) Client auto-advance parks on the validator gate for the s1 -> s2 boundary.
+    const parked = (conn as any).proceedSectionSwitch('s2') as Promise<void>
+    expect((conn as any).pendingSectionSwitch).not.toBeNull()
+    expect((conn as any).pendingSectionSwitch.sectionId).toBe('s2')
+    expect((conn as any).switchInFlight).toBe(false)
+
+    // 2) AI-initiated switch arrives for an UNRELATED section (s3). It cancels the
+    //    now-stale parked s1->s2 switch (resolving its gate with cancelled=true).
+    ;(conn as any).handlePrepareSectionSwitchRequest({ request_id: 'r', identifier: 3 })
+    expect((conn as any).switchInFlight).toBe(true)
+    // The parked gate was cancelled: pendingSectionSwitch is cleared and its promise
+    // resolves cleanly with no client-side reconnect-switch.
+    await expect(parked).resolves.toBeUndefined()
+    expect((conn as any).pendingSectionSwitch).toBeNull()
+    const manualSwitchSends = sendSpy.mock.calls.filter((c: any[]) => {
+      try { return JSON.parse(c[0])?.type === 'manual_section_switch' } catch { return false }
+    }).length
+    expect(manualSwitchSends).toBe(0)
+    expect(errors.length).toBe(0)
+
+    // The AI path's own switch (to s3) still completes cleanly.
+    ;(conn as any).handleSectionSwitched({ section_number: 3 })
+    expect((conn as any).switchInFlight).toBe(false)
+    expect(conn.getStatus()).toBe('connected')
+  })
+
+  it('a mismatched AI switch that COMPLETES before the parked gate resolves does not reconnect-switch to the stale target (bd polyglot-pdf-k726, adverse ordering)', async () => {
+    // The hazard the unconditional cancel closes (Opus fresh-eyes finding): if the parked
+    // switch were merely LEFT INTACT on a mismatch, this ordering would strand the user --
+    // AI switch completes and clears switchInFlight, THEN the parked gate's fail-OPEN timer
+    // resolves, and proceedSectionSwitch's post-await switchInFlight re-check (which only
+    // guards while the AI switch is in flight) no longer fires, so doSectionSwitch('s2')
+    // would run a full reconnect to the stale s2, tearing down the AI's s3 session.
+    // With the cancel, the parked gate was already resolved cancelled -> no such switch.
+    SchemaFormStateManager.save(SchemaFormStateManager.init(SCHEMA_3SECTION))
+    const errors: Error[] = []
+    const conn = new WebFormConnection(SCHEMA_3SECTION, { onError: (e) => errors.push(e) })
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    const sendSpy = (conn as any).ws.send
+    const switchSpy = vi.spyOn(conn as any, 'doSectionSwitch')
+
+    // 1) Client parks on the s1 -> s2 gate.
+    const parked = (conn as any).proceedSectionSwitch('s2') as Promise<void>
+    expect((conn as any).pendingSectionSwitch?.sectionId).toBe('s2')
+
+    // 2) AI switches to the unrelated s3 (cancels the parked switch) ...
+    ;(conn as any).handlePrepareSectionSwitchRequest({ request_id: 'r', identifier: 3 })
+    // ... and COMPLETES (clears switchInFlight) BEFORE we let the parked gate settle.
+    ;(conn as any).handleSectionSwitched({ section_number: 3 })
+    expect((conn as any).switchInFlight).toBe(false)
+
+    // 3) The parked promise has already resolved (cancelled) -- awaiting it must not
+    //    trigger a reconnect-switch to the stale s2.
+    await expect(parked).resolves.toBeUndefined()
+    expect(switchSpy).not.toHaveBeenCalledWith('s2')
+    const manualSwitchSends = sendSpy.mock.calls.filter((c: any[]) => {
+      try { return JSON.parse(c[0])?.type === 'manual_section_switch' } catch { return false }
+    }).length
+    expect(manualSwitchSends).toBe(0)
+    expect(errors.length).toBe(0)
   })
 
   it('parked client switch skips cleanly if the guard is claimed after the gate resolves (defense-in-depth, bd polyglot-pdf-6job)', async () => {

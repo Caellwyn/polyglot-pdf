@@ -82,15 +82,37 @@ export function validateField(field: FormField, value: any): string | null {
   // polyglot-pdf-wpw.3). Checked before the early `!field.validation` return below
   // so a bad enum is still rejected.
   //
-  // CRITICAL SCOPING (Codex PR #145 round 3): a STANDALONE checkbox (type
-  // "checkbox" WITHOUT group_kind "checkbox") is a BOOLEAN field -- the backend
-  // contract is "For checkbox: boolean" (config.py). Its `options` array describes
-  // the single PDF widget, not an enum of allowed values, so Gemini sends
-  // true/false, NOT an option value. Running the enum check on it would compare
-  // "true" against an option like "P2_checkbox3[0]" and reject every valid fill.
-  // So the enum gate applies ONLY to select/radio and checkbox GROUPS; a standalone
-  // checkbox skips it (its boolean is validated structurally, nothing to enum).
-  if (!normalizedEmpty && field.options && field.options.length > 0 && isStringEnumField(field)) {
+  // CRITICAL SCOPING (Codex PR #145 round 3): a STANDALONE checkbox is a
+  // BOOLEAN field -- the backend contract is "For checkbox: boolean"
+  // (config.py), so Gemini sends true/false, not an option value. Running the
+  // enum check on it would compare "true" against an option and reject every
+  // valid fill. The enum gate applies to select/radio and options-bearing
+  // checkbox GROUPS (see isStringEnumField) -- EXCEPT a boolean-intent value on a
+  // field that is really a boolean toggle. Two cases:
+  //   - an ACTUAL boolean value is boolean-intent on any checkbox (a genuine
+  //     on/off signal, never an option-slug selection);
+  //   - the literal "true"/"false" STRING (the backend tool contract's documented
+  //     boolean encoding) is boolean-intent ONLY on a SINGLE-option checkbox (a real
+  //     boolean toggle), NOT on a multi-option selection group.
+  // This matters because a real shipped standalone checkbox (form-kits/i-90
+  // p2_checkbox3) carries a ONE-element `options` array for its single PDF widget,
+  // so isStringEnumField's options.length>0 rule (bd polyglot-pdf-5jvn, matching
+  // canonicalizeAiCheckboxGroupValue/CheckboxField) calls it a "group" too; without
+  // this carve-out its true/false fill would enum-reject. `isCheckboxGroupField` is
+  // ALSO true for p2_checkbox3 (options.length>0), so it cannot distinguish the two;
+  // the load-bearing distinction is the OPTION COUNT -- a genuine boolean toggle has
+  // exactly one option, a selection group has 2+. Scoping the STRING case to
+  // single-option checkboxes keeps the carve-out from reopening the 5jvn silent-drop
+  // for a real group: an AI "true" on a multi-option group (e.g. p3_race) is NOT a
+  // valid option, so it must still enum-reject (Opus fresh-eyes finding). Mirrors
+  // canonicalizeAiCheckboxGroupValue's own boolean-intent exclusion.
+  const isSingleOptionCheckbox =
+    field.type === "checkbox" && (field.options?.length ?? 0) <= 1;
+  const isBooleanIntent =
+    field.type === "checkbox" &&
+    (typeof actualValue === "boolean" ||
+      (isSingleOptionCheckbox && /^(true|false)$/i.test(String(actualValue).trim())));
+  if (!normalizedEmpty && !isBooleanIntent && field.options && field.options.length > 0 && isStringEnumField(field)) {
     const optionError = validateOptionMembership(field, actualValue);
     if (optionError) return optionError;
   }
@@ -217,17 +239,37 @@ function optionValue(opt: any): string | undefined {
 
 /**
  * Whether a field's value is a STRING drawn from its option set -- i.e. the enum
- * check applies. True for `select`, `radio`, and checkbox GROUPS (group_kind
- * "checkbox"). FALSE for a STANDALONE checkbox (type "checkbox" without a group),
- * whose value is a BOOLEAN per the backend contract ("For checkbox: boolean"),
- * even though it carries an `options` array describing its single widget. Running
- * the enum check on a standalone checkbox would reject every valid true/false fill
+ * check applies. True for `select`, `radio`, and checkbox GROUPS. FALSE for a
+ * STANDALONE checkbox (type "checkbox" with NO options), whose value is a
+ * BOOLEAN per the backend contract ("For checkbox: boolean"). Running the enum
+ * check on a standalone checkbox would reject every valid true/false fill
  * (Codex PR #145 round 3).
+ *
+ * A checkbox GROUP is detected the SAME way as canonicalizeAiCheckboxGroupValue
+ * (webFormConnection.ts) and the CheckboxField renderer: options.length > 0, OR
+ * group_kind === "checkbox" for a group with no options yet. group_kind is NOT
+ * required -- no shipped form-kit sets it (e.g. form-kits/i-90 p3_race is
+ * type:"checkbox" with an options array and no group_kind), so gating on it left
+ * every real checkbox-group field's enum check dead: an AI-invented option value
+ * passed validateField untouched, landed as confirmed-pending, and was only
+ * silently dropped at PDF-fill time (bd polyglot-pdf-5jvn).
  */
 function isStringEnumField(field: FormField): boolean {
   if (field.type === "select" || field.type === "radio") return true;
-  if (field.type === "checkbox" && field.group_kind === "checkbox") return true;
+  if (field.type === "checkbox" && isCheckboxGroupField(field)) return true;
   return false;
+}
+
+/**
+ * Whether a checkbox FIELD (type "checkbox") is a GROUP -- vs. a standalone
+ * boolean checkbox. Shared by isStringEnumField and validateOptionMembership so
+ * both agree with canonicalizeAiCheckboxGroupValue (webFormConnection.ts) and the
+ * CheckboxField renderer's own `!field.options` single-checkbox test: a group is
+ * options-bearing, OR explicitly marked via group_kind (a group with no options
+ * yet). Does NOT check field.type itself -- callers already gate on that.
+ */
+function isCheckboxGroupField(field: FormField): boolean {
+  return (field.options?.length ?? 0) > 0 || field.group_kind === "checkbox";
 }
 
 /**
@@ -257,7 +299,7 @@ function validateOptionMembership(field: FormField, value: any): string | null {
       .filter((v): v is string => v !== undefined)
   );
 
-  const isCheckboxGroup = field.group_kind === "checkbox";
+  const isCheckboxGroup = field.type === "checkbox" && isCheckboxGroupField(field);
 
   // A single-choice field (select/radio) cannot take an array. An empty array in
   // particular would make the membership loop below vacuously pass, letting a blank
