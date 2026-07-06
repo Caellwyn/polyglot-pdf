@@ -203,11 +203,14 @@ def test_backfill_excludes_decorative_buttons(tmp_path):
     assert ef._backfill_unclaimed_widgets(schema, dump) == 0
 
 
-def test_acroform_dumper_names_buttons_button():
-    """The exclusion above only works if the REAL dumper emits the literal
-    "button" logical_type (round-3 fresh-eyes: PDF_WIDGET_TYPE_BUTTON was absent
-    from _TYPE_NAMES, so real buttons fell through to "unknown(1)" and would have
-    been backfilled as fake text fields). Pin the producer/consumer contract."""
+def test_acroform_dumper_type_names_cover_every_widget_type():
+    """The button exclusion (and every logical_type-keyed rule downstream) only
+    works if the REAL dumper NAMES every widget type instead of falling through to
+    "unknown(N)" (bd polyglot-pdf-f31h -- PDF_WIDGET_TYPE_BUTTON was the one
+    missing, so real buttons became "unknown(1)" and would be backfilled as fake
+    text fields). Enumerate fitz's PDF_WIDGET_TYPE_* constants and assert
+    _TYPE_NAMES maps every one EXCEPT UNKNOWN -- so a future PyMuPDF widget-type
+    addition fails HERE, loudly, instead of silently re-opening the bug class."""
     import sys
     sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
     try:
@@ -215,7 +218,23 @@ def test_acroform_dumper_names_buttons_button():
         import fitz
     except ImportError:
         pytest.skip("acroform_dump / fitz not importable")
+    # Buttons specifically (the f31h regression) map to the literal "button".
     assert acroform_dump._TYPE_NAMES.get(fitz.PDF_WIDGET_TYPE_BUTTON) == "button"
+    # Completeness: every PDF_WIDGET_TYPE_* constant except UNKNOWN is mapped.
+    constants = {
+        name: getattr(fitz, name)
+        for name in dir(fitz) if name.startswith("PDF_WIDGET_TYPE_")
+    }
+    missing = [
+        name for name, val in constants.items()
+        if name != "PDF_WIDGET_TYPE_UNKNOWN" and val not in acroform_dump._TYPE_NAMES
+    ]
+    assert not missing, (
+        "acroform_dump._TYPE_NAMES is missing a mapping for: "
+        + ", ".join(sorted(missing))
+        + " -- these widgets would become 'unknown(N)' and slip past every "
+        "logical_type-keyed rule (bd f31h)"
+    )
 
 
 def test_backfill_recovers_dropdowns_using_real_dumper_strings(tmp_path):
