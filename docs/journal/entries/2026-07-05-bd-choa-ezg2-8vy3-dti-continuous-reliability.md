@@ -111,9 +111,15 @@ fields.
 
 ## Scar tissue / lessons
 
-- **Vertex Live sessions on the demo project run ONE at a time** -- a second
-  concurrent session kills the first mid-run (1000 "operation was cancelled").
-  bd memory `vertex-live-one-session-at-a-time`.
+- **CORRECTED same-day: concurrent Vertex Live sessions are FINE.** The
+  "second session killed the first" reading was over-attribution -- the death
+  reproduced identically solo (real causes: the harness auto-VAD wedge + the
+  ~9-10 min GoAway connection cap), and a deliberate two-concurrent-sessions
+  test then ran both to completion cleanly. Documented Vertex quota is ~1000
+  concurrent live sessions/project on PayGo, and the backend is
+  per-connection by design, so production concurrency is not at risk. Still
+  serialize harness runs -- only so per-run cost/latency measurements stay
+  unconfounded. bd memory `vertex-live-one-session-at-a-time` (corrected).
 - **"Neutralized VAD sensitivities" is not disabled VAD.** Explicit activity
   brackets require `automatic_activity_detection.disabled=True`; otherwise the
   adapter silently no-ops them and the server's VAD segments your synthetic
