@@ -1,4 +1,14 @@
 {
+  "checkbox_groups": [
+    "p3_race",
+    "p5_checkbox1a"
+  ],
+  "standalone_unwrapped": [
+    "p2_checkbox3",
+    "p4_checkbox1a",
+    "p4_checkbox1b",
+    "p4_checkbox1c"
+  ],
   "slug_maps": {
     "p1_checkbox4": {
       "P1_checkbox4[0]": "yes_proceed_to_item_numbers_5_a_5_c",
@@ -338,10 +348,9 @@
       "P7_checkbox7Extend[1]": "no"
     }
   },
-  "checkbox_groups": [
-    "p3_race",
-    "p5_checkbox1a"
-  ],
+  "operators_rewritten": 19,
+  "behaviors_folded": 16,
+  "controls_fields_dropped": 13,
   "unmirrored_controls": [
     {
       "trigger": "p2_checkbox1",
@@ -365,10 +374,11 @@
       ]
     }
   ],
-  "standalone_unwrapped": [
-    "p2_checkbox3",
-    "p4_checkbox1a",
-    "p4_checkbox1b",
-    "p4_checkbox1c"
-  ]
+  "conditional_fields_dropped": 12,
+  "options_from_dump": [
+    "p3_line8_heightfeet",
+    "p3_line8_heightinches"
+  ],
+  "needs_options": [],
+  "duplicate_option_values": []
 }

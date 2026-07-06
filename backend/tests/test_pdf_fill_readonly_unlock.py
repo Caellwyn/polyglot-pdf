@@ -90,8 +90,14 @@ def test_readonly_field_unlocks_and_fills():
 
 
 # Race checkbox group: selecting these two options must set exactly their widgets.
+# Since the schema-v2 migration (bd polyglot-pdf-c5r8) an option's VALUE is a
+# semantic slug (e.g. "white") resolved to its widget via option.pdf_field_name;
+# the widget LEAVES are unchanged (only option.value migrated).
 _RACE_FIELD_ID = "p3_race"
-_RACE_SELECTED = ["P3_checkbox7_White[0]", "P3_checkbox7_Black[0]"]
+# Option VALUES (schema-v2 slugs) for White and Black -- what a fill request sends.
+_RACE_SELECTED = ["white", "black_or_african_american"]
+# The widget leaves those two options resolve to.
+_RACE_SELECTED_LEAVES = ["P3_checkbox7_White[0]", "P3_checkbox7_Black[0]"]
 _RACE_ALL_LEAVES = [
     "P3_checkbox7_White[0]", "P3_checkbox7_Asian[0]", "P3_checkbox7_Black[0]",
     "P3_checkbox7_Indian[0]", "P3_checkbox7_Hawaiian[0]",
@@ -136,7 +142,7 @@ def test_p3_race_options_fill():
         "PDF (regression of bd polyglot-pdf-7a9.15)"
     )
     # The two selected widgets are ON (non-Off); the other three stay Off.
-    for leaf in _RACE_SELECTED:
+    for leaf in _RACE_SELECTED_LEAVES:
         assert states[leaf] not in ("/Off", "Off", None), f"{leaf} did not fill"
-    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED):
+    for leaf in set(_RACE_ALL_LEAVES) - set(_RACE_SELECTED_LEAVES):
         assert states[leaf] in ("/Off", "Off"), f"{leaf} should not be selected"

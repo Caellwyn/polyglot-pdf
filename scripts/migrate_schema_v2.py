@@ -538,6 +538,23 @@ def _unmirrored_targets(control: Dict[str, Any], trigger_id: Any,
     return unmirrored
 
 
+def _load_dump(pdf: Optional[str], dump_json: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The AcroForm dump for combobox-option recovery: from a --pdf (run
+    acroform_dump) or a pre-made --dump JSON. None when neither is given."""
+    if dump_json:
+        with open(dump_json, encoding="utf-8") as fh:
+            return json.load(fh)
+    if pdf:
+        # scripts/bakeoff on sys.path (the repo-root insert at import handles
+        # backend; add bakeoff for acroform_dump).
+        bakeoff = os.path.join(_REPO, "scripts", "bakeoff")
+        if bakeoff not in sys.path:
+            sys.path.insert(0, bakeoff)
+        import acroform_dump  # noqa: E402
+        return acroform_dump.dump_pdf(pdf)
+    return None
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Migrate a v1 form schema to v2.")
     ap.add_argument("--in", dest="inp", required=True, help="input v1 schema.json")
@@ -545,6 +562,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--archive", default=None,
                     help="write the pre-migration schema here "
                          "(schema_archived.json backup convention)")
+    # A choice field mis-typed as an option-less combobox (the i-90 height
+    # dropdowns) needs the PDF's choices to recover its options -- without a dump
+    # such a field is left option-less and reported (needs_options). Supply the
+    # form's PDF (--pdf, runs acroform_dump) or a pre-made dump JSON (--dump).
+    ap.add_argument("--pdf", default=None,
+                    help="the form PDF (for combobox-option recovery via acroform_dump)")
+    ap.add_argument("--dump", default=None,
+                    help="a pre-made acroform_dump JSON (alternative to --pdf)")
+    ap.add_argument("--report", default=None,
+                    help="write the FULL migration report JSON here (audit trail)")
     args = ap.parse_args(argv)
 
     with open(args.inp, encoding="utf-8") as fh:
@@ -554,9 +581,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         with open(args.archive, "w", encoding="utf-8") as fh:
             json.dump(schema, fh, indent=2)
 
-    migrated, report = migrate(schema)
+    dump = _load_dump(args.pdf, args.dump)
+    migrated, report = migrate(schema, dump)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(migrated, fh, indent=2)
+    if args.report:
+        # The FULL report (all keys) -- the audit trail (fresh-eyes/bd ztf1: a
+        # hand-trimmed report hides real facts like options_from_dump).
+        with open(args.report, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, indent=2)
 
     print(f"[migrated] {args.inp} -> {args.out}")
     print(f"  checkbox_groups: {len(report['checkbox_groups'])}; "

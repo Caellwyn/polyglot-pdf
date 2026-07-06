@@ -76,3 +76,7 @@ def test_migrated_i90_roundtrip_fill_matches_p0_baseline():
     assert result["choice_fill_success"]["pct"] == 100.0, result["choice_fill_success"]
     assert result["choice_fill_success"]["attempted"] == 28  # baseline inventory
     assert result["text_fill_success"]["pct"] == 100.0, result["text_fill_success"]
+    # Pin the TEXT inventory too (fresh-eyes): a pct-only assertion would pass
+    # even if a future edit dropped TEXT fields (as long as the survivors filled).
+    # 110 = the P0 baseline's 108 + the 2 height comboboxes now text/select-fillable.
+    assert result["text_fill_success"]["attempted"] == 110
