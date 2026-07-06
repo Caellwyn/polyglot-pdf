@@ -235,14 +235,19 @@ def _correct_group_checkbox_type(schema: dict, dump_path: str) -> int:
 
 
 # logical_type (from the AcroForm dump) -> schema FieldType for a backfilled
-# field. Anything not a known button/choice widget is treated as text (the
-# safe, always-fillable default; a human editor can refine it).
+# field. A recovered field is a SINGLE widget with no deterministic option set,
+# so it must be a v2 type that is valid with zero options: `checkbox` (a boolean
+# -- for any single toggle widget, checkbox OR radio) or `text` (for everything
+# else, incl. combo/list dropdowns whose options we can't recover here). A human
+# editor refines a recovered dropdown into a proper select. Anything typed with
+# options (radio/select/checkbox_group) would fail v2's >=2-option/no-options
+# strictness on a bare backfilled field, so we never mint those here.
 _LOGICAL_TO_FIELD_TYPE = {
     "checkbox": "checkbox",
-    "radio": "radio",
+    "radio": "checkbox",  # a lone recovered radio widget is a boolean toggle
     "text": "text",
-    "combo": "select",
-    "list": "select",
+    "combo": "text",
+    "list": "text",
 }
 
 
@@ -276,7 +281,8 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
     Claim matching + fillability reuse schema_lint's helpers (single source of
     truth) so backfill and the under-claim lint rule can never disagree on what
     counts as a coverage gap (bd polyglot-pdf-w0eq)."""
-    from backend.services.schema_lint import (  # single source of truth
+    sys.path.insert(0, _REPO)  # self-sufficient, like the other backend imports
+    from backend.services.schema_lint import (  # noqa: E402 single source of truth
         _match_dump_names, is_fillable_widget)
     try:
         with open(dump_path, encoding="utf-8") as fh:
@@ -311,17 +317,26 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
         return None
 
     sections = schema.setdefault("sections", [])
+    had_original_sections = bool(sections)
 
     def _section_for_page(page):
         for sec in sections:
             if page in (sec.get("page_numbers") or []):
                 return sec
-        if sections:
+        if had_original_sections:
+            # A real (LLM-authored) section exists but none covers this page --
+            # file into the last one (a human editor re-files if needed).
             return sections[-1]
-        # No sections at all: create a dedicated bucket so a recovered field is
-        # never orphaned with section_id="" (which validates + lints clean but is
-        # unreachable via section navigation -- defeats the "no widget vanishes"
-        # goal). A human editor re-files it.
+        # No sections at all: create/reuse a dedicated bucket so a recovered field
+        # is never orphaned with section_id="" (which validates + lints clean but
+        # is unreachable via section navigation -- defeats the "no widget vanishes"
+        # goal). A human editor re-files it. Reuse across pages, accumulating each
+        # page into page_numbers.
+        for sec in sections:
+            if sec.get("id") == "recovered_fields":
+                if page not in sec.setdefault("page_numbers", []):
+                    sec["page_numbers"].append(page)
+                return sec
         bucket = {"id": "recovered_fields", "label": "Recovered fields",
                   "order": len(sections) + 1, "fields": [],
                   "page_numbers": [page]}
@@ -357,13 +372,10 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
         }
         if pos:
             field["pdf_position"] = pos
-        # A v2 standalone checkbox is a boolean carrying its widget in
-        # pdf_field_name -- NO options (options are forbidden on a v2 checkbox;
-        # a multi-widget group would be checkbox_group). A radio still needs a
-        # self-describing option to be fillable.
-        if field["type"] == "radio":
-            field["options"] = [{"value": fid, "label": label,
-                                 "pdf_field_name": name}]
+        # Every backfilled type (checkbox / text) is valid with NO options: a v2
+        # checkbox is a boolean carrying its widget in pdf_field_name, and text
+        # takes no options. We deliberately never mint an options-bearing type
+        # here (radio/select need >=2 options a bare widget can't supply).
         schema.setdefault("fields", []).append(field)
         sec.setdefault("fields", []).append(fid)
         added += 1

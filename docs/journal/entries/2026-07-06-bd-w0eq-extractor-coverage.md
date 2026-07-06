@@ -103,6 +103,27 @@ checkbox is a boolean; options are forbidden). Fixed: a backfilled standalone
 checkbox carries its widget in `pdf_field_name` with NO options; only a radio
 keeps a self-option.
 
+## Pre-PR fresh-eyes round 2 (folded in)
+
+A second fresh-eyes pass on the round-1 fixes caught one more blocking gap + two
+nits, all fixed:
+
+1. **Backfilled radio failed v2 validation (blocking).** A lone recovered radio
+   widget got 1 self-option, but v2 requires a radio to have >=2 options
+   (`FormSchema.model_validate` raised "radio requires at least 2 options"). Same
+   class for combo/list -> select. Fixed: `_LOGICAL_TO_FIELD_TYPE` now maps radio
+   -> checkbox (a lone recovered radio widget is a boolean toggle) and combo/list
+   -> text; the backfill mints ONLY zero-option-valid types (checkbox/text), never
+   an options-bearing type. New test `test_backfilled_fields_always_validate_as_v2`
+   round-trips a mixed dump through `FormSchema.model_validate` (the test that
+   would have caught this).
+2. **Bucket page_numbers didn't grow** across orphans on different pages -- fixed
+   to accumulate (guarded by a `had_original_sections` flag so a real section set
+   still routes to `sections[-1]`).
+3. **Backfill's backend import** lacked the `sys.path.insert(0, _REPO)` guard its
+   three sibling imports in the same file have -- added, so it no longer relies on
+   an unrelated module's transitive side effect.
+
 ## Scope note
 
 The redirect deprioritized committing accurate re-extractions of w7-2/f1040 (they

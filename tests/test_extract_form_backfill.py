@@ -240,14 +240,17 @@ def test_backfill_types_a_checkbox_widget_as_v2_boolean_no_options(tmp_path):
     assert "options" not in f  # a v2 checkbox is a boolean, not an options field
 
 
-def test_backfill_types_a_radio_widget_with_a_self_option(tmp_path):
-    """A recovered radio still needs a self-describing option to be fillable."""
+def test_backfill_types_a_lone_radio_widget_as_a_v2_checkbox(tmp_path):
+    """A lone recovered radio widget (one dump entry, single toggle) is modeled as
+    a v2 boolean checkbox -- NOT a 1-option radio, which v2 rejects (radio needs
+    >=2 options). This is the round-2 fresh-eyes fix: the old code minted an
+    invalid single-option radio that failed FormSchema.model_validate."""
     dump = _write_logical_dump(tmp_path, {"r[0]": "radio"})
     schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
     assert ef._backfill_unclaimed_widgets(schema, dump) == 1
     f = schema["fields"][0]
-    assert f["type"] == "radio"
-    assert f["options"][0]["pdf_field_name"] == "r[0]"
+    assert f["type"] == "checkbox"
+    assert "options" not in f
 
 
 def test_backfill_excludes_decorative_buttons(tmp_path):
@@ -283,6 +286,49 @@ def test_backfill_creates_a_bucket_section_when_none_exist(tmp_path):
     buckets = [s for s in schema["sections"] if s["id"] == "recovered_fields"]
     assert len(buckets) == 1
     assert f["id"] in buckets[0]["fields"]
+
+
+def test_backfilled_fields_always_validate_as_v2(tmp_path):
+    """Every backfilled type (checkbox/text) must be VALID under v2 strictness --
+    the round-2 fresh-eyes gap: a backfilled radio got 1 option and failed
+    FormSchema.model_validate ('radio requires at least 2 options'), and combo/
+    list -> select would likewise need options a bare widget can't supply. Pin
+    that a mixed dump (checkbox/radio/text/combo/list) yields a valid v2 schema."""
+    import warnings
+    from backend.models.form_models import FormSchema
+    dump = _write_logical_dump(tmp_path, {
+        "cb[0]": "checkbox", "rad[0]": "radio", "txt[0]": "text",
+        "combo[0]": "combo", "list[0]": "list"})
+    schema = {
+        "schema_version": "2", "source": "pdf",
+        "form_metadata": {"title": "T", "version": "1"},
+        "sections": [{"id": "s", "label": "S", "order": 1,
+                      "page_numbers": [1], "fields": []}],
+        "fields": [],
+    }
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 5
+    # No options-bearing type was minted (all valid with zero options).
+    assert {f["type"] for f in schema["fields"]} <= {"checkbox", "text"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        FormSchema.model_validate(schema)  # raises if any field is v2-invalid
+
+
+def test_backfill_bucket_accumulates_pages_across_orphans(tmp_path):
+    """Two orphans on different pages, no sections: one recovered_fields bucket
+    whose page_numbers covers BOTH pages (round-2 nit fix)."""
+    dump = {"fields": [
+        {"name": "a[0]", "logical_type": "text",
+         "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}]},
+        {"name": "b[0]", "logical_type": "text",
+         "widgets": [{"rect": {"page": 2, "x": 1, "y": 2, "width": 8, "height": 8}}]},
+    ]}
+    p = tmp_path / "d.json"; p.write_text(json.dumps(dump), encoding="utf-8")
+    schema = {"fields": []}
+    assert ef._backfill_unclaimed_widgets(schema, str(p)) == 2
+    buckets = [s for s in schema["sections"] if s["id"] == "recovered_fields"]
+    assert len(buckets) == 1
+    assert sorted(buckets[0]["page_numbers"]) == [1, 3]  # pages 0+1 -> 1-based 1,3
 
 
 def test_backfill_degenerate_leaf_falls_back_to_id_for_labels(tmp_path):
