@@ -376,6 +376,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   };
 
   const handlePreviousSection = () => {
+    // Continuous-session mode (bd polyglot-pdf-x8rt): no sections to navigate.
+    // Defense-in-depth, matching handleNextSection (the Previous button is already
+    // hidden in continuous mode, so this only guards a stray/future caller).
+    if (state.continuousSessionEnabled) return;
     // Use section-based navigation
     const prevSection = SchemaFormStateManager.getPreviousSection(state);
     if (!prevSection) return;

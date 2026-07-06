@@ -3394,6 +3394,12 @@ export class WebFormConnection {
    * @param wsUrl - Backend WebSocket URL (REQUIRED - no default to prevent localhost fallback in production)
    */
   async completeSection(wsUrl: string): Promise<void> {
+    // Continuous-session mode (bd polyglot-pdf-x8rt): no sections to complete or
+    // advance -- this would call startSection on a real next-section id, restarting
+    // the session we keep open. Defense-in-depth: completeSection has no UI caller
+    // today, but guarding it keeps every section-mutation entry point consistent so
+    // a future caller can't bypass the continuous-mode contract.
+    if (this.continuousSessionEnabled) return;
     if (!wsUrl) {
       throw new Error('wsUrl is required for completeSection - must pass the connected backend URL');
     }

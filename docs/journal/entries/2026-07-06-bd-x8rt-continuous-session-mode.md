@@ -79,11 +79,41 @@ default-off flag does not change their current-state prose, so they are out of
 scope here (the closeout rule: a doc stale from files your branch didn't
 behavior-change is not yours to fix).
 
+## Pre-PR fresh-eyes rounds (section-switch holes)
+
+The pre-PR adversarial assess ran FOUR rounds -- continuous mode had more
+section-switch trigger surfaces than the initial build covered, and each round
+found the ones the previous missed:
+
+1. AI `switch_section` tool + client auto-advance -- initial build (tool dropped;
+   `proceedSectionSwitch`/`handlePrepareSectionSwitchRequest` suppressed).
+2. **Round 1:** the `VoiceOverlay` section-picker dropdown (a 3rd trigger) --
+   hidden in continuous mode.
+3. **Round 2 (critical):** `startSection` -- the REAL post-disclaimer session-start
+   path (`switchToFirstSection` -> `startSection`) -- built its own raw
+   single-section handshake, bypassing `buildContinuousManifest`, so the whole-form
+   handshake was DEAD CODE on the session that fills the form. Fixed to send the
+   whole-form handshake; VERIFIED LIVE (WS interceptor: post-disclaimer handshake =
+   `handshake_jit`, `total_sections=1`, 132 fields, section `continuous`). Round 2
+   also fixed the `SchemaForm` Next/Prev buttons + a whole-form-completion
+   misdetection (`nextSectionForAck`).
+4. **Round 3:** `handleSubmit` -- pressing Enter in a field navigated sections
+   (native form submit reaching `handleNextSection`), ungated. Fixed + a
+   defense-in-depth guard on the shared mutation points (`handleNextSection`,
+   `handlePreviousSection`, `completeSection`).
+
+Every section-mutation entry point is now guarded. `SchemaForm.tsx` has no
+component test (pre-existing); filed as `polyglot-pdf-r8yy`.
+
 ## Files touched
 
 Backend: `config.py`, `routes/websocket_routes.py`,
 `services/form_filling_service.py`. Frontend:
 `schema-forms/state/schemaFormState.ts`, `schema-forms/utils/manifestUtils.ts`,
-`navigation.ts`, `webFormConnection.ts`. Deploy: `deploy-demo.sh`. Docs:
-`standards/ws-protocol.md` + this entry. Tests: `backend/tests/unit/test_dti.py`,
-`frontend/src/schema-forms/utils/manifestUtils.test.ts`.
+`navigation.ts`, `webFormConnection.ts`,
+`schema-forms/components/SchemaForm.tsx`, `demo/VoiceOverlay.tsx`. Deploy:
+`deploy-demo.sh`. Docs: `standards/ws-protocol.md`,
+`components/context-compression.md` + this entry. Tests:
+`backend/tests/unit/test_dti.py`,
+`frontend/src/schema-forms/utils/manifestUtils.test.ts`,
+`frontend/src/webFormConnection.confirmloop.test.ts`.
