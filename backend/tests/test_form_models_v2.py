@@ -335,6 +335,44 @@ def test_v1_tolerates_what_v2_rejects():
 
 
 # ---------------------------------------------------------------------------
+# Section-level show_if: same v2 rules as a field's show_if (bd s8gp)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "mutate, needles",
+    [
+        # includes on a text trigger (operator/trigger incompatible)
+        (
+            lambda doc: doc["sections"][0].update(
+                show_if={"field": "cb", "operator": "includes", "value": "x"}
+            ),
+            ("sections[0] (id=s1)", "operator 'includes' is not valid"),
+        ),
+        # no-value operator carrying a value
+        (
+            lambda doc: doc["sections"][0].update(
+                show_if={"field": "grp", "operator": "is_empty", "value": "x"}
+            ),
+            ("sections[0] (id=s1)", "takes no value"),
+        ),
+    ],
+)
+def test_v2_section_show_if_violation_yields_section_path_error(mutate, needles):
+    doc = valid_v2_doc()
+    mutate(doc)
+    assert_v2_error(doc, *needles)
+
+
+def test_v2_section_show_if_valid_condition_does_not_raise():
+    # Negative case: a well-formed section show_if must NOT raise -- proves
+    # the new section check does not over-reject legitimate conditions.
+    doc = valid_v2_doc()
+    doc["sections"][0]["show_if"] = {"field": "grp", "operator": "is_not_empty"}
+    schema = validate(doc)
+    assert isinstance(schema.get_section("s1").show_if, ConditionalDisplay)
+
+
+# ---------------------------------------------------------------------------
 # Exit criterion 3: unknown operator rejected naming the allowed set
 # ---------------------------------------------------------------------------
 
@@ -544,6 +582,26 @@ def test_validate_all_references_walks_composite_and_require_if():
     joined = "\n".join(result["errors"])
     assert "show_if references non-existent field 'nope'" in joined
     assert "require_if references non-existent field 'also_nope'" in joined
+
+
+def test_validate_all_references_walks_section_show_if():
+    doc = valid_v2_doc()
+    doc["sections"][0]["show_if"] = {"field": "ghost", "operator": "is_not_empty"}
+    # Bypass v2 parse-time strictness (which would also catch the ghost ref)
+    # so this test isolates the reference auditor specifically.
+    del doc["schema_version"]
+    result = validate(doc).validate_all_references()
+    joined = "\n".join(result["errors"])
+    assert "Section 's1' show_if references non-existent field 'ghost'" in joined
+
+
+def test_validate_all_references_valid_section_show_if_adds_no_error():
+    # Negative case: a section show_if pointing at a real field must NOT
+    # produce a reference error.
+    doc = valid_v2_doc()
+    doc["sections"][0]["show_if"] = {"field": "grp", "operator": "is_not_empty"}
+    result = validate(doc).validate_all_references()
+    assert result["errors"] == []
 
 
 # ---------------------------------------------------------------------------

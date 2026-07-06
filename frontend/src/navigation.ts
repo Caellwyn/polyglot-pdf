@@ -147,9 +147,22 @@ export function computeNextField(
 
     const currentValue = state.fieldValues[field.id];
     const isConfirmed = currentValue?.confirmed === true;
+    // Mirrors webFormConnection.ts handleConfirmFieldRequest's hasUsableValue
+    // predicate exactly (bd polyglot-pdf-6oe6): '' on an OPTIONAL field is a
+    // USABLE value, not an empty one. The AI fill path legitimately stores ''
+    // on an optional field to mean "the user said this does not apply" (the
+    // SI's field-does-not-apply flow, backend/config.py), then confirms it --
+    // that value is confirmed-pending, not unfilled. Without this, an optional
+    // field holding a confirmed-pending '' fell through Priority 1 (this loop
+    // saw hasValue=false) into Priority 2, where it was re-offered as an EMPTY
+    // field to FILL instead of a filled field to CONFIRM -- an extra,
+    // confusing pass for Gemini. A REQUIRED field's '' is never usable here
+    // (matching hasUsableValue), so a required-empty field is untouched by
+    // this change and still falls through to Priority 2 for filling.
+    const fieldIsRequired = field.validation?.required === true;
     const hasValue = currentValue?.value !== null
       && currentValue?.value !== undefined
-      && currentValue?.value !== '';
+      && (currentValue?.value !== '' || !fieldIsRequired);
 
     // Return first field with value but NOT confirmed
     if (hasValue && !isConfirmed) {

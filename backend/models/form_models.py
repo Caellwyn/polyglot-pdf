@@ -856,6 +856,10 @@ def _collect_v2_problems(schema: "FormSchema") -> List[str]:
         problems.extend(_v2_condition_problems(path, "show_if", f.show_if, fields_by_id))
         problems.extend(_v2_condition_problems(path, "require_if", f.require_if, fields_by_id))
 
+    for i, s in enumerate(schema.sections):
+        section_path = f"sections[{i}] (id={s.id})"
+        problems.extend(_v2_condition_problems(section_path, "show_if", s.show_if, fields_by_id))
+
     return problems
 
 
@@ -1069,6 +1073,15 @@ class FormSchema(BaseModel):
                         )
             if triggers:
                 condition_edges[field.id] = triggers
+
+        # Section-level show_if references (same atom-reference check as
+        # fields, but sections only carry the legacy single-atom shape).
+        for section in self.sections:
+            for atom in iter_condition_atoms(section.show_if):
+                if atom.field not in all_field_ids:
+                    errors.append(
+                        f"Section '{section.id}' show_if references non-existent field '{atom.field}'"
+                    )
 
         # show_if/require_if cycle detection (warning, not error): a field
         # whose visibility depends -- directly or transitively -- on itself

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""block_admin_merge_hook.py -- PreToolUse guard that denies `gh pr merge --admin`.
+r"""block_admin_merge_hook.py -- PreToolUse guard that denies `gh pr merge --admin`.
 
 Why this exists (bd polyglot-pdf-kibf)
 --------------------------------------

@@ -57,6 +57,28 @@ const SCHEMA: FormSchema = {
   parts: [{ id: 'p1', label: 'P1', order: 1, sections: ['s1', 's2'] }],
 } as unknown as FormSchema
 
+// A 3-section variant for the bd polyglot-pdf-k726 mismatch test: the parked
+// client switch targets s2 (N->N+1 boundary), and the AI targets an UNRELATED
+// section s3 -- a jump switch_section can make that the 2-section SCHEMA above
+// cannot express. A distinct version forces SchemaFormStateManager.init to
+// build fresh state instead of reusing the 2-section SCHEMA's cached state
+// (init() reuses `existing` whenever form_number+version match, per beforeEach).
+const SCHEMA_3SECTION: FormSchema = {
+  source: 'web',
+  form_metadata: { form_number: 'I-90', version: '2' },
+  fields: [
+    { id: 'f1', name: 'f1', spoken_name: 'F1', type: 'text' },
+    { id: 'f2', name: 'f2', spoken_name: 'F2', type: 'text' },
+    { id: 'f3', name: 'f3', spoken_name: 'F3', type: 'text' },
+  ],
+  sections: [
+    { id: 's1', label: 'S1', order: 1, fields: ['f1'] },
+    { id: 's2', label: 'S2', order: 2, fields: ['f2'] },
+    { id: 's3', label: 'S3', order: 3, fields: ['f3'] },
+  ],
+  parts: [{ id: 'p1', label: 'P1', order: 1, sections: ['s1', 's2', 's3'] }],
+} as unknown as FormSchema
+
 function installSessionStorage() {
   const store: Record<string, string> = {}
   global.sessionStorage = {
@@ -310,6 +332,53 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
 
     // The AI path's section_switched still completes the (one) switch cleanly.
     ;(conn as any).handleSectionSwitched({ section_number: 2 })
+    expect((conn as any).switchInFlight).toBe(false)
+    expect(conn.getStatus()).toBe('connected')
+  })
+
+  it('AI-initiated switch to an UNRELATED section does NOT cancel a parked client switch (bd polyglot-pdf-k726)', async () => {
+    // Gemini's switch_section can target an ARBITRARY section by order/label, not
+    // only the client's sequential next-section auto-advance target. So the AI can
+    // legitimately jump to section M (here s3) while the client is parked waiting
+    // to auto-advance from section N to N+1 (here s1 -> s2). The parked switch must
+    // NOT be cancelled just because an unrelated AI switch claimed switchInFlight --
+    // that would silently drop the N->N+1 boundary switch.
+    SchemaFormStateManager.save(SchemaFormStateManager.init(SCHEMA_3SECTION))
+    const errors: Error[] = []
+    const conn = new WebFormConnection(SCHEMA_3SECTION, { onError: (e) => errors.push(e) })
+    ;(conn as any).ws = { readyState: MockWebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn() }
+    const sendSpy = (conn as any).ws.send
+
+    // 1) Client auto-advance parks on the validator gate for the s1 -> s2 boundary.
+    const parked = (conn as any).proceedSectionSwitch('s2') as Promise<void>
+    expect((conn as any).pendingSectionSwitch).not.toBeNull()
+    expect((conn as any).pendingSectionSwitch.sectionId).toBe('s2')
+    expect((conn as any).switchInFlight).toBe(false)
+
+    // 2) AI-initiated switch arrives for an UNRELATED section (s3, order 3) while
+    //    parked. It claims switchInFlight (for its own boundary) but must NOT touch
+    //    the parked s1->s2 switch.
+    ;(conn as any).handlePrepareSectionSwitchRequest({ request_id: 'r', identifier: 3 })
+    expect((conn as any).switchInFlight).toBe(true)
+    expect((conn as any).pendingSectionSwitch).not.toBeNull()
+    expect((conn as any).pendingSectionSwitch.sectionId).toBe('s2')
+    expect((conn as any).pendingSectionSwitch.cancelled).toBe(false)
+
+    // 3) The parked switch's gate resolves (clean verdict). proceedSectionSwitch's
+    //    post-await switchInFlight re-check sees the AI switch still owns the guard
+    //    (for s3) and skips its OWN reconnect-based switch cleanly -- no throw, no
+    //    second manual_section_switch, no error. The boundary is deferred, not lost:
+    //    it is not stranded because the parked promise resolves cleanly either way.
+    ;(conn as any).resolvePendingSectionSwitch();
+    await expect(parked).resolves.toBeUndefined()
+    const manualSwitchSends = sendSpy.mock.calls.filter((c: any[]) => {
+      try { return JSON.parse(c[0])?.type === 'manual_section_switch' } catch { return false }
+    }).length
+    expect(manualSwitchSends).toBe(0)
+    expect(errors.length).toBe(0)
+
+    // The AI path's own switch (to s3) still completes cleanly.
+    ;(conn as any).handleSectionSwitched({ section_number: 3 })
     expect((conn as any).switchInFlight).toBe(false)
     expect(conn.getStatus()).toBe('connected')
   })

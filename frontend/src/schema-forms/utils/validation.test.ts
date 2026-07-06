@@ -417,10 +417,14 @@ describe('validateField (comma-separated checkbox-group values)', () => {
   });
 });
 
-// Standalone checkbox fields (type "checkbox" WITHOUT group_kind "checkbox") are
-// BOOLEAN per the backend contract ("For checkbox: boolean"), even though they
-// carry an `options` array describing their single PDF widget. The enum gate must
-// NOT run on them or every valid true/false fill is rejected. Codex PR #145 round 3.
+// Standalone checkbox fields are BOOLEAN per the backend contract ("For
+// checkbox: boolean"), even though a real shipped one (form-kits/i-90
+// p2_checkbox3) carries a ONE-element `options` array describing its single PDF
+// widget -- so isStringEnumField's options.length>0 checkbox-group rule (bd
+// polyglot-pdf-5jvn) calls it a "group" too. The enum gate must still NOT run on
+// a boolean-intent value (true/false, or the "true"/"false" strings the backend
+// tool contract documents), or every valid fill would enum-reject against the
+// single option value. Codex PR #145 round 3 + bd polyglot-pdf-5jvn.
 describe('validateField (standalone boolean checkbox)', () => {
   const standaloneCheckbox: FormField = {
     id: 'p2_checkbox3',
@@ -428,7 +432,8 @@ describe('validateField (standalone boolean checkbox)', () => {
     spoken_name: 'previous card never received',
     type: 'checkbox',
     section_id: 'Part 2',
-    // group_kind is NOT "checkbox" -> standalone boolean, not an enum group.
+    // NO group_kind -- exactly the real i-90 p2_checkbox3 shape. Still a
+    // standalone boolean checkbox despite the one-element options array.
     options: [{ value: 'P2_checkbox3[0]', label: 'My previous card was issued but never received' }],
   };
 
@@ -444,6 +449,48 @@ describe('validateField (standalone boolean checkbox)', () => {
     // Regression: the option value is "P2_checkbox3[0]"; String(true) != that, so
     // an enum check would have rejected it.
     expect(validateField(standaloneCheckbox, 'true')).toBeNull();
+  });
+});
+
+// Checkbox-GROUP enum validation must run even though NO shipped form-kit sets
+// group_kind (bd polyglot-pdf-5jvn): the real i-90 p3_race field is type
+// "checkbox" with a multi-option array and no group_kind. isStringEnumField's
+// checkbox branch now matches canonicalizeAiCheckboxGroupValue/CheckboxField's
+// own group-detection rule (options.length > 0), not a group_kind requirement,
+// so an AI-invented race option is rejected instead of silently landing.
+describe('validateField (checkbox-group enum with no group_kind, e.g. i-90 p3_race)', () => {
+  const raceField: FormField = {
+    id: 'p3_race',
+    name: 'Race (Select all applicable)',
+    spoken_name: 'race',
+    type: 'checkbox',
+    section_id: 'Part 3',
+    // Deliberately NO group_kind -- matches the real shipped i-90 schema.
+    options: [
+      { value: 'P3_checkbox7_White[0]', label: 'White' },
+      { value: 'P3_checkbox7_Asian[0]', label: 'Asian' },
+      { value: 'P3_checkbox7_Black[0]', label: 'Black or African American' },
+    ],
+  };
+
+  it('accepts a single valid option (string, as canonicalized from a voice fill)', () => {
+    expect(validateField(raceField, 'P3_checkbox7_White[0]')).toBeNull();
+  });
+
+  it('accepts a valid option wrapped as a one-element array (the canonical stored shape)', () => {
+    expect(validateField(raceField, ['P3_checkbox7_White[0]'])).toBeNull();
+  });
+
+  it('accepts multiple valid options as an array', () => {
+    expect(validateField(raceField, ['P3_checkbox7_White[0]', 'P3_checkbox7_Asian[0]'])).toBeNull();
+  });
+
+  it('rejects an AI-invented option string', () => {
+    expect(validateField(raceField, 'P3_checkbox7_MadeUp[0]')).not.toBeNull();
+  });
+
+  it('rejects an AI-invented option inside an array', () => {
+    expect(validateField(raceField, ['P3_checkbox7_White[0]', 'P3_checkbox7_MadeUp[0]'])).not.toBeNull();
   });
 });
 

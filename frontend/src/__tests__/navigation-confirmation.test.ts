@@ -216,6 +216,72 @@ describe('computeNextField with confirmation prioritization', () => {
     expect(nextField?.id).toBe('firstName');
   });
 
+  // bd polyglot-pdf-6oe6: an OPTIONAL field the AI filled with '' (the
+  // field-does-not-apply flow: update_form_fields with '' then confirm) but has
+  // NOT yet confirmed must be offered as a filled-unconfirmed field to CONFIRM,
+  // not re-offered as an empty field to FILL. This mirrors webFormConnection.ts
+  // handleConfirmFieldRequest's hasUsableValue, which already treats '' as usable
+  // on an optional field -- before this fix, computeNextField's Priority-1
+  // has-value check (`value !== ''`) disagreed, so the field fell through to
+  // Priority 2 and was offered as empty instead of as a pending confirmation.
+  it('should offer an OPTIONAL field holding an unconfirmed "" value for CONFIRM, not re-fill', () => {
+    const schema = createTestSchema([
+      { id: 'firstName', name: 'First Name' },
+      { id: 'middleName', name: 'Middle Name' }, // optional: no validation.required
+      { id: 'lastName', name: 'Last Name' },
+    ]);
+
+    const state = SchemaFormStateManager.init(schema);
+
+    // firstName: filled and confirmed -- already done, should be skipped.
+    let updatedState = SchemaFormStateManager.updateField(state, 'firstName', 'John', {
+      confirmed: true,
+      confirmationMethod: 'ai_voice',
+    });
+
+    // middleName: the AI filled '' ("no middle name") but has NOT confirmed yet.
+    updatedState = SchemaFormStateManager.updateField(updatedState, 'middleName', '', {
+      confirmed: false,
+    });
+
+    // lastName: genuinely empty (no value at all).
+
+    const nextField = computeNextField(updatedState);
+
+    // Must return middleName (filled-unconfirmed, Priority 1) -- NOT lastName
+    // (which would wrongly imply middleName is being treated as still-empty).
+    expect(nextField).not.toBeNull();
+    expect(nextField?.id).toBe('middleName');
+  });
+
+  // Contrast case: a REQUIRED field's unconfirmed '' must NOT be treated as
+  // usable -- it stays a Priority-2 empty-to-fill field, exactly as before the
+  // fix. This proves the fix is scoped to optional fields only.
+  it('should still treat an unconfirmed "" on a REQUIRED field as empty (Priority 2), not confirmable', () => {
+    const schema = createTestSchema([
+      {
+        id: 'ssn',
+        name: 'SSN',
+        validation: { required: true },
+      },
+      { id: 'lastName', name: 'Last Name' },
+    ]);
+
+    const state = SchemaFormStateManager.init(schema);
+
+    // ssn: required field holding an unconfirmed '' (should NOT be confirmable).
+    const updatedState = SchemaFormStateManager.updateField(state, 'ssn', '', {
+      confirmed: false,
+    });
+
+    const nextField = computeNextField(updatedState);
+
+    // Priority 1 finds nothing usable (ssn's '' is not usable since it's
+    // required); Priority 2 returns the first empty field, which is ssn itself.
+    expect(nextField).not.toBeNull();
+    expect(nextField?.id).toBe('ssn');
+  });
+
   it('should work with manual_edit confirmation method', () => {
     const schema = createTestSchema([
       { id: 'firstName', name: 'First Name' },
