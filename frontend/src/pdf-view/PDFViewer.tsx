@@ -27,14 +27,21 @@ export interface PDFViewerProps {
   onFirstPageLoad?: (page: PDFPageProxy) => void;
 }
 
-function fillStateFor(
+export function fillStateFor(
   fieldId: string,
   wrapped: any,
   raw: unknown,
   currentFieldId?: string | null
 ): FillState {
   if (fieldId === currentFieldId) return 'current';
-  const isEmpty = raw === null || raw === undefined || raw === '' || raw === false;
+  // An empty array counts as empty (a cleared checkbox_group selection) --
+  // same convention as validation.ts's required-check.
+  const isEmpty =
+    raw === null ||
+    raw === undefined ||
+    raw === '' ||
+    raw === false ||
+    (Array.isArray(raw) && raw.length === 0);
   if (isEmpty) return 'empty';
   if (wrapped && typeof wrapped === 'object' && wrapped.confirmed) return 'confirmed';
   return 'filled';

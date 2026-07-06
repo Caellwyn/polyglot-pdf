@@ -43,7 +43,10 @@ export default function PreviewPane({
   const paneRef = useRef<HTMLDivElement>(null);
   const fitAppliedRef = useRef(false);
 
-  // QA surface: any field that cannot paint (no usable rect) is listed once.
+  // QA surface: any field that cannot paint (no usable rect) is listed once
+  // per pane mount. Deps are deliberately empty: `schema` gets a fresh object
+  // identity on every state reload (SchemaFormStateManager.load JSON-parses),
+  // so a [schema] dep would re-log per fill.
   useEffect(() => {
     const unpositioned = schema.fields.filter((f) => !hasValidCoordinates(f.pdf_position));
     if (unpositioned.length > 0) {
@@ -52,7 +55,8 @@ export default function PreviewPane({
         unpositioned.map((f) => f.id)
       );
     }
-  }, [schema]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount by design
+  }, []);
 
   // Fit-width once, off the first rendered page's unscaled dimensions.
   const handleFirstPageLoad = useCallback((page: PDFPageProxy) => {

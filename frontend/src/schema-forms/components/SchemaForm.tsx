@@ -80,6 +80,17 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   // Preview mode's overlays color it, the P1.3 camera snaps to it.
   const [currentFieldId, setCurrentFieldId] = useState<string | null>(null);
 
+  // Once the current field is CONFIRMED it is done -- clear the marker so its
+  // overlay shows green, not a stale orange (the next hint re-sets it). Also
+  // covers the last-field / disconnect-after-confirm edge.
+  useEffect(() => {
+    if (!currentFieldId) return;
+    const wrapped = state.fieldValues[currentFieldId];
+    if (wrapped && typeof wrapped === 'object' && (wrapped as any).confirmed) {
+      setCurrentFieldId(null);
+    }
+  }, [currentFieldId, state.fieldValues]);
+
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
 
