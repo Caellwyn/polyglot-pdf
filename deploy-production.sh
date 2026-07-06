@@ -54,4 +54,8 @@ fi
 # Build with the prod schema config so Vite loads .env.production. (See the
 # FRONTEND_BUILD_CMD note in deploy-all.sh -- a bare "npm run build" ships an
 # empty Firebase config and the app dies with "auth/invalid-api-key".)
-FRONTEND_BUILD_CMD="npm run build:schema" ./deploy-all.sh "$@"
+# BACKEND_EXTRA_ENV pins VERTEXAI explicitly (matching deploy-demo.sh) so the
+# production channel's auth mode is documented in this script rather than
+# relying on backend/config.py's implicit default (bd polyglot-pdf-4b30).
+BACKEND_EXTRA_ENV="VERTEXAI=true" \
+    FRONTEND_BUILD_CMD="npm run build:schema" ./deploy-all.sh "$@"

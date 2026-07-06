@@ -482,8 +482,13 @@ async def set_editor_kit_status(
         if lint_errors:
             # Cap the finding list BEFORE appending the "and N more" tail so a
             # long list can never truncate away the count of what was elided.
+            # Each segment is ALSO capped (~200 chars) before joining: a single
+            # finding whose message embeds a very long option value (e.g. a
+            # 10KB string) would otherwise eat the whole [:1400] budget on its
+            # own, hiding later findings' text within the first 8 (bd
+            # polyglot-pdf-tmby nit 1).
             shown = "; ".join(
-                f"[{f.rule}] {f.path}: {f.message}" for f in lint_errors[:8]
+                f"[{f.rule}] {f.path}: {f.message}"[:200] for f in lint_errors[:8]
             )[:1400]
             more = len(lint_errors) - 8
             if more > 0:
