@@ -452,4 +452,28 @@ describe('WebFormConnection confirm at a section boundary (bd polyglot-pdf-njvh)
     // boundary. The backend reads this to skip the racing next-field-hint request.
     expect(boundaryAck.section_complete).toBe(true)
   })
+
+  it('does NOT ack section_complete in continuous-session mode, even when a real next section exists (bd polyglot-pdf-x8rt)', async () => {
+    const ws = await connectedTwoSection()
+    // Backend signals continuous mode via session_ready; this sets both the
+    // instance flag and the persisted state (so computeNextField spans the whole
+    // form). After it, confirming the last field of section 1 must NOT be read as a
+    // section boundary -- there are no sections to switch to, and field f_s2 is
+    // still unfilled, so the whole form is not done either.
+    ws.onmessage?.({ data: JSON.stringify({
+      type: 'session_ready', session_id: 'web_x', ephemeral: true,
+      jit_mode_enabled: true, dti_mode_enabled: true, continuous_session_enabled: true,
+    }) })
+    ws.send.mockClear()
+
+    fillS1(ws, 'value-one')
+    fireConfirm(ws, 'f_s1', 'req-continuous')
+
+    const acks = confirmAcks(ws)
+    expect(acks).toHaveLength(1)
+    expect(acks[0].request_id).toBe('req-continuous')
+    // The key assertion: no section boundary in continuous mode. (getNextSection
+    // WOULD return section 2 here; the continuous guard is what suppresses it.)
+    expect(acks[0].section_complete).toBeUndefined()
+  })
 })

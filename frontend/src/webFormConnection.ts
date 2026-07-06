@@ -1643,7 +1643,15 @@ export class WebFormConnection {
     // suppress that. So: section_complete == (current section done) AND (a next
     // section exists) -- exactly the switchToSection branch below.
     const nextField = computeNextField(this.state, { skipConfirmed: true });
-    const nextSectionForAck = nextField
+    // Continuous-session mode (bd polyglot-pdf-x8rt): there are NO sections to
+    // advance to -- computeNextField spans the whole form, so !nextField means the
+    // WHOLE FORM is done, not a section boundary. Force nextSectionForAck to null so
+    // sectionComplete stays false (no spurious section_complete WS message) and the
+    // completion branch below takes the form-complete path (onFormComplete), not the
+    // section-switch path. Without this, currentSectionId stays pinned at section 1
+    // while getNextSection reports a real "section 2", misdetecting whole-form
+    // completion as a section boundary (fresh-eyes gap 2).
+    const nextSectionForAck = (nextField || this.continuousSessionEnabled)
       ? null
       : SchemaFormStateManager.getNextSection(this.state);
     const sectionComplete = !nextField && !!nextSectionForAck;
