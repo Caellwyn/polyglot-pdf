@@ -75,11 +75,20 @@ Fresh-eyes assess outcome: (folded in after the Step-5.5 loop below).
 
 ## Doc freshness
 
-New tier-2 doc for the pdf-view surface is deliberately deferred to the epic's
-P1.4 bead (`polyglot-pdf-f58l` -- `docs/components/pdf-view.md`), which lands
-after the live Preview surface exists; a component doc for a modal-only module
-would be churn. No existing tier-1/2 doc tracks `frontend/src/pdf-view/` yet.
-`docs/INDEX.md` gained the sprint-8 active-plan row.
+- `docs/components/schema-forms.md` BUMPED: SchemaForm now mounts the
+  flag-gated preview button + lazy modal; stamp moved to this entry.
+- `docs/standards/testing.md` reviewed + left: it tracks
+  `frontend/package.json`, but this branch's only package.json change is the
+  pdfjs-dist runtime dep -- no testing guidance is affected.
+- The other STALE flags in the prep run (auth, context-compression,
+  jit-schema, pdf-filling, tool-call-flow, voice-ai, websocket-routing, and
+  most of standards/) all point at backend/shared files this branch did NOT
+  touch -- pre-existing staleness (worktree checkout mtimes), left as-is.
+- New tier-2 doc for the pdf-view surface is deliberately deferred to the
+  epic's P1.4 bead (`polyglot-pdf-f58l` -- `docs/components/pdf-view.md`),
+  which lands after the live Preview surface exists; a component doc for a
+  modal-only module would be churn. `docs/INDEX.md` gained the sprint-8
+  active-plan row.
 
 ## Files touched
 
