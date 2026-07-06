@@ -199,6 +199,31 @@ export async function lintSchema(schema: FormSchema): Promise<LintReport> {
   return (await res.json()) as LintReport;
 }
 
+/** One-click Repair-all result (bd polyglot-pdf-zgln, P5.3b). The repaired
+ * schema is stored server-side (over the same schema_repair the CLI runs), so
+ * the caller must RELOAD the kit's schema after this resolves. */
+export interface RepairReport {
+  applied: number;
+  dropped: number;
+  aliasHits: number;
+  repairs: Array<{ action: string; path: string; detail: string; error: boolean }>;
+  errorCount: number;
+  warningCount: number;
+}
+
+/** Run the server-side one-click Repair-all on a kit's STORED draft. Author
+ * tier. A 422 (the draft references PDF widgets that do not exist -- repair
+ * cannot invent mappings) surfaces its detail for the human to fix. AuthError on
+ * a rotated code. */
+export async function repairKit(kitId: string): Promise<RepairReport> {
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/repair`,
+    { method: 'POST' },
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not repair the schema'));
+  return (await res.json()) as RepairReport;
+}
+
 /** Flip a kit's status. Promotion to complete is validated server-side (the
  * publish gate) -- a 422 carries the validation detail to show the human. */
 export async function setRemoteStatus(

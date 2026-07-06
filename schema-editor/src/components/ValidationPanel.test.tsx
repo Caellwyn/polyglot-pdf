@@ -160,3 +160,49 @@ describe('ValidationPanel load-time lint display', () => {
     expect(screen.queryByText(/Could not check for issues/)).toBeNull();
   });
 });
+
+describe('ValidationPanel Repair-all (bd zgln, P5.3b)', () => {
+  const ERROR_REPORT = () =>
+    report([
+      {
+        severity: 'ERROR', rule: 'option-value-duplicate',
+        path: 'fields[0] (id=picker)', field_id: 'picker',
+        message: "option value 'dup' appears 2 times",
+      },
+    ]);
+
+  it('shows "Repair all (N)" and runs the handler when there are errors', async () => {
+    const onRepairAll = vi.fn().mockResolvedValue(undefined);
+    lintSchema.mockResolvedValue(ERROR_REPORT());
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    const btn = await screen.findByRole('button', { name: /Repair all \(1\)/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(onRepairAll).toHaveBeenCalledTimes(1));
+  });
+
+  it('hides the button when there are no errors (warnings only)', async () => {
+    const onRepairAll = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'WARNING', rule: 'show-if-cycle',
+          path: 'fields (id=a)', field_id: 'a', message: 'cycle',
+        },
+      ]),
+    );
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}} onRepairAll={onRepairAll} />,
+    );
+    await waitFor(() => expect(screen.getByText('1 warning')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+
+  it('shows no button when onRepairAll is not provided (editor tier)', async () => {
+    lintSchema.mockResolvedValue(ERROR_REPORT());
+    render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);
+    await waitFor(() => expect(screen.getByText('1 error')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
+  });
+});

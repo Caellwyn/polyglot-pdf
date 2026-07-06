@@ -59,6 +59,9 @@ from backend.routes.form_kit_routes import _safe_kit_id
 from backend.services.schema_lint import (
     SEVERITY_ERROR, SEVERITY_WARNING, lint_schema,
 )
+from backend.services.schema_repair import (
+    RepairError, alias_hit_count, repair as repair_schema,
+)
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
@@ -180,6 +183,23 @@ class LintResponse(BaseModel):
     findings: list[LintFindingOut]
     errorCount: int
     warningCount: int
+
+
+class RepairResponse(BaseModel):
+    """One-click Repair-all result (bd polyglot-pdf-zgln, P5.3b).
+
+    The repaired schema is stored server-side; this reports what changed. The
+    `repairs` list + counts mirror the CLI's _bakeoff.authoring.repair block
+    (same schema_repair.repair() call, so the output equals the CLI on the same
+    input). errorCount/warningCount are the POST-repair lint counts the editor
+    re-renders (they should drop toward zero)."""
+
+    applied: int          # substantive repairs that succeeded
+    dropped: int          # substantive repairs that dropped data (recorded ERROR)
+    aliasHits: int        # invented-operator alias table hit count
+    repairs: list[dict]   # the full repair report (verbatim from schema_repair)
+    errorCount: int       # lint ERRORs remaining after repair
+    warningCount: int     # lint WARNINGs remaining after repair
 
 
 def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
@@ -418,8 +438,10 @@ async def lint_editor_schema(
     Never 4xx on schema shape -- lint_schema never raises, and a malformed draft
     IS the thing the contractor needs the findings for (a structural problem
     surfaces as a condition-malformed finding, not an HTTP error). No dump is
-    passed: the acroform dump is not a per-kit artifact until P5.3, matching the
-    promotion gate's dump-less lint today.
+    passed: this route lints the POSTED schema (no kit id), so it has no kit dump
+    to load -- the dump-aware widget-claim rule runs at the kit-scoped gates (the
+    extract route + the promotion gate, bd v96b) where the acroform.json artifact
+    is available.
     """
     findings = lint_schema(schema)
     out = [LintFindingOut(**f.as_dict()) for f in findings]
@@ -429,6 +451,83 @@ async def lint_editor_schema(
               errors=error_count, warnings=warning_count)
     return LintResponse(
         findings=out, errorCount=error_count, warningCount=warning_count,
+    )
+
+
+@router.post("/kits/{kit_id}/repair", response_model=RepairResponse)
+async def repair_editor_kit(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+) -> RepairResponse:
+    """One-click Repair-all for a kit's stored draft (bd polyglot-pdf-zgln, P5.3b).
+
+    Loads the kit's schema + its persisted AcroForm dump (bd v96b) and runs the
+    SAME deterministic backend.services.schema_repair.repair() the CLI extraction
+    pass runs, so the result equals CLI repair on the same input. The repaired
+    schema is stored back; the response reports what changed (mirroring the CLI's
+    _bakeoff.authoring.repair block) plus the POST-repair lint counts the editor
+    re-renders.
+
+    Author tier: repair MUTATES the stored schema (like extraction), so it needs
+    the author code, not the polish-only editor code. RepairError (the draft
+    references PDF widgets that do not exist -- repair cannot invent mappings) is
+    a 422 CLIENT error naming the widgets, not a 500: a human must fix the
+    hallucinated reference. A complete (published) kit is refused (409) -- repair
+    would rewrite a live schema; revert to draft first, same as save.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is published (status complete). Revert it to draft "
+                   "before repairing -- repair rewrites the schema.",
+        )
+    schema_file, _pdf = _resolve_meta_names(meta)
+    try:
+        schema = await store.load_schema(kit_id, schema_file)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Kit {kit_id} has no schema to repair"
+        ) from exc
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to load schema") from exc
+
+    dump_data = await _load_kit_dump(store, kit_id)
+    try:
+        repaired, repairs = repair_schema(schema, dump_data)
+    except RepairError as exc:
+        # Hallucinated widgets: repair must NOT paper over them (a 500 would read
+        # as a server bug; this is a fixable data defect the author must resolve).
+        raise HTTPException(status_code=422, detail=str(exc)[:400]) from exc
+
+    try:
+        await store.put_schema(kit_id, repaired, schema_file)
+    except FormKitStoreError as exc:
+        raise HTTPException(
+            status_code=502, detail="Repair succeeded but the schema could not be "
+                                    "stored",
+        ) from exc
+
+    # Report shape mirrors the CLI's _repair_schema (extract_form.py): substantive
+    # repairs split applied/dropped, plus the alias hit count; alias-hit-rate is
+    # the meta entry, not a substantive repair.
+    substantive = [r for r in repairs if r.get("action") != "alias-hit-rate"]
+    applied = sum(1 for r in substantive if not r.get("error"))
+    dropped = sum(1 for r in substantive if r.get("error"))
+
+    # Re-lint the repaired schema (dump-aware) so the editor re-renders the
+    # remaining findings -- the SAME schema_lint the promotion gate uses.
+    findings = lint_schema(repaired, dump_data)
+    error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+    warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+    _log.info("editor_schema_repaired", kit_id=kit_id, role=role,
+              applied=applied, dropped=dropped,
+              errors_after=error_count, warnings_after=warning_count)
+    return RepairResponse(
+        applied=applied, dropped=dropped, aliasHits=alias_hit_count(repairs),
+        repairs=repairs, errorCount=error_count, warningCount=warning_count,
     )
 
 

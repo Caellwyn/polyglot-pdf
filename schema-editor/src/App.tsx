@@ -25,6 +25,7 @@ import {
   isHostedMode,
   loadRemotePdfBlobUrl,
   loadRemoteSchema,
+  repairKit,
   saveRemoteSchema,
   type EditorRole,
   type RemoteKitEntry,
@@ -547,6 +548,48 @@ export const App: React.FC = () => {
     }
   }, [hasUnsavedChanges, loadSchemaState]);
 
+  // One-click Repair-all (bd polyglot-pdf-zgln, P5.3b): runs the server-side
+  // deterministic repair on the kit's STORED schema, then reloads the repaired
+  // result. Because it operates on the stored draft, unsaved edits must be saved
+  // first (or discarded) -- reloading would otherwise clobber them silently.
+  // Hosted + author + an open kit only; the ValidationPanel gates the button so
+  // this is not reached otherwise.
+  const handleRepairAll = React.useCallback(async () => {
+    if (!hosted || !selectedKitId) return;
+    if (hasUnsavedChanges) {
+      const ok = window.confirm(
+        'Repair works on the saved version. Save your changes first, or click ' +
+        'OK to discard unsaved edits and repair the last-saved schema.'
+      );
+      if (!ok) return;
+    }
+    // Stale-open guard (bd polyglot-pdf-r5vp): repair is a multi-second round trip
+    // (deterministic repair + store write + reload) and the catalogue stays
+    // clickable, so if the author opens a DIFFERENT kit mid-flight, this repair's
+    // reload must NOT clobber the newer kit's display -- the same openSeqRef token
+    // handleOpenRemoteKit uses (Codex PR #280). Capture it at entry; abandon after
+    // any await once a newer open (or repair) supersedes us.
+    const seq = ++openSeqRef.current;
+    try {
+      await repairKit(selectedKitId);
+      if (seq !== openSeqRef.current) return; // superseded while repairing
+      const repaired = await loadRemoteSchema(selectedKitId);
+      if (seq !== openSeqRef.current) return; // superseded while reloading
+      if (repaired) loadSchemaState(repaired); // fresh baseline -> history cleared
+      setSaveError(null);
+    } catch (err) {
+      if (seq !== openSeqRef.current) return; // a stale repair's failure is moot
+      if (err instanceof AuthError) {
+        handleAuthExpired();
+        return;
+      }
+      // Surface the repair failure (e.g. a 422 naming hallucinated widgets) in
+      // the same non-blocking banner saves use.
+      setSaveError(err instanceof Error ? err.message : 'Failed to repair schema');
+      console.error('Failed to repair schema:', err);
+    }
+  }, [hosted, selectedKitId, hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
+
   // Get selected field
   const selectedField = React.useMemo(() => {
     if (!schema || !selectedFieldId) return null;
@@ -987,6 +1030,13 @@ export const App: React.FC = () => {
             setSelectedFieldId(fieldId);
           }}
           onAuthError={handleAuthExpired}
+          // Repair-all is author-tier on an open hosted kit only (bd zgln); the
+          // panel additionally shows the button only when errors exist.
+          onRepairAll={
+            hosted && role === 'author' && selectedKitId
+              ? handleRepairAll
+              : undefined
+          }
         />
       )}
     </div>

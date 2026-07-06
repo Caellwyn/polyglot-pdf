@@ -25,7 +25,21 @@ vi.mock('./components/PDFViewer', () => ({
   ),
 }));
 vi.mock('./components/FieldList', () => ({ FieldList: () => <div data-testid="list" /> }));
-vi.mock('./components/ValidationPanel', () => ({ ValidationPanel: () => <div data-testid="vp" /> }));
+// The panel mock exposes a "repair" button that fires onRepairAll (when the host
+// provides it) so App's handleRepairAll wiring is testable through the full tree
+// (bd zgln; fresh-eyes: an isolation test of the panel does not cover App's
+// wiring to it). data-has-repair reflects whether the host passed the callback.
+vi.mock('./components/ValidationPanel', () => ({
+  ValidationPanel: ({ onRepairAll }: { onRepairAll?: () => Promise<void> }) => (
+    <div data-testid="vp" data-has-repair={onRepairAll ? 'yes' : 'no'}>
+      {onRepairAll && (
+        <button data-testid="repair-all" onClick={() => void onRepairAll()}>
+          repair
+        </button>
+      )}
+    </div>
+  ),
+}));
 // FieldEditor is mocked with an edit button so a test can dirty the schema.
 vi.mock('./components/FieldEditor', () => ({
   FieldEditor: ({ onUpdateField, field }: {
@@ -67,13 +81,14 @@ vi.mock('./utils/remoteKitStore', async (importOriginal) => {
     loadRemotePdfBlobUrl: vi.fn(),
     saveRemoteSchema: vi.fn(),
     setRemoteStatus: vi.fn(),
+    repairKit: vi.fn(),
   };
 });
 
 import { App } from './App';
 import {
   AuthError, clearAccessCode, isHostedMode, listRemoteKits,
-  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, saveRemoteSchema,
+  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, repairKit, saveRemoteSchema,
 } from './utils/remoteKitStore';
 
 beforeEach(() => {
@@ -170,6 +185,89 @@ describe('App hosted mode (bd 92qe.2)', () => {
     // The header reflects the persisted state.
     await waitFor(() =>
       expect(screen.getByText(/Saved to the shared workspace/)).toBeInTheDocument());
+  });
+
+  it('author Repair-all repairs the kit then reloads the repaired schema (bd zgln)', async () => {
+    vi.mocked(probeSession).mockResolvedValue({ role: 'author' });
+    vi.mocked(repairKit).mockResolvedValue({
+      applied: 2, dropped: 0, aliasHits: 1, repairs: [], errorCount: 0, warningCount: 0,
+    });
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('vp')).toBeInTheDocument());
+    // The host passed onRepairAll (author tier on an open kit).
+    expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('yes');
+
+    vi.mocked(loadRemoteSchema).mockClear();
+    fireEvent.click(screen.getByTestId('repair-all'));
+    await waitFor(() => expect(repairKit).toHaveBeenCalledWith('draft-kit'));
+    // The repaired schema is reloaded from the store after the repair.
+    await waitFor(() => expect(loadRemoteSchema).toHaveBeenCalledWith('draft-kit'));
+  });
+
+  it('editor tier gets NO Repair-all callback (author-only)', async () => {
+    vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('vp')).toBeInTheDocument());
+    expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('no');
+    expect(screen.queryByTestId('repair-all')).toBeNull();
+  });
+
+  it('a repair AuthError re-gates without destroying the open kit', async () => {
+    vi.mocked(probeSession).mockResolvedValue({ role: 'author' });
+    vi.mocked(repairKit).mockRejectedValue(new AuthError());
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('repair-all')).toBeInTheDocument());
+    // A dead code mid-repair drops back to the access gate (probeSession still
+    // resolves author here, so the gate would re-open; assert the re-prompt).
+    vi.mocked(probeSession).mockRejectedValue(new AuthError());
+    fireEvent.click(screen.getByTestId('repair-all'));
+    await screen.findByLabelText('Access code');
+  });
+
+  it('a repair in flight does NOT clobber a kit opened mid-repair (bd r5vp)', async () => {
+    // Stale-open guard: repair kit A (slow), open kit B before it resolves;
+    // the repair reload must NOT overwrite B's displayed schema with A's.
+    vi.mocked(probeSession).mockResolvedValue({ role: 'author' });
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    vi.mocked(loadRemotePdfBlobUrl).mockResolvedValue('blob:pdf');
+    // Per-kit schemas so we can tell which one is displayed by field id.
+    vi.mocked(loadRemoteSchema).mockImplementation(async (kitId: string) => ({
+      ...JSON.parse(JSON.stringify(SCHEMA)),
+      fields: [{ id: kitId === 'second-kit' ? 'B_field' : 'A_field',
+                 name: 'X', type: 'text', spoken_name: 'x' }],
+    } as unknown as FormSchema));
+    // repairKit for kit A hangs until we release it.
+    let releaseRepair: () => void = () => {};
+    vi.mocked(repairKit).mockReturnValue(
+      new Promise((resolve) => { releaseRepair = () => resolve({
+        applied: 1, dropped: 0, aliasHits: 0, repairs: [], errorCount: 0, warningCount: 0,
+      }); }),
+    );
+
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));           // open kit A
+    await waitFor(() => expect(screen.getByTestId('repair-all')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('repair-all'));          // repair A (hangs)
+    await waitFor(() => expect(repairKit).toHaveBeenCalledWith('draft-kit'));
+
+    // Open kit B while A's repair is still in flight.
+    fireEvent.click(screen.getByText('Second Form'));
+    await waitFor(() => expect(loadRemoteSchema).toHaveBeenCalledWith('second-kit'));
+
+    // Now let A's repair finish -- its reload must be abandoned (stale token).
+    vi.mocked(loadRemoteSchema).mockClear();
+    releaseRepair();
+    await waitFor(() => expect(repairKit).toHaveBeenCalledTimes(1));
+    // The repair's reload of kit A must NOT have run after B superseded it.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loadRemoteSchema).not.toHaveBeenCalledWith('draft-kit');
   });
 
   it('hosted mode never calls the File System Access pickers', async () => {
