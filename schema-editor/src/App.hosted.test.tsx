@@ -408,10 +408,20 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
     expect(
       screen.getByRole('dialog', { name: 'Getting started guide' }),
     ).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(
-      screen.queryByRole('dialog', { name: 'Getting started guide' }),
-    ).not.toBeInTheDocument();
+    // HostedGuide attaches its Escape keydown listener in a useEffect, which runs
+    // AFTER the dialog is queryable in the DOM. A single fireEvent right after the
+    // getByRole above can land before the effect registers the listener, so Escape
+    // is dropped and the guide never closes (~1/3 flake in isolation, bd
+    // polyglot-pdf-fgdo). Re-fire Escape inside waitFor so it retries until the
+    // listener is attached AND the resulting setGuideOpen(false) re-render unmounts
+    // the dialog. Idempotent: an extra Escape after the guide is gone is a no-op.
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(
+        screen.queryByRole('dialog', { name: 'Getting started guide' }),
+      ).not.toBeInTheDocument();
+    });
+    // markGuideSeen() runs synchronously in the same handler, before onClose().
     expect(window.localStorage.getItem('schema-editor.guideSeen')).toBe('1');
   });
 
