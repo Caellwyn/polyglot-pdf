@@ -654,7 +654,11 @@ EXIT_HARD_FAIL = 1
 
 def _classify_exit(schema: dict) -> int:
     """Tri-state exit code for a written draft (see EXIT_* above)."""
-    if not schema.get("fields"):
+    fields = schema.get("fields")
+    # "Usable" means >= 1 FIELD-SHAPED (dict) member -- a list of non-dict junk
+    # is no more usable than an empty list (it lints to 0 findings), and the
+    # hosted route applies the same dict-member floor (fresh-eyes, bd v96b).
+    if not isinstance(fields, list) or not any(isinstance(f, dict) for f in fields):
         return EXIT_HARD_FAIL  # nothing usable was produced
     authoring = schema.get("_bakeoff", {}).get("authoring", {})
     valid = bool(authoring.get("schema_valid"))

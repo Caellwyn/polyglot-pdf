@@ -39,10 +39,16 @@ repairs it in the editor, while the promotion gate still blocks publishing it
   `--keep-dump` so the dump lands next to the draft; on a parseable draft with
   >= 1 field it STORES the draft + the `acroform.json` artifact and returns 200
   carrying `errorCount` / `warningCount` / `storedWithIssues`. 502 ONLY on
-  crash / timeout / no-JSON / zero-fields. The store floor (parseable + >= 1
-  field) is re-derived from the WRITTEN draft, not the exit code alone, so a
-  mis-exit can never store garbage. Lint runs after store (dump-aware) using the
-  SAME `schema_lint` the promotion gate uses, so store and promote agree.
+  crash / timeout / no-JSON / no-usable-draft. The store floor requires >= 1
+  FIELD-SHAPED (dict) member in `fields`, re-derived from the WRITTEN draft, not
+  the exit code alone -- checking merely "non-empty list" was NOT enough
+  (fresh-eyes): a crash mid-write can leave a non-empty list of NON-DICT junk
+  that `lint_schema` silently filters out (0 findings), which would otherwise
+  store as a false "clean success" with a junk field count. `fieldCount` counts
+  real (dict) fields too. Lint runs after store (dump-aware) using the SAME
+  `schema_lint` the promotion gate uses, so store and promote agree. The
+  extractor's `_classify_exit` applies the same dict-member floor, so its exit
+  code and the route's floor agree.
 - **Promotion gate closes the widget-claim hole**: `set_editor_kit_status` now
   loads the persisted dump (`_load_kit_dump`, best-effort) and passes it to
   `lint_schema`, so the dump-only `dump-widget-multiclaim` rule runs at the

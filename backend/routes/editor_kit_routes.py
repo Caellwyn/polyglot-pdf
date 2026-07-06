@@ -884,12 +884,21 @@ async def extract_editor_kit(
                     status_code=502,
                     detail=f"Extractor wrote an unreadable schema: {exc}",
                 ) from exc
-            # The store-with-issues FLOOR: a dict with a NON-EMPTY fields list.
-            # Below the floor (no fields, wrong shape) there is nothing worth
-            # storing -- 502, matching the extractor's EXIT_HARD_FAIL.
-            if (not isinstance(schema, dict)
-                    or not isinstance(schema.get("fields"), list)
-                    or not schema.get("fields")):
+            # The store-with-issues FLOOR: a dict carrying at least one FIELD-
+            # SHAPED (dict) member in `fields`. Checking only "non-empty list" is
+            # not enough (fresh-eyes): a crash mid-write can leave a non-empty
+            # list of NON-DICT junk (["a","b"]) that lint_schema silently filters
+            # out (so it reports 0 findings) -- storing it would report a false
+            # "clean success" with a junk field count. The floor is re-derived
+            # from the WRITTEN content (dict members), not the exit code, so a
+            # mis-exit can never store garbage. real_fields is reused below for
+            # an honest field count.
+            real_fields = (
+                [f for f in schema["fields"] if isinstance(f, dict)]
+                if isinstance(schema, dict) and isinstance(schema.get("fields"), list)
+                else []
+            )
+            if not real_fields:
                 _log.error("editor_extract_no_usable_draft", kit_id=kit_id,
                            exit_code=proc.returncode, detail=last_line[:400])
                 raise HTTPException(
@@ -936,7 +945,10 @@ async def extract_editor_kit(
                 proc.returncode == _EXTRACT_EXIT_ISSUES or error_count > 0
             )
 
-            field_count = len(schema.get("fields", []))
+            # Count REAL (dict-shaped) fields, not the raw list length -- a list
+            # with non-dict junk must not overstate the usable field count in the
+            # response/log (fresh-eyes; same root cause as the floor above).
+            field_count = len(real_fields)
             _log.info("editor_extract_done", kit_id=kit_id, fields=field_count,
                       role=role, errors=error_count, warnings=warning_count,
                       stored_with_issues=stored_with_issues)

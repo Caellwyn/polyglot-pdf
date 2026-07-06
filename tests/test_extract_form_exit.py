@@ -46,6 +46,16 @@ def test_zero_fields_is_hard_fail():
     assert ef.EXIT_HARD_FAIL == 1
 
 
+def test_non_dict_junk_fields_is_hard_fail():
+    # fresh-eyes: a non-empty list of NON-DICT junk (a crash mid-write) is no
+    # more usable than an empty list -- it must be HARD_FAIL, not stored-with-
+    # issues, matching the route's dict-member floor.
+    assert ef._classify_exit({"fields": ["a", "b", 7]}) == ef.EXIT_HARD_FAIL
+    assert ef._classify_exit({"fields": "not-a-list"}) == ef.EXIT_HARD_FAIL
+    # A mix of one real field + junk IS usable (the real field survives).
+    assert ef._classify_exit(_draft([{"id": "a"}, "junk"])) == ef.EXIT_VALID
+
+
 def test_lint_dirty_but_parseable_is_stored_with_issues():
     got = ef._classify_exit(_draft([{"id": "a"}], valid=True, lint_errors=2))
     assert got == ef.EXIT_ISSUES

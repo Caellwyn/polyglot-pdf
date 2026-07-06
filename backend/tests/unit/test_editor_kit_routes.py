@@ -1212,6 +1212,42 @@ def test_extract_stores_lint_dirty_draft_with_issues_200(client, monkeypatch):
     assert _run(store.load_schema("fresh")) == _DIRTY_DRAFT
 
 
+def test_extract_junk_fields_list_is_no_usable_draft_502(client, monkeypatch):
+    # fresh-eyes: a non-empty fields list of NON-DICT junk (a crash mid-write)
+    # must NOT pass the floor -- lint_schema silently filters non-dicts out, so
+    # storing it would report a false "clean success" with a junk field count.
+    # The floor is re-derived from real (dict) field members, so this 502s.
+    c, store, root = client
+    _make_kit(root, "fresh")
+    junk = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+            "sections": [], "fields": ["not", "a", "real", "field"]}
+    fake = _fake_extractor(junk, exit_code=1)  # simulate a crash exit
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502, r.text
+    assert "no usable draft" in r.json()["detail"]
+    # Nothing was stored -- the junk never reached the kit's schema.
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_schema("fresh"))
+
+
+def test_extract_field_count_counts_only_real_fields(client, monkeypatch):
+    # fresh-eyes: a mix of real + junk field entries reports only the real count.
+    c, store, root = client
+    _make_kit(root, "fresh")
+    mixed = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+             "sections": [], "fields": [{"id": "a", "type": "text"}, "junk", 7]}
+    fake = _fake_extractor(mixed, exit_code=0)
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["fieldCount"] == 1  # only the one dict-shaped field
+
+
 def test_extract_persists_the_acroform_dump_artifact(client, monkeypatch):
     # The dump becomes the kit's acroform.json artifact (feeds the promotion-gate
     # widget-claim rule + the P5.3c picker).
