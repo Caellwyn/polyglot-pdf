@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
+*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-rearm.md](../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-rearm.md) (reconnect audio re-arm) and [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -255,8 +255,9 @@ the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; 
 
 ## Mic send gate (audio-up path)
 
-Every mic-arming site (initial `startRecording`, `rearmAudioCapture`, and the
-`startSection`/`switchToSection` re-arms) shares ONE send callback in
+Every mic-arming site (initial `startRecording`, `rearmAudioCapture`, the
+`startSection`/`switchToSection` re-arms, and the session-ready re-arm on the
+automatic/internal reconnects -- see below) shares ONE send callback in
 `frontend/src/shared/connection.ts`, gated by the pure function
 `shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy):
 
@@ -276,6 +277,32 @@ The demo's mic-energy meter (visual level indicator, bd polyglot-pdf-s3zv) only
 
 Every `WebFormConnection.status` transition is logged `old->new (reason)` so a
 stranded status is visible in the console.
+
+## Reconnect audio re-arm
+
+Audio (mic capture **and** the playback AudioContext that plays the AI's voice)
+is armed by `audioManager.startRecording` -- which also reuses+resumes the
+playback context. `ConnectionManager.connect()` itself never calls it; each
+reconnect path relies on its caller to re-arm. So re-arm coverage splits by
+reconnect CAUSE (bd polyglot-pdf-z9bc):
+
+- **User-initiated + section-switch reconnects re-arm in their own callers**: the
+  overlay's connect handler (`VoiceOverlay`/`VoiceOverlayMobile`) calls
+  `startRecording` right after `connect()`; `pause->resume` re-arms in `resume()`;
+  `startSection`/`switchToSection` re-arm at the end of the switch.
+- **The AUTOMATIC/internal reconnects do NOT go through those callers**: GoAway
+  pre-emptive resume (`handleGoAwayReconnect`, bd l3a.2) and auto-reconnect on a
+  dropped socket (`attemptReconnect`) reconnect inside `webFormConnection.ts` and
+  surface only via the backend-driven `onSessionReady` / `onSessionRestarted`
+  callbacks.
+
+So audio is re-armed in those two session-ready callbacks (`connection.ts`), via
+the shared `reArmAudio` helper (the same body `rearmAudioCapture` uses). It is
+**idempotent**: it no-ops under the test harness and when `audioManager` already
+reports recording (so the user-initiated/section-switch paths that armed just
+before the ready event never double-arm), and it re-applies the stored PTT/mute
+state after arming. Without this, a GoAway or auto-reconnect left the AI silent
+and the mic dead even though the WebSocket + Gemini session had resumed.
 
 ## fill-language vs spoken-language
 

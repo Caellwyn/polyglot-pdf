@@ -48,7 +48,11 @@ vi.mock('./audioManager', () => ({
       flushAudioQueue: vi.fn(),
       resumePlayback: vi.fn(),
       resumeAudioContext: vi.fn(),
-      setNativeVad: vi.fn()
+      setNativeVad: vi.fn(),
+      // Used by the reconnect audio re-arm path (bd polyglot-pdf-z9bc).
+      setPTTMode: vi.fn(),
+      muteInput: vi.fn(),
+      unmuteInput: vi.fn()
     }
     return audioManagerMock
   })
@@ -351,6 +355,59 @@ describe('Connection Manager (connection.ts)', () => {
 
       manager.onVADSpeechStart()
       expect(audioManagerMock.flushAudioQueue).not.toHaveBeenCalled()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Reconnect audio re-arm (bd polyglot-pdf-z9bc)
+  //
+  // The AUTOMATIC/internal reconnects -- GoAway pre-emptive resume (l3a.2) and
+  // auto-reconnect on a dropped socket -- reach the manager only through the
+  // backend-driven session-ready callbacks (onSessionReady / onSessionRestarted),
+  // NOT through the overlay's connect+startRecording wrapper. Before this fix
+  // those callbacks did not re-arm audio, so the AI's voice + the mic stayed dead
+  // after such a reconnect. The callbacks must now re-arm audio, idempotently.
+  // ---------------------------------------------------------------------------
+  describe('reconnect audio re-arm', () => {
+    async function connected() {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      expect(capturedCallbacks).not.toBeNull()
+      // The initial connect's overlay wrapper is not modeled here; simulate the
+      // post-initial-connect state where audio is NOT yet armed.
+      audioManagerMock.startRecording.mockClear()
+      audioManagerMock.isRecording.mockReturnValue(false)
+      return manager
+    }
+
+    it('re-arms audio on onSessionReady when not already recording (GoAway / auto-reconnect)', async () => {
+      await connected()
+      await capturedCallbacks.onSessionReady('sess-1')
+      expect(audioManagerMock.startRecording).toHaveBeenCalledTimes(1)
+    })
+
+    it('re-arms audio on onSessionRestarted (warm restart path)', async () => {
+      await connected()
+      await capturedCallbacks.onSessionRestarted()
+      expect(audioManagerMock.startRecording).toHaveBeenCalledTimes(1)
+    })
+
+    it('does NOT double-arm when audio is already recording (idempotent -- protects the manual / section-switch paths)', async () => {
+      await connected()
+      // A user-initiated or section-switch path armed audio just before the
+      // session-ready event fires.
+      audioManagerMock.isRecording.mockReturnValue(true)
+
+      await capturedCallbacks.onSessionReady('sess-2')
+      expect(audioManagerMock.startRecording).not.toHaveBeenCalled()
+    })
+
+    it('re-applies PTT/mute state after re-arming (mic gated per stored mode)', async () => {
+      await connected()
+      // PTT defaults ON, so the input must be muted after a re-arm.
+      await capturedCallbacks.onSessionReady('sess-3')
+      expect(audioManagerMock.setPTTMode).toHaveBeenCalledWith(true)
+      expect(audioManagerMock.muteInput).toHaveBeenCalled()
     })
   })
 

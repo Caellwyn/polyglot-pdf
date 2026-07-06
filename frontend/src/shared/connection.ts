@@ -287,6 +287,49 @@ export function createConnectionManager(
 	// continuous audio. Set from the backend session_ready handshake.
 	let nativeVad: boolean = false
 
+	// Re-arm audio (mic capture + playback-context resume) on an already-live
+	// session, WITHOUT reconnecting. This is the single source of truth used both
+	// by the overlay-remount path (rearmAudioCapture) and by the session-ready
+	// callbacks below, so that EVERY reconnect cause re-arms audio -- not just the
+	// user-initiated ones (bd polyglot-pdf-z9bc). Before this, only the manual
+	// reconnect button, pause->resume, and section-switch re-armed; the AUTOMATIC
+	// internal reconnects (GoAway pre-emptive resume l3a.2, and auto-reconnect on
+	// a dropped socket) fired onSessionReady/onSessionRestarted but never re-armed,
+	// so the user heard no AI audio (and their mic was dead) after them.
+	//
+	// Safe to call unconditionally on every ready event: it no-ops under the test
+	// harness (audio is injected) and when audioManager already reports recording
+	// (audioManager.startRecording's own `if (recording) return` guard also covers
+	// the paths that armed audio just before the ready event -- initial connect,
+	// section switch -- so this never double-arms). audioManager.startRecording
+	// also reuses+resumes the PLAYBACK AudioContext, which is what actually restores
+	// the AI's voice on reconnect, not just the mic.
+	const reArmAudio = async (reason: string): Promise<void> => {
+		if (isTestHarnessEnabled()) {
+			return
+		}
+		if (!audioManager) {
+			console.warn('[VFF Connection] reArmAudio: audioManager not initialized', reason)
+			return
+		}
+		if (audioManager.isRecording()) {
+			// Already armed (a user-initiated or section-switch path armed it just
+			// before this ready event) -- nothing to do.
+			return
+		}
+		console.log('[VFF Connection] reArmAudio: re-arming audio after', reason)
+		await audioManager.startRecording(sendMicChunkToBackend)
+		// Re-apply PTT/mute so the input gate matches the stored mode (mirrors the
+		// overlay-remount re-arm).
+		const am = audioManager
+		am.setPTTMode(pushToTalkMode)
+		if (pushToTalkMode) {
+			am.muteInput()
+		} else {
+			am.unmuteInput()
+		}
+	}
+
 	// TEST-ONLY (bd polyglot-pdf-g8w): tracks the most recent field id Gemini
 	// advanced to, so the dev-gated E2E voice harness can assert "moved to the
 	// next field" without scraping transcripts. Only meaningful when the harness
@@ -364,12 +407,27 @@ export function createConnectionManager(
 			// Initialize metrics for this session
 			metrics.startSession(sessionId)
 
+			// Re-arm audio on EVERY session-ready (bd polyglot-pdf-z9bc). The
+			// user-initiated paths (manual reconnect button, section switch) already
+			// arm audio in their own callers, so reArmAudio no-ops there via its
+			// isRecording() guard; the AUTOMATIC reconnects (GoAway l3a.2,
+			// auto-reconnect on drop) reach here WITHOUT having armed audio, and this
+			// is what restores the AI's voice + the mic for them.
+			void reArmAudio('session_ready')
+
 			// Field manager already created at initialization
 			// Now it will start syncing manual edits to Gemini
 		},
 		onSessionRestarted: () => {
 			// Backend confirms Gemini session has been restarted
 			onStatusChange('connected')
+			// Reached via the WARM restart (restart_gemini_session over the SAME
+			// socket -- the connect() isWebSocketConnected branch, when only Gemini
+			// closed but the WS is alive). Re-arm here too so that path resumes audio
+			// (bd polyglot-pdf-z9bc). The automatic reconnects (GoAway l3a.2,
+			// auto-reconnect on drop) open a FRESH socket and land in onSessionReady
+			// above, not here. No-ops if already recording.
+			void reArmAudio('session_restarted')
 		},
 		onNativeVadMode: (enabled) => {
 			// bd polyglot-pdf-333: backend told us whether Gemini's own VAD is
@@ -795,39 +853,12 @@ export function createConnectionManager(
 		// overlay's mount-time PTT effect (which fires in the same React batch) sees
 		// a consistent state and does not leave the input unmuted when PTT is on.
 		async rearmAudioCapture() {
-			// Skip under the test harness (audio is injected, no microphone needed).
-			if (isTestHarnessEnabled()) {
-				console.log('[VFF Connection] rearmAudioCapture: TEST harness active -- skipping')
-				return
-			}
-
-			if (!audioManager) {
-				console.warn('[VFF Connection] rearmAudioCapture: audioManager not initialized')
-				return
-			}
-
-			// Double-arm guard: if already recording, the old overlay has not yet
-			// finished its unmount cleanup; nothing to do.
-			if (audioManager.isRecording()) {
-				console.log('[VFF Connection] rearmAudioCapture: already recording -- skipping')
-				return
-			}
-
-			console.log('[VFF Connection] rearmAudioCapture: re-arming mic after overlay remount')
-
-			await audioManager.startRecording(sendMicChunkToBackend)
-
-			// Re-apply PTT/mute state so the new overlay's defaults take effect
-			// without waiting for its PTT useEffect.
-			const am = audioManager
-			am.setPTTMode(pushToTalkMode)
-			if (pushToTalkMode) {
-				am.muteInput()
-			} else {
-				am.unmuteInput()
-			}
-
-			console.log('[VFF Connection] rearmAudioCapture: mic re-armed, PTT mode synced:', pushToTalkMode)
+			// Delegates to the shared reArmAudio helper (bd polyglot-pdf-z9bc), which
+			// carries the identical test-harness skip, audioManager-null guard,
+			// already-recording double-arm guard, mic re-arm, and PTT/mute re-sync.
+			// Kept as a named method because the overlay-remount path (bd nlfc) calls
+			// it explicitly on remount onto an already-live session.
+			await reArmAudio('overlay_remount')
 		},
 
 		async changeFillLanguage(language: string) {
