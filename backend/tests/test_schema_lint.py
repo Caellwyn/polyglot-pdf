@@ -412,6 +412,41 @@ def test_shipped_kits_lint_clean(kit):
     )
 
 
+def _dump_kit(kit):
+    """A live AcroForm dump of a shipped kit's PDF (no paid API). Skips if the
+    kit / PDF / bakeoff tooling is absent."""
+    import sys
+    pdf = _REPO / "form-kits" / kit / "form.pdf"
+    if not pdf.exists():
+        pytest.skip(f"{kit} form.pdf not present")
+    bakeoff = _REPO / "scripts" / "bakeoff"
+    sys.path.insert(0, str(bakeoff))
+    try:
+        import acroform_dump
+    except ImportError:
+        pytest.skip("acroform_dump (scripts/bakeoff) not importable")
+    return acroform_dump.dump_pdf(str(pdf))
+
+
+def test_i90_dump_unclaimed_excludes_machine_barcodes():
+    # Regression guard for the bug caught pre-PR (bd polyglot-pdf-w0eq): the
+    # dump-widget-unclaimed rule MUST run WITH a dump (the parametrized test above
+    # passes no dump, so the rule never fired on a real kit). i-90's 7 hidden
+    # PDF417 barcode widgets are machine-generated, NOT user fields -- they must
+    # NOT be flagged as coverage gaps, even though they are read-only text (i-90
+    # deliberately fills 20 real read-only-text fields via flip_readonly_bit, so
+    # read-only is not a valid "unfillable" signal). Any unclaimed finding that
+    # DOES survive must be a genuine fillable widget, never a barcode.
+    dump = _dump_kit("i-90")
+    findings = lint_schema(_load_kit_schema("i-90"), dump)
+    unclaimed = [f for f in findings if f.rule == "dump-widget-unclaimed"]
+    for f in unclaimed:
+        low = f.path.lower()
+        assert "barcode" not in low and "pdf417" not in low, (
+            f"a machine barcode was wrongly flagged as a coverage gap: {f.path}"
+        )
+
+
 def test_f1040_duplicate_option_values_are_caught():
     # The shipped f1040 filing-status bug (plan "Additional live bugs"):
     # duplicate option values mean selecting one checks two widgets. The kit

@@ -227,15 +227,27 @@ def test_backfill_adds_a_field_for_an_unclaimed_widget(tmp_path):
     assert added[0]["id"] in schema["sections"][0]["fields"]
 
 
-def test_backfill_types_a_checkbox_widget_with_a_self_option(tmp_path):
-    """A recovered checkbox widget gets a groups-of-one self-option so it is
-    fillable (and lint-accepted)."""
+def test_backfill_types_a_checkbox_widget_as_v2_boolean_no_options(tmp_path):
+    """A recovered checkbox is a v2 standalone boolean: type=checkbox carrying its
+    widget in pdf_field_name, and NO options (options are forbidden on a v2
+    checkbox -- a group would be checkbox_group)."""
     dump = _write_logical_dump(tmp_path, {"box[0]": "checkbox"})
     schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
     assert ef._backfill_unclaimed_widgets(schema, dump) == 1
     f = schema["fields"][0]
     assert f["type"] == "checkbox"
-    assert f["options"][0]["pdf_field_name"] == "box[0]"
+    assert f["pdf_field_name"] == "box[0]"
+    assert "options" not in f  # a v2 checkbox is a boolean, not an options field
+
+
+def test_backfill_types_a_radio_widget_with_a_self_option(tmp_path):
+    """A recovered radio still needs a self-describing option to be fillable."""
+    dump = _write_logical_dump(tmp_path, {"r[0]": "radio"})
+    schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 1
+    f = schema["fields"][0]
+    assert f["type"] == "radio"
+    assert f["options"][0]["pdf_field_name"] == "r[0]"
 
 
 def test_backfill_excludes_decorative_buttons(tmp_path):
@@ -243,6 +255,48 @@ def test_backfill_excludes_decorative_buttons(tmp_path):
     dump = _write_logical_dump(tmp_path, {"btn[0]": "button"})
     schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
     assert ef._backfill_unclaimed_widgets(schema, dump) == 0
+
+
+def test_backfill_excludes_machine_barcodes(tmp_path):
+    """A PDF417/QR barcode widget (read-only text, but machine-generated -- name
+    carries the marker) is NOT a coverage defect. The bug caught pre-PR: i-90's
+    hidden PDF417 barcodes were wrongly backfilled as fake text fields."""
+    dump = {"fields": [
+        {"name": "form1[0].Page1[0].PDF417BarCode1[0]", "logical_type": "text",
+         "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8},
+                      "read_only": True, "tu": "PDF417BarCode1"}]},
+    ]}
+    p = tmp_path / "bc.json"; p.write_text(json.dumps(dump), encoding="utf-8")
+    schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
+    assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
+
+
+def test_backfill_creates_a_bucket_section_when_none_exist(tmp_path):
+    """No sections at backfill time: a recovered field must NOT be orphaned with
+    section_id='' (validates + lints clean but is unreachable). A 'recovered_fields'
+    bucket section is created so the field stays navigable."""
+    dump = _write_logical_dump(tmp_path, {"orphan[0]": "text"})
+    schema = {"fields": []}  # no 'sections' key at all
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 1
+    f = schema["fields"][0]
+    assert f["section_id"] == "recovered_fields"
+    buckets = [s for s in schema["sections"] if s["id"] == "recovered_fields"]
+    assert len(buckets) == 1
+    assert f["id"] in buckets[0]["fields"]
+
+
+def test_backfill_degenerate_leaf_falls_back_to_id_for_labels(tmp_path):
+    """A widget name whose leaf is empty (ends in '.') still gets non-empty
+    name/spoken_name (falls back to the minted id, never blank)."""
+    dump = {"fields": [
+        {"name": "weird.", "logical_type": "text",
+         "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}]},
+    ]}
+    p = tmp_path / "d.json"; p.write_text(json.dumps(dump), encoding="utf-8")
+    schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
+    assert ef._backfill_unclaimed_widgets(schema, str(p)) == 1
+    f = schema["fields"][0]
+    assert f["name"] and f["spoken_name"]  # never blank
 
 
 def test_backfill_is_a_noop_when_all_widgets_claimed(tmp_path):

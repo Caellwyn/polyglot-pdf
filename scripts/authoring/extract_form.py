@@ -265,12 +265,19 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
     The LLM extraction pass stochastically omits a field entirely -- w7 and w7-2
     are the SAME PDF, yet a re-extraction drops a different widget each run, and
     the loss was silent (lint flagged only OVER-claim). This deterministic step
-    closes the gap: any dump widget (excluding decorative buttons) unclaimed by
-    any field's pdf_field_name / option pdf_field_name is added back as a basic
-    field, typed from its dump logical_type, positioned from its dump rect, and
-    filed into the section covering its page (else the last section). The
-    recovered field is functional-but-plain -- a human editor refines its label;
-    the point is that NO widget silently vanishes. Returns the number added."""
+    closes the gap: any USER-FILLABLE dump widget (per schema_lint's
+    is_fillable_widget -- buttons + machine barcodes excluded) unclaimed by any
+    field's pdf_field_name / option pdf_field_name is added back as a basic field,
+    typed from its dump logical_type, positioned from its dump rect, and filed
+    into the section covering its page. The recovered field is functional-but-
+    plain -- a human editor refines its label; the point is that NO widget
+    silently vanishes. Returns the number added.
+
+    Claim matching + fillability reuse schema_lint's helpers (single source of
+    truth) so backfill and the under-claim lint rule can never disagree on what
+    counts as a coverage gap (bd polyglot-pdf-w0eq)."""
+    from backend.services.schema_lint import (  # single source of truth
+        _match_dump_names, is_fillable_widget)
     try:
         with open(dump_path, encoding="utf-8") as fh:
             dump = json.load(fh)
@@ -281,24 +288,16 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
     if not dump_names:
         return 0
 
-    # Widgets already claimed by any field / option (suffix-aware, same
-    # convention as the filler + lint: exact, else endswith ".<claim>").
-    claimed: set[str] = set()
-
-    def _resolve(claim, names):
-        if not isinstance(claim, str) or not claim:
-            return []
-        exact = [n for n in names if n == claim]
-        if exact:
-            return exact
-        return [n for n in names if n.endswith("." + claim)]
-
+    # Widgets already claimed by any field / option (suffix-aware, EXACTLY the
+    # lint/filler convention -- reused, not reimplemented).
+    claimed: set = set()
     for f in schema.get("fields", []):
         for c in [f.get("pdf_field_name")] + [
             o.get("pdf_field_name") for o in (f.get("options") or [])
             if isinstance(o, dict)
         ]:
-            claimed.update(_resolve(c, dump_names))
+            if isinstance(c, str) and c:
+                claimed.update(_match_dump_names(c, dump_names))
 
     by_name = {e["name"]: e for e in entries if isinstance(e.get("name"), str)}
 
@@ -311,49 +310,62 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
                         "width": r["width"], "height": r["height"]}
         return None
 
-    sections = schema.get("sections") or []
+    sections = schema.setdefault("sections", [])
 
     def _section_for_page(page):
         for sec in sections:
             if page in (sec.get("page_numbers") or []):
                 return sec
-        return sections[-1] if sections else None
+        if sections:
+            return sections[-1]
+        # No sections at all: create a dedicated bucket so a recovered field is
+        # never orphaned with section_id="" (which validates + lints clean but is
+        # unreachable via section navigation -- defeats the "no widget vanishes"
+        # goal). A human editor re-files it.
+        bucket = {"id": "recovered_fields", "label": "Recovered fields",
+                  "order": len(sections) + 1, "fields": [],
+                  "page_numbers": [page]}
+        sections.append(bucket)
+        return bucket
 
     existing_ids = {f.get("id") for f in schema.get("fields", [])}
     added = 0
     for name in dump_names:
         if name in claimed:
             continue
-        e = by_name.get(name) or {}
-        logical = e.get("logical_type")
-        if logical == "button":
-            continue  # decorative reset/print buttons are not coverage defects
+        if not is_fillable_widget(dump, name):
+            continue  # buttons + machine-generated barcodes are not coverage gaps
+        logical = (by_name.get(name) or {}).get("logical_type")
         leaf = name.split(".")[-1]
         fid = _slugify_leaf(leaf)
         while fid in existing_ids:
             fid = fid + "_x"
         existing_ids.add(fid)
+        # A degenerate leaf (e.g. a name ending in ".") yields an empty display
+        # label; fall back to the id so name/spoken_name are never blank.
+        label = leaf or fid
         pos = _rect_pos(name)
         page = pos["page"] if pos else 1
         sec = _section_for_page(page)
         field = {
             "id": fid,
-            "name": leaf,  # plain placeholder label -- editor refines it
-            "spoken_name": leaf.replace("_", " "),
+            "name": label,  # plain placeholder label -- editor refines it
+            "spoken_name": label.replace("_", " "),
             "type": _LOGICAL_TO_FIELD_TYPE.get(logical, "text"),
-            "section_id": sec["id"] if sec else "",
+            "section_id": sec["id"],
             "pdf_field_name": name,
         }
         if pos:
             field["pdf_position"] = pos
-        # A checkbox/radio needs an option to be fillable; give it a single
-        # self-describing option (the groups-of-one convention lint accepts).
-        if field["type"] in ("checkbox", "radio"):
-            field["options"] = [{"value": fid, "label": leaf,
+        # A v2 standalone checkbox is a boolean carrying its widget in
+        # pdf_field_name -- NO options (options are forbidden on a v2 checkbox;
+        # a multi-widget group would be checkbox_group). A radio still needs a
+        # self-describing option to be fillable.
+        if field["type"] == "radio":
+            field["options"] = [{"value": fid, "label": label,
                                  "pdf_field_name": name}]
         schema.setdefault("fields", []).append(field)
-        if sec is not None:
-            sec.setdefault("fields", []).append(fid)
+        sec.setdefault("fields", []).append(fid)
         added += 1
     return added
 

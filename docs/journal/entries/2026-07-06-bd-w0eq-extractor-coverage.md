@@ -69,6 +69,40 @@ a name -- these are not that).
   `tests/test_extract_form_backfill.py` (+4 retype, +5 backfill).
 - Full backend + tools suite: 1684 passed, 3 skipped, 0 failures.
 
+## Pre-PR fresh-eyes fixes (folded in)
+
+The pre-PR fresh-eyes pass caught a real correctness bug and three lesser issues,
+all fixed before the PR opened:
+
+1. **Barcode false-positive (blocking).** On the real shipped i-90 kit the
+   under-claim rule flagged 7 hidden `PDF417BarCode1[0]` widgets, and the backfill
+   would have injected 7 bogus `PDF417BarCode1_*` text fields. `logical_type` +
+   `read_only` can't discriminate: a barcode is a read-only MULTILINE text widget,
+   and this project deliberately fills 20 real read-only-text fields (and real
+   read-only checkboxes) via `flip_readonly_bit`. Fixed with a shared
+   `schema_lint.is_fillable_widget(dump, name)` -- the single source of truth for
+   BOTH the lint rule and the backfill -- that excludes buttons AND machine
+   barcodes (name/TU markers `barcode` / `pdf417` / `qrcode`). Verified against the
+   real i-90 PDF: the 7 barcodes are now silent, only the 4 genuinely-missing
+   `P2_checkbox3[1..4]` checkboxes remain flagged. Regression-pinned by a NEW
+   dump-aware test (the existing shipped-kits test passed no dump, so the rule
+   never ran on a real kit in CI).
+2. **Empty-sections orphan.** If the LLM emits no sections, `_section_for_page`
+   returned None and the recovered field got `section_id=""` -- valid + lint-clean
+   but unreachable via section navigation (re-hiding it). Fixed: a
+   `recovered_fields` bucket section is created so no recovered field is orphaned.
+3. **Duplicated claim logic.** The backfill reimplemented lint's suffix-aware
+   claim match; now it imports `_match_dump_names` (+ `is_fillable_widget`) from
+   schema_lint so the two can never desync.
+4. **Empty-leaf label.** A widget name ending in `.` yielded a blank
+   name/spoken_name; now falls back to the minted id.
+
+Also caught by the round-trip re-validation while fixing #1: a recovered checkbox
+was emitted `type=checkbox` WITH a self-option -- a v1 idiom that v2 REJECTS (a v2
+checkbox is a boolean; options are forbidden). Fixed: a backfilled standalone
+checkbox carries its widget in `pdf_field_name` with NO options; only a radio
+keeps a self-option.
+
 ## Scope note
 
 The redirect deprioritized committing accurate re-extractions of w7-2/f1040 (they
