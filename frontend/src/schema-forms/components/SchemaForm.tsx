@@ -26,11 +26,14 @@ import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
 import { isTestHarnessEnabled } from "../../shared/config";
 import { isPreviewUiEnabled } from "../../pdf-view/featureFlag";
+import { getStoredViewMode, storeViewMode, initialViewMode, type ViewMode } from "../../pdf-view/viewMode";
 
 // Lazy chunk boundary: pdfjs-dist and everything else in pdf-view/ load only
-// when this component actually renders -- which requires the preview flag ON
-// plus a click. Flag off (the default) fetches nothing new (epic js7q gating).
+// when these components actually render -- which requires the preview flag ON
+// (plus a click / the Preview mode). Flag off (the default) fetches nothing
+// new (epic js7q gating).
 const FilledPreviewModal = React.lazy(() => import("../../pdf-view/FilledPreviewModal"));
+const PreviewPane = React.lazy(() => import("../../pdf-view/PreviewPane"));
 
 export interface SchemaFormProps {
   schema: FormSchema;
@@ -59,6 +62,19 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   // surface of the preview epic renders only when this is true.
   const [previewUiEnabled] = useState(() => isPreviewUiEnabled());
   const [showPDFPreview, setShowPDFPreview] = useState(false);
+
+  // Dual view modes (bd vxwj): 'simplified' (the classic linear form) vs
+  // 'preview' (the PDF surface). Fresh mounts default Simplified; a stored
+  // per-session 'preview' choice is honored only flag-on at desktop width
+  // (mobile always STARTS Simplified, epic rubric #5). Purely presentational
+  // -- never in the handshake.
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    initialViewMode(isPreviewUiEnabled(), getStoredViewMode(), window.innerWidth)
+  );
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    storeViewMode(mode);
+  };
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
@@ -502,6 +518,39 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
 
   return (
     <>
+      {/* View-mode toggle (flag-gated, bd vxwj). The voice overlay + the
+          ConnectionManager live OUTSIDE the switched container below, so
+          toggling views never remounts them or disturbs the session. */}
+      {previewUiEnabled && (
+        <div className="schema-form__view-toggle" role="tablist" aria-label="Form view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'simplified'}
+            className={`schema-form__view-toggle-button${viewMode === 'simplified' ? ' schema-form__view-toggle-button--active' : ''}`}
+            onClick={() => handleViewModeChange('simplified')}
+          >
+            Simplified
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === 'preview'}
+            className={`schema-form__view-toggle-button${viewMode === 'preview' ? ' schema-form__view-toggle-button--active' : ''}`}
+            onClick={() => handleViewModeChange('preview')}
+          >
+            Preview
+          </button>
+        </div>
+      )}
+
+      {previewUiEnabled && viewMode === 'preview' ? (
+        <React.Suspense
+          fallback={<div className="pdf-preview-pane__notice">Loading the preview...</div>}
+        >
+          <PreviewPane pdfUrl={pdfUrl} />
+        </React.Suspense>
+      ) : (
       <form className="schema-form" onSubmit={handleSubmit}>
         {/* Form Header */}
         <div className="schema-form__header">
@@ -579,6 +628,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
           </div>
         )}
       </form>
+      )}
 
       {/* PDF Download/Print Section - Outside form to avoid submission conflicts */}
       {pdfUrl && (

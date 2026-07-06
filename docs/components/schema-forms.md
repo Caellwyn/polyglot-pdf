@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-vfkv-pdfjs-foundation-preview-modal.md](../journal/entries/2026-07-06-bd-vfkv-pdfjs-foundation-preview-modal.md) for closeout details.*
+*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-vxwj-view-mode-toggle-shell.md](../journal/entries/2026-07-06-bd-vxwj-view-mode-toggle-shell.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -85,10 +85,15 @@ gated by `isSectionValid`), and a final Submit. It also mounts the voice overlay
 and the PDF print/download buttons, and creates the shared mic `MediaStream` +
 `ConnectionManager` once the stream is ready. Behind the preview-UI flag
 (`?previewUi=1`, `frontend/src/pdf-view/featureFlag.ts` -- epic polyglot-pdf-js7q,
-default OFF until maintainer cutover) it also renders a "Preview Filled PDF"
+default OFF until maintainer cutover) it also renders: a "Preview Filled PDF"
 button that lazy-loads `frontend/src/pdf-view/FilledPreviewModal.tsx` (pdf.js
-render of the real `/api/fill-pdf` output); with the flag off, none of that UI
-or its pdfjs chunk loads.
+render of the real `/api/fill-pdf` output), and a Simplified/Preview view-mode
+toggle (`frontend/src/pdf-view/viewMode.ts`, sessionStorage-persisted, default
+Simplified) that swaps the form for the lazy
+`frontend/src/pdf-view/PreviewPane.tsx` PDF surface -- the overlays +
+ConnectionManager sit outside the switched container, so toggling never
+disturbs the voice session. With the flag off, none of that UI or its pdfjs
+chunks load.
 
 `FieldRenderer.tsx` routes by `field.type` to a component. **Implemented:** `text`,
 `email`, `tel`, `textarea`, `radio`, `checkbox`, `date`, `select` (and `number`,
