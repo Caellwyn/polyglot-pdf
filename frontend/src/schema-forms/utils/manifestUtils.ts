@@ -146,6 +146,29 @@ export function buildHandshakeManifest(
 }
 
 /**
+ * Continuous-session manifest (bd polyglot-pdf-x8rt): the whole form as ONE
+ * synthetic "continuous" section carrying EVERY field, so the backend feeds the
+ * model one uninterrupted session (bounded by the compression window) instead of
+ * chopping by section. Mirrors the harness reference
+ * (scripts/spikes/measure_form_session_costs.py continuous arm): one section,
+ * no previous_sections, a single-entry parts list. Fields are emitted in schema
+ * order (schema.fields), which is the fill order the DTI next-field drip follows.
+ */
+export function buildContinuousManifest(schema: FormSchema): HandshakeManifest {
+  const syntheticSection: FormSection = {
+    id: 'continuous',
+    label: schema.form_metadata?.title || 'Full Form',
+    order: 1,
+    fields: schema.fields.map(f => f.id),
+  };
+  return {
+    current_section: generateSectionManifest(syntheticSection, schema),
+    previous_sections: [],
+    parts: [{ id: 'continuous', order: 1, label: syntheticSection.label }],
+  };
+}
+
+/**
  * Format manifest as pipe-separated text for Gemini context
  *
  * Converts manifest to lightweight text format:

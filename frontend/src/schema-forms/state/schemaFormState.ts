@@ -13,7 +13,7 @@
  */
 
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
-import { buildHandshakeManifest, getFieldSchema } from "../utils/manifestUtils";
+import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue } from "../utils/validation";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
 // navigation.ts back-references SchemaFormState as a TYPE-only import, so this
@@ -33,6 +33,11 @@ export interface SchemaFormState {
   // Phase 3: JIT (Just-In-Time) Schema Loading - Token Reduction
   loadedFieldIds: Set<string>; // Field IDs where Gemini has received full schema
   jitModeEnabled: boolean; // Whether JIT mode is active (from backend feature flag)
+  // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form runs as ONE
+  // session (no section resets). When on, the handshake spans every field as a
+  // single synthetic section and section advancement is suppressed. From the
+  // backend CONTINUOUS_SESSION flag via session_ready.
+  continuousSessionEnabled: boolean;
 
   // Disclaimer acceptance tracking
   disclaimerAccepted: boolean; // Whether user has accepted disclaimer
@@ -91,6 +96,7 @@ export class SchemaFormStateManager {
       // JIT schema loading (Phase 3: Token Reduction)
       loadedFieldIds: new Set(),
       jitModeEnabled: false, // Will be set during handshake based on backend flag
+      continuousSessionEnabled: false, // Set during handshake from the backend CONTINUOUS_SESSION flag
       // Disclaimer acceptance
       disclaimerAccepted: false,
       disclaimerAcceptedAt: undefined,
@@ -141,6 +147,11 @@ export class SchemaFormStateManager {
       // Initialize jitModeEnabled if missing (old state)
       if (parsed.jitModeEnabled === undefined) {
         parsed.jitModeEnabled = false;
+      }
+
+      // Initialize continuousSessionEnabled if missing (old state)
+      if (parsed.continuousSessionEnabled === undefined) {
+        parsed.continuousSessionEnabled = false;
       }
 
       // Initialize disclaimer fields if missing (migration for existing sessions)
@@ -649,8 +660,16 @@ export class SchemaFormStateManager {
   static getJITHandshakePayload(state: SchemaFormState, fillLanguage: string = 'English', resume: boolean = false) {
     const currentSection = state.schema.sections?.find(s => s.id === state.currentSectionId);
 
-    // Build manifest with current + previous sections
-    const manifest = buildHandshakeManifest(state.currentSectionId, state.schema, state);
+    // Continuous-session mode (bd polyglot-pdf-x8rt): one synthetic whole-form
+    // section carrying every field, so the backend runs ONE compression-bounded
+    // session instead of chopping by section. computeNextField (below) also spans
+    // the whole form in this mode, so first_field_schema/next-hint stay correct.
+    const continuous = state.continuousSessionEnabled;
+
+    // Build manifest: whole-form (continuous) or current + previous sections.
+    const manifest = continuous
+      ? buildContinuousManifest(state.schema)
+      : buildHandshakeManifest(state.currentSectionId, state.schema, state);
 
     // Send the FIRST UNFILLED field's schema, not the section's positional first
     // field -- on a reconnect/revisit, fields[0] may already be confirmed, and the
@@ -661,6 +680,12 @@ export class SchemaFormStateManager {
     let firstFieldSchema = null;
     if (nextField) {
       firstFieldSchema = getFieldSchema(nextField.id, state.schema);
+    } else if (continuous) {
+      // Whole form already complete / reconnect at the very end: fall back to the
+      // form's first field so the SI still has a schema (mirrors the section case).
+      if (state.schema.fields.length > 0) {
+        firstFieldSchema = getFieldSchema(state.schema.fields[0].id, state.schema);
+      }
     } else {
       // No unfilled field (section already complete / reconnect at the boundary):
       // fall back to the section's first field so the SI still has a schema.
@@ -690,9 +715,12 @@ export class SchemaFormStateManager {
       loaded_field_ids: Array.from(state.loadedFieldIds),
       current_values: state.fieldValues,
       resume,
-      section_number: currentSection?.order ?? 1,
-      section_label: currentSection?.label ?? '',
-      total_sections: state.schema.sections?.length ?? 1,
+      // Continuous mode presents as ONE section spanning the whole form.
+      section_number: continuous ? 1 : (currentSection?.order ?? 1),
+      section_label: continuous
+        ? (state.schema.form_metadata?.title || 'Full Form')
+        : (currentSection?.label ?? ''),
+      total_sections: continuous ? 1 : (state.schema.sections?.length ?? 1),
       fill_language: fillLanguage,
       // The JIT handshake previously UNDER-SENT these three, leaving the JIT SI's
       // {form_title}, {previous_spoken_names}, and {next_field_hint} wrong
@@ -816,6 +844,26 @@ export class SchemaFormStateManager {
     const newState = {
       ...state,
       jitModeEnabled: enabled,
+      lastUpdated: Date.now()
+    };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Continuous-session mode (bd polyglot-pdf-x8rt) - enable/disable.
+   * Called during handshake from the backend CONTINUOUS_SESSION flag. When on,
+   * the handshake spans the whole form as one synthetic section and section
+   * advancement is suppressed.
+   */
+  static setContinuousSession(state: SchemaFormState, enabled: boolean): SchemaFormState {
+    if (state.continuousSessionEnabled === enabled) {
+      return state;
+    }
+
+    const newState = {
+      ...state,
+      continuousSessionEnabled: enabled,
       lastUpdated: Date.now()
     };
     this.save(newState);

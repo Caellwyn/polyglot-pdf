@@ -189,6 +189,7 @@ export class WebFormConnection {
   private isProcessingAudio = false;
   private enableAutoReconnect = false; // Only enable after first successful connection
   private dtiModeEnabled = false; // DTI: send next field's full schema on hint response (bd polyglot-pdf-jnjj.22)
+  private continuousSessionEnabled = false; // Whole form as ONE session; suppress section advance (bd polyglot-pdf-x8rt)
   private isSectionSwitching = false; // Prevent auto-reconnect during intentional section switches
   // Real re-entrancy guard for a section switch, DISTINCT from isSectionSwitching
   // (bd polyglot-pdf-aun / WS-D). isSectionSwitching is the auto-reconnect
@@ -674,7 +675,7 @@ export class WebFormConnection {
    * Handle session_ready message from backend
    */
   private handleSessionReady(message: any): void {
-    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad } = message;
+    const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad, continuous_session_enabled } = message;
 
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
@@ -685,6 +686,16 @@ export class WebFormConnection {
       if (jit_mode_enabled) {
         console.log('[WebFormConnection] [OK] JIT mode enabled by backend');
       }
+    }
+
+    // Continuous-session mode (bd polyglot-pdf-x8rt): when on, the client builds a
+    // whole-form handshake and stops advancing sections (see proceedSectionSwitch /
+    // handlePrepareSectionSwitchRequest). Store it on state so the handshake builder
+    // and navigation read it. Default false when the backend omits the field.
+    this.state = SchemaFormStateManager.setContinuousSession(this.state, continuous_session_enabled === true);
+    this.continuousSessionEnabled = continuous_session_enabled === true;
+    if (this.continuousSessionEnabled) {
+      console.log('[WebFormConnection] [OK] Continuous-session mode enabled by backend');
     }
 
     // DTI mode (bd polyglot-pdf-jnjj.22): when on, the client supplies each next
@@ -1185,6 +1196,21 @@ export class WebFormConnection {
     const identifier = message.identifier;
 
     console.log('[WebFormConnection] handlePrepareSectionSwitchRequest START', { requestId, identifier });
+
+    // Continuous-session mode (bd polyglot-pdf-x8rt): sections do not exist as a
+    // navigation unit -- reject any AI-initiated switch. The backend drops the
+    // switch_section tool in continuous mode, so this should never fire; this is the
+    // client-side backstop against a stray call resetting the one session we keep.
+    if (this.continuousSessionEnabled) {
+      console.warn('[WebFormConnection] prepare_section_switch rejected -- continuous-session mode has no sections');
+      this.send({
+        type: "section_info_response",
+        request_id: requestId,
+        section_info: null,
+        error: 'Section switching is disabled in continuous-session mode',
+      });
+      return;
+    }
 
     // This is the AI-INITIATED switch path (Gemini called switch_section -> backend
     // prepare_section_switch -> here -> section_info_response -> backend restarts
@@ -1746,6 +1772,16 @@ export class WebFormConnection {
    * switch itself, so the gate B5 adds wraps one call.
    */
   private async proceedSectionSwitch(sectionId: string): Promise<void> {
+    // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form is one session,
+    // so there is no section to advance to -- suppress the client auto-advance
+    // entirely. computeNextField spans the whole form in this mode, so it never
+    // reports "section complete, next section available" that would reach here;
+    // this guard is the belt-and-suspenders backstop.
+    if (this.continuousSessionEnabled) {
+      console.log('[WebFormConnection] Continuous mode: suppressing section advance to', sectionId);
+      return;
+    }
+
     // B5 (bd polyglot-pdf-jnjj.17): gate the switch on the validator round-trip
     // (contract 4 ordering). Park the switch and wait for a validation_result:
     //   - clean verdict   -> resolvePendingSectionSwitch -> switch runs;
