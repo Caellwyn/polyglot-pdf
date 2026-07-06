@@ -195,7 +195,8 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # Deploy to Cloud Run
     log_info "🌐 Deploying to Cloud Run service: $BACKEND_SERVICE_NAME..."
     # BACKEND_EXTRA_ENV: channel deploy scripts append channel-specific env vars
-    # here (e.g. the demo runs on AI Studio: VERTEXAI=false,USE_PREMIUM_MODEL=false).
+    # here (e.g. the demo sets VERTEXAI=true,USE_PREMIUM_MODEL=false -- the demo
+    # runs on Vertex ADC, see deploy-demo.sh).
     # Default empty -> prod keeps the Vertex defaults baked into config.py.
     # GEMINI_API_KEY is injected separately via Secret Manager (--set-secrets),
     # NOT here -- never put the key in plaintext env vars.
