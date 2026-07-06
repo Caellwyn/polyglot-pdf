@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-h76m.5: the Mark-complete publish gate now also requires zero schema-lint ERRORs; see the `/api/editor/kits/{kit_id}/status` row). See [journal/entries/2026-07-05-bd-h76m.5-schema-lint.md](journal/entries/2026-07-05-bd-h76m.5-schema-lint.md) for closeout details. This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-07-06. See [journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details. This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -55,14 +55,13 @@ after this many seconds with no received message (audio, ping, or control).
 Routers are registered in `backend/main.py`. REST routers carry a `/api` prefix;
 the `websocket_routes` router carries `/ws` and is mounted **twice** -- bare and
 again under `/api` -- so both `/ws/fill` and `/api/ws/fill` resolve (see Gotchas).
-Routes declared directly on `app` in `main.py` (`/ws/vad-config`, `/health`,
-`/version`) are **not** part of that double-mount and have no `/api` mirror.
+Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
+**not** part of that double-mount and have no `/api` mirror.
 
 | Method | Path | Surface doc |
 |--------|------|-------------|
 | WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. `components/websocket-routing.md`, `components/voice-ai.md` |
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
-| WS | `/ws/vad-config` | VAD config socket (declared on `app` directly in `main.py`). `standards/voice-and-vad.md` |
 | POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). `components/pdf-filling.md` |
 | POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized). `standards/confirmation-and-audit.md` |
 | GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). `components/pdf-filling.md` |

@@ -270,13 +270,12 @@ describe('useAuth guard', () => {
 
 
 // ===========================================================================
-// 5. ProtectedRoute gate: loading -> spinner, no user -> Login, user -> children
+// 5. ProtectedRoute gate: no user -> Login, user -> children
 //
-// ProtectedRoute is tested in ISOLATION by spying on useAuth, so all THREE of
-// its branches run -- including the loading-spinner branch. (Rendering it inside
-// the real AuthProvider would NOT exercise that branch: AuthProvider gates its
-// children on `{!loading && children}`, so ProtectedRoute never even mounts while
-// loading. Driving useAuth directly is the only way to reach the spinner.)
+// ProtectedRoute is tested in ISOLATION by spying on useAuth. It has NO
+// loading branch (removed in bd polyglot-pdf-31u1): AuthProvider gates its
+// children on `{!loading && children}`, so a ProtectedRoute never mounts while
+// auth is loading -- the auth-init wait is owned upstream, not here.
 // ===========================================================================
 describe('ProtectedRoute gate', () => {
     // Restore the useAuth spy after each case so it cannot leak into the
@@ -296,18 +295,6 @@ describe('ProtectedRoute gate', () => {
             </ProtectedRoute>
         );
     }
-
-    it('renders the loading spinner (not the content) while auth is loading', () => {
-        renderGate({ user: null, loading: true });
-
-        // The real spinner branch (ProtectedRoute.tsx) runs: the auth-loading
-        // container is present, and neither the Login screen nor the protected
-        // content is shown.
-        expect(document.querySelector('.auth-loading')).not.toBeNull();
-        expect(document.querySelector('.auth-spinner')).not.toBeNull();
-        expect(screen.queryByTestId('protected')).toBeNull();
-        expect(screen.queryByTestId('login-screen')).toBeNull();
-    });
 
     it('renders the Login screen when not loading and there is no user', () => {
         renderGate({ user: null, loading: false });

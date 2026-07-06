@@ -1,8 +1,8 @@
 # Voice & VAD (turn-taking modes)
 
-**Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
+**Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: fixed a stale VAD-sensitivity default claim -- START was documented as `LOW` but config.py defaults it to `HIGH`; folded the `input_transcription` -> `on_user_activity` native-mode signal and the mic-energy-meter/send-gate relationship into the body from the old stamp chain). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -219,15 +219,13 @@ tool-call rejection window is a **separate** hardcoded constant —
 latency metrics are collected in metrics.ts (local-only — see
 [hipaa-pii-policy.md](hipaa-pii-policy.md)).
 
-> **Two different "VAD configs" — don't conflate them.** `backend/vad_config.json`
-> (`{startSensitivity, endSensitivity, prefixPadding, silenceDuration}`) holds
-> *Gemini-side* automatic-VAD knobs — a **different** thing from the client Silero
-> thresholds above. It's served by a WebSocket at `/ws/vad-config` (mounted in
-> `main.py`, handler `vad_config_websocket`). **Caveat:** the live adapter reads its
-> Gemini-VAD settings from `Settings` (the `VAD_*` env fields, next section), **not**
-> from `vad_config.json`, and with `DISABLE_GEMINI_VAD=True` those Gemini-side knobs
-> are inert anyway — so writing `vad_config.json` via that endpoint has no effect on
-> the running session today. Cleanup tracked in bd `polyglot-pdf-9jv`.
+> **Gemini-side VAD is env-driven only.** The live adapter reads its Gemini-VAD
+> settings from `Settings` (the `VAD_*` env fields, next section) — there is no
+> config file or endpoint for them. (A dead `backend/vad_config.json` +
+> `/ws/vad-config` WebSocket that wrote to it existed but was never read by the
+> adapter and is now removed; bd `polyglot-pdf-9jv`.) With `DISABLE_GEMINI_VAD=True`
+> the Gemini-side knobs are inert regardless; real turn-taking is governed by the
+> **client** Silero thresholds above.
 
 ## Barge-in
 

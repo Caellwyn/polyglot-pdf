@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import Depends, FastAPI, WebSocket
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -8,7 +8,6 @@ load_dotenv()
 
 from .config import Settings, get_settings, parse_extra_origins
 from .routes import websocket_routes
-from .routes.vad_config_routes import vad_config_websocket
 from .routes import pdf_fill_routes
 from .routes import disclaimer_routes
 from .routes import form_kit_routes
@@ -53,12 +52,6 @@ app.include_router(disclaimer_routes.router)
 app.include_router(form_kit_routes.router)
 app.include_router(editor_kit_routes.router)  # token-gated hosted-editor surface (bd 92qe.1)
 app.include_router(dev_console_routes.router)  # dev-only console ingest (bd polyglot-pdf-2m9; 404 in prod)
-
-
-@app.websocket("/ws/vad-config")
-async def vad_config_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for VAD configuration updates from tuning lab"""
-    await vad_config_websocket(websocket)
 
 
 @app.get("/health")
