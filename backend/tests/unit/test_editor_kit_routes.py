@@ -1442,6 +1442,28 @@ def test_extract_failure_maps_to_502_and_stores_nothing(client, monkeypatch):
         _run(store.load_schema("fresh"))
 
 
+def test_extract_non_json_output_is_502(client, monkeypatch):
+    # Exit criterion 2 (the no-JSON sub-case, Opus fallback coverage nit): the
+    # extractor wrote --out but it is not valid JSON -> 502, nothing stored.
+    c, store, root = client
+    _make_kit(root, "fresh")
+
+    def _garbage_run(cmd, **kwargs):
+        out_path = cmd[cmd.index("--out") + 1]
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write("this is not json {{{")
+        return SimpleNamespace(returncode=0, stdout="[OK] wrote schema.json", stderr="")
+
+    monkeypatch.setattr(ekr.subprocess, "run", _garbage_run)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502, r.text
+    assert "unreadable schema" in r.json()["detail"]
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_schema("fresh"))
+
+
 def test_extract_zero_field_draft_is_no_usable_draft_502(client, monkeypatch):
     # A draft with ZERO fields is BELOW the store-with-issues floor (bd v96b):
     # nothing worth storing, so it is a hard-fail 502 -- and the message is a
