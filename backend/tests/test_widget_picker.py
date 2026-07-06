@@ -103,6 +103,21 @@ def test_distinct_name_widgets_are_not_shared_name():
     assert all(w["shared_name"] is False for w in got)
 
 
+def test_multi_widget_checkbox_matrix_is_not_shared_name():
+    # shared_name is RADIO-ONLY: a rare multi-widget CHECKBOX entry stays distinct
+    # (per-option pdf_field_name), never lifting a name onto a checkbox_group
+    # field (which v2 forbids -- Opus fallback).
+    matrix = {"fields": [{
+        "name": "form1[0].cb[0]", "logical_type": "checkbox", "widget_count": 2,
+        "widgets": [
+            {"type": "checkbox", "on_value": "1", "rect": {"page": 0}},
+            {"type": "checkbox", "on_value": "2", "rect": {"page": 0}},
+        ],
+    }]}
+    got = unclaimed_button_widgets({"fields": []}, matrix)
+    assert all(w["shared_name"] is False for w in got)
+
+
 def test_shared_name_radio_partial_claim_leaves_the_rest():
     # An option claims the Male kid via the field name + pdf_on_value=M; the
     # Female kid must STILL be addable (the whole-name claim must not hide it).

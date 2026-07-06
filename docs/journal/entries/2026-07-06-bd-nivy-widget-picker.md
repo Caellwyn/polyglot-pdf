@@ -98,6 +98,22 @@ fixed to dedup against existing option VALUES. (2) typecheck -- `FieldOption`
 round-trips fillable. Both verified: the collision case mints `family_2` and the
 result lints 0/0.
 
+## Opus fallback re-review (folded in)
+
+The re-review confirmed the shared-name fix `NO-GAPS` and found two non-blocking
+in-scope quality issues, both fixed here: (a) the picker list keyed rows on
+`w.name`, but a shared-name group returns N candidates with the SAME name ->
+duplicate React keys; now keyed on `name|on_value`. (b) the `onPick` field-name
+lift was gated only on presence, so a rare shared-name CHECKBOX matrix
+(widget_count>1) could lift a `pdf_field_name` onto a checkbox_group (v2 forbids
+it -> un-promotable). Fixed at the source: `shared_name` is now RADIO-ONLY in the
+backend (a multi-widget checkbox entry stays distinct -> per-option
+`pdf_field_name` -> fillable), plus a belt-and-suspenders `field.type === 'radio'`
+guard on the call site. This also means the picker no longer emits the
+unfillable pdf_on_value-only checkbox shape that bd `polyglot-pdf-u632` tracks at
+the filler (u632 stays open for hardening the filler against a pre-existing such
+schema; this diff just stops the picker being a source of it).
+
 ## Doc-freshness note
 
 closeout_prep flagged the usual tier-2 docs as STALE. Reviewed: `schema-forms.md`

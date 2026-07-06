@@ -297,7 +297,10 @@ const WidgetPicker: React.FC<{
       )}
       {!loading && widgets && widgets.map((w) => (
         <button
-          key={w.name}
+          // A shared-name group returns N candidates with the SAME name (differing
+          // only by on_value), so key on name+on_value to avoid duplicate React
+          // keys (Opus fallback).
+          key={`${w.name}|${w.on_value ?? ''}`}
           type="button"
           className="w-full text-left text-xs p-1.5 rounded hover:bg-gray-100 flex items-center justify-between gap-2"
           onClick={() => pick(w)}
@@ -966,9 +969,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                       updateField({
                         options: [...(field.options || []), opt],
                         // A shared-name group carries the widget name on the
-                        // FIELD (set it if not already present); a checkbox_group
-                        // never does (v2), so only radio reaches here with one.
-                        ...(fieldPdfFieldName && !field.pdf_field_name
+                        // FIELD. Gate on type=radio: v2 FORBIDS a field-level
+                        // pdf_field_name on a checkbox_group (form_models
+                        // rejects it at the promotion gate), and a shared-name
+                        // CHECKBOX matrix (widget_count>1) would otherwise lift
+                        // one here -> an un-promotable schema (Opus fallback).
+                        ...(fieldPdfFieldName && field.type === 'radio'
+                            && !field.pdf_field_name
                           ? { pdf_field_name: fieldPdfFieldName }
                           : {}),
                       })

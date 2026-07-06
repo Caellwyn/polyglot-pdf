@@ -108,13 +108,17 @@ def unclaimed_button_widgets(
         widgets = entry.get("widgets")
         if not isinstance(widgets, list) or not widgets:
             widgets = [{}]
-        # A SHARED-name group (one dump name, >1 kid) must be modeled with the
-        # name on the FIELD and only pdf_on_value on each option -- putting the
+        # A SHARED-name RADIO group (one dump name, >1 kid) must be modeled with
+        # the name on the FIELD and only pdf_on_value on each option -- putting the
         # shared name on every option's pdf_field_name trips dump-widget-multiclaim
-        # (Opus fallback, PR #328). shared_name tells the picker which shape to
+        # (Opus fallback, PR #328). shared_name is RADIO-ONLY: v2 forbids a
+        # field-level pdf_field_name on a checkbox_group, so a rare shared-name
+        # CHECKBOX matrix stays distinct (per-option pdf_field_name -- fillable),
+        # never lifting a name onto a checkbox_group field. shared_name tells the
+        # picker which shape to
         # build: kid -> option.pdf_on_value (+ field pdf_field_name); distinct
         # widget -> option.pdf_field_name.
-        shared_name = len(widgets) > 1
+        shared_name = len(widgets) > 1 and entry.get("logical_type") == "radio"
         for w in widgets:
             w = w if isinstance(w, dict) else {}
             on_value = w.get("on_value")
