@@ -848,6 +848,118 @@ def test_lint_never_4xxs_on_a_malformed_draft(client):
     assert any(f["rule"] == "condition-malformed" for f in body["findings"])
 
 
+# --- POST /repair: one-click Repair-all (bd polyglot-pdf-zgln, P5.3b) ---------
+
+# A draft with a repairable defect: duplicate/invalid option values that repair
+# mints into slugs (a -> the label slug), so the repaired schema lints cleaner.
+_REPAIRABLE_DRAFT = {
+    "source": "pdf",
+    "form_metadata": {"title": "T", "version": "unknown"},
+    "sections": [{"id": "s1", "label": "S1", "order": 1, "fields": ["picker"]}],
+    "fields": [{"id": "picker", "name": "Picker", "spoken_name": "picker",
+                "type": "select", "section_id": "s1",
+                "pdf_field_name": "form1[0].p[0]",
+                "options": [{"value": "Dup Value!", "label": "Alpha"},
+                            {"value": "Dup Value!", "label": "Beta"}]}],
+    "extraction_info": {"extracted_at": "2026-07-05T00:00:00Z",
+                        "extraction_confidence": 0.9, "extractor_version": "t",
+                        "manual_review_required": True},
+}
+
+
+def test_repair_all_stores_and_reports_and_equals_cli(client):
+    # Exit criterion 1: Repair-all repairs a stored draft; its output EQUALS a
+    # direct schema_repair.repair() call on the same input (== CLI), and the
+    # repaired schema is stored back.
+    import backend.services.schema_repair as sr
+    c, store, root = client
+    _make_kit(root, "fresh", status="draft", schema=_REPAIRABLE_DRAFT)
+    r = c.post(
+        "/api/editor/kits/fresh/repair", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["applied"] >= 1
+    # Equivalence: the STORED repaired schema equals repair() called directly
+    # (no dump artifact present -> dump=None on both sides), proving == CLI.
+    expected, _ = sr.repair(_REPAIRABLE_DRAFT, None)
+    assert _run(store.load_schema("fresh")) == expected
+    # The repaired option values are minted slugs (no longer duplicates).
+    stored = _run(store.load_schema("fresh"))
+    vals = [o["value"] for o in stored["fields"][0]["options"]]
+    assert vals == ["alpha", "beta"] and len(set(vals)) == 2
+
+
+def test_repair_all_passes_the_persisted_dump(client):
+    # Repair uses the kit's persisted acroform dump for its widget-existence
+    # check -- a draft claiming a REAL widget repairs fine.
+    c, store, root = client
+    schema = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+              "sections": [], "fields": [{"id": "f", "name": "F",
+              "spoken_name": "f", "type": "text",
+              "pdf_field_name": "form1[0].real[0]"}]}
+    _make_kit(root, "fresh", status="draft", schema=schema)
+    _run(store.put_json_artifact(
+        "fresh", {"fields": [{"name": "form1[0].real[0]"}]}, "acroform.json"))
+    r = c.post(
+        "/api/editor/kits/fresh/repair", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_repair_hallucinated_widget_is_422_not_500(client):
+    # Exit criterion 2: a draft referencing a widget the PDF lacks (checkable
+    # only with a dump) is a clear CLIENT error (422), never a 500.
+    c, store, root = client
+    schema = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+              "sections": [], "fields": [{"id": "f", "name": "F",
+              "spoken_name": "f", "type": "text",
+              "pdf_field_name": "form1[0].GHOST[0]"}]}
+    _make_kit(root, "fresh", status="draft", schema=schema)
+    _run(store.put_json_artifact(
+        "fresh", {"fields": [{"name": "form1[0].real[0]"}]}, "acroform.json"))
+    r = c.post(
+        "/api/editor/kits/fresh/repair", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 422, r.text
+    assert "widget" in r.json()["detail"].lower()
+    # Nothing was overwritten: the un-repaired schema is unchanged.
+    assert _run(store.load_schema("fresh")) == schema
+
+
+def test_repair_requires_author_role(client):
+    c, _store, root = client
+    _make_kit(root, "fresh", status="draft", schema=_REPAIRABLE_DRAFT)
+    # editor token -> 403 (repair mutates the stored schema, author-only).
+    r = c.post(
+        "/api/editor/kits/fresh/repair", headers={"X-Editor-Token": "edit-tok"}
+    )
+    assert r.status_code == 403
+
+
+def test_repair_unknown_kit_404_and_published_409(client):
+    c, _store, root = client
+    # Unknown kit -> 404.
+    assert c.post(
+        "/api/editor/kits/ghost/repair", headers={"X-Editor-Token": "auth-tok"}
+    ).status_code == 404
+    # A COMPLETE kit -> 409 (revert to draft first; repair rewrites the schema).
+    _make_kit(root, "done", status="complete", schema=VALID_SCHEMA)
+    r = c.post(
+        "/api/editor/kits/done/repair", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 409
+
+
+def test_repair_schemaless_kit_is_404(client):
+    c, _store, root = client
+    _make_kit(root, "fresh", status="draft")  # PDF, no schema
+    r = c.post(
+        "/api/editor/kits/fresh/repair", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 404
+
+
 # --- POST status: the publish gate -------------------------------------------
 
 

@@ -17,6 +17,11 @@ interface ValidationPanelProps {
   // A rotated/expired access code surfaced while linting -- let the host drop
   // back to the access gate, same as every other editorFetch caller.
   onAuthError?: () => void;
+  // One-click Repair-all (bd polyglot-pdf-zgln, P5.3b): when provided (author
+  // tier on a stored kit), a "Repair all (N)" button runs the server-side repair
+  // and the host reloads the repaired schema. Omitted -> no button (the panel is
+  // read-only for the editor tier / local mode / an unsaved schema).
+  onRepairAll?: () => Promise<void>;
 }
 
 // Human-readable rule labels: the backend rule ids are stable/terse (bd h76m.5);
@@ -68,6 +73,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   schema,
   onSelectField,
   onAuthError,
+  onRepairAll,
 }) => {
   const stats = React.useMemo(() => getCompletionStats(schema), [schema]);
   const hosted = React.useMemo(isHostedMode, []);
@@ -75,6 +81,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   const [report, setReport] = React.useState<LintReport | null>(null);
   const [lintError, setLintError] = React.useState<string | null>(null);
   const [linting, setLinting] = React.useState(false);
+  const [repairing, setRepairing] = React.useState(false);
 
   // Re-lint whenever the schema changes. Hosted mode calls the backend's
   // authoritative Python linter (P4.3); local mode -- which has no backend and
@@ -120,6 +127,18 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   const findings = report?.findings ?? [];
   const errorCount = report?.errorCount ?? 0;
   const warningCount = report?.warningCount ?? 0;
+
+  const handleRepairAll = React.useCallback(async () => {
+    if (!onRepairAll || repairing) return;
+    setRepairing(true);
+    try {
+      await onRepairAll();
+      // The host reloads the repaired schema, which re-runs the lint effect via
+      // the [schema] dependency -- no manual re-lint needed here.
+    } finally {
+      setRepairing(false);
+    }
+  }, [onRepairAll, repairing]);
 
   const renderFinding = (finding: LintFinding, idx: number) => {
     const isError = finding.severity === 'ERROR';
@@ -211,7 +230,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       {/* Errors and Warnings from the backend linter */}
       {findings.length > 0 && (
         <div className="space-y-2">
-          <div className="flex gap-4 text-sm">
+          <div className="flex items-center gap-4 text-sm">
             {errorCount > 0 && (
               <span className="text-red-600 font-medium">
                 {errorCount} error{errorCount !== 1 ? 's' : ''}
@@ -221,6 +240,20 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
               <span className="text-yellow-600 font-medium">
                 {warningCount} warning{warningCount !== 1 ? 's' : ''}
               </span>
+            )}
+            {/* One-click Repair-all (bd zgln): author tier on a stored kit, only
+                when there are ERROR-class defects the deterministic repair pass
+                targets. */}
+            {onRepairAll && errorCount > 0 && (
+              <button
+                type="button"
+                className="btn-sm btn-primary ml-auto"
+                onClick={() => void handleRepairAll()}
+                disabled={repairing}
+                title="Automatically repair the fixable errors (mint option slugs, rewrite invented operators, drop dead conditions)"
+              >
+                {repairing ? 'Repairing...' : `Repair all (${errorCount})`}
+              </button>
             )}
           </div>
           <div className="max-h-32 overflow-auto custom-scrollbar space-y-1">
