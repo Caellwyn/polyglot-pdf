@@ -2495,6 +2495,13 @@ export class WebFormConnection {
       ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined)
       : null;
 
+    // Keep the recovery-prompt hint current (same side effect as
+    // handleGetNextFieldHintRequest): a stall-recovery prompt after a manual
+    // edit must name the POST-edit next field, not the pre-edit one.
+    if (nextFieldHint) {
+      sessionStorage.setItem('vff_last_field_hint', nextFieldHint);
+    }
+
     // DTI (bd polyglot-pdf-ezg2): a manual edit never triggers the confirm_field
     // next-field round-trip that normally carries the next field's schema, so
     // supply it here -- the backend re-establishes the current-field coercion

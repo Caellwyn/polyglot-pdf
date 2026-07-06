@@ -71,10 +71,17 @@ the session never opens. The DTI per-form derivation (jnjj.35) produces ~2800
 for the I-90, so EVERY DTI+compression session on Vertex died before opening:
 a root cause of the "combination runs erroring". `_build_live_config` now
 clamps the trigger into the legal range (logs
-`compression_trigger_clamped_to_api_bounds`); the window (eviction landing
-zone) keeps its derived per-form value. The old 2800/2200 "winning
-calibration" was measured on AI Studio, whose prepaid credits are now depleted
-(1011) -- all live runs are Vertex now.
+`compression_trigger_clamped_to_api_bounds`), and -- when the DERIVED trigger
+was raised by the clamp -- RE-TUNES the derived window with it
+(`window = max(derived, trigger - margin)`, so evictions keep chopping only
+~margin tokens; keeping the raw floor+headroom window under a 5000 trigger is
+the measured 5000/2200 guidance-stripping case). For the I-90 the derive path
+now yields 5000/4400. CAVEAT: 5000/4400 is an UNTESTED INTERIM -- the only
+live-validated coherent window is the explicit 5000/3500 of the final clean
+run; ctu8's window sweep must validate (or replace) the retuned value before
+the DTI+compression flags flip on. The old 2800/2200 "winning calibration" was
+measured on AI Studio, whose prepaid credits are now depleted (1011) -- all
+live runs are Vertex now.
 
 **Harness (measure_form_session_costs.py).** `--vertex` (ADC; swaps the 2.5
 model id to `MODEL_NATIVE_STANDARD_VERTEX`); `--continuous` (one uninterrupted

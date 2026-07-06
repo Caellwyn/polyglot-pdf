@@ -184,7 +184,11 @@ floor+headroom window (~2200) under a 5000 trigger makes each eviction chop
 ~2800 tokens down to just above the SI floor -- stripping the current-field
 guidance DTI depends on (measured 2026-07-05: the 5000/2200 run drifted
 post-eviction; wider windows stayed coherent). The retune preserves the
-derivation's margin semantic: only ~margin tokens are evicted per cycle. The old
+derivation's margin semantic: only ~margin tokens are evicted per cycle.
+**CAVEAT: the retuned I-90 derive pair (5000/4400) is an untested interim** --
+the only live-validated coherent configuration is the explicit 5000/3500 (the
+clean 30-question continuous run, 2026-07-05); `ctu8`'s sweep must validate or
+replace the retuned value before the DTI+compression flags flip on. The old
 2800/2200 "winning calibration" numbers were measured on AI Studio before this
 bound existed on the connect path; any sweep (`ctu8`) must place triggers at
 >= 5000 and sweep the WINDOW as the independent variable.
