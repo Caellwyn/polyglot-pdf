@@ -159,3 +159,57 @@
 .pdf-preview-modal__error {
   color: #fecaca;
 }
+
+/* --- Preview view-mode pane (the in-page PDF surface) --- */
+
+.pdf-preview-pane {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0.5rem 0 2rem;
+}
+
+.pdf-preview-pane__banner {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  margin: 0 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.pdf-preview-pane__pages {
+  background: #6b7280;
+  border-radius: 6px;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.pdf-preview-pane__page-label {
+  text-align: center;
+  color: #f3f4f6;
+  font-size: 0.75rem;
+  padding: 0.35rem 0 0.9rem;
+}
+
+.pdf-preview-pane__loading {
+  color: #f9fafb;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.pdf-preview-pane__error {
+  color: #fecaca;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.pdf-preview-pane__notice {
+  max-width: 64rem;
+  margin: 1rem auto;
+  padding: 1rem;
+  background: #fefce8;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  color: #713f12;
+}
