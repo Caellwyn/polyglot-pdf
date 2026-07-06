@@ -5,10 +5,11 @@ those runs are 30-34 questions (its contract hard-requires exactly 20) and the
 window/trigger that distinguishes one sweep cell from another lives in the
 run's meta.json, not the filename (its `_NAME_RE` keys only model/arm/path, so
 every window cell collides). This module reads the continuous runs keyed by
-(window, trigger), fits per-question conversation growth from the LIVE
-compression curve, reports coherence (fill accuracy, confirms, secretary
-lookups, evictions), and projects cost-per-form to full length by reusing the
-`cost_matrix_lib` projection math (`window_cost_curve`).
+(window, trigger), fits per-question growth + post-eviction steady level from
+the CSV's measured per-question text-in series, reports coherence (fill
+accuracy, confirms, secretary lookups, evictions), and projects cost-per-form
+to full length with a SEPARATE saturating-ramp model (project_form_cost, below)
+that reuses ONLY `cost_matrix_lib`'s RATES -- NOT its `window_cost_curve`.
 
 Reused from cost_matrix_lib:
   - RATES: per-model per-modality $/Mtok (the ONLY thing reused).
