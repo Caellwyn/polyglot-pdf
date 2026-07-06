@@ -76,6 +76,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     storeViewMode(mode);
   };
 
+  // The field the voice model is currently on (from next_field_hint);
+  // Preview mode's overlays color it, the P1.3 camera snaps to it.
+  const [currentFieldId, setCurrentFieldId] = useState<string | null>(null);
+
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
 
@@ -206,6 +210,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
 
   const handleNextField = (fieldId: string | null) => {
     if (!fieldId) return;
+
+    // Preview mode colors the current field's overlay from this (bd ogrt);
+    // the P1.3 snap-to camera keys on it too.
+    setCurrentFieldId(fieldId);
 
     const element = document.getElementById(fieldId);
     if (element) {
@@ -566,7 +574,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         <React.Suspense
           fallback={<div className="pdf-preview-pane__notice">Loading the preview...</div>}
         >
-          <PreviewPane pdfUrl={pdfUrl} />
+          <PreviewPane
+            pdfUrl={pdfUrl}
+            schema={state.schema}
+            fieldValues={state.fieldValues}
+            currentFieldId={currentFieldId}
+          />
         </React.Suspense>
       ) : (
       <form className="schema-form" onSubmit={handleSubmit}>
