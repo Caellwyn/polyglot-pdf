@@ -16,11 +16,22 @@ It reports a HARD per-schema choice_fill_success = filled/attempted for
 checkbox+radio SEPARATELY from text.
 
 Fidelity to production: the fill calls below are copied VERBATIM (semantics, not
-prose) from backend/routes/pdf_fill_routes.py as of 2026-06-07 --
+prose) from backend/routes/pdf_fill_routes.py as of 2026-07-05 (bd h76m.17 parity) --
   - text     : widget.field_value = str(value); widget.update()
   - checkbox/radio: widget.field_value = on_state; doc.xref_set_key(xref,"AS","/on")
                     (NO update() -- XFA viewer regenerates appearance)
+  - checkbox_group (v2): shares the checkbox branch -- EVERY selected option's own
+                    pdf_field_name is its widget; field-level pdf_field_name is
+                    FORBIDDEN on a v2 group (form_models.py _collect_v2_problems)
+  - shared-field radio (v2): an option with only pdf_on_value (no own
+                    pdf_field_name) resolves against the FIELD-level
+                    pdf_field_name -- one AcroForm field, several kid widgets
+                    told apart by on-state; write is a direct xref V+AS to
+                    the chosen kid, no get_button_on_state/update()
   - find_widget : exact field_name, then endswith fallback (XFA full path)
+  - find_widget_by_state : same name-match, but returns the KID whose /AP
+                    normal states include the given on-state (strict, no
+                    'Yes' default -- a broken sibling must never masquerade)
   - get_button_on_state : first non-Off 'normal' state, else "Yes"
   - read-only unlock : conditional_behavior.pdf_field_flag_change bit flip
 If the production filler changes, update this file (it deliberately does NOT import
@@ -50,6 +61,16 @@ import fitz  # PyMuPDF
 # --------------------------------------------------------------------------- #
 # Production-faithful widget write helpers (mirrors pdf_fill_routes.py)
 # --------------------------------------------------------------------------- #
+
+# A shared-field radio on-state goes into a RAW /Name token; production
+# (pdf_fill_routes.py _PDF_NAME_UNSAFE, bd h76m.17) REFUSES to write one carrying
+# PDF-Name-unsafe characters, counting the field as skipped/unfilled. The harness
+# mirrors that exact charset AND its SCORING: an unsafe on-state is recorded in
+# run() as an attempted-but-unfilled write (stays in the denominator), never
+# dropped (which would make the field vanish and inflate the fill rate;
+# bd polyglot-pdf-bvmu).
+_PDF_NAME_UNSAFE = re.compile(r"[\s/#()<>\[\]{}%]")
+
 
 def _pdf_name_unescape(s: Optional[str]) -> str:
     """Decode PDF name #XX hex escapes (e.g. '#20APT#20' -> ' APT ').
@@ -94,6 +115,38 @@ def _find_widget(doc, field_name: str):
 
 def _is_button(widget) -> bool:
     return widget.field_type == 2 or widget.field_type_string in {"CheckBox", "RadioButton"}
+
+
+def _widget_has_on_state(widget, on_state: str) -> bool:
+    """STRICT membership check: on_state appears in the widget's /AP normal
+    states (route line ~191). No 'Yes' default -- an empty/broken appearance
+    table means NOT-a-match, never a masquerading sibling kid."""
+    try:
+        states = widget.button_states() or {}
+        normal = states.get("normal") or []
+        return isinstance(normal, list) and on_state in normal
+    except Exception:
+        return False
+
+
+def _find_widget_by_state(doc, field_name: str, on_state: str):
+    """Find the radio KID matching an 'on' appearance state (route line ~205).
+
+    A true-AcroForm radio group is ONE field name shared by several kid
+    widgets, each distinguished only by its on-state. Falls back to the first
+    name-match so an unexpected appearance table still resolves something.
+    """
+    fallback = (None, None)
+    for pno in range(doc.page_count):
+        page = doc[pno]
+        for widget in page.widgets() or []:
+            name = widget.field_name or ""
+            if name == field_name or name.endswith(field_name):
+                if fallback == (None, None):
+                    fallback = (widget, page)
+                if _widget_has_on_state(widget, on_state):
+                    return (widget, page)
+    return fallback
 
 
 def _fill_widget(doc, page, widget, value) -> None:
@@ -153,6 +206,7 @@ def synth_value(field: dict) -> Any:
 
     - radio                       -> a single option.value (widget leaf string)
     - checkbox WITH options       -> a string[] of EVERY option.value (exercise all)
+    - checkbox_group (v2)         -> a string[] of EVERY option.value (exercise all)
     - single checkbox (no options)-> True (boolean)
     - text/date/number/textarea   -> a string
     """
@@ -160,7 +214,7 @@ def synth_value(field: dict) -> Any:
     opts = field.get("options") or []
     if ftype == "radio":
         return opts[0].get("value") if opts else None
-    if ftype == "checkbox":
+    if ftype in ("checkbox", "checkbox_group"):
         if opts:
             return [o.get("value") for o in opts if o.get("value") is not None]
         return True
@@ -181,6 +235,17 @@ def _target_widgets_for_field(field: dict) -> list[tuple[str, str]]:
     Returns a list of (widget_name, kind) where kind is 'choice' or 'text'.
     For a radio/checkbox the targets are the option-level pdf_field_names that the
     synth value selects; for a single checkbox / text it is the field-level name.
+
+    v2 (bd h76m.17) mirrors backend/routes/pdf_fill_routes.py's two group shapes:
+      - checkbox_group: shares the checkbox branch -- EVERY selected option's
+        pdf_field_name is its own widget (field-level pdf_field_name is FORBIDDEN
+        on a v2 group, per form_models.py's _collect_v2_problems).
+      - shared-field radio: an option with NO pdf_field_name of its own, only
+        pdf_on_value, resolves against the FIELD-level pdf_field_name -- one
+        AcroForm field shared by several kid widgets, distinguished by on-state.
+        The widget "name" returned here is a synthetic f"{field_name}\x00{on_value}"
+        marker (kind 'choice_shared') so _find_widget can route it to the
+        state-matching kid instead of a plain name lookup.
     """
     ftype = field.get("type")
     opts = field.get("options") or []
@@ -188,9 +253,19 @@ def _target_widgets_for_field(field: dict) -> list[tuple[str, str]]:
     targets: list[tuple[str, str]] = []
     if ftype == "radio":
         sel = next((o for o in opts if o.get("value") == val), None)
-        if sel and sel.get("pdf_field_name"):
-            targets.append((sel["pdf_field_name"], "choice"))
-    elif ftype == "checkbox":
+        if sel:
+            if sel.get("pdf_field_name"):
+                targets.append((sel["pdf_field_name"], "choice"))
+            elif sel.get("pdf_on_value") and field.get("pdf_field_name"):
+                # Emit the shared-radio target even when the on-state is
+                # PDF-Name-unsafe: the unsafe case is handled in run() as an
+                # ATTEMPTED-but-unfilled write (production refuses it and counts
+                # the field as skipped/unfilled -- it stays in the denominator),
+                # NOT by dropping the target here (which would make the field
+                # VANISH from scoring and inflate the fill rate; bd bvmu).
+                marker = f"{field['pdf_field_name']}\x00{sel['pdf_on_value']}"
+                targets.append((marker, "choice_shared"))
+    elif ftype in ("checkbox", "checkbox_group"):
         if opts:
             selected = set(val or [])
             for o in opts:
@@ -232,7 +307,7 @@ def score_value_convention(schema: dict) -> dict:
     total = conforming = 0
     violations = []
     for f in schema.get("fields", []):
-        if f.get("type") not in ("radio", "checkbox"):
+        if f.get("type") not in ("radio", "checkbox", "checkbox_group"):
             continue
         for o in (f.get("options") or []):
             pfn = o.get("pdf_field_name")
@@ -268,7 +343,9 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
 
     # Plan + apply the writes, recording what we EXPECT each widget to hold.
     # expected[widget_name] = ("choice", on_state) | ("text", "RT")
-    expected: dict[str, tuple[str, str]] = {}
+    #   | ("choice", on_state, shared_field_name)  -- v2 shared-field radio,
+    #     keyed "xref:{n}" since sibling kids share one field_name.
+    expected: dict[str, tuple] = {}
     attempts: list[dict] = []  # one per (field, widget) target
 
     for field in fields:
@@ -276,6 +353,50 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
         ftype = field.get("type")
         cbeh = field.get("conditional_behavior")
         for widget_name, kind in _target_widgets_for_field(field):
+            if kind == "choice_shared":
+                # Shared-field radio (bd h76m.17): widget_name is the
+                # f"{field_pdf_name}\x00{on_value}" marker built above --
+                # resolve it against the STATE-matching kid (route's
+                # find_widget_by_state), never a plain name lookup (every kid
+                # shares the same field_name, so name-only would grab the
+                # wrong sibling).
+                shared_field, on_state = widget_name.split("\x00", 1)
+                # Production (pdf_fill_routes.py _PDF_NAME_UNSAFE, bd h76m.17)
+                # REFUSES to write an on-state carrying PDF-Name-unsafe chars,
+                # counting the field as skipped/unfilled. Mirror the SCORING, not
+                # just the refusal: record an ATTEMPTED-but-unfilled write (like
+                # the widget-not-found path below) so the field stays in the
+                # denominator -- dropping the target instead would make it vanish
+                # and inflate the fill rate (bd polyglot-pdf-bvmu, fresh-eyes r2).
+                if _PDF_NAME_UNSAFE.search(on_state):
+                    attempts.append({"field_id": fid, "field_type": ftype,
+                                     "widget": f"{shared_field}[on={on_state}]",
+                                     "kind": kind, "found": False,
+                                     "refused_unsafe_on_state": True})
+                    continue
+                widget, page = _find_widget_by_state(doc, shared_field, on_state)
+                rec = {"field_id": fid, "field_type": ftype,
+                       "widget": f"{shared_field}[on={on_state}]",
+                       "kind": kind, "found": bool(widget)}
+                if not widget:
+                    attempts.append(rec)
+                    continue
+                _apply_flag_unlock(widget, cbeh)
+                # Direct xref write (route line ~359): V + AS to the on_state,
+                # NO fill_widget/get_button_on_state -- the state IS the value.
+                doc.xref_set_key(widget.xref, "V", f"/{on_state}")
+                doc.xref_set_key(widget.xref, "AS", f"/{on_state}")
+                # Keyed by xref, not field_name: sibling kids of the same
+                # shared field all carry the SAME field_name, so a
+                # field_name-keyed expectation would collide/overwrite. The
+                # shared field name travels alongside so read-back only
+                # searches that field's own kids (never a different shared
+                # group that happens to reuse the same on-state string).
+                expected[f"xref:{widget.xref}"] = ("choice", on_state, shared_field)
+                rec["resolved_widget"] = f"xref:{widget.xref}"
+                attempts.append(rec)
+                continue
+
             widget, page = _find_widget(doc, widget_name)
             rec = {"field_id": fid, "field_type": ftype, "widget": widget_name,
                    "kind": kind, "found": bool(widget)}
@@ -308,13 +429,39 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
 
         # Re-open and verify each expected widget actually holds its value.
         d2 = fitz.open(tmp)
-        # Index widgets by exact name for read-back.
-        by_name: dict[str, Any] = {}
+        # Index widgets by exact name for read-back. A shared-field radio's
+        # kids all carry the SAME name, so this maps to a LIST -- xrefs are
+        # not trusted to survive save()'s garbage collection/renumbering, so
+        # "xref:{n}" entries are resolved by re-matching name + on-state
+        # below rather than by xref lookup.
+        by_name: dict[str, list] = {}
         for pno in range(d2.page_count):
             for w in d2[pno].widgets() or []:
-                by_name[w.field_name] = w
-        for wname, (kind, want) in expected.items():
-            w = by_name.get(wname)
+                by_name.setdefault(w.field_name, []).append(w)
+        for wname, entry in expected.items():
+            if wname.startswith("xref:"):
+                # 3-tuple: (kind, on_state, shared_field_name). want == the
+                # on_state; find it ONLY among that shared field's own kids
+                # (name exact-or-endswith, same convention as _find_widget),
+                # by whichever kid's /AS now reads that state.
+                kind, want, shared_field = entry
+                w = None
+                for name, candidates in by_name.items():
+                    if not (name == shared_field or name.endswith(shared_field)):
+                        continue
+                    for cand in candidates:
+                        as_key = d2.xref_get_key(cand.xref, "AS")
+                        as_val = as_key[1] if isinstance(as_key, (list, tuple)) and len(as_key) > 1 else None
+                        norm = as_val[1:] if isinstance(as_val, str) and as_val.startswith("/") else as_val
+                        if norm and _pdf_name_unescape(norm) == _pdf_name_unescape(want):
+                            w = cand
+                            break
+                    if w:
+                        break
+            else:
+                kind, want = entry
+                candidates = by_name.get(wname) or []
+                w = candidates[0] if candidates else None
             if not w:
                 verified[wname] = False
                 continue
@@ -336,9 +483,12 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
         if os.path.exists(tmp):
             os.remove(tmp)
 
-    # Tally, split choice vs text.
+    # Tally, split choice vs text. "choice_shared" (v2 shared-field radio
+    # kids) counts under the CHOICE bucket -- it is a checkbox/radio fill,
+    # just resolved by on-state instead of a per-option pdf_field_name.
     def tally(kind: str) -> dict:
-        recs = [a for a in attempts if a["kind"] == kind]
+        kinds = {"choice", "choice_shared"} if kind == "choice" else {kind}
+        recs = [a for a in attempts if a["kind"] in kinds]
         attempted = len(recs)
         filled = 0
         for a in recs:
@@ -357,10 +507,16 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
         rw = a.get("resolved_widget")
         ok = bool(rw and verified.get(rw))
         if not ok:
+            if a.get("refused_unsafe_on_state"):
+                reason = "refused_unsafe_on_state"  # production skips this too
+            elif not a["found"]:
+                reason = "widget_not_found"
+            else:
+                reason = "value_not_set"
             failures.append({
                 "field_id": a["field_id"], "field_type": a["field_type"],
                 "widget": a["widget"], "kind": a["kind"],
-                "reason": "widget_not_found" if not a["found"] else "value_not_set",
+                "reason": reason,
             })
 
     value_conv = score_value_convention(schema)
