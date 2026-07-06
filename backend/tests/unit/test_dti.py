@@ -629,6 +629,32 @@ def test_update_coerces_hallucinated_id_to_current_field():
     assert result["form_state"].get("p1_line2_acctidentifier") == "123456789012"
 
 
+def test_update_manifest_known_id_is_honored_after_reconnect():
+    """Codex PR #321 P1: after a DTI reconnect (GoAway / mid-section) the fresh
+    handshake carries only field 1's full schema and _dti_extra_fields was
+    cleared -- previously-delivered fields survive ONLY as manifest field_id
+    entries. A post-reconnect correction to such a field must be HONORED (not
+    coerced onto the current field): _is_known_field_id also resolves manifest
+    ids. The unmerged target is then cleanly rejected by validation (an in-band
+    error the model recovers from), never silently misfiled."""
+    svc = _dti_service_with_current_field("p1_line3b_givenname")
+    # Reconnect state: extras cleared; the earlier field exists only in the manifest.
+    svc._dti_extra_fields = {}
+    svc._schema["manifest"] = {"current_section": {
+        "section_id": "s1", "section_label": "S1",
+        "fields": [{"field_id": "p1_line3a_familyname", "spoken_name": "family name"},
+                   {"field_id": "p1_line3b_givenname", "spoken_name": "given name"}],
+    }}
+    assert svc._is_known_field_id("p1_line3a_familyname") is True
+    result = svc.handle_update_fields_tool_call(
+        "sess", {"p1_line3a_familyname": "Vasquez"})
+    # NOT coerced onto the current field; the manifest-known-but-unmerged target
+    # is rejected in-band by validation (schema absent), never misfiled.
+    assert "p1_line3b_givenname" not in (result.get("form_state") or {})
+    assert result["applied_fields"] == []
+    assert result.get("unknown_fields") == ["p1_line3a_familyname"]
+
+
 def test_update_known_but_different_id_is_honored():
     """A RESOLVABLE id is AUTHORITATIVE (bd polyglot-pdf-8vy3, live-run evidence
     2026-07-05): the model legitimately targets a PREVIOUS field when the user

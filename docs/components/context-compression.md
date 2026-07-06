@@ -176,13 +176,18 @@ trigger = clamp(trigger, 5000, 128000)   # Live API hard bound -- see below
 2026-07-05: Vertex closes the connect with `1007 "Context window trigger tokens
 must be within [5000, 128000]"` -- the session never opens). The DTI-derived I-90
 trigger (~2800) is BELOW that minimum, so `_build_live_config` clamps the trigger
-into the legal range and logs `compression_trigger_clamped_to_api_bounds`. Only
-the trigger has this bound; the window (`target_tokens`, the eviction landing
-zone) keeps its derived per-form value, so eviction still lands just above the
-floor -- the clamp only delays WHEN eviction fires (at 5000 tokens of context
-rather than ~2800). The old 2800/2200 "winning calibration" numbers were measured
-on AI Studio before this bound existed on the connect path; any sweep
-(`ctu8`) must place triggers at >= 5000.
+into the legal range and logs `compression_trigger_clamped_to_api_bounds`. When
+the DERIVED trigger is raised by the clamp, the derived window is RE-TUNED with
+it (`window = max(derived, trigger - TRIGGER_MARGIN)`, logged as
+`compression_window_retuned_with_clamped_trigger`): keeping the raw
+floor+headroom window (~2200) under a 5000 trigger makes each eviction chop
+~2800 tokens down to just above the SI floor -- stripping the current-field
+guidance DTI depends on (measured 2026-07-05: the 5000/2200 run drifted
+post-eviction; wider windows stayed coherent). The retune preserves the
+derivation's margin semantic: only ~margin tokens are evicted per cycle. The old
+2800/2200 "winning calibration" numbers were measured on AI Studio before this
+bound existed on the connect path; any sweep (`ctu8`) must place triggers at
+>= 5000 and sweep the WINDOW as the independent variable.
 
 The floor is the **rendered (filled) SI plus the tool declarations** -- both
 unevictable, both re-billed every turn -- NOT the SI template alone.

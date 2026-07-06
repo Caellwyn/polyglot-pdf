@@ -1263,6 +1263,7 @@ class LiveAIGemini(ILiveAI):
             clamped_trigger = min(max(trigger_tokens, _COMPRESSION_TRIGGER_MIN_TOKENS),
                                   _COMPRESSION_TRIGGER_MAX_TOKENS)
             if clamped_trigger != trigger_tokens:
+                trigger_was_raised = clamped_trigger > trigger_tokens
                 self._log.warning(
                     "compression_trigger_clamped_to_api_bounds",
                     requested_trigger_tokens=trigger_tokens,
@@ -1270,6 +1271,30 @@ class LiveAIGemini(ILiveAI):
                     derived_from_si_floor=derive,
                 )
                 trigger_tokens = clamped_trigger
+                # When the DERIVED trigger was raised to the API minimum, RE-TUNE
+                # the derived window with it (Codex PR #321 P1): keeping the raw
+                # derived window (~floor + headroom, e.g. 2200 on the I-90) under
+                # a 5000 trigger makes each eviction chop ~2800+ tokens down to
+                # just above the SI floor -- stripping the current-field guidance
+                # DTI depends on (measured 2026-07-05: the 5000/2200 run drifted
+                # post-eviction; 5000/3500 stayed coherent across 7 evictions).
+                # Preserve the derivation's margin semantic instead: the window
+                # rises with the trigger so only ~trigger_margin tokens are
+                # evicted per cycle, exactly as the raw derivation intended.
+                # Never LOWER the window (max with the derived value).
+                if derive and trigger_was_raised:
+                    retuned_window = max(
+                        window_tokens,
+                        trigger_tokens
+                        - settings.CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS,
+                    )
+                    if retuned_window != window_tokens:
+                        self._log.warning(
+                            "compression_window_retuned_with_clamped_trigger",
+                            derived_window_tokens=window_tokens,
+                            retuned_window_tokens=retuned_window,
+                        )
+                        window_tokens = retuned_window
             # Re-assert the API's window < trigger invariant AFTER the clamp: a
             # trigger clamped DOWN from above the maximum could otherwise land at
             # or below the window (the Settings-level validator runs pre-clamp and

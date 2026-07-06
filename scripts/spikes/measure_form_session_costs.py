@@ -909,6 +909,13 @@ async def run(args) -> int:
     if not args.vertex and not os.getenv("GEMINI_API_KEY"):
         print("GEMINI_API_KEY not set; cannot run (or pass --vertex to use ADC).")
         return 1
+    if args.vertex and args.model == "3.1":
+        # 3.1 is AI-Studio-only (backend/config.py: "There is no Vertex 3.1
+        # (premium) id yet"); connecting it to Vertex 1008s. Fail fast with the
+        # reason instead of a cryptic mid-run close (Codex PR #321).
+        print("--vertex is not available for --model 3.1: the 3.1 Live model has "
+              "no Vertex id (AI-Studio-only as of 2026-06). Use --model 2.5.")
+        return 1
     schema = load_schema(args.schema)
     # Default (args.questions is None) runs the WHOLE plan for the chosen schema, so
     # a default --schema i90 run exercises all 3 sections completely (a fixed default

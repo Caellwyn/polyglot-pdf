@@ -1486,13 +1486,19 @@ def test_production_default_headroom_clears_measured_i90_floor():
     assert est_floor < _I90_MEASURED_FLOOR_TOKENS, (
         "if the estimator no longer undershoots, the headroom can shrink -- recheck"
     )
-    # THE GUARD: the derived window must clear the REAL measured floor, with a
-    # little room to spare (it should land near the validated ~2200, not at 1978).
+    # THE GUARD: the derived window must clear the REAL measured floor. Since the
+    # trigger clamp (API min 5000) raised the derived trigger, the window is
+    # RE-TUNED with it (trigger - margin) so an eviction only chops ~margin
+    # tokens -- keeping the raw floor+headroom window under a 5000 trigger
+    # stripped the current-field guidance (the measured 5000/2200 drift run;
+    # Codex PR #321 P1).
     assert window > _I90_MEASURED_FLOOR_TOKENS, (
         f"derived window {window} is at/below the measured ~{_I90_MEASURED_FLOOR_TOKENS}"
         " floor -> compression fires turn 1 and evicts everything (Codex P1)"
     )
-    assert window <= 2400, "window drifted well above the validated ~2200 calibration"
+    assert window == trigger - settings.CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS, (
+        "clamped-trigger derive path must retune the window to trigger - margin"
+    )
     assert trigger > window  # API invariant
 
 
@@ -1511,10 +1517,13 @@ def test_build_live_config_derives_window_under_dti():
     floor = estimate_si_floor_tokens(adapter._system_instruction, None)
     # The raw derivation (floor + 222 + 600 = 2800) sits BELOW the Live API's
     # trigger minimum, so the config carries the CLAMPED trigger (the API rejects
-    # the whole connect otherwise -- wire-verified 1007); the window keeps its
-    # derived per-form value.
+    # the whole connect otherwise -- wire-verified 1007), and the derived window
+    # is RE-TUNED with it (trigger - margin): keeping the raw floor+headroom
+    # window under a 5000 trigger made each eviction strip the current-field
+    # guidance (the measured 5000/2200 drift; Codex PR #321 P1).
     assert comp["trigger_tokens"] == 5000
-    assert comp["sliding_window"]["target_tokens"] == floor + 222
+    assert comp["sliding_window"]["target_tokens"] == 5000 - 600
+    assert comp["sliding_window"]["target_tokens"] > floor  # still above the floor
     # Sanity: the derived window is NOT the static env constant.
     assert comp["sliding_window"]["target_tokens"] != settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
 
@@ -1577,27 +1586,30 @@ def test_build_live_config_leaves_legal_trigger_unclamped():
 
 def test_build_live_config_a_different_floor_yields_a_different_window():
     """Exit criterion 1: a form with a different SI floor gets a correspondingly
-    different window (the whole point of per-form derivation)."""
+    different window (the whole point of per-form derivation). Floors are chosen
+    ABOVE the API trigger-minimum clamp point (raw trigger > 5000): below it the
+    clamp+retune deliberately flattens small forms to the same 5000/(5000-margin)
+    pair -- the per-form property only expresses above the clamp."""
     from backend.adapters.live_ai_gemini import LiveAIGemini
 
     settings = _compression_settings()
 
     small = LiveAIGemini(api_key="test_key")
-    small._system_instruction = "a" * (1000 * 4)  # floor -> 1000
+    small._system_instruction = "a" * (5000 * 4)  # floor -> 5000 (raw trigger 5822)
     small._function_declarations = None
     small_window = small._build_live_config(settings)["context_window_compression"][
         "sliding_window"
     ]["target_tokens"]
 
     large = LiveAIGemini(api_key="test_key")
-    large._system_instruction = "b" * (3000 * 4)  # floor -> 3000
+    large._system_instruction = "b" * (7000 * 4)  # floor -> 7000 (raw trigger 7822)
     large._function_declarations = None
     large_window = large._build_live_config(settings)["context_window_compression"][
         "sliding_window"
     ]["target_tokens"]
 
-    assert small_window == 1000 + 222
-    assert large_window == 3000 + 222
+    assert small_window == 5000 + 222
+    assert large_window == 7000 + 222
     assert large_window > small_window  # bigger floor -> bigger window
 
 
@@ -1662,10 +1674,14 @@ def test_build_live_config_derived_floor_includes_real_tools():
     floor = estimate_si_floor_tokens(adapter._system_instruction, tools)
     assert floor > 1500  # tools pushed the floor above the SI-only count
     comp = adapter._build_live_config(settings)["context_window_compression"]
-    assert comp["sliding_window"]["target_tokens"] == floor + 222
     # The raw derived trigger (floor + 222 + 600) is below the Live API's 5000
-    # minimum for this floor size, so the config carries the clamped value.
+    # minimum for this floor size, so the config carries the clamped trigger and
+    # the window is retuned with it: max(derived, trigger - margin) -- Codex PR
+    # #321 P1 (a raw floor+headroom window under a clamped trigger makes each
+    # eviction strip the current-field guidance).
     assert comp["trigger_tokens"] == max(floor + 222 + 600, 5000)
+    assert comp["sliding_window"]["target_tokens"] == max(
+        floor + 222, comp["trigger_tokens"] - 600)
     assert comp["sliding_window"]["target_tokens"] > floor
     assert comp["trigger_tokens"] > comp["sliding_window"]["target_tokens"]
 

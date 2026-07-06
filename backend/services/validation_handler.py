@@ -30,7 +30,8 @@ class ValidationHandler:
     def validate_field_updates(
         self,
         fields: List[FormField],
-        updates: Dict[str, Any]
+        updates: Dict[str, Any],
+        strict_ids: bool = False
     ) -> Optional[Dict[str, Any]]:
         """
         Match and validate field updates against schema.
@@ -62,9 +63,9 @@ class ValidationHandler:
             ["email"]
         """
         try:
-            # Step 1: Match field IDs (exact or fuzzy)
+            # Step 1: Match field IDs (exact or fuzzy; exact-ONLY when strict_ids)
             matched_updates, unknown_fields, field_map = self._match_fields(
-                fields, updates or {}
+                fields, updates or {}, strict_ids=strict_ids
             )
             
             # Step 2: Validate matched fields against schema constraints
@@ -104,7 +105,8 @@ class ValidationHandler:
     def _match_fields(
         self,
         fields: List[FormField],
-        updates: Dict[str, Any]
+        updates: Dict[str, Any],
+        strict_ids: bool = False
     ) -> Tuple[Dict[str, Any], List[str], Dict[str, FormField]]:
         """
         Match update keys to field IDs using exact then fuzzy matching.
@@ -127,8 +129,17 @@ class ValidationHandler:
             # Try exact match by field ID first
             matched_field = next((f for f in fields if f.id == field_key), None)
             
-            # If no exact match, try fuzzy matching by name
-            if not matched_field:
+            # If no exact match, try fuzzy matching by name -- UNLESS strict.
+            # DTI mode passes strict_ids=True (bd polyglot-pdf-8vy3 / Codex PR
+            # #321): the DTI protocol has the model COPY field ids verbatim and
+            # the validation pool holds only 1-2 fields, so a fuzzy name match
+            # here would silently re-point a mismatched id onto whatever is in
+            # the pool -- the same mis-fill trap that killed the abandoned
+            # fuzzy-id-recovery (PR #251), and it would bypass the unresolvable-
+            # id-only coercion gate upstream. In strict mode a non-exact id is
+            # reported as unknown_fields (an in-band error the model recovers
+            # from), never re-targeted.
+            if not matched_field and not strict_ids:
                 match_result = fuzzy_match_hint(field_key, fields)
                 if match_result.status == "resolved" and match_result.top_candidate:
                     matched_field = match_result.top_candidate.field

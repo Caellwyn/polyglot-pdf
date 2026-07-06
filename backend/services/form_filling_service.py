@@ -158,18 +158,34 @@ class FormFillingService:
 
     def _is_known_field_id(self, field_id: str) -> bool:
         """True when field_id resolves to a field this session has seen -- the
-        handshake schema or a client-delivered merge (bd polyglot-pdf-8vy3).
+        handshake schema, a client-delivered merge, or the handshake MANIFEST
+        (bd polyglot-pdf-8vy3).
 
         Used by the DTI coercion gates: a RESOLVABLE id is authoritative (the
         model may legitimately target a PREVIOUS field -- a late correction after
         its confirm advanced the pointer); only an UNRESOLVABLE id (the jnjj.46
-        hallucination mode) is re-pointed at the current field."""
+        hallucination mode) is re-pointed at the current field.
+
+        The MANIFEST check matters on a DTI reconnect (GoAway / mid-section): the
+        fresh handshake carries only field 1's full schema and start_session
+        cleared _dti_extra_fields, so previously-delivered fields survive only as
+        manifest field_id entries. Without it, a legitimate post-reconnect
+        correction to an earlier field would read as "unknown" and be coerced
+        onto the current field -- the exact corruption this gate exists to
+        prevent (Codex PR #321 P1). A manifest-known-but-unmerged id is honored
+        here and then cleanly REJECTED by update validation if its full schema is
+        absent -- an in-band error the model can recover from, never a silent
+        misfile."""
         if not field_id:
             return False
         if field_id in self._dti_extra_fields:
             return True
-        return any(f.get("id") == field_id
-                   for f in (self._schema or {}).get("fields", []))
+        schema = self._schema or {}
+        if any(f.get("id") == field_id for f in schema.get("fields", [])):
+            return True
+        manifest_fields = ((schema.get("manifest") or {})
+                           .get("current_section") or {}).get("fields") or []
+        return any(mf.get("field_id") == field_id for mf in manifest_fields)
 
     async def start_session(
         self,
@@ -1133,9 +1149,16 @@ class FormFillingService:
         # Values are not persisted - this is just for acknowledgment
         fields = self._build_fields_from_schema()
 
-        # Use ValidationHandler to match and validate fields
+        # Use ValidationHandler to match and validate fields. In DTI mode ids are
+        # EXACT-ONLY (strict_ids): the protocol has the model copy ids verbatim,
+        # the pool holds only 1-2 fields, and unresolvable ids are already handled
+        # by the coercion gate above -- letting the validator's fuzzy name-match
+        # run here would silently re-point a mismatched id onto whatever is in
+        # the tiny pool (the PR #251 mis-fill trap; Codex PR #321).
         validator = ValidationHandler(session_id=session_id)
-        return validator.validate_field_updates(fields, updates)
+        return validator.validate_field_updates(
+            fields, updates,
+            strict_ids=getattr(self._settings, "USE_DTI", False))
 
     def _coerce_dti_update_to_current_field(
         self, updates: Dict[str, Any], multi_field_call: bool = False
