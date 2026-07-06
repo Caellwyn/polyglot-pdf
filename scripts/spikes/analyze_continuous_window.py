@@ -10,13 +10,17 @@ compression curve, reports coherence (fill accuracy, confirms, secretary
 lookups, evictions), and projects cost-per-form to full length by reusing the
 `cost_matrix_lib` projection math (`window_cost_curve`).
 
-Reused from cost_matrix_lib (the trusted, adversarially-reviewed projection):
-  - window_cost_curve(): the eviction-sawtooth cost model.
-  - RATES: per-model per-modality $/Mtok.
-NOT reused: load_matrix/_cell_frames/calibrate/conversation_growth_per_turn --
-those bake in the 20-question section-matrix shape. The SI base here is read
-straight from each run's meta (prompt_curve[0]) instead of the library's
-global char-rate calibration.
+Reused from cost_matrix_lib:
+  - RATES: per-model per-modality $/Mtok (the ONLY thing reused).
+NOT reused: load_matrix/_cell_frames/calibrate/conversation_growth_per_turn (they
+bake in the 20-question section-matrix shape), AND window_cost_curve (its
+sawtooth model needs si_chars/eviction_lag_q/events_per_q inputs this run shape
+doesn't cleanly provide). The projection here is a SEPARATE, coarser
+saturating-ramp model (project_form_cost) fitted directly to the measured
+per-question text-in series -- it has NOT been through window_cost_curve's
+adversarial review; its trust comes instead from the built-in modeled-vs-measured
+honesty ratio (a fit whose base doesn't reproduce the run's own measured cost is
+flagged). The SI base is read straight from each run's meta (prompt_curve[0]).
 
 Usage:
   python scripts/spikes/analyze_continuous_window.py            # all dti_cont_comp runs

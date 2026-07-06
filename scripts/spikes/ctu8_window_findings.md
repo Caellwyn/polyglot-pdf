@@ -33,6 +33,17 @@ one the 30-question plan from the DTI-fix session; both are continuous DTI +
 compression at 5000/3500. The spread 73-93% reflects real run-to-run variance on
 a ~30-question fill, not a config difference.)
 
+**IMPORTANT comparison caveat (not apples-to-apples).** The window costs above are
+measured on the HAPPY path only. The ~$2.32 section-reset baseline is an 80/20
+happy/unhappy MIX (go/no-go brief, bd 6x1y). Unhappy turns cost more (more turns
+per question), so the honest happy-vs-happy baseline is LOWER than $2.32 -- the
+real cost advantage is smaller than the raw $1.15-vs-$2.32 (~2x) suggests. The GO
+direction still holds (window is cheaper on any like-for-like basis, and by a wide
+margin at 20 questions in the brief's own data), but do NOT quote "2x cheaper" as
+a clean figure. To close this, measure an unhappy-path window run and recompute an
+80/20 window number before the flag flip -- a cheap follow-up, not a blocker for
+the demo test-drive.
+
 All runs: trigger pinned at 5000 (the Vertex API floor -- see below), one
 continuous session (verified: `schema_scope=continuous-full-plan`, prompt curve
 never resets to base), full 34-question I-90.
@@ -98,6 +109,11 @@ Therefore:
 - 4000 (a looser window) was NOT measured -- deferred per the budget decision to
   stop at 3500. If a coherence issue shows up in the demo, 4000 is the first thing
   to try (more recent context, at somewhat higher cost).
+- A pre-clamp 2800/2200 cell (3 runs, committed with the DTI-fix work before the
+  Vertex trigger clamp shipped) is excluded from the recommendation: its trigger
+  2800 is below the 5000 API floor, so 2 of its 3 runs died with connection errors
+  and never evicted -- obsolete under the current always-5000-trigger architecture.
+  The analyzer surfaces it but flags its fit as untrustworthy (honesty ratio 2.40).
 - Second gold form (beyond the I-90) is a separate follow-up; this establishes the
   I-90 number + the method.
 
