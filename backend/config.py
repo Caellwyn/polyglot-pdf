@@ -266,6 +266,16 @@ class Settings(BaseModel):
 		if (self.CONTEXT_COMPRESSION_ENABLED
 				and self.CONTEXT_COMPRESSION_WINDOW_TOKENS >= self.CONTEXT_COMPRESSION_TRIGGER_TOKENS):
 			self.CONTEXT_COMPRESSION_WINDOW_TOKENS = max(1, self.CONTEXT_COMPRESSION_TRIGGER_TOKENS // 2)
+		# Continuous-session mode (bd polyglot-pdf-x8rt) IMPLIES DTI: the whole-form
+		# handshake + section-advance suppression only cohere with the DTI SI (which
+		# carries no section guidance) and the per-field drip. CONTINUOUS_SESSION
+		# without USE_DTI is a broken hybrid -- the frontend would section-chop the
+		# handshake (jitModeEnabled is off) while the client suppresses advancing. So
+		# force USE_DTI on and log loudly, rather than serve that inconsistent state.
+		if self.CONTINUOUS_SESSION and not self.USE_DTI:
+			print("[config] WARNING: CONTINUOUS_SESSION requires USE_DTI; forcing "
+				  "USE_DTI=true (continuous mode needs the DTI SI + per-field drip).")
+			self.USE_DTI = True
 		return self
 
 	# Tool declarations for web forms (stateless, client-managed)

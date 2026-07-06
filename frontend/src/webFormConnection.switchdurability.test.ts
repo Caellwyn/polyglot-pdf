@@ -460,4 +460,39 @@ describe('WebFormConnection section-switch durability (bd polyglot-pdf-aun)', ()
     expect((conn as any).sectionSwitchWatchdog).toBeNull()
     expect(conn.getStatus()).toBe('connected')
   })
+
+  it('startSection sends the WHOLE-FORM handshake in continuous mode (bd polyglot-pdf-x8rt, polyglot-pdf-f5dx)', async () => {
+    // startSection is the REAL post-disclaimer session-start path. In continuous
+    // mode it MUST send the whole-form handshake_jit (buildContinuousManifest), NOT
+    // the legacy single-section "handshake" -- otherwise the form is chopped back
+    // into sections on the session that actually fills it (the round-2 dead-code
+    // bug). Pins that behavior so a refactor can't silently reintroduce the chop.
+    const conn = new WebFormConnection(SCHEMA)
+    // Backend signals continuous mode (sets the instance flag + persisted state).
+    ;(conn as any).handleSessionReady({
+      session_id: 's', native_vad: true,
+      jit_mode_enabled: true, dti_mode_enabled: true, continuous_session_enabled: true,
+    })
+
+    const before = MockWebSocket.instances.length
+    const p = conn.startSection('s1', 'ws://x')
+    await vi.advanceTimersByTimeAsync(1)
+    await p
+
+    // The handshake is sent on the NEW socket startSection opened.
+    const newWs = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+    expect(MockWebSocket.instances.length).toBeGreaterThan(before)
+    const handshakes = newWs.send.mock.calls
+      .map((c: any[]) => c[0]).filter((a: any) => typeof a === 'string')
+      .map((s: string) => JSON.parse(s))
+      .filter((m: any) => m.type === 'handshake' || m.type === 'handshake_jit')
+    expect(handshakes).toHaveLength(1)
+    const hs = handshakes[0]
+    // Whole-form continuous shape -- NOT the legacy single-section handshake.
+    expect(hs.type).toBe('handshake_jit')
+    expect(hs.total_sections).toBe(1)
+    expect(hs.manifest?.current_section?.section_id).toBe('continuous')
+    // Every field of the whole form (both sections), not just section s1's f1.
+    expect(hs.manifest.current_section.fields.map((f: any) => f.field_id)).toEqual(['f1', 'f2'])
+  })
 })
