@@ -1270,6 +1270,18 @@ class LiveAIGemini(ILiveAI):
                     derived_from_si_floor=derive,
                 )
                 trigger_tokens = clamped_trigger
+            # Re-assert the API's window < trigger invariant AFTER the clamp: a
+            # trigger clamped DOWN from above the maximum could otherwise land at
+            # or below the window (the Settings-level validator runs pre-clamp and
+            # the derive path computes the pair independently). Same halving rule
+            # as the Settings validator.
+            if window_tokens >= trigger_tokens:
+                self._log.warning(
+                    "compression_window_clamped_below_trigger",
+                    requested_window_tokens=window_tokens,
+                    clamped_window_tokens=max(1, trigger_tokens // 2),
+                )
+                window_tokens = max(1, trigger_tokens // 2)
             config["context_window_compression"] = {
                 "trigger_tokens": trigger_tokens,
                 "sliding_window": {

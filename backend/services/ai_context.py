@@ -140,6 +140,22 @@ def render_section_metadata(
     return "FORM CONTEXT:\n" + "\n".join(lines)
 
 
+# Shared additive-confirmation preamble (bd polyglot-pdf-choa): makes explicit
+# that the end-of-{scope} review is ADDITIONAL to -- never a replacement for --
+# the per-field confirm loop, so the model can't read "read all fields back at
+# the end" as permission to batch/skip per-field confirmation (the first field
+# of a section was auto-confirmed without its read-back under the old wording).
+# It deliberately REFERENCES the per-field step without restating it: spelling
+# the read-back out again makes Gemini double-read every field (bd
+# polyglot-pdf-yn6q). ONE constant, used by both get_confirmation_policy and
+# the non-sectioned default in build_form_context, so the wording cannot drift.
+_CONFIRMATION_ADDITIVE_PREAMBLE = (
+    "This end-of-{scope} review is IN ADDITION to confirming each field "
+    "one-by-one as you go (every field, including the first, gets its own "
+    "read-back and confirmation). "
+)
+
+
 def get_confirmation_policy(section_number: int, total_sections: int) -> str:
     """Generate confirmation policy text based on section number.
     
@@ -154,19 +170,7 @@ def get_confirmation_policy(section_number: int, total_sections: int) -> str:
     # detected by the frontend once all fields in a section are confirmed. The
     # model's job is to confirm each field (confirm_field); it must NOT be told
     # to call complete_section.
-    # Shared preamble (bd polyglot-pdf-choa): make explicit that this end-of-
-    # section pass is ADDITIONAL to -- never a replacement for -- the per-field
-    # confirm loop, so the model can't read "read all fields back at the end" as
-    # permission to batch/skip per-field confirmation (the first field of a
-    # section was auto-confirmed without its read-back under the old wording).
-    # It deliberately REFERENCES the per-field step without restating it: spelling
-    # the read-back out again here makes Gemini double-read every field (bd
-    # polyglot-pdf-yn6q).
-    addition = (
-        "This end-of-section review is IN ADDITION to confirming each field "
-        "one-by-one as you go (every field, including the first, gets its own "
-        "read-back and confirmation). "
-    )
+    addition = _CONFIRMATION_ADDITIVE_PREAMBLE.format(scope="section")
     if section_number <= 2:
         # First two sections: Full graduated end-of-section confirmation.
         # This block fires only when ALL fields in the section are confirmed.
@@ -428,11 +432,8 @@ def build_form_context(
         # Default policy for non-sectioned forms.
         # Per-field confirm is WORKFLOW step 3; this is end-of-form only
         # (bd polyglot-pdf-yn6q). Same additional-not-replacement clarifier as
-        # get_confirmation_policy (bd polyglot-pdf-choa).
-        confirmation_policy = (
-            "This end-of-form review is IN ADDITION to confirming each field "
-            "one-by-one as you go (every field, including the first, gets its "
-            "own read-back and confirmation). "
+        # get_confirmation_policy (bd polyglot-pdf-choa), via the shared constant.
+        confirmation_policy = _CONFIRMATION_ADDITIVE_PREAMBLE.format(scope="form") + (
             "When ALL fields are confirmed: "
             "Read ALL fields back to user. "
             "Ask 'Would you like me to repeat any field?' "

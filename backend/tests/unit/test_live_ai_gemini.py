@@ -1539,6 +1539,25 @@ def test_build_live_config_clamps_trigger_to_api_minimum():
     assert comp["sliding_window"]["target_tokens"] == 2200
 
 
+def test_build_live_config_high_side_clamp_keeps_window_below_trigger():
+    """A trigger clamped DOWN from above the API maximum must not land at/below
+    the window -- the adapter re-asserts window < trigger after the clamp (the
+    Settings validator runs pre-clamp and cannot see this case)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from backend.config import Settings
+
+    settings = Settings(
+        CONTEXT_COMPRESSION_ENABLED=True,
+        CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR=False,
+        CONTEXT_COMPRESSION_TRIGGER_TOKENS=200_000,   # above API max -> clamped to 128k
+        CONTEXT_COMPRESSION_WINDOW_TOKENS=150_000,    # legal vs 200k, ILLEGAL vs 128k
+    )
+    adapter = LiveAIGemini(api_key="test_key")
+    comp = adapter._build_live_config(settings)["context_window_compression"]
+    assert comp["trigger_tokens"] == 128_000
+    assert comp["sliding_window"]["target_tokens"] < comp["trigger_tokens"]
+
+
 def test_build_live_config_leaves_legal_trigger_unclamped():
     """A trigger already inside [5000, 128000] passes through unchanged."""
     from backend.adapters.live_ai_gemini import LiveAIGemini
