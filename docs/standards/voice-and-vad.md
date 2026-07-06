@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py backend/routes/vad_config_routes.py backend/vad_config.json frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-02. bd polyglot-pdf-o0pc: the dead `PROACTIVE_AUDIO` config flag (hardwired `False`) was removed; the no-proactive-audio rule itself is unchanged (see Hallucination reduction below). Prior: 2026-06-29. bd polyglot-pdf-fa4x: reviewed for the thinking-indicator native-VAD START (wpw.5 follow-up). The native START rides `input_transcription` -> `on_user_activity`, which DOES fire on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH` (the default in the table below) -- confirmed on the deployed Vertex model and live E2E. No VAD-path behavior changed; the `agent_processing` wire type is registered in [ws-protocol.md](ws-protocol.md). Prior: 2026-06-17. bd zivv: native VAD and the manual turn signals (activity_start/activity_end/audio_stream_end) are MUTUALLY EXCLUSIVE -- under native VAD the client sends NO manual signal (connection.ts sendActivityStart AND sendActivityEnd both `if (nativeVad) return`), and PTT-mute streams SILENCE (not nothing) so native VAD finds the turn boundary; this fixed "Gemini stops responding after PTT press" and supersedes the bd-6vo audio_stream_end-on-release approach. See the SPEC section below and [journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md](../journal/entries/2026-06-17-bd-zivv-native-vad-ptt-mutual-exclusion.md). The mic-energy meter (bd s3zv) reads the send gate, it does not alter it.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: fixed a stale VAD-sensitivity default claim -- START was documented as `LOW` but config.py defaults it to `HIGH`; folded the `input_transcription` -> `on_user_activity` native-mode signal and the mic-energy-meter/send-gate relationship into the body from the old stamp chain). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -101,8 +101,9 @@ that utterance; the end signal flushes Gemini's buffer after.
 > The Gemini-side VAD sensitivity knobs (`VAD_START_SENSITIVITY`,
 > `VAD_END_SENSITIVITY`, `VAD_PREFIX_PADDING_MS`, `VAD_SILENCE_DURATION_MS` in
 > config.py) are sent **only when `DISABLE_GEMINI_VAD = False`** — i.e. in native
-> mode (the current default). They currently ship as `LOW`/`LOW`/`500ms`/`500ms`
-> (conservative, deterministic for the smoke test). In manual mode
+> mode (the current default). They currently ship as `HIGH`/`LOW`/`500ms`/`500ms`
+> (the measured config chosen in bd 4sv7 above -- START=HIGH for reliable turn
+> registration, END=LOW/500ms kept conservative). In manual mode
 > (`disabled = True`) the connect config sends **only** `{'disabled': True}` and
 > omits these fields entirely. This is mandatory: the Live API rejects (1007) a
 > config that sets `disabled = True` *and* any sensitivity/padding field together.
@@ -184,6 +185,16 @@ sent at all* (noisy-room support).
   **Auto** (continuous); there is no longer a disabled "Native" state. The *backend*
   VAD mode is still set by `DISABLE_GEMINI_VAD` and is not client-switchable
   mid-session -- but PTT no longer needs to switch it.
+- **Server-side "user is speaking" signal.** Under native VAD there is no manual
+  `activity_start` to key off of, so the adapter's `on_user_activity` callback
+  (`live_ai_gemini.py`) instead fires when Gemini's `server_content` carries a
+  non-empty `input_transcription` -- the only reliable "the user said something"
+  signal in this mode (background noise/silence never produce one). This single
+  callback feeds two consumers: the idle watchdog (see below) and the
+  thinking-indicator's `agent_processing` wire type (registered in
+  [ws-protocol.md](ws-protocol.md)). Confirmed firing on the 2.5 native-audio
+  model at `VAD_START_SENSITIVITY=HIGH` (the default) on the deployed Vertex
+  model and live E2E (bd polyglot-pdf-fa4x).
 
 Revert is the single flag: set `DISABLE_GEMINI_VAD=true` and turn-taking falls back
 to client Silero VAD; PTT behaves the same in both backend modes.
@@ -260,6 +271,10 @@ Every mic-arming site (initial `startRecording`, `rearmAudioCapture`, and the
 - Anything else (or socket closed) → **drop, never silently**: a rate-limited
   (~1/s) `console.warn` reports the status + socket state. Silent mic loss is
   what made the 2026-06-10 demo hang invisible.
+
+The demo's mic-energy meter (visual level indicator, bd polyglot-pdf-s3zv) only
+**reads** this same send gate to decide whether to animate -- it does not alter
+`shouldSendMicChunk` or introduce a second gating path.
 
 Every `WebFormConnection.status` transition is logged `old->new (reason)` so a
 stranded status is visible in the console.

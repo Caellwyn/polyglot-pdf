@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-06-17. Added `get_text_ai()` to `backend/dependencies.py` (bd polyglot-pdf-jnjj.14): `MODEL_LABELING` is now the live cheap-model adapter knob, no longer orphaned. See [journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md](../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md) for closeout details.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -127,5 +127,3 @@ nothing else picks a model.
   bills at the default `2.5` rate. See [logging-and-cost.md](logging-and-cost.md).
 - **Verify any new model string against the live endpoint** before shipping it as a
   default — a plausible-looking name can 1008.
-
-*Last updated: 2026-06-17. Added `get_text_ai()` to `backend/dependencies.py` (bd polyglot-pdf-jnjj.14): `MODEL_LABELING` is now the live cheap-model adapter knob, no longer orphaned. See [journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md](../journal/entries/2026-06-17-bd-jnjj.14-text-ai-adapter.md) for closeout details.*

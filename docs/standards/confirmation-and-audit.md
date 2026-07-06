@@ -2,8 +2,6 @@
 
 **Tracks:** backend/utils/confirmation_logger.py backend/services/callback_handler.py
 
-*Last updated: 2026-06-13. bd rwjy: CallbackHandler was constructed without form_id/form_session_id, so the confirmation-audit guard was always False and no records were written. Fix: extract form_id before the constructor call and pass both IDs. The confirmation workflow described below is now actually reachable. Prior: bd polyglot-pdf-c5t added on_go_away to callback_handler.py; that is a new WS message type that does not interact with confirmation logging.*
-
 Every field value that lands on the form is confirmed by the user, and every
 confirmation is recorded — by `field_id` and *method*, never by value — for
 liability protection and an audit trail.
@@ -39,6 +37,14 @@ confirmation. `log_field_confirmation(...)` is called **only on a recorded ack**
 not take (empty field, or a client timeout) is NOT logged, since no confirmation
 happened. See [tool-call-flow.md](../components/tool-call-flow.md) for the full
 ack flow.
+
+In DTI mode (`USE_DTI`, bd polyglot-pdf-h1bn), the `field_id` used for the confirm
+round-trip and the logged event is not always the raw tool argument: if the model
+confirms a hallucinated, drifted, or empty id, the handler coerces it onto the
+service's current-field pointer before doing anything else with it, mirroring the
+same coercion `update_form_fields` applies. The coerced, schema-validated id is
+what gets logged — never the raw model-supplied id, which is untrusted tool input
+that can carry the user's spoken answer if the model swaps arguments.
 
 ## What gets recorded
 
@@ -108,4 +114,4 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-06-13 (see header note above).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: documented the DTI current-field-id coercion in confirm_field's logged field_id; rest verified accurate against current code). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*

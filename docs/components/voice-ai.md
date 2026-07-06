@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-06-29 (bd polyglot-pdf-fa4x: corrected the Response-config section -- `input_audio_transcription` is enabled when `on_user_activity` is registered OR transcripts are on, and it DOES fire on the 2.5 native-audio model at `VAD_START_SENSITIVITY=HIGH`, so the thinking-indicator native-VAD START works with no new heuristic. The wpw.5 "native audio emits no input_transcription" finding was under the old START=LOW config). Prior: 2026-06-15 (bd polyglot-pdf-daa: 2.5 native-audio 1011 = incomplete tool declaration x tool solicitation, wire-verified; corrected the scar-tissue note. bd s3zv: audioManager gains setEnergyCallback -- forwards the worklet's existing RMS energy (already posted per frame, previously dropped) to an opt-in UI subscriber, tagged with whether the frame passed the send gate. No change to audio routing / adapter behavior; the demo overlays render it as a mic-energy meter). bd np64: non-ASCII -> ASCII in connection.ts / audioManager.ts code comments + console strings (cosmetic, no adapter behavior change). bd rwjy+vfb2: CallbackHandler gains form_id/form_session_id (confirmation audit); send_form_update adds request_hint opt-in (no behavior change). bd 0tgc: onStopCapture/onFormComplete wired in createConnectionManager. bd b6k4: createMicDropWarn extracted/exported from connection.ts. No adapter behavior change. Prior: bd polyglot-pdf-c5t (on_go_away callback: GoAway detection in the receive loop). See [../journal/entries/2026-06-12-bd-c5t-goaway-handling.md](../journal/entries/2026-06-12-bd-c5t-goaway-handling.md) for the GoAway path, [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the cooperative receive-loop shutdown (begin_graceful_shutdown + the finalize self-call guard, closed y4a), [../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md](../journal/entries/2026-06-09-bd-0ux-tool-response-missing-id.md) for the FunctionResponse id echo, and [journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md](../journal/entries/2026-06-04-bd-1g6-3p1-text-channel-1007.md) for the 3.1 text-send (1007) fix.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -26,13 +26,18 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   `client.aio.live.connect(...)`. Handles both modern (async-CM) and older
   (awaitable) SDK shapes.
 - **`set_callbacks(...)`**: registers the async `on_form_update` / `on_transcript`
-  / `on_audio` / `on_tool_call` / `on_go_away` callbacks + system instruction + tool
-  declarations, then lazily creates the audio queue (`maxsize=100`, ~2s) and text
-  queue and starts the background `_run_session_loop()` task. `on_go_away` is
-  optional: the receive loop reads `event.go_away` (a `LiveServerGoAway` with a
-  `time_left` string) and fires it so the client can pre-emptively reconnect before
-  the server-initiated close (bd polyglot-pdf-c5t); detection is best-effort and
-  never breaks the loop.
+  / `on_audio` / `on_tool_call` / `on_go_away` / `on_user_activity` /
+  `on_processing_done` callbacks + system instruction + tool declarations, then
+  lazily creates the audio queue (`maxsize=100`, ~2s) and text queue and starts the
+  background `_run_session_loop()` task. `on_go_away` is optional: the receive loop
+  reads `event.go_away` (a `LiveServerGoAway` with a `time_left` string) and fires
+  it so the client can pre-emptively reconnect before the server-initiated close
+  (bd polyglot-pdf-c5t); detection is best-effort and never breaks the loop.
+  `on_user_activity` is optional and fires on a native-VAD input transcription (see
+  Response config below). `on_processing_done` is optional (bd polyglot-pdf-wpw.5):
+  it fires when the agent's turn ends -- on a barge-in interrupt AND on a real
+  `turn_complete`/`generation_complete` with no output audio -- so a UI "thinking"
+  indicator clears even when there is no audio reply to key off.
   - **CRITICAL:** it resets `self._intentional_shutdown = False` AND
     `self._close_after_flush = False` *before* checking task status — without that,
     a section-switch teardown leaves a flag set and the freshly-started session
@@ -82,6 +87,11 @@ that feeds it in [websocket-routing.md](websocket-routing.md).
   via `session.send_realtime_input(text=...)`; **2.5 / others** keep
   `send_client_content()`. Hint text is **never logged** (callers build it with
   field values — see bd `polyglot-pdf-hjo`); only its length is logged at DEBUG.
+  `send_client_content()` returns a **bool**: `True` only if the turn was actually
+  handed to the live session this call, `False` if it was queued (session not
+  ready), dropped (no session), or the send raised (bd `polyglot-pdf-jnjj.17`) --
+  callers that need to know whether Gemini actually got the text (e.g. the
+  validator-steer hold) check the return instead of assuming success.
 
 ## Activity signals (VAD modes)
 
@@ -100,22 +110,25 @@ single-toggle revert, and the frontend continuous-audio requirement are in
 In `_run_session_loop`, the adapter checks `server_content.interrupted`. On a true
 interrupt it logs `GEMINI_INTERRUPTED` (with the canceled tool-call ids AND names,
 so a barge-in that kills an in-flight `update_form_fields` is visible), resets its
-audio-chunk tracking (`_audio_chunk_count = 0`, `_first_audio_time = None`), and
-`continue`s — skipping the rest of that event so no stale audio/tool-calls are
-processed. The backend does **not** push a flush signal to the client; the actual
-playback flush is **frontend-driven** — `connection.ts onVADSpeechStart` calls
-`audioManager.flushAudioQueue()` the instant the local VAD fires, for
-sub-perceptual latency (see [../standards/voice-and-vad.md](../standards/voice-and-vad.md)).
+audio-chunk tracking (`_audio_chunk_count = 0`, `_first_audio_time = None`), fires
+`on_processing_done` if registered (an interrupted turn produces no audio/
+transcript, so the thinking indicator would otherwise stay set until its
+max-duration timer, bd polyglot-pdf-wpw.5), and `continue`s -- skipping the rest of
+that event so no stale audio/tool-calls are processed. The backend does **not**
+push a flush signal to the client; the actual playback flush is **frontend-driven**
+-- `connection.ts onVADSpeechStart` calls `audioManager.flushAudioQueue()` the
+instant the local VAD fires, for sub-perceptual latency (see
+[../standards/voice-and-vad.md](../standards/voice-and-vad.md)).
 
 ## Tool calling
 
 Tool calls are routed to `CallbackHandler.on_tool_call`
-(`backend/services/callback_handler.py`), which dispatches the five tools declared
+(`backend/services/callback_handler.py`), which dispatches the six tools declared
 in `backend/config.py`. The full call/response sequence (code expectation vs. the
 actual wire payload) is mapped in [tool-call-flow.md](tool-call-flow.md); when
 debugging tool reliability, the adapter captures FULL message bodies locally via
 `_dev_log_io` (`.env.DEV`-gated, never in production) to
-`backend/logs/gemini_<date>.jsonl`. The five tools:
+`backend/logs/gemini_<date>.jsonl`. The six tools:
 
 - `update_form_fields` — single field per call (hallucination mitigation).
 - `confirm_field` — enum `verbal`/`manual`; see
@@ -123,6 +136,10 @@ debugging tool reliability, the adapter captures FULL message bodies locally via
 - `get_form_status` (alias `get_form_state`) — compact field-state snapshot.
 - `switch_section` — advance by `section_identifier`.
 - `get_field_value` — look up a current value by `spoken_name`.
+- `ask_secretary` -- a plain-language question routed to a cheap text-model
+  helper that holds the whole form catalog + current answers and replies in
+  prose (bd polyglot-pdf-jnjj.45); the principal uses it instead of trying to
+  recall a past answer or another field itself.
 
 The `complete_section` tool was **removed** — section completion is frontend-driven
 (see [websocket-routing.md](websocket-routing.md)).

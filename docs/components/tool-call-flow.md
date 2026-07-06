@@ -2,7 +2,10 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-06-16. bd ux15: both tool-call receive paths append to one per-event responses list that is deduped by call id before the single flush (defensive -- the two shapes do not co-occur live; no-op today) -- see the response-invariant paragraph below. Prior: 2026-06-15. bd njvh: the confirm_field handler short-circuits the next-field-hint request at a section boundary (when the ack carries section_complete) to stop a spurious timeout/"do NOT assume complete" prompt racing the FE section switch -- documented in the confirm round-trip below. Prior: 2026-06-13. bd rwjy+vfb2: CallbackHandler now receives form_id/form_session_id (confirmation audit unblocked); send_form_update gains request_hint=False (no behavior change on the update path -- the "deliberately no hint" note at line 86-87 below is now enforced in code). bd polyglot-pdf-c5t (GoAway): the receive loop now detects `event.go_away` and fires `on_go_away` in `callback_handler.py` -- this is a separate code path that does NOT interrupt in-flight tool calls (detection is best-effort, the real close still arrives later as ConnectionClosed/APIError via the existing graceful path). See [../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md](../journal/entries/2026-06-10-bd-wpw.2-sync-confirm-field.md) for the synchronous confirm_field round-trip (FE ack + success:false on empty field), [../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md](../journal/entries/2026-06-10-bd-0c1-cooperative-receive-loop-shutdown.md) for the switch_section cooperative-shutdown fix (closed y4a), [../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md](../journal/entries/2026-06-07-bd-0y7-confirm-loop-breaker.md) for the confirm-loop breaker, and [../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md](../journal/entries/2026-06-10-bd-wpw.3-client-side-ai-validation.md) for the client-side AI-value validation gate.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth
+tool `ask_secretary` to the tool table and tool count; the rest of the
+confirm/update round-trip descriptions verified accurate against current code).
+See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 Map of what the CODE expects for each Gemini tool call vs. what is actually on
 the wire, plus the dev-log `message_type`s that capture each hop. Use this as the
@@ -12,7 +15,7 @@ local-only (`.env.DEV`-gated) -- see [voice-ai.md](voice-ai.md) for the adapter
 overview and [../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md)
 for why full bodies never reach production logs.
 
-## The five tools Gemini is given
+## The six tools Gemini is given
 
 Declared in `Settings.TOOL_DECLARATIONS` (`backend/config.py`), sent to Gemini at
 session setup (`live_ai_gemini.py` "Sending tool declarations"):
@@ -24,6 +27,7 @@ session setup (`live_ai_gemini.py` "Sending tool declarations"):
 | `get_form_status` | Read which fields are filled | `field_ids` |
 | `get_field_value` | Look up one field by spoken name | `spoken_name` |
 | `switch_section` | Navigate to another section | `section_identifier` |
+| `ask_secretary` | Ask a cheap text-model helper a plain-language question about a past answer or another field (bd polyglot-pdf-jnjj.45) | `query` |
 
 ## Inbound: how a tool call reaches the backend
 

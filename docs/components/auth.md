@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-06-12. `websocket_routes.py` changes (vmxx silent-resume, c5t GoAway, w3ic empty-field confirm) do not affect the auth gate (token verification runs before the handshake and is unchanged). See [../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md](../journal/entries/2026-06-08-bd-g8w-voice-form-fill-e2e-harness.md) for the dev test-harness auth bypass; [../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md](../journal/entries/2026-06-04-bd-8sn-deploy-scripts-ship-firestore-rules.md) for the firestore-rules closeout.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- the `websocket_routes.py` dev-only `/ws/echo` and `/ws/audio` debug sockets added since, and the `firebase.json` hosted-editor Hosting target, are both unrelated to the `/ws/fill` auth gate this doc describes). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only

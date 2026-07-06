@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-06-16. Added the MEASURED COST INVARIANT (on 2.5, text-in = the per-turn SI = 95-98% of session cost; audio is negligible) from bd polyglot-pdf-wyhh / polyglot-pdf-jnjj.6; see [journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md](../journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md). Earlier: bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (`time_left` field) in the adapter's GoAway path (no PII).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code; folded the `gemini_go_away_received` log fact into the timing-checkpoints section). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -107,7 +107,9 @@ so tool-call latency can be attributed (no field values are ever logged):
 `timing_coordinator_roundtrip` (`request_type`, `roundtrip_ms`),
 `timing_section_switch_total`, and `timing_audio_drops_session` (emitted only
 when nonzero; `audio_frames_dropped` also rides in the session-end
-`session_cost_summary`).
+`session_cost_summary`). The adapter also logs `gemini_go_away_received`
+(`time_left`) when the Live server sends a GoAway message before terminating
+the connection -- no PII, just the duration string.
 
 ## Roadmap (phased)
 
@@ -123,5 +125,3 @@ beads; this doc is their canonical home (migrated out of
 | 4 — Field + error tracking | voice attempts, manual edits, section nav, error categorization | `polyglot-pdf-ytf` |
 | 5 — BigQuery integration | Cloud Logging → BQ sink + log receiver | `polyglot-pdf-0bs` |
 | 6 — Compliance + audit | separate dataset, IP hashing, zero-PII validation | `polyglot-pdf-yqg` |
-
-*Last updated: 2026-06-16. Added the MEASURED COST INVARIANT (on 2.5, text-in = the per-turn SI = 95-98% of session cost; audio is negligible) from bd polyglot-pdf-wyhh / polyglot-pdf-jnjj.6; see [journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md](../journal/entries/2026-06-15-bd-jnjj.6-g2-rendered-si-cost-measurement-jit-si-vs-per.md). Earlier: bd polyglot-pdf-c5t added a structured `gemini_go_away_received` log (`time_left` field) in the adapter's GoAway path (no PII).*

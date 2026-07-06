@@ -1,8 +1,8 @@
 # JIT schema loading -- infra (audit + A2 repair)
 
-**Tracks:** backend/services/manifest_service.py backend/services/ai_context.py backend/routes/websocket_routes.py backend/services/form_filling_service.py frontend/src/schema-forms/utils/manifestUtils.ts frontend/src/schema-forms/state/schemaFormState.ts
+**Tracks:** backend/services/manifest_service.py backend/services/ai_context.py backend/routes/websocket_routes.py backend/services/form_filling_service.py backend/services/callback_handler.py backend/config.py frontend/src/schema-forms/utils/manifestUtils.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-06-16. The fix-now gaps (A/B/C/D/E/G/L/M/N/O) were REPAIRED by A2 (bd polyglot-pdf-jnjj.9; resolves bug polyglot-pdf-h2ii). A2 fixed the SI-BUILD path only; the G2 cost spike (bd polyglot-pdf-jnjj.6) then found gap P -- the RUNTIME next-field drip returns None past field 1. Gap P is now SUPERSEDED: bd polyglot-pdf-jnjj.22 REPLACES the JIT schema-drip with Dynamic Turn Injection (DTI, USE_DTI flag) rather than fixing it -- DTI rides the next field's CLIENT-SUPPLIED guidance in the confirm_field response and keeps the principal SI tiny (see [../research/secretary-agent-research-plan.md](../research/secretary-agent-research-plan.md) and the DTI branch in ai_context.build_form_context / manifest_service.get_field_guidance / callback_handler). JIT (USE_JIT_SCHEMA) remains a separate, independent A/B arm. See [../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md](../journal/entries/2026-06-15-bd-jnjj.9-jit-path-repair.md) for the A2 repair and [../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md](../journal/entries/2026-06-14-bd-jnjj.8-jit-infra-audit.md) for the original audit. The frozen target shape is [../standards/si-reduction.md](../standards/si-reduction.md).*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: re-verified every claim against current code -- no behavioral drift; refreshed stale line-number citations, added callback_handler.py + config.py to Tracks, and noted the JIT handshake now also carries full_schema for the secretary agent). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 The JIT path (`USE_JIT_SCHEMA=true`, default OFF) was built by weaker models, audited
 under A1, and repaired under A2. This doc is the audit catalog: the **fix-now** gaps
@@ -17,11 +17,13 @@ under A1, and repaired under A2. This doc is the audit catalog: the **fix-now** 
 2. **Frontend JIT handshake** -- `schemaFormState.ts::getJITHandshakePayload`
    sends `{type:"handshake_jit", manifest, first_field_schema, loaded_field_ids,
    current_values, resume, section_number, section_label, total_sections,
-   fill_language, form_title, previous_spoken_names, initial_field_hint}`.
+   fill_language, form_title, previous_spoken_names, initial_field_hint, full_schema}`.
    `first_field_schema` is the FIRST-UNFILLED field's schema (via `computeNextField`),
    not `fields[0]` (A2 fixed gap D). The form_title / previous_spoken_names /
    initial_field_hint were added by A2 (gaps O/M/D-hint -- the JIT handshake used to
-   under-send them).
+   under-send them). `full_schema` (the WHOLE form, all sections) rides every
+   handshake for the secretary agent's catalog (bd polyglot-pdf-p68s/jnjj.45d) --
+   it is not consumed by the JIT SI-build path itself, only by the secretary.
 3. **Backend parse** -- `websocket_routes.py` JIT branch reads `manifest.parts`
    (-> `schema["parts"]`), `first_field_schema` (-> `schema["fields"] =
    [first_field_schema]`), the whole `manifest` (-> `schema["manifest"]`),
@@ -137,19 +139,22 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
 - **P -- [SUPERSEDED by DTI / bd jnjj.22] The runtime next-field drip returns None
   for every field past the first, so the model never receives schemas for fields
   2..N.** RESOLUTION: not fixed in place -- REPLACED. Dynamic Turn Injection
-  (USE_DTI) drops the drip entirely; the next field's guidance is CLIENT-SUPPLIED
-  on next_field_hint_response and rendered into the confirm_field response
-  (response["next_field_guidance"]) by callback_handler, honoring the
-  stateless/client-owns-state invariant the drip violated. get_next_field_schema_for_jit
-  remains only for the legacy JIT (USE_JIT_SCHEMA) arm. Original diagnosis below.
+  (USE_DTI, default OFF like USE_JIT_SCHEMA -- the two flags are independent and
+  both gate off by default) drops the drip entirely; the next field's guidance is
+  CLIENT-SUPPLIED on next_field_hint_response and rendered into the confirm_field
+  response (response["next_field_guidance"]) by `callback_handler.py` (the single
+  call site is gated on `next_hint` truthy, with the render itself gated on
+  `USE_DTI`), honoring the stateless/client-owns-state invariant the drip
+  violated. get_next_field_schema_for_jit remains only for the legacy JIT
+  (USE_JIT_SCHEMA) arm. Original diagnosis below.
   A2 fixed the SI-BUILD path (gaps A/B/C/...) to consume the handshake manifest,
   but the separate RUNTIME drip was not touched. On each successful update/confirm,
   `callback_handler` calls `form_filling_service.get_next_field_schema_for_jit(field_id)`
-  (single call site, `callback_handler.py:556-557`; the result is inserted into
-  the tool response at `:776-777`) to compute the next field's full schema. That
+  (single call site, `callback_handler.py:854-855`; the result is inserted into
+  the tool response at `:917-918`) to compute the next field's full schema. That
   delegates to
   `manifest_service.get_next_field_schema(part_data=self._schema, current_field_id)`
-  (`form_filling_service.py:935-938`), which finds "next" by INDEX within
+  (inside `get_next_field_schema_for_jit`, `form_filling_service.py:1681`), which finds "next" by INDEX within
   `part_data["fields"]` (`manifest_service.py:78-94`) -- it never consults the
   manifest. But in JIT mode `self._schema["fields"]` is `[first_field_schema]`
   (length 1, `websocket_routes.py:671`), so the index lookup returns

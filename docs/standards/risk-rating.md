@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-07-04. See [../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md](../journal/entries/2026-07-04-bd-h76m.3-schema-v2-model-core.md) for closeout details.*
+*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- the pdf_fill_routes.py checkbox_group/pdf_on_value work, config.py SI-directive addition, and models/ schema-v2 changes since 07-04 are all changes within files already rated correctly for the reasons stated, not new risk surfaces). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of
