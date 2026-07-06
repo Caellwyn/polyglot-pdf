@@ -239,17 +239,20 @@ FIELD SHAPE (the unit the scorer grades hardest):
   "copy_to": [str(field id)],             // value mirrored to these fields
   "overflow_to_supplement": str(supplement id),  // long lists overflow here
   "multi_entry": {{...}},                  // repeating-row config (or type=table)
-  // controls_fields drives READ-ONLY UNLOCK / property flips off a chosen option
-  // (the I-90 flip_readonly_bit shape). For a plain "show / require this field
-  // when X" dependency, prefer show_if / require_if ON THE DEPENDENT FIELD --
-  // that is what the runtime evaluates; a bare shows/makes_required here is not
-  // applied at runtime in v2.
+  // A READ-ONLY field that a choice unlocks carries the unlock descriptor ON
+  // ITSELF (that is what the runtime + PDF filler read) -- conditional_behavior /
+  // conditional_logic below, plus a show_if naming the choice. controls_fields
+  // is the trigger-side mirror of that intent; a bare shows/makes_required here
+  // is NOT applied at runtime in v2, so a plain "show / require this field when
+  // X" dependency belongs on the DEPENDENT field's show_if / require_if.
   "controls_fields": [ {{"operator": str, "value": any,
                         "shows": [str], "hides": [str], "unlocks": [str],
                         "locks": [str], "makes_required": [str],
                         "makes_optional": [str]}} ],
-  "conditional_behavior": {{"unlock_method": "flip_readonly_bit"}},   // read-only
-  "conditional_logic": {{...}}             // unlock detail (I-90 gold shape)
+  // On the read-only dependent field: how it unlocks when its show_if holds.
+  "conditional_behavior": {{"unlock_method": "flip_readonly_bit"}},
+  "conditional_logic": {{"unlock_method": "flip_readonly_bit",
+                        "pdf_field_flag_change": {{...}}}}  // I-90 gold shape
 }}
 
 A CONDITION is either ONE atom  {{"field": str(other field id), "operator": str,
@@ -265,8 +268,10 @@ RULES:
   never invent or normalize it. It is the only reliable cross-reference.
 - Recover conditional logic from the PRINTED instructions on the page, not
   guesses. Express a "show / require this field when X" dependency as show_if /
-  require_if ON THE DEPENDENT FIELD; use controls_fields only for a read-only
-  UNLOCK or property flip triggered by a chosen option.
+  require_if ON THE DEPENDENT FIELD. For a read-only field a choice unlocks, put
+  the unlock descriptor (conditional_behavior / conditional_logic) ON THAT FIELD
+  with a show_if naming the choice -- that is what the runtime and PDF filler
+  read; controls_fields alone does not unlock anything at runtime in v2.
 - Output MUST be a single valid JSON object, UTF-8, ASCII-safe, no trailing commas.
 
 CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):

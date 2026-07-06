@@ -101,6 +101,13 @@ def test_contract_advertises_every_scorer_graded_key():
     # contract below what scripts/schema_score.py grades, or LLM arms following it
     # systematically drop scored data. These are the attribute + relationship +
     # structure keys schema_score reads (schema_score.py rel_keys + attr scoring).
+    #
+    # DELIBERATELY EXCLUDES conditional_fields: schema_score grades it, but it is a
+    # v1-LEGACY key the v2 model REJECTS (form_models._collect_v2_problems: "legacy
+    # conditional_fields is not part of schema v2"), so a v2-targeted contract must
+    # NOT advertise it -- the dependency goes on the target's show_if instead. The
+    # scorer/gold still grading it (and comparing v1 widget-leaf option values) is
+    # the v1->v2 transition scoring skew tracked in bd polyglot-pdf-d9lz.
     contract = sc.render_contract()
     scored_keys = [
         "pdf_position", "max_length", "read_only", "multiline",  # attributes
