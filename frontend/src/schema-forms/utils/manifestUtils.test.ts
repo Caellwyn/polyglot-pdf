@@ -18,6 +18,7 @@ import {
   generateSectionManifest,
   shouldIncludeSchema,
   buildHandshakeManifest,
+  buildContinuousManifest,
   formatManifestForContext,
   estimateManifestTokens,
   getFieldSchema
@@ -275,6 +276,43 @@ describe('Manifest Generation Utilities', () => {
       expect(() => {
         buildHandshakeManifest('non-existent', schema, state);
       }).toThrow('Section non-existent not found');
+    });
+  });
+
+  // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form as ONE synthetic
+  // section, so the backend runs one session instead of chopping by section.
+  describe('buildContinuousManifest', () => {
+    it('carries EVERY field of the form in one synthetic section (schema order)', () => {
+      const schema = createTestSchema();
+
+      const manifest = buildContinuousManifest(schema);
+
+      expect(manifest.current_section.section_id).toBe('continuous');
+      // All 7 fields across all 3 sections, in schema.fields order.
+      expect(manifest.current_section.fields.map(f => f.field_id)).toEqual(
+        schema.fields.map(f => f.id)
+      );
+      expect(manifest.current_section.fields).toHaveLength(schema.fields.length);
+    });
+
+    it('has no previous sections and a single-entry parts list', () => {
+      const schema = createTestSchema();
+
+      const manifest = buildContinuousManifest(schema);
+
+      expect(manifest.previous_sections).toHaveLength(0);
+      expect(manifest.parts).toEqual([
+        { id: 'continuous', order: 1, label: 'Test I-90 Form' },
+      ]);
+    });
+
+    it('labels the synthetic section with the form title (falls back to Full Form)', () => {
+      const schema = createTestSchema();
+      const manifest = buildContinuousManifest(schema);
+      expect(manifest.current_section.section_label).toBe('Test I-90 Form');
+
+      const untitled = { ...schema, form_metadata: { ...schema.form_metadata, title: '' } };
+      expect(buildContinuousManifest(untitled).current_section.section_label).toBe('Full Form');
     });
   });
 
