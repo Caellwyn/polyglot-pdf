@@ -16,7 +16,7 @@
  * switch) are not raced.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
 import type { FormSchema } from './schema-forms/types/schema'
 
@@ -54,6 +54,14 @@ class MockWebSocket {
   open() {
     this.readyState = MockWebSocket.OPEN
     this.onopen?.()
+  }
+
+  // Simulate the server rejecting/failing the connection: onerror then onclose,
+  // mirroring how connect() settles a failed socket (handleError + reject).
+  error() {
+    this.onerror?.({})
+    this.readyState = MockWebSocket.CLOSED
+    this.onclose?.({ code: 1006, reason: '', wasClean: false })
   }
 
   send = (() => {}) as (data: any) => void
@@ -221,5 +229,60 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
 
     await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
     expect(MockWebSocket.instances.length).toBe(before)
+  })
+
+  // Failure-path coverage (fresh-eyes PR-review gap): a GoAway pre-emptive
+  // reconnect that FAILS must not strand the user on a stale "connected" or a
+  // dead-end "error"; it falls back to the normal auto-reconnect loop, exactly the
+  // recovery the pre-bead baseline had.
+  describe('reconnect FAILURE falls back to auto-reconnect', () => {
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.useRealTimers() })
+
+    it('recovers via attemptReconnect when the pre-emptive reconnect socket errors', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      // connectAndOpen uses awaits; drive the open synchronously under fake timers.
+      const p = conn.connect('wss://example/ws/fill')
+      MockWebSocket.instances[0].open()
+      await p
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      expect(conn.getStatus()).toBe('connected')
+
+      // GoAway -> pre-emptive reconnect creates socket #2 (index 1).
+      await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
+      expect(MockWebSocket.instances.length).toBe(2)
+
+      // That socket FAILS before it opens. connect() rejects; handleError must NOT
+      // flash "error" (guard suppresses it), and the .catch falls back to
+      // attemptReconnect -> "reconnecting" + a backoff timer.
+      MockWebSocket.instances[1].error()
+      await Promise.resolve() // let the connect() .catch microtask run
+      await Promise.resolve()
+      expect(conn.getStatus()).toBe('reconnecting')
+      // The guard was released so the fallback (and any later GoAway) is not
+      // permanently coalesced.
+      expect((conn as any).goAwayReconnectInFlight).toBe(false)
+
+      // The backoff fires a fresh reconnect socket (attempt 1 at 1000ms).
+      vi.advanceTimersByTime(1000)
+      expect(MockWebSocket.instances.length).toBe(3)
+    })
+
+    it('does not leave a stale "connected" status after a failed pre-emptive reconnect', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      const p = conn.connect('wss://example/ws/fill')
+      MockWebSocket.instances[0].open()
+      await p
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
+      MockWebSocket.instances[1].error()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // The whole point of the gap fix: status is NOT the misleading "connected"
+      // (dead socket) it would have been if the .catch merely cleared the guard.
+      expect(conn.getStatus()).not.toBe('connected')
+    })
   })
 })

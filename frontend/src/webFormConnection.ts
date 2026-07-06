@@ -633,11 +633,10 @@ export class WebFormConnection {
 
         case "go_away":
           // The Gemini Live server will terminate this connection shortly (bd
-          // polyglot-pdf-c5t). Surface time_left so a consumer can pre-emptively
-          // reconnect before the abrupt close. We only NOTIFY here -- unlike
-          // idle_timeout we do NOT set a no-reconnect flag, because a GoAway is a
-          // server lifecycle reset (reconnect IS wanted), not a user-inactivity
-          // close. The reconnect policy is the consumer's (bd follow-on).
+          // polyglot-pdf-c5t). Surface time_left to any consumer via onGoAway, then
+          // ACT on it: unlike idle_timeout we do NOT set a no-reconnect flag,
+          // because a GoAway is a server lifecycle reset (reconnect IS wanted), not
+          // a user-inactivity close.
           console.log('[WebFormConnection] [wave] GoAway received from Gemini; time_left:', message.time_left);
           if (this.callbacks.onGoAway) {
             this.callbacks.onGoAway(message.time_left ?? null);
@@ -2304,8 +2303,14 @@ export class WebFormConnection {
    * Handle WebSocket errors
    */
   private handleError(error: Event | Error): void {
-    // Don't show error during section switches (expected during reconnect)
-    if (!this.isSectionSwitching) {
+    // Don't show error during section switches (expected during reconnect), nor
+    // during a GoAway pre-emptive reconnect (bd polyglot-pdf-l3a.2): both drive
+    // their own reconnect and own the terminal status. For a GoAway reconnect, the
+    // connect() promise's .catch in handleGoAwayReconnect decides the outcome
+    // (fall back to attemptReconnect -> "reconnecting", or "reconnect_failed" at
+    // the cap); letting handleError flash "error" first would both be wrong (we do
+    // recover) and strand the user on a status with no reconnect button.
+    if (!this.isSectionSwitching && !this.goAwayReconnectInFlight) {
       this.setStatus("error", "handleError");
     }
 
@@ -2483,12 +2488,31 @@ export class WebFormConnection {
     // Reconnect immediately through the standard path: connect() re-resolves a
     // fresh token and handleOpen() sends resume:true (hasConnectedOnce is already
     // true after the first connect). A successful open clears the guard in
-    // handleOpen; if connect() rejects (its onerror already surfaced `error`
-    // status), clear the guard here so a later GoAway can retry rather than being
-    // permanently coalesced by a stuck in-flight flag.
+    // handleOpen.
+    //
+    // On FAILURE (token error / network blip / the new socket timing out), clear
+    // the guard and fall back to the normal auto-reconnect exponential-backoff
+    // loop (fresh-eyes PR-review gap): if we merely cleared the guard, the user
+    // would be stranded -- the connect() timeout path never touches status (stale
+    // "connected" over a dead socket) and its onerror path lands on "error", which
+    // has no reconnect button and no retry. attemptReconnect() restores the exact
+    // recovery the pre-bead baseline had (an unhandled GoAway close fell through to
+    // it via handleClose), so a failed pre-emptive reconnect degrades to a normal
+    // reconnecting state instead of a dead end. Skip the fallback if the user has
+    // since idle-timed-out or a section switch took over (those own the lifecycle),
+    // or if the reconnect-attempt cap is already exhausted (let it terminate as
+    // reconnect_failed rather than spin).
     this.connect(this.connectedUrl).catch((error) => {
       console.error('[WebFormConnection] GoAway pre-emptive reconnect failed', error);
       this.goAwayReconnectInFlight = false;
+      if (this.idleTimedOut || this.isSectionSwitching || this.switchInFlight) {
+        return;
+      }
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.attemptReconnect();
+      } else {
+        this.setStatus("reconnect_failed", "handleGoAwayReconnect:max-retries");
+      }
     });
   }
 
