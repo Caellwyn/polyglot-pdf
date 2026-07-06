@@ -380,24 +380,18 @@ def _check_options(
 # ---------------------------------------------------------------------------
 
 def _check_cycles(
-    fields: List[Dict[str, Any]],
-    fields_by_id: Dict[str, Dict[str, Any]],
+    graph: Dict[str, List[str]],
     out: List[LintFinding],
 ) -> None:
-    """DFS over the show_if trigger graph; each cycle is reported once."""
-    graph: Dict[str, List[str]] = {}
-    for f in fields:
-        fid = f.get("id")
-        if not isinstance(fid, str):
-            continue
-        scratch: List[LintFinding] = []  # structural problems reported elsewhere
-        triggers: List[str] = []
-        for _, atom in _walk_condition(f.get("show_if"), "", scratch):
-            ref = atom.get("field")
-            if isinstance(ref, str) and ref in fields_by_id:
-                triggers.append(ref)
-        graph[fid] = triggers
+    """DFS over the show_if trigger graph (edges collected by the main lint
+    loop as it walks each field's show_if); each cycle is reported once.
 
+    Takes the already-built graph rather than re-walking show_if itself --
+    the main loop's per-field show_if walk (which also runs the atom checks)
+    collects these same trigger edges, so re-invoking _walk_condition here
+    would redundantly re-parse every show_if a second time (bd polyglot-pdf-
+    tmby nit 2).
+    """
     # Iterative DFS (explicit stack): a long acyclic show_if chain in a large
     # generated form must not hit Python's recursion limit -- the linter never
     # throws (Codex PR #302).
@@ -539,17 +533,33 @@ def lint_schema(
         f["id"]: f for f in fields if isinstance(f.get("id"), str)
     }
 
+    # show_if trigger graph, collected alongside the main walk below (fid ->
+    # list of trigger field ids referenced from that field's show_if atoms) so
+    # _check_cycles can DFS it directly instead of re-walking show_if itself.
+    show_if_graph: Dict[str, List[str]] = {}
+
     for i, f in enumerate(fields):
         field_path = f"fields[{i}] (id={f.get('id')})"
+        fid = f.get("id")
 
         _check_options(field_path, f, is_v2, out)
 
-        for kind in ("show_if", "require_if"):
-            for atom_path, atom in _walk_condition(
-                f.get(kind), f"{field_path}.{kind}", out
-            ):
-                _check_atom(atom_path, atom, None, out, fields_by_id,
-                            resolve_trigger=True, is_v2=is_v2)
+        show_if_atoms = _walk_condition(f.get("show_if"), f"{field_path}.show_if", out)
+        triggers: List[str] = []
+        for atom_path, atom in show_if_atoms:
+            _check_atom(atom_path, atom, None, out, fields_by_id,
+                        resolve_trigger=True, is_v2=is_v2)
+            ref = atom.get("field")
+            if isinstance(ref, str) and ref in fields_by_id:
+                triggers.append(ref)
+        if isinstance(fid, str):
+            show_if_graph[fid] = triggers
+
+        for atom_path, atom in _walk_condition(
+            f.get("require_if"), f"{field_path}.require_if", out
+        ):
+            _check_atom(atom_path, atom, None, out, fields_by_id,
+                        resolve_trigger=True, is_v2=is_v2)
 
         controls = f.get("controls_fields")
         if isinstance(controls, list):
@@ -578,7 +588,7 @@ def lint_schema(
                                 f"references non-existent field {target!r}",
                             ))
 
-    _check_cycles(fields, fields_by_id, out)
+    _check_cycles(show_if_graph, out)
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)

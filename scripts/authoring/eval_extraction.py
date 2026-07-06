@@ -51,6 +51,7 @@ _REPO = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, _REPO)
 sys.path.insert(0, os.path.join(_REPO, "scripts"))
 sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))
+sys.path.insert(0, os.path.join(_REPO, "scripts", "authoring"))
 
 import roundtrip_fill  # noqa: E402
 import schema_score  # noqa: E402
@@ -309,12 +310,14 @@ def _pct_cell(t: Optional[dict]) -> str:
 
 
 def render_table(rows: list[dict]) -> str:
-    header = (f"{'form':<12} {'verdict':<7} {'lint E/W':<9} {'conv%':>6} "
-              f"{'choice%':>8} {'text%':>7} {'fieldF1':>8} {'structural':<22} repair")
+    # Column width fits the widest cell: longest form name (w9-heldout, 10) +
+    # the '*' baseline marker (1) + the ' [gc]' ablation suffix (5) = 16.
+    header = (f"{'form':<16} {'verdict':<7} {'lint E/W':<9} {'conv%':>6} "
+              f"{'choice%':>8} {'text%':>7} {'fieldF1':>7} {'structural':<22} repair")
     L = [header, "-" * len(header)]
     for r in rows:
         if r.get("skipped"):
-            L.append(f"{r['form']:<12} {'-':<7} {r['skipped']}")
+            L.append(f"{r['form']:<16} {'-':<7} {r['skipped']}")
             continue
         st = r.get("structural")
         if st is None:
@@ -324,17 +327,17 @@ def render_table(rows: list[dict]) -> str:
         else:
             st_cell = f"FAIL ({len(st['problems'])} problem(s))"
         f1 = r.get("field_f1")  # schema_score f1 is already a 0-100 percentage
-        f1_cell = "     - " if f1 is None else f"{f1:6.1f} "
+        f1_cell = "-" if f1 is None else f"{f1:.1f}"
         form_cell = r["form"] + ("*" if r.get("baseline") else "")
         if r.get("group_candidates"):
             form_cell += " [gc]"  # the candidates-block ablation arm
         L.append(
-            f"{form_cell:<12} {r['verdict']:<7} "
+            f"{form_cell:<16} {r['verdict']:<7} "
             f"{str(r['lint_errors']) + '/' + str(r['lint_warnings']):<9} "
             f"{_pct_cell(r.get('value_convention')):>6} "
             f"{_pct_cell(r.get('choice_fill')):>8} "
             f"{_pct_cell(r.get('text_fill')):>7} "
-            f"{f1_cell:>8} {st_cell:<22} {r.get('repair', '-')}"
+            f"{f1_cell:>7} {st_cell:<22} {r.get('repair', '-')}"
         )
     return "\n".join(L)
 

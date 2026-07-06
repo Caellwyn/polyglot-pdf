@@ -143,7 +143,7 @@ interface UngroupStash {
     copy_to?: string[];
     // sentinels distinguishing "had no key" from "key not rewritten" on restore.
     had_show_if: boolean;
-    had_require_if?: boolean;
+    had_require_if: boolean;
     had_controls: boolean;
     had_copy_to: boolean;
   }>;
@@ -644,7 +644,7 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
         if (r.show_if !== undefined) restored.show_if = r.show_if;
         else if (!r.had_show_if) delete (restored as Record<string, unknown>).show_if;
         if (r.require_if !== undefined) restored.require_if = r.require_if;
-        else if (r.had_require_if === false) delete (restored as Record<string, unknown>).require_if;
+        else if (!r.had_require_if) delete (restored as Record<string, unknown>).require_if;
         if (r.controls_fields !== undefined) restored.controls_fields = r.controls_fields;
         else if (!r.had_controls) delete (restored as Record<string, unknown>).controls_fields;
         if (r.copy_to !== undefined) restored.copy_to = r.copy_to;

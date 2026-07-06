@@ -239,7 +239,6 @@
         "p7_line6_preparersemailaddress",
         "p7_checkbox7",
         "p7_checkbox7extend",
-        "p7_checkbox7extend[1]",
         "p7_line8a_signatureofpreparer",
         "p7_line8b_dateofsignature",
         "p7_unit_type3b_unit"
@@ -4141,15 +4140,13 @@
           "value": "P7_checkbox7[1]",
           "shows": [],
           "unlocks": [
-            "p7_checkbox7extend",
-            "p7_checkbox7extend[1]"
+            "p7_checkbox7extend"
           ],
           "makes_required": []
         }
       ],
       "conditional_fields": [
-        "p7_checkbox7extend",
-        "p7_checkbox7extend[1]"
+        "p7_checkbox7extend"
       ],
       "pdf_position": {
         "page": 6,

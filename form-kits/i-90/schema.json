@@ -2259,8 +2259,11 @@
       ],
       "show_if": {
         "field": "p2_checkbox1",
-        "operator": "equals",
-        "value": "P2_checkbox1[1]"
+        "operator": "in",
+        "value": [
+          "P2_checkbox1[0]",
+          "P2_checkbox1[1]"
+        ]
       },
       "conditional_fields": [
         "p2_line2h1_cityandstate"

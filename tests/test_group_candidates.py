@@ -91,6 +91,28 @@ def test_tooltip_prefix_signal_fires_on_tu_key():
     assert "Race. Select all." in signals
 
 
+def test_family_a_drops_same_index_duplicate_widgets_silently():
+    """Pins current behavior (bd m0mm #2): one field whose kid widgets share
+    the SAME [n] index (a plausible legacy-AcroForm artifact -- two widget
+    instances both named e.g. 'reasonbox[0]' instead of distinct indexes)
+    makes `len(indexes) == len(members)` fail for the WHOLE leaf family, so
+    Family A drops both widgets with no signal. The leaf has no trailing
+    digit run, so Family B's numbered-run regex does not rescue them either
+    -- the pair vanishes from the candidate list entirely. Neither committed
+    kit (w7, w9-heldout) exhibits this shape; this test exists so a future
+    occurrence is caught by a changed assertion here instead of silently
+    vanishing from find_group_candidates's output."""
+    dump = {"fields": [
+        {"name": "top.reasonbox[0]", "logical_type": "checkbox",
+         "widgets": [
+             {"on_value": "1", "tu": "", "rect": {"page": 0, "x": 50.0, "y": 100.0}},
+             {"on_value": "1", "tu": "", "rect": {"page": 0, "x": 50.0, "y": 130.0}},
+         ]},
+    ]}
+    candidates = gc.find_group_candidates(dump)
+    assert candidates == []  # current (silent-drop) behavior, pinned
+
+
 def test_render_block_is_suggest_not_decide():
     block = gc.render_candidates_block([
         {"widgets": ["top.c1_2[0]", "top.c1_3[0]"],

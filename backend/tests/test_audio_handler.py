@@ -270,6 +270,40 @@ class TestManualFieldUpdate:
         mock_live_ai.send_text_message.assert_not_called()
     
     @pytest.mark.asyncio
+    async def test_manual_field_update_notifies_on_false(self):
+        """A manually-unchecked checkbox (value=False) is a real answer and
+        must still notify Gemini (bd polyglot-pdf-vtdx)."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai)
+
+        await handler.send_manual_field_update(
+            field_id="agrees_to_terms",
+            field_name="Agrees to Terms",
+            value=False
+        )
+
+        mock_live_ai.send_text_message.assert_called_once()
+        message = mock_live_ai.send_text_message.call_args[0][0]
+        assert "False" in message
+
+    @pytest.mark.asyncio
+    async def test_manual_field_update_notifies_on_zero(self):
+        """A manually-entered 0 is a real answer and must still notify
+        Gemini (bd polyglot-pdf-vtdx)."""
+        mock_live_ai = AsyncMock()
+        handler = AudioHandler(mock_live_ai)
+
+        await handler.send_manual_field_update(
+            field_id="num_dependents",
+            field_name="Number of Dependents",
+            value=0
+        )
+
+        mock_live_ai.send_text_message.assert_called_once()
+        message = mock_live_ai.send_text_message.call_args[0][0]
+        assert "0" in message
+
+    @pytest.mark.asyncio
     async def test_manual_field_update_noop_when_no_live_ai(self):
         """Test that manual update is no-op when LiveAI is None."""
         handler = AudioHandler(None)

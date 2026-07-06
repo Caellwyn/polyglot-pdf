@@ -171,17 +171,19 @@ export const App: React.FC = () => {
       setSavedFileName(entry.schemaFile);
 
       // Build a blob URL for the PDF so PDFViewer (which takes a URL) can render
-      // it; revoke any prior one to avoid leaking object URLs.
-      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+      // it. Swap the blob URL only now that the fetch has succeeded. Revoking
+      // the prior kit's URL BEFORE the fetch (the old order) meant a failed
+      // getFileHandle/getFile call left the still-displayed prior kit pointing
+      // at a dead URL: a silently broken PDF viewer (mirrors handleOpenRemoteKit,
+      // bd 92qe.2).
       let pdfUrl = '';
       if (entry.hasPdf) {
         const pdfHandle = await entry.dirHandle.getFileHandle(entry.pdfFile);
         const pdfFile = await pdfHandle.getFile();
         pdfUrl = URL.createObjectURL(pdfFile);
-        pdfBlobUrlRef.current = pdfUrl;
-      } else {
-        pdfBlobUrlRef.current = null;
       }
+      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = pdfUrl || null;
 
       loadSchemaState(loaded); // fresh baseline -> history cleared
       setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });

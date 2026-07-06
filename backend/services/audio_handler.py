@@ -132,9 +132,13 @@ class AudioHandler:
             # No-op when live AI is not configured (used in unit tests)
             return
         
-        # Skip notification if value is empty/falsy (e.g., user clicked in/out without typing)
-        # This prevents unnecessary model responses for fields that weren't actually filled
-        if not value or (isinstance(value, str) and not value.strip()):
+        # Skip notification only when the field was not actually filled: None/missing,
+        # or a whitespace-only string (e.g. user clicked in/out without typing). A
+        # manually-entered False (unchecked checkbox) or 0 is a real answer and must
+        # still notify Gemini, or the model re-asks for an already-set field (bd
+        # polyglot-pdf-vtdx; same falsy-vs-empty predicate as get_form_status's
+        # skip in callback_handler.py, bd polyglot-pdf-gihj).
+        if value is None or (isinstance(value, str) and not value.strip()):
             _log.debug(
                 "send_manual_field_update_skipped",
                 field_id=field_id,
