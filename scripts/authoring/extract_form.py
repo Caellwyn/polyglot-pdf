@@ -586,8 +586,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
 
     # 4. Normalize required-but-missing scalars to draft defaults, REPAIR (bd
     #    h76m.13: deterministic invented-vocabulary rewrites; the report rides
-    #    in provenance), then validate + lint (bd h76m.5). Exit semantics stay
-    #    validation-driven until the P5.3 tri-state exit lands.
+    #    in provenance), then validate + lint (bd h76m.5). main() maps
+    #    (schema_valid, lint errors, field count) to the tri-state exit code
+    #    (bd v96b: 0 valid+clean / 3 stored-with-issues / 1 no usable draft).
     _normalize_for_schema(schema)
     schema, repair_report = _repair_schema(schema, dump_data)
     ok, detail = _validate_schema(schema)
@@ -638,6 +639,32 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     return schema
 
 
+# Tri-state exit codes (bd polyglot-pdf-v96b, P5.3a). The hosted extract route
+# reads these to decide store-with-issues (3) vs hard-fail (1):
+#   0  VALID     -- draft validated AND lint-clean; ready to promote.
+#   3  ISSUES    -- a usable draft was written (>= 1 field) but it is invalid
+#                   and/or carries lint ERRORs: STORE it with its issue report.
+#   1  HARD_FAIL -- no usable draft (0 fields); the caller must NOT store it.
+# A crash before the write (no draft at all) surfaces as a raised exception ->
+# nonzero via the traceback, which the route also treats as hard-fail.
+EXIT_VALID = 0
+EXIT_ISSUES = 3
+EXIT_HARD_FAIL = 1
+
+
+def _classify_exit(schema: dict) -> int:
+    """Tri-state exit code for a written draft (see EXIT_* above)."""
+    if not schema.get("fields"):
+        return EXIT_HARD_FAIL  # nothing usable was produced
+    authoring = schema.get("_bakeoff", {}).get("authoring", {})
+    valid = bool(authoring.get("schema_valid"))
+    lint = authoring.get("lint") or {}
+    lint_errors = lint.get("errors", 0) or 0
+    if valid and lint_errors == 0:
+        return EXIT_VALID
+    return EXIT_ISSUES
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="One-command PDF -> draft FormSchema (bd 7a9.12 / B1).")
@@ -665,7 +692,9 @@ def main(argv: list[str] | None = None) -> int:
                      keep_dump=args.keep_dump,
                      instructions_pdf=args.instructions_pdf,
                      group_candidates=args.group_candidates)
-    return 0 if schema.get("_bakeoff", {}).get("authoring", {}).get("schema_valid") else 1
+    # Tri-state exit (bd v96b): 0 valid+clean / 3 stored-with-issues / 1 no
+    # usable draft. The draft was already written unconditionally in extract().
+    return _classify_exit(schema)
 
 
 if __name__ == "__main__":

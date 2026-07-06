@@ -74,6 +74,12 @@ router = APIRouter(prefix="/api/editor", tags=["editor-kits"])
 ROLE_EDITOR = "editor"
 ROLE_AUTHOR = "author"
 
+# extract_form.py's tri-state exit code for a stored-with-issues draft (bd
+# polyglot-pdf-v96b, P5.3a). Mirrored here (the extractor runs as a subprocess,
+# so the route cannot import the constant); extract_form.EXIT_ISSUES is the
+# source of truth and a sync test pins the two equal.
+_EXTRACT_EXIT_ISSUES = 3
+
 
 def _token_matches(supplied: str, expected: str) -> bool:
     """Constant-time token compare over UTF-8 BYTES.
@@ -187,6 +193,28 @@ def _resolve_meta_names(meta: Optional[dict]) -> tuple[str, str]:
 def _status_of(meta: Optional[dict]) -> str:
     status = (meta or {}).get("status")
     return status if status in ("draft", "complete") else "unknown"
+
+
+# The kit's persisted AcroForm dump artifact filename (bd polyglot-pdf-v96b). The
+# extract route writes it; the promotion-gate lint and the P5.3c widget picker
+# read it.
+_ACROFORM_ARTIFACT = "acroform.json"
+
+
+async def _load_kit_dump(store, kit_id: str) -> Optional[dict]:
+    """The kit's stored AcroForm dump, or None when absent/unreadable.
+
+    Best-effort: a missing dump (FormKitNotFound) is the common pre-v96b case
+    and simply means "no dump" -- callers degrade to the dump-less lint/repair
+    path. A present-but-unreadable dump (FormKitStoreError) also degrades to None
+    rather than failing the caller: the dump only ENRICHES lint (the widget-claim
+    rule); it must never turn a promotable schema un-promotable by being corrupt.
+    """
+    try:
+        dump = await store.load_json_artifact(kit_id, _ACROFORM_ARTIFACT)
+    except (FormKitNotFound, FormKitStoreError):
+        return None
+    return dump if isinstance(dump, dict) else None
 
 
 @router.get("/session", response_model=EditorSessionResponse)
@@ -472,12 +500,12 @@ async def set_editor_kit_status(
         # conditional references, invented operators on a v1-stamped draft).
         # This is one half of the two-gate seam: a stored-with-issues draft
         # (P5.3) stays un-promotable until repaired. WARNINGs never block.
-        # No dump is passed: the acroform dump is not stored per-kit yet, so
-        # the dump-only widget-claim rule runs at extraction time only. The
-        # dump becomes a kit artifact at P5.3 (bd h76m.14) -- pass it here
-        # when it lands, closing the widget-claim hole at this gate too.
+        # The AcroForm dump is now a per-kit artifact (bd v96b), so pass it when
+        # present -- this closes the dump-only widget-claim rule at the promotion
+        # gate too (a missing dump degrades to the dump-less rules, never blocks).
+        dump_data = await _load_kit_dump(store, kit_id)
         lint_errors = [
-            f for f in lint_schema(schema) if f.severity == SEVERITY_ERROR
+            f for f in lint_schema(schema, dump_data) if f.severity == SEVERITY_ERROR
         ]
         if lint_errors:
             # Cap the finding list BEFORE appending the "and N more" tail so a
@@ -668,6 +696,15 @@ class ExtractResponse(BaseModel):
     detail: str
     schemaFile: Optional[str] = None
     fieldCount: Optional[int] = None
+    # Store-with-issues (bd polyglot-pdf-v96b, P5.3a): a parseable draft with >= 1
+    # field is STORED even when it is lint-dirty or invalid, and the response
+    # carries the lint counts so the editor surfaces them. storedWithIssues is
+    # True exactly when the stored draft has lint ERRORs or failed validation
+    # (extractor tri-state exit 3); the draft is un-promotable until repaired
+    # (the two-gate seam -- promotion still 409s on lint ERRORs).
+    errorCount: int = 0
+    warningCount: int = 0
+    storedWithIssues: bool = False
 
 
 @router.post("/kits/{kit_id}/extract", response_model=ExtractResponse)
@@ -685,11 +722,20 @@ async def extract_editor_kit(
     the extractor on the maintainer's machine): stream the kit's PDF from the
     store to a temp dir, run scripts/authoring/extract_form.py as a subprocess
     (model = EXTRACTOR_MODEL, a gemini-* model -- the local `claude` CLI does
-    not exist in the container), and on a validated success write the draft
-    schema back to the store. Synchronous by design: Cloud Run's
-    --timeout=3600 covers a minutes-long run, and the editor shows elapsed
-    progress. Refuses to clobber an existing schema unless force=true (the
-    same no-overwrite contract as the dev endpoint).
+    not exist in the container).
+
+    STORE-WITH-ISSUES (bd polyglot-pdf-v96b, P5.3a): a parseable draft with >= 1
+    field is stored EVEN when it is lint-dirty or fails validation -- the response
+    returns 200 carrying the lint counts and a storedWithIssues flag so the editor
+    surfaces them and the author repairs in place. Only a hard failure (no usable
+    draft: crash, timeout, no JSON, zero fields) is a 5xx. The AcroForm dump is
+    persisted as the kit's acroform.json artifact alongside the draft. The draft
+    stays UN-PROMOTABLE until repaired -- the two-gate seam: mark-complete still
+    409s on lint ERRORs (store != promote).
+
+    Synchronous by design: Cloud Run's --timeout=3600 covers a minutes-long run,
+    and the editor shows elapsed progress. Refuses to clobber an existing schema
+    unless force=true (the same no-overwrite contract as the dev endpoint).
     """
     kit_id = _safe_kit_id(kit_id)
     settings = get_settings()
@@ -748,12 +794,18 @@ async def extract_editor_kit(
             tmp = Path(tmp_dir)
             pdf_path = tmp / "form.pdf"
             out_path = tmp / "schema.json"
+            # extract_form writes the AcroForm dump next to --out as
+            # <out-stem>_acroform.json under --keep-dump; we persist it as the
+            # kit's acroform.json artifact (bd v96b) so the promotion gate's
+            # dump-widget-claim rule and the P5.3c widget picker can use it.
+            dump_out_path = out_path.with_name(out_path.stem + "_acroform.json")
             pdf_path.write_bytes(pdf_bytes)
             cmd = [
                 sys.executable, str(script),
                 "--pdf", str(pdf_path),
                 "--out", str(out_path),
                 "--model", settings.EXTRACTOR_MODEL,
+                "--keep-dump",
             ]
             if instructions_bytes is not None:
                 instructions_path = tmp / "instructions.pdf"
@@ -802,15 +854,22 @@ async def extract_editor_kit(
             lines = [ln for ln in (proc.stdout + proc.stderr).splitlines() if ln.strip()]
             last_line = lines[-1] if lines else "(no output)"
             # Scrub the internal temp paths from the pipeline's detail line on
-            # EVERY path -- an INVALID draft (a common, expected outcome) exits
-            # 1 with the temp --out path in its message, and the failure detail
-            # must not leak internals the success path scrubs (Opus fallback
-            # review, PR #282). Same discipline as the dev endpoint.
+            # EVERY path -- an INVALID/store-with-issues draft (a common, expected
+            # outcome) names the temp --out path in its message, and the detail
+            # must not leak internals the clean path scrubs (Opus fallback review,
+            # PR #282). Same discipline as the dev endpoint.
             last_line = (last_line
                          .replace(str(out_path), schema_file)
                          .replace(str(tmp), "")
                          .replace(tmp_dir, ""))
-            if proc.returncode != 0 or not out_path.exists():
+
+            # Store-with-issues (bd v96b): the extractor's tri-state exit code
+            # distinguishes a usable-but-imperfect draft (EXIT_ISSUES=3 -> STORE
+            # it with its report) from no usable draft (EXIT_HARD_FAIL=1 -> 502).
+            # A crash exits with neither 0 nor 3. We ALSO re-derive the floor from
+            # the written draft (parseable + >=1 field) rather than trusting the
+            # exit code alone, so a mis-exit can never store garbage.
+            if not out_path.exists():
                 _log.error("editor_extract_failed", kit_id=kit_id,
                            exit_code=proc.returncode, detail=last_line[:400])
                 raise HTTPException(
@@ -825,12 +884,32 @@ async def extract_editor_kit(
                     status_code=502,
                     detail=f"Extractor wrote an unreadable schema: {exc}",
                 ) from exc
-            if not isinstance(schema, dict) or not isinstance(schema.get("fields"), list):
+            # The store-with-issues FLOOR: a dict with a NON-EMPTY fields list.
+            # Below the floor (no fields, wrong shape) there is nothing worth
+            # storing -- 502, matching the extractor's EXIT_HARD_FAIL.
+            if (not isinstance(schema, dict)
+                    or not isinstance(schema.get("fields"), list)
+                    or not schema.get("fields")):
+                _log.error("editor_extract_no_usable_draft", kit_id=kit_id,
+                           exit_code=proc.returncode, detail=last_line[:400])
                 raise HTTPException(
                     status_code=502,
-                    detail="Extractor produced a schema without a fields list",
+                    detail="Extractor produced no usable draft (a schema with at "
+                           "least one field is required)",
                 )
 
+            # Read the persisted dump (best-effort): it powers the widget-claim
+            # lint rule AND becomes the kit's acroform.json artifact. A missing
+            # dump degrades to the dump-less lint path (never fatal).
+            dump_data: Optional[dict] = None
+            if dump_out_path.exists():
+                try:
+                    dump_data = json.loads(dump_out_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                    dump_data = None
+
+            # Store the draft; then the dump artifact (best-effort -- a dump
+            # write failure must not fail an otherwise-good extraction).
             try:
                 await store.put_schema(kit_id, schema, schema_file)
             except FormKitStoreError as exc:
@@ -838,13 +917,33 @@ async def extract_editor_kit(
                     status_code=502, detail="Extraction succeeded but the schema "
                                             "could not be stored",
                 ) from exc
+            if isinstance(dump_data, dict):
+                try:
+                    await store.put_json_artifact(
+                        kit_id, dump_data, _ACROFORM_ARTIFACT
+                    )
+                except FormKitStoreError as exc:
+                    _log.warning("editor_extract_dump_store_failed",
+                                 kit_id=kit_id, error=str(exc))
+
+            # Lint the stored draft (dump-aware when we have it) so the response
+            # carries the counts the editor surfaces -- the SAME schema_lint the
+            # promotion gate uses, so store-with-issues and promote agree.
+            findings = lint_schema(schema, dump_data)
+            error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+            warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+            stored_with_issues = (
+                proc.returncode == _EXTRACT_EXIT_ISSUES or error_count > 0
+            )
 
             field_count = len(schema.get("fields", []))
-            # last_line was already scrubbed of temp paths above.
-            _log.info("editor_extract_done", kit_id=kit_id, fields=field_count, role=role)
+            _log.info("editor_extract_done", kit_id=kit_id, fields=field_count,
+                      role=role, errors=error_count, warnings=warning_count,
+                      stored_with_issues=stored_with_issues)
             return ExtractResponse(
                 ok=True, detail=last_line, schemaFile=schema_file,
-                fieldCount=field_count,
+                fieldCount=field_count, errorCount=error_count,
+                warningCount=warning_count, storedWithIssues=stored_with_issues,
             )
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)

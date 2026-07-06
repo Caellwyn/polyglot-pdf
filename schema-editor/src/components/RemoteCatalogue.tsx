@@ -238,7 +238,23 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       const instructionsPdf = instructionsPdfByKit[kit.id];
       const result = await extractRemoteKit(kit.id, { instructionsPdf });
       await refresh();
-      setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+      // Store-with-issues (bd v96b): a stored-but-imperfect draft surfaces its
+      // lint counts here so the author knows to open + repair it, rather than
+      // the old all-or-nothing "success"/error split.
+      if (result.storedWithIssues) {
+        const errs = result.errorCount ?? 0;
+        const warns = result.warningCount ?? 0;
+        const parts = [
+          errs ? `${errs} error${errs === 1 ? '' : 's'}` : '',
+          warns ? `${warns} warning${warns === 1 ? '' : 's'}` : '',
+        ].filter(Boolean).join(', ');
+        setNotice(
+          `Extracted "${kit.id}" with issues (${parts || 'needs review'}). ` +
+          `Open it to review and repair before marking complete.`,
+        );
+      } else {
+        setNotice(`Extracted "${kit.id}" -- ${result.detail}. Open it to review.`);
+      }
       setInstructionsPdfByKit((prev) => {
         const next = { ...prev };
         delete next[kit.id];

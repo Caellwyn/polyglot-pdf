@@ -280,6 +280,20 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
       expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
   });
 
+  it('store-with-issues extraction surfaces the lint counts (bd v96b)', async () => {
+    vi.mocked(extractRemoteKit).mockResolvedValue({
+      ok: true, detail: '[ISSUES] wrote schema.json -- 42 fields', fieldCount: 42,
+      storedWithIssues: true, errorCount: 3, warningCount: 1,
+    });
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() =>
+      expect(screen.getByText(/with issues \(3 errors, 1 warning\)/)).toBeInTheDocument());
+    expect(screen.getByText(/repair before marking complete/)).toBeInTheDocument();
+  });
+
   it('extraction failure surfaces the server detail', async () => {
     vi.mocked(extractRemoteKit).mockRejectedValue(
       new Error('Extraction failed (exit 1): model refused'),
