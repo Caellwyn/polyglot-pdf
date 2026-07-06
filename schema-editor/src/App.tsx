@@ -25,6 +25,7 @@ import {
   isHostedMode,
   loadRemotePdfBlobUrl,
   loadRemoteSchema,
+  loadUnclaimedWidgets,
   repairKit,
   saveRemoteSchema,
   type EditorRole,
@@ -590,6 +591,23 @@ export const App: React.FC = () => {
     }
   }, [hosted, selectedKitId, hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
 
+  // Fetch the open kit's unclaimed PDF button widgets for the FieldEditor's
+  // "Add from PDF widgets" picker (bd polyglot-pdf-nivy, P5.3c). Hosted + an open
+  // kit only; passed to the editor solely in author mode (see below), so a
+  // missing kit id here just yields nothing.
+  const handleLoadUnclaimedWidgets = React.useCallback(async () => {
+    if (!selectedKitId) return [];
+    try {
+      return await loadUnclaimedWidgets(selectedKitId);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        handleAuthExpired();
+        return [];
+      }
+      throw err; // the picker surfaces the message inline
+    }
+  }, [selectedKitId, handleAuthExpired]);
+
   // Get selected field
   const selectedField = React.useMemo(() => {
     if (!schema || !selectedFieldId) return null;
@@ -1011,6 +1029,14 @@ export const App: React.FC = () => {
                   onUpdateMetadata={handleUpdateMetadata}
                   onUpdateFields={handleUpdateFields}
                   authorTier={!hosted || role === 'author'}
+                  // The "Add from PDF widgets" picker (bd nivy) is hosted
+                  // author-tier on an open kit only -- the callback fetches that
+                  // kit's unclaimed widgets; absent otherwise (no backend dump).
+                  onLoadUnclaimedWidgets={
+                    hosted && role === 'author' && selectedKitId
+                      ? handleLoadUnclaimedWidgets
+                      : undefined
+                  }
                 />
               )}
             </div>

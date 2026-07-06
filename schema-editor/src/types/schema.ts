@@ -110,6 +110,11 @@ export interface FieldOption {
   // polyglot-pdf-s4dp.1) -- mirrors backend FieldOption.pdf_field_name
   // (backend/models/form_models.py) and the runtime FieldOption.
   pdf_field_name?: string;
+  // The PDF 'on' state name that selects this option (v2, bd h76m.3): for a
+  // shared-name radio group the kids share ONE field name and differ only by
+  // this state. Mirrors backend FieldOption.pdf_on_value. The widget picker (bd
+  // nivy) sets it from the dump's on_value so a picked box round-trips fillable.
+  pdf_on_value?: string;
   // Optional backend-side option metadata, kept so a load -> edit -> save
   // round-trip does not strip them (backend FieldOption.spoken_label /
   // label_translations).
