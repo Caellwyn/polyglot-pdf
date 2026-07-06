@@ -64,9 +64,11 @@ import fitz  # PyMuPDF
 
 # A shared-field radio on-state goes into a RAW /Name token; production
 # (pdf_fill_routes.py _PDF_NAME_UNSAFE, bd h76m.17) REFUSES to write one carrying
-# PDF-Name-unsafe characters, leaving the field unfilled. Mirror that exact
-# charset here so the harness scores an unsafe on-state the SAME way production
-# does (unfilled), not by writing a corrupt xref (bd polyglot-pdf-bvmu parity).
+# PDF-Name-unsafe characters, counting the field as skipped/unfilled. The harness
+# mirrors that exact charset AND its SCORING: an unsafe on-state is recorded in
+# run() as an attempted-but-unfilled write (stays in the denominator), never
+# dropped (which would make the field vanish and inflate the fill rate;
+# bd polyglot-pdf-bvmu).
 _PDF_NAME_UNSAFE = re.compile(r"[\s/#()<>\[\]{}%]")
 
 
@@ -255,13 +257,14 @@ def _target_widgets_for_field(field: dict) -> list[tuple[str, str]]:
             if sel.get("pdf_field_name"):
                 targets.append((sel["pdf_field_name"], "choice"))
             elif sel.get("pdf_on_value") and field.get("pdf_field_name"):
-                # Mirror production's refusal (pdf_fill_routes.py, bd h76m.17): an
-                # on-state with PDF-Name-unsafe chars is NOT written -- emit no
-                # target so the harness leaves it unfilled, exactly as production
-                # does, instead of writing a corrupt /Name token (bd bvmu).
-                if not _PDF_NAME_UNSAFE.search(sel["pdf_on_value"]):
-                    marker = f"{field['pdf_field_name']}\x00{sel['pdf_on_value']}"
-                    targets.append((marker, "choice_shared"))
+                # Emit the shared-radio target even when the on-state is
+                # PDF-Name-unsafe: the unsafe case is handled in run() as an
+                # ATTEMPTED-but-unfilled write (production refuses it and counts
+                # the field as skipped/unfilled -- it stays in the denominator),
+                # NOT by dropping the target here (which would make the field
+                # VANISH from scoring and inflate the fill rate; bd bvmu).
+                marker = f"{field['pdf_field_name']}\x00{sel['pdf_on_value']}"
+                targets.append((marker, "choice_shared"))
     elif ftype in ("checkbox", "checkbox_group"):
         if opts:
             selected = set(val or [])
@@ -358,6 +361,19 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
                 # shares the same field_name, so name-only would grab the
                 # wrong sibling).
                 shared_field, on_state = widget_name.split("\x00", 1)
+                # Production (pdf_fill_routes.py _PDF_NAME_UNSAFE, bd h76m.17)
+                # REFUSES to write an on-state carrying PDF-Name-unsafe chars,
+                # counting the field as skipped/unfilled. Mirror the SCORING, not
+                # just the refusal: record an ATTEMPTED-but-unfilled write (like
+                # the widget-not-found path below) so the field stays in the
+                # denominator -- dropping the target instead would make it vanish
+                # and inflate the fill rate (bd polyglot-pdf-bvmu, fresh-eyes r2).
+                if _PDF_NAME_UNSAFE.search(on_state):
+                    attempts.append({"field_id": fid, "field_type": ftype,
+                                     "widget": f"{shared_field}[on={on_state}]",
+                                     "kind": kind, "found": False,
+                                     "refused_unsafe_on_state": True})
+                    continue
                 widget, page = _find_widget_by_state(doc, shared_field, on_state)
                 rec = {"field_id": fid, "field_type": ftype,
                        "widget": f"{shared_field}[on={on_state}]",
@@ -491,10 +507,16 @@ def run(schema_path: str, pdf_path: str, verbose: bool = False) -> dict:
         rw = a.get("resolved_widget")
         ok = bool(rw and verified.get(rw))
         if not ok:
+            if a.get("refused_unsafe_on_state"):
+                reason = "refused_unsafe_on_state"  # production skips this too
+            elif not a["found"]:
+                reason = "widget_not_found"
+            else:
+                reason = "value_not_set"
             failures.append({
                 "field_id": a["field_id"], "field_type": a["field_type"],
                 "widget": a["widget"], "kind": a["kind"],
-                "reason": "widget_not_found" if not a["found"] else "value_not_set",
+                "reason": reason,
             })
 
     value_conv = score_value_convention(schema)

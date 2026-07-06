@@ -214,13 +214,21 @@ def test_target_widgets_shared_radio_missing_field_level_name_yields_nothing():
     assert rf._target_widgets_for_field(field) == []
 
 
-def test_target_widgets_shared_radio_unsafe_on_state_yields_nothing():
+def test_shared_radio_unsafe_on_state_scores_attempted_but_unfilled(tmp_path):
     """Production (pdf_fill_routes.py _PDF_NAME_UNSAFE, bd h76m.17) REFUSES to
-    write a shared-radio on-state carrying PDF-Name-unsafe chars, leaving the
-    field unfilled. The harness must mirror that -- emit NO target for the
-    unsafe on-state -- so it scores the same (unfilled), not by writing a
-    corrupt /Name token (bd polyglot-pdf-bvmu parity). synth_value picks
-    options[0], so its on-value 'has space/slash' is the one under test."""
+    write a shared-radio on-state carrying PDF-Name-unsafe chars, counting the
+    field as skipped/UNFILLED (it stays in the denominator). The harness must
+    mirror that SCORING: the unsafe on-state is an ATTEMPTED-but-unfilled write,
+    NOT a vanished field. Dropping it from the denominator would inflate the
+    fill rate and hide exactly the fill defect the harness exists to surface
+    (bd polyglot-pdf-bvmu, fresh-eyes r2). synth_value picks options[0], so its
+    unsafe on-value 'has space/slash' is the one under test.
+
+    We drive run() against the same synthetic shared-radio PDF (its kids carry
+    on-states '1'/'2', so the unsafe '/'-bearing state resolves to no writable
+    kid anyway -- but the POINT is the field must still be counted as an unfilled
+    attempt, matching production's skipped accounting)."""
+    pdf_path = _synthetic_shared_radio_pdf_path(tmp_path)
     field = {
         "id": "marital",
         "type": "radio",
@@ -230,7 +238,36 @@ def test_target_widgets_shared_radio_unsafe_on_state_yields_nothing():
             {"value": "married", "label": "Married", "pdf_on_value": "2"},
         ],
     }
-    assert rf._target_widgets_for_field(field) == []
+    schema_path = tmp_path / "unsafe_shared_radio_schema.json"
+    schema_path.write_text(json.dumps({"fields": [field]}), encoding="utf-8")
+
+    result = rf.run(str(schema_path), str(pdf_path), verbose=True)
+
+    choice = result["choice_fill_success"]
+    # In the denominator (attempted), NOT vanished; and NOT counted filled.
+    assert choice["attempted"] == 1
+    assert choice["filled"] == 0
+    assert choice["pct"] == 0.0
+    # Reported as a refusal, matching production's skip -- not silently dropped.
+    assert result["failures"]
+    assert result["failures"][0]["reason"] == "refused_unsafe_on_state"
+
+
+def test_target_widgets_shared_radio_unsafe_on_state_still_emits_target():
+    """The unsafe on-state must NOT be filtered out at target-selection time
+    (that would make the field vanish from scoring). It is emitted here and
+    handled as an unfilled attempt in run() -- see the run()-level test above."""
+    field = {
+        "id": "marital",
+        "type": "radio",
+        "pdf_field_name": "grp[0]",
+        "options": [
+            {"value": "single", "label": "Single", "pdf_on_value": "has space/slash"},
+        ],
+    }
+    targets = rf._target_widgets_for_field(field)
+    assert len(targets) == 1
+    assert targets[0][1] == "choice_shared"
 
 
 # --------------------------------------------------------------------------- #

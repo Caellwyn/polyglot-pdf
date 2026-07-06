@@ -51,19 +51,36 @@ gold, which is still v1 -- schema_version None, type "checkbox" not
 criterion is about the FILLER logic, which the synthetic v2 fields exercise
 directly. Full backend+harness suite 1596 passed / 3 skipped.
 
-## Fresh-eyes finding (adopted): the _PDF_NAME_UNSAFE parity gap
+## Fresh-eyes findings (adopted over two rounds): the _PDF_NAME_UNSAFE parity gap
 
-The pre-PR Opus assess caught a real, in-scope parity gap the first cut missed:
+Two Opus assess rounds, each catching a real gap:
+
+**Round 1** caught that the harness had no `_PDF_NAME_UNSAFE` guard at all:
 production's shared-radio write path (pdf_fill_routes.py `_PDF_NAME_UNSAFE`, bd
 h76m.17) REFUSES to write an on-state carrying PDF-Name-unsafe chars
-(`[\s/#()<>\[\]{}%]`), leaving the field unfilled -- but the harness had no such
-guard, so an unsafe `pdf_on_value` (e.g. "has space/slash", production's own
-test case) would be attempted by the harness while production skips it -> the
-two scorers DISAGREE, defeating the harness's purpose. Fixed by mirroring the
-exact `_PDF_NAME_UNSAFE` regex + skipping the target (emitting nothing, so it
-scores unfilled) in `_target_widgets_for_field`, matching production's
-`continue`. +1 test asserting an unsafe on-state yields no target. (7 tests
-total now.)
+(`[\s/#()<>\[\]{}%]`), counting the field as skipped/unfilled -- but the harness
+would attempt/write it, so the two scorers DISAGREE, defeating the harness's
+purpose.
+
+**Round 2** caught that my round-1 fix mirrored the REFUSAL but not the SCORING:
+I skipped emitting the target for an unsafe on-state, which made the field
+VANISH from the denominator entirely (not "unfilled" -- ABSENT). Probe:
+safe-field + unsafe-shared-radio scored 100% in the harness where production
+fills 50% -- the harness reported a HIGHER score than reality, hiding exactly
+the fill defect it exists to surface. Production's refusal is `skipped_count +=
+1` (in the denominator); "emit nothing" is `attempted == 0` (out of it). The two
+production-identical outcomes were scored oppositely.
+
+**Final fix:** the unsafe on-state STILL emits the `choice_shared` target; the
+`_PDF_NAME_UNSAFE` check moved into `run()`, where it records an
+ATTEMPTED-but-unfilled write (a `found:False` + `refused_unsafe_on_state:True`
+attempt, no `resolved_widget`), exactly like the widget-not-found sibling -- so
+`tally()` counts it in `attempted` but never in `filled`, matching production's
+skipped/unfilled accounting. `failures` reports `reason:
+"refused_unsafe_on_state"`. The test now drives `run()` and asserts
+`attempted==1, filled==0, pct==0.0` (in the denominator, not vanished) plus a
+target-emission test (the guard must NOT filter at target-selection time). 8
+tests total.
 
 ## Note (subagent process hiccup, not a work defect)
 
