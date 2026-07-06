@@ -25,7 +25,21 @@ vi.mock('./components/PDFViewer', () => ({
   ),
 }));
 vi.mock('./components/FieldList', () => ({ FieldList: () => <div data-testid="list" /> }));
-vi.mock('./components/ValidationPanel', () => ({ ValidationPanel: () => <div data-testid="vp" /> }));
+// The panel mock exposes a "repair" button that fires onRepairAll (when the host
+// provides it) so App's handleRepairAll wiring is testable through the full tree
+// (bd zgln; fresh-eyes: an isolation test of the panel does not cover App's
+// wiring to it). data-has-repair reflects whether the host passed the callback.
+vi.mock('./components/ValidationPanel', () => ({
+  ValidationPanel: ({ onRepairAll }: { onRepairAll?: () => Promise<void> }) => (
+    <div data-testid="vp" data-has-repair={onRepairAll ? 'yes' : 'no'}>
+      {onRepairAll && (
+        <button data-testid="repair-all" onClick={() => void onRepairAll()}>
+          repair
+        </button>
+      )}
+    </div>
+  ),
+}));
 // FieldEditor is mocked with an edit button so a test can dirty the schema.
 vi.mock('./components/FieldEditor', () => ({
   FieldEditor: ({ onUpdateField, field }: {
@@ -67,13 +81,14 @@ vi.mock('./utils/remoteKitStore', async (importOriginal) => {
     loadRemotePdfBlobUrl: vi.fn(),
     saveRemoteSchema: vi.fn(),
     setRemoteStatus: vi.fn(),
+    repairKit: vi.fn(),
   };
 });
 
 import { App } from './App';
 import {
   AuthError, clearAccessCode, isHostedMode, listRemoteKits,
-  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, saveRemoteSchema,
+  loadRemotePdfBlobUrl, loadRemoteSchema, probeSession, repairKit, saveRemoteSchema,
 } from './utils/remoteKitStore';
 
 beforeEach(() => {
@@ -170,6 +185,49 @@ describe('App hosted mode (bd 92qe.2)', () => {
     // The header reflects the persisted state.
     await waitFor(() =>
       expect(screen.getByText(/Saved to the shared workspace/)).toBeInTheDocument());
+  });
+
+  it('author Repair-all repairs the kit then reloads the repaired schema (bd zgln)', async () => {
+    vi.mocked(probeSession).mockResolvedValue({ role: 'author' });
+    vi.mocked(repairKit).mockResolvedValue({
+      applied: 2, dropped: 0, aliasHits: 1, repairs: [], errorCount: 0, warningCount: 0,
+    });
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('vp')).toBeInTheDocument());
+    // The host passed onRepairAll (author tier on an open kit).
+    expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('yes');
+
+    vi.mocked(loadRemoteSchema).mockClear();
+    fireEvent.click(screen.getByTestId('repair-all'));
+    await waitFor(() => expect(repairKit).toHaveBeenCalledWith('draft-kit'));
+    // The repaired schema is reloaded from the store after the repair.
+    await waitFor(() => expect(loadRemoteSchema).toHaveBeenCalledWith('draft-kit'));
+  });
+
+  it('editor tier gets NO Repair-all callback (author-only)', async () => {
+    vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('vp')).toBeInTheDocument());
+    expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('no');
+    expect(screen.queryByTestId('repair-all')).toBeNull();
+  });
+
+  it('a repair AuthError re-gates without destroying the open kit', async () => {
+    vi.mocked(probeSession).mockResolvedValue({ role: 'author' });
+    vi.mocked(repairKit).mockRejectedValue(new AuthError());
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));
+    await waitFor(() => expect(screen.getByTestId('repair-all')).toBeInTheDocument());
+    // A dead code mid-repair drops back to the access gate (probeSession still
+    // resolves author here, so the gate would re-open; assert the re-prompt).
+    vi.mocked(probeSession).mockRejectedValue(new AuthError());
+    fireEvent.click(screen.getByTestId('repair-all'));
+    await screen.findByLabelText('Access code');
   });
 
   it('hosted mode never calls the File System Access pickers', async () => {
