@@ -44,7 +44,15 @@ A research finding + the analysis tooling to reach it (no runtime code changed):
   cost-per-form with a saturating-ramp model. Reuses `cml.RATES` for pricing.
 - **`scripts/spikes/ctu8_window_findings.md`** (new): the product-owner writeup.
 
-Fresh-eyes assess: (recorded at closeout).
+Fresh-eyes assess (pre-PR, 3 rounds to NO-GAPS): round 1 caught two honesty
+gaps -- the headline "$1.15 vs $2.32" compared happy-path-only window cost
+against the 80/20-mix section baseline (now disclosed as not apples-to-apples;
+follow-up bd 90zr filed to measure an unhappy-path run), and the analyzer
+docstring overclaimed reuse of `window_cost_curve` (only RATES is reused).
+Round 2 caught that the docstring fix was partial (opening summary still
+contradicted the detail); round 3 confirmed the reworded docstring is
+consistent and NO-GAPS. The window-3500 recommendation itself was unchanged
+through all rounds -- only the cost-advantage framing was hedged.
 
 Spend discipline: built + validated the whole pipeline on the 5 already-committed
 runs (zero API cost), then spent ONE new live run (~$0.65) to add the 3000 point.
