@@ -1,0 +1,1085 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90",
+  "arm": "dti",
+  "path": "happy",
+  "questions": 34,
+  "compression": true,
+  "trigger": 5000,
+  "window": 3000,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260706T044639Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.218
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.125
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.109
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.156
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.75
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 8,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.266
+    },
+    {
+      "q": 9,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.234
+    },
+    {
+      "q": 11,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.235
+    },
+    {
+      "q": 12,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.172
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.235
+    },
+    {
+      "q": 13,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.266
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 14,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.688
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.641
+    },
+    {
+      "q": 15,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.203
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.188
+    },
+    {
+      "q": 16,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 19,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 19,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 20,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 20,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 21,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 21,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 22,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 22,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 23,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 23,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 29,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 29,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 30,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 30,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 31,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 31,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 32,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 32,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 33,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 33,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 34,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 34,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "3": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "4": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "6": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "7": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "8": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "9": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "10": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "11": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "12": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "13": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "14": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "15": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "16": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "17": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "18": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "19": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "20": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "21": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "22": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "23": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "24": [
+      "update_form_fields",
+      "confirm_field",
+      "switch_section",
+      "update_form_fields",
+      "confirm_field",
+      "confirm_field",
+      "switch_section"
+    ],
+    "25": [
+      "switch_section",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "confirm_field",
+      "switch_section"
+    ],
+    "26": [
+      "switch_section",
+      "switch_section"
+    ],
+    "27": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "confirm_field",
+      "confirm_field",
+      "switch_section",
+      "confirm_field",
+      "switch_section"
+    ],
+    "28": [
+      "switch_section",
+      "switch_section"
+    ],
+    "29": [
+      "switch_section",
+      "switch_section"
+    ],
+    "30": [
+      "switch_section",
+      "switch_section"
+    ],
+    "31": [
+      "switch_section",
+      "switch_section"
+    ],
+    "32": [
+      "switch_section",
+      "switch_section"
+    ],
+    "33": [
+      "switch_section",
+      "switch_section"
+    ],
+    "34": [
+      "switch_section",
+      "switch_section"
+    ]
+  },
+  "prompt_curve": [
+    1102,
+    1418,
+    1475,
+    1630,
+    1823,
+    2182,
+    2247,
+    2419,
+    2550,
+    2702,
+    2755,
+    2872,
+    3001,
+    3120,
+    3172,
+    3264,
+    3401,
+    3513,
+    3567,
+    3657,
+    3914,
+    4086,
+    4137,
+    4258,
+    4386,
+    4575,
+    4633,
+    4735,
+    4868,
+    2834,
+    2893,
+    3008,
+    3199,
+    3305,
+    3369,
+    3510,
+    3609,
+    3779,
+    3839,
+    3935,
+    4067,
+    4185,
+    4239,
+    4331,
+    2855,
+    2920,
+    2970,
+    3059,
+    3199,
+    3349,
+    3403,
+    3519,
+    3644,
+    3829,
+    3878,
+    4031,
+    4130,
+    4181,
+    4296,
+    4463,
+    4514,
+    4614,
+    4751,
+    2868,
+    2921,
+    3113,
+    3175,
+    3228,
+    3368,
+    3465,
+    3522,
+    3654,
+    3712,
+    3765,
+    4363,
+    4404,
+    4453,
+    4593,
+    4655,
+    4704,
+    4829,
+    4896,
+    2885,
+    3038,
+    3110,
+    3161,
+    3276,
+    3363,
+    3412,
+    3564,
+    3611,
+    3662,
+    3824,
+    3875,
+    4008,
+    4037,
+    4092,
+    4218,
+    4281,
+    4334,
+    4464,
+    4584,
+    4637,
+    4767,
+    4834,
+    4887,
+    2861,
+    2994,
+    3047,
+    3230,
+    3297,
+    3350,
+    3516,
+    3665,
+    3714,
+    3778,
+    3849,
+    3921,
+    3990,
+    4104,
+    4218,
+    4293,
+    4365,
+    4447,
+    4517,
+    4585,
+    4676,
+    4745,
+    4857,
+    2837,
+    2918,
+    2990,
+    3071,
+    3143,
+    3214,
+    3282,
+    3373,
+    3443,
+    3532,
+    3646,
+    3749,
+    3863,
+    3982,
+    4040,
+    4131,
+    4226,
+    4284,
+    4355,
+    4415,
+    4507,
+    4565,
+    4636,
+    4696
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "system_instruction_chars": 4010,
+  "greeting_tokens": 1237,
+  "eviction_drops": [
+    [
+      30,
+      4868,
+      2834
+    ],
+    [
+      45,
+      4331,
+      2855
+    ],
+    [
+      64,
+      4751,
+      2868
+    ],
+    [
+      83,
+      4896,
+      2885
+    ],
+    [
+      107,
+      4887,
+      2861
+    ],
+    [
+      130,
+      4857,
+      2837
+    ]
+  ],
+  "client_confirmed_fields": [
+    "p1_line1_aliennumber",
+    "p1_line2_acctidentifier",
+    "p1_line3a_familyname",
+    "p1_line3b_givenname",
+    "p1_line3c_middlename",
+    "p1_checkbox4",
+    "p1_line6a_incareofname",
+    "p1_line6b_streetnumbername",
+    "p1_unit_type6c_unit",
+    "p1_line6c_aptsteflrnumber",
+    "p1_line6d_cityortown",
+    "p1_line6e_state",
+    "p1_line6f_zipcode",
+    "p1_line6g_province",
+    "p1_line6h_postalcode",
+    "p1_line6i_country",
+    "p1_line7a_streetnumbername",
+    "p1_unit_type7b_unit",
+    "p1_line7b_aptsteflrnumber",
+    "p1_line7c_cityortown",
+    "p1_line7d_state",
+    "p1_line7e_zipcode",
+    "p1_line7f_province",
+    "p1_line7g_postalcode",
+    "p1_line7h_country",
+    "p1_line8_male",
+    "p1_line9_dateofbirth",
+    "p1_line10_citytownofbirth",
+    "p1_line11_countryofbirth",
+    "p1_line12_mothergivenname",
+    "p1_line13_fathergivenname",
+    "p1_line14_classofadmission",
+    "p1_line15_dateofadmission",
+    "p1_line16_ssn"
+  ],
+  "fill_accuracy": {
+    "matched": 16,
+    "total": 34,
+    "accuracy": 0.4706,
+    "detail": [
+      {
+        "field_id": "p1_line1_aliennumber",
+        "expected": "12345678",
+        "written": "12345678",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line2_acctidentifier",
+        "expected": "123456789012",
+        "written": "123456789012",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3a_familyname",
+        "expected": "Vasquez",
+        "written": "Vazquez",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3b_givenname",
+        "expected": "Maria",
+        "written": "Maria",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3c_middlename",
+        "expected": "Elena",
+        "written": "Elena",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_checkbox4",
+        "expected": "P1_checkbox4[1]",
+        "written": "P1_checkbox4[1]",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6a_incareofname",
+        "expected": "Daniel Vasquez",
+        "written": "Daniel Vazquez",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6b_streetnumbername",
+        "expected": "1234 Maple Street",
+        "written": "1234 Maple Street",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_unit_type6c_unit",
+        "expected": "P1_checkbox6c_Unit[0]",
+        "written": "P1_checkbox6c_Unit[0]",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6c_aptsteflrnumber",
+        "expected": "12B",
+        "written": "12B",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6d_cityortown",
+        "expected": "Austin",
+        "written": "Austin",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6e_state",
+        "expected": "TX",
+        "written": "TX",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6f_zipcode",
+        "expected": "73701",
+        "written": "73701",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6g_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6h_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6i_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line7a_streetnumbername",
+        "expected": "1234 Maple Street",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_unit_type7b_unit",
+        "expected": "P1_checkbox7b_Unit[0]",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7b_aptsteflrnumber",
+        "expected": "12B",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7c_cityortown",
+        "expected": "Austin",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7d_state",
+        "expected": "TX",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7e_zipcode",
+        "expected": "73701",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7h_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "",
+        "ok": false,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line8_male",
+        "expected": "P1_Line8_female[0]",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line9_dateofbirth",
+        "expected": "03/05/1990",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line10_citytownofbirth",
+        "expected": "Guadalajara",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line11_countryofbirth",
+        "expected": "Mexico",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line12_mothergivenname",
+        "expected": "Rosa",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line13_fathergivenname",
+        "expected": "Carlos",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line14_classofadmission",
+        "expected": "IR6",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line15_dateofadmission",
+        "expected": "06/10/2015",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line16_ssn",
+        "expected": "123456789",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      }
+    ]
+  },
+  "field_value_lookups": []
+}
