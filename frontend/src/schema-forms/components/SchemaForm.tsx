@@ -25,6 +25,12 @@ import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
 import { isTestHarnessEnabled } from "../../shared/config";
+import { isPreviewUiEnabled } from "../../pdf-view/featureFlag";
+
+// Lazy chunk boundary: pdfjs-dist and everything else in pdf-view/ load only
+// when this component actually renders -- which requires the preview flag ON
+// plus a click. Flag off (the default) fetches nothing new (epic js7q gating).
+const FilledPreviewModal = React.lazy(() => import("../../pdf-view/FilledPreviewModal"));
 
 export interface SchemaFormProps {
   schema: FormSchema;
@@ -48,6 +54,11 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   // PDF download/print state
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
   const [isPrintingPDF, setIsPrintingPDF] = useState(false);
+
+  // Preview-mode UI gate (epic js7q): resolved once per mount; every new UI
+  // surface of the preview epic renders only when this is true.
+  const [previewUiEnabled] = useState(() => isPreviewUiEnabled());
+  const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
@@ -590,11 +601,36 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             >
               {isDownloadingPDF ? '⏳ Generating PDF...' : '📄 Download Filled PDF'}
             </button>
+            {previewUiEnabled && (
+              <button
+                type="button"
+                onClick={() => setShowPDFPreview(true)}
+                disabled={isDownloadingPDF || isPrintingPDF}
+                className="schema-form__download-button"
+                style={{ backgroundColor: '#6c757d' }}
+              >
+                Preview Filled PDF
+              </button>
+            )}
           </div>
           <p className="schema-form__download-help">
             Print or download a PDF with all your current answers filled in. You can continue editing the form after printing/downloading.
           </p>
         </div>
+      )}
+
+      {/* True filled-PDF preview (flag-gated, epic js7q): the modal fills via
+          the same /api/fill-pdf call as download/print and renders the bytes. */}
+      {previewUiEnabled && showPDFPreview && pdfUrl && (
+        <React.Suspense fallback={null}>
+          <FilledPreviewModal
+            kitId={kitId}
+            pdfUrl={pdfUrl}
+            schema={state.schema}
+            fieldValues={state.fieldValues}
+            onClose={() => setShowPDFPreview(false)}
+          />
+        </React.Suspense>
       )}
 
       {/* Voice Overlay - Render mobile or desktop based on screen size */}
