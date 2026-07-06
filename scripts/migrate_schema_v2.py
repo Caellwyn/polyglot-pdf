@@ -204,9 +204,12 @@ def _fold_behavior(f: Dict[str, Any]) -> bool:
 
     Keeps unlock_method + pdf_field_flag_change (the read sub-keys); drops any
     other sub-key (e.g. show_method, no reader). Returns True if anything changed.
-    conditional_behavior wins on a key conflict EXCEPT pdf_field_flag_change,
-    which lives only on conditional_logic in the i-90 gold (the behavior copy
-    lacks it) -- so the fold is what makes the unlock actually fillable.
+    conditional_LOGIC wins on a key conflict (the merge iterates (cl, cb) with
+    first-writer-wins). This is moot on the i-90 gold -- the two containers never
+    disagree on a kept key there (verified: 0 value conflicts across the 16 fields
+    carrying both) -- and it is the right precedence anyway: the full descriptor
+    (pdf_field_flag_change) lives only on conditional_logic in the gold, so the
+    fold is what makes the unlock actually fillable.
     """
     cl = f.get("conditional_logic")
     cb = f.get("conditional_behavior")
