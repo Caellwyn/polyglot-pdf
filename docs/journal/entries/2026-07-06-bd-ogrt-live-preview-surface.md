@@ -46,7 +46,24 @@ an unconfirmed fill blue; current field orange); a `schemaFormStateChange`
 while IN Preview mode repaints without reload; `copy_to` mirror fields paint
 on later pages; 782 FE tests pass.
 
-Fresh-eyes assess outcome: (folded in after the Step-5.5 loop).
+Fresh-eyes assess outcome: round 1 (sonnet, arm B picker) GAPS-FOUND(3), all
+three correct and ADOPTED: (1) `fillStateFor` missed empty-array -- a cleared
+checkbox_group painted filled/confirmed (now `[]` = empty, matching
+validation.ts's convention, with new fillState.test.ts pinning it); (2) the
+"once per mount" QA log actually re-fired per fill because `state.schema` gets
+a fresh object identity on every state reload (deps now deliberately empty);
+(3) `currentFieldId` was never cleared, leaving a confirmed field stuck orange
+after the last hint (now confirmed clears the marker). It also filed
+`polyglot-pdf-jq17` out-of-scope (single-option checkbox on f1040/w7 paints
+the label instead of an X glyph; zero such fields on the i-90). All fixes
+re-verified live. Final Opus clearing round: NO-GAPS -- it actively attacked
+per-fill canvas render cost (PDFPage effect deps stable across fills -- only
+the cheap overlay layer re-renders), coordinate alignment, the id-space of the
+next-field hint, and the confirmed-clears effect (no loop; a one-frame orange
+flash on same-step fill+confirm is cosmetic). Its three residual notes
+(signature data-URL would paint as text -- unreachable today; a string 'false'
+checkbox would border blue with no X -- not a live path; the flash) are
+recorded here as accepted polish debt for the epic's later beads.
 
 ## Lessons
 
