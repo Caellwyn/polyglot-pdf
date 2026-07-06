@@ -25,7 +25,9 @@ AcroForm widget name, the one thing both schemas derive from the same PDF), usin
 the same exact-then-endswith logic the production filler uses
 (backend/routes/pdf_fill_routes.py). For radio/checkbox fields whose name lives on
 their options, we match on the set of option-level pdf_field_names. Fields with no
-PDF name at all (rare; table sub-columns) fall back to a (section, name) fuzzy key.
+PDF name at all (rare; table sub-columns) fall back to a (section, name) fuzzy key,
+then to a section-id-free name-only key so a renamed-section draft still pairs them
+(bd polyglot-pdf-zb55).
 
 ASCII-only (cp1252 safe). Usage:
 
@@ -115,6 +117,19 @@ def _fuzzy_key(f: dict[str, Any]) -> str:
     return _norm_text(f.get("section_id")) + "||" + _norm_text(f.get("name"))
 
 
+def _name_key(f: dict[str, Any]) -> str:
+    """Section-id-free fuzzy key: the field name alone (bd polyglot-pdf-zb55).
+
+    Pass 3's key. `_fuzzy_key` bakes in section_id, so a PDF-less field with the
+    same name but a RENAMED section (e.g. I-589 table/static/supplement fields --
+    ~6 of 303 on i-589, 0 on i-90) goes unmatched, which then leaves the
+    naming-agnostic section-GROUPING metric n/a for exactly the fields it means to
+    grade. Matching PDF-less-to-PDF-less on name alone rescues those fields so a
+    renamed-section draft can still be graded on grouping.
+    """
+    return _norm_text(f.get("name"))
+
+
 # --------------------------------------------------------------------------- #
 # Field matching (extractor-id-agnostic)
 # --------------------------------------------------------------------------- #
@@ -134,6 +149,13 @@ def match_fields(truth: list[dict], draft: list[dict]) -> MatchResult:
              scanned among still-unused draft fields -- the production filler's
              exact-then-endswith rule, robust to colliding leaf names.
     Pass 2:  fuzzy (section, name) for whatever still has no PDF-name match.
+    Pass 3:  section-id-FREE fuzzy name for the PDF-less remainder (bd
+             polyglot-pdf-zb55): a field with no pdf_field_name on either side
+             matches on name alone, so a draft that RENAMED the section still
+             pairs name-identical PDF-less fields -- otherwise the naming-agnostic
+             grouping metric leaks section_id through the matcher and goes n/a for
+             exactly those fields. Restricted to PDF-less-vs-PDF-less so it can
+             never override a real pdf_field_name pairing from Pass 1/2.
     Each draft field is consumed at most once (`draft_used`).
     """
     res = MatchResult()
@@ -174,6 +196,7 @@ def match_fields(truth: list[dict], draft: list[dict]) -> MatchResult:
             leftover_truth.append(t)
 
     # Pass 2: fuzzy (section, name) for the remainder.
+    leftover_after_fuzzy: list[dict] = []
     for t in leftover_truth:
         tk = _fuzzy_key(t)
         best_i, best_score = None, 0.0
@@ -181,6 +204,35 @@ def match_fields(truth: list[dict], draft: list[dict]) -> MatchResult:
             if used:
                 continue
             score = SequenceMatcher(None, tk, _fuzzy_key(draft[i])).ratio()
+            if score > best_score:
+                best_i, best_score = i, score
+        if best_i is not None and best_score >= 0.85:
+            draft_used[best_i] = True
+            res.pairs.append((t, draft[best_i]))
+        else:
+            leftover_after_fuzzy.append(t)
+
+    # Pass 3: section-id-free fuzzy name, PDF-less-vs-PDF-less only (bd zb55).
+    # Only reached by fields with no pdf_field_name (a field WITH a pfn that got
+    # here genuinely has no widget-name match, and matching it on name alone --
+    # ignoring the pdf_field_name it DOES have -- would be a false pair). Same
+    # SequenceMatcher>=0.85 bar as Pass 2, applied to the name key alone.
+    for t in leftover_after_fuzzy:
+        if _field_pfns(t):  # has a PDF name -> not a Pass-3 candidate
+            res.unmatched_truth.append(t)
+            continue
+        tk = _name_key(t)
+        if not tk:  # no name to match on -> can't pair (avoid ""=="" ratio 1.0)
+            res.unmatched_truth.append(t)
+            continue
+        best_i, best_score = None, 0.0
+        for i, used in enumerate(draft_used):
+            if used or draft_pfns[i]:  # skip used + draft fields that HAVE a pfn
+                continue
+            dk = _name_key(draft[i])
+            if not dk:
+                continue
+            score = SequenceMatcher(None, tk, dk).ratio()
             if score > best_score:
                 best_i, best_score = i, score
         if best_i is not None and best_score >= 0.85:

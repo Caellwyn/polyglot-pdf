@@ -181,3 +181,94 @@ def test_over_grouping_penalty_is_applicable_to_the_headline():
     assert sg["applicable"] > 0       # ...and it COUNTS toward the headline
     # _attr_avg's own filter would now include it (truthy applicable + non-nan pct).
     assert sg["applicable"] and sg["pct"] == sg["pct"]
+
+
+# --------------------------------------------------------------------------- #
+# Pass 3: section-id-free name fallback for PDF-less fields (bd polyglot-pdf-zb55)
+# --------------------------------------------------------------------------- #
+
+def test_pdfless_renamed_section_field_matches_on_name_alone():
+    # The zb55 case: a PDF-less field (no pdf_field_name, no option pfns) with the
+    # same name but a RENAMED section. Pass 2's (section, name) fuzzy key would
+    # miss it because the section half diverges; Pass 3 matches on name alone.
+    truth = [
+        {"id": "t", "name": "Supplement continuation line", "type": "text",
+         "section_id": "part_5_supplement"},
+    ]
+    draft = [
+        {"id": "d", "name": "Supplement continuation line", "type": "text",
+         "section_id": "COMPLETELY_DIFFERENT_SECTION_ID"},
+    ]
+    match = schema_score.match_fields(truth, draft)
+    assert len(match.pairs) == 1
+    assert match.pairs[0][0]["id"] == "t" and match.pairs[0][1]["id"] == "d"
+    assert not match.unmatched_truth
+    assert not match.unmatched_draft
+
+
+def test_pass3_does_not_poach_a_field_that_has_a_pdf_name():
+    # A truth field WITH a pdf_field_name that found no widget match must NOT be
+    # rescued by Pass 3 on name alone -- that would ignore the widget name it
+    # genuinely has. Sections differ so Pass 2's (section, name) fuzzy key also
+    # misses (isolating the Pass-3 pfn-guard); it stays unmatched (a true miss).
+    truth = [
+        {"id": "t", "name": "Alien Number", "type": "text",
+         "pdf_field_name": "form1.p1.aliennumber[0]", "section_id": "gold_sec"},
+    ]
+    draft = [
+        {"id": "d", "name": "Alien Number", "type": "text",
+         "section_id": "COMPLETELY_DIFFERENT"},
+    ]
+    match = schema_score.match_fields(truth, draft)
+    assert match.pairs == []
+    assert [t["id"] for t in match.unmatched_truth] == ["t"]
+    assert [d["id"] for d in match.unmatched_draft] == ["d"]
+
+
+def test_pass3_does_not_poach_when_draft_has_a_pdf_name():
+    # Symmetric guard: a PDF-less TRUTH field must not be rescued by Pass 3 onto a
+    # draft field that HAS a pdf_field_name (Pass 3 is PDF-less-vs-PDF-less only).
+    # Sections differ so Pass 2 misses too, isolating the Pass-3 guard.
+    truth = [
+        {"id": "t", "name": "Table cell", "type": "text", "section_id": "gold_sec"},
+    ]
+    draft = [
+        {"id": "d", "name": "Table cell", "type": "text",
+         "pdf_field_name": "form1.p2.cell[0]", "section_id": "COMPLETELY_DIFFERENT"},
+    ]
+    match = schema_score.match_fields(truth, draft)
+    assert match.pairs == []
+    assert [t["id"] for t in match.unmatched_truth] == ["t"]
+    assert [d["id"] for d in match.unmatched_draft] == ["d"]
+
+
+def test_pass3_empty_names_do_not_spuriously_match():
+    # Two PDF-less fields both with empty names must NOT pair (SequenceMatcher on
+    # "" vs "" is 1.0; the empty-key guard prevents manufacturing that match).
+    truth = [{"id": "t", "name": "", "type": "text", "section_id": "S1"}]
+    draft = [{"id": "d", "name": "", "type": "text", "section_id": "S2"}]
+    match = schema_score.match_fields(truth, draft)
+    assert match.pairs == []
+    assert [t["id"] for t in match.unmatched_truth] == ["t"]
+    assert [d["id"] for d in match.unmatched_draft] == ["d"]
+
+
+def test_pass3_rescue_makes_grouping_metric_gradable():
+    # End-to-end: a PDF-less pair the gold co-sections, matched only via Pass 3,
+    # now contributes to the section-GROUPING metric instead of leaving it n/a.
+    # Two PDF-less fields, same names, same gold section, renamed draft section
+    # (but both draft fields share that renamed section -> partition preserved).
+    truth = [
+        {"id": "t1", "name": "Line 1", "type": "text", "section_id": "gold_sec"},
+        {"id": "t2", "name": "Line 2", "type": "text", "section_id": "gold_sec"},
+    ]
+    draft = [
+        {"id": "d1", "name": "Line 1", "type": "text", "section_id": "draft_sec"},
+        {"id": "d2", "name": "Line 2", "type": "text", "section_id": "draft_sec"},
+    ]
+    match = schema_score.match_fields(truth, draft)
+    assert len(match.pairs) == 2
+    sg = schema_score.score_fields(match)["attributes"]["section_grouping"]
+    # Both co-sectioned in gold and (renamed but) co-sectioned in draft -> F1 100%.
+    assert sg["pct"] == 100.0
+    assert sg["f1"] == 1.0
