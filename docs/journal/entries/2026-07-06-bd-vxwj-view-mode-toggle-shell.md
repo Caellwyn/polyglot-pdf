@@ -56,6 +56,16 @@ traced value persistence (sessionStorage-first, DOM-independent), WS
 non-disruption (ConnectionManager effect keyed on streamReady only), lazy
 purity, and flag-off no-op independently.
 
+Post-PR Opus fallback gate (Codex quota-exhausted): reviewer 2 NO-GAPS;
+reviewer 1 found a correct criterion-#2 gap -- a mobile fresh-mount with a
+STORED 'preview' choice started in Preview ("initial mode is Simplified" is
+broader than the empty-storage case verified). ADOPTED: initial-mode decision
+extracted to `initialViewMode()` in viewMode.ts (pure, unit-tested): stored
+'preview' is honored only flag-on at desktop width; mobile mounts always start
+Simplified. Reviewer 1's other note (no field-highlight feedback while in
+Preview mode) is deliberately P1.2's scope (ogrt owns the live surface). Both
+fallback reviews re-ran on the fixed head, per the fix-invalidates-clears rule.
+
 ## Lessons
 
 - **A second lazy consumer changes the chunk graph**: what was "pdfjs lives in

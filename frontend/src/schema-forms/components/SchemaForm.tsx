@@ -26,7 +26,7 @@ import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
 import { isTestHarnessEnabled } from "../../shared/config";
 import { isPreviewUiEnabled } from "../../pdf-view/featureFlag";
-import { getStoredViewMode, storeViewMode, type ViewMode } from "../../pdf-view/viewMode";
+import { getStoredViewMode, storeViewMode, initialViewMode, type ViewMode } from "../../pdf-view/viewMode";
 
 // Lazy chunk boundary: pdfjs-dist and everything else in pdf-view/ load only
 // when these components actually render -- which requires the preview flag ON
@@ -64,11 +64,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   // Dual view modes (bd vxwj): 'simplified' (the classic linear form) vs
-  // 'preview' (the PDF surface). Default is Simplified on EVERY width until
-  // the epic's phase-3 default decision; the stored per-session choice wins
-  // only when the flag is on. Purely presentational -- never in the handshake.
+  // 'preview' (the PDF surface). Fresh mounts default Simplified; a stored
+  // per-session 'preview' choice is honored only flag-on at desktop width
+  // (mobile always STARTS Simplified, epic rubric #5). Purely presentational
+  // -- never in the handshake.
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
-    (isPreviewUiEnabled() && getStoredViewMode()) || 'simplified'
+    initialViewMode(isPreviewUiEnabled(), getStoredViewMode(), window.innerWidth)
   );
   const handleViewModeChange = (mode: ViewMode) => {
     setViewMode(mode);

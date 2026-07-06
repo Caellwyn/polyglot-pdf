@@ -31,3 +31,24 @@ export function storeViewMode(mode: ViewMode): void {
     // Storage unavailable: the mode simply won't survive a reload.
   }
 }
+
+/**
+ * Mobile-width mounts always start Simplified (epic rubric #5); matches the
+ * voice overlay's initial-classify breakpoint in SchemaForm.
+ */
+export const MOBILE_INITIAL_BREAKPOINT = 768;
+
+/**
+ * The view mode a fresh mount starts in. A stored 'preview' choice is honored
+ * only when the flag is on AND the viewport is desktop-width -- at mobile
+ * width the initial mode is always Simplified, per the epic rubric.
+ */
+export function initialViewMode(
+  flagOn: boolean,
+  stored: ViewMode | null,
+  viewportWidth: number
+): ViewMode {
+  if (!flagOn) return 'simplified';
+  if (viewportWidth <= MOBILE_INITIAL_BREAKPOINT) return 'simplified';
+  return stored ?? 'simplified';
+}
