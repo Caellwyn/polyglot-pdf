@@ -830,7 +830,27 @@ def _collect_v2_problems(schema: "FormSchema") -> List[str]:
                         f"pdf_field_name; per-box identity lives on "
                         f"options[].pdf_field_name"
                     )
-                if f.type in (FieldType.CHECKBOX_GROUP, FieldType.RADIO):
+                if f.type == FieldType.CHECKBOX_GROUP:
+                    # A checkbox_group's boxes are independent widgets, so each
+                    # option MUST carry its own pdf_field_name. The shared-NAME
+                    # path (a field-level pdf_field_name + option pdf_on_value) is
+                    # RADIO-ONLY and is already forbidden here by the :827 check
+                    # above (a checkbox_group may not carry f.pdf_field_name at
+                    # all) -- so do NOT offer it as a fillability option here, or
+                    # the rule reads as if v2 supports a shared-name checkbox
+                    # matrix, which it does not (bd polyglot-pdf-f6lj; the picker,
+                    # migrator, and editor-merge all strip a lifted name).
+                    for o in opts:
+                        if not o.pdf_field_name:
+                            problems.append(
+                                f"{path}: option {o.value!r} is not PDF-fillable -- "
+                                f"a checkbox_group option needs its own "
+                                f"pdf_field_name"
+                            )
+                elif f.type == FieldType.RADIO:
+                    # Radio IS a shared AcroForm field: an option is fillable via
+                    # its own pdf_field_name OR the shared-name shape (field-level
+                    # pdf_field_name + option pdf_on_value).
                     for o in opts:
                         fillable = bool(o.pdf_field_name) or bool(
                             f.pdf_field_name and o.pdf_on_value
