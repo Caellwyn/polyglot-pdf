@@ -43,7 +43,7 @@ Production filler UNCHANGED; existing text/radio/checkbox behavior unchanged.
 
 ## Verification
 
-New `tests/test_roundtrip_fill.py` (6 tests): a synthetic v2 checkbox_group and
+New `tests/test_roundtrip_fill.py` (8 tests): a synthetic v2 checkbox_group and
 a synthetic shared-field radio PDF, asserting the expected per-option / kid
 widgets resolve and round-trip as filled. Synthetic fixtures (NOT the real i-90
 gold, which is still v1 -- schema_version None, type "checkbox" not
