@@ -348,6 +348,40 @@ def test_gcs_metadata_roundtrip_and_missing_is_none():
     assert _run(store.load_metadata("i-90")) == {"status": "draft", "label": "I-90"}
 
 
+def test_gcs_json_artifact_roundtrip_and_missing_is_not_found():
+    registry = {}
+    store = _gcs_store(registry)
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_json_artifact("i-90", "acroform.json"))
+    dump = {"fields": [{"name": "form1[0].a[0]"}]}
+    _run(store.put_json_artifact("i-90", dump, "acroform.json"))
+    assert _run(store.load_json_artifact("i-90", "acroform.json")) == dump
+
+
+def test_gcs_json_artifact_transient_error_is_store_error_not_raw():
+    # Opus fallback (PR #323): a NON-NotFound GCS read error must be wrapped as
+    # FormKitStoreError, not escape raw -- else _load_kit_dump (which catches
+    # only FormKitNotFound/FormKitStoreError) would 500 the promotion gate. Drive
+    # it through the REAL _fetch_bytes by making the blob download raise a
+    # transient (non-NotFound) error.
+    class _Transient(Exception):
+        pass
+
+    class _TransientBucket(_FakeBucket):
+        def blob(self, name):
+            b = _FakeBlob(name, self._registry)
+            def _raise():
+                raise _Transient("GCS unavailable")
+            b.download_as_bytes = _raise
+            return b
+
+    registry = {"form-kits/i-90/acroform.json": {"data": "{}"}}
+    store = _gcs_store(registry)
+    store._bucket = _TransientBucket(registry)
+    with pytest.raises(FormKitStoreError):
+        _run(store.load_json_artifact("i-90", "acroform.json"))
+
+
 def test_gcs_list_kit_files_groups_by_kit():
     registry = {
         "form-kits/index.json": {"data": "{}"},          # manifest -> not a kit
@@ -1283,6 +1317,54 @@ _LINT_ERROR_VALID_DRAFT = {
                         "extraction_confidence": 0.9, "extractor_version": "t",
                         "manual_review_required": True},
 }
+
+
+def test_extract_dump_store_failure_is_fatal_nothing_stored(client, monkeypatch):
+    # Opus fallback (PR #323): the dump is the gating input for the
+    # dump-widget-multiclaim ERROR at promotion. A schema stored WITHOUT its dump
+    # would let a dump-only error the author saw at store time vanish at promotion
+    # (re-opening the two-gate seam). So a dump-write failure is FATAL and stores
+    # NOTHING (dump-first ordering: the schema write never runs).
+    c, store, root = client
+    _make_kit(root, "fresh")
+    dump = {"fields": [{"name": "form1[0].a[0]"}]}
+    draft = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+             "sections": [], "fields": [{"id": "a", "type": "text"}]}
+    fake = _fake_extractor(draft, exit_code=0, dump=dump)
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+
+    async def _boom_artifact(kit_id, data, filename):
+        raise FormKitStoreError("dump write failed")
+
+    monkeypatch.setattr(store, "put_json_artifact", _boom_artifact)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502, r.text
+    assert "PDF-widget map" in r.json()["detail"]
+    # Nothing stored: the schema write never ran (dump-first).
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_schema("fresh"))
+
+
+def test_promotion_survives_a_transient_dump_read_error(client, monkeypatch):
+    # Opus fallback (PR #323): _load_kit_dump must degrade to None on a store
+    # error, never 500 the promotion gate. A clean schema stays promotable even
+    # when the dump read transiently fails.
+    c, store, root = client
+    clean = dict(VALID_SCHEMA)
+    _make_kit(root, "fresh", status="draft", schema=clean)
+
+    async def _boom_load(kit_id, filename):
+        raise FormKitStoreError("transient GCS read")
+
+    monkeypatch.setattr(store, "load_json_artifact", _boom_load)
+    r = c.post(
+        "/api/editor/kits/fresh/status",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.text  # dump-less lint, still promotable
 
 
 def test_stored_with_issues_draft_is_unpromotable_two_gate_seam(client, monkeypatch):

@@ -907,9 +907,10 @@ async def extract_editor_kit(
                            "least one field is required)",
                 )
 
-            # Read the persisted dump (best-effort): it powers the widget-claim
-            # lint rule AND becomes the kit's acroform.json artifact. A missing
-            # dump degrades to the dump-less lint path (never fatal).
+            # Read the extractor's persisted dump. A missing/unreadable dump is
+            # the legitimate dump-less path (the store-time lint below and the
+            # promotion gate both then run dump-less, so they AGREE); it is only
+            # a STORED dump that must stay consistent with the stored schema.
             dump_data: Optional[dict] = None
             if dump_out_path.exists():
                 try:
@@ -917,8 +918,27 @@ async def extract_editor_kit(
                 except (json.JSONDecodeError, OSError, UnicodeDecodeError):
                     dump_data = None
 
-            # Store the draft; then the dump artifact (best-effort -- a dump
-            # write failure must not fail an otherwise-good extraction).
+            # Persist the dump artifact BEFORE the schema, and make it FATAL: the
+            # dump is the gating input for the dump-widget-multiclaim ERROR at the
+            # promotion gate, so a schema stored WITHOUT its dump would let a
+            # dump-only error the author saw at store time silently vanish at
+            # promotion -- re-opening the two-gate seam (Opus fallback review, PR
+            # #323). Dump-first ordering means a dump-write failure 502s before
+            # anything is stored (no inconsistent state); a later schema-write
+            # failure leaves only an orphan dump, overwritten on the next extract.
+            if isinstance(dump_data, dict):
+                try:
+                    await store.put_json_artifact(
+                        kit_id, dump_data, _ACROFORM_ARTIFACT
+                    )
+                except FormKitStoreError as exc:
+                    _log.error("editor_extract_dump_store_failed",
+                               kit_id=kit_id, error=str(exc))
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Extraction succeeded but its PDF-widget map could "
+                               "not be stored (needed to validate the draft)",
+                    ) from exc
             try:
                 await store.put_schema(kit_id, schema, schema_file)
             except FormKitStoreError as exc:
@@ -926,14 +946,6 @@ async def extract_editor_kit(
                     status_code=502, detail="Extraction succeeded but the schema "
                                             "could not be stored",
                 ) from exc
-            if isinstance(dump_data, dict):
-                try:
-                    await store.put_json_artifact(
-                        kit_id, dump_data, _ACROFORM_ARTIFACT
-                    )
-                except FormKitStoreError as exc:
-                    _log.warning("editor_extract_dump_store_failed",
-                                 kit_id=kit_id, error=str(exc))
 
             # Lint the stored draft (dump-aware when we have it) so the response
             # carries the counts the editor surfaces -- the SAME schema_lint the

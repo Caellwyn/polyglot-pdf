@@ -595,9 +595,21 @@ class GCSFormKitStore(FormKitStore):
 	async def load_json_artifact(self, kit_id: str, filename: str) -> dict:
 		filename = safe_filename(filename, "artifact.json")
 		blob_path = self._build_blob_path(kit_id, filename)
-		# _fetch_bytes raises FormKitNotFound when the blob is absent -- exactly
-		# the "no dump stored" signal the caller degrades on.
-		data = await self._fetch_bytes(blob_path)
+		# _fetch_bytes raises FormKitNotFound when the blob is absent (the "no dump
+		# stored" signal the caller degrades on) but lets a NON-NotFound google
+		# error (ServiceUnavailable/Forbidden/...) propagate RAW. The
+		# load_json_artifact contract is graceful degradation -- _load_kit_dump
+		# catches only FormKitNotFound/FormKitStoreError, so an unwrapped transient
+		# error would 500 the promotion gate (Opus fallback review, PR #323). Wrap
+		# it as FormKitStoreError here, matching load_metadata's discipline.
+		try:
+			data = await self._fetch_bytes(blob_path)
+		except FormKitNotFound:
+			raise
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to read gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
 		try:
 			return json.loads(data.decode("utf-8"))
 		except (json.JSONDecodeError, UnicodeDecodeError) as exc:

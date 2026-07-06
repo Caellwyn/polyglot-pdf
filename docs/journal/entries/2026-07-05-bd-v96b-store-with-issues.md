@@ -93,6 +93,24 @@ P5.3b (`zgln`, repair-all -- needs this bead's persisted dump for the repair
 widget-existence check) and P5.3c (`nivy`, widget picker -- needs the dump
 artifact). Both feed P6.1.
 
+## Review fixes (pre-PR fresh-eyes + Opus fallback)
+
+Three real gaps caught before merge, all fixed in-PR:
+1. (fresh-eyes) The store floor checked only "non-empty fields list", not
+   dict-shaped members -- junk could store as a false clean success. Fixed on
+   both the route and `_classify_exit` (above).
+2. (Opus fallback) `GCSFormKitStore.load_json_artifact` let a NON-NotFound GCS
+   error (ServiceUnavailable/Forbidden) escape RAW from `_fetch_bytes`, which
+   `_load_kit_dump` does not catch -- 500-ing the promotion gate and breaking the
+   "dump never blocks promotion" contract. Now wrapped as `FormKitStoreError`
+   (matching `load_metadata`'s discipline), so `_load_kit_dump` degrades to None.
+3. (Opus fallback) The dump-artifact write was best-effort AFTER the schema write:
+   if it failed, a dump-only `dump-widget-multiclaim` ERROR the author saw at
+   store time would vanish at the promotion gate (which then lints dump-less),
+   re-opening the seam. Fixed by persisting the dump FIRST and making it FATAL --
+   a dump-write failure 502s before anything is stored, so a stored schema always
+   has its gating dump. Tests reproduce all three on their exact paths.
+
 ## Doc-freshness note
 
 `docs/components/pdf-filling.md` tracks `form_kits.py` (which this bead changed),
