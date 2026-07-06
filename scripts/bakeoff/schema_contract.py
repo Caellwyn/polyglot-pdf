@@ -111,18 +111,18 @@ CANONICAL_EXAMPLE: Dict = {
 # so the contract still renders in a backend-less checkout (the bake-off arms).
 # ---------------------------------------------------------------------------
 _STATIC_OPERATOR_LINES: List[str] = [
-    "  equals        scalar   [checkbox, date, email, number, radio, select, tel, text, textarea]  value must be a trigger option  Strict scalar equality. NOT valid on checkbox_group (use includes).",
-    "  not_equals    scalar   [checkbox, date, email, number, radio, select, tel, text, textarea]  value must be a trigger option  Strict scalar inequality. NOT valid on checkbox_group (use not_includes).",
+    "  equals        scalar   [checkbox, date, email, number, radio, select, tel, text, textarea]  value must be a trigger option (when the trigger is a choice field)  Strict scalar equality. NOT valid on checkbox_group (use includes).",
+    "  not_equals    scalar   [checkbox, date, email, number, radio, select, tel, text, textarea]  value must be a trigger option (when the trigger is a choice field)  Strict scalar inequality. NOT valid on checkbox_group (use not_includes).",
     "  contains      scalar   [email, tel, text, textarea]  Substring match on free-text triggers.",
     "  greater_than  scalar   [date, number]",
     "  less_than     scalar   [date, number]",
     "  is_checked    (no value) [checkbox]  Bool sugar on a standalone checkbox. On groups use is_not_empty.",
     "  is_empty      (no value) [checkbox, checkbox_group, date, email, number, radio, select, tel, text, textarea]",
     "  is_not_empty  (no value) [checkbox, checkbox_group, date, email, number, radio, select, tel, text, textarea]",
-    "  in            list     [date, email, number, radio, select, tel, text, textarea]  value must be a trigger option  Trigger value is one of the listed values.",
-    "  not_in        list     [date, email, number, radio, select, tel, text, textarea]  value must be a trigger option  Trigger value is none of the listed values.",
-    "  includes      scalar   [checkbox_group]  value must be a trigger option  The named option slug is in the group's selected set.",
-    "  not_includes  scalar   [checkbox_group]  value must be a trigger option  The named option slug is NOT in the group's selected set.",
+    "  in            list     [date, email, number, radio, select, tel, text, textarea]  value must be a trigger option (when the trigger is a choice field)  Trigger value is one of the listed values.",
+    "  not_in        list     [date, email, number, radio, select, tel, text, textarea]  value must be a trigger option (when the trigger is a choice field)  Trigger value is none of the listed values.",
+    "  includes      scalar   [checkbox_group]  value must be a trigger option (when the trigger is a choice field)  The named option slug is in the group's selected set.",
+    "  not_includes  scalar   [checkbox_group]  value must be a trigger option (when the trigger is a choice field)  The named option slug is NOT in the group's selected set.",
 ]
 
 
@@ -148,7 +148,12 @@ def render_operator_lines() -> List[str]:
         triggers = ", ".join(sorted(spec.trigger_types))
         bits = [f"  {name:<13} {_arity_label(spec.value_arity):<8} [{triggers}]"]
         if spec.value_must_be_trigger_option:
-            bits.append("value must be a trigger option")
+            # Only enforced WHEN the trigger is a choice field with options; on a
+            # text/date/number trigger (also in several of these operators' trigger
+            # lists) the value is a literal, so the note must be qualified or it
+            # pushes the extractor toward hallucinated options (Codex PR #316).
+            bits.append("value must be a trigger option (when the trigger is a "
+                        "choice field)")
         if spec.notes:
             bits.append(spec.notes)
         lines.append("  ".join(bits))
@@ -219,7 +224,9 @@ FIELD SHAPE (the unit the scorer grades hardest):
                   "address_group","table",
   "section_id": str,         // which section.id this field is in
   "pdf_field_name": str,     // EXACT AcroForm widget name -- copy it verbatim
+  "pdf_position": {{"page": int, "x": num, "y": num, "width": num, "height": num}},
   "validation": {{"required": bool, "pattern": str(optional regex)}},
+  "max_length": int, "read_only": bool, "multiline": bool,
   "options": [ {{"value": str(SLUG), "label": str,
                 "pdf_field_name": str(optional), "pdf_on_value": str(optional)}} ],
                              // radio/select/checkbox_group choices -- see
@@ -229,24 +236,37 @@ FIELD SHAPE (the unit the scorer grades hardest):
   // "Yes (Proceed to Item 5)" and form structure):
   "show_if":  CONDITION,     // this field shows when CONDITION holds
   "require_if": CONDITION,   // this field is required when CONDITION holds
+  "copy_to": [str(field id)],             // value mirrored to these fields
+  "overflow_to_supplement": str(supplement id),  // long lists overflow here
+  "multi_entry": {{...}},                  // repeating-row config (or type=table)
+  // controls_fields drives READ-ONLY UNLOCK / property flips off a chosen option
+  // (the I-90 flip_readonly_bit shape). For a plain "show / require this field
+  // when X" dependency, prefer show_if / require_if ON THE DEPENDENT FIELD --
+  // that is what the runtime evaluates; a bare shows/makes_required here is not
+  // applied at runtime in v2.
   "controls_fields": [ {{"operator": str, "value": any,
                         "shows": [str], "hides": [str], "unlocks": [str],
                         "locks": [str], "makes_required": [str],
-                        "makes_optional": [str]}} ]
+                        "makes_optional": [str]}} ],
+  "conditional_behavior": {{"unlock_method": "flip_readonly_bit"}},   // read-only
+  "conditional_logic": {{...}}             // unlock detail (I-90 gold shape)
 }}
 
 A CONDITION is either ONE atom  {{"field": str(other field id), "operator": str,
-"value": any}}  or ONE composite group with a SINGLE bucket of atoms:
-{{"all_of": [atom, ...]}} / {{"any_of": [...]}} / {{"none_of": [...]}} (depth 1 --
-buckets do not nest).
+"value": any}}  or ONE composite group whose buckets hold atoms:
+{{"all_of": [atom, ...]}}, {{"any_of": [...]}}, {{"none_of": [...]}}. A group MAY
+carry MORE THAN ONE bucket at once (e.g. all_of PLUS none_of = "all these AND
+none of those"); atoms never nest inside atoms (depth 1).
 
 {operator_block}
 
 RULES:
 - Use the EXACT pdf_field_name from the provided AcroForm field list when given;
   never invent or normalize it. It is the only reliable cross-reference.
-- Recover conditional logic (show_if / require_if / controls_fields) from the
-  PRINTED instructions on the page, not guesses.
+- Recover conditional logic from the PRINTED instructions on the page, not
+  guesses. Express a "show / require this field when X" dependency as show_if /
+  require_if ON THE DEPENDENT FIELD; use controls_fields only for a read-only
+  UNLOCK or property flip triggered by a chosen option.
 - Output MUST be a single valid JSON object, UTF-8, ASCII-safe, no trailing commas.
 
 CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):

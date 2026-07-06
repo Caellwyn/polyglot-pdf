@@ -96,6 +96,42 @@ def test_render_contract_embeds_operator_block_and_example():
     assert '"new_application"' in contract
 
 
+def test_contract_advertises_every_scorer_graded_key():
+    # Regression guard for Codex PR #316 finding: the rewrite must not NARROW the
+    # contract below what scripts/schema_score.py grades, or LLM arms following it
+    # systematically drop scored data. These are the attribute + relationship +
+    # structure keys schema_score reads (schema_score.py rel_keys + attr scoring).
+    contract = sc.render_contract()
+    scored_keys = [
+        "pdf_position", "max_length", "read_only", "multiline",  # attributes
+        "show_if", "require_if", "controls_fields", "copy_to",   # relationships
+        "conditional_behavior", "conditional_logic",
+        "overflow_to_supplement", "multi_entry",                 # structure/overflow
+    ]
+    missing = [k for k in scored_keys if k not in contract]
+    assert not missing, f"contract dropped scorer-graded keys: {missing}"
+
+
+def test_contract_allows_multi_bucket_composite_conditions():
+    # Codex PR #316: the model's ConditionGroup supports multiple buckets at once
+    # (all_of + none_of); the contract must not tell the extractor to emit only a
+    # single bucket, or it drops required or exclusion atoms the runtime handles.
+    contract = sc.render_contract()
+    assert "MORE THAN ONE bucket" in contract
+
+
+def test_option_value_note_is_qualified_to_choice_triggers():
+    # Codex PR #316: value_must_be_trigger_option is only enforced on choice-field
+    # triggers; on text/date/number triggers the value is a literal. The rendered
+    # note must be qualified so it does not push the extractor toward hallucinated
+    # options on a text/date/number equals-a-literal condition.
+    for line in sc.render_operator_lines():
+        if "value must be a trigger option" in line:
+            assert "when the trigger is a choice field" in line, (
+                f"unqualified option-value note: {line}"
+            )
+
+
 def test_drift_is_detected(monkeypatch):
     """Exit criterion 1, proven WITHOUT leaving a real failure in the tree.
 
