@@ -541,9 +541,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
           />
         )}
 
-        {/* Navigation */}
+        {/* Navigation. In continuous-session mode (bd polyglot-pdf-x8rt) the form
+            is one session with no sections to navigate -- hide the Previous/Next
+            section buttons so a manual section jump (which desyncs the visible
+            section from the live voice session) is unreachable; only Submit shows. */}
         <div className="schema-form__navigation">
-          {prevSection && (
+          {!state.continuousSessionEnabled && prevSection && (
             <button
               type="button"
               onClick={handlePreviousSection}
@@ -553,7 +556,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             </button>
           )}
 
-          {nextSection ? (
+          {!state.continuousSessionEnabled && nextSection ? (
             <button
               type="button"
               onClick={handleNextSection}

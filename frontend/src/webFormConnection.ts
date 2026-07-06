@@ -3201,29 +3201,45 @@ export class WebFormConnection {
       // watchdog stays armed until then.
       this.isSectionSwitching = false;
 
-      // Compute initial field hint (first unfilled field in this section)
-      const initialFieldHint = this.computeNextFieldHintString();
+      // Continuous-session mode (bd polyglot-pdf-x8rt): startSection is the REAL
+      // session-start path (switchToFirstSection calls it right after the user
+      // accepts the disclaimer), NOT just the auto-reconnect path (handleOpen).
+      // The raw single-section handshake below would chop the form back into
+      // sections -- defeating continuous mode on the session that actually fills
+      // the form. So in continuous mode, send the SAME whole-form handshake
+      // handleOpen builds (getHandshakePayload -> getJITHandshakePayload ->
+      // buildContinuousManifest): one synthetic section, every field,
+      // total_sections=1. currentState was already switched into this.state above.
+      if (this.continuousSessionEnabled) {
+        this.send(
+          SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage, this.hasConnectedOnce)
+        );
+        this.hasConnectedOnce = true;
+      } else {
+        // Compute initial field hint (first unfilled field in this section)
+        const initialFieldHint = this.computeNextFieldHintString();
 
-      // Send handshake with section metadata and initial field hint
-      this.send({
-        type: "handshake",
-        schema: sectionSchema,
-        // FULL form schema for the secretary catalog (bd polyglot-pdf-p68s /
-        // jnjj.45d). Re-sent on the section-switch handshake so the backend's
-        // in-session cache survives the reconnect (stateless invariant); schema
-        // only, no PII. It is the whole form, unchanged across sections.
-        full_schema: currentState.schema,
-        current_values: sectionValues,
-        fill_language: this.fillLanguage,
-        // Section metadata
-        section_id: targetSection.id,
-        section_number: targetSection.order,
-        total_sections: currentState.schema.sections.length,
-        section_label: targetSection.label,
-        previous_spoken_names: previousSpokenNames,
-        // Include initial field hint so backend can use it immediately
-        initial_field_hint: initialFieldHint,
-      });
+        // Send handshake with section metadata and initial field hint
+        this.send({
+          type: "handshake",
+          schema: sectionSchema,
+          // FULL form schema for the secretary catalog (bd polyglot-pdf-p68s /
+          // jnjj.45d). Re-sent on the section-switch handshake so the backend's
+          // in-session cache survives the reconnect (stateless invariant); schema
+          // only, no PII. It is the whole form, unchanged across sections.
+          full_schema: currentState.schema,
+          current_values: sectionValues,
+          fill_language: this.fillLanguage,
+          // Section metadata
+          section_id: targetSection.id,
+          section_number: targetSection.order,
+          total_sections: currentState.schema.sections.length,
+          section_label: targetSection.label,
+          previous_spoken_names: previousSpokenNames,
+          // Include initial field hint so backend can use it immediately
+          initial_field_hint: initialFieldHint,
+        });
+      }
 
       // Do NOT release the guard here: the switch is terminally DONE only when the
       // backend replies `session_ready` (-> handleSessionReady -> completeSectionSwitch),
