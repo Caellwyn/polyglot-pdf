@@ -41,6 +41,11 @@ _TYPE_NAMES = {
     fitz.PDF_WIDGET_TYPE_COMBOBOX: "combobox",
     fitz.PDF_WIDGET_TYPE_LISTBOX: "listbox",
     fitz.PDF_WIDGET_TYPE_SIGNATURE: "signature",
+    # A push-button (reset/print/submit) IS a widget but not a data field; name
+    # it so downstream coverage logic can exclude it (bd polyglot-pdf-w0eq /
+    # f31h -- previously fell through to "unknown(1)", defeating the button
+    # exclusion in schema_lint.is_fillable_widget).
+    fitz.PDF_WIDGET_TYPE_BUTTON: "button",
 }
 
 # AcroForm field-flag bits (PDF 32000-1, table 226/228). PyMuPDF exposes the raw

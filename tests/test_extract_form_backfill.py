@@ -260,6 +260,32 @@ def test_backfill_excludes_decorative_buttons(tmp_path):
     assert ef._backfill_unclaimed_widgets(schema, dump) == 0
 
 
+def test_acroform_dumper_names_buttons_button():
+    """The exclusion above only works if the REAL dumper emits the literal
+    "button" logical_type (round-3 fresh-eyes: PDF_WIDGET_TYPE_BUTTON was absent
+    from _TYPE_NAMES, so real buttons fell through to "unknown(1)" and would have
+    been backfilled as fake text fields). Pin the producer/consumer contract."""
+    import sys
+    sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
+    try:
+        import acroform_dump
+        import fitz
+    except ImportError:
+        pytest.skip("acroform_dump / fitz not importable")
+    assert acroform_dump._TYPE_NAMES.get(fitz.PDF_WIDGET_TYPE_BUTTON) == "button"
+
+
+def test_backfill_recovers_dropdowns_using_real_dumper_strings(tmp_path):
+    """The dumper emits "combobox"/"listbox"/"signature" (not "combo"/"list") --
+    round-3 fresh-eyes flagged the dict keys were dead. A recovered dropdown /
+    signature widget becomes a v2-valid text field."""
+    dump = _write_logical_dump(tmp_path, {
+        "cmb[0]": "combobox", "lst[0]": "listbox", "sig[0]": "signature"})
+    schema = {"fields": [], "sections": [{"id": "s", "page_numbers": [1], "fields": []}]}
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 3
+    assert all(f["type"] == "text" for f in schema["fields"])
+
+
 def test_backfill_excludes_machine_barcodes(tmp_path):
     """A PDF417/QR barcode widget (read-only text, but machine-generated -- name
     carries the marker) is NOT a coverage defect. The bug caught pre-PR: i-90's

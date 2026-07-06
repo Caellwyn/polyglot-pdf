@@ -246,8 +246,12 @@ _LOGICAL_TO_FIELD_TYPE = {
     "checkbox": "checkbox",
     "radio": "checkbox",  # a lone recovered radio widget is a boolean toggle
     "text": "text",
-    "combo": "text",
-    "list": "text",
+    # acroform_dump emits "combobox"/"listbox"/"signature" (the real strings); a
+    # recovered dropdown becomes text (its options can't be recovered here -- an
+    # editor re-types it to select), and a signature widget becomes text too.
+    "combobox": "text",
+    "listbox": "text",
+    "signature": "text",
 }
 
 

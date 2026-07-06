@@ -124,6 +124,24 @@ nits, all fixed:
    three sibling imports in the same file have -- added, so it no longer relies on
    an unrelated module's transitive side effect.
 
+## Pre-PR fresh-eyes round 3 (folded in; also closes f31h)
+
+Round 3 found two producer/consumer string-mismatch gaps, both fixed:
+
+1. **Buttons never actually excluded (closes bd f31h).** `acroform_dump._TYPE_NAMES`
+   had no entry for `fitz.PDF_WIDGET_TYPE_BUTTON`, so a real push-button widget got
+   `logical_type="unknown(1)"`, never the literal `"button"` that
+   `is_fillable_widget` checks -- so the "buttons excluded" guarantee was dead
+   against real PDFs (a real button would be backfilled as a bogus text field).
+   Fixed at the source: added `PDF_WIDGET_TYPE_BUTTON: "button"` to the dumper.
+   None of the 4 shipped kits have a button widget, so zero impact on them; this is
+   forward-looking robustness. New test pins the producer/consumer contract
+   (asserts the dumper emits "button"), not just a synthetic fixture.
+2. **Dead combo/list keys.** `_LOGICAL_TO_FIELD_TYPE` used `"combo"`/`"list"` but
+   the dumper emits `"combobox"`/`"listbox"`/`"signature"`. Harmless today (both
+   fell through to the text default) but misleading; fixed to the real strings +
+   added `signature` -> text. New test drives the real dumper strings.
+
 ## Scope note
 
 The redirect deprioritized committing accurate re-extractions of w7-2/f1040 (they
