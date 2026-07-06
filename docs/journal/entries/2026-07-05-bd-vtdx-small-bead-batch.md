@@ -66,7 +66,9 @@ centrally.
   over a runtime warning as the least-invasive signal.
 - **4y4e** (nits, PR #304): eval_extraction gains a scripts/authoring sys.path
   insert (in-process import of extract_form now resolves); f1_cell double
-  formatting collapsed to a single spec (byte-identical output, verified).
+  formatting collapsed to a single spec (the visible number is unchanged; a
+  redundant trailing space is dropped, harmless -- render_table output is only
+  print()ed, never parsed).
 - **tmby** (nits, PR #302): editor_kit_routes lint-detail segments capped at
   200 chars each (one huge option value can no longer eat the whole [:1400]
   budget); schema_lint `_check_cycles` now DFS's edges collected during the
