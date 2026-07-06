@@ -68,8 +68,16 @@ Fresh-eyes assess: (recorded at closeout).
 `docs/standards/ws-protocol.md` updated: the `session_ready` table gains the
 `continuous_session_enabled` key (the contract test
 `test_session_ready_keys_match_doc` pins this and caught the omission), stamp
-bumped. No other tier-1/2 doc tracks the changed files in a way this branch
-altered.
+bumped. `docs/components/context-compression.md` updated: the "sliding window
+(candidate)" column it described now SHIPPED as the opt-in continuous-session
+mode (ctu8 window 3500), so a Verdict + SHIPPED note was added and the stamp
+bumped -- it tracks `config.py`/`form_filling_service.py`, which this branch
+changed. The other docs prep flagged STALE (auth, jit-schema, voice-ai,
+stateless-architecture, terminology, etc.) were already stale from the DTI-fix +
+GoAway commits on dev (PR #321/#331, 2026-07-05) BEFORE this branch; this branch's
+default-off flag does not change their current-state prose, so they are out of
+scope here (the closeout rule: a doc stale from files your branch didn't
+behavior-change is not yours to fix).
 
 ## Files touched
 
