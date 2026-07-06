@@ -492,6 +492,15 @@ describe('validateField (checkbox-group enum with no group_kind, e.g. i-90 p3_ra
   it('rejects an AI-invented option inside an array', () => {
     expect(validateField(raceField, ['P3_checkbox7_White[0]', 'P3_checkbox7_MadeUp[0]'])).not.toBeNull();
   });
+
+  it('rejects the literal "true"/"false" string on a real GROUP (boolean-intent carve-out is standalone-only)', () => {
+    // The boolean-intent carve-out (validation.ts) exempts a "true"/"false" STRING
+    // from the enum check only on a STANDALONE checkbox. On a multi-option group like
+    // p3_race, "true" is not a valid option, so it must still enum-reject -- otherwise
+    // the carve-out would reopen the exact silent-drop 5jvn closes (Opus fresh-eyes).
+    expect(validateField(raceField, 'true')).not.toBeNull();
+    expect(validateField(raceField, 'false')).not.toBeNull();
+  });
 });
 
 // Bare date fields (type "date" with only a format, no validation/min/max) must

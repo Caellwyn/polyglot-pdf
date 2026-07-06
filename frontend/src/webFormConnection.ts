@@ -1257,36 +1257,31 @@ export class WebFormConnection {
       this.setStatus('switching_section', "handlePrepareSectionSwitch");
       this.armSectionSwitchWatchdog();
 
-      // If the client auto-advance is PARKED on the validator gate, the AI-initiated
-      // switch we are now running only supersedes it when they target the SAME
-      // section (bd polyglot-pdf-k726). Gemini's switch_section can jump to an
-      // ARBITRARY section by order/label, not only the client's sequential
-      // next-section auto-advance target -- so a parked N->N+1 switch and an
-      // AI-initiated switch to an unrelated section M can be in flight at once.
-      // - MATCH (same boundary): the AI switch is authoritative for that boundary --
-      //   it keeps this socket open and advances in place. Cancel the parked client
-      //   switch so that when its gate later resolves, proceedSectionSwitch returns
-      //   instead of running a redundant reconnect-based switchToSection (which would
-      //   tear down audio and THROW "a section switch is already in progress",
-      //   killing the session). cancelPendingSectionSwitch resolves the gate's
-      //   promise with cancelled=true, so proceedSectionSwitch's await unblocks and
-      //   skips cleanly.
-      // - MISMATCH (different target): leave the parked switch alone. It stays
-      //   parked on switchInFlight (now true, claimed by this AI switch) until this
-      //   AI switch completes and releases the guard; proceedSectionSwitch's
-      //   post-await switchInFlight re-check (see there) then skips its own
-      //   reconnect-based switch cleanly instead of throwing -- so the N->N+1
-      //   boundary is not silently dropped, just deferred until the guard frees up.
+      // If the client auto-advance is PARKED on the validator gate, this AI-initiated
+      // switch supersedes it -- CANCEL the parked switch (bd polyglot-pdf-k726).
+      // Gemini's switch_section can jump to an ARBITRARY section by order/label, so a
+      // parked client N->N+1 switch and an AI switch to an unrelated section M can be
+      // in flight at once; cancel is correct for BOTH targets:
+      // - MATCH (same boundary): the AI switch is authoritative and advances in place.
+      // - MISMATCH (different target M): the AI switch has authoritatively RELOCATED
+      //   the session to M, so the parked N->N+1 boundary is now STALE -- running it
+      //   later would reconnect-switch the user OUT of M (tearing down the AI's session
+      //   and audio) the moment the parked gate's fail-OPEN timer fires, because that
+      //   timer resolves AFTER this AI switch completes and clears switchInFlight, so
+      //   proceedSectionSwitch's post-await switchInFlight re-check no longer guards it.
+      //   Cancelling is the safe outcome (not a silent drop of a still-valid advance --
+      //   the advance is no longer valid once the AI moved the session).
+      // cancelPendingSectionSwitch resolves the gate's promise with cancelled=true, so
+      // proceedSectionSwitch's await unblocks and returns at its `if (gate.cancelled)`
+      // check without switching -- no reconnect, no audio teardown, no throw.
       if (this.pendingSectionSwitch) {
-        if (this.pendingSectionSwitch.sectionId === targetSectionId) {
-          console.log('[WebFormConnection] [validator] AI-initiated switch superseding a parked client switch for this boundary; cancelling the parked switch.');
-          this.cancelPendingSectionSwitch();
-        } else {
-          console.log('[WebFormConnection] [validator] AI-initiated switch targets a different section than the parked client switch; leaving the parked switch intact.', {
-            aiTargetSectionId: targetSectionId,
-            parkedTargetSectionId: this.pendingSectionSwitch.sectionId,
-          });
-        }
+        const parkedTargetSectionId = this.pendingSectionSwitch.sectionId;
+        console.log('[WebFormConnection] [validator] AI-initiated switch superseding a parked client switch; cancelling the parked switch.', {
+          aiTargetSectionId: targetSectionId,
+          parkedTargetSectionId,
+          sameBoundary: parkedTargetSectionId === targetSectionId,
+        });
+        this.cancelPendingSectionSwitch();
       }
 
       // Switch to target section in local state (no disconnect!)

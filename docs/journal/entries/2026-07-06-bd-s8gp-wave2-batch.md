@@ -51,17 +51,18 @@ one PR per the bead/PR contract.
   Confirmed to manifest in practice (the optional-cleared-field flow is real).
   Priority-2 (required empty -> fill) untouched. Missing navigation-confirmation
   test added (+a contrast test proving required-empty still routes to fill).
-- **k726** (frontend/src/webFormConnection.ts): handlePrepareSectionSwitchRequest
-  no longer unconditionally cancels a parked client section-switch when an AI
-  switch arrives. It compares the AI's resolved targetSectionId to the parked
-  switch's sectionId: MATCH -> cancel as before (AI is authoritative for that
-  boundary); MISMATCH -> leave the parked switch untouched (only log). Safe
-  because proceedSectionSwitch's existing post-await `if (switchInFlight) skip
-  cleanly` re-check makes the deferred parked gate resolve without a throw or
-  leak -- and by then the AI has moved the session, so re-running the stale
-  N->N+1 switch would be wrong anyway. Regression test: park s1->s2, deliver an
-  AI switch to unrelated s3, assert the parked switch survives and later skips
-  cleanly.
+- **k726** (frontend/src/webFormConnection.ts): handlePrepareSectionSwitchRequest,
+  when an AI switch arrives while a client auto-advance is parked on the
+  validator gate, CANCELS the parked switch (resolving its gate cancelled=true so
+  proceedSectionSwitch returns without a reconnect/throw). This holds for BOTH a
+  matching and a mismatching AI target: an AI switch to an unrelated section M has
+  authoritatively relocated the session, so the parked N->N+1 boundary is now
+  STALE and running it later would pull the user OUT of M. (See the fresh-eyes
+  section: an earlier "preserve on mismatch" cut had a stale-reconnect hazard;
+  cancel-in-both-cases is correct.) Regression tests: an AI switch to unrelated s3
+  cancels the parked s1->s2 switch cleanly; and the adverse ordering (AI switch
+  COMPLETES before the parked gate resolves) does NOT reconnect-switch to the
+  stale s2.
 - **jh2k** (.claude/settings.json + scripts/block_admin_merge_hook.py):
   ALL FOUR hook commands (PreToolUse admin-merge guard, SessionStart bootstrap
   + bd_prime, PreCompact bd_prime) used cwd-RELATIVE `python scripts/...` paths.
@@ -86,6 +87,41 @@ session cannot reload its own hooks): simulated Claude Code's substitution
 the absolute path is found, `gh pr merge --admin` is still DENIED
 (permissionDecision deny, exit 0), a normal `--squash` merge is ALLOWED (exit 0
 no output), and `-W error::SyntaxWarning` no longer raises.
+
+## Fresh-eyes findings (all adopted)
+
+The pre-PR Opus assess found ONE blocking gap + two supporting findings, all
+correct:
+
+- **k726 (blocking) -- stale reconnect after AI switch completes.** My first
+  cut LEFT the parked switch intact on a target mismatch. The reviewer traced a
+  worse bug than the original: once the AI switch COMPLETES (clears
+  switchInFlight), the parked gate's fail-OPEN timer resolves past the
+  post-await switchInFlight re-check (which only guards while the AI switch is
+  in flight) and runs doSectionSwitch on the STALE target -- reconnecting the
+  user OUT of the section the AI just moved them to. Resolution: the bead's
+  premise ("the dropped switch was a valid advance") was itself wrong -- once
+  the AI relocates the session, the parked N->N+1 boundary is STALE. So the
+  correct behavior is to CANCEL the parked switch in BOTH match and mismatch
+  cases (cancel cleanly resolves its gate). This is close to the original
+  unconditional cancel, but now with correct justification and a test for the
+  adverse ordering the agent's original test missed (AI switch completes BEFORE
+  the parked gate resolves). NOTE: this means k726's literal exit criterion
+  ("mismatched AI switch preserves the parked client switch") was superseded --
+  the review proved that behavior buggy; the delivered behavior is the correct
+  one the criterion was reaching for (don't strand the session), reached by
+  cancel-not-preserve.
+- **5jvn (supporting) -- boolean-intent carve-out too broad.** The `"true"`/
+  `"false"` string carve-out fired on ANY checkbox, so `"true"` on a real
+  multi-option group (p3_race) skipped the enum check -- reopening the exact
+  silent-drop 5jvn closes. Fixed by scoping the STRING carve-out to
+  SINGLE-option checkboxes (option count <= 1 -- the load-bearing distinction,
+  since isCheckboxGroupField is true for both the one-option standalone
+  p2_checkbox3 AND real groups). Actual boolean values stay broad. +test: "true"
+  rejects on p3_race, still passes on p2_checkbox3.
+- **k726 (supporting) -- misleading "deferred" comment.** The mismatch comment
+  said the boundary was "deferred", but the code dropped it. Moot after the
+  cancel-in-both-cases fix; the comment now states the cancel reasoning.
 
 ## Doc freshness
 

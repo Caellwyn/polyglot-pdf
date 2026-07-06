@@ -87,19 +87,31 @@ export function validateField(field: FormField, value: any): string | null {
   // (config.py), so Gemini sends true/false, not an option value. Running the
   // enum check on it would compare "true" against an option and reject every
   // valid fill. The enum gate applies to select/radio and options-bearing
-  // checkbox GROUPS (see isStringEnumField) -- EXCEPT a boolean-intent value
-  // (an actual boolean, or the literal "true"/"false" string the backend tool
-  // contract documents), which is never an option selection even on a "group"-
-  // shaped checkbox field. This matters because a real shipped standalone
-  // checkbox (form-kits/i-90 p2_checkbox3) carries a ONE-element `options`
-  // array describing its single PDF widget, so isStringEnumField's
-  // options.length>0 rule (bd polyglot-pdf-5jvn, matching
-  // canonicalizeAiCheckboxGroupValue/CheckboxField) calls it a "group" too;
-  // without this carve-out its true/false fill would enum-reject. Mirrors
+  // checkbox GROUPS (see isStringEnumField) -- EXCEPT a boolean-intent value on a
+  // field that is really a boolean toggle. Two cases:
+  //   - an ACTUAL boolean value is boolean-intent on any checkbox (a genuine
+  //     on/off signal, never an option-slug selection);
+  //   - the literal "true"/"false" STRING (the backend tool contract's documented
+  //     boolean encoding) is boolean-intent ONLY on a SINGLE-option checkbox (a real
+  //     boolean toggle), NOT on a multi-option selection group.
+  // This matters because a real shipped standalone checkbox (form-kits/i-90
+  // p2_checkbox3) carries a ONE-element `options` array for its single PDF widget,
+  // so isStringEnumField's options.length>0 rule (bd polyglot-pdf-5jvn, matching
+  // canonicalizeAiCheckboxGroupValue/CheckboxField) calls it a "group" too; without
+  // this carve-out its true/false fill would enum-reject. `isCheckboxGroupField` is
+  // ALSO true for p2_checkbox3 (options.length>0), so it cannot distinguish the two;
+  // the load-bearing distinction is the OPTION COUNT -- a genuine boolean toggle has
+  // exactly one option, a selection group has 2+. Scoping the STRING case to
+  // single-option checkboxes keeps the carve-out from reopening the 5jvn silent-drop
+  // for a real group: an AI "true" on a multi-option group (e.g. p3_race) is NOT a
+  // valid option, so it must still enum-reject (Opus fresh-eyes finding). Mirrors
   // canonicalizeAiCheckboxGroupValue's own boolean-intent exclusion.
+  const isSingleOptionCheckbox =
+    field.type === "checkbox" && (field.options?.length ?? 0) <= 1;
   const isBooleanIntent =
     field.type === "checkbox" &&
-    (typeof actualValue === "boolean" || /^(true|false)$/i.test(String(actualValue).trim()));
+    (typeof actualValue === "boolean" ||
+      (isSingleOptionCheckbox && /^(true|false)$/i.test(String(actualValue).trim())));
   if (!normalizedEmpty && !isBooleanIntent && field.options && field.options.length > 0 && isStringEnumField(field)) {
     const optionError = validateOptionMembership(field, actualValue);
     if (optionError) return optionError;
