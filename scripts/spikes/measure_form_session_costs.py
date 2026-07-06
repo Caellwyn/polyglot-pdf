@@ -84,6 +84,7 @@ from backend import config as _config  # noqa: E402
 from backend.config import (  # noqa: E402
     MODEL_NATIVE_PREMIUM,
     MODEL_NATIVE_STANDARD,
+    MODEL_NATIVE_STANDARD_VERTEX,
     get_pricing_for_model,
 )
 from backend.services.form_filling_service import FormFillingService  # noqa: E402
@@ -238,6 +239,32 @@ I90_QUESTIONS = [
      "wrong": "My postal code is K1A 0B1."},
     {"field_id": "p1_line7h_country", "say": "United States.",
      "wrong": "Mexico."},
+    # --- Section 4: Part 1.4 Additional Information (bd polyglot-pdf-ctu8) ---
+    # Added to take the plan past 30 questions so a 30-question CONTINUOUS run
+    # (the ctu8 candidate arm) fits inside it. The WHOLE 9-field section is
+    # scripted (no field skipped) to keep the every-visible-field invariant for
+    # the section-reset arms; none of these fields is show_if-conditional.
+    # Same fictional Maria Vasquez persona (no real PII).
+    {"field_id": "p1_line8_male", "say": "I am female.",
+     "wrong": "I am male."},
+    {"field_id": "p1_line9_dateofbirth", "say": "My date of birth is March fifth, nineteen ninety.",
+     "wrong": "My date of birth is April sixth, nineteen ninety one."},
+    {"field_id": "p1_line10_citytownofbirth", "say": "I was born in Guadalajara.",
+     "wrong": "I was born in Monterrey."},
+    {"field_id": "p1_line11_countryofbirth", "say": "My country of birth is Mexico.",
+     "wrong": "My country of birth is Guatemala."},
+    {"field_id": "p1_line12_mothergivenname", "say": "My mother's given name is Rosa.",
+     "wrong": "My mother's given name is Rita."},
+    {"field_id": "p1_line13_fathergivenname", "say": "My father's given name is Carlos.",
+     "wrong": "My father's given name is Miguel."},
+    # Class of admission is a 3-character code (help.instructions); IR6 is a real
+    # LPR category, spoken letter-by-letter so gTTS renders it cleanly.
+    {"field_id": "p1_line14_classofadmission", "say": "My class of admission is I R six.",
+     "wrong": "My class of admission is C R one."},
+    {"field_id": "p1_line15_dateofadmission", "say": "My date of admission was June tenth, twenty fifteen.",
+     "wrong": "My date of admission was July ninth, twenty sixteen."},
+    {"field_id": "p1_line16_ssn", "say": "My social security number is one two three four five six seven eight nine.",
+     "wrong": "My social security number is nine eight seven six five four three two one."},
 ]
 
 # G3 fill-accuracy scoring (bd polyglot-pdf-jnjj.7). The EXPECTED canonical value
@@ -266,7 +293,7 @@ I90_EXPECTED = {
     "p1_line6f_zipcode": "73701",
     "p1_line6g_province": "",
     "p1_line6h_postalcode": "",
-    "p1_line6i_country": "United States",
+    "p1_line6i_country": ["United States", "USA"],
     "p1_line7a_streetnumbername": "1234 Maple Street",
     "p1_unit_type7b_unit": "P1_checkbox7b_Unit[0]",   # Apartment
     "p1_line7b_aptsteflrnumber": "12B",
@@ -275,7 +302,17 @@ I90_EXPECTED = {
     "p1_line7e_zipcode": "73701",
     "p1_line7f_province": "",
     "p1_line7g_postalcode": "",
-    "p1_line7h_country": "United States",
+    "p1_line7h_country": ["United States", "USA"],
+    # Section 4 (Part 1.4 Additional Information, bd polyglot-pdf-ctu8).
+    "p1_line8_male": "P1_Line8_female[0]",         # radio stores the option VALUE
+    "p1_line9_dateofbirth": "03/05/1990",          # MM/DD/YYYY (validation.hint)
+    "p1_line10_citytownofbirth": "Guadalajara",
+    "p1_line11_countryofbirth": "Mexico",
+    "p1_line12_mothergivenname": "Rosa",
+    "p1_line13_fathergivenname": "Carlos",
+    "p1_line14_classofadmission": "IR6",
+    "p1_line15_dateofadmission": "06/10/2015",
+    "p1_line16_ssn": "123456789",
 }
 
 _WORD_DIGITS = {
@@ -377,6 +414,11 @@ def score_fill_accuracy(client, plan, expected) -> dict:
         elif exp == "":
             ok = _canon_value(written) == ""   # correct to leave blank
             scored = "expect-empty"
+        elif isinstance(exp, (list, tuple)):
+            # Any-of: fields with several equally-correct renderings (e.g. a text
+            # country field the model may write as "United States" OR "USA").
+            ok = _canon_value(written) in {_canon_value(e) for e in exp}
+            scored = "any-of"
         else:
             ok = _canon_value(written) == _canon_value(exp)
             scored = "exact"
@@ -553,8 +595,17 @@ class FakeClientWebSocket:
         for fid, f in self.schema_fields.items():
             if fid not in _plan_fids:
                 continue
-            key = (f.get("name") or fid).strip().lower()
-            self.spoken_to_fids.setdefault(key, []).append(fid)
+            # Key on BOTH the schema `name` and the `spoken_name`: the DTI
+            # guidance renders the SPOKEN name ("current family name"), and that
+            # is what the model passes to get_field_value -- a name-only map made
+            # every such recall miss (found=False) in the 30q continuous run.
+            for key_src in (f.get("name"), f.get("spoken_name")):
+                if not key_src:
+                    continue
+                key = str(key_src).strip().lower()
+                fids = self.spoken_to_fids.setdefault(key, [])
+                if fid not in fids:
+                    fids.append(fid)
         # G3 recall instrumentation: each get_field_value call the model makes is
         # recorded as (requested_spoken_name, found, returned_value) for scoring.
         self.field_value_lookups: list[dict] = []
@@ -570,6 +621,11 @@ class FakeClientWebSocket:
         # production frontend (webFormConnection.handleGetNextFieldHintRequest +
         # getFieldSchema). Off for the section-reset/JIT arms.
         self.dti_mode = dti_mode
+        # GoAway (bd polyglot-pdf-c5t / ctu8): the Vertex Live connection is capped
+        # at ~9-10 min and announces the close with a go_away message the backend
+        # forwards to the client. Production's frontend pre-emptively reconnects;
+        # the continuous arm's driver loop does the same when this flag is set.
+        self.go_away_pending = False
 
     # -- WebSocket surface the backend touches
     async def accept(self):
@@ -593,7 +649,13 @@ class FakeClientWebSocket:
             form_state = data.get("form_state") or {}
             for fid, val in form_state.items():
                 value = val.get("value") if isinstance(val, dict) else val
-                if fid in self.schema_fields and value not in (None, ""):
+                # Apply EMPTY-STRING values too (mirror production, bd w3ic): an
+                # optional field the user declines is filled with '' and then
+                # confirmed -- the SI instructs exactly that flow. Dropping ''
+                # here made that flow unsatisfiable (confirm -> no_value -> the
+                # model re-fills '' -> infinite loop; wedged the first 30q
+                # continuous run at the optional postal-code field).
+                if fid in self.schema_fields and value is not None:
                     self.state.setdefault(fid, {})["value"] = value
                     self.state[fid].setdefault("confirmed", False)
         elif mtype == "get_form_state":
@@ -637,12 +699,23 @@ class FakeClientWebSocket:
             rid = msg.get("request_id")
             fid = msg.get("field_id")
             entry = self.state.get(fid)
-            if entry and entry.get("value") not in (None, ""):
+            value = entry.get("value") if entry else None
+            # Mirror the production hasUsableValue gate (webFormConnection, bd
+            # w3ic): '' is a legitimate confirmable end state for an OPTIONAL
+            # field ("does not apply"); only required fields reject ''.
+            f = self.schema_fields.get(fid) or {}
+            required = bool((f.get("validation") or {}).get("required"))
+            usable = value is not None and (value != "" or not required)
+            if usable:
                 entry["confirmed"] = True
                 self._reply(lambda: self.service.handle_confirm_field_response(rid, True))
             else:
                 self._reply(lambda: self.service.handle_confirm_field_response(
                     rid, False, "no_value"))
+        elif mtype == "go_away":
+            # The Live server announced the connection close (time_left rider).
+            # Mirror the production frontend: flag it so the driver reconnects.
+            self.go_away_pending = True
         elif mtype == "transcript":
             # bd jnjj.39 debug: the model's output speech, streamed in chunks. Stamp
             # each with a monotonic ts so it can be joined per-question by time window.
@@ -768,9 +841,19 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
         overrides["CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR"] = False
 
     s = _config.Settings(**overrides)
-    # Labeled deviation from deploy config: neutralize server VAD so explicit
-    # activity brackets give deterministic synthetic-turn boundaries (bd p1t /
-    # h04c precedent). Everything else is the deploy default.
+    # Labeled deviation from deploy config: DISABLE automatic VAD so the explicit
+    # activity brackets are actually honored (deterministic synthetic-turn
+    # boundaries). The old "neutralized sensitivities" (UNSPECIFIED) did NOT
+    # disable automatic VAD -- the adapter no-ops manual brackets in native mode,
+    # so turn ends were detected by the server's VAD on the gTTS audio. AI Studio
+    # tolerated that; Vertex intermittently misses a gTTS utterance end and the
+    # model hangs ~41s until the NEXT utterance's audio flushes it (past the 40s
+    # _wait_turn timeout -> the harness barges in -> escalating desync -> wedge;
+    # observed 2026-07-05 on two 30q continuous runs, both dying ~q8). With
+    # DISABLE_GEMINI_VAD=True the adapter sends real ActivityStart/End and
+    # _build_vad_settings sends {'disabled': True} -- the h04c "explicit activity
+    # brackets" design, now actually wired.
+    s.DISABLE_GEMINI_VAD = True
     s.VAD_START_SENSITIVITY = "UNSPECIFIED"
     s.VAD_END_SENSITIVITY = "UNSPECIFIED"
     s.VAD_PREFIX_PADDING_MS = None
@@ -818,8 +901,13 @@ async def _wait_turn(adapter, tracker_field="_session_total_tokens",
 
 
 async def run(args) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set; cannot run.")
+    # --vertex: run against Vertex AI via ADC instead of the AI Studio API key
+    # (the AI Studio prepaid credits are depleted -- 1011 on connect; the deployed
+    # demo runs Vertex anyway, so this is the deploy-faithful path). google-genai's
+    # Client(vertexai=True, project=..., location=...) reads the ADC file directly;
+    # no GOOGLE_GENAI_USE_VERTEXAI env needed on this constructor-arg path.
+    if not args.vertex and not os.getenv("GEMINI_API_KEY"):
+        print("GEMINI_API_KEY not set; cannot run (or pass --vertex to use ADC).")
         return 1
     schema = load_schema(args.schema)
     # Default (args.questions is None) runs the WHOLE plan for the chosen schema, so
@@ -844,6 +932,11 @@ async def run(args) -> int:
         return 0
 
     model_name = MODELS[args.model]
+    if args.vertex and args.model == "2.5":
+        # The 2.5 native-audio model has a DIFFERENT id on Vertex than on AI
+        # Studio (backend/config.py MODEL_NATIVE_STANDARD_VERTEX; the deployed
+        # demo uses this id). Pricing resolves by family, so rates are identical.
+        model_name = MODEL_NATIVE_STANDARD_VERTEX
     rates = get_pricing_for_model(model_name)
     settings = _make_settings(args.arm, args.trigger, args.window, args.compression)
     # Install the arm's settings so EVERY get_settings() consumer sees it. A bare
@@ -868,7 +961,8 @@ async def run(args) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     _comp_tag = "_comp" if args.compression and args.arm != "sliding-window" else ""
-    base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_comp_tag}_{args.path}_{stamp}"
+    _cont_tag = "_cont" if getattr(args, "continuous", False) else ""
+    base_name = f"costs_{args.schema}_{args.model}_{args.arm}{_cont_tag}{_comp_tag}_{args.path}_{stamp}"
     meta: dict = {
         "bead": "polyglot-pdf-4loz", "model": model_name, "tier": args.model,
         "schema": args.schema,
@@ -876,7 +970,10 @@ async def run(args) -> int:
         "compression": bool(args.compression),
         "trigger": args.trigger if (args.arm == "sliding-window" or args.compression) else None,
         "window": args.window if (args.arm == "sliding-window" or args.compression) else None,
-        "schema_scope": ("per-section" if args.arm in ("section-reset", "section-reset-jit", "dti") else "full-form"),
+        "continuous": bool(getattr(args, "continuous", False)),
+        "schema_scope": ("continuous-full-plan" if getattr(args, "continuous", False)
+                         else "per-section" if args.arm in ("section-reset", "section-reset-jit", "dti")
+                         else "full-form"),
         "started": stamp, "turns": [], "per_question_tools": {},
         "prompt_curve": [], "errors": [], "rates_per_token": rates,
         "vad": "neutralized (explicit activity brackets; labeled deviation)",
@@ -896,7 +993,13 @@ async def run(args) -> int:
     DEBUG = bool(getattr(args, "debug", False))
 
     try:
-        adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
+        if args.vertex:
+            adapter = LiveAIGemini(
+                model=model_name, vertexai=True,
+                project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
+        else:
+            adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
         adapter.set_session_context(
             form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
             form_id=f"INTAKE-{args.schema.upper()}")
@@ -924,9 +1027,33 @@ async def run(args) -> int:
         # flow. section-reset-jit and dti additionally synthesize the JIT-shaped
         # handshake (manifest + one-field `fields`) -- build_form_context renders the
         # JIT SI under USE_JIT_SCHEMA and the tiny DTI SI under USE_DTI (bd jnjj.6/.25).
-        is_section_reset = args.arm in ("section-reset", "section-reset-jit", "dti")
+        # --continuous (bd polyglot-pdf-ctu8): ONE uninterrupted DTI session over the
+        # whole plan -- no section resets, no restart re-greeting. This is the ctu8
+        # CANDIDATE arm (continuous DTI + compression window replaces section resets);
+        # section boundaries in the plan are simply ignored and the client's active
+        # field set is the entire plan. Only defined for the dti arm.
+        continuous = bool(getattr(args, "continuous", False))
+        if continuous and args.arm != "dti":
+            print("--continuous is only defined for --arm dti")
+            return 1
+        is_section_reset = (args.arm in ("section-reset", "section-reset-jit", "dti")
+                            and not continuous)
         uses_jit_handshake = args.arm in ("section-reset-jit", "dti")
-        if is_section_reset:
+        if continuous:
+            # DTI-shaped handshake spanning the WHOLE plan: manifest carries every
+            # plan field, `fields` carries only field 1 (the DTI drip supplies the
+            # rest via confirm_field). One synthetic "section" -- the run never
+            # switches.
+            plan_fids = {q["field_id"] for q in plan}
+            whole = {"form_metadata": schema.get("form_metadata", {}),
+                     "fields": [f for f in schema["fields"] if f["id"] in plan_fids]}
+            arm_schema = jit_handshake_schema(
+                whole, "continuous", "Full Form (continuous)")
+            si_kwargs = dict(section_number=1, total_sections=1,
+                             section_label="Full Form (continuous)",
+                             previous_spoken_names=[])
+            current_section_id = "continuous"
+        elif is_section_reset:
             sec = secs[0]
             sub = section_subschema(schema, sec["id"])
             if uses_jit_handshake:
@@ -1081,6 +1208,43 @@ async def run(args) -> int:
             current_q["n"] = i
             fid = q["field_id"]
             f_sec = (client.schema_fields[fid].get("section_id") or "section-1")
+
+            # Continuous-arm GoAway reconnect (production-faithful, bd c5t/ctu8):
+            # the Vertex Live CONNECTION caps at ~9-10 min and announces the close
+            # via go_away. Production's client reconnects and the stateless backend
+            # rebuilds context from the fresh handshake; mirror that here -- rebuild
+            # the continuous handshake with the REMAINING unconfirmed plan fields
+            # (next field first, as computeNextField would supply) and restart the
+            # session via the same switch_to_section path production reconnects use.
+            # Also fires if the session died WITHOUT a go_away (belt-and-suspenders).
+            if continuous and (client.go_away_pending
+                               or not getattr(adapter, "_session_ready", False)):
+                was_announced = client.go_away_pending
+                client.go_away_pending = False
+                remaining = [client.schema_fields[p["field_id"]] for p in plan
+                             if not client.state.get(p["field_id"], {}).get("confirmed")]
+                if remaining:
+                    sub = {"form_metadata": schema.get("form_metadata", {}),
+                           "fields": remaining}
+                    cont_schema = jit_handshake_schema(
+                        sub, "continuous", "Full Form (continuous)")
+                    await service.switch_to_section(
+                        cont_schema, {},
+                        {"section_id": "continuous", "section_number": 1,
+                         "total_sections": 1,
+                         "section_label": "Full Form (continuous)",
+                         "previous_spoken_names": []},
+                        initial_field_hint=client.next_hint())
+                    for _ in range(150):
+                        if getattr(adapter, "_session_ready", False):
+                            break
+                        await asyncio.sleep(0.1)
+                    last_total = await _wait_turn(adapter, last=0)  # re-greeting
+                    _prev_q_end = time.monotonic()
+                    meta.setdefault("continuous_reconnects", []).append(
+                        {"before_q": i, "announced": was_announced})
+                    print(f"    [reconnect] continuous session restarted before "
+                          f"q{i} (go_away={'yes' if was_announced else 'no'})")
 
             # Section boundary (section-reset, section-reset-jit, dti arms):
             # production restart. The JIT-handshake arms (section-reset-jit, dti)
@@ -1296,6 +1460,17 @@ def main() -> int:
     ap.add_argument("--window", type=int, default=9_000,
                     help="sliding-window target_tokens; must exceed the SI "
                          "base for any evictable mass to exist")
+    ap.add_argument("--vertex", action="store_true",
+                    help="use Vertex AI via ADC (deploy-faithful; the AI Studio "
+                         "prepaid credits are depleted). Project/location from "
+                         "GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION, defaulting "
+                         "to the demo project. On 2.5 this also swaps to the "
+                         "Vertex model id (MODEL_NATIVE_STANDARD_VERTEX).")
+    ap.add_argument("--continuous", action="store_true",
+                    help="ONE uninterrupted DTI session over the whole plan -- no "
+                         "section resets (bd polyglot-pdf-ctu8 candidate arm). Only "
+                         "valid with --arm dti; combine with --compression so the "
+                         "window bounds the continuous session's growth.")
     ap.add_argument("--compression", action="store_true",
                     help="layer calibrated context-window eviction onto a non-"
                          "sliding-window arm (the jnjj.25-folded eviction test): "

@@ -144,6 +144,14 @@ def _tool_error_envelope(message: str = "The tool call failed; ask the user to r
 _FLOOR_CHARS_PER_TOKEN = 4
 
 
+# Live API bounds for context_window_compression.trigger_tokens (wire-verified
+# 2026-07-05: Vertex closes the connect with 1007 "Context window trigger tokens
+# must be within [5000, 128000]" for anything outside them). Used by
+# _build_live_config to clamp derived/configured triggers -- see the clamp there.
+_COMPRESSION_TRIGGER_MIN_TOKENS = 5000
+_COMPRESSION_TRIGGER_MAX_TOKENS = 128_000
+
+
 def estimate_si_floor_tokens(
     system_instruction: Optional[str],
     function_declarations: Optional[List[Dict[str, Any]]],
@@ -1245,6 +1253,23 @@ class LiveAIGemini(ILiveAI):
             else:
                 trigger_tokens = settings.CONTEXT_COMPRESSION_TRIGGER_TOKENS
                 window_tokens = settings.CONTEXT_COMPRESSION_WINDOW_TOKENS
+            # Live API hard bound (wire-verified 2026-07-05 on Vertex: connect dies
+            # with 1007 "Context window trigger tokens must be within [5000, 128000]").
+            # A derived or configured trigger below the minimum fails the ENTIRE
+            # connect -- the session never opens -- so clamp here and log loudly: a
+            # less aggressive eviction beats a dead session. This bites the DTI
+            # per-form derivation specifically (the I-90 DTI floor derives a ~2800
+            # trigger, well under the API minimum).
+            clamped_trigger = min(max(trigger_tokens, _COMPRESSION_TRIGGER_MIN_TOKENS),
+                                  _COMPRESSION_TRIGGER_MAX_TOKENS)
+            if clamped_trigger != trigger_tokens:
+                self._log.warning(
+                    "compression_trigger_clamped_to_api_bounds",
+                    requested_trigger_tokens=trigger_tokens,
+                    clamped_trigger_tokens=clamped_trigger,
+                    derived_from_si_floor=derive,
+                )
+                trigger_tokens = clamped_trigger
             config["context_window_compression"] = {
                 "trigger_tokens": trigger_tokens,
                 "sliding_window": {

@@ -156,6 +156,21 @@ class FormFillingService:
         }
         return build_fields_from_schema(merged)
 
+    def _is_known_field_id(self, field_id: str) -> bool:
+        """True when field_id resolves to a field this session has seen -- the
+        handshake schema or a client-delivered merge (bd polyglot-pdf-8vy3).
+
+        Used by the DTI coercion gates: a RESOLVABLE id is authoritative (the
+        model may legitimately target a PREVIOUS field -- a late correction after
+        its confirm advanced the pointer); only an UNRESOLVABLE id (the jnjj.46
+        hallucination mode) is re-pointed at the current field."""
+        if not field_id:
+            return False
+        if field_id in self._dti_extra_fields:
+            return True
+        return any(f.get("id") == field_id
+                   for f in (self._schema or {}).get("fields", []))
+
     async def start_session(
         self,
         websocket: WebSocket,
@@ -281,6 +296,9 @@ class FormFillingService:
             # update can't be coerced onto the just-confirmed field if next-field
             # delivery times out (Codex PR #264).
             clear_current_field=self._clear_current_field_id,
+            # Resolvable ids are authoritative -- only an unknown id is coerced
+            # (bd polyglot-pdf-8vy3; symmetric with the update-side gate).
+            is_known_field=self._is_known_field_id,
         )
 
         # Use web form tool declarations (stateless)
@@ -369,16 +387,26 @@ class FormFillingService:
         if self._audio_handler:
             await self._audio_handler.send_context_hint(hint_text)
 
-    async def send_manual_field_update(self, field_id: str, field_name: str, value: Any, next_field_hint: Optional[str] = None):
+    async def send_manual_field_update(self, field_id: str, field_name: str, value: Any,
+                                       next_field_hint: Optional[str] = None,
+                                       next_field_schema: Optional[Dict[str, Any]] = None):
         """Notify Gemini of manual field update. Delegates to AudioHandler."""
         # A manual edit is auto-confirmed by the frontend, so the field the DTI
         # current-field pointer names is now DONE. Invalidate the pointer (Codex PR
         # #264 P0): otherwise the next spoken answer -- which is for the field
         # next_field_hint points at, NOT this manually-edited one -- would be coerced
         # by update_form_fields onto the just-edited+confirmed field, overwriting it.
-        # The pointer is re-set when the next field's schema is delivered
-        # (merge_field_schema) / a fresh initiating message fires.
         self._current_field_id = None
+        # Re-establish the pointer for the NEXT field (bd polyglot-pdf-ezg2): a
+        # manual edit does not trigger the confirm_field next-field-hint round-trip
+        # (the usual merge_field_schema carrier), so without this the pointer strands
+        # at None and the immediately-following voice answer is neither coerced nor
+        # (if the field was never merged) accepted. The client sends the next field's
+        # schema alongside the hint; merge it exactly like the confirm path does --
+        # this both re-points the coercion and adds the field to the validation pool.
+        if (getattr(self._settings, "USE_DTI", False)
+                and isinstance(next_field_schema, dict) and next_field_schema.get("id")):
+            self.merge_field_schema(next_field_schema)
         if self._audio_handler:
             # AudioHandler appends next_field_hint to the spoken message, so strip
             # the "(field_id: ...)" parenthetical here too (bd polyglot-pdf-dx7).
@@ -1132,6 +1160,15 @@ class FormFillingService:
         sent_id, value = next(iter(updates.items()))
         if sent_id == current:
             return updates  # normal path -- model named the right field
+        # A RESOLVABLE id is AUTHORITATIVE (bd polyglot-pdf-8vy3, live-run evidence
+        # 2026-07-05): the model legitimately targets a PREVIOUS field when the user
+        # corrects it after its confirm already advanced the pointer -- the blanket
+        # coercion re-pointed those corrections onto the CURRENT field, silently
+        # corrupting it (a 30q continuous run misfiled 5 fields this way while the
+        # model's ids were right every single time). So only an id that resolves to
+        # NO known field -- the jnjj.46 hallucination mode -- is re-pointed.
+        if self._is_known_field_id(sent_id):
+            return updates
         # Log ONLY the schema-validated target id (current); NEVER sent_id -- it is raw
         # model input and can carry the user's answer if the model swaps args (Codex
         # PR #264 P0, no-PII policy). "coerced=True" + the real id is enough signal.

@@ -86,7 +86,7 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `form_state` | apply client field list → `form_state_ack` (backend echoes applied ids only; client owns state) |
 | `next_field_hint` | forward a hint to Gemini → `hint_ack` |
 | `form_state_response` / `field_value_response` / `next_field_hint_response` / `section_info_response` / `confirm_field_response` | resolve a pending backend→frontend async request (`confirm_field_response` carries `{recorded, reason}` for the synchronous confirm round-trip, bd polyglot-pdf-wpw.2, plus an optional `section_complete` flag the WS route reads and threads to the confirm handler so it skips the racing next-field-hint at a section boundary, bd njvh -- see ws-protocol.md for the field) |
-| `manual_field_update` | user manually edited a field → forwarded to Gemini (keeps context in sync) |
+| `manual_field_update` | user manually edited a field → forwarded to Gemini (keeps context in sync); in DTI mode an optional `next_field_schema` rider re-establishes the current-field pointer + validation entry via `merge_field_schema` (bd polyglot-pdf-ezg2) |
 | `read_disclaimer` | send disclaimer initiating message in a language → `disclaimer_read_initiated` |
 | `completion_message` | send a prompt that should make Gemini speak → `completion_ack` |
 | `recovery_prompt` | level 1/2/3 stall-recovery prompt → `recovery_prompt_ack` |
