@@ -59,7 +59,10 @@
 .pdf-preview-modal__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  /* Above the voice overlay panels (10000 desktop / 9999 mobile) so the
+     preview actually covers the screen mid-session, matching the other
+     modals' layering (DisclaimerModal/ConnectionTimeoutModal at 10000). */
+  z-index: 10500;
   display: flex;
   align-items: center;
   justify-content: center;
