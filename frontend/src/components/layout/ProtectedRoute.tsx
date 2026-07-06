@@ -8,15 +8,10 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-    const { user, loading } = useAuth();
-
-    if (loading) {
-        return (
-            <div className="auth-loading">
-                <div className="auth-spinner"></div>
-            </div>
-        );
-    }
+    // No loading branch: AuthProvider renders `{!loading && children}`
+    // (AuthContext.tsx), so a ProtectedRoute never mounts while auth is loading --
+    // the auth-init wait is owned upstream (bd polyglot-pdf-31u1).
+    const { user } = useAuth();
 
     if (!user) {
         return <Login />;

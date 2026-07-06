@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/routes/pdf_fill_routes.py backend/config.py backend/ports/live_ai_port.py backend/models/
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- the pdf_fill_routes.py checkbox_group/pdf_on_value work, config.py SI-directive addition, and models/ schema-v2 changes since 07-04 are all changes within files already rated correctly for the reasons stated, not new risk surfaces). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
 
 A static high/med/low risk rating for the files (and key functions) in this repo.
 It exists as a **cheap, pre-computed signal a reviewer can lean on instead of
@@ -79,7 +79,7 @@ listed -- **anything not listed is treated as `low` until rated otherwise.**
 | `backend/services/ai_context.py` | Builds the system instruction / context for the adapter -- real behavior, but bugs surface in the adapter it feeds. |
 | `backend/models/conditional_vocabulary.py` | The schema-v2 operator/trigger registry + option-slug convention (bd h76m.3) driving the `form_models.py` v2 validators (and later the P1.2 contract render + P2.1 lint) -- a wrong matrix entry mis-validates, but bugs surface through the model validation it feeds. |
 | `backend/services/form_filling_service.py`, `manifest_service.py`, `validation_handler.py`, `request_coordinator.py` | Service-layer logic with callers, but not a cross-file contract or a money/PII surface on their own. |
-| `backend/routes/vad_config_routes.py`, `form_kit_routes.py`, `disclaimer_routes.py` | Route handlers with narrower blast radius than the WS/PDF routes. |
+| `backend/routes/form_kit_routes.py`, `disclaimer_routes.py` | Route handlers with narrower blast radius than the WS/PDF routes. |
 | `backend/main.py`, `backend/dependencies.py` | Wiring/bootstrap -- a break is loud and caught immediately at startup. |
 
 ### Low (illustrative -- the default)
