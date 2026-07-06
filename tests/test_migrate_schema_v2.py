@@ -151,7 +151,7 @@ def test_conditional_fields_is_dropped():
 # --- controls_fields drop-if-mirrored / report-if-unmirrored ----------------
 
 def test_mirrored_controls_field_is_dropped():
-    # trigger controls target; target ALSO has a show_if naming the trigger.
+    # trigger controls target; target's show_if MATCHES on field+operator+value.
     trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
         {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
         {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
@@ -165,8 +165,28 @@ def test_mirrored_controls_field_is_dropped():
     assert rep["unmirrored_controls"] == []
 
 
+def test_controls_edge_on_a_DIFFERENT_value_is_not_mirrored():
+    # fresh-eyes: the edge gates on option R[0] but the target's show_if gates on
+    # a DIFFERENT option R[1] -- these are distinct conditions, NOT a mirror, so
+    # the edge must be REPORTED + kept (a value-blind check would drop it).
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "R[0]",
+                             "unlocks": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
+              "show_if": {"field": "trg", "operator": "equals", "value": "R[1]"}}
+    out, rep = mig.migrate(_v1([trigger, target]))
+    assert out["fields"][0].get("controls_fields"), "distinct-value edge must be kept"
+    assert rep["controls_fields_dropped"] == 0
+    assert rep["unmirrored_controls"] and rep["unmirrored_controls"][0]["targets"] == ["tgt"]
+    # The surviving edge is MIGRATED to v2 (value -> new slug), not stale.
+    kept = out["fields"][0]["controls_fields"][0]
+    assert kept["value"] == "yes"  # slug for R[0]'s label "Yes"
+
+
 def test_unmirrored_controls_field_is_reported_and_kept():
-    # target has NO mirroring show_if -> the edge is reported, not silently lost.
+    # target has NO condition at all -> the edge is reported, not silently lost.
     trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
         {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
         {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
@@ -177,6 +197,19 @@ def test_unmirrored_controls_field_is_reported_and_kept():
     assert out["fields"][0].get("controls_fields")  # kept for the human
     assert rep["controls_fields_dropped"] == 0
     assert rep["unmirrored_controls"] and rep["unmirrored_controls"][0]["targets"] == ["tgt"]
+
+
+def test_duplicate_option_values_are_reported_not_collapsed():
+    # fresh-eyes: two options sharing a v1 value are ambiguous to rewrite; the
+    # collision is REPORTED and the value is left OUT of the rewrite map (so a
+    # referencing condition is preserved verbatim, not silently mis-slugged).
+    f = {"id": "g", "type": "checkbox", "pdf_field_name": "G[0]", "options": [
+        {"value": "DUP", "label": "Alpha", "pdf_field_name": "G[0]"},
+        {"value": "DUP", "label": "Beta", "pdf_field_name": "G[1]"}]}
+    out, rep = mig.migrate(_v1([f]))
+    assert rep["duplicate_option_values"] == [{"field": "g", "values": ["DUP"]}]
+    # The map does NOT contain the ambiguous 'DUP' key.
+    assert "DUP" not in rep["slug_maps"].get("g", {})
 
 
 # --- idempotency + version stamp --------------------------------------------
@@ -212,5 +245,11 @@ def test_migrated_i90_validates_v2_lints_clean_and_is_idempotent():
     assert len(migrated["fields"]) == 132
     # Idempotent.
     assert mig.migrate(migrated, dump)[0] == migrated
-    # No unmirrored controls left unhandled on the hand-curated i-90.
-    assert report["unmirrored_controls"] == []
+    # The i-90 has 3 controls_fields edges whose target-side condition gates on a
+    # DIFFERENT option value than the edge (genuinely distinct conditions on the
+    # same 12-option group) -- these are correctly REPORTED (not silently dropped,
+    # fresh-eyes) and KEPT (migrated to v2 slugs, so still lint-clean above).
+    assert len(report["unmirrored_controls"]) == 3
+    # No ambiguous duplicate option values or unresolved trigger refs on i-90.
+    assert report["duplicate_option_values"] == []
+    assert report.get("unresolved_trigger_refs", []) == []

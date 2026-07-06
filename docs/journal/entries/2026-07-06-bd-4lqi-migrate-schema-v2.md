@@ -79,6 +79,23 @@ dual fate matches the shared fixture; an unmirrored controls_fields edge is
 reported not dropped. 11 tests; the P1.1 validator suite (shared fixture) stays
 green.
 
+## Review fixes (pre-PR fresh-eyes)
+
+Three real bugs caught, all fixed. (1) HIGH -- the controls_fields mirror check
+(`_target_mirrors`) only checked that the target's show_if NAMED the trigger, not
+that its operator+value MATCHED. On the real i-90, `p2_checkbox2[5]`'s edge gates
+on option `[0]` while the target's show_if gates on the unrelated option `[11]`
+-- a value-blind check silently dropped that live, distinct edge and reported it
+as safe. Now the check matches on (field, operator, value) after normalization;
+i-90 has 3 such genuinely-distinct edges, now correctly REPORTED and KEPT
+(migrated to v2 slugs so still lint-clean). (2) `_mint_field_slugs`'s old->new map
+keyed on str(old value), so two options sharing a v1 value collapsed to the last
+one's slug, silently mis-rewriting a referencing condition. Now a duplicate value
+is REPORTED (`duplicate_option_values`) and left OUT of the map (condition
+preserved verbatim); i-90 has none but a future kit is protected. (3) an
+unresolved trigger id (a would-be operator rewrite skipped) is now REPORTED
+(`unresolved_trigger_refs`); i-90 has none.
+
 ## Unblocks
 
 P6.1b (`c5r8`, apply to i-90 + equivalence + demo QA) and P6.1c (`w0eq`,

@@ -88,31 +88,46 @@ def _unwrap_single_option_checkbox(f: Dict[str, Any]) -> bool:
     return True
 
 
-def _mint_field_slugs(f: Dict[str, Any]) -> Dict[str, str]:
-    """Re-mint a choice field's option values to slugs; return old->new map.
+def _mint_field_slugs(f: Dict[str, Any]) -> Tuple[Dict[str, str], List[str]]:
+    """Re-mint a choice field's option values to slugs; return (old->new map,
+    colliding_old_values).
 
     Minted from labels (unique per field). An option with no label falls back to
     its existing value as the mint input, so a label-less option still gets a
     stable slug. Options are mutated in place.
+
+    A v1 field with TWO options sharing one `value` is ambiguous: a condition
+    referencing that old value cannot be rewritten to a single new slug without
+    guessing. Such colliding old values are REPORTED (not silently collapsed to
+    the last option's slug -- fresh-eyes) and left OUT of the rewrite map, so the
+    referencing condition is preserved verbatim for a human to resolve rather
+    than corrupted.
     """
     options = f.get("options")
     if not isinstance(options, list):
-        return {}
+        return {}, []
     labels = [
         (o.get("label") if isinstance(o, dict) and o.get("label")
          else str(o.get("value")) if isinstance(o, dict) else str(o))
         for o in options
     ]
     slugs = vocab.mint_unique_slugs([str(x) for x in labels])
+    # First pass: count how many options each old value appears on.
+    old_counts: Dict[str, int] = {}
+    for o in options:
+        if isinstance(o, dict) and o.get("value") is not None:
+            old_counts[str(o["value"])] = old_counts.get(str(o["value"]), 0) + 1
+    colliding = sorted(v for v, n in old_counts.items() if n > 1)
     old_to_new: Dict[str, str] = {}
     for o, slug in zip(options, slugs):
         if not isinstance(o, dict):
             continue
         old = o.get("value")
-        if old is not None:
+        # Only map an UNAMBIGUOUS old value (appears on exactly one option).
+        if old is not None and old_counts.get(str(old), 0) == 1:
             old_to_new[str(old)] = slug
         o["value"] = slug
-    return old_to_new
+    return old_to_new, colliding
 
 
 def _rewrite_atom_value(atom: Dict[str, Any], old_to_new: Dict[str, str],
@@ -301,7 +316,7 @@ def migrate(schema: Dict[str, Any],
         "operators_rewritten": 0, "behaviors_folded": 0,
         "controls_fields_dropped": 0, "unmirrored_controls": [],
         "conditional_fields_dropped": 0, "options_from_dump": [],
-        "needs_options": [],
+        "needs_options": [], "duplicate_option_values": [],
     }
 
     if str(migrated.get("schema_version")) == vocab.SCHEMA_VERSION_V2:
@@ -335,9 +350,15 @@ def migrate(schema: Dict[str, Any],
         if _recover_options_from_dump(f, dump, report):
             pass
         if isinstance(f.get("options"), list) and f.get("type") in vocab.CHOICE_FIELD_TYPES:
-            m = _mint_field_slugs(f)
+            m, colliding = _mint_field_slugs(f)
             if m and isinstance(fid, str):
                 slug_maps[fid] = m
+            if colliding and isinstance(fid, str):
+                # A duplicate v1 option value is ambiguous to rewrite -- reported,
+                # not silently collapsed (fresh-eyes). i-90 has none; a future
+                # kit (P6.1c) with duplicates surfaces here instead of corrupting.
+                report["duplicate_option_values"].append(
+                    {"field": fid, "values": colliding})
     report["slug_maps"] = slug_maps
 
     def _trigger_type(trigger_id: Any) -> Optional[str]:
@@ -356,6 +377,13 @@ def migrate(schema: Dict[str, Any],
             cond = f.get(kind)
             for atom in _walk_condition_atoms(cond):
                 trig = atom.get("field")
+                # An atom naming a trigger that does not resolve to a field is
+                # REPORTED (fresh-eyes): its type-keyed operator rewrite (e.g.
+                # is_checked -> is_not_empty on a group) is skipped, so a would-be
+                # invalid operator must not slip through silently. i-90 has none.
+                if isinstance(trig, str) and trig not in fields_by_id:
+                    report.setdefault("unresolved_trigger_refs", []).append(
+                        {"in": f.get("id"), "kind": kind, "trigger": trig})
                 before = (atom.get("operator"), copy.deepcopy(atom.get("value")))
                 _rewrite_atom_value(atom, _slug_map_for(trig),
                                     _trigger_type(trig))
@@ -378,18 +406,33 @@ def migrate(schema: Dict[str, Any],
         if not isinstance(controls, list):
             continue
         trigger_id = f.get("id")
+        trig_type = f.get("type")  # post-pass-1 type (checkbox_group/select/...)
+        trig_slug_map = slug_maps.get(trigger_id, {}) if isinstance(trigger_id, str) else {}
         surviving: List[dict] = []
         for control in controls:
             if not isinstance(control, dict):
                 continue
-            unmirrored = _unmirrored_targets(control, trigger_id, fields_by_id)
+            unmirrored = _unmirrored_targets(control, trigger_id, trig_type,
+                                             trig_slug_map, fields_by_id)
             if unmirrored:
+                # Keep the unmirrored edge for the human -- but MIGRATE its
+                # operator+value to v2 (slug + group operator) like a show_if
+                # atom, so the surviving control is v2-valid (lint-clean), not a
+                # stale widget-leaf value that would ref-option-value error.
+                migrated_atom = {"operator": control.get("operator", "equals"),
+                                 "value": control.get("value")}
+                _rewrite_atom_value(migrated_atom, trig_slug_map, trig_type)
+                control["operator"] = migrated_atom["operator"]
+                if "value" in migrated_atom:
+                    control["value"] = migrated_atom["value"]
+                else:
+                    control.pop("value", None)
                 report["unmirrored_controls"].append({
                     "trigger": trigger_id,
-                    "operator": control.get("operator", "equals"),
+                    "operator": control["operator"],
                     "targets": unmirrored,
                 })
-                surviving.append(control)  # keep an unmirrored edge for the human
+                surviving.append(control)
             else:
                 report["controls_fields_dropped"] += 1
         if surviving:
@@ -401,11 +444,40 @@ def migrate(schema: Dict[str, Any],
     return migrated, report
 
 
+def _control_condition(control: Dict[str, Any], trigger_id: Any,
+                       trigger_type: Optional[str],
+                       slug_map: Dict[str, str]) -> Dict[str, Any]:
+    """The equivalent show_if atom a controls_fields edge implies, NORMALIZED to
+    v2 (same operator/value rewrites the target-side atoms got). This is what a
+    mirroring target-side condition must MATCH."""
+    atom = {"field": trigger_id, "operator": control.get("operator", "equals"),
+            "value": control.get("value")}
+    _rewrite_atom_value(atom, slug_map, trigger_type)
+    return atom
+
+
+def _target_mirrors(target: Dict[str, Any], want: Dict[str, Any]) -> bool:
+    """True if the target's show_if/require_if carries an atom that MATCHES the
+    control's implied condition on (field, operator, value) -- a TRUE mirror, not
+    merely naming the same trigger (fresh-eyes: a value/polarity-blind match
+    silently drops a live, distinct edge -- e.g. the i-90 p2_checkbox2[5] edge
+    gating on option [0] while the target's show_if gates on option [11])."""
+    for kind in ("show_if", "require_if"):
+        for atom in _walk_condition_atoms(target.get(kind)):
+            if (atom.get("field") == want.get("field")
+                    and atom.get("operator") == want.get("operator")
+                    and atom.get("value") == want.get("value")):
+                return True
+    return False
+
+
 def _unmirrored_targets(control: Dict[str, Any], trigger_id: Any,
+                        trigger_type: Optional[str], slug_map: Dict[str, str],
                         fields_by_id: Dict[str, dict]) -> List[str]:
-    """Target ids of a controls_fields edge that DON'T carry a mirroring
-    show_if/require_if naming the trigger. An empty list means fully mirrored
-    (safe to drop the edge)."""
+    """Target ids of a controls_fields edge whose target does NOT carry a
+    condition MATCHING the edge's implied condition (field+operator+value). An
+    empty list means every target truly mirrors the edge (safe to drop it)."""
+    want = _control_condition(control, trigger_id, trigger_type, slug_map)
     targets: List[str] = []
     for key in _ACTION_KEYS:
         vals = control.get(key)
@@ -414,18 +486,9 @@ def _unmirrored_targets(control: Dict[str, Any], trigger_id: Any,
     unmirrored: List[str] = []
     for tid in targets:
         target = fields_by_id.get(tid)
-        if not isinstance(target, dict) or not _target_mentions_trigger(target, trigger_id):
+        if not isinstance(target, dict) or not _target_mirrors(target, want):
             unmirrored.append(tid)
     return unmirrored
-
-
-def _target_mentions_trigger(target: Dict[str, Any], trigger_id: Any) -> bool:
-    """True if the target's show_if or require_if names trigger_id in any atom."""
-    for kind in ("show_if", "require_if"):
-        for atom in _walk_condition_atoms(target.get(kind)):
-            if atom.get("field") == trigger_id:
-                return True
-    return False
 
 
 def main(argv: Optional[List[str]] = None) -> int:
