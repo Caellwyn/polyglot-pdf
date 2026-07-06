@@ -17,7 +17,7 @@ declare global {
 }
 
 import React, { useEffect, useRef, useState, useMemo } from 'react'
-import { createConnectionManager, type ConnectionManager } from '../shared/connection'
+import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
@@ -32,11 +32,15 @@ interface VoiceOverlayProps {
 	schema: FormSchema
 	wsUrl?: string
 	onClose?: () => void
-	connectionManager?: ConnectionManager
+	// Required (bd polyglot-pdf-d0k): this overlay never creates its own
+	// ConnectionManager (all connections must carry an auth token, and the parent
+	// -- SchemaForm.tsx -- is the only production render site), so it always
+	// receives the manager from the parent.
+	connectionManager: ConnectionManager
 	status?: string
-	// Thinking indicator from the parent (bd polyglot-pdf-wpw.5): when SchemaForm owns
-	// the shared ConnectionManager it wires onThinkingChange and passes the value down
-	// here (mirrors `status`), since this overlay skips its own manager in that case.
+	// Thinking indicator from the parent (bd polyglot-pdf-wpw.5): SchemaForm owns
+	// the shared ConnectionManager and wires onThinkingChange, passing the value
+	// down here (mirrors `status`).
 	thinking?: boolean
 	// FIX #1: Shared audio stream passed from parent (prevents race conditions)
 	sharedStream?: MediaStream | null
@@ -47,8 +51,8 @@ interface VoiceOverlayProps {
 }
 
 export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: sharedConnectionManager, status: sharedStatus, thinking: sharedThinking, sharedStream, streamError, initialLanguage }: VoiceOverlayProps) {
-	const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(sharedConnectionManager || null)
-	const connectionManagerRef = useRef<ConnectionManager | null>(sharedConnectionManager || null)
+	const [connectionManager, setConnectionManager] = useState<ConnectionManager>(sharedConnectionManager)
+	const connectionManagerRef = useRef<ConnectionManager>(sharedConnectionManager)
 	const [status, setStatus] = useState<string>(sharedStatus || 'Ready')
 	const [error, setError] = useState<string | null>(null)
 	// Thinking indicator (bd polyglot-pdf-wpw.5): true while the agent is processing
@@ -551,51 +555,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// Only initialize after stream is ready
 	const vad = useDemoVAD(vadOptions)
 
-	// Initialize connection manager on mount
+	// Adopt the shared connection manager on mount (bd polyglot-pdf-d0k). This
+	// overlay never creates its own ConnectionManager: all connections must carry
+	// an auth token (Google retired the tokenless Live API path), and the parent
+	// (SchemaForm.tsx) is the only production render site, always supplying one.
 	useEffect(() => {
-		// If shared manager provided, use it
-		if (sharedConnectionManager) {
-			connectionManagerRef.current = sharedConnectionManager
-			setConnectionManager(sharedConnectionManager)
-			return
-		}
-
-		// Otherwise create our own (standalone mode)
-		if (connectionManagerRef.current) {
-			return
-		}
-
-		// Initialize with schema-based state
-		const state = SchemaFormStateManager.init(schema)
-
-		// FIX #1: Connection manager receives stream from parent (already created)
-		const manager = createConnectionManager(
-			state.schema,
-			(newStatus) => {
-				setStatus(newStatus)
-				setError(null)
-			},
-			'English', // Default to English
-			sharedStream || undefined, // Pass shared stream from parent
-			undefined, // onNextField (unused here)
-			undefined, // getToken (unused here)
-			(isThinking) => setThinking(isThinking) // bd polyglot-pdf-wpw.5: thinking indicator
-		)
-
-		connectionManagerRef.current = manager
-		setConnectionManager(manager)
-
-		return () => {
-			// Only cleanup if we created the manager (not shared)
-			if (!sharedConnectionManager) {
-				if (connectionManagerRef.current) {
-					connectionManagerRef.current.disconnect()
-					connectionManagerRef.current = null
-				}
-				setConnectionManager(null)
-			}
-		}
-	}, [schema, sharedConnectionManager]) // Recreate when schema changes
+		connectionManagerRef.current = sharedConnectionManager
+		setConnectionManager(sharedConnectionManager)
+	}, [sharedConnectionManager])
 	// Sync status from shared prop
 	useEffect(() => {
 		if (sharedStatus !== undefined) {
