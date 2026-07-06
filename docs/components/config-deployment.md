@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the missing `USE_DTI` env-overridable flag to the Settings list + Feature flags table). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md](../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -160,7 +160,14 @@ stages):
   → `.env.demo`). Output `frontend/dist` → `firebase deploy --only hosting:app`. The
   bare `npm run build` is NOT used: it loads `.env.production` under the default
   Vite config, whose Firebase keys differ per channel — a demo built that way dies
-  with `auth/invalid-api-key`.
+  with `auth/invalid-api-key`. **Backend WS URL is resolved at deploy time** (bd
+  `emm7`): before the build, `deploy-all.sh` resolves the live Cloud Run URL
+  (`gcloud run services describe polyglot-backend --format 'value(status.url)'`)
+  and exports `VITE_WS_URL` (which OVERRIDES the `.env.<mode>` `VITE_WS_URL` line —
+  standard Vite precedence). The `VITE_WS_URL` values committed in `.env.demo` /
+  `.env.production` are now documented FALLBACK-ONLY, because the Cloud Run auto-URL
+  hash is not stable (it drifted on a service recreate and 404'd the deployed
+  frontend).
 - **Firestore rules** — `firebase deploy --only firestore:rules` ships
   `firestore.rules` (wired via `firebase.json`). This step lives in the
   **`deploy-demo.sh` / `deploy-production.sh` wrappers**, not `deploy-all.sh`, runs
@@ -186,6 +193,11 @@ silently ship a stale editor build), and the editor ships only via
 header is the one-time runbook: site create, `target:apply`, the two
 access-code secrets attached once to Cloud Run with `--set-secrets`, and the
 bucket `roles/storage.objectAdmin` grant the editor's writes need).
+`deploy-editor.sh` also **resolves the live Cloud Run URL at deploy time** and
+exports `VITE_API_BASE_URL` (overriding the `.env.hosted` fallback), same as the
+voice app -- a committed hash there once drifted on a service recreate and made
+every access-code entry hit a 404'd backend, looking like a wrong password (bd
+`emm7`).
 `deploy-demo.sh` carries `EXTRACTOR_MODEL` + `CORS_EXTRA_ORIGINS`
 (SEMICOLON-separated origins -- commas are `--set-env-vars`' pair separator)
 via `BACKEND_EXTRA_ENV`; the backend deploy runs `--memory=1Gi` (extraction
@@ -204,9 +216,13 @@ plus a catch-all `** → /index.html` for SPA routing.
 **WebSockets do NOT go through the Hosting rewrite** (Firebase Hosting can't proxy
 WS). `frontend/src/shared/config.ts` `getBackendUrl()` resolves the WS URL in this
 order: (1) local-dev override (`window.__VFF_LOCAL_DEV` → `window.__VFF_BACKEND_URL`,
-default `ws://localhost:8000/ws/fill`); (2) `VITE_WS_URL` env var; (3) production —
-the hardcoded `PRODUCTION_WS_URL` (`wss://polyglot-backend-d3mhrrkwfq-uc.a.run.app/ws/fill`)
-when the page is HTTPS and not localhost; (4) dev fallback `ws://localhost:8000/ws/fill`.
+default `ws://localhost:8000/ws/fill`); (2) `VITE_WS_URL` env var — **this is the
+real production path**: the deploy injects the live Cloud Run URL here at build time
+(bd `emm7`), so a deployed bundle carries the resolved URL, not a baked literal;
+(3) a hardcoded `PRODUCTION_WS_URL` constant in `config.ts` when the page is HTTPS
+and not localhost — a **stale last-resort fallback** (it still holds an old
+`d3mhrrkwfq` hash that 404s; it only fires if `VITE_WS_URL` was somehow unset at
+build, which the deploy no longer allows); (4) dev fallback `ws://localhost:8000/ws/fill`.
 The `__VFF_*` dev overrides are read from `window` OR `localStorage` (so they
 survive a reload). `config.ts` also exposes `isTestHarnessEnabled()` (true only
 when both `__VFF_LOCAL_DEV` and `__VFF_TEST_HARNESS` are set) — a dev/test-only
