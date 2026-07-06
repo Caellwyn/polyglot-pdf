@@ -44,7 +44,17 @@ maintainer's explicit cutover.
 - Rides along: the PR #336 closeout's telemetry row (that PR merged before the
   row could be committed).
 
-Fresh-eyes assess outcome: (folded in after the Step-5.5 loop).
+Fresh-eyes assess outcome (2 rounds): round 1 (sonnet, arm B picker) scored
+all three criteria PASS; its one out-of-scope gap (a mid-session resize from
+desktop into mobile width keeps a previously-chosen Preview mode -- the
+criterion's "initial mode" wording covers fresh mounts only) it filed itself
+as `polyglot-pdf-ipin`. Of its two observations I filed the component-test one
+as `polyglot-pdf-fdz8` (pin the overlay-outside-view-switch invariant) and
+skipped the notice-wording duplication (trivial; the pane is reworked in
+P1.2). No inline fixes required. Round 2 (Opus clearing round): NO-GAPS --
+traced value persistence (sessionStorage-first, DOM-independent), WS
+non-disruption (ConnectionManager effect keyed on streamReady only), lazy
+purity, and flag-off no-op independently.
 
 ## Lessons
 
