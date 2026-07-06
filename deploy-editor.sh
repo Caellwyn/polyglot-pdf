@@ -42,6 +42,26 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT="${PROJECT:-polyglot-demo-aa709}"
 EDITOR_SITE="${EDITOR_SITE:-polyglot-editor-demo}"
+BACKEND_SERVICE_NAME="${BACKEND_SERVICE_NAME:-polyglot-backend}"
+REGION="${REGION:-us-central1}"
+
+# Resolve the LIVE backend URL at deploy time and inject it, instead of trusting
+# the committed VITE_API_BASE_URL literal in .env.hosted (bd polyglot-pdf-emm7).
+# The Cloud Run auto-URL hash is NOT stable -- it changed (d3mhrrkwfq ->
+# won24rgefq) on a service recreate and every editor access-code entry then hit a
+# 404'd backend, looking like a wrong password. A shell VITE_* overrides the
+# .env.hosted value (standard Vite precedence), so the committed literal becomes a
+# documented fallback, not a landmine. Let a caller-provided VITE_API_BASE_URL win
+# (e.g. a local full-stack test pointing at http://localhost:8000).
+if [ -z "$VITE_API_BASE_URL" ]; then
+    RESOLVED_BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$PROJECT" --format 'value(status.url)' 2>/dev/null || true)
+    if [ -n "$RESOLVED_BACKEND_URL" ]; then
+        export VITE_API_BASE_URL="$RESOLVED_BACKEND_URL"
+        echo "Injecting live backend URL into build: VITE_API_BASE_URL=$VITE_API_BASE_URL"
+    else
+        echo "WARN: could not resolve live backend URL; build falls back to VITE_API_BASE_URL in .env.hosted (may be stale -- bd polyglot-pdf-emm7)" >&2
+    fi
+fi
 
 echo "Building the hosted editor (mode hosted -> .env.hosted)..."
 cd "$SCRIPT_DIR/schema-editor"

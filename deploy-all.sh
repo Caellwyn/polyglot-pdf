@@ -372,6 +372,28 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         fi
     fi
 
+    # Resolve the LIVE backend URL at deploy time and inject it into the build,
+    # instead of trusting a committed VITE_WS_URL literal in .env.<mode> (bd
+    # polyglot-pdf-emm7). The Cloud Run auto-URL hash is NOT stable -- it changed
+    # (d3mhrrkwfq -> won24rgefq) on a service recreate and silently pointed the
+    # deployed frontend at a 404'd backend. A shell VITE_* overrides the .env file
+    # (standard Vite precedence; .env.demo documents this), so the .env literals
+    # become fallbacks, not load-bearing. Reuse BACKEND_URL if the backend stage
+    # set it earlier in THIS process (a bare `deploy-all.sh` / `--all` run);
+    # otherwise resolve it fresh -- which is the usual path, since the demo/prod
+    # wrappers run the frontend stage as a SEPARATE `deploy-all.sh --frontend`
+    # invocation where nothing carries over.
+    if [ -z "$BACKEND_URL" ]; then
+        BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE_NAME" --platform managed --region "$REGION" --project "$POLYGLOT_PROJECT_NAME" --format 'value(status.url)' 2>/dev/null || true)
+    fi
+    if [ -n "$BACKEND_URL" ]; then
+        # https://host -> wss://host/ws/fill (the app's WS endpoint).
+        export VITE_WS_URL="${BACKEND_URL/https:/wss:}/ws/fill"
+        log_info "🔌 Injecting live backend URL into build: VITE_WS_URL=$VITE_WS_URL"
+    else
+        log_warn "Could not resolve live backend URL; build will fall back to VITE_WS_URL in .env.<mode> (may be stale -- bd polyglot-pdf-emm7)"
+    fi
+
     # Build frontend (channel-aware; see FRONTEND_BUILD_CMD above)
     log_info "📦 Building frontend ($FRONTEND_BUILD_CMD)..."
     $FRONTEND_BUILD_CMD
