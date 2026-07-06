@@ -230,6 +230,46 @@ describe('App hosted mode (bd 92qe.2)', () => {
     await screen.findByLabelText('Access code');
   });
 
+  it('a repair in flight does NOT clobber a kit opened mid-repair (bd r5vp)', async () => {
+    // Stale-open guard: repair kit A (slow), open kit B before it resolves;
+    // the repair reload must NOT overwrite B's displayed schema with A's.
+    vi.mocked(probeSession).mockResolvedValue({ role: 'author' });
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    vi.mocked(loadRemotePdfBlobUrl).mockResolvedValue('blob:pdf');
+    // Per-kit schemas so we can tell which one is displayed by field id.
+    vi.mocked(loadRemoteSchema).mockImplementation(async (kitId: string) => ({
+      ...JSON.parse(JSON.stringify(SCHEMA)),
+      fields: [{ id: kitId === 'second-kit' ? 'B_field' : 'A_field',
+                 name: 'X', type: 'text', spoken_name: 'x' }],
+    } as unknown as FormSchema));
+    // repairKit for kit A hangs until we release it.
+    let releaseRepair: () => void = () => {};
+    vi.mocked(repairKit).mockReturnValue(
+      new Promise((resolve) => { releaseRepair = () => resolve({
+        applied: 1, dropped: 0, aliasHits: 0, repairs: [], errorCount: 0, warningCount: 0,
+      }); }),
+    );
+
+    await passGate();
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Draft Form'));           // open kit A
+    await waitFor(() => expect(screen.getByTestId('repair-all')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('repair-all'));          // repair A (hangs)
+    await waitFor(() => expect(repairKit).toHaveBeenCalledWith('draft-kit'));
+
+    // Open kit B while A's repair is still in flight.
+    fireEvent.click(screen.getByText('Second Form'));
+    await waitFor(() => expect(loadRemoteSchema).toHaveBeenCalledWith('second-kit'));
+
+    // Now let A's repair finish -- its reload must be abandoned (stale token).
+    vi.mocked(loadRemoteSchema).mockClear();
+    releaseRepair();
+    await waitFor(() => expect(repairKit).toHaveBeenCalledTimes(1));
+    // The repair's reload of kit A must NOT have run after B superseded it.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loadRemoteSchema).not.toHaveBeenCalledWith('draft-kit');
+  });
+
   it('hosted mode never calls the File System Access pickers', async () => {
     const savePicker = vi.fn();
     const dirPicker = vi.fn();

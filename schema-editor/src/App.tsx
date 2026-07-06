@@ -563,12 +563,22 @@ export const App: React.FC = () => {
       );
       if (!ok) return;
     }
+    // Stale-open guard (bd polyglot-pdf-r5vp): repair is a multi-second round trip
+    // (deterministic repair + store write + reload) and the catalogue stays
+    // clickable, so if the author opens a DIFFERENT kit mid-flight, this repair's
+    // reload must NOT clobber the newer kit's display -- the same openSeqRef token
+    // handleOpenRemoteKit uses (Codex PR #280). Capture it at entry; abandon after
+    // any await once a newer open (or repair) supersedes us.
+    const seq = ++openSeqRef.current;
     try {
       await repairKit(selectedKitId);
+      if (seq !== openSeqRef.current) return; // superseded while repairing
       const repaired = await loadRemoteSchema(selectedKitId);
+      if (seq !== openSeqRef.current) return; // superseded while reloading
       if (repaired) loadSchemaState(repaired); // fresh baseline -> history cleared
       setSaveError(null);
     } catch (err) {
+      if (seq !== openSeqRef.current) return; // a stale repair's failure is moot
       if (err instanceof AuthError) {
         handleAuthExpired();
         return;

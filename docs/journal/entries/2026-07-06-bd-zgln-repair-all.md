@@ -1,6 +1,7 @@
 ---
 date: 2026-07-06
 bead: polyglot-pdf-zgln
+also_closes: polyglot-pdf-r5vp
 title: "P5.3b one-click Repair-all endpoint + editor button"
 tags: [schema-editor, extractor, conventions]
 ---
@@ -58,6 +59,17 @@ editor+exit tests pass (incl. author-gate 403, published-kit 409, schemaless 404
 dump-aware repair). FE: ValidationPanel 10 tests (3 new Repair-all); touched
 App/save suites green; typecheck clean. Full FE suite relied on CI's Linux runner
 (the local vitest fork-pool hangs -- see the v96b entry).
+
+## bd r5vp: stale-open guard (folded in)
+
+The Opus fallback review filed r5vp: `handleRepairAll` awaited repair + reload
+without the `openSeqRef` monotonic-token guard `handleOpenRemoteKit` uses (Codex
+PR #280). Repairing kit A (a multi-second round trip) while opening kit B
+mid-flight would let A's reload clobber B's displayed schema. Folded the fix into
+this PR (small, same file, self-inflicted this bead): `handleRepairAll` captures
+`openSeqRef` at entry and abandons after each await if a newer open/repair
+superseded it. A test opens A, repairs A (hung), opens B, then releases the
+repair and asserts A's reload never runs.
 
 ## Unblocks
 
