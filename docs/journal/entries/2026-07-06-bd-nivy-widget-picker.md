@@ -68,7 +68,17 @@ runner (the local vitest fork-pool hangs -- see the v96b entry).
 
 ## Review fixes (pre-PR)
 
-Two real bugs caught before the PR: (1) fresh-eyes -- the WidgetPicker minted the
+Three real bugs caught before the PR. (0, fresh-eyes) `unclaimed_button_widgets`
+read only `widgets[0]` of a dump entry, so a TRUE single-name AcroForm radio
+group (one field name, N kids differing only by `on_value` -- a documented v2
+shape on USCIS/legal forms) surfaced only its FIRST kid, and once any option
+claimed that shared name, the rest became permanently unreachable -- the exit
+criterion failed for that whole class of forms. Fixed: the picker now emits one
+candidate PER kid widget, and claiming is per `(name, on_value)` -- a whole-name
+claim (per-widget group / standalone) shadows every kid; a kid claim
+(`(name, on_value)`) shadows only that kid, so a partly-mapped shared-name group
+still offers its unmapped kids. Verified end-to-end (adding the Female kid ->
+lint 0/0) with four new service tests. Then: (1) fresh-eyes -- the WidgetPicker minted the
 new option slug unique against existing option LABELS, but `option-value-duplicate`
 keys on VALUE, so a hand-edited value colliding with the new label's slug would
 slip through as a duplicate-value ERROR (breaking the lint-clean criterion);

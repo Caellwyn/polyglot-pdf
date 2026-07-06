@@ -73,6 +73,52 @@ def test_radio_widgets_are_addable_too():
     assert [w["type"] for w in got] == ["radio", "radio"]
 
 
+def _shared_radio():
+    # A TRUE single-name AcroForm radio group: one field name, N kids differing
+    # only by on_value (bd nivy fresh-eyes -- the shape widgets[0] used to drop).
+    return {"fields": [{
+        "name": "form1[0].sex[0]", "logical_type": "radio", "widget_count": 2,
+        "widgets": [
+            {"type": "radio", "on_value": "M", "tu": "Male", "rect": {"page": 0}},
+            {"type": "radio", "on_value": "F", "tu": "Female", "rect": {"page": 0}},
+        ],
+    }]}
+
+
+def test_shared_name_radio_surfaces_every_kid():
+    got = unclaimed_button_widgets({"fields": []}, _shared_radio())
+    # BOTH kids are addable, distinguished by on_value (not just widgets[0]).
+    assert [(w["on_value"], w["tooltip"]) for w in got] == [
+        ("M", "Male"), ("F", "Female"),
+    ]
+
+
+def test_shared_name_radio_partial_claim_leaves_the_rest():
+    # An option claims the Male kid via the field name + pdf_on_value=M; the
+    # Female kid must STILL be addable (the whole-name claim must not hide it).
+    schema = {"fields": [{"id": "sex", "type": "radio",
+                          "pdf_field_name": "form1[0].sex[0]",
+                          "options": [{"value": "male", "pdf_on_value": "M"}]}]}
+    got = unclaimed_button_widgets(schema, _shared_radio())
+    assert [w["on_value"] for w in got] == ["F"]
+
+
+def test_shared_name_radio_all_kids_claimed_is_empty():
+    schema = {"fields": [{"id": "sex", "type": "radio",
+                          "pdf_field_name": "form1[0].sex[0]",
+                          "options": [{"value": "male", "pdf_on_value": "M"},
+                                      {"value": "female", "pdf_on_value": "F"}]}]}
+    assert unclaimed_button_widgets(schema, _shared_radio()) == []
+
+
+def test_option_level_pdf_field_name_claims_whole_name():
+    # A per-widget claim (option carries its OWN pdf_field_name) shadows the whole
+    # name -- so if a shared-name group were (mis)modeled that way, all kids hide.
+    schema = {"fields": [{"id": "sex", "type": "radio", "options": [
+        {"value": "male", "pdf_field_name": "form1[0].sex[0]"}]}]}
+    assert unclaimed_button_widgets(schema, _shared_radio()) == []
+
+
 def test_malformed_entries_never_crash():
     dump = {"fields": [None, 7, {"logical_type": "checkbox"},  # no name
                        _btn("form1[0].ok[0]", "1")]}
