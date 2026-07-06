@@ -11,7 +11,11 @@
 //
 // Two scenarios exercised for each overlay:
 //   A. alreadyLive remount (disclaimer accepted): rearmAudioCapture fires, connect does not.
-//   B. fresh mount (status disconnected, no shared manager): rearmAudioCapture does NOT fire.
+//   B. fresh mount (status disconnected): rearmAudioCapture does NOT fire.
+//
+// bd polyglot-pdf-d0k: both overlays now require a connectionManager prop --
+// there is no standalone (tokenless) creation path -- so scenario B mounts with
+// a disconnected mock manager instead of omitting the prop.
 import { render, cleanup, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { FormSchema } from '../schema-forms/types/schema'
@@ -34,13 +38,6 @@ vi.mock('./useDemoVAD', () => ({
 vi.mock('../schema-forms/utils/pdfFiller', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../schema-forms/utils/pdfFiller')>()
   return { ...actual, getBackendHttpUrl: () => 'http://localhost:8000' }
-})
-
-// --- mock createConnectionManager so the component never builds a real one; we
-//     inject our own mock manager as the connectionManager prop.
-vi.mock('../shared/connection', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../shared/connection')>()
-  return { ...actual, createConnectionManager: vi.fn() }
 })
 
 import { VoiceOverlay } from './VoiceOverlay'
@@ -194,34 +191,23 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
   }
 
   /**
-   * Scenario B: fresh mount (no shared manager -- standalone path).
-   * The alreadyLive branch is not taken, so rearmAudioCapture must NOT be called.
-   * (The standalone mount creates its own manager via createConnectionManager,
-   * which is mocked to a no-op; we pass no connectionManager prop.)
+   * Scenario B: fresh mount on a disconnected manager (bd polyglot-pdf-d0k: the
+   * standalone/tokenless creation path is gone -- connectionManager is now a
+   * required prop -- so a "fresh mount" means a disconnected manager was passed
+   * in, not that no manager exists). The alreadyLive branch is not taken, so
+   * rearmAudioCapture must NOT be called.
    */
   async function assertNoRearmOnFreshMount(
     Overlay: typeof VoiceOverlay | typeof VoiceOverlayMobile
   ) {
-    // No manager prop -- standalone fresh-mount path.
-    // createConnectionManager is mocked at the module level; return a manager whose
-    // rearmAudioCapture we can spy on, so we can pin the negative invariant: on a
-    // fresh/standalone mount the alreadyLive branch is NOT taken, so the component
-    // must never call rearmAudioCapture (a guard regression would call it).
-    const standaloneRearmSpy = vi.fn(async () => {})
-    const standaloneManager = makeResizeFlipMock()
-    ;(standaloneManager as any).rearmAudioCapture = standaloneRearmSpy
-    // A fresh standalone mount starts disconnected (no live session to re-arm).
-    ;(standaloneManager as any).getStatus = vi.fn(() => 'disconnected')
-
-    const { createConnectionManager } = await import('../shared/connection')
-    const createSpy = vi.mocked(createConnectionManager)
-    createSpy.mockReturnValue(standaloneManager)
-    createSpy.mockClear()
+    const manager = makeResizeFlipMock()
+    // A fresh mount starts disconnected (no live session to re-arm).
+    ;(manager as any).getStatus = vi.fn(() => 'disconnected')
 
     render(
       <Overlay
         schema={MINIMAL_SCHEMA}
-        // no connectionManager prop (fresh/standalone mount)
+        connectionManager={manager}
         initialLanguage="English"
       />
     )
@@ -229,13 +215,11 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
     // Give effects a tick to settle.
     await new Promise(resolve => setTimeout(resolve, 50))
 
-    // Standalone path: the component should have called createConnectionManager
-    // to build its own manager (it never got a prop manager).
-    expect(createSpy).toHaveBeenCalled()
-    // The alreadyLive re-arm path is only reached when a prop manager is provided
-    // AND status is 'connected'. On a fresh/standalone mount it must NOT fire --
-    // pin that explicitly so a guard regression that re-arms unconditionally fails.
-    expect(standaloneRearmSpy).not.toHaveBeenCalled()
+    // The alreadyLive re-arm path is only reached when status is 'connected' (or
+    // one of the other "live" states). On a fresh/disconnected mount it must NOT
+    // fire -- pin that explicitly so a guard regression that re-arms
+    // unconditionally fails.
+    expect(manager.__rearmSpy).not.toHaveBeenCalled()
   }
 
   it('desktop (VoiceOverlay): calls rearmAudioCapture on alreadyLive remount', async () => {
@@ -246,11 +230,11 @@ describe('VoiceOverlay resize-flip mic re-arm (bd polyglot-pdf-nlfc)', () => {
     await assertRearmOnAlreadyLive(VoiceOverlayMobile)
   })
 
-  it('desktop (VoiceOverlay): does NOT call rearmAudioCapture on fresh/standalone mount', async () => {
+  it('desktop (VoiceOverlay): does NOT call rearmAudioCapture on fresh/disconnected mount', async () => {
     await assertNoRearmOnFreshMount(VoiceOverlay)
   })
 
-  it('mobile (VoiceOverlayMobile): does NOT call rearmAudioCapture on fresh/standalone mount', async () => {
+  it('mobile (VoiceOverlayMobile): does NOT call rearmAudioCapture on fresh/disconnected mount', async () => {
     await assertNoRearmOnFreshMount(VoiceOverlayMobile)
   })
 
