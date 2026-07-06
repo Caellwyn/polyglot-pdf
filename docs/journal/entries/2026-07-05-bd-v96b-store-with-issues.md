@@ -86,3 +86,11 @@ flake -- CI's Linux runner runs it green, as on PRs #313/#316).
 P5.3b (`zgln`, repair-all -- needs this bead's persisted dump for the repair
 widget-existence check) and P5.3c (`nivy`, widget picker -- needs the dump
 artifact). Both feed P6.1.
+
+## Doc-freshness note
+
+`docs/components/pdf-filling.md` tracks `form_kits.py` (which this bead changed),
+so it was updated to document the new `put_json_artifact` / `load_json_artifact`
+store surface. The other STALE-flagged tier-2 docs (auth, context-compression,
+several standards) do NOT track any file this diff touched -- pre-existing drift
+from other work's file mtimes, left as-is.

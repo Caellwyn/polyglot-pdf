@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-07-05. See [the h76m.17 journal entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for closeout details.*
+*Last updated: 2026-07-05. See [the v96b journal entry](../journal/entries/2026-07-05-bd-v96b-store-with-issues.md) for the kit JSON-artifact surface; [the h76m.17 entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for runtime group consumers.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -109,11 +109,14 @@ two backends by `FORM_KITS_MODE`:
 `load_pdf_bytes` raises `FormKitNotFound` (→ 404) / `FormKitStoreError` (→ 502).
 
 The same store also carries an **additive editor write/list surface**
-(`put_schema`, `put_metadata`, `load_metadata`, `list_kit_files`) consumed by the
-token-gated `/api/editor/*` routes (`backend/routes/editor_kit_routes.py`) that
-back the hosted schema editor (bd `polyglot-pdf-92qe.1`). PDF filling and the
-public `/api/form-kits*` routes never call the write surface; drafts stay
-invisible to the voice app (the complete-only manifest gate is unchanged).
+(`put_schema`, `put_metadata`, `load_metadata`, `list_kit_files`,
+`put_pdf_bytes`, and `put_json_artifact` / `load_json_artifact` for per-kit JSON
+artifacts such as the persisted AcroForm dump `acroform.json`, bd
+`polyglot-pdf-v96b`) consumed by the token-gated `/api/editor/*` routes
+(`backend/routes/editor_kit_routes.py`) that back the hosted schema editor (bd
+`polyglot-pdf-92qe.1`). PDF filling and the public `/api/form-kits*` routes never
+call the write surface; drafts stay invisible to the voice app (the complete-only
+manifest gate is unchanged).
 
 ## Debugging
 
