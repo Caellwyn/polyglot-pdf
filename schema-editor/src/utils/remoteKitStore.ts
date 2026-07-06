@@ -234,6 +234,13 @@ export interface RemoteExtractionResult {
   detail: string;
   schemaFile?: string;
   fieldCount?: number;
+  // Store-with-issues (bd polyglot-pdf-v96b, P5.3a): a parseable draft is stored
+  // even when lint-dirty; these carry the lint counts the catalogue surfaces so
+  // the author knows to open + repair. storedWithIssues is true when the stored
+  // draft has lint ERRORs or failed validation.
+  errorCount?: number;
+  warningCount?: number;
+  storedWithIssues?: boolean;
 }
 
 /** Run the server-side PDF -> draft-schema extraction for a kit. Minutes-long:

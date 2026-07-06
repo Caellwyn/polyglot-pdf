@@ -181,6 +181,28 @@ class FormKitStore:
 		"""Write a kit's form PDF (the author-tier onboarding, bd 92qe.3)."""
 		raise NotImplementedError
 
+	async def put_json_artifact(
+		self, kit_id: str, data: dict, filename: str
+	) -> None:
+		"""Write a named JSON artifact under a kit (bd polyglot-pdf-v96b, P5.3a).
+
+		The store-with-issues path persists the AcroForm dump (acroform.json) as a
+		kit artifact so the dump-only widget-claim lint rule can run at the
+		promotion gate and the P5.3c widget picker can list unclaimed widgets.
+		filename is sanitized like every other kit filename.
+		"""
+		raise NotImplementedError
+
+	async def load_json_artifact(self, kit_id: str, filename: str) -> dict:
+		"""Read a named JSON artifact under a kit (FormKitNotFound when absent).
+
+		The read mirror of put_json_artifact (bd polyglot-pdf-v96b). A present-but-
+		unreadable artifact is a FormKitStoreError (-> 502), an absent one is
+		FormKitNotFound (-> the caller treats a missing dump as "no dump available",
+		degrading gracefully to the dump-less lint/repair path).
+		"""
+		raise NotImplementedError
+
 	async def list_kit_files(self) -> dict[str, list[str]]:
 		"""Map every kit id to the filenames at its root (one storage listing).
 
@@ -356,6 +378,26 @@ class LocalFormKitStore(FormKitStore):
 			await anyio.to_thread.run_sync(_write)
 		except OSError as exc:
 			raise FormKitStoreError(f"Unable to write {pdf_file}: {exc}") from exc
+
+	async def put_json_artifact(
+		self, kit_id: str, data: dict, filename: str
+	) -> None:
+		filename = safe_filename(filename, "artifact.json")
+		await self._write_json(self._kit_dir(kit_id) / filename, data)
+
+	async def load_json_artifact(self, kit_id: str, filename: str) -> dict:
+		filename = safe_filename(filename, "artifact.json")
+		path = self._kit_dir(kit_id) / filename
+		if not path.exists():
+			raise FormKitNotFound(f"Artifact not found for {kit_id}: {filename}")
+		try:
+			return await anyio.to_thread.run_sync(
+				lambda: json.loads(path.read_text(encoding="utf-8"))
+			)
+		except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+			raise FormKitStoreError(
+				f"Invalid or unreadable artifact for {kit_id}/{filename}: {exc}"
+			) from exc
 
 	async def _write_json(self, path: Path, data: dict) -> None:
 		"""Atomic JSON write: temp file in the same dir, then os.replace.
@@ -542,6 +584,37 @@ class GCSFormKitStore(FormKitStore):
 		except Exception as exc:
 			raise FormKitStoreError(
 				f"Unable to write gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
+
+	async def put_json_artifact(
+		self, kit_id: str, data: dict, filename: str
+	) -> None:
+		filename = safe_filename(filename, "artifact.json")
+		await self._upload_json(self._build_blob_path(kit_id, filename), data)
+
+	async def load_json_artifact(self, kit_id: str, filename: str) -> dict:
+		filename = safe_filename(filename, "artifact.json")
+		blob_path = self._build_blob_path(kit_id, filename)
+		# _fetch_bytes raises FormKitNotFound when the blob is absent (the "no dump
+		# stored" signal the caller degrades on) but lets a NON-NotFound google
+		# error (ServiceUnavailable/Forbidden/...) propagate RAW. The
+		# load_json_artifact contract is graceful degradation -- _load_kit_dump
+		# catches only FormKitNotFound/FormKitStoreError, so an unwrapped transient
+		# error would 500 the promotion gate (Opus fallback review, PR #323). Wrap
+		# it as FormKitStoreError here, matching load_metadata's discipline.
+		try:
+			data = await self._fetch_bytes(blob_path)
+		except FormKitNotFound:
+			raise
+		except Exception as exc:
+			raise FormKitStoreError(
+				f"Unable to read gs://{self.bucket_name}/{blob_path}: {exc}"
+			) from exc
+		try:
+			return json.loads(data.decode("utf-8"))
+		except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+			raise FormKitStoreError(
+				f"Invalid artifact for {kit_id}/{filename}: {exc}"
 			) from exc
 
 	async def _upload_json(self, blob_path: str, data: dict) -> None:

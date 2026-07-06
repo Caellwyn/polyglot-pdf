@@ -218,6 +218,23 @@ def test_local_store_schema_write_roundtrip(tmp_path):
     assert [p.name for p in (tmp_path / "i-90").iterdir()] == ["schema.json"]
 
 
+def test_local_store_json_artifact_roundtrip(tmp_path):
+    # bd polyglot-pdf-v96b: the AcroForm dump is persisted as a kit artifact.
+    store = LocalFormKitStore(tmp_path)
+    (tmp_path / "i-90").mkdir()
+    dump = {"fields": [{"name": "form1[0].a[0]"}], "field_count": 1}
+    _run(store.put_json_artifact("i-90", dump, "acroform.json"))
+    assert _run(store.load_json_artifact("i-90", "acroform.json")) == dump
+
+
+def test_local_store_missing_artifact_is_not_found(tmp_path):
+    from backend.services.form_kits import FormKitNotFound
+    store = LocalFormKitStore(tmp_path)
+    (tmp_path / "i-90").mkdir()
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_json_artifact("i-90", "acroform.json"))
+
+
 def test_local_store_metadata_roundtrip(tmp_path):
     store = LocalFormKitStore(tmp_path)
     (tmp_path / "i-90").mkdir()
@@ -329,6 +346,40 @@ def test_gcs_metadata_roundtrip_and_missing_is_none():
     assert _run(store.load_metadata("i-90")) is None
     _run(store.put_metadata("i-90", {"status": "draft", "label": "I-90"}))
     assert _run(store.load_metadata("i-90")) == {"status": "draft", "label": "I-90"}
+
+
+def test_gcs_json_artifact_roundtrip_and_missing_is_not_found():
+    registry = {}
+    store = _gcs_store(registry)
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_json_artifact("i-90", "acroform.json"))
+    dump = {"fields": [{"name": "form1[0].a[0]"}]}
+    _run(store.put_json_artifact("i-90", dump, "acroform.json"))
+    assert _run(store.load_json_artifact("i-90", "acroform.json")) == dump
+
+
+def test_gcs_json_artifact_transient_error_is_store_error_not_raw():
+    # Opus fallback (PR #323): a NON-NotFound GCS read error must be wrapped as
+    # FormKitStoreError, not escape raw -- else _load_kit_dump (which catches
+    # only FormKitNotFound/FormKitStoreError) would 500 the promotion gate. Drive
+    # it through the REAL _fetch_bytes by making the blob download raise a
+    # transient (non-NotFound) error.
+    class _Transient(Exception):
+        pass
+
+    class _TransientBucket(_FakeBucket):
+        def blob(self, name):
+            b = _FakeBlob(name, self._registry)
+            def _raise():
+                raise _Transient("GCS unavailable")
+            b.download_as_bytes = _raise
+            return b
+
+    registry = {"form-kits/i-90/acroform.json": {"data": "{}"}}
+    store = _gcs_store(registry)
+    store._bucket = _TransientBucket(registry)
+    with pytest.raises(FormKitStoreError):
+        _run(store.load_json_artifact("i-90", "acroform.json"))
 
 
 def test_gcs_list_kit_files_groups_by_kit():
@@ -1101,14 +1152,21 @@ def test_onboard_long_filename_truncates_instead_of_400(client):
     assert (root / kit_id / "form.pdf").exists()
 
 
-def _fake_extractor(schema_payload, exit_code=0, write_out=True):
-    """A subprocess.run stand-in that mimics extract_form.py: writes --out."""
+def _fake_extractor(schema_payload, exit_code=0, write_out=True, dump=None):
+    """A subprocess.run stand-in that mimics extract_form.py: writes --out (and,
+    when `dump` is given, the sibling <out-stem>_acroform.json under --keep-dump,
+    matching the real extractor's --keep-dump behavior the route now requests)."""
 
     def _run(cmd, **kwargs):
         out_path = cmd[cmd.index("--out") + 1]
         if write_out:
             with open(out_path, "w", encoding="utf-8") as fh:
                 json.dump(schema_payload, fh)
+        if dump is not None:
+            import os as _os
+            stem = _os.path.splitext(out_path)[0]
+            with open(stem + "_acroform.json", "w", encoding="utf-8") as fh:
+                json.dump(dump, fh)
         return SimpleNamespace(
             returncode=exit_code,
             stdout=f"[OK] wrote {out_path} -- 2 fields",
@@ -1121,8 +1179,18 @@ def _fake_extractor(schema_payload, exit_code=0, write_out=True):
 def test_extract_runs_and_stores_the_draft(client, monkeypatch):
     c, store, root = client
     _make_kit(root, "fresh")  # PDF, no schema
-    draft = {"fields": [{"id": "a"}, {"id": "b"}], "sections": []}
-    fake = _fake_extractor(draft)
+    # A clean v2 draft (validates + lint-clean): a standalone text field.
+    draft = {
+        "source": "pdf", "schema_version": "2",
+        "form_metadata": {"title": "T", "version": "unknown"},
+        "sections": [{"id": "s1", "label": "S1", "order": 1, "fields": ["a"]}],
+        "fields": [{"id": "a", "name": "A", "spoken_name": "a", "type": "text",
+                    "section_id": "s1", "pdf_field_name": "form1[0].a[0]"}],
+        "extraction_info": {"extracted_at": "2026-07-05T00:00:00Z",
+                            "extraction_confidence": 0.9,
+                            "extractor_version": "t", "manual_review_required": True},
+    }
+    fake = _fake_extractor(draft, exit_code=0)
     monkeypatch.setattr(ekr.subprocess, "run", fake)
     r = c.post(
         "/api/editor/kits/fresh/extract",
@@ -1131,12 +1199,195 @@ def test_extract_runs_and_stores_the_draft(client, monkeypatch):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
-    assert body["fieldCount"] == 2
+    assert body["fieldCount"] == 1
     assert body["schemaFile"] == "schema.json"
+    # A clean draft is NOT stored-with-issues and carries zero lint counts.
+    assert body["storedWithIssues"] is False
+    assert body["errorCount"] == 0 and body["warningCount"] == 0
     # The temp --out path never leaks into the user-facing detail.
     assert ".tmp" not in body["detail"] and "extract_" not in body["detail"]
     # The draft landed in the store.
     assert _run(store.load_schema("fresh")) == draft
+
+
+# --- store-with-issues (bd polyglot-pdf-v96b, P5.3a) -------------------------
+
+# A lint-DIRTY draft with >= 1 field: a v1 field whose show_if names an unknown
+# operator (unknown-operator ERROR) -- parseable, so it stores with issues.
+_DIRTY_DRAFT = {
+    "source": "pdf",
+    "form_metadata": {"title": "T", "version": "unknown"},
+    "sections": [],
+    "fields": [
+        {"id": "picker", "type": "select",
+         "options": [{"value": "alpha", "label": "Alpha"}]},
+        {"id": "dep", "type": "text",
+         "show_if": {"field": "picker", "operator": "is_selected", "value": "alpha"}},
+    ],
+}
+
+
+def test_extract_stores_lint_dirty_draft_with_issues_200(client, monkeypatch):
+    # Exit criterion 1: a forced-imperfect extraction STORES the draft and
+    # returns 200 carrying lint counts + storedWithIssues, not a 502.
+    c, store, root = client
+    _make_kit(root, "fresh")
+    fake = _fake_extractor(_DIRTY_DRAFT, exit_code=3)  # tri-state ISSUES
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["storedWithIssues"] is True
+    assert body["errorCount"] >= 1
+    # The imperfect draft landed in the store (store-with-issues, not dropped).
+    assert _run(store.load_schema("fresh")) == _DIRTY_DRAFT
+
+
+def test_extract_junk_fields_list_is_no_usable_draft_502(client, monkeypatch):
+    # fresh-eyes: a non-empty fields list of NON-DICT junk (a crash mid-write)
+    # must NOT pass the floor -- lint_schema silently filters non-dicts out, so
+    # storing it would report a false "clean success" with a junk field count.
+    # The floor is re-derived from real (dict) field members, so this 502s.
+    c, store, root = client
+    _make_kit(root, "fresh")
+    junk = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+            "sections": [], "fields": ["not", "a", "real", "field"]}
+    fake = _fake_extractor(junk, exit_code=1)  # simulate a crash exit
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502, r.text
+    assert "no usable draft" in r.json()["detail"]
+    # Nothing was stored -- the junk never reached the kit's schema.
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_schema("fresh"))
+
+
+def test_extract_field_count_counts_only_real_fields(client, monkeypatch):
+    # fresh-eyes: a mix of real + junk field entries reports only the real count.
+    c, store, root = client
+    _make_kit(root, "fresh")
+    mixed = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+             "sections": [], "fields": [{"id": "a", "type": "text"}, "junk", 7]}
+    fake = _fake_extractor(mixed, exit_code=0)
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["fieldCount"] == 1  # only the one dict-shaped field
+
+
+def test_extract_persists_the_acroform_dump_artifact(client, monkeypatch):
+    # The dump becomes the kit's acroform.json artifact (feeds the promotion-gate
+    # widget-claim rule + the P5.3c picker).
+    c, store, root = client
+    _make_kit(root, "fresh")
+    dump = {"fields": [{"name": "form1[0].a[0]"}], "field_count": 1}
+    draft = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+             "sections": [], "fields": [{"id": "a", "type": "text"}]}
+    fake = _fake_extractor(draft, exit_code=0, dump=dump)
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 200, r.text
+    # The dump was stored as acroform.json and reads back.
+    assert _run(store.load_json_artifact("fresh", "acroform.json")) == dump
+
+
+# Pydantic-VALID but lint-ERROR draft (duplicate option values: v1 tolerance
+# parses it, the lint duplicate-option-value rule rejects it). This reaches the
+# LINT gate specifically (a Pydantic-invalid draft would 422 at the earlier
+# gate), so it pins the two-gate seam at the lint layer.
+_LINT_ERROR_VALID_DRAFT = {
+    "source": "pdf",
+    "form_metadata": {"title": "T", "version": "unknown"},
+    "sections": [{"id": "s1", "label": "S1", "order": 1, "fields": ["picker"]}],
+    "fields": [{"id": "picker", "name": "Picker", "spoken_name": "picker",
+                "type": "select", "section_id": "s1",
+                "pdf_field_name": "form1[0].p[0]",
+                "options": [{"value": "dup", "label": "A"},
+                            {"value": "dup", "label": "B"}]}],
+    "extraction_info": {"extracted_at": "2026-07-05T00:00:00Z",
+                        "extraction_confidence": 0.9, "extractor_version": "t",
+                        "manual_review_required": True},
+}
+
+
+def test_extract_dump_store_failure_is_fatal_nothing_stored(client, monkeypatch):
+    # Opus fallback (PR #323): the dump is the gating input for the
+    # dump-widget-multiclaim ERROR at promotion. A schema stored WITHOUT its dump
+    # would let a dump-only error the author saw at store time vanish at promotion
+    # (re-opening the two-gate seam). So a dump-write failure is FATAL and stores
+    # NOTHING (dump-first ordering: the schema write never runs).
+    c, store, root = client
+    _make_kit(root, "fresh")
+    dump = {"fields": [{"name": "form1[0].a[0]"}]}
+    draft = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+             "sections": [], "fields": [{"id": "a", "type": "text"}]}
+    fake = _fake_extractor(draft, exit_code=0, dump=dump)
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+
+    async def _boom_artifact(kit_id, data, filename):
+        raise FormKitStoreError("dump write failed")
+
+    monkeypatch.setattr(store, "put_json_artifact", _boom_artifact)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502, r.text
+    assert "PDF-widget map" in r.json()["detail"]
+    # Nothing stored: the schema write never ran (dump-first).
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_schema("fresh"))
+
+
+def test_promotion_survives_a_transient_dump_read_error(client, monkeypatch):
+    # Opus fallback (PR #323): _load_kit_dump must degrade to None on a store
+    # error, never 500 the promotion gate. A clean schema stays promotable even
+    # when the dump read transiently fails.
+    c, store, root = client
+    clean = dict(VALID_SCHEMA)
+    _make_kit(root, "fresh", status="draft", schema=clean)
+
+    async def _boom_load(kit_id, filename):
+        raise FormKitStoreError("transient GCS read")
+
+    monkeypatch.setattr(store, "load_json_artifact", _boom_load)
+    r = c.post(
+        "/api/editor/kits/fresh/status",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.text  # dump-less lint, still promotable
+
+
+def test_stored_with_issues_draft_is_unpromotable_two_gate_seam(client, monkeypatch):
+    # The two-gate seam: a stored lint-ERROR draft (via the extract route) is
+    # UN-PROMOTABLE -- mark-complete 409s on the LINT errors specifically (store
+    # != promote). Uses a Pydantic-valid draft so the refusal is the lint gate,
+    # not the earlier wire-contract gate.
+    c, store, root = client
+    _make_kit(root, "fresh")
+    fake = _fake_extractor(_LINT_ERROR_VALID_DRAFT, exit_code=3)
+    monkeypatch.setattr(ekr.subprocess, "run", fake)
+    stored = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert stored.status_code == 200 and stored.json()["storedWithIssues"] is True
+    # Now try to promote it -- the lint gate must refuse (409).
+    promote = c.post(
+        "/api/editor/kits/fresh/status",
+        headers={"X-Editor-Token": "auth-tok"},
+        json={"status": "complete"},
+    )
+    assert promote.status_code == 409, promote.text
+    assert "lint error" in promote.json()["detail"]
 
 
 def test_extract_requires_author_role_and_a_pdf(client, monkeypatch):
@@ -1191,15 +1442,36 @@ def test_extract_failure_maps_to_502_and_stores_nothing(client, monkeypatch):
         _run(store.load_schema("fresh"))
 
 
-def test_extract_invalid_draft_failure_detail_scrubs_temp_path(client, monkeypatch):
-    # An INVALID draft (a common, expected outcome) exits 1 AFTER writing the
-    # temp --out path into its message -- the FAILURE detail must scrub the
-    # internal temp path exactly like the success path does (Opus fallback
-    # review, PR #282).
+def test_extract_non_json_output_is_502(client, monkeypatch):
+    # Exit criterion 2 (the no-JSON sub-case, Opus fallback coverage nit): the
+    # extractor wrote --out but it is not valid JSON -> 502, nothing stored.
+    c, store, root = client
+    _make_kit(root, "fresh")
+
+    def _garbage_run(cmd, **kwargs):
+        out_path = cmd[cmd.index("--out") + 1]
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write("this is not json {{{")
+        return SimpleNamespace(returncode=0, stdout="[OK] wrote schema.json", stderr="")
+
+    monkeypatch.setattr(ekr.subprocess, "run", _garbage_run)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502, r.text
+    assert "unreadable schema" in r.json()["detail"]
+    with pytest.raises(FormKitNotFound):
+        _run(store.load_schema("fresh"))
+
+
+def test_extract_zero_field_draft_is_no_usable_draft_502(client, monkeypatch):
+    # A draft with ZERO fields is BELOW the store-with-issues floor (bd v96b):
+    # nothing worth storing, so it is a hard-fail 502 -- and the message is a
+    # clean generic one that leaks no internal temp path.
     c, _store, root = client
     _make_kit(root, "fresh")
 
-    def _invalid_run(cmd, **kwargs):
+    def _empty_run(cmd, **kwargs):
         out_path = cmd[cmd.index("--out") + 1]
         with open(out_path, "w", encoding="utf-8") as fh:
             json.dump({"fields": []}, fh)
@@ -1209,7 +1481,35 @@ def test_extract_invalid_draft_failure_detail_scrubs_temp_path(client, monkeypat
             stderr="",
         )
 
-    monkeypatch.setattr(ekr.subprocess, "run", _invalid_run)
+    monkeypatch.setattr(ekr.subprocess, "run", _empty_run)
+    r = c.post(
+        "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
+    )
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert "no usable draft" in detail
+    # No internal path leaks in the generic message.
+    assert "extract_" not in detail and ".tmp" not in detail
+    assert "Temp" not in detail and "\\" not in detail.replace("\n", "")
+
+
+def test_extract_missing_output_failure_detail_scrubs_temp_path(client, monkeypatch):
+    # When the extractor writes NO --out file at all (a genuine crash), the 502
+    # echoes its last stdout line -- which must scrub the internal temp path
+    # exactly like the success path does (Opus fallback review, PR #282).
+    c, _store, root = client
+    _make_kit(root, "fresh")
+
+    def _crash_run(cmd, **kwargs):
+        out_path = cmd[cmd.index("--out") + 1]
+        # Do NOT write out_path -- simulate a crash that produced no draft.
+        return SimpleNamespace(
+            returncode=1,
+            stdout=f"Traceback: failed writing {out_path} -- boom",
+            stderr="",
+        )
+
+    monkeypatch.setattr(ekr.subprocess, "run", _crash_run)
     r = c.post(
         "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
     )
