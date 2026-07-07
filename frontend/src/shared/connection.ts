@@ -376,18 +376,28 @@ export function createConnectionManager(
 			console.warn('[VFF Connection] rehydrateAudio: audioManager not initialized (' + reason + ')')
 			return
 		}
-		if (!audioManager.isRecording()) {
+		const wasRecording = audioManager.isRecording()
+		if (!wasRecording) {
 			console.log('[VFF Connection] rehydrateAudio: arming mic (' + reason + ')')
 			await audioManager.startRecording(sendMicChunkToBackend)
 		}
-		// Re-apply PTT/mute so a freshly-armed (or already-live) mic sits in the
-		// correct gate state without waiting for an overlay useEffect.
+		// Re-apply the PTT gate MODE to the worklet (idempotent, does not open or
+		// close the mic) so the noise-gate state is correct after a reconnect.
 		const am = audioManager
 		am.setPTTMode(pushToTalkMode)
-		if (pushToTalkMode) {
-			am.muteInput()
-		} else {
-			am.unmuteInput()
+		// Mute/unmute state is only (re)set when we ARMED A FRESH mic (which starts
+		// unmuted by default, so PTT mode must apply its resting mute). When the mic
+		// was ALREADY recording -- the self-healing GoAway/auto-drop/warm-restart
+		// case -- we deliberately DO NOT touch mute state: the user may be actively
+		// holding push-to-talk (mic unmuted mid-utterance), and blindly re-muting
+		// here would truncate their speech (bd polyglot-pdf-z9bc fresh-eyes gap).
+		// Their existing mute/hold state is already correct and survives the swap.
+		if (!wasRecording) {
+			if (pushToTalkMode) {
+				am.muteInput()
+			} else {
+				am.unmuteInput()
+			}
 		}
 	}
 

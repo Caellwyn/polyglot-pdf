@@ -328,9 +328,11 @@ describe('Connection Manager (connection.ts)', () => {
       return manager
     }
 
-    it('onSessionReady (GoAway / auto-drop) arms the mic when not already recording', async () => {
+    it('onSessionReady (GoAway / auto-drop) arms the mic + applies resting mute when NOT already recording', async () => {
       await connected()
       audioManagerMock.isRecording.mockReturnValue(false)
+      // Default session is PTT-on, so a freshly-armed mic must start muted (resting).
+      audioManagerMock.muteInput.mockClear()
 
       capturedCallbacks.onSessionReady('sess-1')
       // rehydrateAudio is fire-and-forget from the sync callback; let its microtask run.
@@ -338,25 +340,35 @@ describe('Connection Manager (connection.ts)', () => {
       await Promise.resolve()
 
       expect(audioManagerMock.startRecording).toHaveBeenCalledTimes(1)
-      // PTT re-synced after arming.
+      // PTT re-synced after arming; a fresh arm (starts unmuted) gets the PTT
+      // resting mute applied.
       expect(audioManagerMock.setPTTMode).toHaveBeenCalled()
+      expect(audioManagerMock.muteInput).toHaveBeenCalled()
     })
 
-    it('onSessionReady is a no-op re-sync when already recording (self-healed path -- no double-arm)', async () => {
+    it('onSessionReady does NOT touch mute state when already recording (preserves an active PTT hold)', async () => {
       await connected()
       // On a real GoAway/auto-drop the worklet survives, so isRecording() stays true.
+      // The user could be mid-hold (mic unmuted); re-muting here would truncate speech.
       audioManagerMock.isRecording.mockReturnValue(true)
+      audioManagerMock.muteInput.mockClear()
+      audioManagerMock.unmuteInput.mockClear()
 
       capturedCallbacks.onSessionReady('sess-2')
       await Promise.resolve()
       await Promise.resolve()
 
-      // Critically: it does NOT re-arm (the failure the earlier fix, PR #339, had
-      // was the inverse -- an isRecording() guard that skipped the WHOLE arm; here
-      // the WHOLE routine still runs, it just doesn't duplicate getUserMedia).
+      // Does NOT re-arm (the failure PR #339 had was the inverse -- an isRecording()
+      // guard that skipped the WHOLE arm; here the routine still runs, it just does
+      // not duplicate getUserMedia).
       expect(audioManagerMock.startRecording).not.toHaveBeenCalled()
-      // PTT is still re-synced even when already recording.
+      // PTT gate MODE is still re-synced to the worklet...
       expect(audioManagerMock.setPTTMode).toHaveBeenCalled()
+      // ...but mute/unmute is NOT touched: the mic's current mute/hold state is
+      // preserved (bd polyglot-pdf-z9bc fresh-eyes gap -- do not truncate an
+      // in-progress utterance on a mid-hold reconnect).
+      expect(audioManagerMock.muteInput).not.toHaveBeenCalled()
+      expect(audioManagerMock.unmuteInput).not.toHaveBeenCalled()
     })
 
     it('onSessionRestarted (warm restart) also routes through the shared routine', async () => {
