@@ -834,7 +834,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		audioManager?.unmuteInput()
 		// Record the hold in the ConnectionManager (bd polyglot-pdf-qt7w) so a
 		// reconnect that arms a FRESH mic mid-hold does not re-mute the user. Cleared
-		// in the release timeout, right before the actual muteInput() below.
+		// synchronously in handlePushToTalkRelease (and force-release / unmount /
+		// mode-toggle), never in a cancellable timeout.
 		connectionManager?.setPushToTalkHeld(true)
 	}
 
