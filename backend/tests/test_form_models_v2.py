@@ -129,32 +129,13 @@ def assert_v2_error(doc: dict, *needles: str):
 # Exit criterion 1: shipped v1 kits validate UNCHANGED
 # ---------------------------------------------------------------------------
 
-# i-90 is now v2 (migrated at P6.1b, bd c5r8); the remaining shipped kits stay v1
-# until P6.1c re-extracts them. i-90's own v2-validity is pinned by
-# tests/test_i90_migrated_baseline.py.
-@pytest.mark.parametrize("kit", ["w7", "w7-2", "f1040"])
-def test_v1_kit_validates_unchanged(kit):
+# Post the P6.2 strictness flip (bd h76m.16), EVERY shipped kit is v2: i-90
+# (P6.1b) + w7/w7-2/f1040 (migrated at P6.2). There is no v1-acceptance path left
+# -- the model applies v2 rules to every schema.
+@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+def test_shipped_kit_is_v2_and_validates(kit):
     schema = validate(load_kit(kit))
-    assert schema.schema_version is None  # no stamp -> legacy path
-    # Legacy single-condition show_if keeps its wire shape (no coercion to
-    # ConditionGroup on read -- round-trips through the editor stay v1).
-    for field in schema.fields:
-        if field.show_if is not None:
-            assert isinstance(field.show_if, ConditionalDisplay)
-
-
-def test_migrated_i90_kit_is_v2():
-    # The shipped i-90 was migrated to v2 at P6.1b.
-    assert validate(load_kit("i-90")).schema_version == "2"
-
-
-def test_v1_kit_dump_keeps_legacy_show_if_shape():
-    schema = validate(load_kit("w7"))  # a still-v1 kit (i-90 is v2 now)
-    dumped = schema.model_dump(mode="json", exclude_none=True)
-    with_show_if = [f for f in dumped["fields"] if "show_if" in f]
-    assert with_show_if, "w7 should carry show_if fields"
-    for f in with_show_if:
-        assert set(f["show_if"]) <= {"field", "operator", "value"}
+    assert schema.schema_version == "2"
 
 
 # ---------------------------------------------------------------------------
@@ -340,11 +321,6 @@ def test_v2_legacy_single_show_if_still_accepted():
             ),
             ("fields[1] (id=dep)", "requires a single scalar"),
         ),
-        # legacy conditional_fields is not v2 vocabulary
-        (
-            lambda doc: doc["fields"][1].update(conditional_fields=["cb"]),
-            ("fields[1] (id=dep)", "conditional_fields is not part of schema v2"),
-        ),
     ],
 )
 def test_v2_violation_yields_field_path_error(mutate, needles):
@@ -355,14 +331,14 @@ def test_v2_violation_yields_field_path_error(mutate, needles):
     assert_v2_error(doc, *needles)
 
 
-def test_v1_tolerates_what_v2_rejects():
-    # The SAME duplicate-option/equals-on-group document parses fine without
-    # the v2 stamp -- the shipped kits keep working until the P6.2 flip.
+def test_v2_rules_apply_without_the_version_stamp():
+    # Post the P6.2 flip: v2 rules apply to EVERY schema, stamped or not (the
+    # v1-tolerance bypass is gone). The same equals-on-group defect that a v2
+    # doc rejects is now rejected with no schema_version stamp too.
     doc = valid_v2_doc()
-    doc["fields"][0]["options"][1]["value"] = "dependent_spouse"  # dupe
     doc["fields"][1]["show_if"] = {"field": "grp", "operator": "equals", "value": "1"}
     del doc["schema_version"]
-    validate(doc)
+    assert_v2_error(doc, "operator 'equals' is not valid")
 
 
 # ---------------------------------------------------------------------------
@@ -515,18 +491,16 @@ def test_legacy_dict_does_not_parse_as_group():
     assert isinstance(legacy, ConditionalDisplay)
 
 
-def test_schema_version_coercion_and_legacy_tolerance():
+def test_schema_version_coercion():
     doc = valid_v2_doc()
-    doc["schema_version"] = 2  # int coerces
+    doc["schema_version"] = 2  # int coerces to the string "2"
     assert validate(doc).schema_version == "2"
-    # Any non-'2' stamp takes the LEGACY path (stored drafts carry '1.0'
-    # from before this key was modeled; rejecting them would break the v1
-    # tolerance -- Codex PR #299). Prove it by pairing a stray stamp with
-    # content only v2 rejects.
+    # Post the P6.2 flip there is no legacy-tolerance path: v2 rules apply to
+    # every schema regardless of the stamp. A v2-rejected defect (dup option
+    # value) is caught even under a stray non-'2' stamp.
     doc["fields"][0]["options"][1]["value"] = "dependent_spouse"  # dupe
-    for stamp in ("1.0", "3", 1.0):
-        doc["schema_version"] = stamp
-        assert validate(doc).schema_version == str(stamp)
+    doc["schema_version"] = "1.0"
+    assert_v2_error(doc, "duplicate")
 
 
 # ---------------------------------------------------------------------------
@@ -570,23 +544,18 @@ def test_is_checked_dual_fate(case):
 
 
 # ---------------------------------------------------------------------------
-# controls_fields: parsed but deprecated in v2
+# controls_fields: DELETED from the model at the P6.2 flip (bd h76m.16). A stray
+# legacy controls_fields key is now silently ignored (extra="ignore"), never
+# stored and never raising -- the trigger-side view is derived from show_if.
 # ---------------------------------------------------------------------------
 
-def test_v2_controls_fields_parses_with_deprecation_warning():
+def test_v2_controls_fields_is_ignored_not_stored():
     doc = valid_v2_doc()
     doc["fields"][2]["controls_fields"] = [{"value": True, "shows": ["dep"]}]
-    with pytest.warns(DeprecationWarning, match="controls_fields is deprecated"):
-        schema = validate(doc)
-    assert schema.get_field("cb").controls_fields
-
-
-def test_v1_controls_fields_stays_silent():
-    # w7 (still v1) carries controls_fields entries -- a v1 kit must not raise the
-    # deprecation warning (that fires only on a v2-stamped schema). i-90 is v2 now.
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error", DeprecationWarning)
-        validate(load_kit("w7"))
+        schema = validate(doc)  # no deprecation warning, no error
+    assert not hasattr(schema.get_field("cb"), "controls_fields")
 
 
 # ---------------------------------------------------------------------------
@@ -602,30 +571,26 @@ def test_conditional_cycle_warns_not_errors():
     assert any("Conditional cycle" in w for w in result["warnings"])
 
 
-def test_validate_all_references_walks_composite_and_require_if():
+def test_v2_parse_catches_composite_and_require_if_bad_refs():
+    # Post the P6.2 flip, parse-time strictness (always-on) catches a
+    # non-existent field reference in a COMPOSITE show_if and in require_if --
+    # the reference auditor's job is now done at parse for every stored schema.
     dep = text_field(
         show_if={"any_of": [{"field": "nope", "operator": "is_not_empty"}]},
+    )
+    assert_v2_error(v2_schema([group_field(), dep]),
+                    "references non-existent field 'nope'")
+    dep2 = text_field(
         require_if={"field": "also_nope", "operator": "is_not_empty"},
     )
-    doc = v2_schema([group_field(), dep])
-    # Bypass v2 parse-time strictness to reach the reference auditor the
-    # editor gate calls on v1 drafts too.
-    del doc["schema_version"]
-    result = validate(doc).validate_all_references()
-    joined = "\n".join(result["errors"])
-    assert "show_if references non-existent field 'nope'" in joined
-    assert "require_if references non-existent field 'also_nope'" in joined
+    assert_v2_error(v2_schema([group_field(), dep2]),
+                    "references non-existent field 'also_nope'")
 
 
-def test_validate_all_references_walks_section_show_if():
+def test_v2_parse_catches_section_show_if_bad_ref():
     doc = valid_v2_doc()
     doc["sections"][0]["show_if"] = {"field": "ghost", "operator": "is_not_empty"}
-    # Bypass v2 parse-time strictness (which would also catch the ghost ref)
-    # so this test isolates the reference auditor specifically.
-    del doc["schema_version"]
-    result = validate(doc).validate_all_references()
-    joined = "\n".join(result["errors"])
-    assert "Section 's1' show_if references non-existent field 'ghost'" in joined
+    assert_v2_error(doc, "references non-existent field 'ghost'")
 
 
 def test_validate_all_references_valid_section_show_if_adds_no_error():

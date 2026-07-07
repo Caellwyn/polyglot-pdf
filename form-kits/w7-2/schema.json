@@ -287,12 +287,12 @@
       },
       "options": [
         {
-          "value": "c1_1[0]",
+          "value": "apply_for_a_new_itin",
           "label": "Apply for a new ITIN",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]"
         },
         {
-          "value": "c1_1[1]",
+          "value": "renew_an_existing_itin",
           "label": "Renew an existing ITIN",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[1]"
         }
@@ -314,25 +314,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_2[0]",
-          "label": "Nonresident alien required to get an ITIN to claim tax treaty benefit",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_2[0]"
-        }
-      ],
-      "controls_fields": [
-        {
-          "operator": "equals",
-          "value": "c1_2[0]",
-          "makes_required": [
-            "reason_h",
-            "treaty_country",
-            "treaty_article"
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "reason_b",
@@ -350,14 +332,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_3[0]",
-          "label": "Nonresident alien filing a U.S. federal tax return",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_3[0]"
-        }
-      ]
+      }
     },
     {
       "id": "reason_c",
@@ -375,14 +350,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_4[0]",
-          "label": "U.S. resident alien filing a U.S. federal tax return",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_4[0]"
-        }
-      ]
+      }
     },
     {
       "id": "reason_d",
@@ -400,25 +368,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_5[0]",
-          "label": "Dependent of U.S. citizen/resident alien",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_5[0]"
-        }
-      ],
-      "controls_fields": [
-        {
-          "operator": "equals",
-          "value": "c1_5[0]",
-          "makes_required": [
-            "reason_d_relationship",
-            "reason_de_name",
-            "reason_de_ssn_itin"
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "reason_d_relationship",
@@ -439,8 +389,7 @@
       },
       "show_if": {
         "field": "reason_d",
-        "operator": "equals",
-        "value": "c1_5[0]"
+        "operator": "is_checked"
       }
     },
     {
@@ -459,24 +408,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_6[0]",
-          "label": "Spouse of U.S. citizen/resident alien",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_6[0]"
-        }
-      ],
-      "controls_fields": [
-        {
-          "operator": "equals",
-          "value": "c1_6[0]",
-          "makes_required": [
-            "reason_de_name",
-            "reason_de_ssn_itin"
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "reason_de_name",
@@ -530,25 +462,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_7[0]",
-          "label": "Nonresident alien student, professor, or researcher",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_7[0]"
-        }
-      ],
-      "controls_fields": [
-        {
-          "operator": "equals",
-          "value": "c1_7[0]",
-          "makes_required": [
-            "reason_h",
-            "treaty_country",
-            "treaty_article"
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "reason_g",
@@ -566,14 +480,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_8[0]",
-          "label": "Dependent/spouse of a nonresident alien holding a U.S. visa",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[0]"
-        }
-      ]
+      }
     },
     {
       "id": "reason_h",
@@ -591,14 +498,7 @@
       },
       "validation": {
         "required": false
-      },
-      "options": [
-        {
-          "value": "c1_9[0]",
-          "label": "Other",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_9[0]"
-        }
-      ]
+      }
     },
     {
       "id": "treaty_country",
@@ -890,12 +790,12 @@
       },
       "options": [
         {
-          "value": "c1_10[0]",
+          "value": "male",
           "label": "Male",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]"
         },
         {
-          "value": "c1_10[1]",
+          "value": "female",
           "label": "Female",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]"
         }
@@ -959,9 +859,8 @@
       "id": "id_document_type",
       "name": "6d. Identification document(s) submitted",
       "spoken_name": "Identification document type",
-      "type": "checkbox",
+      "type": "checkbox_group",
       "section_id": "sec_id_documents",
-      "pdf_field_name": null,
       "pdf_position": {
         "page": 0,
         "x": 0,
@@ -974,22 +873,22 @@
       },
       "options": [
         {
-          "value": "c1_11[0]",
+          "value": "passport",
           "label": "Passport",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[0]"
         },
         {
-          "value": "c1_11[1]",
+          "value": "driver_s_license_state_i_d",
           "label": "Driver's license/State I.D.",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[1]"
         },
         {
-          "value": "c1_11[2]",
+          "value": "uscis_documentation",
           "label": "USCIS documentation",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[2]"
         },
         {
-          "value": "c1_11[3]",
+          "value": "other",
           "label": "Other",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[3]"
         }
@@ -1124,30 +1023,14 @@
       },
       "options": [
         {
-          "value": "c1_12[0]",
+          "value": "no_don_t_know_skip_line_6f",
           "label": "No/Don't know. Skip line 6f.",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[0]"
         },
         {
-          "value": "c1_12[1]",
+          "value": "yes_complete_line_6f",
           "label": "Yes. Complete line 6f.",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[1]"
-        }
-      ],
-      "controls_fields": [
-        {
-          "operator": "equals",
-          "value": "c1_12[1]",
-          "makes_required": [
-            "itin_1",
-            "itin_2",
-            "itin_3",
-            "irsn_1",
-            "irsn_2",
-            "irsn_3",
-            "prior_name_first",
-            "prior_name_last"
-          ]
         }
       ]
     },
@@ -1172,7 +1055,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1196,7 +1079,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1220,7 +1103,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1244,7 +1127,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1268,7 +1151,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1292,7 +1175,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1315,7 +1198,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1338,7 +1221,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1361,7 +1244,7 @@
       "show_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
-        "value": "c1_12[1]"
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1509,17 +1392,17 @@
       },
       "options": [
         {
-          "value": "c1_13[0]",
+          "value": "parent",
           "label": "Parent",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[0]"
         },
         {
-          "value": "c1_13[1]",
+          "value": "power_of_attorney",
           "label": "Power of attorney",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[1]"
         },
         {
-          "value": "c1_13[2]",
+          "value": "court_appointed_guardian",
           "label": "Court-appointed guardian",
           "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[2]"
         }
@@ -1640,5 +1523,6 @@
       "schema_valid": true,
       "validation": "validated against backend FormSchema (Pydantic)"
     }
-  }
+  },
+  "schema_version": "2"
 }

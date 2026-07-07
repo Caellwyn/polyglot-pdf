@@ -333,7 +333,10 @@ def test_plain_string_options_get_value_hygiene_checks():
     assert lint_schema(_schema(fields)) == []
 
 
-def test_controls_fields_get_operator_and_action_ref_checks():
+def test_controls_fields_is_ignored_post_flip():
+    # controls_fields was DELETED at the P6.2 flip (bd h76m.16). A stray legacy
+    # controls_fields key is no longer linted (the model ignores it); lint sees
+    # nothing to flag from it. The trigger-side view lives in show_if now.
     fields = [
         {"id": "trigger", "type": "select",
          "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
@@ -342,8 +345,7 @@ def test_controls_fields_get_operator_and_action_ref_checks():
          ]},
     ]
     findings = lint_schema(_schema(fields))
-    assert _rules(findings) == ["ref-unresolved-field"]
-    assert "ghost" in findings[0].message
+    assert "ref-unresolved-field" not in _rules(findings)
 
 
 def test_composite_v2_group_with_valid_atoms_is_clean():
@@ -447,19 +449,22 @@ def test_i90_dump_unclaimed_excludes_machine_barcodes():
         )
 
 
-def test_f1040_duplicate_option_values_are_caught():
-    # The shipped f1040 filing-status bug (plan "Additional live bugs"):
-    # duplicate option values mean selecting one checks two widgets. The kit
-    # stays red until repaired/re-extracted (P6.1) -- this pins that lint SEES it.
+def test_f1040_duplicate_option_values_are_resolved_post_migration():
+    # The shipped f1040 filing-status bug (plan "Additional live bugs"): dup
+    # option values meant selecting one checked two widgets. Migrating f1040 to
+    # v2 (bd h76m.16, P6.2) mints unique semantic slugs per field, RESOLVING it.
+    # The kit now lints clean (no option-value-duplicate).
     findings = lint_schema(_load_kit_schema("f1040"))
-    assert has_errors(findings)
-    assert all(f.rule == "option-value-duplicate" for f in findings)
+    assert not any(f.rule == "option-value-duplicate" for f in findings)
 
 
 def test_archived_broken_w7_draft_lints_red():
     """The W-7 draft that triggered the epic: invented operators + an 8-option
-    group whose values are all "1". Lint must be RED naming both defects --
-    and must NOT crash even though this draft fails FormSchema.model_validate."""
+    group whose values are all "1". Lint must be RED naming those defects --
+    and must NOT crash even though this draft fails FormSchema.model_validate.
+    (Post the P6.2 flip, controls_fields is unlinted -- the invented operators
+    that lived inside it no longer surface -- but the show_if-side defects and
+    the duplicate-option-value defect still make the draft RED.)"""
     draft = json.loads(
         (_FIXTURES / "w7_broken_draft.json").read_text(encoding="utf-8")
     )
@@ -468,8 +473,6 @@ def test_archived_broken_w7_draft_lints_red():
     rules = set(_rules(findings))
     assert "unknown-operator" in rules
     assert "option-value-duplicate" in rules
-    named = " ".join(f.message for f in findings)
-    assert "is_selected" in named and "contains_any" in named
 
 
 # ---------------------------------------------------------------------------
@@ -479,7 +482,7 @@ def test_archived_broken_w7_draft_lints_red():
 
 def test_field_id_of_extracts_the_anchored_field():
     assert field_id_of("fields[3] (id=picker).show_if") == "picker"
-    assert field_id_of("fields[0] (id=dep).controls_fields[2]") == "dep"
+    assert field_id_of("fields[0] (id=dep).require_if") == "dep"
     # show-if-cycle warnings use the "fields (id=X)" (no index) path shape.
     assert field_id_of("fields (id=loop_a)") == "loop_a"
 

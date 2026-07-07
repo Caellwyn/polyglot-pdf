@@ -1,0 +1,156 @@
+{
+  "checkbox_groups": [],
+  "standalone_unwrapped": [
+    "fld_filed_301",
+    "fld_combat_zone",
+    "fld_other_check",
+    "fld_deceased_check",
+    "fld_main_home_us",
+    "fld_election_you",
+    "fld_election_spouse",
+    "fld_nonresident_spouse_check",
+    "fld_more_than_four_dependents",
+    "fld_dep1_lived_with",
+    "fld_dep1_in_us",
+    "fld_dep2_lived_with",
+    "fld_dep2_in_us",
+    "fld_dep3_lived_with",
+    "fld_dep3_in_us",
+    "fld_dep4_lived_with",
+    "fld_dep4_in_us",
+    "fld_dep1_fulltime_student",
+    "fld_dep1_disabled",
+    "fld_dep2_fulltime_student",
+    "fld_dep2_disabled",
+    "fld_dep3_fulltime_student",
+    "fld_dep3_disabled",
+    "fld_dep4_fulltime_student",
+    "fld_dep4_disabled",
+    "fld_dep1_ctc",
+    "fld_dep1_odc",
+    "fld_dep2_ctc",
+    "fld_dep2_odc",
+    "fld_dep3_ctc",
+    "fld_dep3_odc",
+    "fld_dep4_ctc",
+    "fld_dep4_odc",
+    "fld_mfs_hoh_apart",
+    "fld_6c_lumpsum",
+    "fld_6d_mfs_apart",
+    "fld_12a_you_dep",
+    "fld_12a_spouse_dep",
+    "fld_12b_spouse_itemizes",
+    "fld_12c_dual_status",
+    "fld_12d_you_born",
+    "fld_12d_you_blind",
+    "fld_12d_spouse_born",
+    "fld_12d_spouse_blind",
+    "fld_27b_clergy",
+    "fld_27c_no_eic",
+    "fld_28_check",
+    "fld_35a_form8888",
+    "fld_preparer_self_employed"
+  ],
+  "slug_maps": {
+    "fld_filing_status": {
+      "c1_8[2]": "married_filing_separately_mfs"
+    },
+    "fld_digital_assets": {
+      "c1_10[0]": "yes",
+      "c1_10[1]": "no"
+    },
+    "fld_3c": {
+      "c1_33[0]": "1_line_3a",
+      "c1_34[0]": "2_line_3b"
+    },
+    "fld_4c": {
+      "c1_35[0]": "1_rollover",
+      "c1_36[0]": "2_qcd",
+      "c1_37[0]": "3"
+    },
+    "fld_5c": {
+      "c1_38[0]": "1_rollover",
+      "c1_39[0]": "2_pso",
+      "c1_40[0]": "3"
+    },
+    "fld_7b": {
+      "c1_43[0]": "schedule_d_not_required",
+      "c1_44[0]": "includes_child_s_capital_gain_or_loss"
+    },
+    "fld_16_check": {
+      "c2_9[0]": "1_form_8814",
+      "c2_10[0]": "2_form_4972",
+      "c2_11[0]": "3"
+    },
+    "fld_account_type": {
+      "c2_16[0]": "checking",
+      "c2_16[1]": "savings"
+    },
+    "fld_designee_allow": {
+      "c2_17[0]": "yes_complete_below",
+      "c2_17[1]": "no"
+    }
+  },
+  "operators_rewritten": 0,
+  "behaviors_folded": 0,
+  "controls_fields_dropped": 0,
+  "unmirrored_controls": [
+    {
+      "trigger": "fld_filing_status",
+      "operator": "equals",
+      "targets": [
+        "fld_mfs_spouse_name",
+        "fld_spouse_ssn"
+      ]
+    },
+    {
+      "trigger": "fld_nonresident_spouse_check",
+      "operator": "equals",
+      "targets": [
+        "fld_nonresident_spouse_name"
+      ]
+    },
+    {
+      "trigger": "fld_4c",
+      "operator": "equals",
+      "targets": [
+        "fld_4c_other"
+      ]
+    },
+    {
+      "trigger": "fld_5c",
+      "operator": "equals",
+      "targets": [
+        "fld_5c_other"
+      ]
+    },
+    {
+      "trigger": "fld_16_check",
+      "operator": "equals",
+      "targets": [
+        "fld_16_other"
+      ]
+    },
+    {
+      "trigger": "fld_designee_allow",
+      "operator": "equals",
+      "targets": [
+        "fld_designee_name",
+        "fld_designee_phone",
+        "fld_designee_pin"
+      ]
+    }
+  ],
+  "conditional_fields_dropped": 0,
+  "options_from_dump": [],
+  "needs_options": [],
+  "duplicate_option_values": [
+    {
+      "field": "fld_filing_status",
+      "values": [
+        "c1_8[0]",
+        "c1_8[1]"
+      ]
+    }
+  ]
+}

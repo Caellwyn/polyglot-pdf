@@ -618,32 +618,9 @@ def lint_schema(
             _check_atom(atom_path, atom, None, out, fields_by_id,
                         resolve_trigger=True, is_v2=is_v2)
 
-        controls = f.get("controls_fields")
-        if isinstance(controls, list):
-            for j, control in enumerate(controls):
-                if not isinstance(control, dict):
-                    continue
-                control_path = f"{field_path}.controls_fields[{j}]"
-                # Trigger-side: the condition tests the OWNING field's value;
-                # a missing operator defaults to equals (the model's default).
-                atom = {
-                    "operator": control.get("operator", "equals"),
-                    "value": control.get("value"),
-                }
-                _check_atom(control_path, atom, f, out, fields_by_id,
-                            resolve_trigger=False, is_v2=is_v2)
-                for action in ("shows", "hides", "unlocks", "locks",
-                               "makes_required", "makes_optional"):
-                    targets = control.get(action)
-                    if not isinstance(targets, list):
-                        continue
-                    for target in targets:
-                        if isinstance(target, str) and target not in fields_by_id:
-                            out.append(LintFinding(
-                                SEVERITY_ERROR, "ref-unresolved-field",
-                                f"{control_path}.{action}",
-                                f"references non-existent field {target!r}",
-                            ))
+        # controls_fields was DELETED at the P6.2 strictness flip (bd h76m.16):
+        # dead at runtime, removed from the model; the trigger-side view is
+        # derived from show_if/require_if, so there is nothing to lint here.
 
     _check_cycles(show_if_graph, out)
 

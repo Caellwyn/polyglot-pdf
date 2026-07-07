@@ -126,12 +126,6 @@ class SupplementType(str, Enum):
     """Types of supplement pages for overflow content"""
     TYPE = "supplement_a"  # ex. Additional children (I-589)
 
-class GroupKind(str, Enum):
-    """Type of field grouping"""
-    CHECKBOX = "checkbox"
-    RADIO = "radio"
-
-
 class SessionStatus(str, Enum):
     """Form session status"""
     IN_PROGRESS = "in_progress"
@@ -342,41 +336,6 @@ def iter_condition_atoms(condition: Optional["FieldCondition"]) -> List[Conditio
     return atoms
 
 
-class ConditionalControl(BaseModel):
-    """
-    Proactive, trigger-side logic.
-    Used on a field to define what it controls when its value changes.
-    Example: Placed on Field A, "When my value is 'Yes', unlock Field B and show Field C."
-    """
-    operator: ConditionalOperator = Field(
-        default=ConditionalOperator.EQUALS,
-        description="The operator to check this field's value against."
-    )
-    value: Union[str, int, float, bool, List[Union[str, int, float, bool]]] = Field(
-        description="The value (or list of values) to check for."
-    )
-
-    # Define all possible actions
-    shows: Optional[List[str]] = Field(
-        None, description="List of field IDs to show (make not hidden)."
-    )
-    hides: Optional[List[str]] = Field(
-        None, description="List of field IDs to hide."
-    )
-    unlocks: Optional[List[str]] = Field(
-        None, description="List of field IDs to unlock (make not read-only)."
-    )
-    locks: Optional[List[str]] = Field(
-        None, description="List of field IDs to lock (make read-only)."
-    )
-    makes_required: Optional[List[str]] = Field(
-        None, description="List of field IDs to make required."
-    )
-    makes_optional: Optional[List[str]] = Field(
-        None, description="List of field IDs to make optional (not required)."
-    )
-
-
 class ConditionalBehavior(BaseModel):
     """
     Defines *how* a field reacts to conditional actions.
@@ -518,7 +477,6 @@ class FormField(BaseModel):
     section_label: Optional[str] = Field(None, description="Section display name")
     group_id: Optional[str] = Field(None, description='Grouping within section (e.g., "full-name")')
     group_label: Optional[str] = Field(None, description="Group display name")
-    group_kind: Optional[GroupKind] = Field(None, description="Type of group if applicable")
 
     # Conditional display. v1: a single {field, operator, value} condition.
     # v2 (bd h76m.3): additionally accepts a composite ConditionGroup
@@ -530,26 +488,14 @@ class FormField(BaseModel):
 
     # v2 (bd h76m.3): condition under which this field becomes REQUIRED --
     # sits beside show_if with the same legacy/composite shape and the same
-    # evaluator machinery; replaces controls_fields.makes_required.
+    # evaluator machinery; the target-side require_if is the ONLY require path.
     require_if: Optional[FieldCondition] = Field(
         None, description="Reactive logic: defines when this field is required."
-    )
-
-    # Conditional control (trigger-side)
-    controls_fields: Optional[List[ConditionalControl]] = Field(
-        None,
-        description="Proactive logic: defines how this field's value affects other fields."
     )
 
     # Conditional behavior (how to react)
     conditional_behavior: Optional[ConditionalBehavior] = Field(
         None, description="Defines *how* this field reacts to conditional logic (e.g., PDF bit flipping)."
-    )
-
-    # Legacy support - deprecated, use controls_fields instead
-    conditional_fields: Optional[List[str]] = Field(
-        None,
-        description="DEPRECATED: Use controls_fields instead. List of field IDs conditionally shown based on this field"
     )
 
     # Help and guidance
@@ -867,12 +813,6 @@ def _collect_v2_problems(schema: "FormSchema") -> List[str]:
                         f"pdf_field_name"
                     )
 
-        if f.conditional_fields:
-            problems.append(
-                f"{path}: legacy conditional_fields is not part of schema v2 "
-                f"(express the dependency as show_if on the target fields)"
-            )
-
         problems.extend(_v2_condition_problems(path, "show_if", f.show_if, fields_by_id))
         problems.extend(_v2_condition_problems(path, "require_if", f.require_if, fields_by_id))
 
@@ -944,23 +884,16 @@ class FormSchema(BaseModel):
 
     @model_validator(mode='after')
     def _enforce_v2_rules(self):
-        """Apply the strict v2 rules when the schema opts in (bd h76m.3).
+        """Apply the strict v2 rules to EVERY schema (bd h76m.16, P6.2 flip).
 
-        v1 schemas (schema_version None/'1') pass through untouched -- the
-        shipped kits must keep validating unchanged until the P6.2 flip. A v2
-        schema carrying the deprecated trigger-side controls_fields parses
-        (demote-not-delete until P6.2) but raises a DeprecationWarning.
+        The v1-acceptance bypass is gone: schema v2 is the only shape. All
+        stored kits are migrated to v2 (i-90/w7/w7-2/f1040), and the trigger-
+        side controls_fields / group_kind / conditional_fields fields have been
+        deleted from the model, so a legacy schema carrying them now fails to
+        parse (extra keys) rather than validating on a tolerated legacy path.
+        The dict-based migration script (migrate_schema_v2.py) reads raw v1
+        dicts and does NOT go through this model, so it is unaffected.
         """
-        if self.schema_version != vocab.SCHEMA_VERSION_V2:
-            return self
-        if any(f.controls_fields for f in self.fields):
-            warnings.warn(
-                "controls_fields is deprecated in schema v2 (dead at runtime; "
-                "the editor derives the trigger-side view from show_if) and is "
-                "deleted at the strictness flip",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         problems = _collect_v2_problems(self)
         if problems:
             raise ValueError(
