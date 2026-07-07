@@ -91,6 +91,11 @@ approximation for feedback; this modal (and download) is the ground truth.
   font shrink); the FilledPreviewModal is the exact render.
 - Radio/checkbox-group selections paint their labels at the field-level rect
   (tiny for 10px option boxes) until the per-option `pdf_position` backfill.
-- `signature` values would paint as raw text (unreachable today -- signature
-  fields are not implemented in the form).
+- `signature` fields DO get overlays (the i-90 has 4, w7/w7-2 have 2 each,
+  all with valid `pdf_position`): a signature is not paintable as text, so if
+  one ever carried a string value it would render as raw text in its rect.
+  Simplified mode has no signature INPUT widget yet
+  (`FieldRenderer` marks the type not-yet-implemented), but that is a
+  widget gap, not a value/paint gap -- nothing restricts `update_form_fields`
+  by field type, so the overlay path is live.
 - Textarea width-fitting assumes a single line; long wrapped values clip.
