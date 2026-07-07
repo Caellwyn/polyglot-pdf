@@ -257,18 +257,22 @@ the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; 
 
 Every mic-arming site shares ONE send callback in
 `frontend/src/shared/connection.ts`, gated by the pure function
-`shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy). Apart from the
-initial connect (the overlay's connect-poll calls `startRecording`), every
-reconnect / session-restart path re-arms through a single
-`rehydrateAudio(reason)` routine (bd polyglot-pdf-z9bc): `resume`,
-`startSection`, `switchToSection`, `rearmAudioCapture`, and the
-`onSessionReady` / `onSessionRestarted` callbacks (the latter is how the
-automatic/internal reconnects -- GoAway pre-emptive resume and auto-drop --
-re-sync). It is idempotent: a no-op under the test harness and while paused, it
-skips the arm when already recording (the mic worklet + playback `AudioContext`
-survive a socket swap, so on GoAway/auto-drop audio self-heals and this is a
-pure PTT re-sync), and it always re-applies PTT/mute. The shared send callback is
-then gated by:
+`shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy). A single
+`rehydrateAudio(reason)` routine (bd polyglot-pdf-z9bc) owns arming for every
+reconnect / session-restart path: `resume`, `startSection`, `switchToSection`,
+`rearmAudioCapture`, and the `onSessionReady` / `onSessionRestarted` callbacks
+(the latter is how the automatic/internal reconnects -- GoAway pre-emptive resume
+and auto-drop -- re-sync). Because `session_ready` also fires on the FIRST
+connect, `rehydrateAudio` runs on initial connect too -- it races the overlay's
+connect-poll `startRecording`, which the in-flight `arming` guard in
+`audioManager.startRecording` makes safe (the second caller awaits the first
+instead of double-arming). `rehydrateAudio` is idempotent: a no-op under the test
+harness and while paused; it skips the arm when already recording (the mic
+worklet + playback `AudioContext` survive a socket swap, so on GoAway/auto-drop
+audio self-heals -- a pure PTT-mode re-sync); it re-applies the PTT gate MODE
+always, but only (re)sets mute/unmute when it ARMED A FRESH mic (so a reconnect
+landing during an active push-to-talk hold does not truncate the user's speech).
+The shared send callback is then gated by:
 
 - `connected` → always send.
 - `switching_section` **with the WebSocket open** → send. Safe because the
