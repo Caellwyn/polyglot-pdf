@@ -282,16 +282,19 @@ def evaluate_form(form: dict, draft_path: Optional[str],
     # Verdict: RED on any lint ERROR, a failed structural assertion, a
     # non-conforming value convention, or choice fill below the epic's 95%
     # gate. The value-convention column measures the V1 widget-leaf value
-    # convention, which the repair pass deliberately replaces with v2 slugs
-    # -- so it counts toward RED only when repair did NOT run on this row
-    # (post-repair, lint's slug/duplicate/reference rules + roundtrip are
-    # the gates).
+    # convention; a v2 schema (all shipped kits post the P6.2 flip, bd
+    # h76m.16) deliberately uses SEMANTIC SLUGS instead, so it "violates" that
+    # v1 convention BY DESIGN -- the check therefore only counts toward RED for
+    # a v1 draft on which repair did not run (post-repair / for a v2 schema,
+    # lint's slug/duplicate/reference rules + roundtrip are the real gates).
+    is_v2 = str(draft.get("schema_version")) == "2"
     conv_pct = row["value_convention"].get("pct")
     choice_pct = row["choice_fill"].get("pct")
     red = (
         row["lint_errors"] > 0
         or (row.get("structural") and not row["structural"]["passed"])
-        or (not repair_ran and conv_pct is not None and conv_pct < 100.0)
+        or (not is_v2 and not repair_ran
+            and conv_pct is not None and conv_pct < 100.0)
         or (choice_pct is not None and choice_pct < 95.0)
     )
     row["verdict"] = "RED" if red else "OK"

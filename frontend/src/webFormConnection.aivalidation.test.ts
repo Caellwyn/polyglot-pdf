@@ -486,8 +486,7 @@ describe('WebFormConnection optional checkbox group [] is confirmable, not stran
         id: 'concerns[]',
         name: 'concerns',
         spoken_name: 'Concerns',
-        type: 'checkbox',
-        group_kind: 'checkbox',
+        type: 'checkbox_group',
         // optional: no validation.required
         options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
       },

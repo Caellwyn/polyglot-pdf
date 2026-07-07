@@ -206,8 +206,7 @@ describe('validateField (enum / option membership)', () => {
       id: 'tags[]',
       name: 'Tags',
       spoken_name: 'tags',
-      type: 'checkbox',
-      group_kind: 'checkbox',
+      type: 'checkbox_group',
       section_id: 'Part 1',
       options: [
         { value: 'single', label: 'Single' },
@@ -245,8 +244,7 @@ describe('validateField (enum / option membership)', () => {
       id: 'tags_opt[]',
       name: 'Optional Tags',
       spoken_name: 'optional tags',
-      type: 'checkbox',
-      group_kind: 'checkbox',
+      type: 'checkbox_group',
       section_id: 'Part 1',
       options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
     };
@@ -375,8 +373,7 @@ describe('validateField (comma-separated checkbox-group values)', () => {
     id: 'reason[]',
     name: 'Reason for Visit',
     spoken_name: 'reason for visit',
-    type: 'checkbox',
-    group_kind: 'checkbox',
+    type: 'checkbox_group',
     section_id: 'Part 1',
     options: ['Fears/Phobias/Worries', 'Family Concerns', 'Work Difficulties'] as any,
   };
@@ -532,127 +529,96 @@ describe('validateField (bare date field, format-only)', () => {
   });
 });
 
-// shouldShowField conditional visibility, focused on the checkbox-group trigger
-// bug (bd polyglot-pdf-vq4m): a multi-option checkbox emits a string[] of selected
-// option values, so `equals`/`not_equals` must compare by membership, not strict
-// scalar identity (which is always false/true against an array). The I-90's
-// p5_line1b_language is gated `equals P5_Checkbox1b[0]` on the p5_checkbox1a
-// checkbox group; before the fix it was unreachable in the renderer.
-describe('shouldShowField (checkbox-group equals/not_equals trigger)', () => {
-  // A dependent gated on a single option of a checkbox-group trigger.
-  const gatedEquals: FormField = {
+// shouldShowField conditional visibility on a checkbox-group trigger AFTER the
+// P6.2 strictness flip (bd polyglot-pdf-h76m.16). equals/not_equals are now PURE
+// scalar comparisons -- membership belongs to includes/not_includes. The voice-AI
+// comma-joined group string is converted to a string[] at the single ingress
+// boundary (canonicalizeAiCheckboxGroupValue in webFormConnection.ts) BEFORE
+// storage, so the evaluator NEVER sees a comma-string for a group. The I-90's
+// p5_line1b_language is now gated `includes P5_Checkbox1b[0]` on the p5_checkbox1a
+// checkbox group.
+describe('shouldShowField (checkbox-group includes/not_includes trigger)', () => {
+  // A dependent gated on a single option of a checkbox-group trigger via includes.
+  const gatedIncludes: FormField = {
     id: 'p5_line1b_language',
     name: 'Interpreter language',
     type: 'text',
     section_id: 'Part 5',
-    show_if: { field: 'p5_checkbox1a', operator: 'equals', value: 'P5_Checkbox1b[0]' },
+    show_if: { field: 'p5_checkbox1a', operator: 'includes', value: 'P5_Checkbox1b[0]' },
   } as FormField;
 
-  const gatedNotEquals: FormField = {
-    ...gatedEquals,
+  const gatedNotIncludes: FormField = {
+    ...gatedIncludes,
     id: 'p5_other',
-    show_if: { field: 'p5_checkbox1a', operator: 'not_equals', value: 'P5_Checkbox1b[0]' },
+    show_if: { field: 'p5_checkbox1a', operator: 'not_includes', value: 'P5_Checkbox1b[0]' },
   } as FormField;
 
-  // The trigger field, a checkbox GROUP. Passed as the `fields` arg so the
-  // comma-separated AI-fill string can be recognized + split (a comma-string is
-  // only split when the trigger is a known checkbox group -- Codex PR #259).
-  const triggerCheckboxGroup: FormField = {
-    id: 'p5_checkbox1a',
-    name: 'How the form was completed',
-    type: 'checkbox',
-    group_kind: 'checkbox',
-    section_id: 'Part 5',
-  } as FormField;
-  const fields = [gatedEquals, gatedNotEquals, triggerCheckboxGroup];
-
-  it('SHOWS an equals-gated dependent when the checkbox group includes the option', () => {
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(true);
+  it('SHOWS an includes-gated dependent when the checkbox group includes the option', () => {
+    expect(shouldShowField(gatedIncludes, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(true);
   });
 
-  it('HIDES an equals-gated dependent when the group has a different option selected', () => {
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: ['P5_Checkbox1a[0]'] })).toBe(false);
+  it('HIDES an includes-gated dependent when the group has a different option selected', () => {
+    expect(shouldShowField(gatedIncludes, { p5_checkbox1a: ['P5_Checkbox1a[0]'] })).toBe(false);
   });
 
-  it('HIDES an equals-gated dependent when the group is empty', () => {
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: [] })).toBe(false);
+  it('HIDES an includes-gated dependent when the group is empty', () => {
+    expect(shouldShowField(gatedIncludes, { p5_checkbox1a: [] })).toBe(false);
   });
 
   it('SHOWS the option when it is one of several selected in the group', () => {
     expect(
-      shouldShowField(gatedEquals, { p5_checkbox1a: ['P5_Checkbox1a[0]', 'P5_Checkbox1b[0]'] })
+      shouldShowField(gatedIncludes, { p5_checkbox1a: ['P5_Checkbox1a[0]', 'P5_Checkbox1b[0]'] })
     ).toBe(true);
+  });
+
+  it('handles a single-selection bare scalar (one box, voice path) under includes', () => {
+    expect(shouldShowField(gatedIncludes, { p5_checkbox1a: 'P5_Checkbox1b[0]' })).toBe(true);
+    expect(shouldShowField(gatedIncludes, { p5_checkbox1a: 'P5_Checkbox1a[0]' })).toBe(false);
+  });
+
+  it('not_includes: HIDES when the group includes the option, SHOWS otherwise', () => {
+    expect(shouldShowField(gatedNotIncludes, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(false);
+    expect(shouldShowField(gatedNotIncludes, { p5_checkbox1a: ['P5_Checkbox1a[0]'] })).toBe(true);
+    expect(shouldShowField(gatedNotIncludes, { p5_checkbox1a: [] })).toBe(true);
+  });
+
+  it('equals/not_equals are SCALAR (a group array is never strictly equal to a scalar)', () => {
+    // Post-flip equals/not_equals do NOT do membership. An array trigger value is
+    // never === a scalar option string, so equals is always false, not_equals true.
+    const scalarEquals = {
+      ...gatedIncludes,
+      show_if: { field: 'p5_checkbox1a', operator: 'equals', value: 'P5_Checkbox1b[0]' },
+    } as FormField;
+    const scalarNotEquals = {
+      ...gatedIncludes,
+      show_if: { field: 'p5_checkbox1a', operator: 'not_equals', value: 'P5_Checkbox1b[0]' },
+    } as FormField;
+    expect(shouldShowField(scalarEquals, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(false);
+    expect(shouldShowField(scalarNotEquals, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(true);
   });
 
   it('still works for a plain SCALAR trigger (radio/select) under equals', () => {
     const scalarGated = {
-      ...gatedEquals,
+      ...gatedIncludes,
       show_if: { field: 'mode', operator: 'equals', value: 'yes' },
     } as FormField;
     expect(shouldShowField(scalarGated, { mode: 'yes' })).toBe(true);
     expect(shouldShowField(scalarGated, { mode: 'no' })).toBe(false);
   });
 
-  it('not_equals: HIDES when the group includes the option, SHOWS otherwise', () => {
-    expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: ['P5_Checkbox1b[0]'] })).toBe(false);
-    expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: ['P5_Checkbox1a[0]'] })).toBe(true);
-    expect(shouldShowField(gatedNotEquals, { p5_checkbox1a: [] })).toBe(true);
-  });
-
-  // The voice-AI fill path stores a checkbox group as a COMMA-SEPARATED STRING
-  // ("Multiple checkboxes: comma-separated exact values", backend/config.py),
-  // un-split -- not a string[]. equals/not_equals must compare by membership for
-  // that shape too, else the AI path stays broken (Codex PR #259).
-  it('SHOWS an equals-gated dependent when the AI comma-separated string includes the option', () => {
-    expect(
-      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' }, fields)
-    ).toBe(true);
-  });
-
-  it('HIDES an equals-gated dependent when the comma-separated string omits the option', () => {
-    expect(
-      shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' }, fields)
-    ).toBe(false);
-  });
-
-  it('handles a single-selection comma-free string (scalar path, exact match)', () => {
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0]' }, fields)).toBe(true);
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1a[0]' }, fields)).toBe(false);
-  });
-
-  it('not_equals: comma-separated string membership (hidden when present, shown when absent)', () => {
-    expect(
-      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' }, fields)
-    ).toBe(false);
-    expect(
-      shouldShowField(gatedNotEquals, { p5_checkbox1a: 'P5_Checkbox1a[0], P5_Checkbox2[0]' }, fields)
-    ).toBe(true);
-  });
-
-  it('does NOT split a comma-bearing SCALAR trigger value (text/select, not a checkbox group)', () => {
-    // A scalar trigger whose value legitimately contains a comma must compare
-    // strictly, not be split into members (Codex PR #259).
-    const cityTrigger: FormField = {
-      id: 'city', name: 'City', type: 'text', section_id: 'Part 5',
-    } as FormField; // no group_kind -> scalar
+  it('does NOT split a comma-bearing SCALAR trigger value (a comma string is a plain scalar)', () => {
+    // The evaluator never splits: a comma-string is compared strictly. A scalar
+    // trigger whose value legitimately contains a comma matches only whole.
     const gatedOnCity = {
-      ...gatedEquals,
+      ...gatedIncludes,
       show_if: { field: 'city', operator: 'equals', value: 'Springfield, IL' },
     } as FormField;
-    const withCity = [gatedOnCity, cityTrigger];
-    // exact comma-bearing match -> shown; the partial "Springfield" must NOT match.
-    expect(shouldShowField(gatedOnCity, { city: 'Springfield, IL' }, withCity)).toBe(true);
+    expect(shouldShowField(gatedOnCity, { city: 'Springfield, IL' })).toBe(true);
     const gatedOnPartial = {
-      ...gatedEquals,
+      ...gatedIncludes,
       show_if: { field: 'city', operator: 'equals', value: 'Springfield' },
     } as FormField;
-    expect(shouldShowField(gatedOnPartial, { city: 'Springfield, IL' }, [gatedOnPartial, cityTrigger])).toBe(false);
-  });
-
-  it('falls back to strict compare for a comma string when the trigger field is unknown (no fields arg)', () => {
-    // Without the fields list we cannot confirm a checkbox group, so a comma
-    // string is NOT split -- safer than guessing.
-    expect(shouldShowField(gatedEquals, { p5_checkbox1a: 'P5_Checkbox1b[0], P5_Checkbox2[0]' })).toBe(false);
+    expect(shouldShowField(gatedOnPartial, { city: 'Springfield, IL' })).toBe(false);
   });
 });
 

@@ -217,10 +217,14 @@ def test_one_command_emits_the_multi_form_table(capsys, tmp_path):
     assert "PASS (8w" in table
     # The held-out form (no draft, no gold -- by design) is explicit, not silent.
     assert "held-out" in table
-    # f1040's shipped duplicate bug keeps the baseline table RED -> exit 1.
-    assert "RED" in table and rc == 1
+    # Post the P6.2 flip (bd h76m.16) every shipped kit is migrated to v2 and
+    # clean -- the f1040 duplicate-option bug that used to keep the baseline RED
+    # is resolved by the migration, so the whole table is GREEN -> exit 0.
+    assert "RED" not in table and rc == 0
     rows = json.loads(out_json.read_text(encoding="utf-8"))
     assert len(rows) == 4
+    # The three real kits score OK; the held-out row carries no verdict.
+    assert all(r.get("verdict", "OK") == "OK" for r in rows)
 
 
 # --------------------------------------------------------------------------- #

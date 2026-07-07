@@ -1066,11 +1066,12 @@ def test_mark_complete_requires_a_schema(client):
     assert r.status_code == 409
 
 
-def test_mark_complete_lint_gate_409s_naming_findings(client):
-    """bd h76m.5 (P2.1): zero lint ERRORs to promote. A schema that PARSES
-    (duplicate option values are legal to Pydantic on a v1 schema -- the
-    shipped-f1040 bug class) must still be refused at the publish gate, with
-    the findings named so the editor can fix them."""
+def test_mark_complete_publish_gate_refuses_a_duplicate_option_schema(client):
+    """bd h76m.5 (P2.1) + the P6.2 flip (bd h76m.16): a schema with duplicate
+    option values must be refused at the publish gate, named so the editor can
+    fix it. Post the flip, v2 strictness is always-on, so this defect is caught
+    at the PARSE gate (422) rather than the lint gate -- the publish gate still
+    stands between a bad schema and the voice app, just one layer earlier."""
     from backend.models.form_models import FormSchema
 
     c, _store, root = client
@@ -1079,14 +1080,15 @@ def test_mark_complete_lint_gate_409s_naming_findings(client):
     linty["fields"].append({
         "id": "picker", "name": "Picker", "spoken_name": "picker",
         "type": "select", "section_id": "s1",
+        "pdf_field_name": "form1[0].pick[0]",
         "options": [
             {"value": "same", "label": "A"},
             {"value": "same", "label": "B"},
         ],
     })
-    # Sanity: this schema passes the Pydantic gate (v1 tolerance) -- the lint
-    # gate is the ONLY thing standing between it and the voice app.
-    FormSchema.model_validate(linty)
+    # The parse gate now catches this (v2 strictness is always-on).
+    with pytest.raises(Exception):
+        FormSchema.model_validate(linty)
 
     _make_kit(root, "linty", schema=linty)
     r = c.post(
@@ -1094,11 +1096,10 @@ def test_mark_complete_lint_gate_409s_naming_findings(client):
         headers={"X-Editor-Token": "edit-tok"},
         json={"status": "complete"},
     )
-    assert r.status_code == 409
+    assert r.status_code == 422
     detail = r.json()["detail"]
-    assert "lint error" in detail
-    assert "option-value-duplicate" in detail  # names the rule
-    assert "picker" in detail                  # names the field
+    assert "duplicate option values" in detail  # names the defect
+    assert "picker" in detail                    # names the field
     # The kit stays draft.
     meta = json.loads((root / "linty" / "metadata.json").read_text())
     assert meta["status"] == "draft"
@@ -1542,10 +1543,11 @@ def test_promotion_survives_a_transient_dump_read_error(client, monkeypatch):
 
 
 def test_stored_with_issues_draft_is_unpromotable_two_gate_seam(client, monkeypatch):
-    # The two-gate seam: a stored lint-ERROR draft (via the extract route) is
-    # UN-PROMOTABLE -- mark-complete 409s on the LINT errors specifically (store
-    # != promote). Uses a Pydantic-valid draft so the refusal is the lint gate,
-    # not the earlier wire-contract gate.
+    # The two-gate seam: a defective draft (via the extract route) STORES
+    # (200, storedWithIssues) but is UN-PROMOTABLE (store != promote). Post the
+    # P6.2 flip (bd h76m.16), v2 strictness is always-on, so a duplicate-option
+    # draft is refused at the PARSE gate (422) at promotion time -- the seam
+    # (store accepts, promote refuses) still holds, one layer earlier.
     c, store, root = client
     _make_kit(root, "fresh")
     fake = _fake_extractor(_LINT_ERROR_VALID_DRAFT, exit_code=3)
@@ -1554,14 +1556,14 @@ def test_stored_with_issues_draft_is_unpromotable_two_gate_seam(client, monkeypa
         "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
     )
     assert stored.status_code == 200 and stored.json()["storedWithIssues"] is True
-    # Now try to promote it -- the lint gate must refuse (409).
+    # Now try to promote it -- the publish gate must refuse.
     promote = c.post(
         "/api/editor/kits/fresh/status",
         headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
-    assert promote.status_code == 409, promote.text
-    assert "lint error" in promote.json()["detail"]
+    assert promote.status_code == 422, promote.text
+    assert "duplicate option values" in promote.json()["detail"]
 
 
 def test_extract_requires_author_role_and_a_pdf(client, monkeypatch):

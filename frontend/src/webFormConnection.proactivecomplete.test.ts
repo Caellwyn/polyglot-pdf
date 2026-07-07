@@ -395,8 +395,7 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
       fields: [
         { id: 'f_req', name: 'reqname', spoken_name: 'Required', type: 'text',
           validation: { required: true } },
-        { id: 'f_cb', name: 'cbname', spoken_name: 'Checkboxes', type: 'checkbox',
-          group_kind: 'checkbox' },
+        { id: 'f_cb', name: 'cbname', spoken_name: 'Checkboxes', type: 'checkbox_group' },
       ],
       sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_req', 'f_cb'] }],
     } as unknown as FormSchema

@@ -54,10 +54,10 @@ export function stripToken(url: string): string {
  * silently stays empty on the printed PDF). Splitting at the AI ingress makes
  * validation, storage, conditionals, and fill all see the same array.
  *
- * A "choice group" here is a checkbox field WITH options (the renderer's own
- * group rule -- CheckboxField renders options-bearing checkbox fields as a
- * multi-select storing string[]) or one explicitly marked group_kind
- * "checkbox". A standalone boolean checkbox (no options) is never touched, and
+ * A "choice group" here is the v2 `checkbox_group` type, or (legacy shape) a
+ * `type:"checkbox"` field WITH options (the renderer's own group rule --
+ * CheckboxField renders options-bearing checkbox fields as a multi-select
+ * storing string[]). A standalone boolean checkbox (no options) is never touched, and
  * non-string values (bool, array) pass through unchanged. Option values may
  * contain "/" but never "," (the schema contract forbids it; slugs later make
  * that structural), so comma is an unambiguous delimiter. A single no-comma
@@ -74,8 +74,8 @@ export function stripToken(url: string): string {
  */
 export function canonicalizeAiCheckboxGroupValue(field: FormField, value: any): any {
   const isChoiceGroup =
-    field.type === "checkbox" &&
-    ((field.options?.length ?? 0) > 0 || field.group_kind === "checkbox");
+    field.type === "checkbox_group" ||
+    (field.type === "checkbox" && (field.options?.length ?? 0) > 0);
   if (!isChoiceGroup) return value;
 
   const raw = unwrapFieldValue(value);

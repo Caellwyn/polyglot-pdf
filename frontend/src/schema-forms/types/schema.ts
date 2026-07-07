@@ -27,6 +27,7 @@ export type FieldType =
   | "select"
   | "radio"
   | "checkbox"
+  | "checkbox_group"
   | "signature"
   | "address_group"
   | "table";
@@ -51,7 +52,6 @@ export type ConditionalOperator =
   | "includes"
   | "not_includes";
 
-export type GroupKind = "checkbox" | "radio";
 
 export type SessionStatus = "in_progress" | "completed" | "exported" | "expired";
 
@@ -120,17 +120,6 @@ export interface CompositeConditionalDisplay {
 
 // What a schema may carry on show_if / require_if: either wire dialect.
 export type FieldCondition = ConditionalDisplay | CompositeConditionalDisplay;
-
-export interface ConditionalControl {
-  operator: ConditionalOperator;
-  value: string | number | boolean | Array<string | number | boolean>;
-  shows?: string[];
-  hides?: string[];
-  unlocks?: string[];
-  locks?: string[];
-  makes_required?: string[];
-  makes_optional?: string[];
-}
 
 export interface ConditionalBehavior {
   unlock_method?: "flip_readonly_bit" | "set_property";
@@ -210,18 +199,15 @@ export interface FormField {
   section_label?: string;
   group_id?: string;
   group_label?: string;
-  group_kind?: GroupKind;
 
   // Conditional display: legacy single condition OR v2 composite group.
   show_if?: FieldCondition;
   // v2 (bd h76m.8): condition under which this field becomes REQUIRED --
   // same shape and evaluator machinery as show_if.
   require_if?: FieldCondition;
-  controls_fields?: ConditionalControl[];
   conditional_behavior?: ConditionalBehavior;
   /** Legacy alias for conditional_behavior; still emitted by generated form-kit schemas. */
   conditional_logic?: ConditionalBehavior;
-  conditional_fields?: string[]; // DEPRECATED: Use controls_fields
 
   // Help and guidance
   help?: FieldHelp;

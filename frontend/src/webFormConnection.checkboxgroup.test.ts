@@ -11,9 +11,10 @@
  * comma string into string[] BEFORE validate/store, so state, callbacks,
  * conditionals, and fill all see the canonical array.
  *
- * No shipped kit sets group_kind (the older comma-split in shouldShowField is
- * gated on it and never fires), so the group detection here matches the
- * renderer's own rule: a checkbox field WITH options is a multi-select group.
+ * Group detection matches the renderer's own rule: the v2 `checkbox_group` type,
+ * or (legacy shape) a `type:"checkbox"` field WITH options is a multi-select
+ * group. The old `group_kind` marker was deleted at the P6.2 strictness flip
+ * (bd polyglot-pdf-h76m.16); group-ness now lives in the TYPE.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -209,11 +210,13 @@ describe('canonicalizeAiCheckboxGroupValue unit behavior', () => {
     expect(canonicalizeAiCheckboxGroupValue(textField, 'a, b')).toBe('a, b')
   })
 
-  it('respects an explicit group_kind checkbox marker even without options', () => {
-    const marked = {
-      id: 'g', name: 'G', spoken_name: 'G', type: 'checkbox', group_kind: 'checkbox',
+  it('splits a v2 checkbox_group type even without options (group-ness is in the type)', () => {
+    // Post-P6.2 (bd h76m.16) group detection keys on the TYPE: a checkbox_group
+    // is a multi-select group regardless of whether options[] is present.
+    const grouped = {
+      id: 'g', name: 'G', spoken_name: 'G', type: 'checkbox_group',
     } as unknown as FormField
-    expect(canonicalizeAiCheckboxGroupValue(marked, 'a, b')).toEqual(['a', 'b'])
+    expect(canonicalizeAiCheckboxGroupValue(grouped, 'a, b')).toEqual(['a', 'b'])
   })
 
   it('splits a wrapped FieldValue comma string into a plain array', () => {

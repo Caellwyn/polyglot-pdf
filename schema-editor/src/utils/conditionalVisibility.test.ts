@@ -17,7 +17,7 @@ function field(partial: Partial<FormField> & { id: string }): FormField {
 const radio = field({ id: 'trigger', type: 'radio', options: [
   { value: 'a', label: 'A' }, { value: 'b', label: 'B' },
 ] });
-const checkboxGroup = field({ id: 'cbg', type: 'checkbox', options: [
+const checkboxGroup = field({ id: 'cbg', type: 'checkbox_group', options: [
   { value: 'x', label: 'X' }, { value: 'y', label: 'Y' },
 ] });
 const fields = [radio, checkboxGroup];
@@ -49,21 +49,36 @@ describe('equals / not_equals (scalar radio trigger)', () => {
   });
 });
 
-describe('checkbox-group trigger compares by MEMBERSHIP', () => {
-  const dep = field({ id: 'dep', show_if: { field: 'cbg', operator: 'equals', value: 'x' } });
-  it('equals: true when x is among the selected array', () => {
+// AFTER the P6.2 strictness flip (bd polyglot-pdf-h76m.16) a checkbox-group
+// trigger's selected set is tested by includes/not_includes; equals/not_equals
+// are PURE scalar comparisons. The voice-AI comma-joined string is converted to
+// a string[] at ingress BEFORE storage, so the evaluator never splits a comma.
+describe('checkbox-group trigger compares by MEMBERSHIP (includes/not_includes)', () => {
+  const dep = field({ id: 'dep', show_if: { field: 'cbg', operator: 'includes', value: 'x' } });
+  it('includes: true when x is among the selected array', () => {
     expect(shouldShowField(dep, { cbg: ['x', 'y'] }, fields)).toBe(true);
     expect(shouldShowField(dep, { cbg: ['y'] }, fields)).toBe(false);
     expect(shouldShowField(dep, { cbg: [] }, fields)).toBe(false);
   });
-  it('not_equals: true when x is NOT among the selected array', () => {
-    const d = field({ id: 'd', show_if: { field: 'cbg', operator: 'not_equals', value: 'x' } });
+  it('not_includes: true when x is NOT among the selected array', () => {
+    const d = field({ id: 'd', show_if: { field: 'cbg', operator: 'not_includes', value: 'x' } });
     expect(shouldShowField(d, { cbg: ['y'] }, fields)).toBe(true);
     expect(shouldShowField(d, { cbg: ['x'] }, fields)).toBe(false);
   });
-  it('splits a comma-joined string ONLY for a checkbox-group trigger', () => {
-    expect(evaluateCondition({ field: 'cbg', operator: 'equals', value: 'y' }, { cbg: 'x,y' }, fields)).toBe(true);
-    // a scalar text trigger with a comma is NOT split (e.g. "Springfield, IL")
+  it('includes: a single-box bare scalar selection is compared by identity', () => {
+    expect(evaluateCondition({ field: 'cbg', operator: 'includes', value: 'y' }, { cbg: 'y' }, fields)).toBe(true);
+    expect(evaluateCondition({ field: 'cbg', operator: 'includes', value: 'y' }, { cbg: 'x' }, fields)).toBe(false);
+  });
+  it('equals/not_equals are SCALAR: a group array is never strictly equal to a scalar', () => {
+    // Post-flip equals does NOT do membership; an array is never === a scalar
+    // option string, so equals is always false and not_equals always true.
+    expect(evaluateCondition({ field: 'cbg', operator: 'equals', value: 'y' }, { cbg: ['x', 'y'] }, fields)).toBe(false);
+    expect(evaluateCondition({ field: 'cbg', operator: 'not_equals', value: 'y' }, { cbg: ['x', 'y'] }, fields)).toBe(true);
+  });
+  it('does NOT split a comma-joined string (a comma value is a plain scalar)', () => {
+    // The evaluator never splits: a comma-string is compared strictly, so a
+    // scalar text trigger like "Springfield, IL" matches only whole.
+    expect(evaluateCondition({ field: 'cbg', operator: 'equals', value: 'x,y' }, { cbg: 'x,y' }, fields)).toBe(true);
     const textTrigger = field({ id: 't', type: 'text' });
     expect(evaluateCondition({ field: 't', operator: 'equals', value: 'IL' }, { t: 'Springfield, IL' }, [textTrigger])).toBe(false);
   });
