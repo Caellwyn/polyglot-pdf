@@ -444,6 +444,43 @@ def _dump_names(dump: Dict[str, Any]) -> List[str]:
     ]
 
 
+def _dump_entry(dump: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
+    """The AcroForm dump entry for widget `name`, or None if absent."""
+    entries = dump.get("fields") if isinstance(dump, dict) else None
+    if not isinstance(entries, list):
+        return None
+    for e in entries:
+        if isinstance(e, dict) and e.get("name") == name:
+            return e
+    return None
+
+
+# Substrings marking a widget as machine-generated / not a user-fillable field
+# (2D barcodes on USCIS/IRS forms: PDF417, QR, Code128 -- always named *BarCode*
+# / *PDF417* / *QRCode*). Matched case-insensitively against the widget name AND
+# its /TU. logical_type alone can't tell these apart: a PDF417 barcode is a
+# read-only MULTILINE text widget, and this project DELIBERATELY fills read-only
+# text/checkbox fields via unlock_method: flip_readonly_bit (i-90 has 20 real
+# read-only-text fields + real read-only checkboxes), so "read_only" is not a
+# safe "unfillable" signal here (bd polyglot-pdf-w0eq, caught pre-PR).
+_MACHINE_WIDGET_MARKERS = ("barcode", "pdf417", "qrcode")
+
+
+def is_fillable_widget(dump: Dict[str, Any], name: str) -> bool:
+    """Whether an AcroForm widget is a user-fillable form field (vs a decorative
+    button or a machine-generated barcode). The single source of truth for BOTH
+    the under-claim lint rule and extract_form's coverage backfill, so the two
+    never disagree on what counts as a coverage gap (bd polyglot-pdf-w0eq)."""
+    e = _dump_entry(dump, name) or {}
+    if e.get("logical_type") == "button":
+        return False  # decorative reset/print buttons
+    hay = (name + " " + str(e.get("tu") or "")).lower()
+    widgets = e.get("widgets") or [{}]
+    for w in widgets:
+        hay += " " + str(w.get("tu") or "").lower()
+    return not any(m in hay for m in _MACHINE_WIDGET_MARKERS)
+
+
 def _match_dump_names(claim: str, dump_names: List[str]) -> List[str]:
     """Resolve a schema pdf_field_name to dump widget names.
 
@@ -501,6 +538,26 @@ def _check_dump_claims(
         # field-level + a single option of the SAME field is the benign
         # groups-of-one convention (standalone checkbox describing its widget
         # in both places) -- not a finding.
+
+    # Under-claim: a real AcroForm widget that NO field maps to. The LLM
+    # extraction pass stochastically omits a field entirely (w7 / w7-2 are the
+    # same PDF, yet a re-extraction drops a different widget each run); without
+    # this the loss was silent, since the block above only flagged OVER-claim
+    # (bd polyglot-pdf-w0eq, P6.1c). A WARNING, not an ERROR: some widgets are
+    # legitimately unmodeled (reset/print buttons), and the extractor's
+    # deterministic coverage backfill claims the rest -- so a clean extraction
+    # emits none of these. Fillable widgets only (buttons excluded): an unfilled
+    # decorative button is not a coverage defect.
+    fillable_unclaimed = sorted(
+        n for n in dump_names
+        if n not in claims and is_fillable_widget(dump, n)
+    )
+    for name in fillable_unclaimed:
+        out.append(LintFinding(
+            SEVERITY_WARNING, "dump-widget-unclaimed", f"widget {name!r}",
+            "no field maps to this AcroForm widget (extraction likely dropped "
+            "it) -- backfill or model it explicitly",
+        ))
 
 
 # ---------------------------------------------------------------------------

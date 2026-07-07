@@ -224,6 +224,48 @@ def test_dump_multiclaim_by_two_options_of_one_field():
 
 
 # ---------------------------------------------------------------------------
+# Under-claim: a dump widget NO field maps to (extraction dropped it).
+# bd polyglot-pdf-w0eq, P6.1c.
+# ---------------------------------------------------------------------------
+
+def test_unclaimed_fillable_widget_warns():
+    # The stochastic-drop bug: the dump has a text widget no field claims. A
+    # WARNING (not ERROR) so it never breaks the store-with-issues exit code.
+    fields = [{"id": "a", "type": "text", "pdf_field_name": "f1[0]"}]
+    dump = {"fields": [
+        {"name": "top[0].f1[0]", "logical_type": "text"},
+        {"name": "top[0].f2[0]", "logical_type": "text"},  # unclaimed
+    ]}
+    findings = lint_schema(_schema(fields), dump)
+    assert _rules(findings) == ["dump-widget-unclaimed"]
+    assert findings[0].severity == "WARNING"
+    assert "f2[0]" in findings[0].path
+    assert not has_errors(findings)
+
+
+def test_unclaimed_button_widget_is_not_a_finding():
+    # A decorative reset/print button is legitimately unmodeled -- not a gap.
+    fields = [{"id": "a", "type": "text", "pdf_field_name": "f1[0]"}]
+    dump = {"fields": [
+        {"name": "top[0].f1[0]", "logical_type": "text"},
+        {"name": "top[0].reset[0]", "logical_type": "button"},
+    ]}
+    assert lint_schema(_schema(fields), dump) == []
+
+
+def test_all_widgets_claimed_emits_no_unclaimed_finding():
+    fields = [
+        {"id": "a", "type": "text", "pdf_field_name": "f1[0]"},
+        {"id": "b", "type": "text", "pdf_field_name": "f2[0]"},
+    ]
+    dump = {"fields": [
+        {"name": "top[0].f1[0]", "logical_type": "text"},
+        {"name": "top[0].f2[0]", "logical_type": "text"},
+    ]}
+    assert lint_schema(_schema(fields), dump) == []
+
+
+# ---------------------------------------------------------------------------
 # Deliberate non-findings: the tolerances that keep shipped v1 kits clean.
 # ---------------------------------------------------------------------------
 
@@ -368,6 +410,41 @@ def test_shipped_kits_lint_clean(kit):
     assert findings == [], f"{kit}: {summarize(findings)}: " + "; ".join(
         f"{f.rule} {f.path}" for f in findings[:5]
     )
+
+
+def _dump_kit(kit):
+    """A live AcroForm dump of a shipped kit's PDF (no paid API). Skips if the
+    kit / PDF / bakeoff tooling is absent."""
+    import sys
+    pdf = _REPO / "form-kits" / kit / "form.pdf"
+    if not pdf.exists():
+        pytest.skip(f"{kit} form.pdf not present")
+    bakeoff = _REPO / "scripts" / "bakeoff"
+    sys.path.insert(0, str(bakeoff))
+    try:
+        import acroform_dump
+    except ImportError:
+        pytest.skip("acroform_dump (scripts/bakeoff) not importable")
+    return acroform_dump.dump_pdf(str(pdf))
+
+
+def test_i90_dump_unclaimed_excludes_machine_barcodes():
+    # Regression guard for the bug caught pre-PR (bd polyglot-pdf-w0eq): the
+    # dump-widget-unclaimed rule MUST run WITH a dump (the parametrized test above
+    # passes no dump, so the rule never fired on a real kit). i-90's 7 hidden
+    # PDF417 barcode widgets are machine-generated, NOT user fields -- they must
+    # NOT be flagged as coverage gaps, even though they are read-only text (i-90
+    # deliberately fills 20 real read-only-text fields via flip_readonly_bit, so
+    # read-only is not a valid "unfillable" signal). Any unclaimed finding that
+    # DOES survive must be a genuine fillable widget, never a barcode.
+    dump = _dump_kit("i-90")
+    findings = lint_schema(_load_kit_schema("i-90"), dump)
+    unclaimed = [f for f in findings if f.rule == "dump-widget-unclaimed"]
+    for f in unclaimed:
+        low = f.path.lower()
+        assert "barcode" not in low and "pdf417" not in low, (
+            f"a machine barcode was wrongly flagged as a coverage gap: {f.path}"
+        )
 
 
 def test_f1040_duplicate_option_values_are_caught():
