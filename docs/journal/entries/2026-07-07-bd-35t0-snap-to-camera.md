@@ -31,6 +31,19 @@ freely; a button snaps back.
   (`max-height`) so the toolbar stays visible while scrolling and the pane is
   the snapping viewport.
 
+Fresh-eyes assess outcome: round 1 (sonnet, arm B picker) scored the rubric
+PASS and found 2 gaps + 1 nit, all ADOPTED: (1) the retry loop polled 2s to
+exhaustion on every advance to an unpositioned field -- the hook now takes an
+`isSnappable` short-circuit fed by the same coordinate check the pane already
+does; (2) the hook had no test coverage -- added useSnapToField.test.tsx (fake
+timers: snap-on-change, bracketed ids, retry cap, short-circuit, unmount
+cleanup); (3) the pane toolbar lacked the flex-wrap its modal counterpart has.
+Writing the tests exposed a real portability bug: `CSS.escape` is absent in
+the jsdom test env -- and unnecessary, since quoted attribute-selector values
+only need backslash/quote escaping; replaced with the minimal escape and
+re-verified the bracketed-mirror snap live (0px off-center). Final Opus
+clearing round: (below).
+
 ## Lessons
 
 - **Verify the actual scroller, not the intended one.** The first cut did
