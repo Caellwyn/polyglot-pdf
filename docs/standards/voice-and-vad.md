@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-06 (bd polyglot-pdf-z9bc: mic-arming now funnels through one `rehydrateAudio` routine across every reconnect path). See [../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-consolidation.md](../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-consolidation.md).*
+*Last updated: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -270,9 +270,16 @@ instead of double-arming). `rehydrateAudio` is idempotent: a no-op under the tes
 harness and while paused; it skips the arm when already recording (the mic
 worklet + playback `AudioContext` survive a socket swap, so on GoAway/auto-drop
 audio self-heals -- a pure PTT-mode re-sync); it re-applies the PTT gate MODE
-always, but only (re)sets mute/unmute when it ARMED A FRESH mic (so a reconnect
-landing during an active push-to-talk hold does not truncate the user's speech).
-The shared send callback is then gated by:
+always, but only (re)sets mute/unmute when it ARMED A FRESH mic. That fresh-arm
+mute decision reads the CURRENT push-to-talk hold state (bd polyglot-pdf-qt7w):
+`pushToTalkMode && !held -> mute, else unmute`, read AFTER the arm await. The
+overlays drive that hold state via `connectionManager.setPushToTalkHeld(true/false)`
+from their PTT press / release / force-release / unmount handlers. Reading it
+last means a press that lands DURING the arm await leaves the fresh mic unmuted
+(the user's in-progress utterance is not truncated), and a press that lands after
+still wins via its own `unmuteInput()`. Combined with the already-recording skip
+above (a reconnect that finds the mic still live never touches mute at all), no
+reconnect can re-mute an active hold. The shared send callback is then gated by:
 
 - `connected` → always send.
 - `switching_section` **with the WebSocket open** → send. Safe because the
