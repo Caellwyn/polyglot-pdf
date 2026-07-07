@@ -84,6 +84,7 @@ export interface ConnectionManager {
 	endGeminiSession: () => void  // End Gemini session only (keep WebSocket alive)
 	setPushToTalkMode: (enabled: boolean) => void  // Enable/disable PTT mode
 	getPushToTalkMode: () => boolean  // Current PTT mode (so a remounted overlay restores the user's choice; bd polyglot-pdf-6vo)
+	setPushToTalkHeld: (held: boolean) => void  // Track whether PTT is CURRENTLY held down (bd polyglot-pdf-qt7w), so a reconnect's audio rehydration does not re-mute an active hold
 	isNativeVad: () => boolean  // bd polyglot-pdf-333: true when Gemini's own VAD drives turns
 	getFieldManager: () => FieldManager | null
 	getAudioManager: () => AudioManager | null
@@ -282,6 +283,12 @@ export function createConnectionManager(
 	// `false` here would have wrongly started every NEW session in Auto with the mic
 	// open (fresh-eyes PR #119). Default true keeps PTT-as-default intact.
 	let pushToTalkMode: boolean = true  // Track if PTT mode is enabled (disables energy-based barge-in)
+	// Whether the user is CURRENTLY holding push-to-talk down (bd polyglot-pdf-qt7w).
+	// Distinct from pushToTalkMode (is PTT the input mode) -- this is the momentary
+	// "is the button pressed right now" so a reconnect's audio rehydration does not
+	// re-mute an active hold mid-utterance. The overlays drive it from their PTT
+	// press/release handlers via setPushToTalkHeld().
+	let pushToTalkHeld: boolean = false
 	// Native-VAD mode (bd polyglot-pdf-333): when true, Gemini's own VAD drives
 	// turns -- we suppress all manual activity signals (PTT + Silero) and stream
 	// continuous audio. Set from the backend session_ready handshake.
@@ -393,7 +400,12 @@ export function createConnectionManager(
 		// here would truncate their speech (bd polyglot-pdf-z9bc fresh-eyes gap).
 		// Their existing mute/hold state is already correct and survives the swap.
 		if (!wasRecording) {
-			if (pushToTalkMode) {
+			// Read the hold state AFTER the (awaited) arm so a PTT press that landed
+			// DURING startRecording is honored (bd polyglot-pdf-qt7w): the fresh mic
+			// must end unmuted if the user is now holding, muted otherwise. Reading it
+			// here (last write wins) also makes a press that lands just AFTER this
+			// correct -- the press's own unmuteInput() then runs and wins.
+			if (pushToTalkMode && !pushToTalkHeld) {
 				am.muteInput()
 			} else {
 				am.unmuteInput()
@@ -799,6 +811,15 @@ export function createConnectionManager(
 		setPushToTalkMode(enabled: boolean) {
 			console.log(`[VFF Connection] Setting push-to-talk mode: ${enabled}`)
 			pushToTalkMode = enabled
+		},
+
+		// Track whether PTT is CURRENTLY held (bd polyglot-pdf-qt7w). The overlays
+		// call this from their PTT press (true) / release (false) handlers, alongside
+		// the muteInput()/unmuteInput() they already do. rehydrateAudio reads this
+		// after a fresh-arm await so a reconnect landing mid-hold does not re-mute the
+		// user. Purely advisory: the audioManager's own inputMuted is still the gate.
+		setPushToTalkHeld(held: boolean) {
+			pushToTalkHeld = held
 		},
 
 		// Current PTT mode, so an overlay remounted onto a LIVE session (a
