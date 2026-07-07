@@ -16,7 +16,7 @@
  * until the overlay has a real height.
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 const SNAP_RETRY_MS = 200;
 const SNAP_RETRY_MAX = 10;
@@ -48,10 +48,18 @@ export function useSnapToField(
     [containerRef]
   );
 
-  // Snap on every current-field CHANGE, retrying briefly while pages lay out.
+  // Held in a ref so a caller passing an unstable function identity can never
+  // re-fire the snap effect (a per-fill identity churn would re-snap while the
+  // user wanders -- the free-wander rule forbids that).
+  const isSnappableRef = useRef(isSnappable);
+  useEffect(() => {
+    isSnappableRef.current = isSnappable;
+  });
+
+  // Snap ONLY on a current-field CHANGE, retrying briefly while pages lay out.
   useEffect(() => {
     if (!active || !currentFieldId) return;
-    if (isSnappable && !isSnappable(currentFieldId)) return;
+    if (isSnappableRef.current && !isSnappableRef.current(currentFieldId)) return;
     if (snapTo(currentFieldId)) return;
     let tries = 0;
     const timer = window.setInterval(() => {
@@ -61,7 +69,7 @@ export function useSnapToField(
       }
     }, SNAP_RETRY_MS);
     return () => window.clearInterval(timer);
-  }, [currentFieldId, active, snapTo, isSnappable]);
+  }, [currentFieldId, active, snapTo]);
 
   return { snapTo };
 }

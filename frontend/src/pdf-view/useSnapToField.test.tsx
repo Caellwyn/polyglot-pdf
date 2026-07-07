@@ -59,6 +59,21 @@ describe('useSnapToField', () => {
     expect(spy.mock.calls.length).toBe(callsAfterCap);
   });
 
+  it('does NOT re-snap when isSnappable identity churns without a field change', () => {
+    // Production regression shape: state reloads hand the pane a fresh schema
+    // object per fill, so a naively-memoized isSnappable gets a new identity
+    // per fill. The hook must not re-snap on that churn (free-wander rule).
+    const { ref, spies } = makeContainer(['a']);
+    const { rerender } = renderHook(
+      ({ fn }: { fn: (id: string) => boolean }) => useSnapToField(ref, 'a', true, fn),
+      { initialProps: { fn: () => true } }
+    );
+    expect(spies['a']).toHaveBeenCalledTimes(1);
+    rerender({ fn: () => true }); // fresh closure identity, same field
+    rerender({ fn: () => true });
+    expect(spies['a']).toHaveBeenCalledTimes(1);
+  });
+
   it('short-circuits unpositioned fields without polling', () => {
     const { ref } = makeContainer([]);
     const spy = vi.spyOn(ref.current, 'querySelector');
