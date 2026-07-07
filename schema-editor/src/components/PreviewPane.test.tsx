@@ -94,10 +94,12 @@ describe('PreviewPane: show_if hide/show as controller changes (crit 2)', () => 
     expect(screen.queryByLabelText('Detail')).toBeNull();
   });
 
-  it('reveals a checkbox-gated field by MEMBERSHIP (any-selected semantics)', () => {
+  it('reveals a checkbox-gated field by MEMBERSHIP (includes semantics)', () => {
+    // Post the P6.2 flip (bd h76m.16), membership on a checkbox-group trigger is
+    // the v2 `includes` operator (equals is scalar-only now).
     const gated = field({
       id: 'gated', type: 'text', label: 'Asian detail',
-      show_if: { field: 'races', operator: 'equals', value: 'asian' },
+      show_if: { field: 'races', operator: 'includes', value: 'asian' },
     });
     render(<PreviewPane schema={buildSchema([gated], ['gated'])} />);
 
