@@ -62,9 +62,14 @@ export default function PreviewPane({
   // Snap-to camera (bd 35t0): instant snap on every current-field change;
   // free wandering between advances; the button below snaps back on demand.
   // Unpositioned fields have no overlay to snap to -- short-circuit them.
+  // Deps deliberately empty: the field list is static per mount, while the
+  // `schema` PROP identity churns on every fill (state reload) -- keying on it
+  // would give isSnappable a fresh identity per fill and re-fire the snap
+  // effect, yanking a wandering user back on every fill (free-wander rule).
   const positionedIds = useMemo(
     () => new Set(schema.fields.filter((f) => hasValidCoordinates(f.pdf_position)).map((f) => f.id)),
-    [schema]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- static per mount by design
+    []
   );
   const isSnappable = useCallback((fieldId: string) => positionedIds.has(fieldId), [positionedIds]);
   const { snapTo } = useSnapToField(paneRef, currentFieldId, !!pdfDoc, isSnappable);
