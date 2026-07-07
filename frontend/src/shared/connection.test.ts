@@ -434,6 +434,26 @@ describe('Connection Manager (connection.ts)', () => {
       expect(audioManagerMock.muteInput).not.toHaveBeenCalled()
     })
 
+    it('a released hold (setPushToTalkHeld(false)) makes the next fresh-arm mute -- no stale-true (bd qt7w)', async () => {
+      const manager = await connected()
+      audioManagerMock.isRecording.mockReturnValue(false)
+      // Simulate a full press-then-release cycle: the overlay set held=true on press
+      // and clears it SYNCHRONOUSLY at release (not in a cancellable timeout), so by
+      // the time any later reconnect fresh-arms, the flag must read false.
+      manager.setPushToTalkHeld(true)
+      manager.setPushToTalkHeld(false)
+      audioManagerMock.muteInput.mockClear()
+      audioManagerMock.unmuteInput.mockClear()
+
+      capturedCallbacks.onSessionReady('sess-released')
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Released -> resting mute applies (the mic is NOT wrongly left unmuted).
+      expect(audioManagerMock.muteInput).toHaveBeenCalled()
+      expect(audioManagerMock.unmuteInput).not.toHaveBeenCalled()
+    })
+
     it('fresh-arm with NO concurrent press still applies the PTT resting mute (bd qt7w -- no regression)', async () => {
       const manager = await connected()
       audioManagerMock.isRecording.mockReturnValue(false)

@@ -875,6 +875,14 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		// Update UI immediately to show button is no longer held
 		setIsHoldingPushToTalk(false)
+		// Clear the hold flag SYNCHRONOUSLY at release, not inside the deferred
+		// timeout below (bd polyglot-pdf-qt7w). The flag drives whether a fresh-arm
+		// reconnect leaves the mic unmuted; once the user has RELEASED, a reconnect
+		// should apply the resting mute even mid-grace-window. Clearing it here (vs in
+		// the timeout) also means an unmount during the 500ms window -- which CANCELS
+		// that timeout, e.g. the desktop<->mobile resize flip -- cannot leave the flag
+		// stale-true on the shared ConnectionManager.
+		connectionManager?.setPushToTalkHeld(false)
 
 		// CRITICAL: Delay 500ms before sending activity_end and muting
 		// This allows final audio chunks to be recorded and sent to Gemini
@@ -890,9 +898,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// MUTE: Stop streaming audio after signaling end of turn
 			// All audio recorded during the 500ms delay has already been sent
 			const audioManager = connectionManager?.getAudioManager()
-			// Clear the hold FIRST (bd polyglot-pdf-qt7w) so it is consistent with the
-			// mute we are about to apply -- the unmuted window (press .. here) is over.
-			connectionManager?.setPushToTalkHeld(false)
+			// (Hold flag was already cleared synchronously at release above -- bd
+			// polyglot-pdf-qt7w; this timeout only handles the deferred mute.)
 			audioManager?.muteInput()
 
 			// Allow Gemini's response to play now that the user released the mic

@@ -105,6 +105,7 @@ function makeMockManager(status: string, opts?: { sendingMic?: boolean }): Conne
     sendRecoveryPrompt: vi.fn(),
     endGeminiSession: vi.fn(),
     setPushToTalkMode: vi.fn(),
+    setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => true),
     isNativeVad: vi.fn(() => true),  // deployed default: native VAD
     getFieldManager: vi.fn(() => null),

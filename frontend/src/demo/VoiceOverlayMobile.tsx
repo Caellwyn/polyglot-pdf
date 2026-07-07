@@ -1001,6 +1001,12 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		// Update UI immediately to show button is no longer held
 		setIsHoldingPushToTalk(false)
+		// Clear the hold flag SYNCHRONOUSLY at release (bd polyglot-pdf-qt7w), not
+		// inside the deferred timeout below: an unmount during the 500ms window
+		// cancels that timeout (e.g. the desktop<->mobile resize flip), which would
+		// otherwise leave the flag stale-true on the shared ConnectionManager and make
+		// a later fresh-arm reconnect wrongly rest unmuted.
+		connectionManager?.setPushToTalkHeld(false)
 
 		// CRITICAL: Delay 500ms before sending activity_end and muting
 		// This allows final audio chunks to be recorded and sent to Gemini
@@ -1016,9 +1022,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// MUTE: Stop streaming audio after signaling end of turn
 			// All audio recorded during the 500ms delay has already been sent
 			const audioManager = connectionManager?.getAudioManager()
-			// Clear the hold FIRST (bd polyglot-pdf-qt7w) so it is consistent with the
-			// mute we are about to apply -- the unmuted window is over.
-			connectionManager?.setPushToTalkHeld(false)
+			// (Hold flag was already cleared synchronously at release above -- bd
+			// polyglot-pdf-qt7w; this timeout only handles the deferred mute.)
 			audioManager?.muteInput()
 
 			// Allow Gemini's response to play now that the user released the mic
