@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
+*Last updated: 2026-07-06 (bd polyglot-pdf-z9bc: mic-arming now funnels through one `rehydrateAudio` routine across every reconnect path). See [../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-consolidation.md](../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-consolidation.md).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -255,10 +255,20 @@ the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; 
 
 ## Mic send gate (audio-up path)
 
-Every mic-arming site (initial `startRecording`, `rearmAudioCapture`, and the
-`startSection`/`switchToSection` re-arms) shares ONE send callback in
+Every mic-arming site shares ONE send callback in
 `frontend/src/shared/connection.ts`, gated by the pure function
-`shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy):
+`shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy). Apart from the
+initial connect (the overlay's connect-poll calls `startRecording`), every
+reconnect / session-restart path re-arms through a single
+`rehydrateAudio(reason)` routine (bd polyglot-pdf-z9bc): `resume`,
+`startSection`, `switchToSection`, `rearmAudioCapture`, and the
+`onSessionReady` / `onSessionRestarted` callbacks (the latter is how the
+automatic/internal reconnects -- GoAway pre-emptive resume and auto-drop --
+re-sync). It is idempotent: a no-op under the test harness and while paused, it
+skips the arm when already recording (the mic worklet + playback `AudioContext`
+survive a socket swap, so on GoAway/auto-drop audio self-heals and this is a
+pure PTT re-sync), and it always re-applies PTT/mute. The shared send callback is
+then gated by:
 
 - `connected` → always send.
 - `switching_section` **with the WebSocket open** → send. Safe because the
