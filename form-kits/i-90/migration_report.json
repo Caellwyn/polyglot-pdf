@@ -356,7 +356,6 @@
     {
       "trigger": "p1_checkbox4",
       "operator": "equals",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p1_line5a_familyname",
@@ -367,7 +366,6 @@
     {
       "trigger": "p1_unit_type6c_unit",
       "operator": "is_not_empty",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p1_line6c_aptsteflrnumber"
@@ -376,7 +374,6 @@
     {
       "trigger": "p1_unit_type7b_unit",
       "operator": "is_not_empty",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p1_line7b_aptsteflrnumber"
@@ -385,9 +382,6 @@
     {
       "trigger": "p2_checkbox1",
       "operator": "equals",
-      "targets": [
-        "p2_checkbox2[5]"
-      ],
       "mirrored_into": [],
       "unconverted_actions": [
         "p2_checkbox2[5]"
@@ -396,9 +390,6 @@
     {
       "trigger": "p2_checkbox1",
       "operator": "equals",
-      "targets": [
-        "p2_checkbox2[5]"
-      ],
       "mirrored_into": [],
       "unconverted_actions": [
         "p2_checkbox2[5]"
@@ -407,7 +398,6 @@
     {
       "trigger": "p2_checkbox1",
       "operator": "equals",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p2_checkbox3"
@@ -416,9 +406,6 @@
     {
       "trigger": "p2_checkbox2[5]",
       "operator": "equals",
-      "targets": [
-        "p2_line2h1_cityandstate"
-      ],
       "mirrored_into": [],
       "unconverted_actions": [
         "p2_line2h1_cityandstate"
@@ -427,7 +414,6 @@
     {
       "trigger": "p4_checkbox1[1]",
       "operator": "is_not_empty",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p4_checkbox1a",
@@ -438,7 +424,6 @@
     {
       "trigger": "p4_checkbox1a",
       "operator": "is_checked",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p4_line1a_accomodationrequested"
@@ -447,7 +432,6 @@
     {
       "trigger": "p4_checkbox1b",
       "operator": "is_checked",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p4_line1b_accomodationrequested"
@@ -456,7 +440,6 @@
     {
       "trigger": "p4_checkbox1c",
       "operator": "is_checked",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p4_line1c_accomodationrequested"
@@ -465,7 +448,6 @@
     {
       "trigger": "p5_checkbox1a",
       "operator": "includes",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p5_line1b_language"
@@ -474,7 +456,6 @@
     {
       "trigger": "p5_checkbox1a",
       "operator": "includes",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p5_line2_nameofrepresentative"
@@ -483,7 +464,6 @@
     {
       "trigger": "p6_unit_type3b_unit",
       "operator": "is_not_empty",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p6_line3b_aptsteflrnumber"
@@ -492,7 +472,6 @@
     {
       "trigger": "p7_unit_type3b_unit",
       "operator": "is_not_empty",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p7_line3b_aptsteflrnumber"
@@ -501,7 +480,6 @@
     {
       "trigger": "p7_checkbox7",
       "operator": "equals",
-      "targets": [],
       "mirrored_into": [],
       "unconverted_actions": [
         "p7_checkbox7extend"

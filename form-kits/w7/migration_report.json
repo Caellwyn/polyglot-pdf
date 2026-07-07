@@ -37,62 +37,9 @@
   },
   "operators_rewritten": 12,
   "behaviors_folded": 0,
-  "controls_fields_dropped": 1,
-  "controls_mirrored": 8,
-  "unmirrored_controls": [
-    {
-      "trigger": "reason_a",
-      "operator": "is_checked",
-      "targets": [
-        "reason_h",
-        "treaty_country",
-        "treaty_article"
-      ],
-      "mirrored_into": [
-        "reason_h.require_if",
-        "treaty_article.require_if",
-        "treaty_country.require_if"
-      ],
-      "unconverted_actions": []
-    },
-    {
-      "trigger": "reason_d",
-      "operator": "is_checked",
-      "targets": [
-        "us_person_ssn_itin"
-      ],
-      "mirrored_into": [
-        "us_person_ssn_itin.require_if"
-      ],
-      "unconverted_actions": []
-    },
-    {
-      "trigger": "reason_e",
-      "operator": "is_checked",
-      "targets": [
-        "us_person_name"
-      ],
-      "mirrored_into": [
-        "us_person_name.require_if"
-      ],
-      "unconverted_actions": []
-    },
-    {
-      "trigger": "reason_f",
-      "operator": "is_checked",
-      "targets": [
-        "reason_h",
-        "treaty_country",
-        "treaty_article"
-      ],
-      "mirrored_into": [
-        "reason_h.require_if",
-        "treaty_article.require_if",
-        "treaty_country.require_if"
-      ],
-      "unconverted_actions": []
-    }
-  ],
+  "controls_fields_dropped": 0,
+  "controls_mirrored": 14,
+  "unmirrored_controls": [],
   "conditional_fields_dropped": 0,
   "options_from_dump": [],
   "needs_options": [],

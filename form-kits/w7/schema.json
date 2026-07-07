@@ -316,6 +316,10 @@
       "show_if": {
         "field": "reason_d",
         "operator": "is_checked"
+      },
+      "require_if": {
+        "field": "reason_d",
+        "operator": "is_checked"
       }
     },
     {
@@ -358,8 +362,16 @@
         "operator": "is_checked"
       },
       "require_if": {
-        "field": "reason_e",
-        "operator": "is_checked"
+        "any_of": [
+          {
+            "field": "reason_d",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_e",
+            "operator": "is_checked"
+          }
+        ]
       }
     },
     {
@@ -384,8 +396,16 @@
         "operator": "is_checked"
       },
       "require_if": {
-        "field": "reason_d",
-        "operator": "is_checked"
+        "any_of": [
+          {
+            "field": "reason_d",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_e",
+            "operator": "is_checked"
+          }
+        ]
       }
     },
     {
@@ -1035,6 +1055,11 @@
         "field": "previously_received_itin",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "require_if": {
+        "field": "previously_received_itin",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1059,6 +1084,11 @@
         "field": "previously_received_itin",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "require_if": {
+        "field": "previously_received_itin",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1080,6 +1110,11 @@
       },
       "max_length": 4,
       "show_if": {
+        "field": "previously_received_itin",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
+      },
+      "require_if": {
         "field": "previously_received_itin",
         "operator": "equals",
         "value": "yes_complete_line_6f"

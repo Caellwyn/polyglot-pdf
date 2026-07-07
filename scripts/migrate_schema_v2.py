@@ -463,27 +463,32 @@ def migrate(schema: Dict[str, Any],
                 continue
             want = _control_condition(control, trigger_id, trig_type,
                                       trig_slug_map, standalone_old)
-            unmirrored = _unmirrored_targets(
-                control, trigger_id, trig_type, trig_slug_map, fields_by_id,
-                standalone_old)
-            # Mirror the show/require actions onto each not-already-mirrored
-            # target; report any action key we cannot convert.
+            # Mirror each show/require action onto its target -- but ONLY into the
+            # matching bucket (shows -> show_if, makes_required -> require_if), and
+            # only when THAT bucket does not already carry the condition. A
+            # pre-existing condition in the OTHER bucket is a different effect and
+            # must NOT suppress the mirror (fresh-eyes r2: the key-blind check
+            # silently dropped require_if on 15 w7/w7-2 fields whose show_if
+            # happened to match). Report any action key with no v2 equivalent.
             mirrored_here: List[str] = []
+            noop_here = 0
             for action, key in (("shows", "show_if"),
                                 ("makes_required", "require_if")):
                 for tid in control.get(action) or []:
-                    if not isinstance(tid, str) or tid not in unmirrored:
+                    target = fields_by_id.get(tid) if isinstance(tid, str) else None
+                    if not isinstance(target, dict):
                         continue
-                    target = fields_by_id.get(tid)
-                    if isinstance(target, dict):
-                        _add_target_condition(target, key, dict(want))
-                        mirrored_here.append(f"{tid}.{key}")
+                    if _target_has_condition(target, key, want):
+                        noop_here += 1  # already mirrored in THIS bucket
+                        continue
+                    _add_target_condition(target, key, dict(want))
+                    mirrored_here.append(f"{tid}.{key}")
             unconverted = sorted(
                 t for k in ("hides", "locks", "unlocks", "makes_optional")
                 for t in (control.get(k) or []) if isinstance(t, str)
             )
             report["controls_mirrored"] += len(mirrored_here)
-            if not mirrored_here and not unconverted:
+            if not mirrored_here and not unconverted and noop_here:
                 # Every action was a no-op (target already mirrored the edge).
                 report["controls_fields_dropped"] += 1
             if unconverted:
@@ -492,7 +497,6 @@ def migrate(schema: Dict[str, Any],
                 report["unmirrored_controls"].append({
                     "trigger": trigger_id,
                     "operator": want.get("operator"),
-                    "targets": unmirrored,
                     "mirrored_into": sorted(mirrored_here),
                     "unconverted_actions": unconverted,
                 })
@@ -535,44 +539,33 @@ def _control_condition(control: Dict[str, Any], trigger_id: Any,
         return {"field": trigger_id, "operator": "is_checked"}
     atom = {"field": trigger_id, "operator": op, "value": val}
     _rewrite_atom_value(atom, slug_map, trigger_type)
+    # A no-value operator (is_checked / is_empty / is_not_empty) carries no value.
+    if atom.get("operator") in ("is_checked", "is_empty", "is_not_empty"):
+        atom.pop("value", None)
     return atom
 
 
-def _target_mirrors(target: Dict[str, Any], want: Dict[str, Any]) -> bool:
-    """True if the target's show_if/require_if carries an atom that MATCHES the
-    control's implied condition on (field, operator, value) -- a TRUE mirror, not
-    merely naming the same trigger (fresh-eyes: a value/polarity-blind match
-    silently drops a live, distinct edge -- e.g. the i-90 p2_checkbox2[5] edge
-    gating on option [0] while the target's show_if gates on option [11])."""
-    for kind in ("show_if", "require_if"):
-        for atom in _walk_condition_atoms(target.get(kind)):
-            if (atom.get("field") == want.get("field")
-                    and atom.get("operator") == want.get("operator")
-                    and atom.get("value") == want.get("value")):
-                return True
+def _target_has_condition(target: Dict[str, Any], key: str,
+                          want: Dict[str, Any]) -> bool:
+    """True if the target's condition under `key` (show_if OR require_if -- the
+    SPECIFIC bucket, not both) already carries an atom MATCHING the control's
+    implied condition on (field, operator, value).
+
+    Key-specific by design (bd h76m.16, fresh-eyes r2): a `shows` action mirrors
+    into show_if and a `makes_required` action into require_if, so a `shows` edge
+    is "already mirrored" ONLY if show_if covers it -- a matching require_if (or
+    vice versa) is a DIFFERENT effect and must NOT suppress the mirror, or the
+    edge's real effect is silently lost. Also value/polarity-aware: an atom naming
+    the same trigger but a different option value is a distinct condition, not a
+    mirror."""
+    for atom in _walk_condition_atoms(target.get(key)):
+        if (atom.get("field") == want.get("field")
+                and atom.get("operator") == want.get("operator")
+                and atom.get("value") == want.get("value")):
+            return True
     return False
 
 
-def _unmirrored_targets(control: Dict[str, Any], trigger_id: Any,
-                        trigger_type: Optional[str], slug_map: Dict[str, str],
-                        fields_by_id: Dict[str, dict],
-                        standalone_old_val: Optional[str] = None) -> List[str]:
-    """Target ids of a controls_fields edge whose target does NOT carry a
-    condition MATCHING the edge's implied condition (field+operator+value). An
-    empty list means every target truly mirrors the edge (safe to drop it)."""
-    want = _control_condition(control, trigger_id, trigger_type, slug_map,
-                              standalone_old_val)
-    targets: List[str] = []
-    for key in _ACTION_KEYS:
-        vals = control.get(key)
-        if isinstance(vals, list):
-            targets.extend(t for t in vals if isinstance(t, str))
-    unmirrored: List[str] = []
-    for tid in targets:
-        target = fields_by_id.get(tid)
-        if not isinstance(target, dict) or not _target_mirrors(target, want):
-            unmirrored.append(tid)
-    return unmirrored
 
 
 def _load_dump(pdf: Optional[str], dump_json: Optional[str]) -> Optional[Dict[str, Any]]:

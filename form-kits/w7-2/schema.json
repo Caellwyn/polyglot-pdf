@@ -390,6 +390,10 @@
       "show_if": {
         "field": "reason_d",
         "operator": "is_checked"
+      },
+      "require_if": {
+        "field": "reason_d",
+        "operator": "is_checked"
       }
     },
     {
@@ -1116,6 +1120,11 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "require_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1137,6 +1146,11 @@
       },
       "max_length": 2,
       "show_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
+      },
+      "require_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
@@ -1164,6 +1178,11 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "require_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1185,6 +1204,11 @@
       },
       "max_length": 3,
       "show_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
+      },
+      "require_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
@@ -1212,6 +1236,11 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "require_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1236,6 +1265,11 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "require_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
       }
     },
     {
@@ -1256,6 +1290,11 @@
         "required": false
       },
       "show_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
+      },
+      "require_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
@@ -1302,6 +1341,11 @@
         "required": false
       },
       "show_if": {
+        "field": "prior_itin_irsn",
+        "operator": "equals",
+        "value": "yes_complete_line_6f"
+      },
+      "require_if": {
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"

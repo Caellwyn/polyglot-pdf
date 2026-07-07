@@ -224,6 +224,43 @@ def test_unmirrored_makes_required_edge_is_mirrored_into_require_if():
         "field": "trg", "operator": "equals", "value": "yes"}
 
 
+def test_pre_existing_show_if_does_not_suppress_a_makes_required_mirror():
+    # fresh-eyes r2: the w7 us_person_ssn_itin bug in miniature -- a target with a
+    # show_if from trigger X must STILL gain a require_if when a DIFFERENT trigger
+    # Y's makes_required edge names it. A key-blind "already mirrored" check saw
+    # the matching-shaped show_if and dropped the require_if entirely.
+    x = {"id": "x", "type": "checkbox", "pdf_field_name": "X[0]", "options": [
+        {"value": "X[0]", "label": "X", "pdf_field_name": "X[0]"}]}
+    y = {"id": "y", "type": "checkbox", "pdf_field_name": "Y[0]", "options": [
+        {"value": "Y[0]", "label": "Y", "pdf_field_name": "Y[0]"}],
+        "controls_fields": [{"operator": "is_checked", "makes_required": ["tgt"]}]}
+    # tgt is SHOWN when x is checked, and (per y's edge) REQUIRED when y is checked.
+    tgt = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
+           "show_if": {"field": "x", "operator": "is_checked"}}
+    out, rep = mig.migrate(_v1([x, y, tgt]))
+    t = {f["id"]: f for f in out["fields"]}["tgt"]
+    assert t["show_if"] == {"field": "x", "operator": "is_checked"}  # kept
+    assert t["require_if"] == {"field": "y", "operator": "is_checked"}  # NOT dropped
+
+
+def test_makes_required_from_two_triggers_where_one_also_shows_merges_correctly():
+    # The exact w7 shape: reason_d SHOWS + REQUIRES tgt, reason_e also REQUIRES it.
+    # require_if must be the OR of BOTH (any_of), not just one.
+    d = {"id": "rd", "type": "checkbox", "pdf_field_name": "D[0]", "options": [
+        {"value": "D[0]", "label": "D", "pdf_field_name": "D[0]"}],
+        "controls_fields": [{"operator": "is_checked",
+                             "shows": ["tgt"], "makes_required": ["tgt"]}]}
+    e = {"id": "re", "type": "checkbox", "pdf_field_name": "E[0]", "options": [
+        {"value": "E[0]", "label": "E", "pdf_field_name": "E[0]"}],
+        "controls_fields": [{"operator": "is_checked", "makes_required": ["tgt"]}]}
+    tgt = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    out, rep = mig.migrate(_v1([d, e, tgt]))
+    t = {f["id"]: f for f in out["fields"]}["tgt"]
+    assert t["show_if"] == {"field": "rd", "operator": "is_checked"}
+    assert "any_of" in t["require_if"]
+    assert {a["field"] for a in t["require_if"]["any_of"]} == {"rd", "re"}
+
+
 def test_two_triggers_requiring_one_target_merge_into_any_of():
     # reason_a AND reason_f both require treaty_country -> require_if is the OR
     # (any_of) of both conditions, not a last-writer-wins overwrite.
