@@ -54,7 +54,12 @@ confidence, same trace). Fixed at BOTH layers: the pane pins the Set to mount
 a ref so no caller's unstable identity can ever re-snap -- with a churn
 regression test that fails against the pre-fix hook. Live-verified: a
 faithful fill event landed ("77" painted) while a wander position held.
-Final Opus clearing round on the fixed diff: (below).
+Final Opus clearing round on the fixed diff: NO-GAPS -- it verified the
+ref-update-before-snap effect ordering across commit orderings, snapTo
+stability, and the confirm->null->next-field transitions; its one residual
+note (a wander during the ~2s layout-retry window could still be snapped by a
+late successful tick -- essentially unreachable since overlay heights are
+CSS-explicit, not canvas-dependent) is recorded as accepted.
 
 ## Lessons
 
