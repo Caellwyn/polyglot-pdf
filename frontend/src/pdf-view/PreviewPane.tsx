@@ -13,7 +13,7 @@
  * bundle while the preview flag is off.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import type { FormSchema } from '../schema-forms/types/schema';
 import { usePDFDocument } from './usePDFDocument';
@@ -61,7 +61,13 @@ export default function PreviewPane({
 
   // Snap-to camera (bd 35t0): instant snap on every current-field change;
   // free wandering between advances; the button below snaps back on demand.
-  const { snapTo } = useSnapToField(paneRef, currentFieldId, !!pdfDoc);
+  // Unpositioned fields have no overlay to snap to -- short-circuit them.
+  const positionedIds = useMemo(
+    () => new Set(schema.fields.filter((f) => hasValidCoordinates(f.pdf_position)).map((f) => f.id)),
+    [schema]
+  );
+  const isSnappable = useCallback((fieldId: string) => positionedIds.has(fieldId), [positionedIds]);
+  const { snapTo } = useSnapToField(paneRef, currentFieldId, !!pdfDoc, isSnappable);
 
   // Fit-width once, off the first rendered page's unscaled dimensions.
   const handleFirstPageLoad = useCallback((page: PDFPageProxy) => {

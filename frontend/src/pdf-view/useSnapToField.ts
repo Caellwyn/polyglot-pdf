@@ -25,16 +25,21 @@ export function useSnapToField(
   containerRef: React.RefObject<HTMLElement | null>,
   currentFieldId: string | null | undefined,
   /** Gate: pages exist (the PDF document is loaded). */
-  active: boolean
+  active: boolean,
+  /**
+   * Optional short-circuit: fields with no usable pdf_position never get an
+   * overlay, so retrying for one would poll to exhaustion on every advance.
+   */
+  isSnappable?: (fieldId: string) => boolean
 ) {
   const snapTo = useCallback(
     (fieldId: string): boolean => {
       const container = containerRef.current;
       if (!container) return false;
-      // Field ids can contain brackets (copy_to mirrors like "...[1]").
-      const el = container.querySelector<HTMLElement>(
-        `[data-field-id="${CSS.escape(fieldId)}"]`
-      );
+      // Quoted attribute-selector values only need backslash + quote escaped
+      // (brackets in copy_to mirror ids like "...[1]" are fine as-is).
+      const escaped = fieldId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const el = container.querySelector<HTMLElement>(`[data-field-id="${escaped}"]`);
       if (!el) return false;
       if (el.getBoundingClientRect().height === 0) return false; // not laid out yet
       el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
@@ -46,6 +51,7 @@ export function useSnapToField(
   // Snap on every current-field CHANGE, retrying briefly while pages lay out.
   useEffect(() => {
     if (!active || !currentFieldId) return;
+    if (isSnappable && !isSnappable(currentFieldId)) return;
     if (snapTo(currentFieldId)) return;
     let tries = 0;
     const timer = window.setInterval(() => {
@@ -55,7 +61,7 @@ export function useSnapToField(
       }
     }, SNAP_RETRY_MS);
     return () => window.clearInterval(timer);
-  }, [currentFieldId, active, snapTo]);
+  }, [currentFieldId, active, snapTo, isSnappable]);
 
   return { snapTo };
 }
