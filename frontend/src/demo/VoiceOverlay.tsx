@@ -739,6 +739,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		// Update connection manager PTT mode (disables energy-based barge-in)
 		connectionManager?.setPushToTalkMode(newMode)
+		// A mode toggle ends any notion of an active hold; clear the hold flag so it
+		// can never go stale-true across the mode change (bd polyglot-pdf-qt7w). Both
+		// branches below re-apply the correct mute/unmute for the new mode.
+		connectionManager?.setPushToTalkHeld(false)
 
 		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
 			status.toLowerCase().startsWith('connected ') ||
