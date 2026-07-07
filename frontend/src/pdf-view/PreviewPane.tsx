@@ -19,6 +19,7 @@ import type { FormSchema } from '../schema-forms/types/schema';
 import { usePDFDocument } from './usePDFDocument';
 import { hasValidCoordinates } from './pdfCoordinates';
 import { PDFViewer } from './PDFViewer';
+import { useSnapToField } from './useSnapToField';
 import './pdf-view.css';
 
 export interface PreviewPaneProps {
@@ -58,6 +59,10 @@ export default function PreviewPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount by design
   }, []);
 
+  // Snap-to camera (bd 35t0): instant snap on every current-field change;
+  // free wandering between advances; the button below snaps back on demand.
+  const { snapTo } = useSnapToField(paneRef, currentFieldId, !!pdfDoc);
+
   // Fit-width once, off the first rendered page's unscaled dimensions.
   const handleFirstPageLoad = useCallback((page: PDFPageProxy) => {
     if (fitAppliedRef.current || !paneRef.current) return;
@@ -81,10 +86,25 @@ export default function PreviewPane({
 
   return (
     <div className="pdf-preview-pane">
-      <div className="pdf-preview-pane__banner">
-        Preview mode: your answers appear on the real form as you go. Colors:
-        orange = current field, blue = filled, green = confirmed. For the
-        exact print output, use "Preview Filled PDF" below.
+      <div className="pdf-preview-pane__toolbar">
+        <div className="pdf-preview-pane__banner">
+          Preview mode: your answers appear on the real form as you go. Colors:
+          orange = current field, blue = filled, green = confirmed. For the
+          exact print output, use "Preview Filled PDF" below.
+        </div>
+        <button
+          type="button"
+          className="pdf-preview-pane__snap-button"
+          onClick={() => currentFieldId && snapTo(currentFieldId)}
+          disabled={!currentFieldId}
+          title={
+            currentFieldId
+              ? 'Jump back to the field being filled'
+              : 'Available while the voice assistant is on a field'
+          }
+        >
+          Snap to current field
+        </button>
       </div>
       <div className="pdf-preview-pane__pages" ref={paneRef}>
         {error && <p className="pdf-preview-pane__error">Could not load the form PDF: {error}</p>}

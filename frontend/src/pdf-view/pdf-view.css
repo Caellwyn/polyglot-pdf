@@ -168,14 +168,41 @@
   padding: 0.5rem 0 2rem;
 }
 
+.pdf-preview-pane__toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 0 0.5rem 0.75rem;
+}
+
 .pdf-preview-pane__banner {
+  flex: 1;
   background: #eef2ff;
   border: 1px solid #c7d2fe;
   color: #3730a3;
   border-radius: 6px;
   padding: 0.6rem 0.9rem;
-  margin: 0 0.5rem 0.75rem;
   font-size: 0.9rem;
+}
+
+.pdf-preview-pane__snap-button {
+  flex: none;
+  align-self: center;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid #4f46e5;
+  border-radius: 6px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pdf-preview-pane__snap-button:disabled {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #6b7280;
+  cursor: default;
 }
 
 .pdf-preview-pane__pages {
@@ -183,6 +210,10 @@
   border-radius: 6px;
   padding: 1rem;
   overflow: auto;
+  /* The pane is its own viewport: snapping centers fields here and the
+     toolbar (with the snap-back button) stays on screen while scrolling. */
+  max-height: calc(100vh - 11rem);
+  min-height: 20rem;
 }
 
 .pdf-preview-pane__page-label {
