@@ -111,6 +111,16 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	}
 
 	let recording = false
+	// In-flight arming guard (bd polyglot-pdf-z9bc). `recording` is only set true
+	// at the END of startRecording, AFTER getUserMedia + AudioContext + addModule
+	// all await; so a plain `if (recording) return` does NOT stop a SECOND
+	// concurrent startRecording that begins while the first is still in that await
+	// chain (both would run getUserMedia + worklet setup and clobber
+	// nodes.source/workletNode). This can happen when two callers race to arm on
+	// the same tick (e.g. an overlay status-poll and a session-ready callback both
+	// calling startRecording). Hold the in-flight promise so a concurrent call
+	// awaits it instead of starting a duplicate setup.
+	let arming: Promise<void> | null = null
 	let playbackTime = 0
 	let playbackChunkCount = 0 // Track playback chunks for debugging
 	let onAudioDataCallback: ((data: ArrayBuffer) => void) | null = null
@@ -156,10 +166,25 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 * Start recording audio from microphone
 	 */
 	async function startRecording(onAudioData: (data: ArrayBuffer) => void): Promise<void> {
+		// Fast path: already fully armed.
 		if (recording) {
 			return
 		}
+		// A setup is already in flight (a concurrent caller began arming and has not
+		// finished its await chain yet) -- await THAT one instead of starting a
+		// duplicate getUserMedia/worklet setup (bd polyglot-pdf-z9bc).
+		if (arming) {
+			return arming
+		}
+		arming = _startRecordingImpl(onAudioData)
+		try {
+			await arming
+		} finally {
+			arming = null
+		}
+	}
 
+	async function _startRecordingImpl(onAudioData: (data: ArrayBuffer) => void): Promise<void> {
 		try {
 			// Only create stream if we don't already have one (from constructor)
 			if (!nodes.stream) {

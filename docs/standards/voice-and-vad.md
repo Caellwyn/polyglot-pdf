@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](../journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details.*
+*Last updated: 2026-07-06 (bd polyglot-pdf-z9bc: mic-arming now funnels through one `rehydrateAudio` routine across every reconnect path). See [../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-consolidation.md](../journal/entries/2026-07-06-bd-z9bc-reconnect-audio-consolidation.md).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -255,10 +255,24 @@ the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; 
 
 ## Mic send gate (audio-up path)
 
-Every mic-arming site (initial `startRecording`, `rearmAudioCapture`, and the
-`startSection`/`switchToSection` re-arms) shares ONE send callback in
+Every mic-arming site shares ONE send callback in
 `frontend/src/shared/connection.ts`, gated by the pure function
-`shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy):
+`shouldSendMicChunk(status, socketOpen)` (bd polyglot-pdf-xroy). A single
+`rehydrateAudio(reason)` routine (bd polyglot-pdf-z9bc) owns arming for every
+reconnect / session-restart path: `resume`, `startSection`, `switchToSection`,
+`rearmAudioCapture`, and the `onSessionReady` / `onSessionRestarted` callbacks
+(the latter is how the automatic/internal reconnects -- GoAway pre-emptive resume
+and auto-drop -- re-sync). Because `session_ready` also fires on the FIRST
+connect, `rehydrateAudio` runs on initial connect too -- it races the overlay's
+connect-poll `startRecording`, which the in-flight `arming` guard in
+`audioManager.startRecording` makes safe (the second caller awaits the first
+instead of double-arming). `rehydrateAudio` is idempotent: a no-op under the test
+harness and while paused; it skips the arm when already recording (the mic
+worklet + playback `AudioContext` survive a socket swap, so on GoAway/auto-drop
+audio self-heals -- a pure PTT-mode re-sync); it re-applies the PTT gate MODE
+always, but only (re)sets mute/unmute when it ARMED A FRESH mic (so a reconnect
+landing during an active push-to-talk hold does not truncate the user's speech).
+The shared send callback is then gated by:
 
 - `connected` → always send.
 - `switching_section` **with the WebSocket open** → send. Safe because the

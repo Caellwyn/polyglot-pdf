@@ -341,6 +341,66 @@ export function createConnectionManager(
 		}
 	})
 
+	// Single audio-rehydration routine shared by EVERY reconnect / session-restart
+	// path (bd polyglot-pdf-z9bc). Before this, "arm the mic and re-sync PTT" was
+	// duplicated across resume(), startSection(), switchToSection() and
+	// rearmAudioCapture(), and the automatic/internal reconnects (GoAway,
+	// auto-drop, warm restart) re-armed nothing at all. Centralizing it here means
+	// the condition is handled in ONE place: the callers (and the session-ready
+	// callbacks) all funnel through this, so no path can silently diverge.
+	//
+	// IDEMPOTENT BY DESIGN -- safe to call on a path that is already recording:
+	//   - no-op under the test harness (audio is injected -- bd polyglot-pdf-g8w);
+	//   - no-op while paused (resume() clears `paused` before calling this);
+	//   - startRecording() is skipped when already recording, and its in-flight
+	//     `arming` guard (bd polyglot-pdf-z9bc) makes a concurrent call from the
+	//     overlay's connect-poll and a session-ready callback await one setup
+	//     instead of racing two getUserMedia calls;
+	//   - PTT/mute is always re-applied (cheap, idempotent) so a freshly-armed mic
+	//     starts in the correct gate state.
+	// This is why routing the self-healing GoAway/auto-drop/warm-restart paths
+	// through it is harmless: on those paths the mic worklet + playback context
+	// survive the socket swap and `recording` stays true, so this is a no-op
+	// re-sync -- NOT the isRecording()-guarded skip-the-whole-arm that made the
+	// earlier fix (PR #339) wrong.
+	const rehydrateAudio = async (reason: string): Promise<void> => {
+		if (isTestHarnessEnabled()) {
+			console.log('[VFF Connection] rehydrateAudio: TEST harness active -- skipping (' + reason + ')')
+			return
+		}
+		if (paused) {
+			console.log('[VFF Connection] rehydrateAudio: paused -- skipping (' + reason + ')')
+			return
+		}
+		if (!audioManager) {
+			console.warn('[VFF Connection] rehydrateAudio: audioManager not initialized (' + reason + ')')
+			return
+		}
+		const wasRecording = audioManager.isRecording()
+		if (!wasRecording) {
+			console.log('[VFF Connection] rehydrateAudio: arming mic (' + reason + ')')
+			await audioManager.startRecording(sendMicChunkToBackend)
+		}
+		// Re-apply the PTT gate MODE to the worklet (idempotent, does not open or
+		// close the mic) so the noise-gate state is correct after a reconnect.
+		const am = audioManager
+		am.setPTTMode(pushToTalkMode)
+		// Mute/unmute state is only (re)set when we ARMED A FRESH mic (which starts
+		// unmuted by default, so PTT mode must apply its resting mute). When the mic
+		// was ALREADY recording -- the self-healing GoAway/auto-drop/warm-restart
+		// case -- we deliberately DO NOT touch mute state: the user may be actively
+		// holding push-to-talk (mic unmuted mid-utterance), and blindly re-muting
+		// here would truncate their speech (bd polyglot-pdf-z9bc fresh-eyes gap).
+		// Their existing mute/hold state is already correct and survives the swap.
+		if (!wasRecording) {
+			if (pushToTalkMode) {
+				am.muteInput()
+			} else {
+				am.unmuteInput()
+			}
+		}
+	}
+
 	const callbacks: ConnectionCallbacks = {
 		onStatusChange: (status) => {
 			// BUG FIX (Nov 10, 2025): Reset paused flag when connection is lost
@@ -364,12 +424,33 @@ export function createConnectionManager(
 			// Initialize metrics for this session
 			metrics.startSession(sessionId)
 
+			// Rehydrate audio through the shared routine (bd polyglot-pdf-z9bc). This
+			// is the callback the AUTOMATIC/INTERNAL reconnects surface through --
+			// GoAway (handleGoAwayReconnect) and auto-drop (attemptReconnect) -- which
+			// re-armed nothing before. Audio self-heals on these paths (the worklet +
+			// contexts survive the socket swap), so this is an idempotent no-op re-sync
+			// there; it also covers the manual/section paths (their explicit arm ran
+			// just before, so isRecording() is already true and startRecording is
+			// skipped). Fire-and-forget: the callback is sync, and a re-arm failure is
+			// logged but must not throw into the message loop.
+			void rehydrateAudio('onSessionReady').catch((err) => {
+				console.error('[VFF Connection] rehydrateAudio(onSessionReady) failed:', err)
+			})
+
 			// Field manager already created at initialization
 			// Now it will start syncing manual edits to Gemini
 		},
 		onSessionRestarted: () => {
 			// Backend confirms Gemini session has been restarted
 			onStatusChange('connected')
+
+			// Warm restart (restart_gemini_session) keeps the SAME socket + mic, so
+			// this is normally a pure PTT re-sync no-op; routed through the shared
+			// routine anyway so every reconnect cause is handled in one place
+			// (bd polyglot-pdf-z9bc).
+			void rehydrateAudio('onSessionRestarted').catch((err) => {
+				console.error('[VFF Connection] rehydrateAudio(onSessionRestarted) failed:', err)
+			})
 		},
 		onNativeVadMode: (enabled) => {
 			// bd polyglot-pdf-333: backend told us whether Gemini's own VAD is
@@ -608,10 +689,10 @@ export function createConnectionManager(
 			paused = false
 			onStatusChange('connected')
 
-			// Restart recording
-			if (audioManager && !audioManager.isRecording()) {
-				await this.startRecording()
-			}
+			// Restart recording through the shared rehydration routine (bd
+			// polyglot-pdf-z9bc). `paused` was just cleared above, so this arms the
+			// mic and re-syncs PTT in one place.
+			await rehydrateAudio('resume')
 
 			// Audio will automatically resume when user starts speaking again
 			// The connection stayed warm, so Gemini is still ready
@@ -795,39 +876,11 @@ export function createConnectionManager(
 		// overlay's mount-time PTT effect (which fires in the same React batch) sees
 		// a consistent state and does not leave the input unmuted when PTT is on.
 		async rearmAudioCapture() {
-			// Skip under the test harness (audio is injected, no microphone needed).
-			if (isTestHarnessEnabled()) {
-				console.log('[VFF Connection] rearmAudioCapture: TEST harness active -- skipping')
-				return
-			}
-
-			if (!audioManager) {
-				console.warn('[VFF Connection] rearmAudioCapture: audioManager not initialized')
-				return
-			}
-
-			// Double-arm guard: if already recording, the old overlay has not yet
-			// finished its unmount cleanup; nothing to do.
-			if (audioManager.isRecording()) {
-				console.log('[VFF Connection] rearmAudioCapture: already recording -- skipping')
-				return
-			}
-
-			console.log('[VFF Connection] rearmAudioCapture: re-arming mic after overlay remount')
-
-			await audioManager.startRecording(sendMicChunkToBackend)
-
-			// Re-apply PTT/mute state so the new overlay's defaults take effect
-			// without waiting for its PTT useEffect.
-			const am = audioManager
-			am.setPTTMode(pushToTalkMode)
-			if (pushToTalkMode) {
-				am.muteInput()
-			} else {
-				am.unmuteInput()
-			}
-
-			console.log('[VFF Connection] rearmAudioCapture: mic re-armed, PTT mode synced:', pushToTalkMode)
+			// Delegates to the shared rehydration routine (bd polyglot-pdf-z9bc):
+			// same harness / already-recording / PTT-resync behavior this method had,
+			// now handled in one place. The overlay-remount recovery is just another
+			// caller of the single arm+resync path.
+			await rehydrateAudio('rearmAudioCapture')
 		},
 
 		async changeFillLanguage(language: string) {
@@ -927,11 +980,10 @@ export function createConnectionManager(
 
 			await connection.startSection(sectionId, connectedUrl)
 
-			// Restart recording if we were recording before. Skip the mic under the
-			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
-			if (!paused && audioManager && !isTestHarnessEnabled()) {
-				await audioManager.startRecording(sendMicChunkToBackend)
-			}
+			// Re-arm the mic through the shared rehydration routine (bd
+			// polyglot-pdf-z9bc) -- same paused / harness / idempotency guards as
+			// every other reconnect path, plus a PTT re-sync.
+			await rehydrateAudio('startSection')
 		},
 
 		async switchToSection(sectionId: string) {
@@ -946,11 +998,9 @@ export function createConnectionManager(
 
 			await connection.switchToSection(sectionId, connectedUrl)
 
-			// Restart recording if we were recording before. Skip the mic under the
-			// test harness gate (audio is injected -- bd polyglot-pdf-g8w, Codex PR #123).
-			if (!paused && audioManager && !isTestHarnessEnabled()) {
-				await audioManager.startRecording(sendMicChunkToBackend)
-			}
+			// Re-arm the mic through the shared rehydration routine (bd
+			// polyglot-pdf-z9bc) -- same guards + PTT re-sync as every other path.
+			await rehydrateAudio('switchToSection')
 		},
 
 		async completeSection() {

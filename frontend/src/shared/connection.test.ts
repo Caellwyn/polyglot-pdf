@@ -48,7 +48,12 @@ vi.mock('./audioManager', () => ({
       flushAudioQueue: vi.fn(),
       resumePlayback: vi.fn(),
       resumeAudioContext: vi.fn(),
-      setNativeVad: vi.fn()
+      setNativeVad: vi.fn(),
+      // Used by the shared rehydrateAudio routine (bd polyglot-pdf-z9bc) to
+      // re-sync PTT/mute after arming.
+      setPTTMode: vi.fn(),
+      muteInput: vi.fn(),
+      unmuteInput: vi.fn()
     }
     return audioManagerMock
   })
@@ -298,6 +303,103 @@ describe('Connection Manager (connection.ts)', () => {
       // only the PTT wrapper (manager.sendActivityEnd) does, per criterion 2(b).
       // Without the nativeVad gate on onVADSpeechEnd this would spuriously fire.
       expect(webFormConnectionMock.sendActivityEnd).not.toHaveBeenCalled()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // (b2) Shared audio rehydration across reconnect paths (bd polyglot-pdf-z9bc)
+  //
+  // Every reconnect / session-restart cause funnels through ONE rehydrateAudio
+  // routine. The AUTOMATIC/INTERNAL reconnects (GoAway, auto-drop) surface via
+  // onSessionReady; the warm restart via onSessionRestarted. Audio self-heals on
+  // those paths, so the routine must be idempotent: arm the mic only when NOT
+  // already recording, and always re-sync PTT -- never double-arm a path that
+  // armed just before the ready event.
+  // ---------------------------------------------------------------------------
+  describe('shared audio rehydration (reconnect consolidation, bd z9bc)', () => {
+    async function connected() {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      expect(capturedCallbacks).not.toBeNull()
+      // Clear the arm calls made during initial connect so each assertion is scoped
+      // to the reconnect callback under test.
+      audioManagerMock.startRecording.mockClear()
+      audioManagerMock.setPTTMode.mockClear()
+      return manager
+    }
+
+    it('onSessionReady (GoAway / auto-drop) arms the mic + applies resting mute when NOT already recording', async () => {
+      await connected()
+      audioManagerMock.isRecording.mockReturnValue(false)
+      // Default session is PTT-on, so a freshly-armed mic must start muted (resting).
+      audioManagerMock.muteInput.mockClear()
+
+      capturedCallbacks.onSessionReady('sess-1')
+      // rehydrateAudio is fire-and-forget from the sync callback; let its microtask run.
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(audioManagerMock.startRecording).toHaveBeenCalledTimes(1)
+      // PTT re-synced after arming; a fresh arm (starts unmuted) gets the PTT
+      // resting mute applied.
+      expect(audioManagerMock.setPTTMode).toHaveBeenCalled()
+      expect(audioManagerMock.muteInput).toHaveBeenCalled()
+    })
+
+    it('onSessionReady does NOT touch mute state when already recording (preserves an active PTT hold)', async () => {
+      await connected()
+      // On a real GoAway/auto-drop the worklet survives, so isRecording() stays true.
+      // The user could be mid-hold (mic unmuted); re-muting here would truncate speech.
+      audioManagerMock.isRecording.mockReturnValue(true)
+      audioManagerMock.muteInput.mockClear()
+      audioManagerMock.unmuteInput.mockClear()
+
+      capturedCallbacks.onSessionReady('sess-2')
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Does NOT re-arm (the failure PR #339 had was the inverse -- an isRecording()
+      // guard that skipped the WHOLE arm; here the routine still runs, it just does
+      // not duplicate getUserMedia).
+      expect(audioManagerMock.startRecording).not.toHaveBeenCalled()
+      // PTT gate MODE is still re-synced to the worklet...
+      expect(audioManagerMock.setPTTMode).toHaveBeenCalled()
+      // ...but mute/unmute is NOT touched: the mic's current mute/hold state is
+      // preserved (bd polyglot-pdf-z9bc fresh-eyes gap -- do not truncate an
+      // in-progress utterance on a mid-hold reconnect).
+      expect(audioManagerMock.muteInput).not.toHaveBeenCalled()
+      expect(audioManagerMock.unmuteInput).not.toHaveBeenCalled()
+    })
+
+    it('onSessionRestarted (warm restart) also routes through the shared routine', async () => {
+      await connected()
+      audioManagerMock.isRecording.mockReturnValue(true) // warm restart keeps the mic
+
+      capturedCallbacks.onSessionRestarted()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Warm restart never stopped the mic -> no re-arm, just a PTT re-sync.
+      expect(audioManagerMock.startRecording).not.toHaveBeenCalled()
+      expect(audioManagerMock.setPTTMode).toHaveBeenCalled()
+    })
+
+    it('rehydrate is skipped while paused (a paused session must not re-open the mic)', async () => {
+      const manager = await connected()
+      audioManagerMock.isRecording.mockReturnValue(true)
+      // Pause stops the mic and sets the paused flag.
+      manager.pause()
+      audioManagerMock.startRecording.mockClear()
+      audioManagerMock.setPTTMode.mockClear()
+      audioManagerMock.isRecording.mockReturnValue(false)
+
+      capturedCallbacks.onSessionReady('sess-3')
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Paused -> the shared routine bails before arming or touching PTT.
+      expect(audioManagerMock.startRecording).not.toHaveBeenCalled()
+      expect(audioManagerMock.setPTTMode).not.toHaveBeenCalled()
     })
   })
 
