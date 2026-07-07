@@ -41,8 +41,20 @@ cleanup); (3) the pane toolbar lacked the flex-wrap its modal counterpart has.
 Writing the tests exposed a real portability bug: `CSS.escape` is absent in
 the jsdom test env -- and unnecessary, since quoted attribute-selector values
 only need backslash/quote escaping; replaced with the minimal escape and
-re-verified the bracketed-mirror snap live (0px off-center). Final Opus
-clearing round: (below).
+re-verified the bracketed-mirror snap live (0px off-center).
+
+The round-1 fix itself introduced the sprint's best bug: `positionedIds` was
+memoized on `schema`, whose PROP identity churns on every fill -- so
+`isSnappable` got a fresh identity per fill and the snap effect re-fired,
+yanking a wandering user back on every value write (a direct free-wander
+violation). Caught twice independently: self-caught while composing the Opus
+round's prompt, and by that Opus round itself (GAPS-FOUND(1), high
+confidence, same trace). Fixed at BOTH layers: the pane pins the Set to mount
+(the field list is static per mount), and the hook now holds `isSnappable` in
+a ref so no caller's unstable identity can ever re-snap -- with a churn
+regression test that fails against the pre-fix hook. Live-verified: a
+faithful fill event landed ("77" painted) while a wander position held.
+Final Opus clearing round on the fixed diff: (below).
 
 ## Lessons
 
