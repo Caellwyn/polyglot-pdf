@@ -204,6 +204,49 @@
   padding: 2rem 1rem;
 }
 
+/* --- Live viewer page stack + fill-state overlays --- */
+
+.pdf-viewer__page {
+  margin: 0 auto 0.5rem;
+  width: fit-content;
+}
+
+.pdf-viewer__page-inner {
+  position: relative;
+}
+
+.pdf-viewer__overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.pdf-field-overlay {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.pdf-field-overlay__text {
+  color: #111827;
+  line-height: 1.05;
+  padding: 0 2px;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+.pdf-field-overlay__check {
+  color: #111827;
+  font-weight: 700;
+  margin: 0 auto;
+  line-height: 1;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
 .pdf-preview-pane__notice {
   max-width: 64rem;
   margin: 1rem auto;

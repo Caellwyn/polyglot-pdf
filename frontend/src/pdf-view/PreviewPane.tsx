@@ -1,33 +1,62 @@
 /**
- * PreviewPane -- the Preview view-mode surface (bd polyglot-pdf-vxwj).
+ * PreviewPane -- the Preview view-mode surface (bd polyglot-pdf-vxwj shell,
+ * live surface bd polyglot-pdf-ogrt).
  *
- * P1.1 placeholder scope: renders the BLANK form PDF so the view mode, lazy
- * chunking, and layout shell are real. The live surface -- field overlays,
- * value painting, snap-to camera -- lands in the P1.2/P1.3 beads
- * (polyglot-pdf-ogrt / 35t0) on top of this mount point.
+ * Renders the blank form PDF with fill-state field overlays: the user's
+ * answers paint into their printed rects live as the voice session (or a
+ * manual edit) fills them. SchemaForm passes the wrapped FieldValue map down
+ * on every schemaFormStateChange, so no extra subscription lives here.
+ * Read-only; click-to-edit and the snap-to camera are later beads
+ * (phase 2 / polyglot-pdf-35t0).
  *
  * Lazy-loaded from SchemaForm (React.lazy), so pdfjs stays out of the default
  * bundle while the preview flag is off.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { PDFPageProxy } from 'pdfjs-dist';
+import type { FormSchema } from '../schema-forms/types/schema';
 import { usePDFDocument } from './usePDFDocument';
-import { PDFPage } from './PDFPage';
+import { hasValidCoordinates } from './pdfCoordinates';
+import { PDFViewer } from './PDFViewer';
 import './pdf-view.css';
 
 export interface PreviewPaneProps {
   pdfUrl?: string;
+  schema: FormSchema;
+  /** Wrapped FieldValue map from SchemaFormState (fresh on every change). */
+  fieldValues: Record<string, any>;
+  currentFieldId?: string | null;
 }
 
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 2.0;
 
-export default function PreviewPane({ pdfUrl }: PreviewPaneProps) {
+export default function PreviewPane({
+  pdfUrl,
+  schema,
+  fieldValues,
+  currentFieldId,
+}: PreviewPaneProps) {
   const { document: pdfDoc, numPages, isLoading, error } = usePDFDocument(pdfUrl ?? null);
   const [scale, setScale] = useState(1.0);
   const paneRef = useRef<HTMLDivElement>(null);
   const fitAppliedRef = useRef(false);
+
+  // QA surface: any field that cannot paint (no usable rect) is listed once
+  // per pane mount. Deps are deliberately empty: `schema` gets a fresh object
+  // identity on every state reload (SchemaFormStateManager.load JSON-parses),
+  // so a [schema] dep would re-log per fill.
+  useEffect(() => {
+    const unpositioned = schema.fields.filter((f) => !hasValidCoordinates(f.pdf_position));
+    if (unpositioned.length > 0) {
+      console.debug(
+        `[PreviewPane] ${unpositioned.length} field(s) lack a usable pdf_position and will not paint:`,
+        unpositioned.map((f) => f.id)
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount by design
+  }, []);
 
   // Fit-width once, off the first rendered page's unscaled dimensions.
   const handleFirstPageLoad = useCallback((page: PDFPageProxy) => {
@@ -53,27 +82,24 @@ export default function PreviewPane({ pdfUrl }: PreviewPaneProps) {
   return (
     <div className="pdf-preview-pane">
       <div className="pdf-preview-pane__banner">
-        Preview mode (early): this shows the blank form for now. Your answers
-        will appear here live in an upcoming update -- until then, use
-        "Preview Filled PDF" below to see them filled in.
+        Preview mode: your answers appear on the real form as you go. Colors:
+        orange = current field, blue = filled, green = confirmed. For the
+        exact print output, use "Preview Filled PDF" below.
       </div>
       <div className="pdf-preview-pane__pages" ref={paneRef}>
         {error && <p className="pdf-preview-pane__error">Could not load the form PDF: {error}</p>}
         {!error && isLoading && <p className="pdf-preview-pane__loading">Loading the form...</p>}
-        {pdfDoc &&
-          Array.from({ length: numPages }, (_, i) => (
-            <div key={i + 1} className="pdf-preview-modal__page">
-              <PDFPage
-                document={pdfDoc}
-                pageNumber={i + 1}
-                scale={scale}
-                onPageLoad={i === 0 ? handleFirstPageLoad : undefined}
-              />
-              <div className="pdf-preview-pane__page-label">
-                Page {i + 1} of {numPages}
-              </div>
-            </div>
-          ))}
+        {pdfDoc && (
+          <PDFViewer
+            document={pdfDoc}
+            numPages={numPages}
+            scale={scale}
+            fields={schema.fields}
+            fieldValues={fieldValues}
+            currentFieldId={currentFieldId}
+            onFirstPageLoad={handleFirstPageLoad}
+          />
+        )}
       </div>
     </div>
   );
