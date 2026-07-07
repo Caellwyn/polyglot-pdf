@@ -114,6 +114,7 @@ function makeMockManager(calls: string[]) {
     sendRecoveryPrompt: vi.fn(),
     endGeminiSession: vi.fn(),
     setPushToTalkMode: vi.fn(),
+    setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => false),
     isNativeVad: vi.fn(() => true),
     getFieldManager: vi.fn(() => null),

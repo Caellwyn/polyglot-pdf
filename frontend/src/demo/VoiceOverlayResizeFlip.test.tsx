@@ -96,6 +96,7 @@ function makeResizeFlipMock(): ConnectionManager & {
     sendRecoveryPrompt: vi.fn(),
     endGeminiSession: vi.fn(),
     setPushToTalkMode: vi.fn(),
+    setPushToTalkHeld: vi.fn(),
     getPushToTalkMode: vi.fn(() => true),
     isNativeVad: vi.fn(() => false),
     getFieldManager: vi.fn(() => null),

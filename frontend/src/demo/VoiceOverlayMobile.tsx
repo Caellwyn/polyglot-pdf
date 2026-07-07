@@ -321,6 +321,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// Send activity end and mute
 		connectionManager?.sendActivityEnd()
 		const audioManager = connectionManager?.getAudioManager()
+		// Keep the ConnectionManager hold flag consistent with the mute (bd
+		// polyglot-pdf-qt7w) -- a force-release ends the unmuted window.
+		connectionManager?.setPushToTalkHeld(false)
 		audioManager?.muteInput()
 		audioManager?.resumePlayback()
 	}
@@ -397,6 +400,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 				console.log('[PTT Safety Mobile] [warn] Component unmounting while recording - force releasing')
 				// Direct cleanup since we're unmounting
 				connectionManager?.sendActivityEnd()
+				connectionManager?.setPushToTalkHeld(false)
 				connectionManager?.getAudioManager()?.muteInput()
 			}
 		}
@@ -896,8 +900,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		// Update connection manager PTT mode (disables energy-based barge-in)
 		connectionManager?.setPushToTalkMode(newMode)
-		
-		const isCurrentlyConnected = status.toLowerCase() === 'connected' || 
+		// A mode toggle ends any notion of an active hold; clear the hold flag so it
+		// can never go stale-true across the mode change (bd polyglot-pdf-qt7w).
+		connectionManager?.setPushToTalkHeld(false)
+
+		const isCurrentlyConnected = status.toLowerCase() === 'connected' ||
 		                            status.toLowerCase().startsWith('connected ') || 
 		                            status.toLowerCase() === 'switching_section' || 
 		                            status.toLowerCase().startsWith('reconnecting')
@@ -954,6 +961,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		// UNMUTE: Allow real audio through
 		const audioManager = connectionManager?.getAudioManager()
 		audioManager?.unmuteInput()
+		// Record the hold so a reconnect that arms a FRESH mic mid-hold does not
+		// re-mute the user (bd polyglot-pdf-qt7w). Cleared on release/force-release.
+		connectionManager?.setPushToTalkHeld(true)
 
 		// BARGE-IN: Stop Gemini's audio if she's talking
 		if (audioManager?.isSpeaking()) {
@@ -991,6 +1001,12 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		// Update UI immediately to show button is no longer held
 		setIsHoldingPushToTalk(false)
+		// Clear the hold flag SYNCHRONOUSLY at release (bd polyglot-pdf-qt7w), not
+		// inside the deferred timeout below: an unmount during the 500ms window
+		// cancels that timeout (e.g. the desktop<->mobile resize flip), which would
+		// otherwise leave the flag stale-true on the shared ConnectionManager and make
+		// a later fresh-arm reconnect wrongly rest unmuted.
+		connectionManager?.setPushToTalkHeld(false)
 
 		// CRITICAL: Delay 500ms before sending activity_end and muting
 		// This allows final audio chunks to be recorded and sent to Gemini
@@ -1006,6 +1022,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			// MUTE: Stop streaming audio after signaling end of turn
 			// All audio recorded during the 500ms delay has already been sent
 			const audioManager = connectionManager?.getAudioManager()
+			// (Hold flag was already cleared synchronously at release above -- bd
+			// polyglot-pdf-qt7w; this timeout only handles the deferred mute.)
 			audioManager?.muteInput()
 
 			// Allow Gemini's response to play now that the user released the mic
