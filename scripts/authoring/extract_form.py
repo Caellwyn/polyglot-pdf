@@ -295,8 +295,12 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
                 return sec
         if had_original_sections:
             # A real (LLM-authored) section exists but none covers this page --
-            # file into the last one (a human editor re-files if needed).
-            return sections[-1]
+            # file into the last one (a human editor re-files if needed), and add
+            # the page to its page_numbers so field-page and section-page agree.
+            last = sections[-1]
+            if page not in last.setdefault("page_numbers", []):
+                last["page_numbers"].append(page)
+            return last
         # No sections at all: create/reuse a dedicated bucket so a recovered field
         # is never orphaned with section_id="" (which validates + lints clean but
         # is unreachable via section navigation -- defeats the "no widget vanishes"

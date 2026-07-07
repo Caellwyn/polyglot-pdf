@@ -281,12 +281,13 @@ def test_backfilled_fields_always_validate_as_v2(tmp_path):
     the round-2 fresh-eyes gap: a backfilled radio got 1 option and failed
     FormSchema.model_validate ('radio requires at least 2 options'), and combo/
     list -> select would likewise need options a bare widget can't supply. Pin
-    that a mixed dump (checkbox/radio/text/combo/list) yields a valid v2 schema."""
+    that a mixed dump yields a valid v2 schema. Uses the REAL dumper logical_type
+    strings (combobox/listbox/signature), so it exercises the actual mapping keys."""
     import warnings
     from backend.models.form_models import FormSchema
     dump = _write_logical_dump(tmp_path, {
         "cb[0]": "checkbox", "rad[0]": "radio", "txt[0]": "text",
-        "combo[0]": "combo", "list[0]": "list"})
+        "combo[0]": "combobox", "list[0]": "listbox", "sig[0]": "signature"})
     schema = {
         "schema_version": "2", "source": "pdf",
         "form_metadata": {"title": "T", "version": "1"},
@@ -294,7 +295,7 @@ def test_backfilled_fields_always_validate_as_v2(tmp_path):
                       "page_numbers": [1], "fields": []}],
         "fields": [],
     }
-    assert ef._backfill_unclaimed_widgets(schema, dump) == 5
+    assert ef._backfill_unclaimed_widgets(schema, dump) == 6
     # No options-bearing type was minted (all valid with zero options).
     assert {f["type"] for f in schema["fields"]} <= {"checkbox", "text"}
     with warnings.catch_warnings():
