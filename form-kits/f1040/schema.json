@@ -729,6 +729,11 @@
         "y": 118.0,
         "width": 107.0,
         "height": 14.0
+      },
+      "require_if": {
+        "field": "fld_filing_status",
+        "operator": "equals",
+        "value": "married_filing_separately_mfs"
       }
     },
     {
@@ -990,6 +995,11 @@
         "y": 240.0,
         "width": 144.0,
         "height": 12.0
+      },
+      "require_if": {
+        "field": "fld_filing_status",
+        "operator": "equals",
+        "value": "married_filing_separately_mfs"
       }
     },
     {
@@ -1044,6 +1054,10 @@
         "y": 267.0,
         "width": 262.8,
         "height": 11.5
+      },
+      "require_if": {
+        "field": "fld_nonresident_spouse_check",
+        "operator": "is_checked"
       }
     },
     {
@@ -2195,6 +2209,11 @@
         "y": 582.0,
         "width": 71.25,
         "height": 12.0
+      },
+      "show_if": {
+        "field": "fld_4c",
+        "operator": "equals",
+        "value": "3"
       }
     },
     {
@@ -2284,6 +2303,11 @@
         "y": 606.0,
         "width": 72.0,
         "height": 12.0
+      },
+      "show_if": {
+        "field": "fld_5c",
+        "operator": "equals",
+        "value": "3"
       }
     },
     {
@@ -2781,6 +2805,11 @@
         "y": 156.0,
         "width": 36.0,
         "height": 12.0
+      },
+      "show_if": {
+        "field": "fld_16_check",
+        "operator": "equals",
+        "value": "3"
       }
     },
     {
@@ -3457,6 +3486,11 @@
         "y": 594.0,
         "width": 165.6,
         "height": 18.0
+      },
+      "require_if": {
+        "field": "fld_designee_allow",
+        "operator": "equals",
+        "value": "yes_complete_below"
       }
     },
     {
@@ -3475,6 +3509,11 @@
         "y": 594.0,
         "width": 100.8,
         "height": 18.0
+      },
+      "require_if": {
+        "field": "fld_designee_allow",
+        "operator": "equals",
+        "value": "yes_complete_below"
       }
     },
     {
@@ -3494,6 +3533,11 @@
         "y": 600.0,
         "width": 72.0,
         "height": 11.5
+      },
+      "require_if": {
+        "field": "fld_designee_allow",
+        "operator": "equals",
+        "value": "yes_complete_below"
       }
     },
     {

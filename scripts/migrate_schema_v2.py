@@ -25,11 +25,16 @@ Transforms (plan P6.1):
    pdf_field_flag_change; DROP show_method (spike-confirmed: no reader -- the
    consumers are pdf_fill_routes.py + FieldRenderer.tsx, which read unlock_method
    and pdf_field_flag_change only). conditional_logic is then removed.
-5. controls_fields: each edge is a trigger-side action (shows/unlocks/... target
-   ids). v2 evaluates target-side show_if/require_if, so a controls_fields edge is
-   dropped ONLY when its target already carries a mirroring show_if/require_if
-   naming this trigger; an UNMIRRORED edge is REPORTED (never silently dropped)
-   for human conversion.
+5. controls_fields: each edge is a trigger-side action (shows/makes_required/
+   unlocks/... target ids). v2 has NO trigger-side logic (only target-side
+   show_if/require_if), so every edge is MIRRORED into the target: `shows` ->
+   the target's show_if, `makes_required` -> require_if (merged via any_of when
+   several triggers gate one target). An action already mirrored by an existing
+   target condition is a no-op drop. Actions with no clean target-side v2
+   equivalent (unlocks/locks/hides/makes_optional -- read-only/negation logic)
+   are REPORTED as unconverted, never silently lost (in the shipped kits these
+   are all `unlocks`, redundant with the target's conditional_behavior.
+   unlock_method=flip_readonly_bit). controls_fields is then always removed.
 6. drop conditional_fields (legacy; v2 rejects it).
 7. stamp schema_version '2'.
 
@@ -324,7 +329,8 @@ def migrate(schema: Dict[str, Any],
     report: Dict[str, Any] = {
         "checkbox_groups": [], "standalone_unwrapped": [], "slug_maps": {},
         "operators_rewritten": 0, "behaviors_folded": 0,
-        "controls_fields_dropped": 0, "unmirrored_controls": [],
+        "controls_fields_dropped": 0, "controls_mirrored": 0,
+        "unmirrored_controls": [],
         "conditional_fields_dropped": 0, "options_from_dump": [],
         "needs_options": [], "duplicate_option_values": [],
     }
@@ -436,8 +442,13 @@ def migrate(schema: Dict[str, Any],
             del f["conditional_fields"]
             report["conditional_fields_dropped"] += 1
 
-    # Pass 4: controls_fields -- drop an edge only when its targets carry a
-    # mirroring show_if/require_if naming this trigger; report unmirrored edges.
+    # Pass 4: controls_fields -- v2 has no trigger-side conditional logic, so
+    # every edge is either already mirrored by a target-side show_if/require_if
+    # (drop it) OR must be MIRRORED into one (so the behavior survives), then the
+    # trigger-side controls_fields is always removed. A `shows` action becomes the
+    # target's show_if; `makes_required` becomes require_if (the actions the
+    # shipped kits use). unlocks/locks/hides/makes_optional are reported as
+    # UNCONVERTED (no clean target-side equivalent) rather than silently lost.
     for f in fields:
         controls = f.get("controls_fields")
         if not isinstance(controls, list):
@@ -445,41 +456,67 @@ def migrate(schema: Dict[str, Any],
         trigger_id = f.get("id")
         trig_type = f.get("type")  # post-pass-1 type (checkbox_group/select/...)
         trig_slug_map = slug_maps.get(trigger_id, {}) if isinstance(trigger_id, str) else {}
-        surviving: List[dict] = []
+        standalone_old = (standalone_old_value.get(trigger_id)
+                          if isinstance(trigger_id, str) else None)
         for control in controls:
             if not isinstance(control, dict):
                 continue
+            want = _control_condition(control, trigger_id, trig_type,
+                                      trig_slug_map, standalone_old)
             unmirrored = _unmirrored_targets(
                 control, trigger_id, trig_type, trig_slug_map, fields_by_id,
-                standalone_old_value.get(trigger_id) if isinstance(trigger_id, str) else None)
-            if unmirrored:
-                # Keep the unmirrored edge for the human -- but MIGRATE its
-                # operator+value to v2 (slug + group operator) like a show_if
-                # atom, so the surviving control is v2-valid (lint-clean), not a
-                # stale widget-leaf value that would ref-option-value error.
-                migrated_atom = {"operator": control.get("operator", "equals"),
-                                 "value": control.get("value")}
-                _rewrite_atom_value(migrated_atom, trig_slug_map, trig_type)
-                control["operator"] = migrated_atom["operator"]
-                if "value" in migrated_atom:
-                    control["value"] = migrated_atom["value"]
-                else:
-                    control.pop("value", None)
+                standalone_old)
+            # Mirror the show/require actions onto each not-already-mirrored
+            # target; report any action key we cannot convert.
+            mirrored_here: List[str] = []
+            for action, key in (("shows", "show_if"),
+                                ("makes_required", "require_if")):
+                for tid in control.get(action) or []:
+                    if not isinstance(tid, str) or tid not in unmirrored:
+                        continue
+                    target = fields_by_id.get(tid)
+                    if isinstance(target, dict):
+                        _add_target_condition(target, key, dict(want))
+                        mirrored_here.append(f"{tid}.{key}")
+            unconverted = sorted(
+                t for k in ("hides", "locks", "unlocks", "makes_optional")
+                for t in (control.get(k) or []) if isinstance(t, str)
+            )
+            report["controls_mirrored"] += len(mirrored_here)
+            if not mirrored_here and not unconverted:
+                # Every action was a no-op (target already mirrored the edge).
+                report["controls_fields_dropped"] += 1
+            if unconverted:
+                # Actions with no target-side v2 equivalent -- the ONLY thing a
+                # human still needs to review (show/require are handled above).
                 report["unmirrored_controls"].append({
                     "trigger": trigger_id,
-                    "operator": control["operator"],
+                    "operator": want.get("operator"),
                     "targets": unmirrored,
+                    "mirrored_into": sorted(mirrored_here),
+                    "unconverted_actions": unconverted,
                 })
-                surviving.append(control)
-            else:
-                report["controls_fields_dropped"] += 1
-        if surviving:
-            f["controls_fields"] = surviving
-        else:
-            f.pop("controls_fields", None)
+        # v2 carries no trigger-side logic: controls_fields is always removed.
+        f.pop("controls_fields", None)
 
     migrated["schema_version"] = vocab.SCHEMA_VERSION_V2
     return migrated, report
+
+
+def _add_target_condition(target: Dict[str, Any], key: str,
+                          atom: Dict[str, Any]) -> None:
+    """Add a mirrored show_if/require_if atom to a target field, merging with any
+    condition already there via any_of (OR) so a field gated by EITHER its own
+    condition OR the mirrored trigger stays shown/required under both."""
+    existing = target.get(key)
+    if not existing:
+        target[key] = atom
+        return
+    # Already a composite any_of -> append; else wrap both atoms in a new any_of.
+    if isinstance(existing, dict) and isinstance(existing.get("any_of"), list):
+        existing["any_of"].append(atom)
+    else:
+        target[key] = {"any_of": [existing, atom]}
 
 
 def _control_condition(control: Dict[str, Any], trigger_id: Any,
@@ -596,12 +633,19 @@ def main(argv: Optional[List[str]] = None) -> int:
           f"operators rewritten: {report['operators_rewritten']}; "
           f"behaviors folded: {report['behaviors_folded']}; "
           f"controls_fields dropped: {report['controls_fields_dropped']}; "
+          f"controls mirrored -> show_if/require_if: {report['controls_mirrored']}; "
           f"conditional_fields dropped: {report['conditional_fields_dropped']}")
-    if report["unmirrored_controls"]:
-        print(f"  WARNING: {len(report['unmirrored_controls'])} UNMIRRORED "
-              f"controls_fields edge(s) KEPT for human conversion:", file=sys.stderr)
-        for u in report["unmirrored_controls"][:10]:
-            print(f"    trigger={u['trigger']} -> {u['targets']}", file=sys.stderr)
+    # An UNCONVERTED action (unlocks/locks/hides/makes_optional -- no clean
+    # target-side v2 equivalent) is the only thing a human still needs to review.
+    unconverted = [u for u in report["unmirrored_controls"]
+                   if u.get("unconverted_actions")]
+    if unconverted:
+        print(f"  WARNING: {len(unconverted)} controls_fields edge(s) carry "
+              f"actions with NO v2 target-side equivalent (needs human review):",
+              file=sys.stderr)
+        for u in unconverted[:10]:
+            print(f"    trigger={u['trigger']} -> unconverted "
+                  f"{u['unconverted_actions']}", file=sys.stderr)
     return 0
 
 

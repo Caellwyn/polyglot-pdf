@@ -426,6 +426,18 @@
       },
       "validation": {
         "required": false
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason_d",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_e",
+            "operator": "is_checked"
+          }
+        ]
       }
     },
     {
@@ -444,6 +456,18 @@
       },
       "validation": {
         "required": false
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason_d",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_e",
+            "operator": "is_checked"
+          }
+        ]
       }
     },
     {
@@ -498,6 +522,18 @@
       },
       "validation": {
         "required": false
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason_a",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_f",
+            "operator": "is_checked"
+          }
+        ]
       }
     },
     {
@@ -516,6 +552,18 @@
       },
       "validation": {
         "required": false
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason_a",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_f",
+            "operator": "is_checked"
+          }
+        ]
       }
     },
     {
@@ -534,6 +582,18 @@
       },
       "validation": {
         "required": false
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason_a",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_f",
+            "operator": "is_checked"
+          }
+        ]
       }
     },
     {

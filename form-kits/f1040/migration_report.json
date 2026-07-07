@@ -94,6 +94,7 @@
   "operators_rewritten": 0,
   "behaviors_folded": 0,
   "controls_fields_dropped": 0,
+  "controls_mirrored": 9,
   "unmirrored_controls": [
     {
       "trigger": "fld_filing_status",
@@ -101,35 +102,56 @@
       "targets": [
         "fld_mfs_spouse_name",
         "fld_spouse_ssn"
-      ]
+      ],
+      "mirrored_into": [
+        "fld_mfs_spouse_name.require_if",
+        "fld_spouse_ssn.require_if"
+      ],
+      "unconverted_actions": []
     },
     {
       "trigger": "fld_nonresident_spouse_check",
-      "operator": "equals",
+      "operator": "is_checked",
       "targets": [
         "fld_nonresident_spouse_name"
-      ]
+      ],
+      "mirrored_into": [
+        "fld_nonresident_spouse_name.require_if"
+      ],
+      "unconverted_actions": []
     },
     {
       "trigger": "fld_4c",
       "operator": "equals",
       "targets": [
         "fld_4c_other"
-      ]
+      ],
+      "mirrored_into": [
+        "fld_4c_other.show_if"
+      ],
+      "unconverted_actions": []
     },
     {
       "trigger": "fld_5c",
       "operator": "equals",
       "targets": [
         "fld_5c_other"
-      ]
+      ],
+      "mirrored_into": [
+        "fld_5c_other.show_if"
+      ],
+      "unconverted_actions": []
     },
     {
       "trigger": "fld_16_check",
       "operator": "equals",
       "targets": [
         "fld_16_other"
-      ]
+      ],
+      "mirrored_into": [
+        "fld_16_other.show_if"
+      ],
+      "unconverted_actions": []
     },
     {
       "trigger": "fld_designee_allow",
@@ -138,7 +160,13 @@
         "fld_designee_name",
         "fld_designee_phone",
         "fld_designee_pin"
-      ]
+      ],
+      "mirrored_into": [
+        "fld_designee_name.require_if",
+        "fld_designee_phone.require_if",
+        "fld_designee_pin.require_if"
+      ],
+      "unconverted_actions": []
     }
   ],
   "conditional_fields_dropped": 0,

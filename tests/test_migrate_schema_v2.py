@@ -177,43 +177,74 @@ def test_conditional_fields_is_dropped():
 
 # --- controls_fields drop-if-mirrored / report-if-unmirrored ----------------
 
-def test_mirrored_controls_field_is_dropped():
-    # trigger controls target; target's show_if MATCHES on field+operator+value.
+def test_shows_edge_mirrored_by_target_show_if_is_dropped():
+    # A `shows` edge whose target ALREADY carries the matching show_if is a no-op:
+    # controls_fields is removed and nothing is re-added (dropped, not re-mirrored).
     trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
         {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
         {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
         "controls_fields": [{"operator": "equals", "value": "R[0]",
-                             "unlocks": ["tgt"]}]}
+                             "shows": ["tgt"]}]}
     target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
               "show_if": {"field": "trg", "operator": "equals", "value": "R[0]"}}
     out, rep = mig.migrate(_v1([trigger, target]))
-    assert "controls_fields" not in out["fields"][0]  # mirrored -> dropped
+    assert "controls_fields" not in out["fields"][0]  # always removed
     assert rep["controls_fields_dropped"] == 1
+    assert rep["controls_mirrored"] == 0  # target already mirrored it
     assert rep["unmirrored_controls"] == []
 
 
-def test_controls_edge_on_a_DIFFERENT_value_is_not_mirrored():
-    # fresh-eyes: the edge gates on option R[0] but the target's show_if gates on
-    # a DIFFERENT option R[1] -- these are distinct conditions, NOT a mirror, so
-    # the edge must be REPORTED + kept (a value-blind check would drop it).
+def test_unmirrored_shows_edge_is_mirrored_into_target_show_if():
+    # A `shows` edge whose target has no matching condition is MIRRORED into the
+    # target's show_if (v2 has no trigger-side logic), then controls_fields is
+    # dropped -- the behavior survives (bd h76m.16, fixing the P6.2 over-strip).
     trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
         {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
         {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
         "controls_fields": [{"operator": "equals", "value": "R[0]",
-                             "unlocks": ["tgt"]}]}
-    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
-              "show_if": {"field": "trg", "operator": "equals", "value": "R[1]"}}
+                             "shows": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
     out, rep = mig.migrate(_v1([trigger, target]))
-    assert out["fields"][0].get("controls_fields"), "distinct-value edge must be kept"
-    assert rep["controls_fields_dropped"] == 0
-    assert rep["unmirrored_controls"] and rep["unmirrored_controls"][0]["targets"] == ["tgt"]
-    # The surviving edge is MIGRATED to v2 (value -> new slug), not stale.
-    kept = out["fields"][0]["controls_fields"][0]
-    assert kept["value"] == "yes"  # slug for R[0]'s label "Yes"
+    assert "controls_fields" not in out["fields"][0]  # always removed
+    tgt = out["fields"][1]
+    assert tgt["show_if"] == {"field": "trg", "operator": "equals", "value": "yes"}
+    assert rep["controls_mirrored"] == 1
 
 
-def test_unmirrored_controls_field_is_reported_and_kept():
-    # target has NO condition at all -> the edge is reported, not silently lost.
+def test_unmirrored_makes_required_edge_is_mirrored_into_require_if():
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "R[0]",
+                             "makes_required": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    out, rep = mig.migrate(_v1([trigger, target]))
+    assert "controls_fields" not in out["fields"][0]
+    assert out["fields"][1]["require_if"] == {
+        "field": "trg", "operator": "equals", "value": "yes"}
+
+
+def test_two_triggers_requiring_one_target_merge_into_any_of():
+    # reason_a AND reason_f both require treaty_country -> require_if is the OR
+    # (any_of) of both conditions, not a last-writer-wins overwrite.
+    a = {"id": "a", "type": "checkbox", "pdf_field_name": "A[0]", "options": [
+        {"value": "A[0]", "label": "Reason A", "pdf_field_name": "A[0]"}],
+        "controls_fields": [{"operator": "is_checked", "makes_required": ["tc"]}]}
+    f = {"id": "f", "type": "checkbox", "pdf_field_name": "F[0]", "options": [
+        {"value": "F[0]", "label": "Reason F", "pdf_field_name": "F[0]"}],
+        "controls_fields": [{"operator": "is_checked", "makes_required": ["tc"]}]}
+    tc = {"id": "tc", "type": "text", "pdf_field_name": "TC[0]"}
+    out, rep = mig.migrate(_v1([a, f, tc]))
+    req = out["fields"][2]["require_if"]
+    assert "any_of" in req and len(req["any_of"]) == 2
+    fields = {atom["field"] for atom in req["any_of"]}
+    assert fields == {"a", "f"}
+
+
+def test_unconvertible_action_is_reported_not_silently_lost():
+    # unlocks/locks/hides/makes_optional have no clean v2 target-side equivalent;
+    # they are REPORTED as unconverted (the human still reviews them), and
+    # controls_fields is still removed.
     trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
         {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
         {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
@@ -221,9 +252,10 @@ def test_unmirrored_controls_field_is_reported_and_kept():
                              "unlocks": ["tgt"]}]}
     target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
     out, rep = mig.migrate(_v1([trigger, target]))
-    assert out["fields"][0].get("controls_fields")  # kept for the human
-    assert rep["controls_fields_dropped"] == 0
-    assert rep["unmirrored_controls"] and rep["unmirrored_controls"][0]["targets"] == ["tgt"]
+    assert "controls_fields" not in out["fields"][0]
+    assert "show_if" not in out["fields"][1] and "require_if" not in out["fields"][1]
+    unconv = [u for u in rep["unmirrored_controls"] if u.get("unconverted_actions")]
+    assert unconv and unconv[0]["unconverted_actions"] == ["tgt"]
 
 
 def test_duplicate_option_values_are_reported_not_collapsed():
@@ -277,11 +309,15 @@ def test_migrated_i90_validates_v2_lints_clean_and_is_idempotent():
     assert len(migrated["fields"]) == 132
     # Idempotent.
     assert mig.migrate(migrated, dump)[0] == migrated
-    # The i-90 has 3 controls_fields edges whose target-side condition gates on a
-    # DIFFERENT option value than the edge (genuinely distinct conditions on the
-    # same 12-option group) -- these are correctly REPORTED (not silently dropped,
-    # fresh-eyes) and KEPT (migrated to v2 slugs, so still lint-clean above).
-    assert len(report["unmirrored_controls"]) == 3
+    # controls_fields is DELETED from v2 (bd h76m.16): every i-90 edge is an
+    # `unlocks` action, which has no target-side show_if/require_if equivalent, so
+    # each is REPORTED as unconverted (never silently lost). They are behaviorally
+    # redundant here anyway -- every target already carries its own show_if plus
+    # conditional_behavior.unlock_method=flip_readonly_bit, which does the actual
+    # unlocking -- so the migrated schema has ZERO controls_fields left.
+    assert all("controls_fields" not in f for f in migrated["fields"])
+    assert report["unmirrored_controls"]  # the unlocks are reported for review
+    assert all(u["unconverted_actions"] for u in report["unmirrored_controls"])
     # No ambiguous duplicate option values or unresolved trigger refs on i-90.
     assert report["duplicate_option_values"] == []
     assert report.get("unresolved_trigger_refs", []) == []
