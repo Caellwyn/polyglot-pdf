@@ -652,6 +652,21 @@ export class WebFormConnection {
           this.handleGoAwayReconnect();
           break;
 
+        case "gemini_session_dropped":
+          // The Gemini Live session died SPONTANEOUSLY behind our still-open WS
+          // (e.g. a 1011 "Input data processing failed"), so the backend can no
+          // longer produce responses (bd polyglot-pdf-ppfy). Without this the
+          // client would sit frozen on "connected" while the user's audio is
+          // silently dropped. Drive the SAME pre-emptive reconnect the GoAway path
+          // uses (close + reconnect with resume:true, no re-greeting), but surface
+          // a "reconnecting" status so the UI shows the transient recovery modal;
+          // handleSessionReady restores "connected" on success, clearing it. The
+          // goAwayReconnectInFlight guard coalesces this with any concurrent
+          // GoAway reconnect so we never fire two.
+          console.log('[WebFormConnection] [warn] Gemini session dropped (spontaneous); reconnecting');
+          this.handleGoAwayReconnect(/* surfaceReconnectingStatus */ true);
+          break;
+
         case "validation_result":
           // B5 (bd polyglot-pdf-jnjj.17): the cheap-model validator's verdict for the
           // just-emitted section/form boundary (validation-delegation.md contract 1).
@@ -2520,7 +2535,7 @@ export class WebFormConnection {
    * reconnect), or a GoAway reconnect already in flight. Also skipped when there
    * is no open socket / no stored URL to reconnect to.
    */
-  private handleGoAwayReconnect(): void {
+  private handleGoAwayReconnect(surfaceReconnectingStatus: boolean = false): void {
     if (this.goAwayReconnectInFlight) {
       // A previous GoAway is already driving a reconnect -- coalesce.
       return;
@@ -2547,6 +2562,16 @@ export class WebFormConnection {
 
     console.log('[WebFormConnection] [wave] GoAway policy: pre-emptive silent reconnect');
     this.goAwayReconnectInFlight = true;
+
+    // Spontaneous-drop case (bd polyglot-pdf-ppfy): unlike a GoAway (a clean
+    // server-lifecycle reset the user should not see), a 1011 drop is a real
+    // interruption -- surface "reconnecting" so the UI can show the transient
+    // "having issues connecting" modal. handleSessionReady restores "connected"
+    // on a successful reopen, which clears the modal; a failed reconnect falls
+    // through to attemptReconnect / reconnect_failed below.
+    if (surfaceReconnectingStatus) {
+      this.setStatus("reconnecting", "handleSessionDroppedReconnect");
+    }
 
     // Close the current socket WITHOUT the disconnect() side effects (which would
     // set status "disconnected" and, more importantly, is meant for intentional

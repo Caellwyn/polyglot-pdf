@@ -2264,6 +2264,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				onReconnect={() => { setReconnectModalDismissed(false); handleConnect() }}
 				onCancel={() => setReconnectModalDismissed(true)}
 			/>
+
+			{/* Transient "reconnecting" notice (bd polyglot-pdf-ppfy): shown while the
+			    app is auto-reconnecting after a SPONTANEOUS AI-session drop (e.g. a
+			    Gemini 1011 the backend forwards as gemini_session_dropped, which
+			    drives the reconnect and sets status 'reconnecting'). Passive, no
+			    buttons; it auto-clears when the reconnect succeeds (status ->
+			    connected) or the terminal modal above takes over on give-up
+			    (reconnect_failed). onReconnect is unused in this variant but required
+			    by the prop shape. */}
+			<ConnectionTimeoutModal
+				variant="reconnecting"
+				isOpen={status.toLowerCase() === 'reconnecting'}
+				selectedLanguage={selectedLanguage}
+				onReconnect={() => {}}
+			/>
 		</>
 	)
 }

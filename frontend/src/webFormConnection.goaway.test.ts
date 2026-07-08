@@ -318,6 +318,83 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     })
   })
 
+  // Spontaneous-drop coverage (bd polyglot-pdf-ppfy): a backend
+  // {type:"gemini_session_dropped"} (a 1011 the backend detected behind the still-
+  // open WS) drives the SAME pre-emptive reconnect as a GoAway, but surfaces a
+  // "reconnecting" status so the UI can show the transient recovery modal.
+  describe('spontaneous drop reconnect (bd polyglot-pdf-ppfy)', () => {
+    it('reconnects on gemini_session_dropped and surfaces "reconnecting" status', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      const first = await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      expect(conn.getStatus()).toBe('connected')
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+
+      // A new socket was created and the old one closed (same mechanism as GoAway).
+      expect(MockWebSocket.instances.length).toBe(2)
+      expect(first.readyState).toBe(MockWebSocket.CLOSED)
+      // UNLIKE GoAway (which stays "connected"), a spontaneous drop surfaces
+      // "reconnecting" so the transient modal shows during recovery.
+      expect(conn.getStatus()).toBe('reconnecting')
+    })
+
+    it('restores "connected" when the reconnect completes (clears the modal)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.getStatus()).toBe('reconnecting')
+
+      // Completing the reopen (open + session_ready) restores "connected", which is
+      // what flips the reconnecting modal off in the overlay.
+      const reconnected = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+      reconnected.open()
+      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      expect(conn.getStatus()).toBe('connected')
+    })
+
+    it('reconnects with resume:true on a spontaneous drop (no re-greeting)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      let handshake: any = null
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      const reconnected = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+      reconnected.send = (data: any) => { handshake = JSON.parse(data) }
+      reconnected.open()
+
+      expect(handshake).toBeTruthy()
+      expect(handshake.resume).toBe(true)
+    })
+
+    it('coalesces with an in-flight GoAway reconnect (no double reconnect)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      // A GoAway starts a reconnect; a spontaneous-drop message arriving before it
+      // completes must coalesce (the shared goAwayReconnectInFlight guard).
+      await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(MockWebSocket.instances.length).toBe(2) // one reconnect, not two
+    })
+
+    it('does NOT reconnect on a spontaneous drop after an idle timeout', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      await (conn as any).handleMessage(msg({ type: 'idle_timeout' }))
+      const countAfterIdle = MockWebSocket.instances.length
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(MockWebSocket.instances.length).toBe(countAfterIdle)
+    })
+  })
+
   // Async-token-gap coverage (Opus fresh-eyes Finding 3): in production getToken is
   // always registered, so the reconnect connect() suspends on `await getToken()`
   // with this.ws already nulled. If the OLD (closing) socket's onclose lands during

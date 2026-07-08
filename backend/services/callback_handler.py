@@ -327,6 +327,26 @@ class CallbackHandler:
                 _log.warning("websocket_go_away_send_failed",
                              error=str(e), session_id=self._session_id)
 
+    async def on_session_dropped(self) -> None:
+        """Forward a spontaneous Gemini drop to the client (bd polyglot-pdf-ppfy).
+
+        Unlike GoAway (a pre-close warning), this fires AFTER the Gemini session
+        has already died unexpectedly (e.g. a 1011 "Input data processing failed").
+        The client-facing WS is still open behind a now-dead Gemini, so without this
+        relay the client freezes on "connected" and the user's audio is silently
+        dropped. Relaying a distinct `gemini_session_dropped` message lets the client
+        drive its existing reconnect path. The backend stores nothing (stateless
+        invariant); errors are swallowed (the WS may already be closing from an idle
+        timeout race) so a failed forward never crashes teardown -- same discipline
+        as on_go_away.
+        """
+        if self._websocket is not None:
+            try:
+                await self._websocket.send_json({"type": "gemini_session_dropped"})
+            except Exception as e:
+                _log.warning("websocket_session_dropped_send_failed",
+                             error=str(e), session_id=self._session_id)
+
     async def on_tool_call(
         self,
         tool_name: str,

@@ -152,6 +152,18 @@ _COMPRESSION_TRIGGER_MIN_TOKENS = 5000
 _COMPRESSION_TRIGGER_MAX_TOKENS = 128_000
 
 
+# WS close codes that count as a SPONTANEOUS drop worth forwarding to the client
+# so it can reconnect (bd polyglot-pdf-ppfy). 1011 is the intermittent Gemini 2.5
+# native-audio "Input data processing failed" that motivated this; 1006 is an
+# abnormal closure with no close frame (also a genuine unexpected drop). A NORMAL
+# close (1000) and a GoAway-driven server-lifecycle close are deliberately EXCLUDED
+# -- those are routine and the client already handles a GoAway via its own
+# pre-emptive reconnect, so re-forwarding them would mislabel a normal reset as an
+# AI failure. Same catch block sees "normal end, GoAway expiry, 1011" alike, so the
+# code -- not merely "an exception was caught" -- is what distinguishes the case.
+_SPONTANEOUS_DROP_CLOSE_CODES = frozenset({1011, 1006})
+
+
 def estimate_si_floor_tokens(
     system_instruction: Optional[str],
     function_declarations: Optional[List[Dict[str, Any]]],
@@ -328,6 +340,13 @@ class LiveAIGemini(ILiveAI):
         # backend only DETECTS + FORWARDS -- the client owns the reconnect (it owns
         # the stateless reconnect path), so no server-side session state is added.
         self._on_go_away = None
+        # Fired when the Gemini session ends by a SPONTANEOUS drop (e.g. a 1011
+        # "Input data processing failed" close) -- NOT an intentional finalize and
+        # NOT a section-switch shutdown (bd polyglot-pdf-ppfy). Without this the
+        # client-facing WS stays open behind a dead Gemini and the user freezes on
+        # "connected"; the callback lets the backend forward the drop so the client
+        # can reconnect. Like on_go_away, the backend only DETECTS + FORWARDS.
+        self._on_session_dropped = None
         # Fired when the agent's turn is DONE so the thinking indicator's processing
         # state clears (bd polyglot-pdf-wpw.5). Covers the turn-end cases the
         # first-audio clear misses: a barge-in/interruption, AND a server
@@ -386,6 +405,19 @@ class LiveAIGemini(ILiveAI):
         # down first. _closed_event is created per-session in set_callbacks.
         self._close_after_flush: bool = False
         self._closed_event: Optional[asyncio.Event] = None
+        # Spontaneous-drop detection (bd polyglot-pdf-ppfy). Set at the
+        # ConnectionClosed/APIError catch in the receive loop so the bg-task
+        # done-callback can tell a real error-drop (1011) apart from a clean end (a
+        # no-events break leaves these None) OR a benign server-lifecycle close
+        # (a normal 1000 / a GoAway-expiry close, which the client already handles
+        # via its own reconnect and MUST NOT be re-forwarded as a "dropped" event).
+        # _spontaneous_drop_code holds the WS close code so the predicate can gate
+        # on the actual failure mode. Reset per-session in _run_session_loop.
+        # _dropped_notified latches the notify so a drop is forwarded at most once
+        # per session; reset per-session in set_callbacks.
+        self._spontaneous_drop_exc: Optional[BaseException] = None
+        self._spontaneous_drop_code: Optional[int] = None
+        self._dropped_notified: bool = False
 
         # Session readiness flag and message queue for race condition handling
         self._session_ready: bool = False  # True when Gemini session is ready to receive messages
@@ -568,6 +600,7 @@ class LiveAIGemini(ILiveAI):
         on_audio=None,
         on_tool_call=None,
         on_go_away=None,
+        on_session_dropped=None,
         on_user_activity=None,
         on_processing_done=None,
         system_instruction: str | None = None,
@@ -590,6 +623,7 @@ class LiveAIGemini(ILiveAI):
         self._on_audio = on_audio
         self._on_tool_call = on_tool_call
         self._on_go_away = on_go_away
+        self._on_session_dropped = on_session_dropped
         self._on_user_activity = on_user_activity
         # bd polyglot-pdf-wpw.5: fired when the agent turn is done (interrupt or
         # turn_complete) so the thinking indicator clears even with no output audio.
@@ -613,6 +647,10 @@ class LiveAIGemini(ILiveAI):
         # belongs to the new task -- begin_graceful_shutdown returns THIS instance,
         # so a swap task always awaits the event for the session it is replacing.
         self._close_after_flush = False
+        # Reset the spontaneous-drop notify latch per (re)connect so a NEW session
+        # that later drops is forwarded once, independent of a prior session's drop
+        # (bd polyglot-pdf-ppfy).
+        self._dropped_notified = False
 
         # Start background task if not already running
         if self._bg_task is None or self._bg_task.done():
@@ -630,6 +668,12 @@ class LiveAIGemini(ILiveAI):
             # the ~1200-line loop. Bind THIS event (not self._closed_event) so a
             # later session's callback can't race-set the wrong event. The
             # done-callback runs on the loop thread after the task finishes.
+            #
+            # NOTE: the spontaneous-drop notify (bd polyglot-pdf-ppfy) is fired from
+            # INSIDE _run_session_loop at the ConnectionClosed/APIError catch, NOT
+            # here -- doing it in the loop's own context is race-free (a done-callback
+            # reading shared drop markers could be beaten by a restart resetting them;
+            # bd polyglot-pdf-bcrn). This callback keeps only its original job.
             self._bg_task.add_done_callback(lambda _t, _ev=closed_event: _ev.set())
             # Removed verbose logging - session start logged below
         else:
@@ -640,6 +684,41 @@ class LiveAIGemini(ILiveAI):
     def is_session_active(self) -> bool:
         """Check if Gemini session is currently active (has running background task)."""
         return self._bg_task is not None and not self._bg_task.done()
+
+    def _was_spontaneous_drop(self) -> bool:
+        """True only when the session ended by a real, unexpected ERROR drop.
+
+        A spontaneous drop is a ConnectionClosed/APIError caught in the receive
+        loop whose WS close code is in _SPONTANEOUS_DROP_CLOSE_CODES (1011/1006) --
+        NOT a normal close and NOT a GoAway-driven server-lifecycle close (both of
+        which reach the SAME catch block but are routine; the client handles a
+        GoAway via its own reconnect, so re-forwarding those would mislabel a
+        normal reset as an AI failure). It must also be NOT an intentional
+        finalize() and NOT a section-switch graceful shutdown. The two boolean
+        guards are belt-and-suspenders: the graceful break paths exit BEFORE the
+        drop catch, so the drop marker normally stays None on those paths, but a
+        drop racing in during an already-requested shutdown must still not fire
+        (bd polyglot-pdf-ppfy).
+        """
+        return (
+            self._spontaneous_drop_exc is not None
+            and self._spontaneous_drop_code in _SPONTANEOUS_DROP_CLOSE_CODES
+            and not self._intentional_shutdown
+            and not self._close_after_flush
+        )
+
+    async def _safe_notify_dropped(self) -> None:
+        """Await the on_session_dropped callback, swallowing errors (bd ppfy).
+
+        Mirrors the on_go_away forward discipline: the backend only DETECTS +
+        FORWARDS, and a failed forward (e.g. the client WS already closed) must
+        never crash the session teardown.
+        """
+        try:
+            if self._on_session_dropped is not None:
+                await self._on_session_dropped()
+        except Exception:
+            self._log.exception("on_session_dropped_callback_error")
 
     async def stream_audio(self, audio_chunk: bytes):
         """Enqueue an audio chunk to be sent to the live session.
@@ -1350,6 +1429,21 @@ class LiveAIGemini(ILiveAI):
                         f.write("=" * 80 + "\n")
                 except Exception as e:
                     self._log.warn("failed_to_write_debug_file", error=str(e))
+
+        # Turn off model "thinking" tokens (bd polyglot-pdf-3v5m). The form-fill
+        # turn loop needs no chain-of-thought, and thinking tokens bill at the
+        # output rate. Send the 2.5-family `thinking_budget=0` form ONLY to a model
+        # that is positively identified as 2.5 (an explicit allowlist, not "!= 3.1")
+        # -- model_family() is a PRICING fallback that maps any unrecognized string
+        # to "2.5", so gating on `!= "3.1"` would send `thinking_budget` to an
+        # unknown/typo'd model that may not accept it (fresh-eyes). 3.1 uses a
+        # different `thinking_level` field and is left at its default. Dict form
+        # mirrors the other snake_case config keys the SDK aliases. Effect on
+        # native-audio Live is unverified upstream
+        # (docs/genai_docs/live-api-best-practices.md), so this is safe-if-ignored.
+        # Gated by DISABLE_MODEL_THINKING (default on).
+        if settings.DISABLE_MODEL_THINKING and model_family(self._model_name) == "2.5":
+            config["thinking_config"] = {"thinking_budget": 0}
         return config
 
     async def _run_session_loop(self):
@@ -1378,6 +1472,10 @@ class LiveAIGemini(ILiveAI):
         self._timing_last_activity_end = None
         self._timing_first_inbound_audio = None
         self._timing_audio_dropped = 0
+        # Reset spontaneous-drop markers per session so a clean end this time is not
+        # misread as a drop from a prior session (bd polyglot-pdf-ppfy).
+        self._spontaneous_drop_exc = None
+        self._spontaneous_drop_code = None
 
         config = self._build_live_config(settings)
 
@@ -2460,6 +2558,15 @@ class LiveAIGemini(ILiveAI):
                         # takes this graceful break path, not the unexpected-
                         # error re-raise below. bd polyglot-pdf-x52p
                         except (ConnectionClosed, genai_errors.APIError) as exc:
+                            # Read the WS close code (bd polyglot-pdf-ppfy). A raw
+                            # ConnectionClosed exposes it as .rcvd.code (its top-level
+                            # .code is deprecated in websockets 13.1+), so read .rcvd
+                            # FIRST; an APIError (session.receive() re-raises websocket
+                            # closures as APIError with the WS close code) carries it
+                            # as .code.
+                            close_code = getattr(getattr(exc, "rcvd", None), "code", None)
+                            if close_code is None:
+                                close_code = getattr(exc, "code", None)
                             print(f"\n{'='*80}")
                             print(f"[error] GEMINI CONNECTION DROPPED")
                             print(f"{'='*80}")
@@ -2470,8 +2577,31 @@ class LiveAIGemini(ILiveAI):
 
                             self._log.error("gemini_session_connection_closed",
                                           reason=str(exc),
+                                          close_code=close_code,
                                           event_count=event_count,
                                           intentional_shutdown=self._intentional_shutdown)
+                            # Record the drop + its close code (bd polyglot-pdf-ppfy)
+                            # so _was_spontaneous_drop() can tell a real error-drop
+                            # (1011/1006) apart from a clean no-events end or a benign
+                            # normal/GoAway close, and forward ONLY a genuine drop.
+                            self._spontaneous_drop_exc = exc
+                            self._spontaneous_drop_code = close_code
+                            # Forward the drop to the client HERE, inside the loop's
+                            # own execution -- this is unambiguously THIS session's
+                            # context and can await directly. Firing here (rather than
+                            # from the bg-task done-callback) closes a race where a
+                            # restart_gemini_session() slipping into the
+                            # task-done-but-callback-not-yet-fired window resets the
+                            # drop markers before a done-callback could read them (bd
+                            # polyglot-pdf-bcrn, caught pre-PR). The _dropped_notified
+                            # latch + _was_spontaneous_drop() guards still apply.
+                            if (
+                                self._on_session_dropped is not None
+                                and not self._dropped_notified
+                                and self._was_spontaneous_drop()
+                            ):
+                                self._dropped_notified = True
+                                await self._safe_notify_dropped()
                             break
 
                         # Exit the while-loop on a cooperative graceful shutdown (the

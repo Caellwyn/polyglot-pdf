@@ -1686,3 +1686,291 @@ def test_build_live_config_derived_floor_includes_real_tools():
     assert comp["trigger_tokens"] > comp["sliding_window"]["target_tokens"]
 
 
+# ---------------------------------------------------------------------------
+# Spontaneous-drop detection + forward (bd polyglot-pdf-ppfy)
+# ---------------------------------------------------------------------------
+
+class _ClosingSession:
+    """Fake session whose receive() raises a WS-close error (e.g. a 1011)."""
+
+    def __init__(self, exc):
+        self._exc = exc
+
+    async def send_realtime_input(self, **kwargs):
+        return None
+
+    async def send_tool_response(self, **kwargs):
+        return None
+
+    async def send_client_content(self, **kwargs):
+        return None
+
+    def receive(self):
+        exc = self._exc
+
+        class _Gen:
+            def __aiter__(self_inner):
+                return self_inner
+
+            async def __anext__(self_inner):
+                raise exc
+
+        return _Gen()
+
+
+def _make_1011():
+    from google.genai import errors as genai_errors
+    return genai_errors.APIError(1011, {"error": {"message": "Input data processing failed"}})
+
+
+def _make_close(code):
+    """A ConnectionClosed with a specific WS close code (e.g. 1000 normal / 1001
+    going-away) -- reaches the same receive-loop catch as a 1011 but must NOT be
+    forwarded as a spontaneous drop."""
+    from websockets.exceptions import ConnectionClosed
+    from websockets.frames import Close
+    rcvd = Close(code, "")
+    try:
+        return ConnectionClosed(rcvd, None)
+    except TypeError:
+        # Older websockets signature: ConnectionClosed(code, reason)
+        exc = ConnectionClosed(code, "")
+        return exc
+
+
+def test_was_spontaneous_drop_predicate_matrix():
+    """_was_spontaneous_drop is True ONLY for a real error-drop (1011/1006), never
+    for a deliberate close, a clean end, or a benign normal/GoAway close (bd
+    polyglot-pdf-ppfy)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    a = LiveAIGemini()
+
+    # No drop recorded -> False (clean no-events end).
+    a._spontaneous_drop_exc = None
+    a._spontaneous_drop_code = None
+    a._intentional_shutdown = False
+    a._close_after_flush = False
+    assert a._was_spontaneous_drop() is False
+
+    # A recorded 1011 drop with no shutdown flags -> True (the spontaneous case).
+    a._spontaneous_drop_exc = _make_1011()
+    a._spontaneous_drop_code = 1011
+    assert a._was_spontaneous_drop() is True
+
+    # A BENIGN close (normal 1000 or a GoAway-driven close) reaches the same catch
+    # but must NOT be forwarded as a drop -- the code gate excludes it.
+    a._spontaneous_drop_code = 1000
+    assert a._was_spontaneous_drop() is False
+    a._spontaneous_drop_code = 1001  # GoAway-style going-away
+    assert a._was_spontaneous_drop() is False
+    # A missing code (e.g. a non-close APIError) is likewise not a drop.
+    a._spontaneous_drop_code = None
+    assert a._was_spontaneous_drop() is False
+
+    # 1006 (abnormal closure, no frame) IS a genuine drop.
+    a._spontaneous_drop_code = 1006
+    assert a._was_spontaneous_drop() is True
+
+    # A drop that races an intentional finalize -> not forwarded.
+    a._spontaneous_drop_code = 1011
+    a._intentional_shutdown = True
+    assert a._was_spontaneous_drop() is False
+    a._intentional_shutdown = False
+
+    # A drop during a section-switch graceful shutdown -> not forwarded.
+    a._close_after_flush = True
+    assert a._was_spontaneous_drop() is False
+
+
+@pytest.mark.asyncio
+async def test_safe_notify_dropped_invokes_callback():
+    """_safe_notify_dropped awaits the registered callback and swallows errors."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    a = LiveAIGemini()
+    a._log = MagicMock()
+
+    cb = AsyncMock()
+    a._on_session_dropped = cb
+    await a._safe_notify_dropped()
+    cb.assert_awaited_once()
+
+    # A raising callback must not propagate (teardown must never crash).
+    a._on_session_dropped = AsyncMock(side_effect=RuntimeError("boom"))
+    await a._safe_notify_dropped()  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_run_session_loop_records_spontaneous_drop_on_1011():
+    """A 1011 close in the receive loop is recorded on _spontaneous_drop_exc so the
+    done-callback can forward it (bd polyglot-pdf-ppfy)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    session = _ClosingSession(_make_1011())
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+    adapter._audio_queue = asyncio.Queue()
+    adapter._text_queue = asyncio.Queue()
+
+    await asyncio.wait_for(adapter._run_session_loop(), timeout=2.0)
+
+    # The drop was captured, and (no shutdown flags set) the predicate says forward.
+    assert adapter._spontaneous_drop_exc is not None
+    assert adapter._was_spontaneous_drop() is True
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_spontaneous_drop_fires_on_session_dropped_via_bg_task():
+    """End-to-end: a 1011 through the real bg-task path fires on_session_dropped
+    exactly once (bd polyglot-pdf-ppfy)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    session = _ClosingSession(_make_1011())
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    dropped = AsyncMock()
+    adapter.set_callbacks(on_session_dropped=dropped)
+
+    # The notify fires IN-LOOP at the drop catch (not from a done-callback), so it
+    # has already completed by the time the bg task finishes -- awaiting the task is
+    # enough. The extra sleeps are belt-and-suspenders and not load-bearing.
+    await asyncio.wait_for(adapter._bg_task, timeout=2.0)
+    await asyncio.sleep(0)
+
+    dropped.assert_awaited_once()
+    assert adapter._dropped_notified is True
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_no_drop_notify_on_clean_no_events_end():
+    """A clean session end (no drop) must NOT fire on_session_dropped."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(_DummySession())  # empty receive
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    dropped = AsyncMock()
+    adapter.set_callbacks(on_session_dropped=dropped)
+
+    await asyncio.wait_for(adapter._bg_task, timeout=2.0)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    dropped.assert_not_awaited()
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_drop_notify_fires_inside_loop_before_task_completes():
+    """The drop notify fires from INSIDE _run_session_loop (at the catch), so it has
+    already run by the time the bg-task completes -- immune to a restart resetting
+    the drop markers in the task-done-but-callback-not-fired window (bd
+    polyglot-pdf-bcrn / ppfy)."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    session = _ClosingSession(_make_1011())
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    dropped = AsyncMock()
+    adapter.set_callbacks(on_session_dropped=dropped)
+
+    # Await ONLY the task. If the notify were scheduled on a separate done-callback
+    # task, it would NOT have run yet at this point; because it fires in-loop, it
+    # has. No extra event-loop yields needed.
+    await asyncio.wait_for(adapter._bg_task, timeout=2.0)
+    dropped.assert_awaited_once()
+    await adapter.finalize()
+
+
+@pytest.mark.asyncio
+async def test_no_drop_notify_on_benign_normal_close():
+    """A normal (1000) close reaches the drop catch but is NOT a spontaneous drop --
+    only 1011/1006 forward (bd polyglot-pdf-ppfy). Guards against mislabeling a
+    routine/GoAway close as an AI failure."""
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    adapter = LiveAIGemini()
+    adapter._log = MagicMock()
+
+    session = _ClosingSession(_make_close(1000))
+    fake_live = MagicMock()
+    fake_live.connect.return_value = _DummyContextManager(session)
+    adapter._client = SimpleNamespace(aio=SimpleNamespace(live=fake_live))
+
+    dropped = AsyncMock()
+    adapter.set_callbacks(on_session_dropped=dropped)
+
+    await asyncio.wait_for(adapter._bg_task, timeout=2.0)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    # The close was recorded, but its code (1000) is not a drop code -> no notify.
+    assert adapter._spontaneous_drop_code == 1000
+    assert adapter._was_spontaneous_drop() is False
+    dropped.assert_not_awaited()
+    await adapter.finalize()
+
+
+# ---------------------------------------------------------------------------
+# thinking_config gating (bd polyglot-pdf-3v5m): thinking_budget=0 for 2.5-family
+# ONLY, gated by DISABLE_MODEL_THINKING, never sent to 3.1 or an unknown model.
+# ---------------------------------------------------------------------------
+
+def _build_cfg(model_name, disable_thinking):
+    from backend.adapters.live_ai_gemini import LiveAIGemini
+    from backend.config import Settings
+    a = LiveAIGemini(model=model_name)
+    a._log = MagicMock()
+    a._system_instruction = "test SI"
+    s = Settings()
+    s.DISABLE_MODEL_THINKING = disable_thinking
+    return a._build_live_config(s)
+
+
+def test_thinking_config_present_for_2p5_when_enabled():
+    cfg = _build_cfg("gemini-live-2.5-flash-native-audio", disable_thinking=True)
+    assert cfg.get("thinking_config") == {"thinking_budget": 0}
+
+
+def test_thinking_config_absent_for_3p1():
+    # 3.1 uses a different thinking_level field; the 2.5-only thinking_budget form
+    # must NOT be sent to it.
+    cfg = _build_cfg("gemini-3.1-flash-live-preview", disable_thinking=True)
+    assert "thinking_config" not in cfg
+
+
+def test_thinking_config_absent_when_flag_off():
+    cfg = _build_cfg("gemini-live-2.5-flash-native-audio", disable_thinking=False)
+    assert "thinking_config" not in cfg
+
+
+def test_thinking_config_gate_documents_model_family_fallback():
+    # HONEST NOTE (fresh-eyes finding 4): the gate is `model_family(...) == "2.5"`,
+    # which reads as an explicit 2.5 allowlist. But model_family() is a PRICING
+    # helper that maps ANY unrecognized string to the default family "2.5", so an
+    # unknown model still matches and still gets thinking_budget=0. The change from
+    # `!= "3.1"` to `== "2.5"` is a clarity/intent improvement, NOT a behavior fix
+    # for unknown models -- a true capability gate would need a distinct "unknown"
+    # from model_family, which is out of scope (it's a widely-used pricing fn).
+    # Practical risk is ~nil: thinking_config is safe-if-ignored on native-audio.
+    # This test PINS that fallback so a future model_family change that stops
+    # defaulting to "2.5" is caught here rather than silently changing the gate.
+    from backend.config import model_family
+    assert model_family("totally-made-up-model-xyz") == "2.5"
+    cfg = _build_cfg("totally-made-up-model-xyz", disable_thinking=True)
+    assert cfg.get("thinking_config") == {"thinking_budget": 0}
+
