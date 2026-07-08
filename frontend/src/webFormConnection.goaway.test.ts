@@ -598,6 +598,36 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
         vi.advanceTimersByTime(20000)
         expect(conn.getStatus()).toBe('reconnect_failed')
         expect(conn.isDroppedReconnect()).toBe(false)
+        // The hung socket must be closed+nulled (bd yigb, fresh-eyes) so it is not
+        // left OPEN behind a terminal reconnect_failed.
+        expect((conn as any).ws).toBeNull()
+      })
+
+      // bd polyglot-pdf-yigb (fresh-eyes): after a watchdog-triggered reconnect_failed
+      // on a HUNG-but-open socket, the terminal modal's "Reconnect" (connect()) must
+      // actually open a FRESH socket -- not silently no-op because the old socket was
+      // still readyState===OPEN.
+      it('the Reconnect button opens a fresh socket after a watchdog-triggered reconnect_failed', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        // Drop -> pre-emptive reconnect opens socket #2 (via handleOpen re-arm).
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        MockWebSocket.instances[1].open() // socket opens but no session_ready (hang)
+        const countAtHang = MockWebSocket.instances.length
+
+        // Watchdog fires -> reconnect_failed, and the hung socket is closed+nulled.
+        vi.advanceTimersByTime(20000)
+        expect(conn.getStatus()).toBe('reconnect_failed')
+        expect((conn as any).ws).toBeNull()
+
+        // The user's Reconnect click -> connect() must open a NEW socket (not a
+        // no-op on a still-OPEN ws).
+        conn.connect('wss://example/ws/fill')
+        expect(MockWebSocket.instances.length).toBe(countAtHang + 1)
       })
     })
   })

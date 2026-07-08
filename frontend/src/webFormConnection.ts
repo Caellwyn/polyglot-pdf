@@ -3226,6 +3226,18 @@ export class WebFormConnection {
       ) {
         console.error('[WebFormConnection] Spontaneous-drop reconnect timed out (no session_ready) -- surfacing reconnect_failed');
         this.goAwayReconnectInFlight = false;
+        // The hung socket is still OPEN (the backend just never sent session_ready
+        // -- the socket itself is healthy), so it MUST be closed+nulled before
+        // surfacing reconnect_failed (bd polyglot-pdf-yigb, fresh-eyes). Otherwise:
+        // (a) the terminal-modal "Reconnect" button -> connect() early-returns on
+        // this.ws.readyState===OPEN, a silent no-op dead end; and (b) if the socket
+        // later closes on its own, handleClose would silently fall back to
+        // attemptReconnect, undoing the terminal state. Nulling first makes connect()
+        // open a fresh socket and stops handleClose from auto-reconnecting.
+        if (this.ws) {
+          try { this.ws.close(); } catch { /* already closing */ }
+          this.ws = null;
+        }
         this.setStatus('reconnect_failed', 'droppedReconnectWatchdog:timeout');
       }
     }, WebFormConnection.DROPPED_RECONNECT_TIMEOUT_MS);
