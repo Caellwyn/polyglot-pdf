@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-vxwj-view-mode-toggle-shell.md](../journal/entries/2026-07-06-bd-vxwj-view-mode-toggle-shell.md) for closeout details.*
+*Last updated: 2026-07-07. See [../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md](../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -128,14 +128,15 @@ fail-open = not required). The editor preview mirrors both in
 require, and normalize sections) pins the two evaluators against each other
 in CI.
 Membership semantics: the v2 operators `includes`/`not_includes` test whether
-an option slug is in a checkbox-group trigger's selected set (`string[]`, a
-voice-path comma string, or a bare scalar single selection). The legacy
-`equals`/`not_equals` on a group trigger ALSO compare by membership — the
-vq4m hack, quarantined in the atomic leaf evaluator until the P6.2
-strictness flip; a strict `===`/`!==` against an array never matches, which
-previously left checkbox-group-gated dependents permanently hidden/shown
-(bd polyglot-pdf-vq4m). Scalar (radio/select/text) triggers use strict
-identity.
+an option slug is in a checkbox-group trigger's selected set (a `string[]`; the
+voice-path comma string is converted to an array at the single ingress boundary,
+`applyAiValueWithValidation` in webFormConnection.ts, BEFORE storage, so the
+evaluator only ever sees an array or a bare scalar single selection).
+`equals`/`not_equals` are PURE scalar comparisons (used on radio/select/text
+triggers). The old vq4m equals-means-membership hack, the comma-split tolerance,
+and the `group_kind` gate were all DELETED at the P6.2 strictness flip
+(bd polyglot-pdf-h76m.16); a checkbox group is now identified by its TYPE (the v2
+`checkbox_group`, or a legacy `checkbox` carrying options[]), never `group_kind`.
 The voice locked-field path (`utils/conditionalFieldCheck.ts`) explains
 composite gates by listing EVERY atom's trigger in `required_fields` (the
 locked-reason wording names the first trigger, then counts the rest);
@@ -147,9 +148,12 @@ A field with `unlock_method === "flip_readonly_bit"` becomes **editable even whe
 `FieldRenderer` reads the unlock flag from **either** `conditional_behavior`
 (canonical) **or** `conditional_logic` (a legacy alias of the same
 `ConditionalBehavior` type, still emitted by some generated form-kit schemas,
-e.g. i-90). The richer `controls_fields` / `ConditionalControl`
-(shows/hides/locks/unlocks/makes_required/makes_optional) supersedes the deprecated
-`conditional_fields`.
+e.g. i-90). The trigger-side `controls_fields` / `ConditionalControl` and the
+legacy `conditional_fields` were DELETED at the P6.2 strictness flip
+(bd polyglot-pdf-h76m.16): v2 has NO trigger-side conditional logic. Every
+dependency is expressed target-side as `show_if` (visibility) or `require_if`
+(required-ness) -- the migration mirrored the old `shows`/`makes_required` edges
+into those (merging with `any_of` when several triggers gate one target).
 
 ## Backend half
 
