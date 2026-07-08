@@ -556,6 +556,49 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
         // Tear down so the pending backoff timer does not fire a dangling reconnect.
         conn.disconnect()
       })
+
+      // bd polyglot-pdf-yigb (fresh-eyes): the watchdog is re-armed on EVERY reopen
+      // (handleOpen), so a hang AFTER a backoff-driven reopen still escalates -- it
+      // is not left uncovered by the one-shot initial arm. This drives the REAL
+      // watchdog setTimeout callback (not a re-derived condition) end to end.
+      it('escalates to reconnect_failed if a backoff-driven reopen then hangs', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        // Drop -> pre-emptive reconnect (socket #2), initial watchdog armed.
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // Pre-emptive socket FAILS -> attemptReconnect schedules a backoff timer.
+        MockWebSocket.instances[1].error()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(conn.getStatus()).toBe('reconnecting')
+
+        // Fire the backoff timer (1000ms): attemptReconnect -> connect() opens
+        // socket #3. Open it -> handleOpen re-arms the watchdog for THIS socket.
+        vi.advanceTimersByTime(1000)
+        // connect() is async (may await a token); flush microtasks, then open the
+        // newest socket.
+        await Promise.resolve()
+        await Promise.resolve()
+        const s3 = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+        s3.open()
+        // After a backoff reopen, connect() moved status to "connecting" (not
+        // "reconnecting"); the drop marker is still set and the watchdog re-armed.
+        expect(conn.getStatus()).toBe('connecting')
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // The backoff socket opened but the backend NEVER sends session_ready (a
+        // hang). The re-armed watchdog (reconnectTimer is null now -- the backoff
+        // fired) must escalate to reconnect_failed rather than stick forever.
+        vi.advanceTimersByTime(20000)
+        expect(conn.getStatus()).toBe('reconnect_failed')
+        expect(conn.isDroppedReconnect()).toBe(false)
+      })
     })
   })
 
