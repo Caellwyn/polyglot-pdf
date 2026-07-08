@@ -2267,15 +2267,21 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 			{/* Transient "reconnecting" notice (bd polyglot-pdf-ppfy): shown while the
 			    app is auto-reconnecting after a SPONTANEOUS AI-session drop (e.g. a
-			    Gemini 1011 the backend forwards as gemini_session_dropped, which
-			    drives the reconnect and sets status 'reconnecting'). Passive, no
-			    buttons; it auto-clears when the reconnect succeeds (status ->
+			    Gemini 1011 the backend forwards as gemini_session_dropped). Passive,
+			    no buttons; auto-clears when the reconnect succeeds (status ->
 			    connected) or the terminal modal above takes over on give-up
 			    (reconnect_failed). onReconnect is unused in this variant but required
-			    by the prop shape. */}
+			    by the prop shape.
+
+			    Gated on BOTH status==='reconnecting' AND isDroppedReconnect(): the
+			    "reconnecting" status is ALSO set by an ordinary WS blip's
+			    attemptReconnect (network hiccup, Cloud Run reset), which has nothing
+			    to do with the AI -- those must stay silent, not pop a "trouble
+			    reaching the AI assistant" modal (fresh-eyes). isDroppedReconnect() is
+			    true only when the reconnect was driven by a gemini_session_dropped. */}
 			<ConnectionTimeoutModal
 				variant="reconnecting"
-				isOpen={status.toLowerCase() === 'reconnecting'}
+				isOpen={status.toLowerCase() === 'reconnecting' && (connectionManager?.isDroppedReconnect?.() ?? false)}
 				selectedLanguage={selectedLanguage}
 				onReconnect={() => {}}
 			/>

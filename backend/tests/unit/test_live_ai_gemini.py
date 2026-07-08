@@ -1755,7 +1755,14 @@ def test_was_spontaneous_drop_predicate_matrix():
     # A recorded 1011 drop with no shutdown flags -> True (the spontaneous case).
     a._spontaneous_drop_exc = _make_1011()
     a._spontaneous_drop_code = 1011
+    a._go_away_seen = False
     assert a._was_spontaneous_drop() is True
+
+    # A 1011-coded close AFTER a GoAway is a routine server-lifecycle reset the
+    # client already reconnects on -> NOT forwarded (even though the code matches).
+    a._go_away_seen = True
+    assert a._was_spontaneous_drop() is False
+    a._go_away_seen = False
 
     # A BENIGN close (normal 1000 or a GoAway-driven close) reaches the same catch
     # but must NOT be forwarded as a drop -- the code gate excludes it.
@@ -1926,8 +1933,9 @@ async def test_no_drop_notify_on_benign_normal_close():
 
 
 # ---------------------------------------------------------------------------
-# thinking_config gating (bd polyglot-pdf-3v5m): thinking_budget=0 for 2.5-family
-# ONLY, gated by DISABLE_MODEL_THINKING, never sent to 3.1 or an unknown model.
+# thinking_config gating (shipped with bd polyglot-pdf-ppfy; NOT the 3v5m failover):
+# thinking_budget=0 for 2.5-family ONLY, gated by DISABLE_MODEL_THINKING, never
+# sent to 3.1 or an unknown model.
 # ---------------------------------------------------------------------------
 
 def _build_cfg(model_name, disable_thinking):

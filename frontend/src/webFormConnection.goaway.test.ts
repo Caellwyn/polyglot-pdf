@@ -393,6 +393,99 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
       expect(MockWebSocket.instances.length).toBe(countAfterIdle)
     })
+
+    // fresh-eyes finding 1: the "reconnecting" status is NOT unique to the drop
+    // path -- an ordinary WS blip's attemptReconnect sets it too. isDroppedReconnect()
+    // must distinguish them so the overlay only shows the "trouble reaching the AI"
+    // modal for a genuine Gemini drop.
+    it('flags isDroppedReconnect() true only for a gemini_session_dropped reconnect', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      expect(conn.isDroppedReconnect()).toBe(false)
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.getStatus()).toBe('reconnecting')
+      expect(conn.isDroppedReconnect()).toBe(true) // gates the modal ON
+    })
+
+    it('does NOT flag isDroppedReconnect() for an ordinary WS-close reconnect (network blip)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      const sock = await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      // An ordinary unexpected close (NOT a gemini_session_dropped) -> handleClose
+      // -> attemptReconnect -> status "reconnecting", but this is a network blip,
+      // not an AI drop, so the modal must stay silent.
+      sock.readyState = MockWebSocket.CLOSED
+      ;(sock.onclose as any)?.({ code: 1006, reason: '', wasClean: false })
+      expect(conn.getStatus()).toBe('reconnecting')
+      expect(conn.isDroppedReconnect()).toBe(false) // gates the modal OFF
+    })
+
+    it('clears isDroppedReconnect() when the drop reconnect recovers (connected)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.isDroppedReconnect()).toBe(true)
+
+      // Reopen + session_ready -> connected -> the marker (and modal) clear.
+      MockWebSocket.instances[MockWebSocket.instances.length - 1].open()
+      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      expect(conn.getStatus()).toBe('connected')
+      expect(conn.isDroppedReconnect()).toBe(false)
+    })
+
+    // fresh-eyes finding 2: a drop reconnect whose socket OPENS but never gets
+    // session_ready (backend hung) must escalate to reconnect_failed, not stick on
+    // the transient modal forever.
+    describe('drop-reconnect watchdog', () => {
+      beforeEach(() => { vi.useFakeTimers() })
+      afterEach(() => { vi.useRealTimers() })
+
+      it('escalates to reconnect_failed if session_ready never arrives after reopen', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        expect(conn.getStatus()).toBe('reconnecting')
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // The reconnect socket OPENS (clears goAwayReconnectInFlight) but the backend
+        // never sends session_ready -- we stay on "reconnecting".
+        MockWebSocket.instances[MockWebSocket.instances.length - 1].open()
+        expect(conn.getStatus()).toBe('reconnecting')
+
+        // Watchdog fires -> escalate to reconnect_failed (terminal modal), clearing
+        // the transient marker.
+        vi.advanceTimersByTime(20000)
+        expect(conn.getStatus()).toBe('reconnect_failed')
+        expect(conn.isDroppedReconnect()).toBe(false)
+      })
+
+      it('does NOT escalate if session_ready arrives before the watchdog', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        const reconnected = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+        reconnected.open()
+        ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+        expect(conn.getStatus()).toBe('connected')
+
+        // Advancing past the watchdog window must NOT flip us to reconnect_failed.
+        vi.advanceTimersByTime(20000)
+        expect(conn.getStatus()).toBe('connected')
+      })
+    })
   })
 
   // Async-token-gap coverage (Opus fresh-eyes Finding 3): in production getToken is

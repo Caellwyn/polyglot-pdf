@@ -418,6 +418,15 @@ class LiveAIGemini(ILiveAI):
         self._spontaneous_drop_exc: Optional[BaseException] = None
         self._spontaneous_drop_code: Optional[int] = None
         self._dropped_notified: bool = False
+        # A GoAway was received this session (bd polyglot-pdf-ppfy). A GoAway is a
+        # server-lifecycle reset the client ALREADY reconnects on (via on_go_away ->
+        # handleGoAwayReconnect); the real close that follows it -- whatever its code
+        # -- must NOT ALSO fire gemini_session_dropped (which would double-drive the
+        # client's reconnect / mislabel a routine reset as an AI failure). It is
+        # undocumented whether Gemini's post-GoAway close code can fall in
+        # {1011,1006}, so this flag excludes the case regardless of the code (fresh-
+        # eyes). Reset per-session in _run_session_loop.
+        self._go_away_seen: bool = False
 
         # Session readiness flag and message queue for race condition handling
         self._session_ready: bool = False  # True when Gemini session is ready to receive messages
@@ -689,22 +698,27 @@ class LiveAIGemini(ILiveAI):
         """True only when the session ended by a real, unexpected ERROR drop.
 
         A spontaneous drop is a ConnectionClosed/APIError caught in the receive
-        loop whose WS close code is in _SPONTANEOUS_DROP_CLOSE_CODES (1011/1006) --
-        NOT a normal close and NOT a GoAway-driven server-lifecycle close (both of
-        which reach the SAME catch block but are routine; the client handles a
-        GoAway via its own reconnect, so re-forwarding those would mislabel a
-        normal reset as an AI failure). It must also be NOT an intentional
-        finalize() and NOT a section-switch graceful shutdown. The two boolean
-        guards are belt-and-suspenders: the graceful break paths exit BEFORE the
-        drop catch, so the drop marker normally stays None on those paths, but a
-        drop racing in during an already-requested shutdown must still not fire
-        (bd polyglot-pdf-ppfy).
+        loop whose WS close code is in _SPONTANEOUS_DROP_CLOSE_CODES (1011/1006).
+        Excluded cases (all reach the SAME catch block but are routine, so
+        re-forwarding them would mislabel a normal reset as an AI failure):
+          - a normal close (code not in the set),
+          - a section-switch graceful shutdown (`_close_after_flush`),
+          - an intentional finalize() (`_intentional_shutdown`),
+          - a GoAway-driven close (`_go_away_seen`): a GoAway is a
+            server-lifecycle reset the client ALREADY reconnects on, and it is
+            undocumented whether Gemini's post-GoAway close code can fall in the
+            drop set -- so exclude it regardless of the code (fresh-eyes).
+        The flag guards are belt-and-suspenders: the graceful break paths exit
+        BEFORE the drop catch, so the drop marker normally stays None on those
+        paths, but a drop racing in during an already-requested shutdown or after a
+        GoAway must still not fire (bd polyglot-pdf-ppfy).
         """
         return (
             self._spontaneous_drop_exc is not None
             and self._spontaneous_drop_code in _SPONTANEOUS_DROP_CLOSE_CODES
             and not self._intentional_shutdown
             and not self._close_after_flush
+            and not self._go_away_seen
         )
 
     async def _safe_notify_dropped(self) -> None:
@@ -1430,7 +1444,9 @@ class LiveAIGemini(ILiveAI):
                 except Exception as e:
                     self._log.warn("failed_to_write_debug_file", error=str(e))
 
-        # Turn off model "thinking" tokens (bd polyglot-pdf-3v5m). The form-fill
+        # Turn off model "thinking" tokens (shipped with bd polyglot-pdf-ppfy; a
+        # maintainer-requested cost/latency win, no bead of its own -- NOT the 3v5m
+        # failover, which is a separate, still-open design bead). The form-fill
         # turn loop needs no chain-of-thought, and thinking tokens bill at the
         # output rate. Send the 2.5-family `thinking_budget=0` form ONLY to a model
         # that is positively identified as 2.5 (an explicit allowlist, not "!= 3.1")
@@ -1476,6 +1492,7 @@ class LiveAIGemini(ILiveAI):
         # misread as a drop from a prior session (bd polyglot-pdf-ppfy).
         self._spontaneous_drop_exc = None
         self._spontaneous_drop_code = None
+        self._go_away_seen = False
 
         config = self._build_live_config(settings)
 
@@ -1737,6 +1754,11 @@ class LiveAIGemini(ILiveAI):
                                 go_away = getattr(event, "go_away", None)
                                 if go_away is not None:
                                     time_left = getattr(go_away, "time_left", None)
+                                    # Mark the session GoAway'd so a subsequent close
+                                    # is not ALSO forwarded as a spontaneous drop (bd
+                                    # polyglot-pdf-ppfy): the client already reconnects
+                                    # on the GoAway itself.
+                                    self._go_away_seen = True
                                     self._log.warning(
                                         "gemini_go_away_received",
                                         time_left=time_left,

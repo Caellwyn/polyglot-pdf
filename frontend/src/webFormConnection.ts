@@ -184,6 +184,17 @@ export class WebFormConnection {
   // isSectionSwitching does for a section switch). Cleared once the new socket
   // opens (handleOpen) or the reconnect attempt fails.
   private goAwayReconnectInFlight = false;
+  // True while the CURRENT reconnect was triggered by a SPONTANEOUS Gemini drop
+  // (gemini_session_dropped / 1011), as opposed to an ordinary WS blip that
+  // attemptReconnect also drives (bd polyglot-pdf-ppfy). Both collapse to the
+  // "reconnecting" status, but only a Gemini drop should surface the "having
+  // trouble reaching the AI" modal -- a plain network reconnect must stay silent
+  // (it is not an AI problem). Set in the gemini_session_dropped handler; cleared
+  // in setStatus when the connection leaves "reconnecting" (to "connected" on
+  // recovery or "reconnect_failed"/"error" on give-up). Read by the overlay to
+  // gate the modal. (fresh-eyes: the bare "reconnecting" status is NOT unique to
+  // the drop path.)
+  private droppedReconnectInFlight = false;
   private audioQueue: ArrayBuffer[] = [];
   private audioChunkCount = 0; // Track audio chunks for logging
   private isProcessingAudio = false;
@@ -204,6 +215,15 @@ export class WebFormConnection {
   // this window, surface `error` instead of a stuck `switching_section` forever.
   private sectionSwitchWatchdog: number | null = null;
   private static readonly SECTION_SWITCH_TIMEOUT_MS = 15000;
+  // Watchdog for the spontaneous-drop reconnect (bd polyglot-pdf-ppfy): if the
+  // reconnect socket OPENS but session_ready never arrives (backend hung setting up
+  // a new Gemini session), the UI would sit on "reconnecting" -- and the transient
+  // modal -- forever with no escalation. This surfaces reconnect_failed (the
+  // terminal modal) after the timeout so exit-criterion "escalates on give-up"
+  // holds for a silent-hang, not just a socket-level failure (fresh-eyes). Armed
+  // when a drop-reconnect starts; disarmed on handleSessionReady (success).
+  private droppedReconnectWatchdog: number | null = null;
+  private static readonly DROPPED_RECONNECT_TIMEOUT_MS = 20000;
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
   // Set to true after the first successful handleOpen so that subsequent opens
@@ -444,6 +464,11 @@ export class WebFormConnection {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    // Tear down the drop-reconnect watchdog + marker on an intentional disconnect
+    // so a stray timer can't fire reconnect_failed after teardown (bd
+    // polyglot-pdf-ppfy).
+    this.clearDroppedReconnectWatchdog();
+    this.droppedReconnectInFlight = false;
 
     // B5 (bd polyglot-pdf-jnjj.17): release any parked validator switch-gate on an
     // intentional disconnect. We RESOLVE the gate promise (so proceedSectionSwitch's
@@ -664,7 +689,21 @@ export class WebFormConnection {
           // goAwayReconnectInFlight guard coalesces this with any concurrent
           // GoAway reconnect so we never fire two.
           console.log('[WebFormConnection] [warn] Gemini session dropped (spontaneous); reconnecting');
+          // Mark this reconnect as drop-driven so the overlay shows the "having
+          // trouble reaching the AI" modal for it (and NOT for an ordinary WS blip
+          // that attemptReconnect drives to the same "reconnecting" status). Set
+          // BEFORE handleGoAwayReconnect so it is true when setStatus('reconnecting')
+          // fires the onStatusChange the overlay reads. Cleared in setStatus on the
+          // way out of "reconnecting" (bd polyglot-pdf-ppfy).
+          this.droppedReconnectInFlight = true;
           this.handleGoAwayReconnect(/* surfaceReconnectingStatus */ true);
+          // Guard against a reconnect that opens a socket but never gets
+          // session_ready (backend hang): escalate to reconnect_failed rather than
+          // stick on the transient modal forever (bd polyglot-pdf-ppfy). Armed only
+          // if the reconnect actually started (status is now "reconnecting").
+          if (this.droppedReconnectInFlight && this.status === 'reconnecting') {
+            this.armDroppedReconnectWatchdog();
+          }
           break;
 
         case "validation_result":
@@ -737,6 +776,12 @@ export class WebFormConnection {
     if (this.switchInFlight) {
       this.completeSectionSwitch();
     }
+
+    // A successful (re)connect reached session_ready: disarm the drop-reconnect
+    // watchdog so it can't later fire a spurious reconnect_failed (bd
+    // polyglot-pdf-ppfy). setStatus("connected") below also clears the
+    // droppedReconnectInFlight marker.
+    this.clearDroppedReconnectWatchdog();
 
     this.setStatus("connected", "handleSessionReady");
 
@@ -2973,6 +3018,15 @@ export class WebFormConnection {
 
     this.status = status;
 
+    // Clear the drop-driven-reconnect marker once we leave "reconnecting" (bd
+    // polyglot-pdf-ppfy): a move to "connected" (recovered) or to
+    // "reconnect_failed"/"error"/anything-else ends the drop-reconnect window, so
+    // the overlay stops showing the "having trouble reaching the AI" modal. Kept
+    // only WHILE status is "reconnecting" AND this reconnect was drop-driven.
+    if (status !== "reconnecting") {
+      this.droppedReconnectInFlight = false;
+    }
+
     // Safety clear for the thinking indicator (bd polyglot-pdf-wpw.5): any move OFF
     // "connected" (disconnect, error, reconnecting, section switch, idle_timeout,
     // reconnect_failed) means there is no live turn in flight, so the indicator must
@@ -2993,6 +3047,17 @@ export class WebFormConnection {
    */
   getStatus(): ConnectionStatus {
     return this.status;
+  }
+
+  /**
+   * Whether the CURRENT "reconnecting" is driven by a spontaneous Gemini drop
+   * (gemini_session_dropped / 1011), as opposed to an ordinary WS blip that
+   * attemptReconnect also drives to the same status (bd polyglot-pdf-ppfy). The
+   * overlay gates the "having trouble reaching the AI" modal on this so a plain
+   * network reconnect stays silent. Only meaningful while status is "reconnecting".
+   */
+  isDroppedReconnect(): boolean {
+    return this.droppedReconnectInFlight;
   }
 
   /** Whether the "thinking" indicator is currently active (bd polyglot-pdf-wpw.5). */
@@ -3087,6 +3152,32 @@ export class WebFormConnection {
     if (this.sectionSwitchWatchdog !== null) {
       clearTimeout(this.sectionSwitchWatchdog);
       this.sectionSwitchWatchdog = null;
+    }
+  }
+
+  /** Arm the drop-reconnect watchdog (bd polyglot-pdf-ppfy): if a spontaneous-drop
+   *  reconnect neither recovers (session_ready -> connected) nor errors within the
+   *  window -- e.g. the socket opened but the backend hung setting up Gemini -- it
+   *  escalates to reconnect_failed so the UI does not stick on the transient modal
+   *  forever. handleSessionReady disarms it on success. */
+  private armDroppedReconnectWatchdog(): void {
+    this.clearDroppedReconnectWatchdog();
+    this.droppedReconnectWatchdog = window.setTimeout(() => {
+      this.droppedReconnectWatchdog = null;
+      // Only fire if we are still stuck reconnecting from the drop (a recovery to
+      // "connected" or a prior escalation would have disarmed / moved us off it).
+      if (this.droppedReconnectInFlight && this.status === 'reconnecting') {
+        console.error('[WebFormConnection] Spontaneous-drop reconnect timed out (no session_ready) -- surfacing reconnect_failed');
+        this.goAwayReconnectInFlight = false;
+        this.setStatus('reconnect_failed', 'droppedReconnectWatchdog:timeout');
+      }
+    }, WebFormConnection.DROPPED_RECONNECT_TIMEOUT_MS);
+  }
+
+  private clearDroppedReconnectWatchdog(): void {
+    if (this.droppedReconnectWatchdog !== null) {
+      clearTimeout(this.droppedReconnectWatchdog);
+      this.droppedReconnectWatchdog = null;
     }
   }
 
