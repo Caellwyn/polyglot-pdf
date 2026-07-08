@@ -509,15 +509,29 @@ def migrate(schema: Dict[str, Any],
 
 def _add_target_condition(target: Dict[str, Any], key: str,
                           atom: Dict[str, Any]) -> None:
-    """Add a mirrored show_if/require_if atom to a target field, merging with any
-    condition already there via any_of (OR) so a field gated by EITHER its own
-    condition OR the mirrored trigger stays shown/required under both."""
+    """Add a mirrored show_if/require_if atom to a target field as an OR
+    alternative -- the field is shown/required under its OWN condition OR the
+    mirrored trigger.
+
+    Appending in place is safe ONLY when the existing condition is a PURE any_of
+    (no all_of/none_of alongside it): appending into an any_of that sits beside an
+    all_of/none_of would read as `all_of AND (any_of OR new) AND none_of`, NOT
+    `(whole old condition) OR new` (Codex PR #346). For anything else -- a single
+    atom, or a composite carrying all_of/none_of -- wrap the WHOLE existing
+    condition as one arm of a fresh any_of so its AND/NOT semantics are preserved
+    as a single OR alternative. (No shipped kit hits the composite case today;
+    this keeps the merge correct for a future one.)"""
     existing = target.get(key)
     if not existing:
         target[key] = atom
         return
-    # Already a composite any_of -> append; else wrap both atoms in a new any_of.
-    if isinstance(existing, dict) and isinstance(existing.get("any_of"), list):
+    is_pure_any_of = (
+        isinstance(existing, dict)
+        and isinstance(existing.get("any_of"), list)
+        and not existing.get("all_of")
+        and not existing.get("none_of")
+    )
+    if is_pure_any_of:
         existing["any_of"].append(atom)
     else:
         target[key] = {"any_of": [existing, atom]}

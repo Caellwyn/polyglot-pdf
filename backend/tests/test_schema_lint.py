@@ -333,19 +333,29 @@ def test_plain_string_options_get_value_hygiene_checks():
     assert lint_schema(_schema(fields)) == []
 
 
-def test_controls_fields_is_ignored_post_flip():
-    # controls_fields was DELETED at the P6.2 flip (bd h76m.16). A stray legacy
-    # controls_fields key is no longer linted (the model ignores it); lint sees
-    # nothing to flag from it. The trigger-side view lives in show_if now.
+def test_stale_controls_fields_is_a_lint_error_post_flip():
+    # controls_fields was DELETED at the P6.2 flip (bd h76m.16); the model IGNORES
+    # the extra key, so a stale/mis-migrated draft still carrying it would publish
+    # with its trigger-side behavior silently dropped. Lint ERRORs on it so the
+    # mark-complete gate rejects it (Codex PR #346).
     fields = [
         {"id": "trigger", "type": "select",
          "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
          "controls_fields": [
-             {"operator": "equals", "value": "a", "unlocks": ["ghost"]},
+             {"operator": "equals", "value": "a", "shows": ["ghost"]},
          ]},
     ]
     findings = lint_schema(_schema(fields))
-    assert "ref-unresolved-field" not in _rules(findings)
+    assert "legacy-trigger-side-logic" in _rules(findings)
+    assert has_errors(findings)
+
+
+def test_stale_conditional_fields_is_a_lint_error_post_flip():
+    fields = [
+        {"id": "trigger", "type": "text", "conditional_fields": ["dep"]},
+    ]
+    findings = lint_schema(_schema(fields))
+    assert "legacy-trigger-side-logic" in _rules(findings)
 
 
 def test_composite_v2_group_with_valid_atoms_is_clean():

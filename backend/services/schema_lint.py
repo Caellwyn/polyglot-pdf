@@ -618,9 +618,20 @@ def lint_schema(
             _check_atom(atom_path, atom, None, out, fields_by_id,
                         resolve_trigger=True, is_v2=is_v2)
 
-        # controls_fields was DELETED at the P6.2 strictness flip (bd h76m.16):
-        # dead at runtime, removed from the model; the trigger-side view is
-        # derived from show_if/require_if, so there is nothing to lint here.
+        # controls_fields / conditional_fields were DELETED at the P6.2 flip (bd
+        # h76m.16). The model IGNORES the extra key (extra="ignore"), so a stale
+        # or mis-migrated draft still carrying one would publish with its
+        # trigger-side shows/makes_required behavior silently dropped at runtime
+        # (Codex PR #346). Lint ERRORs on it so the mark-complete gate rejects it:
+        # the dependency must be expressed target-side as show_if / require_if.
+        for legacy_key in ("controls_fields", "conditional_fields"):
+            if f.get(legacy_key):
+                out.append(LintFinding(
+                    SEVERITY_ERROR, "legacy-trigger-side-logic",
+                    f"{field_path}.{legacy_key}",
+                    f"{legacy_key} was removed in schema v2 (its behavior lives "
+                    f"target-side in show_if / require_if now) -- migrate it",
+                ))
 
     _check_cycles(show_if_graph, out)
 
