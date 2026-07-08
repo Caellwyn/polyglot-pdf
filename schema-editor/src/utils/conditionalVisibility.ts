@@ -12,10 +12,10 @@
 //   - checkbox group         -> string[] of selected option values (multi-select)
 //   - single checkbox        -> boolean
 //   - text/number/date/etc.  -> string
-// A checkbox-group trigger therefore arrives as string[]; equals/not_equals
-// compare by MEMBERSHIP (any selected option matches), matching the runtime
-// (which also accepts a comma-joined string from the voice path -- preserved here
-// for parity even though the preview only produces arrays).
+// A checkbox-group trigger therefore arrives as string[]; membership operators
+// (includes/not_includes) test that array, and equals/not_equals are PURE scalar
+// comparisons (never membership) -- matching the runtime after the P6.2
+// strictness flip (bd h76m.16).
 
 import type { FormField, ConditionalDisplay } from '../types/schema';
 import {
@@ -26,26 +26,15 @@ import {
 
 // Resolve the selected-option SET when the trigger value is multi-valued (a
 // checkbox group), else null (a plain scalar, for which strict identity is
-// correct). Mirrors the runtime's selectedSet logic. The comma-string split is
-// gated on the trigger field actually being a checkbox group, so a legitimate
-// scalar like "Springfield, IL" is never split (Codex PR #259 parity).
-//
-// Group detection differs from the runtime by NECESSITY: the runtime keys on
-// `group_kind === "checkbox"`, but the EDITOR's FormField type has no group_kind
-// field (and no editor form-kit sets one), so we key on the editor's actual shape
-// -- a checkbox field carrying options[]. This is the faithful editor-side
-// equivalent, not a behavioral regression (fresh-eyes finding 5).
-function selectedSetFor(
-  triggerValue: unknown,
-  triggerField: FormField | undefined,
-): string[] | null {
+// correct). Mirrors the runtime's selectedSet logic. A v2 checkbox_group value
+// is ALWAYS a string[] by the time it reaches the evaluator: the voice-AI
+// comma-joined string is converted to an array at the single ingress boundary
+// BEFORE storage, so the evaluator never sees a comma-string for a group. The
+// comma-split + isCheckboxGroup-comma branch were DELETED at the P6.2 strictness
+// flip (bd h76m.16), matching the runtime's selectedSet.
+function selectedSetFor(triggerValue: unknown): string[] | null {
   if (Array.isArray(triggerValue)) {
     return triggerValue.map(v => String(v));
-  }
-  const isCheckboxGroup = triggerField?.type === 'checkbox' &&
-    !!triggerField.options && triggerField.options.length > 0;
-  if (isCheckboxGroup && typeof triggerValue === 'string' && triggerValue.includes(',')) {
-    return triggerValue.split(',').map(s => s.trim());
   }
   return null;
 }
@@ -58,11 +47,10 @@ function selectedSetFor(
 export function evaluateCondition(
   cond: AtomicCondition | ConditionalDisplay,
   fieldValues: Record<string, unknown>,
-  fields: FormField[],
+  _fields: FormField[],
 ): boolean {
   const triggerValue = fieldValues[cond.field];
-  const triggerField = fields.find(f => f.id === cond.field);
-  const selectedSet = selectedSetFor(triggerValue, triggerField);
+  const selectedSet = selectedSetFor(triggerValue);
 
   // v2 membership: is the named option slug in the group's selected set? A
   // single selection may arrive as a bare scalar -- compare by string
@@ -78,11 +66,13 @@ export function evaluateCondition(
 
   switch (cond.operator) {
     case 'equals':
-      if (selectedSet) return selectedSet.includes(String(cond.value));
+      // Pure scalar comparison. The vq4m equals-means-membership hack was
+      // DELETED at the P6.2 strictness flip (bd h76m.16): v2 expresses
+      // membership with includes/not_includes, and the backend rejects
+      // equals-on-a-checkbox_group at parse. Mirrors the runtime evaluator.
       return triggerValue === cond.value;
 
     case 'not_equals':
-      if (selectedSet) return !selectedSet.includes(String(cond.value));
       return triggerValue !== cond.value;
 
     case 'contains':

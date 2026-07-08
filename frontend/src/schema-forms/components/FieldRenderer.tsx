@@ -123,6 +123,12 @@ export function FieldRenderer({
       );
 
     case "checkbox":
+    case "checkbox_group":
+      // Both the v2 multi-select group (checkbox_group) and a standalone/legacy
+      // options-bearing checkbox render through CheckboxField (it branches on
+      // options[] internally). Without the checkbox_group case a migrated group
+      // field (i-90 race, W-7-2 doc type) falls to the "Unknown field type"
+      // default and is unfillable (Codex PR #346).
       return (
         <CheckboxField
           field={field}

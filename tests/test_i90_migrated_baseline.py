@@ -60,9 +60,10 @@ def test_archived_i90_is_the_v1_original():
 def test_migrated_i90_validates_v2_and_lints_clean():
     schema = _schema()
     with warnings.catch_warnings():
-        # controls_fields is demote-not-delete in v2 (retired at P6.2) -- it
-        # raises a DeprecationWarning, not an error.
-        warnings.simplefilter("ignore", DeprecationWarning)
+        # Post the P6.2 flip (bd h76m.16) controls_fields is DELETED from the
+        # model (not demoted), so the migrated i-90 validates with NO warning at
+        # all -- promote any warning to an error to prove it.
+        warnings.simplefilter("error")
         FormSchema.model_validate(schema)
     assert not has_errors(lint_schema(schema, _dump()))
     # Field count survives migration unchanged (baseline: 132).

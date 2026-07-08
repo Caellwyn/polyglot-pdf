@@ -168,20 +168,6 @@ describe('FieldEditor group guards (Codex PR #310 round 3)', () => {
     expect(removes.some(b => !(b as HTMLButtonElement).disabled)).toBe(true);
   });
 
-  it('hides the legacy Controls Fields editor for a checkbox_group', () => {
-    const f = twoOptionGroup();
-    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
-    expect(screen.queryByText('Controls Fields')).not.toBeInTheDocument();
-    expect(screen.queryByText('+ Add Control')).not.toBeInTheDocument();
-  });
-
-  it('keeps the Controls Fields editor for a plain checkbox', () => {
-    const f = { id: 'cb', name: 'CB', spoken_name: 'cb', type: 'checkbox',
-      section_id: 's1', pdf_field_name: 'cb[0]', read_only: false, required: false } as FormField;
-    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
-    expect(screen.getByText('Controls Fields')).toBeInTheDocument();
-  });
-
   it('makes the type picker read-only for an option-bearing group', () => {
     const f = twoOptionGroup();
     render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);

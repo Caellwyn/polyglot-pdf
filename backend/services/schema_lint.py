@@ -618,32 +618,25 @@ def lint_schema(
             _check_atom(atom_path, atom, None, out, fields_by_id,
                         resolve_trigger=True, is_v2=is_v2)
 
-        controls = f.get("controls_fields")
-        if isinstance(controls, list):
-            for j, control in enumerate(controls):
-                if not isinstance(control, dict):
-                    continue
-                control_path = f"{field_path}.controls_fields[{j}]"
-                # Trigger-side: the condition tests the OWNING field's value;
-                # a missing operator defaults to equals (the model's default).
-                atom = {
-                    "operator": control.get("operator", "equals"),
-                    "value": control.get("value"),
-                }
-                _check_atom(control_path, atom, f, out, fields_by_id,
-                            resolve_trigger=False, is_v2=is_v2)
-                for action in ("shows", "hides", "unlocks", "locks",
-                               "makes_required", "makes_optional"):
-                    targets = control.get(action)
-                    if not isinstance(targets, list):
-                        continue
-                    for target in targets:
-                        if isinstance(target, str) and target not in fields_by_id:
-                            out.append(LintFinding(
-                                SEVERITY_ERROR, "ref-unresolved-field",
-                                f"{control_path}.{action}",
-                                f"references non-existent field {target!r}",
-                            ))
+        # controls_fields / conditional_fields were DELETED at the P6.2 flip (bd
+        # h76m.16). The model IGNORES the extra key (extra="ignore"), so a stale
+        # or mis-migrated V2 kit still carrying one would publish with its
+        # trigger-side shows/makes_required behavior silently dropped at runtime
+        # (Codex PR #346). Lint ERRORs on it -- but ONLY for a schema that CLAIMS
+        # to be v2 (is_v2): a raw pre-migration extraction DRAFT legitimately
+        # still carries controls_fields until the repair/migrate pipeline converts
+        # it, and lint runs on that draft mid-pipeline. The dependency must be
+        # expressed target-side as show_if / require_if before a kit is v2.
+        if is_v2:
+            for legacy_key in ("controls_fields", "conditional_fields"):
+                if f.get(legacy_key):
+                    out.append(LintFinding(
+                        SEVERITY_ERROR, "legacy-trigger-side-logic",
+                        f"{field_path}.{legacy_key}",
+                        f"{legacy_key} was removed in schema v2 (its behavior "
+                        f"lives target-side in show_if / require_if now) -- "
+                        f"migrate it",
+                    ))
 
     _check_cycles(show_if_graph, out)
 

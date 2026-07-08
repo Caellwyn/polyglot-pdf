@@ -245,31 +245,27 @@ function optionValue(opt: any): string | undefined {
  * check on a standalone checkbox would reject every valid true/false fill
  * (Codex PR #145 round 3).
  *
- * A checkbox GROUP is detected the SAME way as canonicalizeAiCheckboxGroupValue
- * (webFormConnection.ts) and the CheckboxField renderer: options.length > 0, OR
- * group_kind === "checkbox" for a group with no options yet. group_kind is NOT
- * required -- no shipped form-kit sets it (e.g. form-kits/i-90 p3_race is
- * type:"checkbox" with an options array and no group_kind), so gating on it left
- * every real checkbox-group field's enum check dead: an AI-invented option value
- * passed validateField untouched, landed as confirmed-pending, and was only
- * silently dropped at PDF-fill time (bd polyglot-pdf-5jvn).
+ * A checkbox GROUP is the v2 `checkbox_group` type, OR (legacy shape) a
+ * `type:"checkbox"` field carrying an options[] array. The old `group_kind`
+ * marker was DELETED at the P6.2 strictness flip (bd h76m.16) -- no shipped kit
+ * ever set it, and v2 carries the group-ness in the TYPE.
  */
 function isStringEnumField(field: FormField): boolean {
   if (field.type === "select" || field.type === "radio") return true;
+  if (field.type === "checkbox_group") return true;
   if (field.type === "checkbox" && isCheckboxGroupField(field)) return true;
   return false;
 }
 
 /**
- * Whether a checkbox FIELD (type "checkbox") is a GROUP -- vs. a standalone
- * boolean checkbox. Shared by isStringEnumField and validateOptionMembership so
- * both agree with canonicalizeAiCheckboxGroupValue (webFormConnection.ts) and the
- * CheckboxField renderer's own `!field.options` single-checkbox test: a group is
- * options-bearing, OR explicitly marked via group_kind (a group with no options
- * yet). Does NOT check field.type itself -- callers already gate on that.
+ * Whether a field is a checkbox GROUP -- vs. a standalone boolean checkbox.
+ * Shared by isStringEnumField and validateOptionMembership so both agree with
+ * canonicalizeAiCheckboxGroupValue (webFormConnection.ts) and the CheckboxField
+ * renderer: the v2 `checkbox_group` type, or a `type:"checkbox"` field that
+ * carries options[] (the legacy options-bearing group shape).
  */
 function isCheckboxGroupField(field: FormField): boolean {
-  return (field.options?.length ?? 0) > 0 || field.group_kind === "checkbox";
+  return field.type === "checkbox_group" || (field.options?.length ?? 0) > 0;
 }
 
 /**
@@ -299,7 +295,9 @@ function validateOptionMembership(field: FormField, value: any): string | null {
       .filter((v): v is string => v !== undefined)
   );
 
-  const isCheckboxGroup = field.type === "checkbox" && isCheckboxGroupField(field);
+  const isCheckboxGroup =
+    field.type === "checkbox_group" ||
+    (field.type === "checkbox" && isCheckboxGroupField(field));
 
   // A single-choice field (select/radio) cannot take an array. An empty array in
   // particular would make the membership loop below vacuously pass, letting a blank
@@ -535,41 +533,20 @@ export function evaluateAtomicCondition(
   // Bug Fix: Unwrap FieldValue object before comparing
   const triggerValue = unwrapFieldValue(fieldValues[condition.field]);
 
-  // A checkbox-group trigger's selected set arrives in TWO shapes (bd
-  // polyglot-pdf-vq4m): a string[] from the interactive CheckboxField renderer, OR
-  // a comma-separated string from the voice-AI fill path (backend/config.py:
-  // "Multiple checkboxes: comma-separated exact values"; SchemaFormStateManager
-  // stores that raw string un-split). Both must compare by MEMBERSHIP under
-  // equals/not_equals -- a strict scalar compare misses both. Returns the selected
-  // option set when the trigger is multi-valued, else null (a plain scalar, for
-  // which strict identity is correct). Mirrors validateOptionMembership's parsing.
+  // A v2 checkbox_group's selected set is ALWAYS a string[] by the time it
+  // reaches the evaluator: the voice-AI comma-string is converted to an array at
+  // the single ingress boundary (applyAiValueWithValidation) BEFORE storage, so
+  // the evaluator never sees a comma-joined group value. Membership operators
+  // (includes/not_includes) test that array. A plain scalar (radio/select/text)
+  // is not a set -> null.
   //
-  // The comma-string split is gated on the TRIGGER field actually being a checkbox
-  // group (`group_kind === "checkbox"`), resolved from the optional `fields` list.
-  // Comma presence alone is NOT sufficient: a legitimate scalar value like
-  // "Springfield, IL" must NOT be split (Codex PR #259). When `fields` is not
-  // provided (the trigger field cannot be resolved), only the array shape is
-  // treated as a set -- a comma-string falls through to strict scalar compare.
-  //
-  // QUARANTINED until the P6.2 strictness flip (bd h76m.16): the equals/
-  // not_equals membership branches below are the vq4m hack -- v2 schemas
-  // express membership with includes/not_includes, and the backend rejects
-  // equals-on-group at parse for v2 documents.
-  const triggerField = fields?.find((f) => f.id === condition.field);
-  const triggerIsCheckboxGroup = triggerField?.group_kind === "checkbox";
-  const selectedSet = ((): string[] | null => {
-    if (Array.isArray(triggerValue)) {
-      return triggerValue.map((v) => String(v));
-    }
-    if (
-      triggerIsCheckboxGroup &&
-      typeof triggerValue === "string" &&
-      triggerValue.includes(",")
-    ) {
-      return triggerValue.split(",").map((s) => s.trim());
-    }
-    return null;
-  })();
+  // The vq4m equals-means-membership hack + the comma-split + the group_kind
+  // gate were DELETED at the P6.2 strictness flip (bd h76m.16): v2 expresses
+  // membership with includes/not_includes, and equals/not_equals are pure scalar
+  // comparisons (the backend rejects equals-on-a-checkbox_group at parse).
+  const selectedSet = Array.isArray(triggerValue)
+    ? triggerValue.map((v) => String(v))
+    : null;
 
   // v2 membership: is the named option slug in the group's selected set? A
   // single selection may arrive as a bare scalar (voice path, one box) --
@@ -587,15 +564,9 @@ export function evaluateAtomicCondition(
 
   switch (condition.operator) {
     case "equals":
-      if (selectedSet) {
-        return selectedSet.includes(String(condition.value));
-      }
       return triggerValue === condition.value;
 
     case "not_equals":
-      if (selectedSet) {
-        return !selectedSet.includes(String(condition.value));
-      }
       return triggerValue !== condition.value;
 
     case "contains":

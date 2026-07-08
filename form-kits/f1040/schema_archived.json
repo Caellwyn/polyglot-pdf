@@ -1,0 +1,4161 @@
+{
+  "source": "pdf",
+  "form_metadata": {
+    "title": "U.S. Individual Income Tax Return",
+    "form_number": "1040",
+    "page_count": 2,
+    "edition_date": "2025",
+    "version": "draft",
+    "language": "en"
+  },
+  "parts": [
+    {
+      "id": "part_header",
+      "label": "Header and Personal Information",
+      "order": 1,
+      "section_ids": [
+        "sec_taxyear",
+        "sec_taxpayer",
+        "sec_address",
+        "sec_election"
+      ]
+    },
+    {
+      "id": "part_filing",
+      "label": "Filing Status",
+      "order": 2,
+      "section_ids": [
+        "sec_filing_status"
+      ]
+    },
+    {
+      "id": "part_digital",
+      "label": "Digital Assets",
+      "order": 3,
+      "section_ids": [
+        "sec_digital_assets"
+      ]
+    },
+    {
+      "id": "part_dependents",
+      "label": "Dependents",
+      "order": 4,
+      "section_ids": [
+        "sec_dependents"
+      ]
+    },
+    {
+      "id": "part_income",
+      "label": "Income",
+      "order": 5,
+      "section_ids": [
+        "sec_income"
+      ]
+    },
+    {
+      "id": "part_tax_credits",
+      "label": "Tax and Credits",
+      "order": 6,
+      "section_ids": [
+        "sec_tax_credits"
+      ]
+    },
+    {
+      "id": "part_payments",
+      "label": "Payments and Refundable Credits",
+      "order": 7,
+      "section_ids": [
+        "sec_payments"
+      ]
+    },
+    {
+      "id": "part_refund",
+      "label": "Refund",
+      "order": 8,
+      "section_ids": [
+        "sec_refund"
+      ]
+    },
+    {
+      "id": "part_owe",
+      "label": "Amount You Owe",
+      "order": 9,
+      "section_ids": [
+        "sec_owe"
+      ]
+    },
+    {
+      "id": "part_designee",
+      "label": "Third Party Designee",
+      "order": 10,
+      "section_ids": [
+        "sec_designee"
+      ]
+    },
+    {
+      "id": "part_sign",
+      "label": "Sign Here",
+      "order": 11,
+      "section_ids": [
+        "sec_sign"
+      ]
+    },
+    {
+      "id": "part_preparer",
+      "label": "Paid Preparer Use Only",
+      "order": 12,
+      "section_ids": [
+        "sec_preparer"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec_taxyear",
+      "label": "Tax Year and Filing Indicators",
+      "order": 1,
+      "fields": [
+        "fld_year_begin",
+        "fld_year_end_month",
+        "fld_year_end_year",
+        "fld_filed_301",
+        "fld_combat_zone",
+        "fld_other_check",
+        "fld_other_text",
+        "fld_deceased_check",
+        "fld_deceased_date",
+        "fld_spouse_deceased_date"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_taxpayer",
+      "label": "Taxpayer and Spouse Names and SSNs",
+      "order": 2,
+      "fields": [
+        "fld_your_first",
+        "fld_your_last",
+        "fld_your_ssn",
+        "fld_spouse_first",
+        "fld_spouse_last",
+        "fld_spouse_ssn"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_address",
+      "label": "Address",
+      "order": 3,
+      "fields": [
+        "fld_home_address",
+        "fld_apt",
+        "fld_city",
+        "fld_state",
+        "fld_zip",
+        "fld_foreign_country",
+        "fld_foreign_province",
+        "fld_foreign_postal",
+        "fld_main_home_us"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_election",
+      "label": "Presidential Election Campaign",
+      "order": 4,
+      "fields": [
+        "fld_election_you",
+        "fld_election_spouse"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_filing_status",
+      "label": "Filing Status",
+      "order": 5,
+      "fields": [
+        "fld_filing_status",
+        "fld_mfs_spouse_name",
+        "fld_hoh_qss_child",
+        "fld_nonresident_spouse_check",
+        "fld_nonresident_spouse_name"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_digital_assets",
+      "label": "Digital Assets",
+      "order": 6,
+      "fields": [
+        "fld_digital_assets"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_dependents",
+      "label": "Dependents",
+      "order": 7,
+      "fields": [
+        "fld_more_than_four_dependents",
+        "fld_dep1_first",
+        "fld_dep1_last",
+        "fld_dep1_ssn",
+        "fld_dep1_relationship",
+        "fld_dep2_first",
+        "fld_dep2_last",
+        "fld_dep2_ssn",
+        "fld_dep2_relationship",
+        "fld_dep3_first",
+        "fld_dep3_last",
+        "fld_dep3_ssn",
+        "fld_dep3_relationship",
+        "fld_dep4_first",
+        "fld_dep4_last",
+        "fld_dep4_ssn",
+        "fld_dep4_relationship",
+        "fld_dep1_lived_with",
+        "fld_dep1_in_us",
+        "fld_dep2_lived_with",
+        "fld_dep2_in_us",
+        "fld_dep3_lived_with",
+        "fld_dep3_in_us",
+        "fld_dep4_lived_with",
+        "fld_dep4_in_us",
+        "fld_dep1_fulltime_student",
+        "fld_dep1_disabled",
+        "fld_dep2_fulltime_student",
+        "fld_dep2_disabled",
+        "fld_dep3_fulltime_student",
+        "fld_dep3_disabled",
+        "fld_dep4_fulltime_student",
+        "fld_dep4_disabled",
+        "fld_dep1_ctc",
+        "fld_dep1_odc",
+        "fld_dep2_ctc",
+        "fld_dep2_odc",
+        "fld_dep3_ctc",
+        "fld_dep3_odc",
+        "fld_dep4_ctc",
+        "fld_dep4_odc",
+        "fld_mfs_hoh_apart"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_income",
+      "label": "Income",
+      "order": 8,
+      "fields": [
+        "fld_1a",
+        "fld_1b",
+        "fld_1c",
+        "fld_1d",
+        "fld_1e",
+        "fld_1f",
+        "fld_1g",
+        "fld_1h_type",
+        "fld_1h",
+        "fld_1i",
+        "fld_1z",
+        "fld_2a",
+        "fld_2b",
+        "fld_3a",
+        "fld_3b",
+        "fld_3c",
+        "fld_4a",
+        "fld_4b",
+        "fld_4c",
+        "fld_4c_other",
+        "fld_5a",
+        "fld_5b",
+        "fld_5c",
+        "fld_5c_other",
+        "fld_6a",
+        "fld_6b",
+        "fld_6c_lumpsum",
+        "fld_6d_mfs_apart",
+        "fld_7a",
+        "fld_7b",
+        "fld_8",
+        "fld_9",
+        "fld_10",
+        "fld_11a"
+      ],
+      "page_numbers": [
+        0
+      ]
+    },
+    {
+      "id": "sec_tax_credits",
+      "label": "Tax and Credits",
+      "order": 9,
+      "fields": [
+        "fld_11b",
+        "fld_12a_you_dep",
+        "fld_12a_spouse_dep",
+        "fld_12b_spouse_itemizes",
+        "fld_12c_dual_status",
+        "fld_12d_you_born",
+        "fld_12d_you_blind",
+        "fld_12d_spouse_born",
+        "fld_12d_spouse_blind",
+        "fld_12e",
+        "fld_13a",
+        "fld_13b",
+        "fld_14",
+        "fld_15",
+        "fld_16_check",
+        "fld_16_other",
+        "fld_16",
+        "fld_17",
+        "fld_18",
+        "fld_19",
+        "fld_20",
+        "fld_21",
+        "fld_22",
+        "fld_23",
+        "fld_24"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "sec_payments",
+      "label": "Payments and Refundable Credits",
+      "order": 10,
+      "fields": [
+        "fld_25a",
+        "fld_25b",
+        "fld_25c",
+        "fld_25d",
+        "fld_26",
+        "fld_former_spouse_ssn",
+        "fld_27a",
+        "fld_27b_clergy",
+        "fld_27c_no_eic",
+        "fld_28_check",
+        "fld_28",
+        "fld_29",
+        "fld_30",
+        "fld_31",
+        "fld_32",
+        "fld_33"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "sec_refund",
+      "label": "Refund",
+      "order": 11,
+      "fields": [
+        "fld_34",
+        "fld_35a",
+        "fld_35a_form8888",
+        "fld_routing",
+        "fld_account_type",
+        "fld_account_number",
+        "fld_36"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "sec_owe",
+      "label": "Amount You Owe",
+      "order": 12,
+      "fields": [
+        "fld_37",
+        "fld_38"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "sec_designee",
+      "label": "Third Party Designee",
+      "order": 13,
+      "fields": [
+        "fld_designee_allow",
+        "fld_designee_name",
+        "fld_designee_phone",
+        "fld_designee_pin"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "sec_sign",
+      "label": "Sign Here",
+      "order": 14,
+      "fields": [
+        "fld_your_occupation",
+        "fld_your_ip_pin",
+        "fld_spouse_occupation",
+        "fld_spouse_ip_pin",
+        "fld_taxpayer_phone",
+        "fld_taxpayer_email"
+      ],
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "sec_preparer",
+      "label": "Paid Preparer Use Only",
+      "order": 15,
+      "fields": [
+        "fld_preparer_name",
+        "fld_preparer_ptin",
+        "fld_preparer_self_employed",
+        "fld_firm_name",
+        "fld_firm_phone",
+        "fld_firm_address",
+        "fld_firm_ein"
+      ],
+      "page_numbers": [
+        1
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "id": "fld_year_begin",
+      "name": "For the year beginning (other tax year)",
+      "spoken_name": "Tax year beginning",
+      "type": "text",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_01[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 228.8,
+        "y": 48.5,
+        "width": 88.0,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_year_end_month",
+      "name": "Tax year ending month/day",
+      "spoken_name": "Tax year ending date",
+      "type": "text",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_02[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 365.6,
+        "y": 48.5,
+        "width": 88.0,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_year_end_year",
+      "name": "Tax year ending year (20__)",
+      "spoken_name": "Ending year",
+      "type": "text",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_03[0]",
+      "max_length": 2,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 468.6,
+        "y": 48.5,
+        "width": 17.0,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_filed_301",
+      "name": "Filed pursuant to section 301.9100-2",
+      "spoken_name": "Filed pursuant to 301.9100-2",
+      "type": "checkbox",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]",
+      "options": [
+        {
+          "value": "c1_1[0]",
+          "label": "Filed pursuant to section 301.9100-2",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 36.0,
+        "y": 62.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_combat_zone",
+      "name": "Combat zone",
+      "spoken_name": "Combat zone",
+      "type": "checkbox",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_2[0]",
+      "options": [
+        {
+          "value": "c1_2[0]",
+          "label": "Combat zone",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_2[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 155.2,
+        "y": 62.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_other_check",
+      "name": "Other",
+      "spoken_name": "Other",
+      "type": "checkbox",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_4[0]",
+      "options": [
+        {
+          "value": "c1_4[0]",
+          "label": "Other",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_4[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 36.0,
+        "y": 74.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_other_text",
+      "name": "Other (specify)",
+      "spoken_name": "Other explanation",
+      "type": "text",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_04[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 209.8,
+        "y": 60.5,
+        "width": 161.0,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_deceased_check",
+      "name": "Deceased",
+      "spoken_name": "Deceased",
+      "type": "checkbox",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_3[0]",
+      "options": [
+        {
+          "value": "c1_3[0]",
+          "label": "Deceased",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_3[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 374.8,
+        "y": 62.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_deceased_date",
+      "name": "Deceased date (MM/DD/YYYY)",
+      "spoken_name": "Deceased date",
+      "type": "date",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_05[0]",
+      "max_length": 2,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 417.6,
+        "y": 60.5,
+        "width": 14.4,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_spouse_deceased_date",
+      "name": "Spouse deceased date (MM/DD/YYYY)",
+      "spoken_name": "Spouse deceased date",
+      "type": "date",
+      "section_id": "sec_taxyear",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_06[0]",
+      "max_length": 2,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 439.2,
+        "y": 60.5,
+        "width": 14.4,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_your_first",
+      "name": "Your first name and middle initial",
+      "spoken_name": "Your first name",
+      "type": "text",
+      "section_id": "sec_taxpayer",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_11[0]",
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 68.4,
+        "y": 72.5,
+        "width": 168.2,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_your_last",
+      "name": "Your last name",
+      "spoken_name": "Your last name",
+      "type": "text",
+      "section_id": "sec_taxpayer",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_12[0]",
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 238.6,
+        "y": 72.5,
+        "width": 170.8,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_your_ssn",
+      "name": "Your social security number",
+      "spoken_name": "Your social security number",
+      "type": "text",
+      "section_id": "sec_taxpayer",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_16[0]",
+      "max_length": 9,
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 469.0,
+        "y": 94.0,
+        "width": 107.0,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_spouse_first",
+      "name": "Spouse's first name and middle initial",
+      "spoken_name": "Spouse first name",
+      "type": "text",
+      "section_id": "sec_taxpayer",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_13[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 411.4,
+        "y": 72.5,
+        "width": 164.6,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_spouse_last",
+      "name": "Spouse's last name",
+      "spoken_name": "Spouse last name",
+      "type": "text",
+      "section_id": "sec_taxpayer",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_14[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 36.0,
+        "y": 94.0,
+        "width": 215.25,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_spouse_ssn",
+      "name": "Spouse's social security number",
+      "spoken_name": "Spouse social security number",
+      "type": "text",
+      "section_id": "sec_taxpayer",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_19[0]",
+      "max_length": 9,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 469.0,
+        "y": 118.0,
+        "width": 107.0,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_home_address",
+      "name": "Home address (number and street)",
+      "spoken_name": "Home address",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_15[0]",
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 253.0,
+        "y": 94.0,
+        "width": 214.25,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_apt",
+      "name": "Apt. no.",
+      "spoken_name": "Apartment number",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_17[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 36.0,
+        "y": 118.0,
+        "width": 215.25,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_city",
+      "name": "City, town, or post office",
+      "spoken_name": "City",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_18[0]",
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 253.0,
+        "y": 118.0,
+        "width": 214.25,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_state",
+      "name": "State",
+      "spoken_name": "State",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Address_ReadOrder[0].f1_20[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 36.0,
+        "y": 142.0,
+        "width": 380.85,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_zip",
+      "name": "ZIP code",
+      "spoken_name": "ZIP code",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Address_ReadOrder[0].f1_21[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 418.6,
+        "y": 142.0,
+        "width": 48.65,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_foreign_country",
+      "name": "Foreign country name",
+      "spoken_name": "Foreign country name",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Address_ReadOrder[0].f1_22[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 36.0,
+        "y": 166.0,
+        "width": 294.45,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_foreign_province",
+      "name": "Foreign province/state/county",
+      "spoken_name": "Foreign province",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Address_ReadOrder[0].f1_23[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 332.2,
+        "y": 166.0,
+        "width": 63.05,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_foreign_postal",
+      "name": "Foreign postal code",
+      "spoken_name": "Foreign postal code",
+      "type": "text",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Address_ReadOrder[0].f1_24[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 397.0,
+        "y": 166.0,
+        "width": 70.25,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_main_home_us",
+      "name": "Check here if your main home, and your spouse's if filing a joint return, was in the U.S. for more than half of 2025",
+      "spoken_name": "Main home in U.S.",
+      "type": "checkbox",
+      "section_id": "sec_address",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_5[0]",
+      "options": [
+        {
+          "value": "c1_5[0]",
+          "label": "Main home in U.S. more than half of 2025",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_5[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 568.0,
+        "y": 146.75,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_election_you",
+      "name": "Presidential Election Campaign - You",
+      "spoken_name": "Election campaign you",
+      "type": "checkbox",
+      "section_id": "sec_election",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_6[0]",
+      "options": [
+        {
+          "value": "c1_6[0]",
+          "label": "You - $3 to fund",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_6[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 482.4,
+        "y": 194.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_election_spouse",
+      "name": "Presidential Election Campaign - Spouse",
+      "spoken_name": "Election campaign spouse",
+      "type": "checkbox",
+      "section_id": "sec_election",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_7[0]",
+      "options": [
+        {
+          "value": "c1_7[0]",
+          "label": "Spouse - $3 to fund",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_7[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 525.6,
+        "y": 194.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_filing_status",
+      "name": "Filing Status (check only one box)",
+      "spoken_name": "Filing status",
+      "type": "radio",
+      "section_id": "sec_filing_status",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c1_8[0]",
+          "label": "Single",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[0]"
+        },
+        {
+          "value": "c1_8[1]",
+          "label": "Married filing jointly",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[1]"
+        },
+        {
+          "value": "c1_8[2]",
+          "label": "Married filing separately (MFS)",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[2]"
+        },
+        {
+          "value": "c1_8[0]",
+          "label": "Head of household (HOH)",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[0]"
+        },
+        {
+          "value": "c1_8[1]",
+          "label": "Qualifying surviving spouse (QSS)",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[1]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "c1_8[2]",
+          "makes_required": [
+            "fld_mfs_spouse_name",
+            "fld_spouse_ssn"
+          ]
+        }
+      ],
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 97.6,
+        "y": 206.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_mfs_spouse_name",
+      "name": "MFS: enter spouse's full name here",
+      "spoken_name": "MFS spouse full name",
+      "type": "text",
+      "section_id": "sec_filing_status",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].f1_28[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 180.0,
+        "y": 240.0,
+        "width": 144.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_hoh_qss_child",
+      "name": "If you checked the HOH or QSS box, enter the child's name if the qualifying person is a child but not your dependent",
+      "spoken_name": "HOH/QSS child name",
+      "type": "text",
+      "section_id": "sec_filing_status",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_29[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 362.0,
+        "y": 246.0,
+        "width": 214.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_nonresident_spouse_check",
+      "name": "If treating a nonresident alien or dual-status alien spouse as a U.S. resident for the entire tax year, check the box",
+      "spoken_name": "Nonresident spouse as resident",
+      "type": "checkbox",
+      "section_id": "sec_filing_status",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_9[0]",
+      "options": [
+        {
+          "value": "c1_9[0]",
+          "label": "Treat nonresident/dual-status spouse as U.S. resident",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_9[0]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "c1_9[0]",
+          "makes_required": [
+            "fld_nonresident_spouse_name"
+          ]
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 97.6,
+        "y": 258.12,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_nonresident_spouse_name",
+      "name": "Nonresident/dual-status spouse name",
+      "spoken_name": "Nonresident spouse name",
+      "type": "text",
+      "section_id": "sec_filing_status",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_30[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 313.2,
+        "y": 267.0,
+        "width": 262.8,
+        "height": 11.5
+      }
+    },
+    {
+      "id": "fld_digital_assets",
+      "name": "At any time during 2025, did you receive, sell, exchange, or otherwise dispose of a digital asset?",
+      "spoken_name": "Digital assets",
+      "type": "radio",
+      "section_id": "sec_digital_assets",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c1_10[0]",
+          "label": "Yes",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]"
+        },
+        {
+          "value": "c1_10[1]",
+          "label": "No",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]"
+        }
+      ],
+      "validation": {
+        "required": true
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 518.4,
+        "y": 287.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_more_than_four_dependents",
+      "name": "If more than four dependents, see instructions and check here",
+      "spoken_name": "More than four dependents",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Dependents_ReadOrder[0].c1_11[0]",
+      "options": [
+        {
+          "value": "c1_11[0]",
+          "label": "More than four dependents",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Dependents_ReadOrder[0].c1_11[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 79.7,
+        "y": 368.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep1_first",
+      "name": "Dependent 1 (1) First name",
+      "spoken_name": "Dependent 1 first name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row1[0].f1_31[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 145.0,
+        "y": 309.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep2_first",
+      "name": "Dependent 2 (1) First name",
+      "spoken_name": "Dependent 2 first name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row1[0].f1_32[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 253.0,
+        "y": 309.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep3_first",
+      "name": "Dependent 3 (1) First name",
+      "spoken_name": "Dependent 3 first name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row1[0].f1_33[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 361.0,
+        "y": 309.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep4_first",
+      "name": "Dependent 4 (1) First name",
+      "spoken_name": "Dependent 4 first name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row1[0].f1_34[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 469.0,
+        "y": 309.0,
+        "width": 107.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep1_last",
+      "name": "Dependent 1 (2) Last name",
+      "spoken_name": "Dependent 1 last name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row2[0].f1_35[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 145.0,
+        "y": 321.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep2_last",
+      "name": "Dependent 2 (2) Last name",
+      "spoken_name": "Dependent 2 last name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row2[0].f1_36[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 253.0,
+        "y": 321.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep3_last",
+      "name": "Dependent 3 (2) Last name",
+      "spoken_name": "Dependent 3 last name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row2[0].f1_37[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 361.0,
+        "y": 321.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep4_last",
+      "name": "Dependent 4 (2) Last name",
+      "spoken_name": "Dependent 4 last name",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row2[0].f1_38[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 469.0,
+        "y": 321.0,
+        "width": 107.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep1_ssn",
+      "name": "Dependent 1 (3) SSN",
+      "spoken_name": "Dependent 1 SSN",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row3[0].f1_39[0]",
+      "max_length": 9,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 145.0,
+        "y": 333.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep2_ssn",
+      "name": "Dependent 2 (3) SSN",
+      "spoken_name": "Dependent 2 SSN",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row3[0].f1_40[0]",
+      "max_length": 9,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 253.0,
+        "y": 333.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep3_ssn",
+      "name": "Dependent 3 (3) SSN",
+      "spoken_name": "Dependent 3 SSN",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row3[0].f1_41[0]",
+      "max_length": 9,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 361.0,
+        "y": 333.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep4_ssn",
+      "name": "Dependent 4 (3) SSN",
+      "spoken_name": "Dependent 4 SSN",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row3[0].f1_42[0]",
+      "max_length": 9,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 469.0,
+        "y": 333.0,
+        "width": 107.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep1_relationship",
+      "name": "Dependent 1 (4) Relationship",
+      "spoken_name": "Dependent 1 relationship",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row4[0].f1_43[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 145.0,
+        "y": 345.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep2_relationship",
+      "name": "Dependent 2 (4) Relationship",
+      "spoken_name": "Dependent 2 relationship",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row4[0].f1_44[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 253.0,
+        "y": 345.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep3_relationship",
+      "name": "Dependent 3 (4) Relationship",
+      "spoken_name": "Dependent 3 relationship",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row4[0].f1_45[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 361.0,
+        "y": 345.0,
+        "width": 106.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep4_relationship",
+      "name": "Dependent 4 (4) Relationship",
+      "spoken_name": "Dependent 4 relationship",
+      "type": "text",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row4[0].f1_46[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 469.0,
+        "y": 345.0,
+        "width": 107.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_dep1_lived_with",
+      "name": "Dependent 1 (5)(a) Yes - Check if lived with you more than half of 2025",
+      "spoken_name": "Dependent 1 lived with you",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent1[0].c1_12[0]",
+      "options": [
+        {
+          "value": "c1_12[0]",
+          "label": "Yes - lived with you more than half of 2025",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent1[0].c1_12[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 169.6,
+        "y": 359.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep1_in_us",
+      "name": "Dependent 1 (5)(b) And in the U.S.",
+      "spoken_name": "Dependent 1 in the U.S.",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent1[0].c1_13[0]",
+      "options": [
+        {
+          "value": "c1_13[0]",
+          "label": "And in the U.S.",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent1[0].c1_13[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 169.6,
+        "y": 371.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep2_lived_with",
+      "name": "Dependent 2 (5)(a) Yes - Check if lived with you more than half of 2025",
+      "spoken_name": "Dependent 2 lived with you",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent2[0].c1_14[0]",
+      "options": [
+        {
+          "value": "c1_14[0]",
+          "label": "Yes - lived with you more than half of 2025",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent2[0].c1_14[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 277.6,
+        "y": 359.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep2_in_us",
+      "name": "Dependent 2 (5)(b) And in the U.S.",
+      "spoken_name": "Dependent 2 in the U.S.",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent2[0].c1_15[0]",
+      "options": [
+        {
+          "value": "c1_15[0]",
+          "label": "And in the U.S.",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent2[0].c1_15[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 277.6,
+        "y": 371.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep3_lived_with",
+      "name": "Dependent 3 (5)(a) Yes - Check if lived with you more than half of 2025",
+      "spoken_name": "Dependent 3 lived with you",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent3[0].c1_16[0]",
+      "options": [
+        {
+          "value": "c1_16[0]",
+          "label": "Yes - lived with you more than half of 2025",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent3[0].c1_16[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 385.6,
+        "y": 359.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep3_in_us",
+      "name": "Dependent 3 (5)(b) And in the U.S.",
+      "spoken_name": "Dependent 3 in the U.S.",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent3[0].c1_17[0]",
+      "options": [
+        {
+          "value": "c1_17[0]",
+          "label": "And in the U.S.",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent3[0].c1_17[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 385.6,
+        "y": 371.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep4_lived_with",
+      "name": "Dependent 4 (5)(a) Yes - Check if lived with you more than half of 2025",
+      "spoken_name": "Dependent 4 lived with you",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent4[0].c1_18[0]",
+      "options": [
+        {
+          "value": "c1_18[0]",
+          "label": "Yes - lived with you more than half of 2025",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent4[0].c1_18[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 493.6,
+        "y": 359.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep4_in_us",
+      "name": "Dependent 4 (5)(b) And in the U.S.",
+      "spoken_name": "Dependent 4 in the U.S.",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent4[0].c1_19[0]",
+      "options": [
+        {
+          "value": "c1_19[0]",
+          "label": "And in the U.S.",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row5[0].Dependent4[0].c1_19[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 493.6,
+        "y": 371.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep1_fulltime_student",
+      "name": "Dependent 1 (6) Check if Full-time student",
+      "spoken_name": "Dependent 1 full-time student",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent1[0].c1_20[0]",
+      "options": [
+        {
+          "value": "c1_20[0]",
+          "label": "Full-time student",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent1[0].c1_20[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 148.0,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep1_disabled",
+      "name": "Dependent 1 (6) Check if Permanently and totally disabled",
+      "spoken_name": "Dependent 1 disabled",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent1[0].c1_21[0]",
+      "options": [
+        {
+          "value": "c1_21[0]",
+          "label": "Permanently and totally disabled",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent1[0].c1_21[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 198.4,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep2_fulltime_student",
+      "name": "Dependent 2 (6) Check if Full-time student",
+      "spoken_name": "Dependent 2 full-time student",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent2[0].c1_22[0]",
+      "options": [
+        {
+          "value": "c1_22[0]",
+          "label": "Full-time student",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent2[0].c1_22[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 256.0,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep2_disabled",
+      "name": "Dependent 2 (6) Check if Permanently and totally disabled",
+      "spoken_name": "Dependent 2 disabled",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent2[0].c1_23[0]",
+      "options": [
+        {
+          "value": "c1_23[0]",
+          "label": "Permanently and totally disabled",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent2[0].c1_23[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 306.4,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep3_fulltime_student",
+      "name": "Dependent 3 (6) Check if Full-time student",
+      "spoken_name": "Dependent 3 full-time student",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent3[0].c1_24[0]",
+      "options": [
+        {
+          "value": "c1_24[0]",
+          "label": "Full-time student",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent3[0].c1_24[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 364.0,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep3_disabled",
+      "name": "Dependent 3 (6) Check if Permanently and totally disabled",
+      "spoken_name": "Dependent 3 disabled",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent3[0].c1_25[0]",
+      "options": [
+        {
+          "value": "c1_25[0]",
+          "label": "Permanently and totally disabled",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent3[0].c1_25[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 414.4,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep4_fulltime_student",
+      "name": "Dependent 4 (6) Check if Full-time student",
+      "spoken_name": "Dependent 4 full-time student",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent4[0].c1_26[0]",
+      "options": [
+        {
+          "value": "c1_26[0]",
+          "label": "Full-time student",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent4[0].c1_26[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 472.0,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep4_disabled",
+      "name": "Dependent 4 (6) Check if Permanently and totally disabled",
+      "spoken_name": "Dependent 4 disabled",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent4[0].c1_27[0]",
+      "options": [
+        {
+          "value": "c1_27[0]",
+          "label": "Permanently and totally disabled",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row6[0].Dependent4[0].c1_27[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 522.4,
+        "y": 383.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep1_ctc",
+      "name": "Dependent 1 (7) Credits - Child tax credit",
+      "spoken_name": "Dependent 1 child tax credit",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent1[0].c1_28[0]",
+      "options": [
+        {
+          "value": "c1_28[0]",
+          "label": "Child tax credit",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent1[0].c1_28[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 148.0,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep1_odc",
+      "name": "Dependent 1 (7) Credits - Credit for other dependents",
+      "spoken_name": "Dependent 1 credit for other dependents",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent1[0].c1_28[1]",
+      "options": [
+        {
+          "value": "c1_28[1]",
+          "label": "Credit for other dependents",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent1[0].c1_28[1]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 198.4,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep2_ctc",
+      "name": "Dependent 2 (7) Credits - Child tax credit",
+      "spoken_name": "Dependent 2 child tax credit",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent2[0].c1_29[0]",
+      "options": [
+        {
+          "value": "c1_29[0]",
+          "label": "Child tax credit",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent2[0].c1_29[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 256.0,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep2_odc",
+      "name": "Dependent 2 (7) Credits - Credit for other dependents",
+      "spoken_name": "Dependent 2 credit for other dependents",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent2[0].c1_29[1]",
+      "options": [
+        {
+          "value": "c1_29[1]",
+          "label": "Credit for other dependents",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent2[0].c1_29[1]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 306.4,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep3_ctc",
+      "name": "Dependent 3 (7) Credits - Child tax credit",
+      "spoken_name": "Dependent 3 child tax credit",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent3[0].c1_30[0]",
+      "options": [
+        {
+          "value": "c1_30[0]",
+          "label": "Child tax credit",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent3[0].c1_30[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 364.0,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep3_odc",
+      "name": "Dependent 3 (7) Credits - Credit for other dependents",
+      "spoken_name": "Dependent 3 credit for other dependents",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent3[0].c1_30[1]",
+      "options": [
+        {
+          "value": "c1_30[1]",
+          "label": "Credit for other dependents",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent3[0].c1_30[1]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 414.4,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep4_ctc",
+      "name": "Dependent 4 (7) Credits - Child tax credit",
+      "spoken_name": "Dependent 4 child tax credit",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent4[0].c1_31[0]",
+      "options": [
+        {
+          "value": "c1_31[0]",
+          "label": "Child tax credit",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent4[0].c1_31[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 472.0,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_dep4_odc",
+      "name": "Dependent 4 (7) Credits - Credit for other dependents",
+      "spoken_name": "Dependent 4 credit for other dependents",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent4[0].c1_31[1]",
+      "options": [
+        {
+          "value": "c1_31[1]",
+          "label": "Credit for other dependents",
+          "pdf_field_name": "topmostSubform[0].Page1[0].Table_Dependents[0].Row7[0].Dependent4[0].c1_31[1]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 522.4,
+        "y": 404.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_mfs_hoh_apart",
+      "name": "Check if your filing status is MFS or HOH and you lived apart from your spouse for the last 6 months of 2025, or you are legally separated",
+      "spoken_name": "MFS/HOH lived apart",
+      "type": "checkbox",
+      "section_id": "sec_dependents",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_32[0]",
+      "options": [
+        {
+          "value": "c1_32[0]",
+          "label": "MFS/HOH lived apart from spouse last 6 months of 2025",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_32[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 95.6,
+        "y": 424.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_1a",
+      "name": "Line 1a - Total amount from Form(s) W-2, box 1",
+      "spoken_name": "Line 1a W-2 wages",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_31[0]",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "fld_1b",
+      "name": "Line 1b - Household employee wages not reported on Form(s) W-2",
+      "spoken_name": "Line 1b household employee wages",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_32[0]",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "fld_1c",
+      "name": "Line 1c - Tip income not reported on line 1a",
+      "spoken_name": "Line 1c tip income",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_33[0]",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "fld_1d",
+      "name": "Line 1d - Medicaid waiver payments not reported on Form(s) W-2",
+      "spoken_name": "Line 1d Medicaid waiver payments",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_34[0]",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "fld_1e",
+      "name": "Line 1e - Taxable dependent care benefits from Form 2441, line 26",
+      "spoken_name": "Line 1e dependent care benefits",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 450.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_1f",
+      "name": "Line 1f - Employer-provided adoption benefits from Form 8839, line 31",
+      "spoken_name": "Line 1f adoption benefits",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_48[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 462.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_1g",
+      "name": "Line 1g - Wages from Form 8919, line 6",
+      "spoken_name": "Line 1g Form 8919 wages",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_49[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 474.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_1h_type",
+      "name": "Line 1h - Other earned income type",
+      "spoken_name": "Line 1h other earned income type",
+      "type": "text",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_50[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 486.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_1h",
+      "name": "Line 1h - Other earned income amount",
+      "spoken_name": "Line 1h other earned income amount",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_51[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 498.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_1i",
+      "name": "Line 1i - Nontaxable combat pay election",
+      "spoken_name": "Line 1i nontaxable combat pay",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_52[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 510.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_1z",
+      "name": "Line 1z - Add lines 1a through 1h",
+      "spoken_name": "Line 1z total",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_53[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 522.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_2a",
+      "name": "Line 2a - Tax-exempt interest",
+      "spoken_name": "Line 2a tax-exempt interest",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_54[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 344.2,
+        "y": 534.0,
+        "width": 131.0,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_2b",
+      "name": "Line 2b - Taxable interest",
+      "spoken_name": "Line 2b taxable interest",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_55[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 534.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_3a",
+      "name": "Line 3a - Qualified dividends",
+      "spoken_name": "Line 3a qualified dividends",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_56[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 410.4,
+        "y": 546.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_3b",
+      "name": "Line 3b - Ordinary dividends",
+      "spoken_name": "Line 3b ordinary dividends",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_57[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 558.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_3c",
+      "name": "Line 3c - Check if your child's dividends are included in 1 Line 3a or 2 Line 3b",
+      "spoken_name": "Line 3c child's dividends included",
+      "type": "radio",
+      "section_id": "sec_income",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c1_33[0]",
+          "label": "1 Line 3a",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_33[0]"
+        },
+        {
+          "value": "c1_34[0]",
+          "label": "2 Line 3b",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_34[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 283.8,
+        "y": 596.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_4a",
+      "name": "Line 4a - IRA distributions",
+      "spoken_name": "Line 4a IRA distributions",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_58[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 252.0,
+        "y": 570.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_4b",
+      "name": "Line 4b - IRA distributions taxable amount",
+      "spoken_name": "Line 4b IRA taxable amount",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_59[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 570.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_4c",
+      "name": "Line 4c - Check if 1 Rollover, 2 QCD, 3 (other)",
+      "spoken_name": "Line 4c check",
+      "type": "radio",
+      "section_id": "sec_income",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c1_35[0]",
+          "label": "1 Rollover",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_35[0]"
+        },
+        {
+          "value": "c1_36[0]",
+          "label": "2 QCD",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_36[0]"
+        },
+        {
+          "value": "c1_37[0]",
+          "label": "3",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_37[0]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "c1_37[0]",
+          "shows": [
+            "fld_4c_other"
+          ]
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 283.8,
+        "y": 620.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_4c_other",
+      "name": "Line 4c - Other (3) specify",
+      "spoken_name": "Line 4c other amount",
+      "type": "text",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_60[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 252.0,
+        "y": 582.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_5a",
+      "name": "Line 5a - Pensions and annuities",
+      "spoken_name": "Line 5a pensions and annuities",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_61[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 582.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_5b",
+      "name": "Line 5b - Pensions and annuities taxable amount",
+      "spoken_name": "Line 5b pensions taxable amount",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_62[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 252.0,
+        "y": 606.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_5c",
+      "name": "Line 5c - Check if 1 Rollover, 2 PSO, 3 (other)",
+      "spoken_name": "Line 5c check",
+      "type": "radio",
+      "section_id": "sec_income",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c1_38[0]",
+          "label": "1 Rollover",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_38[0]"
+        },
+        {
+          "value": "c1_39[0]",
+          "label": "2 PSO",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_39[0]"
+        },
+        {
+          "value": "c1_40[0]",
+          "label": "3",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_40[0]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "c1_40[0]",
+          "shows": [
+            "fld_5c_other"
+          ]
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 283.8,
+        "y": 644.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_5c_other",
+      "name": "Line 5c - Other (3) specify",
+      "spoken_name": "Line 5c other amount",
+      "type": "text",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_63[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 606.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_6a",
+      "name": "Line 6a - Social security benefits",
+      "spoken_name": "Line 6a social security benefits",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_64[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 439.2,
+        "y": 618.0,
+        "width": 36.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_6b",
+      "name": "Line 6b - Social security benefits taxable amount",
+      "spoken_name": "Line 6b social security taxable amount",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_65[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 252.0,
+        "y": 630.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_6c_lumpsum",
+      "name": "Line 6c - If you elect to use the lump-sum election method, check here",
+      "spoken_name": "Line 6c lump-sum election",
+      "type": "checkbox",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_41[0]",
+      "options": [
+        {
+          "value": "c1_41[0]",
+          "label": "Lump-sum election method",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_41[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 467.2,
+        "y": 668.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_6d_mfs_apart",
+      "name": "Line 6d - If you are married filing separately and lived apart from your spouse the entire year, check here",
+      "spoken_name": "Line 6d MFS lived apart entire year",
+      "type": "checkbox",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].c1_42[0]",
+      "options": [
+        {
+          "value": "c1_42[0]",
+          "label": "MFS and lived apart entire year",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_42[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 467.2,
+        "y": 680.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_7a",
+      "name": "Line 7a - Capital gain or (loss). Attach Schedule D if required",
+      "spoken_name": "Line 7a capital gain or loss",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_66[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 630.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_7b",
+      "name": "Line 7b - Check if: Schedule D not required or Includes child's capital gain or (loss)",
+      "spoken_name": "Line 7b check",
+      "type": "radio",
+      "section_id": "sec_income",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c1_43[0]",
+          "label": "Schedule D not required",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_43[0]"
+        },
+        {
+          "value": "c1_44[0]",
+          "label": "Includes child's capital gain or (loss)",
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_44[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 153.2,
+        "y": 704.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_8",
+      "name": "Line 8 - Additional income from Schedule 1, line 10",
+      "spoken_name": "Line 8 additional income",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_67[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 439.2,
+        "y": 642.0,
+        "width": 36.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_9",
+      "name": "Line 9 - Add lines 1z, 2b, 3b, 4b, 5b, 6b, 7a, and 8. This is your total income",
+      "spoken_name": "Line 9 total income",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_68[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 252.0,
+        "y": 654.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_10",
+      "name": "Line 10 - Adjustments to income from Schedule 1, line 26",
+      "spoken_name": "Line 10 adjustments to income",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_69[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 654.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_11a",
+      "name": "Line 11a - Subtract line 10 from line 9. This is your adjusted gross income",
+      "spoken_name": "Line 11a adjusted gross income",
+      "type": "number",
+      "section_id": "sec_income",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_70[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 690.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_11b",
+      "name": "Line 11b - Amount from line 11a (adjusted gross income)",
+      "spoken_name": "Line 11b adjusted gross income",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_01[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 36.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_12a_you_dep",
+      "name": "Line 12a - Someone can claim You as a dependent",
+      "spoken_name": "Line 12a you as dependent",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_1[0]",
+      "options": [
+        {
+          "value": "c2_1[0]",
+          "label": "You as a dependent",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_1[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 203.6,
+        "y": 50.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12a_spouse_dep",
+      "name": "Line 12a - Someone can claim Your spouse as a dependent",
+      "spoken_name": "Line 12a spouse as dependent",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_2[0]",
+      "options": [
+        {
+          "value": "c2_2[0]",
+          "label": "Your spouse as a dependent",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_2[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 304.4,
+        "y": 50.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12b_spouse_itemizes",
+      "name": "Line 12b - Spouse itemizes on a separate return",
+      "spoken_name": "Line 12b spouse itemizes",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_3[0]",
+      "options": [
+        {
+          "value": "c2_3[0]",
+          "label": "Spouse itemizes on a separate return",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_3[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 115.2,
+        "y": 62.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12c_dual_status",
+      "name": "Line 12c - You were a dual-status alien",
+      "spoken_name": "Line 12c dual-status alien",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_4[0]",
+      "options": [
+        {
+          "value": "c2_4[0]",
+          "label": "You were a dual-status alien",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_4[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 304.4,
+        "y": 62.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12d_you_born",
+      "name": "Line 12d - You: Were born before January 2, 1961",
+      "spoken_name": "Line 12d you born before 1961",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_5[0]",
+      "options": [
+        {
+          "value": "c2_5[0]",
+          "label": "You: Were born before January 2, 1961",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_5[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 153.2,
+        "y": 74.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12d_you_blind",
+      "name": "Line 12d - You: Are blind",
+      "spoken_name": "Line 12d you blind",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_6[0]",
+      "options": [
+        {
+          "value": "c2_6[0]",
+          "label": "You: Are blind",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_6[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 311.6,
+        "y": 74.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12d_spouse_born",
+      "name": "Line 12d - Spouse: Was born before January 2, 1961",
+      "spoken_name": "Line 12d spouse born before 1961",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_7[0]",
+      "options": [
+        {
+          "value": "c2_7[0]",
+          "label": "Spouse: Was born before January 2, 1961",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_7[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 153.2,
+        "y": 86.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12d_spouse_blind",
+      "name": "Line 12d - Spouse: Is blind",
+      "spoken_name": "Line 12d spouse blind",
+      "type": "checkbox",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_8[0]",
+      "options": [
+        {
+          "value": "c2_8[0]",
+          "label": "Spouse: Is blind",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_8[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 311.6,
+        "y": 86.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_12e",
+      "name": "Line 12e - Standard deduction or itemized deductions (from Schedule A)",
+      "spoken_name": "Line 12e standard or itemized deductions",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_02[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 96.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_13a",
+      "name": "Line 13a - Qualified business income deduction from Form 8995 or Form 8995-A",
+      "spoken_name": "Line 13a qualified business income deduction",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_03[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 108.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_13b",
+      "name": "Line 13b - Additional deductions from Schedule 1-A, line 38",
+      "spoken_name": "Line 13b additional deductions",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_04[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 120.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_14",
+      "name": "Line 14 - Add lines 12e, 13a, and 13b",
+      "spoken_name": "Line 14 total deductions",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_05[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 132.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_15",
+      "name": "Line 15 - Subtract line 14 from line 11b. This is your taxable income",
+      "spoken_name": "Line 15 taxable income",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_06[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 144.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_16_check",
+      "name": "Line 16 - Check if any from Form(s): 1 8814, 2 4972, 3 (other)",
+      "spoken_name": "Line 16 form check",
+      "type": "radio",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c2_9[0]",
+          "label": "1 Form 8814",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_9[0]"
+        },
+        {
+          "value": "c2_10[0]",
+          "label": "2 Form 4972",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_10[0]"
+        },
+        {
+          "value": "c2_11[0]",
+          "label": "3",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_11[0]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "c2_11[0]",
+          "shows": [
+            "fld_16_other"
+          ]
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 312.6,
+        "y": 158.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_16_other",
+      "name": "Line 16 - Form(s) other (3) specify",
+      "spoken_name": "Line 16 other form",
+      "type": "text",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_07[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 439.2,
+        "y": 156.0,
+        "width": 36.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_16",
+      "name": "Line 16 - Tax",
+      "spoken_name": "Line 16 tax",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_08[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 156.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_17",
+      "name": "Line 17 - Amount from Schedule 2, line 3",
+      "spoken_name": "Line 17 Schedule 2 amount",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_09[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 168.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_18",
+      "name": "Line 18 - Add lines 16 and 17",
+      "spoken_name": "Line 18 sum",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_10[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 180.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_19",
+      "name": "Line 19 - Child tax credit or credit for other dependents from Schedule 8812",
+      "spoken_name": "Line 19 child tax credit",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_11[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 192.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_20",
+      "name": "Line 20 - Amount from Schedule 3, line 8",
+      "spoken_name": "Line 20 Schedule 3 amount",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_12[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 204.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_21",
+      "name": "Line 21 - Add lines 19 and 20",
+      "spoken_name": "Line 21 sum",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_13[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 216.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_22",
+      "name": "Line 22 - Subtract line 21 from line 18. If zero or less, enter -0-",
+      "spoken_name": "Line 22 subtotal",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_14[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 228.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_23",
+      "name": "Line 23 - Other taxes, including self-employment tax, from Schedule 2, line 21",
+      "spoken_name": "Line 23 other taxes",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_15[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 240.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_24",
+      "name": "Line 24 - Add lines 22 and 23. This is your total tax",
+      "spoken_name": "Line 24 total tax",
+      "type": "number",
+      "section_id": "sec_tax_credits",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_16[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 252.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_25a",
+      "name": "Line 25a - Federal income tax withheld from Form(s) W-2",
+      "spoken_name": "Line 25a W-2 withholding",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_17[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 276.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_25b",
+      "name": "Line 25b - Federal income tax withheld from Form(s) 1099",
+      "spoken_name": "Line 25b 1099 withholding",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_18[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 288.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_25c",
+      "name": "Line 25c - Federal income tax withheld from Other forms",
+      "spoken_name": "Line 25c other withholding",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_19[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 300.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_25d",
+      "name": "Line 25d - Add lines 25a through 25c",
+      "spoken_name": "Line 25d total withholding",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_20[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 312.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_26",
+      "name": "Line 26 - 2025 estimated tax payments and amount applied from 2024 return",
+      "spoken_name": "Line 26 estimated tax payments",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_21[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 324.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_former_spouse_ssn",
+      "name": "If you made estimated tax payments with your former spouse in 2025, enter their SSN",
+      "spoken_name": "Former spouse SSN",
+      "type": "text",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].SSN_ReadOrder[0].f2_22[0]",
+      "max_length": 9,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 237.6,
+        "y": 348.0,
+        "width": 86.4,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_27a",
+      "name": "Line 27a - Earned income credit (EIC)",
+      "spoken_name": "Line 27a earned income credit",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_23[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 360.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_27b_clergy",
+      "name": "Line 27b - Clergy filing Schedule SE",
+      "spoken_name": "Line 27b clergy Schedule SE",
+      "type": "checkbox",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_12[0]",
+      "options": [
+        {
+          "value": "c2_12[0]",
+          "label": "Clergy filing Schedule SE",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_12[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 467.2,
+        "y": 374.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_27c_no_eic",
+      "name": "Line 27c - If you do not want to claim the EIC, check here",
+      "spoken_name": "Line 27c do not claim EIC",
+      "type": "checkbox",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_13[0]",
+      "options": [
+        {
+          "value": "c2_13[0]",
+          "label": "Do not want to claim the EIC",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_13[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 467.2,
+        "y": 386.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_28_check",
+      "name": "Line 28 - If you do not want to claim the ACTC, check here",
+      "spoken_name": "Line 28 do not claim ACTC",
+      "type": "checkbox",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].Line28_ReadOrder[0].c2_14[0]",
+      "options": [
+        {
+          "value": "c2_14[0]",
+          "label": "Do not want to claim the ACTC",
+          "pdf_field_name": "topmostSubform[0].Page2[0].Line28_ReadOrder[0].c2_14[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 373.6,
+        "y": 410.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_28",
+      "name": "Line 28 - Additional child tax credit (ACTC) from Schedule 8812",
+      "spoken_name": "Line 28 additional child tax credit",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_24[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 408.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_29",
+      "name": "Line 29 - American opportunity credit from Form 8863, line 8",
+      "spoken_name": "Line 29 American opportunity credit",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_25[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 420.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_30",
+      "name": "Line 30 - Refundable adoption credit from Form 8839, line 13",
+      "spoken_name": "Line 30 refundable adoption credit",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_26[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 432.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_31",
+      "name": "Line 31 - Amount from Schedule 3, line 15",
+      "spoken_name": "Line 31 Schedule 3 amount",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_27[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 444.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_32",
+      "name": "Line 32 - Add lines 27a, 28, 29, 30, and 31. Total other payments and refundable credits",
+      "spoken_name": "Line 32 total other payments",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_28[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 456.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_33",
+      "name": "Line 33 - Add lines 25d, 26, and 32. These are your total payments",
+      "spoken_name": "Line 33 total payments",
+      "type": "number",
+      "section_id": "sec_payments",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_29[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 468.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_34",
+      "name": "Line 34 - If line 33 is more than line 24, subtract line 24 from line 33. This is the amount you overpaid",
+      "spoken_name": "Line 34 amount overpaid",
+      "type": "number",
+      "section_id": "sec_refund",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_30[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 480.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_35a",
+      "name": "Line 35a - Amount of line 34 you want refunded to you",
+      "spoken_name": "Line 35a refund amount",
+      "type": "number",
+      "section_id": "sec_refund",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_31[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 492.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_35a_form8888",
+      "name": "Line 35a - If Form 8888 is attached, check here",
+      "spoken_name": "Line 35a Form 8888 attached",
+      "type": "checkbox",
+      "section_id": "sec_refund",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_15[0]",
+      "options": [
+        {
+          "value": "c2_15[0]",
+          "label": "Form 8888 is attached",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_15[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 467.2,
+        "y": 494.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_routing",
+      "name": "Line 35b - Routing number",
+      "spoken_name": "Routing number",
+      "type": "text",
+      "section_id": "sec_refund",
+      "pdf_field_name": "topmostSubform[0].Page2[0].RoutingNo[0].f2_32[0]",
+      "max_length": 9,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 180.0,
+        "y": 504.0,
+        "width": 129.6,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_account_type",
+      "name": "Line 35c - Type: Checking or Savings",
+      "spoken_name": "Account type",
+      "type": "radio",
+      "section_id": "sec_refund",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c2_16[0]",
+          "label": "Checking",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_16[0]"
+        },
+        {
+          "value": "c2_16[1]",
+          "label": "Savings",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_16[1]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 377.4,
+        "y": 506.0,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_account_number",
+      "name": "Line 35d - Account number",
+      "spoken_name": "Account number",
+      "type": "text",
+      "section_id": "sec_refund",
+      "pdf_field_name": "topmostSubform[0].Page2[0].AccountNo[0].f2_33[0]",
+      "max_length": 17,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 180.0,
+        "y": 516.0,
+        "width": 244.8,
+        "height": 11.0
+      }
+    },
+    {
+      "id": "fld_36",
+      "name": "Line 36 - Amount of line 34 you want applied to your 2026 estimated tax",
+      "spoken_name": "Line 36 applied to 2026 estimated tax",
+      "type": "number",
+      "section_id": "sec_refund",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_34[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 528.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_37",
+      "name": "Line 37 - Subtract line 33 from line 24. This is the amount you owe",
+      "spoken_name": "Line 37 amount you owe",
+      "type": "number",
+      "section_id": "sec_owe",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_35[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 552.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_38",
+      "name": "Line 38 - Estimated tax penalty",
+      "spoken_name": "Line 38 estimated tax penalty",
+      "type": "number",
+      "section_id": "sec_owe",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_36[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 410.4,
+        "y": 564.0,
+        "width": 71.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_designee_allow",
+      "name": "Third Party Designee - Do you want to allow another person to discuss this return with the IRS?",
+      "spoken_name": "Allow third party designee",
+      "type": "radio",
+      "section_id": "sec_designee",
+      "pdf_field_name": null,
+      "options": [
+        {
+          "value": "c2_17[0]",
+          "label": "Yes. Complete below.",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_17[0]"
+        },
+        {
+          "value": "c2_17[1]",
+          "label": "No",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_17[1]"
+        }
+      ],
+      "controls_fields": [
+        {
+          "operator": "equals",
+          "value": "c2_17[0]",
+          "makes_required": [
+            "fld_designee_name",
+            "fld_designee_phone",
+            "fld_designee_pin"
+          ]
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 432.0,
+        "y": 577.75,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_designee_name",
+      "name": "Designee's name",
+      "spoken_name": "Designee's name",
+      "type": "text",
+      "section_id": "sec_designee",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_37[0]",
+      "multiline": true,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 129.6,
+        "y": 594.0,
+        "width": 165.6,
+        "height": 18.0
+      }
+    },
+    {
+      "id": "fld_designee_phone",
+      "name": "Designee's phone no.",
+      "spoken_name": "Designee's phone number",
+      "type": "text",
+      "section_id": "sec_designee",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_38[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 324.0,
+        "y": 594.0,
+        "width": 100.8,
+        "height": 18.0
+      }
+    },
+    {
+      "id": "fld_designee_pin",
+      "name": "Designee's Personal identification number (PIN)",
+      "spoken_name": "Designee's PIN",
+      "type": "text",
+      "section_id": "sec_designee",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_39[0]",
+      "max_length": 5,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 600.0,
+        "width": 72.0,
+        "height": 11.5
+      }
+    },
+    {
+      "id": "fld_your_occupation",
+      "name": "Your occupation",
+      "spoken_name": "Your occupation",
+      "type": "text",
+      "section_id": "sec_sign",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_40[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 325.0,
+        "y": 646.0,
+        "width": 135.05,
+        "height": 20.0
+      }
+    },
+    {
+      "id": "fld_your_ip_pin",
+      "name": "If the IRS sent you an Identity Protection PIN, enter it here",
+      "spoken_name": "Your Identity Protection PIN",
+      "type": "text",
+      "section_id": "sec_sign",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_41[0]",
+      "max_length": 6,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 654.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_spouse_occupation",
+      "name": "Spouse's occupation",
+      "spoken_name": "Spouse's occupation",
+      "type": "text",
+      "section_id": "sec_sign",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_42[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 325.0,
+        "y": 676.0,
+        "width": 135.05,
+        "height": 20.0
+      }
+    },
+    {
+      "id": "fld_spouse_ip_pin",
+      "name": "If the IRS sent your spouse an Identity Protection PIN, enter it here",
+      "spoken_name": "Spouse's Identity Protection PIN",
+      "type": "text",
+      "section_id": "sec_sign",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_43[0]",
+      "max_length": 6,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 504.0,
+        "y": 684.0,
+        "width": 72.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_taxpayer_phone",
+      "name": "Phone no.",
+      "spoken_name": "Phone number",
+      "type": "text",
+      "section_id": "sec_sign",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_44[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 127.6,
+        "y": 696.0,
+        "width": 145.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_taxpayer_email",
+      "name": "Email address",
+      "spoken_name": "Email address",
+      "type": "text",
+      "section_id": "sec_sign",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_45[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 324.0,
+        "y": 696.0,
+        "width": 252.0,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_preparer_name",
+      "name": "Preparer's name",
+      "spoken_name": "Preparer's name",
+      "type": "text",
+      "section_id": "sec_preparer",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_46[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 91.6,
+        "y": 718.0,
+        "width": 130.85,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_preparer_ptin",
+      "name": "Preparer's PTIN",
+      "spoken_name": "Preparer's PTIN",
+      "type": "text",
+      "section_id": "sec_preparer",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_47[0]",
+      "max_length": 11,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 454.6,
+        "y": 718.0,
+        "width": 55.85,
+        "height": 14.0
+      }
+    },
+    {
+      "id": "fld_preparer_self_employed",
+      "name": "Check if: Self-employed",
+      "spoken_name": "Preparer self-employed",
+      "type": "checkbox",
+      "section_id": "sec_preparer",
+      "pdf_field_name": "topmostSubform[0].Page2[0].c2_18[0]",
+      "options": [
+        {
+          "value": "c2_18[0]",
+          "label": "Self-employed",
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_18[0]"
+        }
+      ],
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 518.4,
+        "y": 720.5,
+        "width": 8.0,
+        "height": 8.0
+      }
+    },
+    {
+      "id": "fld_firm_name",
+      "name": "Firm's name",
+      "spoken_name": "Firm's name",
+      "type": "text",
+      "section_id": "sec_preparer",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_48[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 134.6,
+        "y": 732.0,
+        "width": 318.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_firm_phone",
+      "name": "Firm's phone no.",
+      "spoken_name": "Firm's phone number",
+      "type": "text",
+      "section_id": "sec_preparer",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_49[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 494.6,
+        "y": 732.0,
+        "width": 81.4,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_firm_address",
+      "name": "Firm's address",
+      "spoken_name": "Firm's address",
+      "type": "text",
+      "section_id": "sec_preparer",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_50[0]",
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 142.6,
+        "y": 744.0,
+        "width": 310.25,
+        "height": 12.0
+      }
+    },
+    {
+      "id": "fld_firm_ein",
+      "name": "Firm's EIN",
+      "spoken_name": "Firm's EIN",
+      "type": "text",
+      "section_id": "sec_preparer",
+      "pdf_field_name": "topmostSubform[0].Page2[0].f2_51[0]",
+      "max_length": 10,
+      "validation": {
+        "required": false
+      },
+      "pdf_position": {
+        "page": 2,
+        "x": 494.6,
+        "y": 744.0,
+        "width": 81.4,
+        "height": 12.0
+      }
+    }
+  ],
+  "supplements": [],
+  "_bakeoff": {
+    "arm": "claude-hybrid-plain",
+    "model": "claude-opus-4-8",
+    "backend": "claude-cli",
+    "enriched": false,
+    "fewshot": false,
+    "pdf_sent": true,
+    "disabled_signals": [],
+    "order_caveat": false,
+    "tokens": {
+      "input": 6,
+      "output": 31281,
+      "cost_usd_equiv": 4.01972475
+    },
+    "authoring": {
+      "tool": "extract_form.py",
+      "prompt": "plain",
+      "positions_filled": 172,
+      "schema_valid": true,
+      "validation": "validated against backend FormSchema (Pydantic)"
+    }
+  }
+}

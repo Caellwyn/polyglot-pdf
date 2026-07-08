@@ -38,6 +38,9 @@ def _run(coro):
 # (source=pdf requires extraction_info) -- used by the mark-complete gate tests.
 VALID_SCHEMA = {
     "source": "pdf",
+    # Post the P6.2 flip (bd h76m.16) a complete kit MUST be v2 -- the
+    # mark-complete gate requires schema_version=="2".
+    "schema_version": "2",
     "form_metadata": {"title": "Test Form", "version": "unknown"},
     "sections": [{"id": "s1", "label": "Section 1", "order": 1, "fields": ["f1"]}],
     "fields": [
@@ -1066,11 +1069,12 @@ def test_mark_complete_requires_a_schema(client):
     assert r.status_code == 409
 
 
-def test_mark_complete_lint_gate_409s_naming_findings(client):
-    """bd h76m.5 (P2.1): zero lint ERRORs to promote. A schema that PARSES
-    (duplicate option values are legal to Pydantic on a v1 schema -- the
-    shipped-f1040 bug class) must still be refused at the publish gate, with
-    the findings named so the editor can fix them."""
+def test_mark_complete_publish_gate_refuses_a_duplicate_option_schema(client):
+    """bd h76m.5 (P2.1) + the P6.2 flip (bd h76m.16): a schema with duplicate
+    option values must be refused at the publish gate, named so the editor can
+    fix it. Post the flip, v2 strictness is always-on, so this defect is caught
+    at the PARSE gate (422) rather than the lint gate -- the publish gate still
+    stands between a bad schema and the voice app, just one layer earlier."""
     from backend.models.form_models import FormSchema
 
     c, _store, root = client
@@ -1079,14 +1083,15 @@ def test_mark_complete_lint_gate_409s_naming_findings(client):
     linty["fields"].append({
         "id": "picker", "name": "Picker", "spoken_name": "picker",
         "type": "select", "section_id": "s1",
+        "pdf_field_name": "form1[0].pick[0]",
         "options": [
             {"value": "same", "label": "A"},
             {"value": "same", "label": "B"},
         ],
     })
-    # Sanity: this schema passes the Pydantic gate (v1 tolerance) -- the lint
-    # gate is the ONLY thing standing between it and the voice app.
-    FormSchema.model_validate(linty)
+    # The parse gate now catches this (v2 strictness is always-on).
+    with pytest.raises(Exception):
+        FormSchema.model_validate(linty)
 
     _make_kit(root, "linty", schema=linty)
     r = c.post(
@@ -1094,14 +1099,32 @@ def test_mark_complete_lint_gate_409s_naming_findings(client):
         headers={"X-Editor-Token": "edit-tok"},
         json={"status": "complete"},
     )
-    assert r.status_code == 409
+    assert r.status_code == 422
     detail = r.json()["detail"]
-    assert "lint error" in detail
-    assert "option-value-duplicate" in detail  # names the rule
-    assert "picker" in detail                  # names the field
+    assert "duplicate option values" in detail  # names the defect
+    assert "picker" in detail                    # names the field
     # The kit stays draft.
     meta = json.loads((root / "linty" / "metadata.json").read_text())
     assert meta["status"] == "draft"
+
+
+def test_mark_complete_requires_v2_schema_version(client):
+    # P6.2 flip (bd h76m.16 / t96a): a complete kit must be v2. A v2-shaped schema
+    # WITHOUT the schema_version stamp (or carrying a removed key the model would
+    # silently ignore) is refused at the publish gate, closing the extra="ignore"
+    # hole. VALID_SCHEMA minus the stamp is otherwise promotable.
+    c, _store, root = client
+    unstamped = json.loads(json.dumps(VALID_SCHEMA))
+    del unstamped["schema_version"]
+    _make_kit(root, "unstamped", schema=unstamped)
+    r = c.post(
+        "/api/editor/kits/unstamped/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 422
+    assert "not v2" in r.json()["detail"] or "schema_version" in r.json()["detail"]
+    assert json.loads((root / "unstamped" / "metadata.json").read_text())["status"] == "draft"
 
 
 def test_mark_complete_validates_against_form_contract(client):
@@ -1542,10 +1565,11 @@ def test_promotion_survives_a_transient_dump_read_error(client, monkeypatch):
 
 
 def test_stored_with_issues_draft_is_unpromotable_two_gate_seam(client, monkeypatch):
-    # The two-gate seam: a stored lint-ERROR draft (via the extract route) is
-    # UN-PROMOTABLE -- mark-complete 409s on the LINT errors specifically (store
-    # != promote). Uses a Pydantic-valid draft so the refusal is the lint gate,
-    # not the earlier wire-contract gate.
+    # The two-gate seam: a defective draft (via the extract route) STORES
+    # (200, storedWithIssues) but is UN-PROMOTABLE (store != promote). Post the
+    # P6.2 flip (bd h76m.16), v2 strictness is always-on, so a duplicate-option
+    # draft is refused at the PARSE gate (422) at promotion time -- the seam
+    # (store accepts, promote refuses) still holds, one layer earlier.
     c, store, root = client
     _make_kit(root, "fresh")
     fake = _fake_extractor(_LINT_ERROR_VALID_DRAFT, exit_code=3)
@@ -1554,14 +1578,14 @@ def test_stored_with_issues_draft_is_unpromotable_two_gate_seam(client, monkeypa
         "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}
     )
     assert stored.status_code == 200 and stored.json()["storedWithIssues"] is True
-    # Now try to promote it -- the lint gate must refuse (409).
+    # Now try to promote it -- the publish gate must refuse.
     promote = c.post(
         "/api/editor/kits/fresh/status",
         headers={"X-Editor-Token": "auth-tok"},
         json={"status": "complete"},
     )
-    assert promote.status_code == 409, promote.text
-    assert "lint error" in promote.json()["detail"]
+    assert promote.status_code == 422, promote.text
+    assert "duplicate option values" in promote.json()["detail"]
 
 
 def test_extract_requires_author_role_and_a_pdf(client, monkeypatch):

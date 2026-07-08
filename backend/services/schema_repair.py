@@ -481,37 +481,8 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
             else:
                 f[kind] = new_cond
 
-        controls = f.get("controls_fields")
-        if isinstance(controls, list):
-            kept_controls = []
-            for j, control in enumerate(controls):
-                if not isinstance(control, dict):
-                    continue
-                path = f"fields[{i}] (id={fid}).controls_fields[{j}]"
-                atom = _rewrite_atom(
-                    {"field": fid,
-                     "operator": control.get("operator", "equals"),
-                     "value": control.get("value"),
-                     **({"option_id": control["option_id"]}
-                        if isinstance(control.get("option_id"), str) else {})},
-                    f, resolution, path, repairs, count_alias)
-                if atom is None:
-                    repairs.append({
-                        "action": "drop-control", "path": path,
-                        "detail": "trigger condition unrepairable -- control "
-                                  "entry dropped (dead at runtime anyway)",
-                        "error": True,
-                    })
-                    continue
-                control["operator"] = atom["operator"]
-                if "value" in atom:
-                    control["value"] = atom["value"]
-                control.pop("option_id", None)
-                kept_controls.append(control)
-            if kept_controls:
-                f["controls_fields"] = kept_controls
-            else:
-                f.pop("controls_fields", None)
+        # controls_fields was DELETED at the P6.2 strictness flip (bd h76m.16):
+        # dead at runtime, removed from the model. Nothing to repair here.
 
     if alias_hits:
         repairs.append({

@@ -2006,22 +2006,6 @@
       "help": {
         "instructions": "Indicate your current status as a Lawful Permanent Resident, Permanent Resident - In Commuter Status, or Conditional Permanent Resident. Select only one."
       },
-      "controls_fields": [
-        {
-          "operator": "equals",
-          "value": "lawful_permanent_resident",
-          "unlocks": [
-            "p2_checkbox2[5]"
-          ]
-        },
-        {
-          "operator": "equals",
-          "value": "permanent_resident_in_commuter_status",
-          "unlocks": [
-            "p2_checkbox2[5]"
-          ]
-        }
-      ],
       "pdf_position": {
         "page": 2,
         "x": 60.65999984741211,
@@ -2168,17 +2152,6 @@
       "help": {
         "instructions": "Select why you need a new card"
       },
-      "controls_fields": [
-        {
-          "operator": "equals",
-          "value": "my_name_or_other_biographic_information_has_been_legally_changed_since_issuance_of_my_existing_card",
-          "shows": [],
-          "unlocks": [
-            "p2_line2h1_cityandstate"
-          ],
-          "makes_required": []
-        }
-      ],
       "show_if": {
         "field": "p2_checkbox1",
         "operator": "in",

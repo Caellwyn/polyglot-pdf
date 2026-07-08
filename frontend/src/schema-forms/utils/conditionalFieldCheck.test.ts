@@ -313,8 +313,7 @@ describe('composite-gated fields in the voice locked-field path (bd h76m.8)', ()
         id: 'grp',
         name: 'Reason for submitting',
         spoken_name: 'reason for submitting',
-        type: 'checkbox',
-        group_kind: 'checkbox',
+        type: 'checkbox_group',
         section_id: 's1',
         options: [
           { value: 'e_dependent', label: 'Dependent' },

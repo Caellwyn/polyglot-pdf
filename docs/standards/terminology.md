@@ -1,6 +1,9 @@
 # Terminology canon
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- form_models.py's v2 strictness checks, FieldOption/FormSection/FormPart shapes, and the consolidated_widgets/group_kind enforcement all still match this doc's claims). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-07 (bd polyglot-pdf-h76m.16 P6.2 strictness flip: the
+retired-vocabulary section now reflects the DELETION of controls_fields /
+conditional_fields / group_kind / the vq4m hack from the model + evaluators). See
+[../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md](../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md).*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -85,14 +88,18 @@ both dialects parse.
 | **includes / not_includes** | Group-membership operators: "option slug X is (not) in the checkbox_group trigger's selected set". In v2, `equals` on a group trigger is a validation ERROR -- the undocumented equals-means-membership evaluator hack (bd vq4m) is retired vocabulary. |
 | **is_checked** | Bool sugar on a standalone checkbox ONLY. "Any box of the group ticked" is `is_not_empty` (the is_checked dual fate -- `backend/tests/fixtures/is_checked_dual_fate.json`). |
 
-Retired-or-retiring vocabulary, with the exact current enforcement:
-`controls_fields` (trigger-side action lists; dead at runtime) parses under
-v2 with a `DeprecationWarning`; `conditional_fields` is a v2 parse ERROR;
-`group_kind` is conceptually superseded by the `checkbox_group` type but
-still parses silently in both dialects (its deletion is P6.2 work, no v2
-gate yet); `consolidated_widgets` was never a modeled field at all (it
-appears only in kit JSON / SI-exclusion lists) and is likewise slated for
-P6.2 deletion.
+RETIRED vocabulary (all DELETED at the P6.2 strictness flip, bd
+polyglot-pdf-h76m.16): `controls_fields` / `ConditionalControl` (trigger-side
+action lists; were dead at runtime -- the migration mirrored their
+`shows`/`makes_required` into target-side `show_if`/`require_if`),
+`conditional_fields`, and `group_kind`/`GroupKind` are all removed from the model
+-- a schema carrying `controls_fields`/`conditional_fields` has the key silently
+ignored (extra="ignore"), and a checkbox group is now identified by its TYPE (the
+v2 `checkbox_group`, or a legacy `checkbox` with options[]), never `group_kind`.
+`consolidated_widgets` was never a modeled field (it appears only in kit JSON /
+SI-exclusion lists). The vq4m equals-means-membership evaluator hack + the
+comma-split tolerance are also gone from both evaluators (membership is
+`includes`/`not_includes` only).
 
 ## Field IDs and brackets
 
