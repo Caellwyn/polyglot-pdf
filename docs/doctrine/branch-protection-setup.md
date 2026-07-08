@@ -39,8 +39,8 @@ Effective rules, verified via `gh api repos/.../rules/branches/dev`:
 
 Human approval is **not** required (count 0), and there is no ruleset-level
 review gate — the review gate is procedural (the
-[review-flow](review-flow.md): loop Codex to clean, then apply the
-auto-merge-vs-ping rule — a routine low-risk PR that reviewed CLEAN with green
+[review-flow](review-flow.md): loop the Opus-4.8 outer review to clean, then apply
+the auto-merge-vs-ping rule — a routine low-risk PR that reviewed CLEAN with green
 checks is merged autonomously via `gh pr merge`, while a consequence-bearing PR
 is pinged to the maintainer, whose merge it remains; see CLAUDE.md "Auto-merge
 vs. maintainer merge", bd polyglot-pdf-16pj). The CI status checks are the only
@@ -63,15 +63,14 @@ To recreate from scratch, POST the JSON in the journal entry to
 `repos/Caellwyn/polyglot-pdf/rulesets` (strip read-only fields: `id`,
 `node_id`, `_links`, `created_at`, `updated_at`).
 
-## Copilot / Codex review agents
+## External review agents (RETIRED 2026-07-08)
 
-`.github/copilot-instructions.md` (Copilot) and the "If you are reviewing a PR"
-section of [`AGENTS.md`](../../AGENTS.md) (Codex) govern the automated reviewers --
-each bot reads only its own file. Key contract: **always post a top-level summary
-comment on every round** (it's the author's polling-agent signal — a silent finish
-hangs the agent), assign findings-bearing `dev` PRs to `@caellwynai-josh`, and
-never commit directly (comment-only). The copilot instructions were tightened on
-the zero-findings/LGTM case because Copilot had been finishing silently when work
-was satisfactory. (Codex's review rules were consolidated into AGENTS.md and the
-never-read `.github/codex-instructions.md` removed -- Codex discovers AGENTS.md,
-not that file.)
+There is **no external model reviewer** anymore. The repo previously used GitHub
+Copilot, then OpenAI Codex, as an automated PR reviewer; both are retired (the
+maintainer's Codex subscription ended 2026-07-08). Review is now entirely
+Claude-based -- an Opus-4.8 outer review run as orchestrator-driven subagents (see
+[`review-flow.md`](review-flow.md)) -- so no bot reads `.github/copilot-instructions.md`
+or the "If you are reviewing a PR" section of [`AGENTS.md`](../../AGENTS.md); those
+files are kept only as inert history. There is nothing to configure at the
+branch-protection layer for review: the ruleset never gated on a bot, and the CI
+status checks remain the only mechanical merge blocker.

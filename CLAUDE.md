@@ -65,26 +65,27 @@ closed); the cited code path is the ground truth when a doc and the code disagre
 1. **Beads is the system of record for "what to do next."** Resume work via
    `bd ready` / `bd show <id>`, not by reading a plan file. Pull before reads,
    push after every write. See [`docs/doctrine/workflow.md`](docs/doctrine/workflow.md).
-2. **Every PR ships through `/closeout`:** commit, then closeout runs the **pre-PR
-   adversarial fresh-eyes assess loop** (scored against the bead's exit criteria,
-   looped to no-gap), opens a normal PR, and **then** runs the **OpenAI Codex outer
-   review only when the PR is review-worthy** (fresh-eyes is the inner pre-PR layer,
-   Codex the outer post-PR layer -- they are serial, not parallel). Codex
-   (`chatgpt-codex-connector[bot]`) replaced GitHub
-   Copilot at the credit-exhaustion cutover (bd hrn.8/hrn.9). **Codex auto-reviews
-   on PR open**, so round 1 needs no trigger -- just include an `@codex review`
-   line in the PR BODY as a nudge. **Round 2+ re-reviews** need an explicit
-   `@codex review` COMMENT
-   (`gh api repos/<owner>/<repo>/issues/$PR/comments -f 'body=@codex review'`; the
-   comment's `created_at` is that round's watch `--since` floor). The trigger
-   string is EXACTLY `@codex review` -- `@codex please commit ...` would invoke
-   Codex's commit path instead. **Do NOT use the `requested_reviewers` reviewer
-   API** -- that fires Copilot (retired here). Docs/beads/journal-only PRs skip the
-   review. Codex's CLEAN signal is a 👍 (`+1`) reaction on its summary comment;
-   closeout loops Codex to clean (re-commenting `@codex review` each round), then
-   auto-merges a routine low-risk PR or pings the maintainer for a
-   consequence-bearing one (see "Auto-merge vs. maintainer merge"). No draft
-   PRs; never hand-poll Codex. See the "Closeout" section below and
+2. **Every PR ships through `/closeout`, and BOTH review layers run PRE-PR:** commit,
+   then closeout runs the **fresh-eyes assess loop** (Sonnet/Haiku, scored against
+   the bead's exit criteria, looped to no-gap, with a guaranteed Opus final round),
+   **then** the **Opus-4.8 outer review** (review-worthy changes only) -- both on the
+   LOCAL branch, serial not parallel. Only AFTER both loops clear does closeout open a
+   normal PR, close the bead(s), and make the merge decision. **Review is entirely
+   Claude-based; there is NO external reviewer** (the maintainer's OpenAI Codex
+   subscription ended 2026-07-08). The Opus outer review is the SAME
+   two-independent-clearing-reviews gate that used to be the "fallback for when Codex
+   was unavailable" -- it is now simply always-on (Codex is permanently
+   unavailable). It spawns the `fresh-eyes-reviewer` agent at `model: opus` on the
+   local diff (`origin/dev...HEAD`) and loops to `NO-GAPS`, then a SECOND independent
+   Opus (or Sonnet if a 2nd Opus is unavailable) must ALSO clear the identical diff; a
+   fix in either re-runs both. The subagents' STATUS lines are read directly -- there
+   is **no bot watcher and no `@codex review` / `pr_review_watcher.py` /
+   `requested_reviewers` trigger** (all dead path). Docs/beads/journal-only changes
+   skip the outer review (fresh-eyes `NO-GAPS` is their record). Once both clear,
+   **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (no two-call
+   watcher pattern), then closeout auto-merges a routine low-risk PR or pings the
+   maintainer for a consequence-bearing one (see "Auto-merge vs. maintainer merge").
+   No draft PRs. See the "Closeout" section below and
    [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md).
 3. **In a worktree, run every git command via `git -C <worktree-path>`** --
    the shell cwd resets between tool calls; a chained `cd <main-repo> && git ...`
@@ -184,16 +185,17 @@ takes the product-owner seat, not the engineering-lead seat: routine, low-risk P
 that a **separate model -- including an adversarial one -- has reviewed CLEAN** are
 **merged autonomously**, not handed back for a click. You run `gh pr merge` yourself
 when **ALL** of these hold:
-   - **An adversarial reviewer cleared the diff.** Codex reported CLEAN, OR the
-     Step-7.5 Opus-4.8 fallback returned `NO-GAPS` -- and when Codex was unavailable
-     (quota / timeout / no-ack) that fallback requires **TWO independent clearing
-     reviews**, not one (bd polyglot-pdf-dgoa; see
-     [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)) -- with the same
-     authority as a clean Codex review, OR -- once Codex is retired entirely -- the
-     pre-PR adversarial fresh-eyes assess loop's no-gap (whose FINAL clearing round
-     always runs on Opus, bd dgoa) is the review of record. A separate model,
-     adversarially, found it clean. **A review-SKIPPED PR does NOT satisfy this** --
-     no adversarial review ran, so it pings (below).
+   - **An adversarial reviewer cleared the diff.** The Opus-4.8 outer review
+     returned `NO-GAPS` -- and because it is the only independent adversarial gate,
+     it requires **TWO independent clearing reviews**, not one (the primary looped
+     Opus review + a second independent confirming review on the identical diff; bd
+     polyglot-pdf-dgoa; see
+     [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). (This is the
+     former Codex-unavailable fallback, now the always-on primary -- there is NO
+     external reviewer; the maintainer's Codex subscription ended 2026-07-08.) A
+     separate, stronger-tier model, adversarially, found it clean -- twice. **A
+     review-SKIPPED PR does NOT satisfy this** -- no adversarial review ran, so it
+     pings (below).
    - **CI / required status checks are green.**
    - **The PR is NOT consequence-bearing** (see the list below).
 
@@ -453,42 +455,41 @@ Do NOT hand-roll the review cycle. In particular:
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
   review + telemetry setup and tempts hand-polling).
-- **Codex reviews review-worthy PRs -- auto on open, `@codex review` comment for
-  re-reviews.** The reviewer is OpenAI Codex (`chatgpt-codex-connector[bot]`), which
-  replaced Copilot at the credit-exhaustion cutover (bd hrn.8/hrn.9). The
-  orchestrator judges per-PR whether the diff can regress runtime behavior; if so,
-  it includes an `@codex review` line in the PR BODY -- **Codex auto-reviews on
-  open**, so round 1 needs no comment. **Round 2+** post an explicit `@codex
-  review` COMMENT (`gh api .../issues/$PR/comments -f 'body=@codex review'`; the
-  comment's `created_at` is that round's watch `--since` floor). The trigger string
-  is EXACTLY `@codex review` -- `@codex please commit ...` invokes Codex's commit
-  path instead. **Do NOT use the `requested_reviewers` reviewer API** -- that fires
-  Copilot (retired here). Docs-only / `.beads`-only / journal-only / trivial PRs
-  get NO review. Each re-review is triggered by posting a fresh `@codex review` comment after
-  the fix-push.
-- **Codex is watched by a script, never by hand.** For a review-worthy PR,
-  `/closeout` launches `scripts/pr_review_watcher.py <pr#> --reviewer codex` (the
-  default) via `run_in_background`; the harness wakes you once with the classified
-  verdict -- one of `CLEAN`/`COMMENTS` (both exit 0), `ERROR` (exit 1), or
-  `TIMEOUT` (exit 2). Codex's CLEAN is a 👍 (`+1`) reaction on its summary comment.
-  Never treat `ERROR`/`TIMEOUT` as clean. **Never poll `gh api .../comments`
-  yourself** -- that's the expensive manual loop the watcher exists to replace, and
-  hand-polling silently misses feedback.
-- **The adversarial fresh-eyes assess loop runs PRE-PR** (closeout Step 5.5, always
-  -- review-worthy or not): fresh-eyes is scored against the bead's exit criteria and
-  re-spawned until no gap remains, with the fixes committed before the PR opens. Codex
-  is the **outer** review that runs after the PR opens (review-worthy PRs only); you
-  loop Codex until it reports `CLEAN`. The two layers are serial, not parallel.
-- Once the review is `CLEAN`, closeout **closes the bead(s)** the PR resolves and
+- **The Opus-4.8 outer review handles review-worthy changes PRE-PR -- there is NO
+  external reviewer.** Review is entirely Claude-based (the maintainer's OpenAI Codex
+  subscription ended 2026-07-08; Codex succeeded Copilot at the earlier
+  credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). The orchestrator
+  judges whether the diff can regress runtime behavior; if so, closeout runs
+  the outer review ON THE LOCAL BRANCH, before the PR opens: it spawns the
+  `fresh-eyes-reviewer` agent at `model: opus` on the local diff
+  (`origin/dev...HEAD`), loops it to `NO-GAPS`, then runs a SECOND independent Opus
+  (or Sonnet if a 2nd Opus is unavailable) that must ALSO clear the identical diff --
+  a fix found by either re-runs both (the two-independent-clearing-reviews gate).
+  There is **no `@codex review` trigger, no `pr_review_watcher.py`, and no
+  `requested_reviewers` reviewer API** -- all dead path. Docs-only / `.beads`-only /
+  journal-only / trivial changes get NO outer review.
+- **The outer review's subagents are read directly, never watched by a script.**
+  Closeout reads each Opus reviewer's `NO-GAPS` / `GAPS-FOUND` STATUS line straight
+  from the subagent result -- there is no GitHub bot to poll, so the old
+  `pr_review_watcher.py` background-watch loop does not run for the outer review.
+  Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean -- surface it.
+- **BOTH review layers run PRE-PR, serial not parallel** (closeout Steps 5.5 + 5.6):
+  the fresh-eyes assess loop first (scored against the bead's exit criteria,
+  re-spawned until no gap, final clearing round on Opus), THEN the Opus outer review
+  (review-worthy changes only, looped until two independent Opus passes both clear),
+  all on the local branch with fixes committed. Only after both clear does the PR
+  open.
+- Once both reviews are `NO-GAPS`, **one `closeout_finish.py` run opens the PR AND
+  closes the bead(s)** the change resolves (no two-call watcher pattern), and closeout
   then **either auto-merges or pings**, per the auto-merge rule (see "Auto-merge vs.
-  maintainer merge" in Critical rules): a routine, low-risk PR that a separate
-  adversarial model cleared CLEAN with green checks is **merged autonomously**
+  maintainer merge" in Critical rules): a routine, low-risk PR that the adversarial
+  Opus outer review cleared with green checks is **merged autonomously**
   (`gh pr merge`); a **consequence-bearing** PR is instead handed to the maintainer
   with a "clean and ready to merge" ping. Force-pushes and `bd dolt push --force`
   remain barred either way.
 
 The full checklist (beads housekeeping, doc-freshness, journal entry, tests, the
-pre-PR fresh-eyes assess loop + the PR + the Codex outer-review loop) lives in
+pre-PR fresh-eyes assess loop + the PR + the Opus outer-review loop) lives in
 [`.claude/skills/closeout/SKILL.md`](.claude/skills/closeout/SKILL.md) -- that
 skill is the source of truth; this section just makes running it **non-optional,
 once per PR.**

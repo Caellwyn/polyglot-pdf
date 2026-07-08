@@ -1,19 +1,18 @@
 """Tests for scripts/closeout_finish.py (bd polyglot-pdf-hrn.13).
 
-Pins the safety-critical contract of the closeout glue script:
-  - the CLI gate: exactly one of --review-worthy/--skip-review (argparse
-    mutually-exclusive + required);
+Pins the safety-critical contract of the closeout glue script. Review is entirely
+Claude-based and runs BEFORE this script (2026-07-08 flow change: both review
+layers clear on the local branch, then this script opens the PR AND closes the
+bead(s) in one run), so there is no review-worthiness gate, no watch command, and
+no external-reviewer trigger to pin here.
   - --dry-run performs ZERO mutating subprocess calls (the highest-value test --
     it pins the "preview has no side effects" promise);
   - worktree safety: every git call is `git -C <WT>`; no `git add` ever;
-  - review-worthy opens the PR (Codex AUTO-REVIEWS on open; the @codex review
-    line rides in the PR BODY, so round 1 posts NO comment and NEVER the reviewer
-    API -- that fires Copilot, credits exhausted, bd hrn.8/hrn.9), captures the
-    PR-open time as the --since floor, and prints the watch command (with
-    --reviewer codex); skip-review does none of that;
+  - a normal run opens the PR and closes the bead(s); it emits NO watch command and
+    makes NO gh-api / reviewer-API / bot-trigger call;
   - a rebase conflict aborts the rebase and exits REBASE-CONFLICT (4);
   - telemetry is warn-only (a ledger failure does not change the exit code);
-  - --close-beads gates the bd close calls (0 without, N with).
+  - --close-only closes the bead(s) ONLY (recovery tool).
 
 All git/gh/bd/ledger calls go through closeout_finish._run, so the tests stub
 that single seam rather than spawning real processes (the bd_safe._run idiom).
@@ -86,10 +85,10 @@ def _args(**over):
     base = dict(
         bead=["proj-aa11"], branch="feat/x", base="origin/dev",
         pr_title="docs(x): y (bd proj-aa11)", pr_body_file="/tmp/body.md",
-        review_worthy=False, skip_review=True, commit_message=None,
+        commit_message=None,
         arm="A", cost_category="production", copilot_rounds=0,
         maintainer_touchpoints=0, deferred_nits=0, haiku_escalations=0,
-        errors_shipped=0, close_beads=False, close_only=False, dry_run=False,
+        errors_shipped=0, close_beads=True, close_only=False, dry_run=False,
     )
     base.update(over)
     return argparse.Namespace(**base)
@@ -112,35 +111,30 @@ def _restore_run():
 # CLI contract
 # --------------------------------------------------------------------------- #
 class TestCLIContract:
-    def test_requires_a_review_flag(self, monkeypatch):
-        # A PR-opening run (not --close-only) with neither review flag must fail
-        # the precondition check in main() (the gate moved from argparse to main()
-        # so --close-only can omit it).
+    def test_pr_run_requires_pr_flags(self, monkeypatch):
+        # A PR-opening run (not --close-only) missing a PR flag must fail the
+        # precondition check in main() (the flags are argparse-optional only so
+        # --close-only can omit them).
         rec = RunRecorder()
         monkeypatch.setattr(cf, "_run", rec)
         monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
         monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
         monkeypatch.setattr(cf.Path, "exists", lambda self: True)
-        rc = cf.main(["--bead", "x", "--branch", "b", "--pr-title", "t",
-                      "--pr-body-file", "f"])
+        # missing --pr-title / --pr-body-file
+        rc = cf.main(["--bead", "x", "--branch", "b"])
         assert rc == cf.EXIT_PRECONDITION
 
-    def test_review_flags_mutually_exclusive(self):
+    def test_no_review_gate_flags(self):
+        # The retired external-reviewer gate flags no longer exist.
         with pytest.raises(SystemExit):
             cf.build_parser().parse_args(
                 ["--bead", "x", "--branch", "b", "--pr-title", "t",
-                 "--pr-body-file", "f", "--review-worthy", "--skip-review"])
-
-    def test_skip_review_parses(self):
-        ns = cf.build_parser().parse_args(
-            ["--bead", "x", "--branch", "b", "--pr-title", "t",
-             "--pr-body-file", "f", "--skip-review"])
-        assert ns.skip_review and not ns.review_worthy
+                 "--pr-body-file", "f", "--skip-review"])
 
     def test_bead_repeatable(self):
         ns = cf.build_parser().parse_args(
             ["--bead", "x", "--bead", "y", "--branch", "b", "--pr-title", "t",
-             "--pr-body-file", "f", "--skip-review"])
+             "--pr-body-file", "f"])
         assert ns.bead == ["x", "y"]
 
 
@@ -150,8 +144,7 @@ class TestCLIContract:
 class TestDryRun:
     def test_no_mutating_calls(self, capsys):
         rec = RunRecorder()
-        job = _job(rec, dry_run=True, review_worthy=True, skip_review=False,
-                   commit_message="c")
+        job = _job(rec, dry_run=True, commit_message="c")
         assert job.run() == cf.EXIT_OK
         # The ledger preview MUST have run (else the test passes vacuously with
         # zero calls -- the Finding-7 gap).
@@ -186,70 +179,48 @@ class TestWorktreeSafety:
 
 
 # --------------------------------------------------------------------------- #
-# Review-worthy vs skip-review
+# Open-PR-and-close (the unified normal run; review already cleared pre-PR)
 # --------------------------------------------------------------------------- #
-class TestReviewWorthy:
-    def test_round1_posts_no_comment_and_floor_is_pr_open_time(self, monkeypatch):
-        # Codex AUTO-REVIEWS on PR open, so round 1 posts NO trigger comment -- the
-        # @codex review line rides in the PR BODY (the orchestrator writes the body
-        # file). request_review() only captures the floor (= _utcnow() at PR-open)
-        # and prints the watch command.
-        monkeypatch.setattr(cf, "_utcnow", lambda: "2026-06-07T09:30:00Z")
+class TestOpenAndClose:
+    def test_opens_pr_closes_beads_no_bot_trigger(self):
+        # A normal run opens the PR and closes the bead(s) in ONE run. It emits NO
+        # watch command and makes NO gh-api / reviewer-API / bot-trigger call --
+        # review is entirely Claude-based and already cleared before this ran.
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
         })
-        job = _job(rec, review_worthy=True, skip_review=False)
+        job = _job(rec)
         assert job.run() == cf.EXIT_OK
         assert job.out["PR"] == "42"
-        # the floor is the PR-open time (_utcnow()).
-        assert job.out["TS"] == "2026-06-07T09:30:00Z"
-        # NO gh api call at all in round 1 -- no comment, and NEVER the reviewer API
-        # (that fires Copilot, credits exhausted -- bd hrn.8/hrn.9).
+        # No leftover watch/floor keys in the output.
+        assert "WATCH_CMD" not in job.out
+        assert "TS" not in job.out
+        # NO gh api call, NEVER the reviewer API, no bot mention.
         assert not any("gh api" in j for j in rec.joined())
         assert not any("requested_reviewers" in j for j in rec.joined())
         assert not any("@copilot" in j for j in rec.joined())
-        # watch command printed, referencing the PR, --reviewer codex, and --since
-        assert "pr_review_watcher.py" in job.out["WATCH_CMD"]
-        assert "--reviewer codex" in job.out["WATCH_CMD"]
-        assert "--since" in job.out["WATCH_CMD"] and "42" in job.out["WATCH_CMD"]
-        assert job.out["RESULT"] == "OPENED-REVIEW"
+        assert not any("@codex" in j for j in rec.joined())
+        assert not any("pr_review_watcher" in j for j in rec.joined())
+        # The bead(s) were closed in this same run.
+        assert any("bd_safe.py" in j and "close" in j for j in rec.joined())
+        assert job.out["beads_closed"] == "proj-aa11"
+        assert job.out["RESULT"] == "OPENED-CLOSED"
 
-    def test_round1_never_uses_reviewer_api(self):
-        # Regression guard against reverting to the Copilot reviewer-API trigger.
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/42", ""),
-        })
-        job = _job(rec, review_worthy=True, skip_review=False)
-        job.run()
-        assert not any("requested_reviewers" in j for j in rec.joined())
-        # The trigger string constant is the EXACT "@codex review" (used in the PR
-        # body by the orchestrator + the SKILL Step-7 re-review comment), never the
-        # commit-invoking "@codex please commit ...".
-        assert cf.CODEX_REVIEW_TRIGGER == "@codex review"
+    def test_no_retired_reviewer_symbols(self):
+        # Regression guard: the retired external-reviewer machinery is gone.
+        assert not hasattr(cf, "CODEX_REVIEW_TRIGGER")
+        assert not hasattr(cf.Closeout, "request_review")
 
     def test_pr_create_uses_bare_base_name(self):
         # gh pr create --base wants the branch NAME ('dev'), not 'origin/dev'.
-        # (Round 1 posts no comment -- Codex auto-reviews on open -- so TS is just
-        # _utcnow(); this test only checks --base.)
         rec = RunRecorder(responses={
             "pr create": (0, "https://github.com/o/r/pull/42", ""),
         })
-        job = _job(rec, review_worthy=True, skip_review=False, base="origin/dev")
+        job = _job(rec, base="origin/dev")
         job.run()
         create = [c for c in rec.calls if "create" in c][0]
         i = create.index("--base")
         assert create[i + 1] == "dev", create
-
-
-class TestSkipReview:
-    def test_no_trigger_no_watch(self):
-        rec = RunRecorder(responses={"pr create": (0, "https://github.com/o/r/pull/7", "")})
-        job = _job(rec, skip_review=True, review_worthy=False)
-        assert job.run() == cf.EXIT_OK
-        assert not any("gh api" in j for j in rec.joined())
-        assert job.out["WATCH_CMD"] == "-"
-        assert job.out["TS"] == "-"
-        assert job.out["RESULT"] == "OPENED-NOREVIEW"
 
 
 # --------------------------------------------------------------------------- #
@@ -260,7 +231,7 @@ class TestRebaseConflict:
         rec = RunRecorder(responses={
             "pull --rebase": (1, "CONFLICT (content): journal.md", ""),
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         with pytest.raises(cf.RebaseConflict):
             job.run()
         # it aborted the rebase, leaving the branch clean
@@ -278,7 +249,7 @@ class TestRebaseConflict:
         # venv_python(.exists) is checked unless dry-run; fake a real path check
         monkeypatch.setattr(cf.Path, "exists", lambda self: True)
         rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
-                      "--pr-title", "t", "--pr-body-file", "f", "--skip-review"])
+                      "--pr-title", "t", "--pr-body-file", "f"])
         assert rc == cf.EXIT_REBASE_CONFLICT
 
 
@@ -291,7 +262,7 @@ class TestTelemetryWarnOnly:
             "pr create": (0, "https://github.com/o/r/pull/7", ""),
             "harness_ledger.py": (1, "", "could not find transcript"),
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         assert job.run() == cf.EXIT_OK
         assert job.out["telemetry"].startswith("GAP")
 
@@ -315,7 +286,7 @@ class TestTelemetryCommitPush:
             "harness_ledger": (0, self._LEDGER_STDOUT, ""),
             "status --porcelain": self._DIRTY_STATUS,
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         assert job.run() == cf.EXIT_OK
         # A commit naming the per-row telemetry file (by exact path) happened.
         commits = [j for j in rec.joined()
@@ -339,7 +310,7 @@ class TestTelemetryCommitPush:
             "pr create": (0, "https://github.com/o/r/pull/7", ""),
             "harness_ledger": (1, "", "transcript not found"),
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         job.run()
         assert not any("status --porcelain" in j for j in rec.joined())
         assert not any("commit" in j and "telemetry" in j for j in rec.joined())
@@ -351,7 +322,7 @@ class TestTelemetryCommitPush:
             "harness_ledger": (0, self._LEDGER_STDOUT, ""),
             # status returns empty (recorder default) -> clean -> nothing to do
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         job.run()
         assert not any("commit" in j and "telemetry" in j for j in rec.joined())
 
@@ -361,7 +332,7 @@ class TestTelemetryCommitPush:
             "harness_ledger": (0, self._LEDGER_STDOUT, ""),
             "status --porcelain": self._DIRTY_STATUS,
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         job.run()
         # Every git call uses git -C <WT>.
         for cmd in rec.calls:
@@ -383,7 +354,7 @@ class TestTelemetryCommitPush:
             "status --porcelain": self._DIRTY_STATUS,
             "push origin feat/x": (1, "", "remote rejected"),
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         assert job.run() == cf.EXIT_OK
         assert "PUSH-FAILED" in job.out["telemetry"]
         assert "remote rejected" in job.out["telemetry"]
@@ -395,7 +366,7 @@ class TestTelemetryCommitPush:
             "harness_ledger": (0, self._LEDGER_STDOUT, ""),
             "status --porcelain": (128, "", "fatal: not a git repository"),
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         assert job.run() == cf.EXIT_OK
         assert "STATUS-CHECK-FAILED" in job.out["telemetry"]
         # Did NOT attempt a telemetry commit after the failed guard.
@@ -410,7 +381,7 @@ class TestTelemetryCommitPush:
             "status --porcelain": self._DIRTY_STATUS,
             "commit -m": (1, "", "pre-commit hook rejected"),
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         assert job.run() == cf.EXIT_OK
         assert "COMMIT-FAILED" in job.out["telemetry"]
         # A `git reset HEAD -- <telemetry_file>` must follow the failed commit.
@@ -426,7 +397,7 @@ class TestTelemetryCommitPush:
             "harness_ledger": (1, nonzero_stdout, "cache write failed"),
             "status --porcelain": self._DIRTY_STATUS,
         })
-        job = _job(rec, skip_review=True, review_worthy=False)
+        job = _job(rec)
         job.run()
         commits = [j for j in rec.joined()
                    if "commit" in j and self._TELEMETRY_ROW_PATH in j]
@@ -435,27 +406,36 @@ class TestTelemetryCommitPush:
     def test_close_only_never_commits_telemetry(self):
         # --close-only returns before the telemetry steps -> no status/commit/push.
         rec = RunRecorder()
-        job = _job(rec, close_only=True, close_beads=True, review_worthy=False,
-                   skip_review=False, bead=["proj-aa11"])
+        job = _job(rec, close_only=True, close_beads=True, bead=["proj-aa11"])
         job.run()
         assert not any("status --porcelain" in j or "telemetry" in j
                        for j in rec.joined())
 
 
 # --------------------------------------------------------------------------- #
-# Bead-close gating
+# Bead-close
 # --------------------------------------------------------------------------- #
 class TestCloseBeadsGated:
-    def test_no_close_by_default(self):
-        rec = RunRecorder(responses={"pr create": (0, "https://github.com/o/r/pull/7", "")})
-        job = _job(rec, skip_review=True, review_worthy=False, close_beads=False)
-        job.run()
-        assert not any("bd_safe" in j and "close" in j for j in rec.joined())
-        assert job.out["beads_closed"] == "-"
+    def test_main_forces_close_on_normal_run(self, monkeypatch):
+        # A normal CLI run always closes the bead(s): main() sets close_beads=True
+        # (review already cleared pre-PR), so the PR-open run and the close are one.
+        rec = RunRecorder(responses={
+            "pr create": (0, "https://github.com/o/r/pull/7", ""),
+            "rev-parse --abbrev-ref": (0, "feat/x", ""),
+        })
+        monkeypatch.setattr(cf, "_run", rec)
+        monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
+        monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
+        monkeypatch.setattr(cf.swarm_config, "repo", lambda: "owner/repo")
+        monkeypatch.setattr(cf.Path, "exists", lambda self: True)
+        rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
+                      "--pr-title", "t", "--pr-body-file", "f"])
+        assert rc == cf.EXIT_OK
+        assert any("bd_safe" in j and "close" in j for j in rec.joined())
 
     def test_closes_each_bead_when_flagged(self):
         rec = RunRecorder(responses={"pr create": (0, "https://github.com/o/r/pull/7", "")})
-        job = _job(rec, skip_review=True, review_worthy=False, close_beads=True,
+        job = _job(rec, close_beads=True,
                    bead=["proj-aa11", "proj-bb22"])
         job.run()
         closes = [j for j in rec.joined() if "bd_safe" in j and "close" in j]
@@ -473,8 +453,7 @@ class TestCloseOnly:
         # The whole point of hrn.15: --close-only closes the bead but does NOT
         # append a ledger row (the first call already did), so no double-count.
         rec = RunRecorder()
-        job = _job(rec, close_only=True, close_beads=True, review_worthy=False,
-                   skip_review=False, bead=["proj-aa11"])
+        job = _job(rec, close_only=True, close_beads=True, bead=["proj-aa11"])
         assert job.run() == cf.EXIT_OK
         joined = rec.joined()
         # bead WAS closed
@@ -491,8 +470,7 @@ class TestCloseOnly:
         # writes no row), so it must make ZERO subprocess calls (fresh-eyes
         # Finding 4 -- guards against a future regression adding one).
         rec = RunRecorder()
-        job = _job(rec, close_only=True, close_beads=True, review_worthy=False,
-                   skip_review=False, dry_run=True)
+        job = _job(rec, close_only=True, close_beads=True, dry_run=True)
         assert job.run() == cf.EXIT_OK
         assert len(rec.calls) == 0, rec.joined()
         out = capsys.readouterr().out
@@ -502,8 +480,7 @@ class TestCloseOnly:
         # Defensive: a programmatic caller setting close_only but NOT close_beads
         # must still close (not silently no-op) -- fresh-eyes Finding 2.
         rec = RunRecorder()
-        job = _job(rec, close_only=True, close_beads=False, review_worthy=False,
-                   skip_review=False, bead=["proj-aa11"])
+        job = _job(rec, close_only=True, close_beads=False, bead=["proj-aa11"])
         assert job.run() == cf.EXIT_OK
         assert any("bd_safe" in j and "close" in j for j in rec.joined())
         assert job.out["beads_closed"] == "proj-aa11"
@@ -527,7 +504,7 @@ class TestCloseOnly:
         monkeypatch.setattr(cf, "resolve_roots", lambda: (FAKE_R, FAKE_WT))
         monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
         monkeypatch.setattr(cf.Path, "exists", lambda self: True)
-        rc = cf.main(["--bead", "proj-aa11", "--skip-review"])  # no --branch etc.
+        rc = cf.main(["--bead", "proj-aa11"])  # no --branch etc.
         assert rc == cf.EXIT_PRECONDITION
 
 
@@ -542,7 +519,7 @@ class TestBranchMismatch:
         monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
         monkeypatch.setattr(cf.Path, "exists", lambda self: True)
         rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
-                      "--pr-title", "t", "--pr-body-file", "f", "--skip-review"])
+                      "--pr-title", "t", "--pr-body-file", "f"])
         assert rc == cf.EXIT_PRECONDITION
 
     def test_fails_closed_when_branch_unreadable(self, monkeypatch):
@@ -554,7 +531,7 @@ class TestBranchMismatch:
         monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
         monkeypatch.setattr(cf.Path, "exists", lambda self: True)
         rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
-                      "--pr-title", "t", "--pr-body-file", "f", "--skip-review"])
+                      "--pr-title", "t", "--pr-body-file", "f"])
         assert rc == cf.EXIT_PRECONDITION
 
     def test_dry_run_skips_branch_guard(self, monkeypatch):
@@ -567,7 +544,7 @@ class TestBranchMismatch:
         monkeypatch.setattr(cf, "venv_python", lambda R: FAKE_PY)
         monkeypatch.setattr(cf.Path, "exists", lambda self: True)
         rc = cf.main(["--bead", "proj-aa11", "--branch", "feat/x",
-                      "--pr-title", "t", "--pr-body-file", "f", "--skip-review",
+                      "--pr-title", "t", "--pr-body-file", "f",
                       "--dry-run"])
         assert rc == cf.EXIT_OK
         # the branch guard's rev-parse must NOT have run under dry-run

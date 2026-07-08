@@ -162,7 +162,7 @@ Assess is a **recursive adversarial fresh-eyes loop run BEFORE the PR opens**
 (not after), scoring the produced changes against the rubric. The assessor's
 mandate is gap-exhaustion -- "find every place the changes do NOT meet the
 criteria" -- never approval-seeking. The full procedure (the closeout Step 5.5
-scorecard, the inner fresh-eyes loop, the Codex outer review and its no-credits
-fallback) lives in [`review-flow.md`](review-flow.md). Resolve ends in the merge
+scorecard, the inner fresh-eyes loop, and the Opus-4.8 outer review -- both
+Claude, no external reviewer) lives in [`review-flow.md`](review-flow.md). Resolve ends in the merge
 decision: a routine low-risk PR that reviewed CLEAN auto-merges, a
 consequence-bearing one is the maintainer's merge (bd `polyglot-pdf-16pj`).

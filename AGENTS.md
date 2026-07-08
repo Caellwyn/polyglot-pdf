@@ -1,15 +1,20 @@
 # AGENTS.md -- polyglot-pdf
 
-**Context file for OpenAI Codex (and other AGENTS.md-aware coding agents).**
-This is the Codex-convention sibling of [`CLAUDE.md`](CLAUDE.md) (which Claude
+**Context file for AGENTS.md-aware coding agents.**
+This is the AGENTS.md-convention sibling of [`CLAUDE.md`](CLAUDE.md) (which Claude
 Code reads). The two intentionally point at the **same** canonical docs rather
 than duplicating them -- keep this file lean and let the linked docs carry the
 detail, so the two agent-context files can't drift apart.
 
-> **Reviewing a PR, not editing the repo?** Skip straight to the
-> [**"If you are reviewing a PR" section**](#if-you-are-reviewing-a-pr) at the
-> bottom -- those are your behavior rules. The rest of this file is codebase
-> context for agents that *edit* the repo.
+> **External code review is RETIRED (2026-07-08).** This repo no longer uses any
+> external model reviewer -- the maintainer's OpenAI Codex subscription ended, and
+> Codex had already succeeded GitHub Copilot. Review is now entirely Claude-based
+> (a fresh-eyes inner loop + an Opus-4.8 outer review; see
+> [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). The
+> ["If you are reviewing a PR" section](#if-you-are-reviewing-a-pr) at the bottom
+> is kept only as inert history for the retired Codex reviewer -- no bot reads it
+> now. The rest of this file is live codebase context for agents that *edit* the
+> repo.
 
 ---
 
@@ -80,6 +85,11 @@ unless you are specifically exercising the real adapter.
 ---
 
 ## If you are reviewing a PR
+
+> **RETIRED (2026-07-08) -- inert history.** This section is the behavior spec for
+> the external Codex reviewer, which is no longer used (review is now Claude-based;
+> see [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). No bot reads
+> this today. It is kept unchanged below for provenance only.
 
 **This section applies ONLY when your task is to review a pull request.** If you
 are editing or writing code, ignore it -- the rest of this file is your context.
