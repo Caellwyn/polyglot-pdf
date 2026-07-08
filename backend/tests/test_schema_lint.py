@@ -333,11 +333,11 @@ def test_plain_string_options_get_value_hygiene_checks():
     assert lint_schema(_schema(fields)) == []
 
 
-def test_stale_controls_fields_is_a_lint_error_post_flip():
+def test_stale_controls_fields_on_a_v2_kit_is_a_lint_error():
     # controls_fields was DELETED at the P6.2 flip (bd h76m.16); the model IGNORES
-    # the extra key, so a stale/mis-migrated draft still carrying it would publish
-    # with its trigger-side behavior silently dropped. Lint ERRORs on it so the
-    # mark-complete gate rejects it (Codex PR #346).
+    # the extra key, so a stale/mis-migrated V2 kit still carrying it would publish
+    # with its trigger-side behavior silently dropped. Lint ERRORs on a V2 schema
+    # so the mark-complete gate rejects it (Codex PR #346).
     fields = [
         {"id": "trigger", "type": "select",
          "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
@@ -345,17 +345,33 @@ def test_stale_controls_fields_is_a_lint_error_post_flip():
              {"operator": "equals", "value": "a", "shows": ["ghost"]},
          ]},
     ]
-    findings = lint_schema(_schema(fields))
+    findings = lint_schema(_schema(fields, version="2"))
     assert "legacy-trigger-side-logic" in _rules(findings)
     assert has_errors(findings)
 
 
-def test_stale_conditional_fields_is_a_lint_error_post_flip():
+def test_stale_conditional_fields_on_a_v2_kit_is_a_lint_error():
     fields = [
         {"id": "trigger", "type": "text", "conditional_fields": ["dep"]},
     ]
-    findings = lint_schema(_schema(fields))
+    findings = lint_schema(_schema(fields, version="2"))
     assert "legacy-trigger-side-logic" in _rules(findings)
+
+
+def test_controls_fields_on_a_v1_draft_is_NOT_flagged():
+    # A raw pre-migration extraction draft (no v2 stamp) legitimately still
+    # carries controls_fields until the repair/migrate pipeline converts it; lint
+    # runs on that draft mid-pipeline and must NOT ERROR on it (else the
+    # broken-draft-repairs-to-lint-clean contract breaks -- CI regression).
+    fields = [
+        {"id": "trigger", "type": "select",
+         "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
+         "controls_fields": [
+             {"operator": "equals", "value": "a", "shows": ["ghost"]},
+         ]},
+    ]
+    findings = lint_schema(_schema(fields))  # no version -> v1 draft
+    assert "legacy-trigger-side-logic" not in _rules(findings)
 
 
 def test_composite_v2_group_with_valid_atoms_is_clean():

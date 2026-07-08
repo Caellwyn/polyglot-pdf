@@ -620,18 +620,23 @@ def lint_schema(
 
         # controls_fields / conditional_fields were DELETED at the P6.2 flip (bd
         # h76m.16). The model IGNORES the extra key (extra="ignore"), so a stale
-        # or mis-migrated draft still carrying one would publish with its
+        # or mis-migrated V2 kit still carrying one would publish with its
         # trigger-side shows/makes_required behavior silently dropped at runtime
-        # (Codex PR #346). Lint ERRORs on it so the mark-complete gate rejects it:
-        # the dependency must be expressed target-side as show_if / require_if.
-        for legacy_key in ("controls_fields", "conditional_fields"):
-            if f.get(legacy_key):
-                out.append(LintFinding(
-                    SEVERITY_ERROR, "legacy-trigger-side-logic",
-                    f"{field_path}.{legacy_key}",
-                    f"{legacy_key} was removed in schema v2 (its behavior lives "
-                    f"target-side in show_if / require_if now) -- migrate it",
-                ))
+        # (Codex PR #346). Lint ERRORs on it -- but ONLY for a schema that CLAIMS
+        # to be v2 (is_v2): a raw pre-migration extraction DRAFT legitimately
+        # still carries controls_fields until the repair/migrate pipeline converts
+        # it, and lint runs on that draft mid-pipeline. The dependency must be
+        # expressed target-side as show_if / require_if before a kit is v2.
+        if is_v2:
+            for legacy_key in ("controls_fields", "conditional_fields"):
+                if f.get(legacy_key):
+                    out.append(LintFinding(
+                        SEVERITY_ERROR, "legacy-trigger-side-logic",
+                        f"{field_path}.{legacy_key}",
+                        f"{legacy_key} was removed in schema v2 (its behavior "
+                        f"lives target-side in show_if / require_if now) -- "
+                        f"migrate it",
+                    ))
 
     _check_cycles(show_if_graph, out)
 
