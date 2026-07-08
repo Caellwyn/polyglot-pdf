@@ -94,7 +94,11 @@ finishes) eliminates the race. `bcrn` closed with this PR.
   `"2.5"`, so the thinking-config `== "2.5"` allowlist still matches an unknown
   model. The change from `!= "3.1"` is clarity, not a behavior fix for unknowns; a
   test pins the fallback so a future `model_family` change is caught.
-- Verification honesty: the full turn-by-turn continuous fill + the "real 1011 ->
-  modal appears" path is unit-tested end to end (backend forwards -> client
-  reconnects -> modal on status), NOT eyeballed live (the headless harness froze
-  under Gemini audio and the browser automation was flaky this session).
+- Verification honesty: the "real 1011 -> modal appears" path is unit-tested at the
+  layer level (backend forwards `gemini_session_dropped` -> client reconnects ->
+  modal gates on `status==='reconnecting' && isDroppedReconnect()`), including the
+  drop-vs-blip distinction, the coalesce no-leak case, clear-on-recovery, and the
+  backoff-`connecting`-leg marker-survival case (two fresh-eyes reviews drove the
+  last two out). It is NOT eyeballed live -- the full continuous turn-by-turn fill
+  and a real observed 1011->modal were not run (the headless harness froze under
+  Gemini audio and the browser automation was flaky this session).

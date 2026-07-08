@@ -469,6 +469,45 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       expect(conn.isDroppedReconnect()).toBe(false)
     })
 
+    // fresh-eyes (two independent reviews): a drop reconnect whose first socket
+    // FAILS falls into attemptReconnect's backoff, whose connect() moves status to
+    // "connecting". isDroppedReconnect() must STAY true across that intermediate
+    // "connecting" leg (cleared only on a SETTLED status) -- else the "trouble
+    // reaching the AI" modal vanishes mid-recovery into a bare "connecting" screen.
+    describe('drop reconnect that fails and backs off', () => {
+      beforeEach(() => { vi.useFakeTimers() })
+      afterEach(() => { vi.useRealTimers() })
+
+      it('keeps isDroppedReconnect() true across the backoff "connecting" leg', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        // Drop -> pre-emptive reconnect (socket #2), drop marker set.
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // The reconnect socket FAILS -> attemptReconnect schedules a backoff.
+        MockWebSocket.instances[1].error()
+        await Promise.resolve()
+        await Promise.resolve()
+        // Marker survives the failure (still a drop reconnect in progress).
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // Backoff fires -> connect() -> status "connecting". The marker must NOT be
+        // cleared by that intermediate transition.
+        vi.advanceTimersByTime(1000)
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(conn.getStatus()).toBe('connecting')
+        expect(conn.isDroppedReconnect()).toBe(true) // modal not dropped mid-recovery
+
+        conn.disconnect() // tear down the pending recovery cleanly
+      })
+    })
+
   })
 
   // Async-token-gap coverage (Opus fresh-eyes Finding 3): in production getToken is

@@ -3025,12 +3025,24 @@ export class WebFormConnection {
 
     this.status = status;
 
-    // Clear the drop-driven-reconnect marker once we leave "reconnecting" (bd
-    // polyglot-pdf-ppfy): a move to "connected" (recovered) or to
-    // "reconnect_failed"/"error"/anything-else ends the drop-reconnect window, so
-    // the overlay stops showing the "having trouble reaching the AI" modal.
+    // Clear the drop-driven-reconnect marker only on a SETTLED status (bd
+    // polyglot-pdf-ppfy): "connected" = recovered, and reconnect_failed / error /
+    // idle_timeout / disconnected = gave up. NOT on the intermediate "connecting"
+    // that a live drop reconnect passes through -- a drop reconnect whose first
+    // socket fails falls into attemptReconnect's backoff, whose connect() sets
+    // "connecting"; clearing there would drop the marker mid-recovery and the
+    // "having trouble reaching the AI" modal would vanish into a bare "connecting"
+    // screen for the rest of the episode (fresh-eyes). The modal only draws on
+    // status==='reconnecting', so keeping the marker across "connecting" is safe --
+    // it just lets the modal reappear if a later leg returns to "reconnecting".
     // handleSessionReady also clears it explicitly on success.
-    if (status !== "reconnecting") {
+    if (
+      status === "connected" ||
+      status === "reconnect_failed" ||
+      status === "error" ||
+      status === "idle_timeout" ||
+      status === "disconnected"
+    ) {
       this.droppedReconnectInFlight = false;
     }
 
