@@ -516,6 +516,46 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
         vi.advanceTimersByTime(20000)
         expect(conn.getStatus()).toBe('connected')
       })
+
+      // bd polyglot-pdf-vqbm (fresh-eyes): if the pre-emptive reconnect FAILS and
+      // falls back to attemptReconnect's exponential backoff, a reconnect is
+      // legitimately still pending -- the watchdog must NOT prematurely force
+      // reconnect_failed while a backoff timer is scheduled. We invoke the watchdog
+      // callback directly (rather than advancing time, which would also fire the
+      // backoff and start a dangling socket) to isolate the stand-down guard.
+      it('does NOT escalate while an attemptReconnect backoff is still pending', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        // Drop -> pre-emptive reconnect creates socket #2, watchdog armed.
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // That socket FAILS -> .catch -> attemptReconnect schedules a backoff timer
+        // (status stays "reconnecting", reconnectTimer !== null, a recovery pending).
+        // Use the synchronous error() (onerror + onclose same turn) so no real-timer
+        // promise dangles under fake timers.
+        MockWebSocket.instances[1].error()
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(conn.getStatus()).toBe('reconnecting')
+        expect((conn as any).reconnectTimer).not.toBeNull()
+
+        // The drop-watchdog's fire condition, evaluated while the backoff is still
+        // pending, must be FALSE (it stands down on `reconnectTimer !== null`), so it
+        // does NOT force reconnect_failed -- the pending backoff owns recovery.
+        const wouldEscalate =
+          (conn as any).droppedReconnectInFlight &&
+          conn.getStatus() === 'reconnecting' &&
+          (conn as any).reconnectTimer === null
+        expect(wouldEscalate).toBe(false)
+
+        // Tear down so the pending backoff timer does not fire a dangling reconnect.
+        conn.disconnect()
+      })
     })
   })
 

@@ -3185,7 +3185,17 @@ export class WebFormConnection {
       this.droppedReconnectWatchdog = null;
       // Only fire if we are still stuck reconnecting from the drop (a recovery to
       // "connected" or a prior escalation would have disarmed / moved us off it).
-      if (this.droppedReconnectInFlight && this.status === 'reconnecting') {
+      // AND only when nothing else is actively driving recovery: if the pre-emptive
+      // reconnect failed and fell back to attemptReconnect's exponential backoff, a
+      // reconnect is legitimately still pending (this.reconnectTimer !== null) --
+      // forcing reconnect_failed there would prematurely give up on a recovery that
+      // is a moment away (bd polyglot-pdf-vqbm, fresh-eyes). Let the backoff run;
+      // if IT exhausts, it surfaces reconnect_failed itself.
+      if (
+        this.droppedReconnectInFlight &&
+        this.status === 'reconnecting' &&
+        this.reconnectTimer === null
+      ) {
         console.error('[WebFormConnection] Spontaneous-drop reconnect timed out (no session_ready) -- surfacing reconnect_failed');
         this.goAwayReconnectInFlight = false;
         this.setStatus('reconnect_failed', 'droppedReconnectWatchdog:timeout');
