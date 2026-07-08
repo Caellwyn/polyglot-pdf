@@ -38,6 +38,9 @@ def _run(coro):
 # (source=pdf requires extraction_info) -- used by the mark-complete gate tests.
 VALID_SCHEMA = {
     "source": "pdf",
+    # Post the P6.2 flip (bd h76m.16) a complete kit MUST be v2 -- the
+    # mark-complete gate requires schema_version=="2".
+    "schema_version": "2",
     "form_metadata": {"title": "Test Form", "version": "unknown"},
     "sections": [{"id": "s1", "label": "Section 1", "order": 1, "fields": ["f1"]}],
     "fields": [
@@ -1103,6 +1106,25 @@ def test_mark_complete_publish_gate_refuses_a_duplicate_option_schema(client):
     # The kit stays draft.
     meta = json.loads((root / "linty" / "metadata.json").read_text())
     assert meta["status"] == "draft"
+
+
+def test_mark_complete_requires_v2_schema_version(client):
+    # P6.2 flip (bd h76m.16 / t96a): a complete kit must be v2. A v2-shaped schema
+    # WITHOUT the schema_version stamp (or carrying a removed key the model would
+    # silently ignore) is refused at the publish gate, closing the extra="ignore"
+    # hole. VALID_SCHEMA minus the stamp is otherwise promotable.
+    c, _store, root = client
+    unstamped = json.loads(json.dumps(VALID_SCHEMA))
+    del unstamped["schema_version"]
+    _make_kit(root, "unstamped", schema=unstamped)
+    r = c.post(
+        "/api/editor/kits/unstamped/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 422
+    assert "not v2" in r.json()["detail"] or "schema_version" in r.json()["detail"]
+    assert json.loads((root / "unstamped" / "metadata.json").read_text())["status"] == "draft"
 
 
 def test_mark_complete_validates_against_form_contract(client):

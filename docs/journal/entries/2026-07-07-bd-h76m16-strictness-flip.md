@@ -35,9 +35,11 @@ per field). v1 originals are archived to `schema_archived.json`.
   `includes`/`not_includes` over a `string[]` (the voice comma string is converted
   to an array at the single ingress boundary before storage). A checkbox group is
   identified by TYPE (v2 `checkbox_group`, or legacy `checkbox` with options[]).
-- **Shared vectors** + the editor FieldEditor controls_fields UI + the frontend/
-  editor `ConditionalControl` TYPE removed. `checkbox_group` added to the frontend
-  `FieldType` union (it was missing).
+- **Shared vectors** + the editor FieldEditor controls_fields UI + the FRONTEND
+  `ConditionalControl` TYPE removed. (The schema-editor's own `ConditionalControl`
+  type + its dead internal fieldGrouping/PreviewPane/validation handling are
+  deferred to bd wvgh -- harmless, controls_fields is always absent now.)
+  `checkbox_group` added to the frontend `FieldType` union (it was missing).
 
 ## controls_fields is MIRRORED, not dropped (the hard part)
 

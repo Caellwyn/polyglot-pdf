@@ -728,8 +728,9 @@ def _v2_condition_problems(
 
 
 def _collect_v2_problems(schema: "FormSchema") -> List[str]:
-    """All schema-v2 strictness rules (bd h76m.3). Only called when
-    schema_version == '2'; each problem names the offending field path."""
+    """All schema-v2 strictness rules (bd h76m.3). Called on EVERY schema since
+    the P6.2 flip (bd h76m.16) -- v2 is the only shape; each problem names the
+    offending field path."""
     problems: List[str] = []
     fields_by_id = {f.id: f for f in schema.fields}
     is_pdf = schema.source == FormSource.PDF
@@ -889,10 +890,14 @@ class FormSchema(BaseModel):
         The v1-acceptance bypass is gone: schema v2 is the only shape. All
         stored kits are migrated to v2 (i-90/w7/w7-2/f1040), and the trigger-
         side controls_fields / group_kind / conditional_fields fields have been
-        deleted from the model, so a legacy schema carrying them now fails to
-        parse (extra keys) rather than validating on a tolerated legacy path.
-        The dict-based migration script (migrate_schema_v2.py) reads raw v1
-        dicts and does NOT go through this model, so it is unaffected.
+        deleted from the model. The model uses the default extra="ignore", so a
+        legacy schema carrying those keys does NOT fail here -- the key is
+        SILENTLY DROPPED. That silent-drop is why schema_lint ERRORs on a v2 kit
+        still carrying controls_fields, and why the mark-complete gate requires
+        schema_version=="2" (bd polyglot-pdf-t96a) -- the model is not a backstop
+        for the removed keys. The dict-based migration script
+        (migrate_schema_v2.py) reads raw v1 dicts and does NOT go through this
+        model, so it is unaffected.
         """
         problems = _collect_v2_problems(self)
         if problems:

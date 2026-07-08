@@ -54,6 +54,7 @@ from pydantic import BaseModel, ValidationError
 import structlog
 
 from backend.config import get_settings
+from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.services.schema_lint import (
@@ -655,6 +656,19 @@ async def set_editor_kit_status(
                 status_code=422,
                 detail="Schema is missing extraction_info (required for PDF "
                        "forms), so it cannot be marked complete",
+            )
+        # v2-only gate (bd h76m.16, P6.2 flip): schema v2 is the only shape a
+        # complete kit may carry. The model IGNORES unknown keys (extra="ignore"),
+        # so a v2-shaped-but-unstamped schema still carrying a removed trigger-side
+        # key (controls_fields / conditional_fields) would slip past both the model
+        # AND the is_v2-gated lint below; requiring the stamp here closes that
+        # (bd polyglot-pdf-t96a). The extraction + migration pipelines both stamp
+        # v2, so a legitimate kit is unaffected.
+        if str(schema.get("schema_version")) != vocab.SCHEMA_VERSION_V2:
+            raise HTTPException(
+                status_code=422,
+                detail="Schema is not v2 (schema_version must be \"2\"); migrate "
+                       "it before marking complete",
             )
         # Lint gate (bd h76m.5, P2.1): zero lint ERRORs to promote. Pydantic
         # above enforces the wire contract; lint catches the class of defect
