@@ -218,15 +218,6 @@ export class WebFormConnection {
   // this window, surface `error` instead of a stuck `switching_section` forever.
   private sectionSwitchWatchdog: number | null = null;
   private static readonly SECTION_SWITCH_TIMEOUT_MS = 15000;
-  // Watchdog for the spontaneous-drop reconnect (bd polyglot-pdf-ppfy): if the
-  // reconnect socket OPENS but session_ready never arrives (backend hung setting up
-  // a new Gemini session), the UI would sit on "reconnecting" -- and the transient
-  // modal -- forever with no escalation. This surfaces reconnect_failed (the
-  // terminal modal) after the timeout so exit-criterion "escalates on give-up"
-  // holds for a silent-hang, not just a socket-level failure (fresh-eyes). Armed
-  // when a drop-reconnect starts; disarmed on handleSessionReady (success).
-  private droppedReconnectWatchdog: number | null = null;
-  private static readonly DROPPED_RECONNECT_TIMEOUT_MS = 20000;
   private connectedUrl: string = ''; // Track the URL we're connected to (for section switches/reconnects)
   private idleTimedOut: boolean = false; // Track if connection was closed due to idle timeout
   // Set to true after the first successful handleOpen so that subsequent opens
@@ -467,10 +458,8 @@ export class WebFormConnection {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    // Tear down the drop-reconnect watchdog + marker on an intentional disconnect
-    // so a stray timer can't fire reconnect_failed after teardown (bd
+    // Clear the drop-reconnect marker on an intentional disconnect (bd
     // polyglot-pdf-ppfy).
-    this.clearDroppedReconnectWatchdog();
     this.droppedReconnectInFlight = false;
 
     // B5 (bd polyglot-pdf-jnjj.17): release any parked validator switch-gate on an
@@ -522,17 +511,6 @@ export class WebFormConnection {
     // another reconnect.
     this.goAwayReconnectInFlight = false;
 
-    // Re-arm the drop-reconnect watchdog on EVERY reopen while a drop reconnect is
-    // in flight (bd polyglot-pdf-yigb, fresh-eyes): the watchdog covers the
-    // socket-open -> session_ready gap, and that gap recurs on each socket the
-    // recovery opens -- the initial pre-emptive one AND any later backoff-driven one
-    // (attemptReconnect). Arming only once (at the drop event) left a hang after a
-    // backoff-driven reopen with no timeout, stuck on "reconnecting" forever.
-    // handleSessionReady disarms it on success; re-arming is idempotent (clears the
-    // prior timer first).
-    if (this.droppedReconnectInFlight) {
-      this.armDroppedReconnectWatchdog();
-    }
 
     // Reset the unconfirmable-field loop-breaker on every (re)connect so a counter
     // left mid-window before a drop does not false-trip on the first confirm of the
@@ -714,13 +692,12 @@ export class WebFormConnection {
           // no-op and never clears it) -- and a later ordinary blip would then
           // wrongly show the AI modal (two independent fresh-eyes reviews). When
           // coalesced, the in-flight reconnect owns recovery; the drop rides it
-          // silently, which is correct (a single seamless reconnect). Watchdog is
-          // armed on the same condition (bd polyglot-pdf-ppfy).
+          // silently, which is correct (a single seamless reconnect) (bd
+          // polyglot-pdf-ppfy).
           {
             const startedReconnect = this.handleGoAwayReconnect(/* surfaceReconnectingStatus */ true);
             if (startedReconnect) {
               this.droppedReconnectInFlight = true;
-              this.armDroppedReconnectWatchdog();
             }
           }
           break;
@@ -796,14 +773,12 @@ export class WebFormConnection {
       this.completeSectionSwitch();
     }
 
-    // A successful (re)connect reached session_ready: disarm the drop-reconnect
-    // watchdog AND clear the drop-reconnect marker directly here (bd
-    // polyglot-pdf-ppfy). Clearing the marker explicitly -- not only via
-    // setStatus("connected") below -- is belt-and-suspenders: if status was already
-    // "connected" (e.g. a coalesced reconnect that never transitioned), setStatus
-    // no-ops and would not run its clear, so a session_ready always resolves the
-    // marker regardless (two independent fresh-eyes reviews).
-    this.clearDroppedReconnectWatchdog();
+    // A successful (re)connect reached session_ready: clear the drop-reconnect
+    // marker directly here (bd polyglot-pdf-ppfy). Clearing it explicitly -- not
+    // only via setStatus("connected") below -- is belt-and-suspenders: if status was
+    // already "connected" (e.g. a coalesced reconnect that never transitioned),
+    // setStatus no-ops and would not run its clear, so a session_ready always
+    // resolves the marker regardless (two independent fresh-eyes reviews).
     this.droppedReconnectInFlight = false;
 
     this.setStatus("connected", "handleSessionReady");
@@ -2514,16 +2489,6 @@ export class WebFormConnection {
       return;
     }
 
-    // Already in the terminal "reconnect_failed" state (the user must act) -- do
-    // NOT auto-reconnect (bd polyglot-pdf-yigb, fresh-eyes). The drop-reconnect
-    // watchdog closes the hung socket AFTER surfacing reconnect_failed; that close's
-    // onclose lands here with reconnectAttempts reset to 0 by the last handleOpen,
-    // which would otherwise fall through to attemptReconnect() and silently undo the
-    // terminal state (flipping back to "reconnecting"). Stay put so the terminal
-    // modal's Reconnect button remains the only way forward.
-    if (this.status === "reconnect_failed") {
-      return;
-    }
 
     // An intentional teardown leaves status already "disconnected" -- stay put,
     // regardless of the (possibly stale, at-max) reconnect counter. Checking this
@@ -3063,20 +3028,9 @@ export class WebFormConnection {
     // Clear the drop-driven-reconnect marker once we leave "reconnecting" (bd
     // polyglot-pdf-ppfy): a move to "connected" (recovered) or to
     // "reconnect_failed"/"error"/anything-else ends the drop-reconnect window, so
-    // the overlay stops showing the "having trouble reaching the AI" modal. Clear
-    // ONLY on a SETTLED status -- not on the intermediate "connecting"/"reconnecting"
-    // a live drop reconnect passes through (a backoff-driven reopen goes
-    // "reconnecting" -> "connecting" via connect(); clearing there would drop the
-    // marker mid-recovery and blind the re-armed watchdog, bd polyglot-pdf-yigb).
-    // "connected" = recovered; the rest = gave up. handleSessionReady also clears it
-    // explicitly on success.
-    if (
-      status === "connected" ||
-      status === "reconnect_failed" ||
-      status === "error" ||
-      status === "idle_timeout" ||
-      status === "disconnected"
-    ) {
+    // the overlay stops showing the "having trouble reaching the AI" modal.
+    // handleSessionReady also clears it explicitly on success.
+    if (status !== "reconnecting") {
       this.droppedReconnectInFlight = false;
     }
 
@@ -3205,59 +3159,6 @@ export class WebFormConnection {
     if (this.sectionSwitchWatchdog !== null) {
       clearTimeout(this.sectionSwitchWatchdog);
       this.sectionSwitchWatchdog = null;
-    }
-  }
-
-  /** Arm the drop-reconnect watchdog (bd polyglot-pdf-ppfy): if a spontaneous-drop
-   *  reconnect neither recovers (session_ready -> connected) nor errors within the
-   *  window -- e.g. the socket opened but the backend hung setting up Gemini -- it
-   *  escalates to reconnect_failed so the UI does not stick on the transient modal
-   *  forever. handleSessionReady disarms it on success. */
-  private armDroppedReconnectWatchdog(): void {
-    this.clearDroppedReconnectWatchdog();
-    this.droppedReconnectWatchdog = window.setTimeout(() => {
-      this.droppedReconnectWatchdog = null;
-      // Fire only if we are still stuck in a drop reconnect that has NOT recovered
-      // (a recovery to "connected", or a prior escalation to "reconnect_failed",
-      // would have disarmed / cleared the marker). The live-reconnect window spans
-      // BOTH "reconnecting" (the pre-emptive path / an attemptReconnect that has not
-      // yet fired connect()) AND "connecting" (a reopen's connect() is mid-flight
-      // via handleOpen -- e.g. a backoff-driven reopen, bd polyglot-pdf-yigb).
-      // AND only when nothing else is actively driving recovery: if the reconnect
-      // fell back to attemptReconnect's exponential backoff, a retry is legitimately
-      // still SCHEDULED (this.reconnectTimer !== null) -- forcing reconnect_failed
-      // there would prematurely give up on a recovery a moment away (bd
-      // polyglot-pdf-vqbm). Let that backoff run; if IT exhausts via repeated
-      // closes, handleClose surfaces reconnect_failed itself, and if its reopen
-      // HANGS, handleOpen re-armed this watchdog to catch it (yigb).
-      if (
-        this.droppedReconnectInFlight &&
-        (this.status === 'reconnecting' || this.status === 'connecting') &&
-        this.reconnectTimer === null
-      ) {
-        console.error('[WebFormConnection] Spontaneous-drop reconnect timed out (no session_ready) -- surfacing reconnect_failed');
-        this.goAwayReconnectInFlight = false;
-        // The hung socket is still OPEN (the backend just never sent session_ready
-        // -- the socket itself is healthy), so it MUST be closed+nulled before
-        // surfacing reconnect_failed (bd polyglot-pdf-yigb, fresh-eyes). Otherwise:
-        // (a) the terminal-modal "Reconnect" button -> connect() early-returns on
-        // this.ws.readyState===OPEN, a silent no-op dead end; and (b) if the socket
-        // later closes on its own, handleClose would silently fall back to
-        // attemptReconnect, undoing the terminal state. Nulling first makes connect()
-        // open a fresh socket and stops handleClose from auto-reconnecting.
-        if (this.ws) {
-          try { this.ws.close(); } catch { /* already closing */ }
-          this.ws = null;
-        }
-        this.setStatus('reconnect_failed', 'droppedReconnectWatchdog:timeout');
-      }
-    }, WebFormConnection.DROPPED_RECONNECT_TIMEOUT_MS);
-  }
-
-  private clearDroppedReconnectWatchdog(): void {
-    if (this.droppedReconnectWatchdog !== null) {
-      clearTimeout(this.droppedReconnectWatchdog);
-      this.droppedReconnectWatchdog = null;
     }
   }
 

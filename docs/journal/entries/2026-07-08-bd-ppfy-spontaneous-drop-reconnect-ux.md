@@ -48,11 +48,29 @@ A 3-layer fix (bd ppfy) + a thinking-token change (bd 3v5m), one PR:
   via `goAwayReconnectInFlight`) but surfaces a `reconnecting` status.
 - **L3 modal** (`ConnectionTimeoutModal.tsx`, `connectionTimeoutTranslations.ts`,
   `VoiceOverlay.tsx`): a passive `variant="reconnecting"` (spinner, no buttons)
-  with copy in all 18 languages, shown while `reconnecting`, auto-cleared on
-  `connected`, escalating to the existing terminal modal on `reconnect_failed`.
+  with copy in all 18 languages, shown while `reconnecting` AND the reconnect is
+  drop-driven (`isDroppedReconnect()`), auto-cleared on `connected`, escalating to
+  the existing terminal modal on `reconnect_failed` (reached via the normal
+  socket-level `handleClose:max-retries` path).
 - **thinking tokens off** (`config.py`, `live_ai_gemini.py`): `thinking_config
   thinking_budget=0` for 2.5-family models (explicit `== "2.5"` allowlist), gated
   `DISABLE_MODEL_THINKING` (default on). Safe-if-ignored on native-audio.
+
+### Watchdog: built, then removed (deliberate)
+
+A pre-PR reviewer asked for a client watchdog to escalate a "silent hang" (the
+reconnect socket opens but `session_ready` never arrives) to the terminal modal
+instead of sitting on the transient one. It was built -- but it turned out to be a
+complexity magnet: across ~5 adversarial-review rounds it spawned a chain of
+edge-case fixes (stand-down-during-backoff, re-arm-on-reopen, close-the-hung-socket,
+guard-the-close-reentrancy), each one exposing the next interaction with the
+reconnect state machine. The maintainer's call (2026-07-08): **rip the watchdog out**
+and ship the twice-cleared core. A silent hang now stays on the transient
+"reconnecting" modal until the user refreshes -- an accepted degradation for an
+ultra-rare failure-within-a-failure. Beads `polyglot-pdf-vqbm` and
+`polyglot-pdf-yigb` (both watchdog-only edge cases) are closed obsolete. If graceful
+silent-hang recovery is ever wanted, it belongs in its own properly-scoped bead, not
+bolted onto this state machine.
 
 ## Where the notify fires (the race fix)
 
