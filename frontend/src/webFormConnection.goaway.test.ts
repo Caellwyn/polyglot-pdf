@@ -423,6 +423,37 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       expect(conn.isDroppedReconnect()).toBe(false) // gates the modal OFF
     })
 
+    // fresh-eyes (two independent reviews): a gemini_session_dropped that COALESCES
+    // into an in-flight GoAway reconnect must NOT leak isDroppedReconnect()=true. If
+    // it did, the next ordinary WS blip would wrongly show the AI modal.
+    it('does NOT leak isDroppedReconnect() when a drop coalesces into an in-flight GoAway reconnect', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      // GoAway starts a reconnect (status stays "connected" -- silent).
+      await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
+      expect(conn.getStatus()).toBe('connected')
+      // A drop arrives before that reconnect completes -> coalesces (no fresh
+      // reconnect starts), so the drop marker must NOT be set.
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.isDroppedReconnect()).toBe(false)
+      expect(MockWebSocket.instances.length).toBe(2) // still one reconnect
+
+      // The coalesced reconnect completes (status stays "connected").
+      MockWebSocket.instances[1].open()
+      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      expect(conn.isDroppedReconnect()).toBe(false)
+
+      // A later ORDINARY blip drives status -> "reconnecting"; the modal must stay
+      // silent (marker never leaked true).
+      const live = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+      live.readyState = MockWebSocket.CLOSED
+      ;(live.onclose as any)?.({ code: 1006, reason: '', wasClean: false })
+      expect(conn.getStatus()).toBe('reconnecting')
+      expect(conn.isDroppedReconnect()).toBe(false)
+    })
+
     it('clears isDroppedReconnect() when the drop reconnect recovers (connected)', async () => {
       const conn = new WebFormConnection(SCHEMA)
       await connectAndOpen(conn)
