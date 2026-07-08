@@ -469,6 +469,18 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
       expect(conn.isDroppedReconnect()).toBe(false)
     })
 
+    // fresh-eyes: pin the give-up outcome too -- the marker clears on
+    // reconnect_failed (the terminal state), symmetric with the connected clear, so
+    // a later unrelated blip stays silent.
+    it('clears isDroppedReconnect() when the drop reconnect gives up (reconnect_failed)', () => {
+      const conn = new WebFormConnection(SCHEMA)
+      // Set the marker directly then drive the terminal transition; the settled-state
+      // clear in setStatus must reset it.
+      ;(conn as any).droppedReconnectInFlight = true
+      ;(conn as any).setStatus('reconnect_failed', 'test')
+      expect(conn.isDroppedReconnect()).toBe(false)
+    })
+
     // fresh-eyes (two independent reviews): a drop reconnect whose first socket
     // FAILS falls into attemptReconnect's backoff, whose connect() moves status to
     // "connecting". isDroppedReconnect() must STAY true across that intermediate

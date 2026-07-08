@@ -192,10 +192,11 @@ export class WebFormConnection {
   // (it is not an AI problem). Set in the gemini_session_dropped handler ONLY when
   // handleGoAwayReconnect actually STARTS a reconnect (not when it coalesces into
   // an in-flight one -- else it would leak `true` and misfire the modal on a later
-  // blip; two independent fresh-eyes reviews). Cleared in setStatus when the
-  // connection leaves "reconnecting" (to "connected" on recovery or
-  // "reconnect_failed"/"error" on give-up) AND explicitly in handleSessionReady.
-  // Read by the overlay to gate the modal. (fresh-eyes: the bare "reconnecting"
+  // blip; two independent fresh-eyes reviews). Cleared in setStatus only on a
+  // SETTLED status (connected / reconnect_failed / error / idle_timeout /
+  // disconnected) -- NOT on the intermediate "connecting" a backoff-driven reopen
+  // passes through, else the modal would vanish mid-recovery -- AND explicitly in
+  // handleSessionReady. Read by the overlay to gate the modal. (fresh-eyes: the bare "reconnecting"
   // status is NOT unique to the drop path.)
   private droppedReconnectInFlight = false;
   private audioQueue: ArrayBuffer[] = [];
