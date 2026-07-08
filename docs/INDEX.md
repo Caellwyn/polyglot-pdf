@@ -35,6 +35,7 @@ ground truth -- fix the doc first as a separate commit.
 | Schema forms + client state | [`components/schema-forms.md`](components/schema-forms.md) | `frontend/src/schema-forms/`, `frontend/src/shared/` |
 | JIT schema loading (manifest path; A1 audit + fix-list) | [`components/jit-schema.md`](components/jit-schema.md) | `backend/services/manifest_service.py`, `backend/services/ai_context.py` |
 | PDF filling | [`components/pdf-filling.md`](components/pdf-filling.md) | `backend/routes/pdf_fill_routes.py`, `backend/services/form_kits.py` |
+| Preview mode / pdf-view (flag-gated in-browser PDF surface) | [`components/pdf-view.md`](components/pdf-view.md) | `frontend/src/pdf-view/` |
 | Auth | [`components/auth.md`](components/auth.md) | `frontend/src/contexts/AuthContext.tsx`, `backend/services/auth.py`, `firestore.rules` |
 | Config + deployment | [`components/config-deployment.md`](components/config-deployment.md) | `backend/config.py`, `deploy-*.sh`, `firebase.json` |
 | Beads remote bootstrap (hydrate `bd` in a fresh remote/web session) | [`components/beads-remote-bootstrap.md`](components/beads-remote-bootstrap.md) | `scripts/beads_remote_bootstrap.py`, `scripts/bd_prime.py` |
