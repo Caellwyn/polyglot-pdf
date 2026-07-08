@@ -2514,6 +2514,17 @@ export class WebFormConnection {
       return;
     }
 
+    // Already in the terminal "reconnect_failed" state (the user must act) -- do
+    // NOT auto-reconnect (bd polyglot-pdf-yigb, fresh-eyes). The drop-reconnect
+    // watchdog closes the hung socket AFTER surfacing reconnect_failed; that close's
+    // onclose lands here with reconnectAttempts reset to 0 by the last handleOpen,
+    // which would otherwise fall through to attemptReconnect() and silently undo the
+    // terminal state (flipping back to "reconnecting"). Stay put so the terminal
+    // modal's Reconnect button remains the only way forward.
+    if (this.status === "reconnect_failed") {
+      return;
+    }
+
     // An intentional teardown leaves status already "disconnected" -- stay put,
     // regardless of the (possibly stale, at-max) reconnect counter. Checking this
     // FIRST is what keeps a deliberate close from being misread as a terminal

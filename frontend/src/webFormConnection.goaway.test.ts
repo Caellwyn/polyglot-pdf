@@ -629,6 +629,36 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
         conn.connect('wss://example/ws/fill')
         expect(MockWebSocket.instances.length).toBe(countAtHang + 1)
       })
+
+      // bd polyglot-pdf-yigb (fresh-eyes): closing the hung socket fires onclose ->
+      // handleClose; with reconnectAttempts reset to 0 by the last handleOpen, that
+      // must NOT auto-reconnect and silently undo the terminal reconnect_failed.
+      it('stays reconnect_failed when the hung socket close reaches handleClose', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        const hung = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+        hung.open() // hang: open, no session_ready. reconnectAttempts reset to 0.
+
+        // Watchdog fires -> reconnect_failed + close()+null the socket.
+        vi.advanceTimersByTime(20000)
+        expect(conn.getStatus()).toBe('reconnect_failed')
+
+        // Simulate the real-browser DEFERRED onclose for the socket the watchdog
+        // closed, landing AFTER reconnect_failed was set. Fire the REGISTERED
+        // handler (hung.onclose) -- the exact closure the app installed -- not a
+        // direct handleClose call, so this exercises the real reentrancy path the
+        // MockWebSocket.close() stub does not fire on its own (both fallback
+        // reviewers flagged this). handleClose must stand down on the
+        // reconnect_failed guard, NOT flip back to "reconnecting".
+        hung.readyState = MockWebSocket.CLOSED
+        ;(hung.onclose as any)?.({ code: 1006, reason: '', wasClean: false })
+        expect(conn.getStatus()).toBe('reconnect_failed')
+      })
     })
   })
 
