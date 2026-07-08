@@ -75,4 +75,48 @@ describe('ConnectionTimeoutModal', () => {
     expect(screen.queryByText('Not Now')).toBeNull();
     expect(screen.getByText('Reconnect')).toBeTruthy();
   });
+
+  // Transient "reconnecting" variant (bd polyglot-pdf-ppfy).
+  describe('reconnecting variant', () => {
+    it('renders the reconnecting copy and NO buttons', () => {
+      render(
+        <ConnectionTimeoutModal
+          {...defaultProps}
+          variant="reconnecting"
+        />
+      );
+      expect(screen.getByText('Reconnecting...')).toBeTruthy();
+      // The transient variant is passive: no reconnect / not-now buttons.
+      expect(screen.queryByText('Reconnect')).toBeNull();
+      expect(screen.queryByText('Not Now')).toBeNull();
+      // The status spinner is present.
+      expect(document.querySelector('.connection-timeout-modal-spinner')).toBeTruthy();
+    });
+
+    it('renders reconnecting copy in the selected language', () => {
+      render(
+        <ConnectionTimeoutModal
+          {...defaultProps}
+          selectedLanguage="Spanish"
+          variant="reconnecting"
+        />
+      );
+      // Spanish reconnectingTitle = "Reconectando..." (ASCII, no escape needed).
+      expect(screen.getByText('Reconectando...')).toBeTruthy();
+      // Not the terminal title. \u escapes (ASCII-only, scar #6): Spanish
+      // terminal title = 'Se Agot\u00f3 el Tiempo de Conexi\u00f3n'.
+      expect(screen.queryByText('Se Agot\u00f3 el Tiempo de Conexi\u00f3n')).toBeNull();
+    });
+
+    it('renders nothing when closed even in reconnecting variant', () => {
+      const { container } = render(
+        <ConnectionTimeoutModal
+          {...defaultProps}
+          variant="reconnecting"
+          isOpen={false}
+        />
+      );
+      expect(container.firstChild).toBeNull();
+    });
+  });
 });

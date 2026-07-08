@@ -74,6 +74,7 @@ export interface ConnectionManager {
 	resume: () => Promise<void>  // Resume from pause
 	disconnect: () => void  // True disconnect (cleanup everything)
 	getStatus: () => ConnectionStatus
+	isDroppedReconnect: () => boolean  // bd polyglot-pdf-ppfy: is the current "reconnecting" driven by a spontaneous Gemini drop (vs an ordinary WS blip)? Gates the "trouble reaching the AI" modal.
 	getThinking: () => boolean  // bd polyglot-pdf-wpw.5: is the agent currently processing a turn?
 	isSendingMicAudio: () => boolean  // bd polyglot-pdf-s3zv: would a mic chunk be forwarded to the backend right now (the real shouldSendMicChunk gate, incl. socket state)? Drives the energy meter's green "sending" state.
 	sendAudio: (audioData: ArrayBuffer) => void
@@ -735,6 +736,13 @@ export function createConnectionManager(
 
 		getStatus() {
 			return connection?.getStatus() ?? 'disconnected'
+		},
+
+		// Whether the current "reconnecting" is driven by a spontaneous Gemini drop
+		// (bd polyglot-pdf-ppfy) -- the overlay gates the "trouble reaching the AI"
+		// modal on this so an ordinary WS blip's reconnect stays silent.
+		isDroppedReconnect() {
+			return connection?.isDroppedReconnect() ?? false
 		},
 
 		getThinking() {

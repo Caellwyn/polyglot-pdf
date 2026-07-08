@@ -367,6 +367,37 @@ class TestGoAway:
         await handler.on_go_away("2s")  # must not raise
 
 
+class TestSessionDropped:
+    """on_session_dropped forwards a spontaneous Gemini drop (bd polyglot-pdf-ppfy)."""
+
+    @pytest.mark.asyncio
+    async def test_on_session_dropped_forwards_ws_message(
+        self, callback_handler, mock_websocket
+    ):
+        await callback_handler.on_session_dropped()
+        mock_websocket.send_json.assert_awaited_once_with(
+            {"type": "gemini_session_dropped"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_on_session_dropped_swallows_send_failure(
+        self, callback_handler, mock_websocket
+    ):
+        # The WS may already be closing from an idle-timeout race; a send failure
+        # must never crash session teardown (same discipline as on_go_away).
+        mock_websocket.send_json.side_effect = RuntimeError("ws closed")
+        await callback_handler.on_session_dropped()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_on_session_dropped_noop_without_websocket(self, mock_coordinator):
+        handler = CallbackHandler(
+            websocket=None,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        await handler.on_session_dropped()  # must not raise
+
+
 class TestAskSecretaryRouting:
     """ask_secretary tool routing + fail-open (bd polyglot-pdf-jnjj.45c)."""
 

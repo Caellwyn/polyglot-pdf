@@ -1,19 +1,26 @@
 /**
- * ConnectionTimeoutModal - connection-timeout recovery prompt (bd polyglot-pdf-jf6w.2).
+ * ConnectionTimeoutModal - connection-recovery prompt (bd polyglot-pdf-jf6w.2).
  *
- * Shown when the voice connection drops in a way the app cannot silently
- * auto-recover from (the WebFormConnection surfaces the terminal
- * "reconnect_failed" status -- bd polyglot-pdf-jf6w.3). Offers a primary
- * "reconnect" button that re-runs the existing connect/restore path; the client
- * already owns all field state, and vmxx's silent-resume suppresses the
- * re-greeting, so the resume picks up at the current field.
+ * Two variants:
+ *
+ * - "timeout" (default): shown when the voice connection drops in a way the app
+ *   cannot silently auto-recover from (WebFormConnection surfaces the terminal
+ *   "reconnect_failed" status -- bd polyglot-pdf-jf6w.3). Offers a primary
+ *   "reconnect" button that re-runs the existing connect/restore path; the client
+ *   already owns all field state, and vmxx's silent-resume suppresses the
+ *   re-greeting, so the resume picks up at the current field. Dismissible via an
+ *   optional secondary "not now" button.
+ *
+ * - "reconnecting" (bd polyglot-pdf-ppfy): a TRANSIENT "please wait" state shown
+ *   while the app is auto-reconnecting after a SPONTANEOUS AI-session drop (e.g. a
+ *   Gemini 1011 the backend detects and forwards as gemini_session_dropped). It is
+ *   passive -- no buttons, not user-dismissible -- and the caller clears it by
+ *   flipping isOpen once the session recovers (status -> connected), or swaps to
+ *   the "timeout" variant if auto-reconnect gives up (status -> reconnect_failed).
  *
  * Mirrors the DisclaimerModal house pattern (inline per-language copy, no i18n
- * library; copy lives in connectionTimeoutTranslations.ts). Unlike the
- * disclaimer, this modal IS dismissible -- the user may choose to stay on the
- * form without reconnecting -- so a secondary "not now" button and an optional
- * onCancel are provided. The copy renders in the user's selectedLanguage with an
- * English fallback.
+ * library; copy lives in connectionTimeoutTranslations.ts). The copy renders in
+ * the user's selectedLanguage with an English fallback.
  */
 
 import React from 'react';
@@ -25,6 +32,11 @@ export interface ConnectionTimeoutModalProps {
   selectedLanguage: string;
   onReconnect: () => void;
   onCancel?: () => void;
+  /**
+   * "timeout" (default) = terminal give-up with a reconnect button.
+   * "reconnecting" = transient auto-reconnect notice, no buttons (bd ppfy).
+   */
+  variant?: 'timeout' | 'reconnecting';
 }
 
 export function ConnectionTimeoutModal({
@@ -32,6 +44,7 @@ export function ConnectionTimeoutModal({
   selectedLanguage,
   onReconnect,
   onCancel,
+  variant = 'timeout',
 }: ConnectionTimeoutModalProps) {
   if (!isOpen) return null;
 
@@ -39,6 +52,10 @@ export function ConnectionTimeoutModal({
   const copy =
     CONNECTION_TIMEOUT_TRANSLATIONS[selectedLanguage] ||
     CONNECTION_TIMEOUT_TRANSLATIONS['English'];
+
+  const isReconnecting = variant === 'reconnecting';
+  const title = isReconnecting ? copy.reconnectingTitle : copy.title;
+  const message = isReconnecting ? copy.reconnectingMessage : copy.message;
 
   return (
     <div
@@ -55,29 +72,39 @@ export function ConnectionTimeoutModal({
           id="connection-timeout-title"
           className="connection-timeout-modal-title"
         >
-          {copy.title}
+          {title}
         </h2>
 
-        <p className="connection-timeout-modal-message">{copy.message}</p>
+        <p className="connection-timeout-modal-message">{message}</p>
 
-        <div className="connection-timeout-modal-buttons">
-          {onCancel && (
+        {/* The transient reconnecting variant is passive: a spinner, no actions.
+            The terminal timeout variant keeps its reconnect / not-now buttons. */}
+        {isReconnecting ? (
+          <div
+            className="connection-timeout-modal-spinner"
+            role="status"
+            aria-live="polite"
+          />
+        ) : (
+          <div className="connection-timeout-modal-buttons">
+            {onCancel && (
+              <button
+                className="connection-timeout-modal-button connection-timeout-modal-button--secondary"
+                onClick={onCancel}
+                type="button"
+              >
+                {copy.cancelButton}
+              </button>
+            )}
             <button
-              className="connection-timeout-modal-button connection-timeout-modal-button--secondary"
-              onClick={onCancel}
+              className="connection-timeout-modal-button connection-timeout-modal-button--primary"
+              onClick={onReconnect}
               type="button"
             >
-              {copy.cancelButton}
+              {copy.reconnectButton}
             </button>
-          )}
-          <button
-            className="connection-timeout-modal-button connection-timeout-modal-button--primary"
-            onClick={onReconnect}
-            type="button"
-          >
-            {copy.reconnectButton}
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

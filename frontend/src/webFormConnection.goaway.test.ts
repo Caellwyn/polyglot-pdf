@@ -318,6 +318,210 @@ describe('WebFormConnection GoAway reconnect POLICY (bd polyglot-pdf-l3a.2)', ()
     })
   })
 
+  // Spontaneous-drop coverage (bd polyglot-pdf-ppfy): a backend
+  // {type:"gemini_session_dropped"} (a 1011 the backend detected behind the still-
+  // open WS) drives the SAME pre-emptive reconnect as a GoAway, but surfaces a
+  // "reconnecting" status so the UI can show the transient recovery modal.
+  describe('spontaneous drop reconnect (bd polyglot-pdf-ppfy)', () => {
+    it('reconnects on gemini_session_dropped and surfaces "reconnecting" status', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      const first = await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      expect(conn.getStatus()).toBe('connected')
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+
+      // A new socket was created and the old one closed (same mechanism as GoAway).
+      expect(MockWebSocket.instances.length).toBe(2)
+      expect(first.readyState).toBe(MockWebSocket.CLOSED)
+      // UNLIKE GoAway (which stays "connected"), a spontaneous drop surfaces
+      // "reconnecting" so the transient modal shows during recovery.
+      expect(conn.getStatus()).toBe('reconnecting')
+    })
+
+    it('restores "connected" when the reconnect completes (clears the modal)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.getStatus()).toBe('reconnecting')
+
+      // Completing the reopen (open + session_ready) restores "connected", which is
+      // what flips the reconnecting modal off in the overlay.
+      const reconnected = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+      reconnected.open()
+      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      expect(conn.getStatus()).toBe('connected')
+    })
+
+    it('reconnects with resume:true on a spontaneous drop (no re-greeting)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      let handshake: any = null
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      const reconnected = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+      reconnected.send = (data: any) => { handshake = JSON.parse(data) }
+      reconnected.open()
+
+      expect(handshake).toBeTruthy()
+      expect(handshake.resume).toBe(true)
+    })
+
+    it('coalesces with an in-flight GoAway reconnect (no double reconnect)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      // A GoAway starts a reconnect; a spontaneous-drop message arriving before it
+      // completes must coalesce (the shared goAwayReconnectInFlight guard).
+      await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(MockWebSocket.instances.length).toBe(2) // one reconnect, not two
+    })
+
+    it('does NOT reconnect on a spontaneous drop after an idle timeout', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      await (conn as any).handleMessage(msg({ type: 'idle_timeout' }))
+      const countAfterIdle = MockWebSocket.instances.length
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(MockWebSocket.instances.length).toBe(countAfterIdle)
+    })
+
+    // fresh-eyes finding 1: the "reconnecting" status is NOT unique to the drop
+    // path -- an ordinary WS blip's attemptReconnect sets it too. isDroppedReconnect()
+    // must distinguish them so the overlay only shows the "trouble reaching the AI"
+    // modal for a genuine Gemini drop.
+    it('flags isDroppedReconnect() true only for a gemini_session_dropped reconnect', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+      expect(conn.isDroppedReconnect()).toBe(false)
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.getStatus()).toBe('reconnecting')
+      expect(conn.isDroppedReconnect()).toBe(true) // gates the modal ON
+    })
+
+    it('does NOT flag isDroppedReconnect() for an ordinary WS-close reconnect (network blip)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      const sock = await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      // An ordinary unexpected close (NOT a gemini_session_dropped) -> handleClose
+      // -> attemptReconnect -> status "reconnecting", but this is a network blip,
+      // not an AI drop, so the modal must stay silent.
+      sock.readyState = MockWebSocket.CLOSED
+      ;(sock.onclose as any)?.({ code: 1006, reason: '', wasClean: false })
+      expect(conn.getStatus()).toBe('reconnecting')
+      expect(conn.isDroppedReconnect()).toBe(false) // gates the modal OFF
+    })
+
+    // fresh-eyes (two independent reviews): a gemini_session_dropped that COALESCES
+    // into an in-flight GoAway reconnect must NOT leak isDroppedReconnect()=true. If
+    // it did, the next ordinary WS blip would wrongly show the AI modal.
+    it('does NOT leak isDroppedReconnect() when a drop coalesces into an in-flight GoAway reconnect', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      // GoAway starts a reconnect (status stays "connected" -- silent).
+      await (conn as any).handleMessage(msg({ type: 'go_away', time_left: '2s' }))
+      expect(conn.getStatus()).toBe('connected')
+      // A drop arrives before that reconnect completes -> coalesces (no fresh
+      // reconnect starts), so the drop marker must NOT be set.
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.isDroppedReconnect()).toBe(false)
+      expect(MockWebSocket.instances.length).toBe(2) // still one reconnect
+
+      // The coalesced reconnect completes (status stays "connected").
+      MockWebSocket.instances[1].open()
+      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      expect(conn.isDroppedReconnect()).toBe(false)
+
+      // A later ORDINARY blip drives status -> "reconnecting"; the modal must stay
+      // silent (marker never leaked true).
+      const live = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+      live.readyState = MockWebSocket.CLOSED
+      ;(live.onclose as any)?.({ code: 1006, reason: '', wasClean: false })
+      expect(conn.getStatus()).toBe('reconnecting')
+      expect(conn.isDroppedReconnect()).toBe(false)
+    })
+
+    it('clears isDroppedReconnect() when the drop reconnect recovers (connected)', async () => {
+      const conn = new WebFormConnection(SCHEMA)
+      await connectAndOpen(conn)
+      ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+      await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+      expect(conn.isDroppedReconnect()).toBe(true)
+
+      // Reopen + session_ready -> connected -> the marker (and modal) clear.
+      MockWebSocket.instances[MockWebSocket.instances.length - 1].open()
+      ;(conn as any).handleSessionReady({ session_id: 's2', native_vad: false })
+      expect(conn.getStatus()).toBe('connected')
+      expect(conn.isDroppedReconnect()).toBe(false)
+    })
+
+    // fresh-eyes: pin the give-up outcome too -- the marker clears on
+    // reconnect_failed (the terminal state), symmetric with the connected clear, so
+    // a later unrelated blip stays silent.
+    it('clears isDroppedReconnect() when the drop reconnect gives up (reconnect_failed)', () => {
+      const conn = new WebFormConnection(SCHEMA)
+      // Set the marker directly then drive the terminal transition; the settled-state
+      // clear in setStatus must reset it.
+      ;(conn as any).droppedReconnectInFlight = true
+      ;(conn as any).setStatus('reconnect_failed', 'test')
+      expect(conn.isDroppedReconnect()).toBe(false)
+    })
+
+    // fresh-eyes (two independent reviews): a drop reconnect whose first socket
+    // FAILS falls into attemptReconnect's backoff, whose connect() moves status to
+    // "connecting". isDroppedReconnect() must STAY true across that intermediate
+    // "connecting" leg (cleared only on a SETTLED status) -- else the "trouble
+    // reaching the AI" modal vanishes mid-recovery into a bare "connecting" screen.
+    describe('drop reconnect that fails and backs off', () => {
+      beforeEach(() => { vi.useFakeTimers() })
+      afterEach(() => { vi.useRealTimers() })
+
+      it('keeps isDroppedReconnect() true across the backoff "connecting" leg', async () => {
+        const conn = new WebFormConnection(SCHEMA)
+        const p = conn.connect('wss://example/ws/fill')
+        MockWebSocket.instances[0].open()
+        await p
+        ;(conn as any).handleSessionReady({ session_id: 's', native_vad: false })
+
+        // Drop -> pre-emptive reconnect (socket #2), drop marker set.
+        await (conn as any).handleMessage(msg({ type: 'gemini_session_dropped' }))
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // The reconnect socket FAILS -> attemptReconnect schedules a backoff.
+        MockWebSocket.instances[1].error()
+        await Promise.resolve()
+        await Promise.resolve()
+        // Marker survives the failure (still a drop reconnect in progress).
+        expect(conn.isDroppedReconnect()).toBe(true)
+
+        // Backoff fires -> connect() -> status "connecting". The marker must NOT be
+        // cleared by that intermediate transition.
+        vi.advanceTimersByTime(1000)
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(conn.getStatus()).toBe('connecting')
+        expect(conn.isDroppedReconnect()).toBe(true) // modal not dropped mid-recovery
+
+        conn.disconnect() // tear down the pending recovery cleanly
+      })
+    })
+
+  })
+
   // Async-token-gap coverage (Opus fresh-eyes Finding 3): in production getToken is
   // always registered, so the reconnect connect() suspends on `await getToken()`
   // with this.ws already nulled. If the OLD (closing) socket's onclose lands during

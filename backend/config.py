@@ -163,6 +163,17 @@ class Settings(BaseModel):
 	# section-reset path is unchanged when off.
 	CONTINUOUS_SESSION: bool = os.getenv("CONTINUOUS_SESSION", "false").lower() == "true"
 
+	# Disable model "thinking" tokens on the live session (default ON = thinking
+	# off). We do not need chain-of-thought for the form-fill turn loop, and
+	# thinking tokens are billed at the (expensive) output rate. For 2.5-family
+	# models thinking_config={"thinking_budget": 0} turns it off and reduces
+	# latency (genai codegen_instructions.md); the effect on native-audio Live is
+	# unverified upstream (live-api-best-practices.md), so this is safe-if-ignored
+	# rather than guaranteed. Only the 2.5 `thinking_budget` form is sent; 3.1 uses
+	# a different `thinking_level` field and is left at its default. Env-flippable
+	# (set DISABLE_MODEL_THINKING=false) if native-audio ever misbehaves with it.
+	DISABLE_MODEL_THINKING: bool = os.getenv("DISABLE_MODEL_THINKING", "true").lower() == "true"
+
 	# === VAD (Voice Activity Detection) Settings ===
 	# Gemini Live API automatic activity detection sensitivity
 	# START_SENSITIVITY: How quickly Gemini detects speech start

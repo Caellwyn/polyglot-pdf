@@ -173,6 +173,15 @@ forwards the text to the client (PHI stays server-side, bd hjo). VAD config
 (`realtime_input_config`) is covered in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
 
+Model **thinking** is turned off by default: when `DISABLE_MODEL_THINKING` is set
+(default on) and the active model is 2.5-family, the config carries
+`thinking_config = {"thinking_budget": 0}`. The form-fill turn loop needs no
+chain-of-thought, and thinking tokens bill at the output rate. The 3.1 family uses
+a different `thinking_level` field and is left at its default (the 2.5-only
+`thinking_budget` form is not sent to it). Whether the flag does anything on
+native-audio Live is unverified upstream ([../genai_docs/live-api-best-practices.md](../genai_docs/live-api-best-practices.md)),
+so this is safe-if-ignored rather than guaranteed.
+
 ## Scar tissue
 
 - **`_intentional_shutdown` reset ordering** (above) — the section-switch crash.
