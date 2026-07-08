@@ -224,17 +224,36 @@ def test_unmirrored_makes_required_edge_is_mirrored_into_require_if():
         "field": "trg", "operator": "equals", "value": "yes"}
 
 
+def test_same_trigger_show_if_does_not_suppress_that_triggers_require_if():
+    # fresh-eyes r2/r3: the EXACT w7 relationship_d shape. reason_d's edge
+    # makes_required:[relationship_d], and relationship_d ALREADY has a show_if
+    # naming reason_d with the SAME value -- so the key-blind "already mirrored"
+    # check saw the matching show_if and dropped require_if to None. The mirror
+    # must be KEY-SPECIFIC: a show_if match must NOT satisfy a makes_required edge.
+    trig = {"id": "reason_d", "type": "checkbox", "pdf_field_name": "R[0]",
+            "options": [{"value": "R[0]", "label": "D", "pdf_field_name": "R[0]"}],
+            "controls_fields": [{"operator": "equals", "value": "R[0]",
+                                 "makes_required": ["rel_d"]}]}
+    # rel_d is SHOWN when reason_d==R[0] AND (per the edge) REQUIRED under the same
+    # condition. Both buckets must be populated.
+    rel_d = {"id": "rel_d", "type": "text", "pdf_field_name": "T[0]",
+             "show_if": {"field": "reason_d", "operator": "equals", "value": "R[0]"}}
+    out, rep = mig.migrate(_v1([trig, rel_d]))
+    t = {f["id"]: f for f in out["fields"]}["rel_d"]
+    # show_if is a single-option checkbox trigger -> equals R[0] became is_checked.
+    assert t["show_if"] == {"field": "reason_d", "operator": "is_checked"}
+    # require_if MUST be populated (the r2 bug left it None because show_if matched).
+    assert t["require_if"] == {"field": "reason_d", "operator": "is_checked"}
+
+
 def test_pre_existing_show_if_does_not_suppress_a_makes_required_mirror():
-    # fresh-eyes r2: the w7 us_person_ssn_itin bug in miniature -- a target with a
-    # show_if from trigger X must STILL gain a require_if when a DIFFERENT trigger
-    # Y's makes_required edge names it. A key-blind "already mirrored" check saw
-    # the matching-shaped show_if and dropped the require_if entirely.
+    # A target with a show_if from trigger X must STILL gain a require_if when a
+    # DIFFERENT trigger Y's makes_required edge names it (the cross-trigger case).
     x = {"id": "x", "type": "checkbox", "pdf_field_name": "X[0]", "options": [
         {"value": "X[0]", "label": "X", "pdf_field_name": "X[0]"}]}
     y = {"id": "y", "type": "checkbox", "pdf_field_name": "Y[0]", "options": [
         {"value": "Y[0]", "label": "Y", "pdf_field_name": "Y[0]"}],
         "controls_fields": [{"operator": "is_checked", "makes_required": ["tgt"]}]}
-    # tgt is SHOWN when x is checked, and (per y's edge) REQUIRED when y is checked.
     tgt = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
            "show_if": {"field": "x", "operator": "is_checked"}}
     out, rep = mig.migrate(_v1([x, y, tgt]))
