@@ -3385,6 +3385,14 @@
       "show_if": {
         "field": "p4_checkbox1[1]",
         "operator": "is_not_empty"
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
       }
     },
     {
@@ -3458,6 +3466,14 @@
       "show_if": {
         "field": "p4_checkbox1[1]",
         "operator": "is_not_empty"
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
       }
     },
     {
@@ -3531,6 +3547,14 @@
       "show_if": {
         "field": "p4_checkbox1[1]",
         "operator": "is_not_empty"
+      },
+      "conditional_behavior": {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {
+          "bit": 0,
+          "current_value": 1,
+          "required_value": 0
+        }
       }
     },
     {

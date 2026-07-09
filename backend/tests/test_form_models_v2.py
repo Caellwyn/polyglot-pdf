@@ -141,13 +141,38 @@ def test_shipped_kit_is_v2_and_validates(kit):
 @pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
 def test_shipped_kit_has_no_dangling_references(kit):
     # Every id a section's fields[] (or a show_if/require_if) names must exist.
-    # Guards the class of bug bd k2gr (i-90 Part-2 listed p2_checkbox3[1..4], the
-    # widget leaves consolidated into the p2_checkbox3 group) + bd p3ww (w7-2
+    # Guards the class of bug bd k2gr (i-90 Part-2 listed p2_checkbox3[1..4] as
+    # section field ids that did not exist in schema.fields) + bd p3ww (w7-2
     # sec_agent listed 4 agent_* fields that were never extracted) -- both dead
     # section refs, not caught by the promotion lint (which only checks condition
     # references, not section.fields).
     result = validate(load_kit(kit)).validate_all_references()
     assert result["errors"] == [], result["errors"]
+
+
+@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+def test_shipped_kit_shown_readonly_fields_can_unlock(kit):
+    # A field that is read_only AND carries a show_if is only editable once shown
+    # if it ALSO declares an unlock_method -- FieldRenderer's isDisabled falls back
+    # to field.read_only UNCONDITIONALLY when shouldUnlock is false, so a shown
+    # read-only field with no unlock is permanently disabled. Guards bd
+    # polyglot-pdf-3fz7 (i-90 p4_checkbox1a/b/c: read_only + show_if, no
+    # unlock_method -> the accommodation checkboxes could never be checked once
+    # Part 4 was answered Yes). The unlock descriptor lives on
+    # conditional_behavior.unlock_method (the only conditional container the v2
+    # model declares; a raw conditional_logic key is dropped at parse time).
+    schema = validate(load_kit(kit))
+    offenders = []
+    for field in schema.fields:
+        if not (field.read_only and field.show_if is not None):
+            continue
+        behavior = field.conditional_behavior
+        if behavior is None or not getattr(behavior, "unlock_method", None):
+            offenders.append(field.id)
+    assert offenders == [], (
+        f"{kit}: shown read-only fields with no unlock_method (permanently "
+        f"disabled once shown): {offenders}"
+    )
 
 
 # ---------------------------------------------------------------------------
