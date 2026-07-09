@@ -52,3 +52,26 @@ export function initialViewMode(
   if (viewportWidth <= MOBILE_INITIAL_BREAKPOINT) return 'simplified';
   return stored ?? 'simplified';
 }
+
+/**
+ * The view mode after a LIVE resize (bd polyglot-pdf-ipin). The initial mode is
+ * chosen once at mount by initialViewMode(); this handles a same-tab resize (or
+ * device rotation) that crosses the breakpoint mid-session. To keep the
+ * mobile-defaults-Simplified intent (epic rubric #5) true for a live resize --
+ * not only a fresh mount -- a viewport that shrinks to mobile width forces
+ * Preview back to Simplified.
+ *
+ * It is one-directional on purpose: shrinking into mobile drops Preview, but
+ * growing back to desktop does NOT auto-restore Preview (the user re-picks it).
+ * At desktop width the current mode is always kept, so a deliberate desktop
+ * Simplified/Preview choice is never overridden by a resize that stays wide.
+ */
+export function viewModeAfterResize(
+  current: ViewMode,
+  viewportWidth: number
+): ViewMode {
+  if (viewportWidth <= MOBILE_INITIAL_BREAKPOINT && current === 'preview') {
+    return 'simplified';
+  }
+  return current;
+}

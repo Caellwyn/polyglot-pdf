@@ -27,7 +27,7 @@ import { createConnectionManager, type ConnectionManager } from "../../shared/co
 import { MIC_AUDIO_CONSTRAINTS } from "../../shared/audioConstraints";
 import { isTestHarnessEnabled } from "../../shared/config";
 import { isPreviewUiEnabled } from "../../pdf-view/featureFlag";
-import { getStoredViewMode, storeViewMode, initialViewMode, type ViewMode } from "../../pdf-view/viewMode";
+import { getStoredViewMode, storeViewMode, initialViewMode, viewModeAfterResize, type ViewMode } from "../../pdf-view/viewMode";
 
 // Lazy chunk boundary: pdfjs-dist and everything else in pdf-view/ load only
 // when these components actually render -- which requires the preview flag ON
@@ -150,6 +150,19 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         }
         return next;
       });
+
+      // A live resize that crosses INTO mobile width drops Preview back to
+      // Simplified (bd polyglot-pdf-ipin), keeping the mobile-defaults-Simplified
+      // intent true mid-session and not only at a fresh mount. One-directional:
+      // growing back to desktop never auto-restores Preview. Skip the INITIAL
+      // classify -- the mount already chose the mode via initialViewMode().
+      if (!initial) {
+        setViewMode(prev => {
+          const next = viewModeAfterResize(prev, w);
+          if (next !== prev) storeViewMode(next);
+          return next;
+        });
+      }
     };
 
     const onResize = () => {
