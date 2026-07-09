@@ -138,6 +138,18 @@ def test_shipped_kit_is_v2_and_validates(kit):
     assert schema.schema_version == "2"
 
 
+@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+def test_shipped_kit_has_no_dangling_references(kit):
+    # Every id a section's fields[] (or a show_if/require_if) names must exist.
+    # Guards the class of bug bd k2gr (i-90 Part-2 listed p2_checkbox3[1..4], the
+    # widget leaves consolidated into the p2_checkbox3 group) + bd p3ww (w7-2
+    # sec_agent listed 4 agent_* fields that were never extracted) -- both dead
+    # section refs, not caught by the promotion lint (which only checks condition
+    # references, not section.fields).
+    result = validate(load_kit(kit)).validate_all_references()
+    assert result["errors"] == [], result["errors"]
+
+
 # ---------------------------------------------------------------------------
 # Exit criterion 2: v2 fixtures validate; violations -> field-path errors
 # ---------------------------------------------------------------------------
