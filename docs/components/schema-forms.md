@@ -96,8 +96,10 @@ disturbs the voice session. With the flag off, none of that UI or its pdfjs
 chunks load.
 
 `FieldRenderer.tsx` routes by `field.type` to a component. **Implemented:** `text`,
-`email`, `tel`, `textarea`, `radio`, `checkbox`, `date`, `select` (and `number`,
-which reuses `TextField`). **Not yet implemented** (render a placeholder):
+`email`, `tel`, `textarea`, `radio`, `checkbox`, `checkbox_group`, `date`, `select`
+(and `number`, which reuses `TextField`). `checkbox` and `checkbox_group` both
+render through `CheckboxField`, which branches on `options[]` (a bare boolean box
+vs. a multi-select group). **Not yet implemented** (render a placeholder):
 `signature`, `address_group`, `table`. Unknown types render an error block.
 
 Manual edits from the React UI are **auto-confirmed** as `manual_edit`
