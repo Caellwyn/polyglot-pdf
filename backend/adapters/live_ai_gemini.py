@@ -753,13 +753,22 @@ class LiveAIGemini(ILiveAI):
         chunk_count = 0
         from backend.config import get_settings
         _settings = get_settings()
-        _gapfill_enabled = bool(getattr(_settings, "AUDIO_GAPFILL_ENABLED", False))
+        _in_rate = int(getattr(_settings, "AUDIO_IN_RATE", 16000))
+        _mime_type = f"audio/pcm;rate={_in_rate}"
+        # Gap-fill is a NATIVE-VAD keepalive: it manufactures a continuous stream so
+        # Gemini's own VAD is not starved of trailing audio. In manual-VAD mode
+        # (DISABLE_GEMINI_VAD=true) turns are bracketed by activity_start/end and
+        # audio is expected ONLY inside a bracket -- injecting silence between PTT
+        # turns would send un-bracketed audio and desync the turn state. So gap-fill
+        # is gated OFF whenever native VAD is off, independent of AUDIO_GAPFILL_ENABLED
+        # (Opus fresh-eyes finding, bd polyglot-pdf-7f7m).
+        _native_vad = not bool(getattr(_settings, "DISABLE_GEMINI_VAD", False))
+        _gapfill_enabled = _native_vad and bool(getattr(_settings, "AUDIO_GAPFILL_ENABLED", False))
         _gapfill_timeout_s = (
             max(1, int(getattr(_settings, "AUDIO_GAPFILL_INTERVAL_MS", 40))) / 1000.0
         )
         # One chunk of mono PCM16 silence at AUDIO_IN_RATE = rate * (ms/1000) * 2 bytes.
         _chunk_ms = max(1, int(getattr(_settings, "WS_CHUNK_MS", 20)))
-        _in_rate = int(getattr(_settings, "AUDIO_IN_RATE", 16000))
         _silence_frame = bytes((_in_rate * _chunk_ms // 1000) * 2)
         _seen_real_audio = False
         _silence_frames_sent = 0
@@ -773,7 +782,7 @@ class LiveAIGemini(ILiveAI):
                     self._log.info("[mic] [Sender] First audio chunk sending to Gemini", bytes=len(data))
 
                 await session.send_realtime_input(
-                    audio=types.Blob(data=data, mime_type="audio/pcm;rate=16000")
+                    audio=types.Blob(data=data, mime_type=_mime_type)
                 )
 
                 if is_silence:

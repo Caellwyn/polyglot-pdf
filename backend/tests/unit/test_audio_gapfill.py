@@ -30,11 +30,13 @@ class _RecordingSession:
         self.audio_frames.append(bytes(data))
 
 
-def _make_adapter(monkeypatch, *, enabled=True, interval_ms=20):
+def _make_adapter(monkeypatch, *, enabled=True, interval_ms=20, native_vad=True):
     """Build a bare adapter with gap-fill config forced to test values.
 
     _audio_sender_loop reads get_settings() ONCE at entry, so patching the
     cached settings object's attributes before the call is sufficient.
+    native_vad=True (DISABLE_GEMINI_VAD=False) is the mode gap-fill targets;
+    manual VAD gates it OFF regardless of AUDIO_GAPFILL_ENABLED.
     """
     from backend.config import get_settings
 
@@ -43,6 +45,7 @@ def _make_adapter(monkeypatch, *, enabled=True, interval_ms=20):
     monkeypatch.setattr(settings, "AUDIO_GAPFILL_INTERVAL_MS", interval_ms, raising=False)
     monkeypatch.setattr(settings, "WS_CHUNK_MS", 20, raising=False)
     monkeypatch.setattr(settings, "AUDIO_IN_RATE", 16000, raising=False)
+    monkeypatch.setattr(settings, "DISABLE_GEMINI_VAD", not native_vad, raising=False)
 
     adapter = LiveAIGemini(api_key="test_key")
     adapter._audio_queue = asyncio.Queue(maxsize=100)
@@ -148,6 +151,28 @@ async def test_gapfill_disabled_blocks_without_silence(monkeypatch):
     loop_task = asyncio.create_task(adapter._audio_sender_loop(session))
     await asyncio.sleep(0.12)  # long stall
     assert session.audio_frames == [real], "disabled gap-fill must not emit silence"
+
+    adapter._audio_queue.put_nowait(None)
+    await asyncio.wait_for(loop_task, timeout=2.0)
+    assert session.audio_frames == [real]
+
+
+@pytest.mark.asyncio
+async def test_gapfill_off_in_manual_vad_mode(monkeypatch):
+    """Manual VAD (DISABLE_GEMINI_VAD=true) gates gap-fill OFF even if enabled.
+
+    Gap-fill is a native-VAD keepalive; in manual/PTT mode audio must stay inside
+    activity_start/end brackets, so injecting silence between turns is wrong.
+    """
+    adapter = _make_adapter(monkeypatch, enabled=True, interval_ms=20, native_vad=False)
+    session = _RecordingSession()
+
+    real = b"\x0c\x0d" * 320
+    adapter._audio_queue.put_nowait(real)
+
+    loop_task = asyncio.create_task(adapter._audio_sender_loop(session))
+    await asyncio.sleep(0.12)  # long stall that WOULD gap-fill under native VAD
+    assert session.audio_frames == [real], "manual VAD must not emit gap-fill silence"
 
     adapter._audio_queue.put_nowait(None)
     await asyncio.wait_for(loop_task, timeout=2.0)
