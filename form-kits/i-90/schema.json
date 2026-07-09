@@ -2692,11 +2692,11 @@
         {
           "value": "hispanic_or_latino",
           "label": "Hispanic or Latino",
-          "pdf_field_name": "P3_checkbox6[0]",
+          "pdf_field_name": "P3_checkbox6[1]",
           "pdf_position": {
             "page": 3,
             "x": 344.0,
-            "y": 115.58,
+            "y": 100.59,
             "width": 10.0,
             "height": 10.0
           }
@@ -2704,11 +2704,11 @@
         {
           "value": "not_hispanic_or_latino",
           "label": "Not Hispanic or Latino",
-          "pdf_field_name": "P3_checkbox6[1]",
+          "pdf_field_name": "P3_checkbox6[0]",
           "pdf_position": {
             "page": 3,
             "x": 344.0,
-            "y": 100.59,
+            "y": 115.58,
             "width": 10.0,
             "height": 10.0
           }
