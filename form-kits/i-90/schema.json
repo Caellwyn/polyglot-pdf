@@ -2371,27 +2371,62 @@
         {
           "value": "my_previous_card_has_been_lost_stolen_or_destroyed",
           "label": "My previous card has been lost, stolen, or destroyed",
-          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[4]"
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[4]",
+          "pdf_position": {
+            "page": 3,
+            "x": 60.98,
+            "y": 103.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_previous_card_was_issued_but_never_received",
           "label": "My previous card was issued but never received",
-          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[0]"
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 60.98,
+            "y": 121.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_existing_card_has_been_mutilated",
           "label": "My existing card has been mutilated",
-          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[1]"
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[1]",
+          "pdf_position": {
+            "page": 3,
+            "x": 60.98,
+            "y": 139.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_existing_card_has_incorrect_data_because_of_dhs_error",
           "label": "My existing card has incorrect data because of DHS error",
-          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[2]"
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[2]",
+          "pdf_position": {
+            "page": 3,
+            "x": 60.98,
+            "y": 157.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_name_or_other_biographic_information_has_legally_changed_since_issuance_of_my_existing_card",
           "label": "My name or other biographic information has legally changed since the issuance of my existing card",
-          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[3]"
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[3]",
+          "pdf_position": {
+            "page": 3,
+            "x": 61.0,
+            "y": 199.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. Select the reason for your replacement card.",
