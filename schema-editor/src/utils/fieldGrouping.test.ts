@@ -384,43 +384,11 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
     expect(detail.show_if).toEqual({ field: 'reason_b', operator: 'is_checked' });
   });
 
-  it('rewrites controls_fields references to a merged-away field onto the primary (de-duped)', () => {
-    const schema = w7Schema();
-    schema.fields.push({
-      id: 'trigger', name: 'Trigger', type: 'checkbox', section_id: 'reason',
-      pdf_field_name: 'trigger[0]', read_only: false, required: false,
-      controls_fields: [{ operator: 'is_checked', value: true, shows: ['reason_a', 'reason_b', 'reason_c'] }],
-    });
-    schema.sections[0].fields.push('trigger');
-
-    // merge a+b -> both map to reason_a; the shows list must de-dupe to [reason_a, reason_c]
-    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
-    const trigger = merged.fields.find(f => f.id === 'trigger')!;
-    expect(trigger.controls_fields![0].shows).toEqual(['reason_a', 'reason_c']);
-  });
-
   it('records source_type on each merged option', () => {
     const schema = w7Schema();
     const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
     const f = merged.fields[0];
     expect(f.options!.every(o => o.source_type === 'checkbox')).toBe(true);
-  });
-
-  it('does NOT rewrite an untouched controls_fields array when only show_if changed', () => {
-    const schema = w7Schema();
-    const controls = [{ operator: 'is_checked' as const, value: true, shows: ['reason_c'] }];
-    schema.fields.push({
-      id: 'mixed', name: 'Mixed', type: 'text', section_id: 'reason',
-      pdf_field_name: 'mixed[0]', read_only: false, required: false,
-      show_if: { field: 'reason_b', operator: 'is_checked' }, // points at merged-away
-      controls_fields: controls, // points only at reason_c (survives)
-    });
-    schema.sections[0].fields.push('mixed');
-
-    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
-    const mixed = merged.fields.find(f => f.id === 'mixed')!;
-    expect(asAtom(mixed.show_if).field).toBe('reason_a'); // show_if rewritten
-    expect(mixed.controls_fields).toBe(controls); // untouched array kept by reference
   });
 
   it('rewrites copy_to references to a merged-away field onto the primary', () => {
@@ -474,24 +442,6 @@ describe('Codex PR #256 fixes', () => {
     expect(restored.hidden).toBe(true);
   });
 
-  it('preserves a non-primary source field own controls_fields through round-trip', () => {
-    const schema = w7Schema();
-    const rb = schema.fields.find(f => f.id === 'reason_b')!;
-    rb.controls_fields = [{ operator: 'is_checked', value: true, shows: ['reason_e'] }];
-
-    const { schema: merged } = mergeFields(schema, ['reason_a', 'reason_b']);
-    // the merged radio carries reason_b's rule, re-keyed to fire on its option value
-    const mergedRule = merged.fields[0].controls_fields!.find(c => c.value === 'reason_b');
-    expect(mergedRule).toBeDefined();
-    expect(mergedRule!.operator).toBe('equals');
-    expect(mergedRule!.shows).toEqual(['reason_e']);
-
-    // un-merge restores reason_b with its original controls intact
-    const unmerged = ungroupField(merged, 'reason_a');
-    const restored = unmerged.fields.find(f => f.id === 'reason_b')!;
-    expect(restored.controls_fields).toEqual([{ operator: 'is_checked', value: true, shows: ['reason_e'] }]);
-  });
-
   it('un-groups a hand-authored CHECKBOX group (no stash, fallback path)', () => {
     const schema = w7Schema();
     schema.fields = [{
@@ -511,29 +461,6 @@ describe('Codex PR #256 fixes', () => {
 });
 
 describe('Opus fallback review fixes', () => {
-  it("remaps the PRIMARY's own control TARGET arrays referencing a merged-away sibling", () => {
-    const schema = w7Schema();
-    const ra = schema.fields.find(f => f.id === 'reason_a')!; // the primary
-    // a control targeting a merged-away sibling (reason_b) + a survivor (reason_e)
-    ra.controls_fields = [{ operator: 'is_checked', value: true, shows: ['reason_b', 'reason_e'] }];
-
-    const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
-    const f = merged.fields.find(ff => ff.id === 'reason_a')!;
-    // target array remapped (reason_b -> reason_a, de-duped), reason_e kept
-    expect(f.controls_fields![0].shows).toEqual(['reason_a', 'reason_e']);
-  });
-
-  it("remaps a carried non-primary control's TARGET arrays (no dangling sibling)", () => {
-    const schema = w7Schema();
-    schema.fields.find(f => f.id === 'reason_b')!.controls_fields = [
-      { operator: 'is_checked', value: true, shows: ['reason_c'] }, // reason_c also merged away
-    ];
-    const merged = mergeFields(schema, ['reason_a', 'reason_b', 'reason_c']).schema;
-    const carried = merged.fields[0].controls_fields!.find(c => c.value === 'reason_b')!;
-    // reason_c was merged away -> remapped to the primary, not left dangling
-    expect(carried.shows).toEqual(['reason_a']);
-  });
-
   it('stripEditorState removes the _ungroup stash from a saved schema', () => {
     const schema = w7Schema();
     const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
@@ -758,17 +685,6 @@ describe('Opus fallback review fixes', () => {
     expect(unmerged.fields.some(f => f.id === 'white_1')).toBe(true);
   });
 
-  it('expands a dependent controls_fields target list referencing the consolidated id to all split ids', () => {
-    const schema = raceSchemaWithDependent();
-    schema.fields.find(f => f.id === 'detail')!.show_if = undefined;
-    schema.fields.find(f => f.id === 'detail')!.controls_fields = [
-      { operator: 'is_checked', value: true, shows: ['p3_race'] },
-    ];
-    const unmerged = ungroupField(schema, 'p3_race');
-    const detail = unmerged.fields.find(f => f.id === 'detail')!;
-    expect(detail.controls_fields![0].shows).toEqual(['p3_race', 'asian']);
-  });
-
   it('expands a dependent copy_to referencing the consolidated id to all split ids (de-duped)', () => {
     const schema = raceSchemaWithDependent();
     schema.fields.find(f => f.id === 'detail')!.show_if = undefined;
@@ -785,19 +701,6 @@ describe('Opus fallback review fixes', () => {
     const unmerged = ungroupField(schema, 'p3_race');
     const detailAfter = unmerged.fields.find(f => f.id === 'detail')!;
     expect(detailAfter).toBe(detailBefore);
-  });
-
-  it("re-keys the PRIMARY's own selection-operator control to equals its option value (round 2)", () => {
-    const schema = w7Schema();
-    schema.fields.find(f => f.id === 'reason_a')!.controls_fields = [
-      { operator: 'is_checked', value: true, shows: ['reason_e'] },
-    ];
-    const merged = mergeFields(schema, ['reason_a', 'reason_b']).schema;
-    const ctrl = merged.fields[0].controls_fields![0];
-    // would-never-fire is_checked on a radio -> equals the primary's option value
-    expect(ctrl.operator).toBe('equals');
-    expect(ctrl.value).toBe('reason_a');
-    expect(ctrl.shows).toEqual(['reason_e']);
   });
 
   it('drops a primary show_if that would become self-referential (round 2)', () => {

@@ -10,9 +10,9 @@
 //   - Merge STASHES each source field's complete original FormField, plus the
 //     original conditional references it rewrites, under a private _ungroup key
 //     on the merged field. Un-merge restores them verbatim -- so help, validation,
-//     hidden, show_if, controls_fields and every other per-field property survive
-//     a merge -> un-merge round-trip (NOT a lossy whitelist rebuild). The backend
-//     and runtime ignore the extra _ungroup key.
+//     hidden, show_if and every other per-field property survive a merge ->
+//     un-merge round-trip (NOT a lossy whitelist rebuild). The backend and runtime
+//     ignore the extra _ungroup key.
 //   - Merge REWRITES dependent conditionals with the CORRECT runtime semantics:
 //     a reference that selected a now-merged-away widget ("is_checked" on that
 //     widget) becomes a reference to that widget's option slug on the group --
@@ -36,11 +36,8 @@ import type {
   FormField,
   FormSchema,
   FieldOption,
-  ControlActionKey,
   CompositeConditionalDisplay,
   ConditionalDisplay,
-  ConditionalControl,
-  ConditionalOperator,
   FieldCondition,
 } from '../types/schema';
 
@@ -58,12 +55,6 @@ export function isGroupableField(field: FormField): boolean {
   if (field.options && field.options.length > 0) return false;
   return !!field.pdf_field_name;
 }
-
-// The controls_fields action arrays whose entries are target field ids that a
-// merge must rewrite when a referenced field is merged away.
-const CONTROL_ACTION_KEYS: ControlActionKey[] = [
-  'shows', 'hides', 'unlocks', 'locks', 'makes_required', 'makes_optional',
-];
 
 // "Selection" operators -- conditions that test whether a (checkbox/radio) widget
 // is the selected one. When that widget is merged into a consolidated group, the
@@ -133,18 +124,16 @@ interface UngroupStash {
   // Each source field's complete original object, in option order. sources[0] is
   // the primary (its id == the merged field id).
   sources: FormField[];
-  // Dependent fields whose show_if / controls_fields this merge rewrote, with
+  // Dependent fields whose show_if / require_if / copy_to this merge rewrote, with
   // their pre-merge values, so un-merge can restore them verbatim.
   rewrites: Array<{
     fieldId: string;
     show_if?: FieldCondition;
     require_if?: FieldCondition;
-    controls_fields?: ConditionalControl[];
     copy_to?: string[];
     // sentinels distinguishing "had no key" from "key not rewritten" on restore.
     had_show_if: boolean;
     had_require_if: boolean;
-    had_controls: boolean;
     had_copy_to: boolean;
   }>;
 }
@@ -390,8 +379,8 @@ export function retargetOptionValueReferences(
   return anyChanged ? next : fields;
 }
 
-// Rewrite every dependent field's show_if / controls_fields that referenced a
-// merged-away field. Returns the rewritten fields AND a record of what changed
+// Rewrite every dependent field's show_if / require_if / copy_to that referenced
+// a merged-away field. Returns the rewritten fields AND a record of what changed
 // (so un-merge can restore the originals). mergedAwayToValue maps each
 // merged-away field id to its option value on the consolidated radio.
 function rewriteReferences(
@@ -418,7 +407,7 @@ function rewriteReferences(
     const next: FormField = { ...f };
     const record: UngroupStash['rewrites'][number] = {
       fieldId: f.id, had_show_if: !!f.show_if, had_require_if: !!f.require_if,
-      had_controls: !!f.controls_fields, had_copy_to: !!f.copy_to,
+      had_copy_to: !!f.copy_to,
     };
     let recorded = false;
 
@@ -443,27 +432,6 @@ function rewriteReferences(
       next.copy_to = remapControlList(f.copy_to);
       changed = true;
       recorded = true;
-    }
-
-    if (f.controls_fields) {
-      let controlsChanged = false;
-      const newControls = f.controls_fields.map(ctrl => {
-        const c = { ...ctrl };
-        for (const key of CONTROL_ACTION_KEYS) {
-          const list = ctrl[key];
-          if (list && list.some(id => mergedAway.has(id))) {
-            c[key] = remapControlList(list);
-            controlsChanged = true;
-          }
-        }
-        return c;
-      });
-      if (controlsChanged) {
-        record.controls_fields = f.controls_fields; // original
-        next.controls_fields = newControls;
-        changed = true;
-        recorded = true;
-      }
     }
 
     if (recorded) rewrites.push(record);
@@ -513,41 +481,6 @@ export function mergeFields(
     pdf_field_name: f.pdf_field_name,
     source_type: f.type,
   }));
-
-  // Remap merged-away ids -> primary across a control rule's action-target arrays
-  // (a rule pointing at a sibling that is now only an option must not dangle).
-  const remapControlTargets = (ctrl: ConditionalControl): ConditionalControl => {
-    const c = { ...ctrl };
-    for (const key of CONTROL_ACTION_KEYS) {
-      const list = ctrl[key];
-      if (list && list.some(id => mergedAwayToValue.has(id))) {
-        const out: string[] = [];
-        for (const id of list) {
-          const r = mergedAwayToValue.has(id) ? primary.id : id;
-          if (!out.includes(r)) out.push(r);
-        }
-        c[key] = out;
-      }
-    }
-    return c;
-  };
-
-  // Carry each NON-PRIMARY source's own trigger-side controls onto the merged
-  // radio, re-keyed to fire when that option is selected (operator: equals,
-  // value: the option value). Otherwise merging A+B would drop the rule by which
-  // selecting B unlocked/showed follow-up fields (Codex PR #256). Each carried
-  // rule's TARGET arrays are also remapped, so a rule that targeted another
-  // merged-away sibling does not dangle (Opus fallback review).
-  const carriedControls: ConditionalControl[] = [];
-  for (const f of distinct.slice(1)) {
-    for (const ctrl of f.controls_fields || []) {
-      carriedControls.push({
-        ...remapControlTargets(ctrl),
-        operator: membership ? 'includes' : 'equals',
-        value: idToSlug.get(f.id)!,
-      });
-    }
-  }
 
   // Replace the primary in place; drop the other merged fields. Rewrite dependent
   // conditionals on the SURVIVING fields, recording originals for a lossless undo.
@@ -604,29 +537,13 @@ export function mergeFields(
     }
     primaryCopyTo = out;
   }
-  // The primary's own trigger-side controls fire on its (now radio) value. A
-  // widget-level selection operator (is_checked) would never fire against a
-  // radio, so re-key it to "equals the primary's option value" -- the same fix
-  // applied to carried non-primary controls (Opus fallback review, round 2).
-  const primarySlug = idToSlug.get(primary.id)!;
-  const primaryControls = (primary.controls_fields || []).map(ctrl => {
-    const remapped = remapControlTargets(ctrl);
-    return SELECTION_OPERATORS.has(ctrl.operator)
-      ? {
-          ...remapped,
-          operator: (membership ? 'includes' : 'equals') as ConditionalOperator,
-          value: primarySlug,
-        }
-      : remapped;
-  });
 
   // The merged field carries the primary's identity + the stash for un-merge.
-  // show_if / copy_to / controls_fields are set EXPLICITLY (not via a conditional
-  // spread) so a dropped/rewritten value OVERRIDES the one inherited from
-  // {...primary} -- a conditional spread would silently keep the stale inherited
-  // value (e.g. a dropped self-referential show_if would survive). Round 2 fix.
+  // show_if / copy_to are set EXPLICITLY (not via a conditional spread) so a
+  // dropped/rewritten value OVERRIDES the one inherited from {...primary} -- a
+  // conditional spread would silently keep the stale inherited value (e.g. a
+  // dropped self-referential show_if would survive). Round 2 fix.
   const stash: UngroupStash = { sources: distinct, rewrites };
-  const mergedControls = [...primaryControls, ...carriedControls];
   const mergedField = {
     ...primary,
     type: kind,
@@ -646,8 +563,6 @@ export function mergeFields(
   else delete mergedField.require_if;
   if (primaryCopyTo) mergedField.copy_to = primaryCopyTo;
   else delete mergedField.copy_to;
-  if (mergedControls.length > 0) mergedField.controls_fields = mergedControls;
-  else delete mergedField.controls_fields;
   const mergedFieldTyped = mergedField as unknown as FormField;
 
   // Reassemble fields, putting the merged field where the primary was.
@@ -715,8 +630,6 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
         else if (!r.had_show_if) delete (restored as Record<string, unknown>).show_if;
         if (r.require_if !== undefined) restored.require_if = r.require_if;
         else if (!r.had_require_if) delete (restored as Record<string, unknown>).require_if;
-        if (r.controls_fields !== undefined) restored.controls_fields = r.controls_fields;
-        else if (!r.had_controls) delete (restored as Record<string, unknown>).controls_fields;
         if (r.copy_to !== undefined) restored.copy_to = r.copy_to;
         else if (!r.had_copy_to) delete (restored as Record<string, unknown>).copy_to;
         newFields.push(restored);
@@ -819,8 +732,8 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
 //     does not dangle, with its operator NORMALIZED (see
 //     normalizeWholeGroupOperator) so it still fires correctly against a standalone
 //     boolean checkbox.
-//   - controls_fields / copy_to target arrays containing C are EXPANDED to all
-//     reconstructed ids (the rule acted on the whole former group), de-duped.
+//   - copy_to target arrays containing C are EXPANDED to all reconstructed ids
+//     (the rule acted on the whole former group), de-duped.
 //
 // Returns the same object reference when nothing referenced fieldId (no-op).
 
@@ -966,8 +879,8 @@ function remapFallbackDependent(
     changed = true;
   }
 
-  // copy_to / controls_fields target arrays: a single consolidated id expands to
-  // the full set of split ids (the rule covered the whole former group).
+  // copy_to target arrays: a single consolidated id expands to the full set of
+  // split ids (the rule covered the whole former group).
   const expand = (ids?: string[]): string[] | undefined => {
     if (!ids || !ids.includes(fieldId)) return ids;
     const out: string[] = [];
@@ -981,25 +894,6 @@ function remapFallbackDependent(
   if (f.copy_to && f.copy_to.includes(fieldId)) {
     next.copy_to = expand(f.copy_to);
     changed = true;
-  }
-
-  if (f.controls_fields) {
-    let controlsChanged = false;
-    const newControls = f.controls_fields.map(ctrl => {
-      const c = { ...ctrl };
-      for (const key of CONTROL_ACTION_KEYS) {
-        const list = ctrl[key];
-        if (list && list.includes(fieldId)) {
-          c[key] = expand(list);
-          controlsChanged = true;
-        }
-      }
-      return c;
-    });
-    if (controlsChanged) {
-      next.controls_fields = newControls;
-      changed = true;
-    }
   }
 
   return changed ? next : f;
