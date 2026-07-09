@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-7esr-p2-3-click-to-edit-popover.md](../journal/entries/2026-07-09-bd-7esr-p2-3-click-to-edit-popover.md) for closeout details.*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-95q0-p2-4-epic-verification-pass.md](../journal/entries/2026-07-09-bd-95q0-p2-4-epic-verification-pass.md) for the epic verification record.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
