@@ -31,18 +31,21 @@ closure inside `_handle_session` to a testable method
 replaced by `asyncio.wait_for(get(), timeout=AUDIO_GAPFILL_INTERVAL_MS)` -- but
 ONLY after the first real chunk has streamed. On timeout it sends ONE synthetic
 all-zero PCM16 frame (`rate * chunk_ms/1000 * 2` bytes = 640B at 16kHz/20ms) so
-the wire cadence never breaks. Gated OFF before first real audio (nothing to keep
-alive yet) and once `_close_after_flush`/`_intentional_shutdown` is set (the drain
-path owns the socket + the `None` sentinel then; on that path a timeout falls back
-to a blocking `get()` so the sentinel still exits cleanly). New env-overridable
-config: `AUDIO_GAPFILL_ENABLED` (default true) + `AUDIO_GAPFILL_INTERVAL_MS`
-(default 40ms).
+the wire cadence never breaks. Gated OFF unless native VAD is on (manual/PTT mode
+brackets audio with activity_start/end, so injecting silence between turns is
+wrong), before first real audio (nothing to keep alive yet), and once
+`_close_after_flush`/`_intentional_shutdown` is set (the drain path owns the socket
++ the `None` sentinel then; on that path a timeout falls back to a blocking `get()`
+so the sentinel still exits cleanly). New env-overridable config:
+`AUDIO_GAPFILL_ENABLED` (default true) + `AUDIO_GAPFILL_INTERVAL_MS` (default 25ms
+= one 20ms chunk + jitter margin, so the worst-case wire gap stays within ~one
+chunk interval).
 
-Coverage: `backend/tests/unit/test_audio_gapfill.py` (5 tests) -- real passthrough
+Coverage: `backend/tests/unit/test_audio_gapfill.py` (6 tests) -- real passthrough
 + sentinel exit; gap -> silence while streaming; no silence before first chunk; no
-silence after the shutdown flag; disabled = legacy blocking. Existing adapter
-suites green (62) after the closure -> method refactor; full backend unit suite
-green (559 passed, 2 skipped).
+silence after the shutdown flag; disabled = legacy blocking; gap-fill gated off in
+manual VAD. Existing adapter suites green after the closure -> method refactor;
+full backend suite green (941 passed, 2 skipped).
 
 **Client AEC constraints (gnmo) -- SCOPE NARROWED after code verification.** The
 bead's original premise (from a pasted Gemini-chat analysis) was that the two

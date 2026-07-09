@@ -133,12 +133,14 @@ class Settings(BaseModel):
 	# audio sender emits a synthetic silence frame if no real chunk arrives within
 	# AUDIO_GAPFILL_INTERVAL_MS during an active stream, so the wire cadence never
 	# breaks. Env-overridable so the demo can flip it without a redeploy. The
-	# interval defaults to one chunk plus slack (~WS_CHUNK_MS + a jitter margin) so
-	# it fills only genuine gaps, never racing real audio.
+	# interval defaults to one chunk plus a small jitter margin (WS_CHUNK_MS 20ms +
+	# ~5ms) so it fills only genuine gaps without racing real audio -- keeping the
+	# worst-case wire gap within ~one chunk interval (the 7f7m exit criterion), not
+	# two (a 40ms default left recurring ~20ms gaps between silence frames).
 	AUDIO_GAPFILL_ENABLED: bool = (
 		os.getenv("AUDIO_GAPFILL_ENABLED", "true").lower() == "true"
 	)
-	AUDIO_GAPFILL_INTERVAL_MS: int = int(os.getenv("AUDIO_GAPFILL_INTERVAL_MS", "40"))
+	AUDIO_GAPFILL_INTERVAL_MS: int = int(os.getenv("AUDIO_GAPFILL_INTERVAL_MS", "25"))
 	WS_PING_INTERVAL_SEC: int = 15
 	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 120s of no received message (audio/ping/control)
 	# B5 (bd polyglot-pdf-jnjj.17): backend-side fail-OPEN bound for the boundary
