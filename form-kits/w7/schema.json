@@ -205,12 +205,26 @@
         {
           "value": "apply_for_a_new_itin",
           "label": "Apply for a new ITIN",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 453.6,
+            "y": 97.75,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "renew_an_existing_itin",
           "label": "Renew an existing ITIN",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 453.6,
+            "y": 109.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "pdf_position": {
@@ -780,12 +794,26 @@
         {
           "value": "male",
           "label": "Male",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 527.6,
+            "y": 422.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "female",
           "label": "Female",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 527.6,
+            "y": 433.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "pdf_position": {
@@ -864,22 +892,50 @@
         {
           "value": "passport",
           "label": "Passport",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 129.6,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "driver_s_license_state_i_d",
           "label": "Driver's license/State I.D.",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 194.4,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "uscis_documentation",
           "label": "USCIS documentation",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[2]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[2]",
+          "pdf_position": {
+            "page": 1,
+            "x": 316.8,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "other",
           "label": "Other",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[3]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[3]",
+          "pdf_position": {
+            "page": 1,
+            "x": 432.0,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "pdf_position": {
@@ -1014,12 +1070,26 @@
         {
           "value": "no_don_t_know_skip_line_6f",
           "label": "No/Don't know. Skip line 6f.",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 129.6,
+            "y": 529.75,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "yes_complete_line_6f",
           "label": "Yes. Complete line 6f.",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 129.6,
+            "y": 541.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "pdf_position": {
@@ -1398,17 +1468,38 @@
         {
           "value": "parent",
           "label": "Parent",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 333.2,
+            "y": 686.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "power_of_attorney",
           "label": "Power of attorney",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 383.6,
+            "y": 686.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "court_appointed_guardian",
           "label": "Court-appointed guardian",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[2]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[2]",
+          "pdf_position": {
+            "page": 1,
+            "x": 470.0,
+            "y": 686.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "pdf_position": {

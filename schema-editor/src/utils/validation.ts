@@ -58,8 +58,8 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
 
   // Build the COMPLETE set of field ids up front so reference checks below see
   // every field regardless of declaration order. Building it incrementally inside
-  // the reference loop falsely flagged a FORWARD reference -- a show_if /
-  // controls_fields target that appears LATER in schema.fields -- as non-existent
+  // the reference loop falsely flagged a FORWARD reference -- a show_if / require_if
+  // target that appears LATER in schema.fields -- as non-existent
   // (bd polyglot-pdf-y61i). Duplicate-ID detection still needs an incremental
   // "seen so far" set, so it keeps its own (`seenIds`) in the loop below.
   const fieldIds = new Set<string>();
@@ -104,33 +104,6 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
           errors.push({
             field_id: field.id,
             message: `${kind} references non-existent field: ${atom.field}`,
-            type: 'warning',
-          });
-        }
-      }
-    }
-
-    // Check controls_fields references (against the full id set -- forward refs OK).
-    // controls_fields is an ARRAY of control rules; each rule lists controlled ids
-    // across shows/hides/unlocks/locks/makes_required/makes_optional. Iterating the
-    // array is load-bearing: the previous code read `.shows` off the array itself
-    // (undefined), so the check silently did nothing on real form kits (bd
-    // polyglot-pdf-y61i).
-    if (field.controls_fields) {
-      const allControlledFields = field.controls_fields.flatMap(control => [
-        ...(control.shows || []),
-        ...(control.hides || []),
-        ...(control.unlocks || []),
-        ...(control.locks || []),
-        ...(control.makes_required || []),
-        ...(control.makes_optional || []),
-      ]);
-
-      for (const controlledId of allControlledFields) {
-        if (!fieldIds.has(controlledId)) {
-          errors.push({
-            field_id: field.id,
-            message: `controls_fields references non-existent field: ${controlledId}`,
             type: 'warning',
           });
         }

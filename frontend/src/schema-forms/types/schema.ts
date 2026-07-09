@@ -143,6 +143,13 @@ export interface FieldOption {
   spoken_label?: string;
   label_translations?: Record<string, string>;
   pdf_field_name?: string;
+  // The PDF 'on' state that selects this option within a shared-name widget
+  // group (mirrors backend FieldOption.pdf_on_value, bd h76m.3).
+  pdf_on_value?: string;
+  // This option's own widget rect (mirrors backend FieldOption.pdf_position,
+  // bd polyglot-pdf-5f41). Lets Preview mode paint a selection mark at the
+  // option's printed box instead of a label at the field-level rect.
+  pdf_position?: PDFPosition;
 }
 
 export interface TableColumn {

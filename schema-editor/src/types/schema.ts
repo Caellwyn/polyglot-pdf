@@ -66,7 +66,6 @@ export interface FormField {
   // v2 (bd h76m.8): condition under which this field becomes REQUIRED --
   // same shape and evaluator machinery as show_if.
   require_if?: FieldCondition;
-  controls_fields?: ConditionalControl[];
   conditional_logic?: any;
   conditional_behavior?: any;
   copy_to?: string[];
@@ -117,9 +116,13 @@ export interface FieldOption {
   pdf_on_value?: string;
   // Optional backend-side option metadata, kept so a load -> edit -> save
   // round-trip does not strip them (backend FieldOption.spoken_label /
-  // label_translations).
+  // label_translations / pdf_position).
   spoken_label?: string;
   label_translations?: Record<string, string>;
+  // This option's own widget rect (mirrors backend FieldOption.pdf_position,
+  // bd polyglot-pdf-5f41; backfilled into the kit schemas from the AcroForm
+  // dump). Round-trip contract: editor saves must not strip it.
+  pdf_position?: PDFPosition;
   // The field type of the separate widget this option was merged FROM (bd
   // polyglot-pdf-s4dp.1). Recorded at merge time so un-merge can restore each
   // source field's original type (radio vs checkbox) instead of guessing --
@@ -162,35 +165,6 @@ export type ConditionalOperator =
   // checkbox_group trigger's selected set". Mirror backend ConditionalOperator.
   | 'includes'
   | 'not_includes';
-
-// A single conditional-control rule. controls_fields is an ARRAY of these on a
-// field -- matching the real schema data (e.g. schemas/i-90/i-90_schema.json:488),
-// the runtime contract (frontend/src/schema-forms/types/schema.ts
-// ConditionalControl), and backend ConditionalControl
-// (backend/models/form_models.py). The previous single-object shape with a
-// `when_value` key did NOT match any real data, so validateSchema's
-// controlled-id reference check silently did nothing on real form kits
-// (Codex review, bd polyglot-pdf-y61i).
-export interface ConditionalControl {
-  operator: ConditionalOperator;
-  value: string | number | boolean | Array<string | number | boolean>;
-  shows?: string[];
-  hides?: string[];
-  unlocks?: string[];
-  locks?: string[];
-  makes_required?: string[];
-  makes_optional?: string[];
-}
-
-// The action keys of ConditionalControl (the string[] target lists only --
-// excludes operator/value). Editing UI iterates over these.
-export type ControlActionKey =
-  | 'shows'
-  | 'hides'
-  | 'unlocks'
-  | 'locks'
-  | 'makes_required'
-  | 'makes_optional';
 
 export interface PDFPosition {
   page: number;
