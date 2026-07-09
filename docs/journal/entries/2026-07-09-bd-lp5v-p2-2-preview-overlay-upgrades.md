@@ -56,7 +56,14 @@ are pre-existing noise -- the unmodified dev checkout reports 16); flag-off
 bundle unchanged in kind -- `vite build` keeps pdf-view in its own lazy
 chunk and `dist/index.html` carries zero references to it.
 
-Review record: (filled at closeout -- fresh-eyes + Opus outer review.)
+Review record: fresh-eyes round 1 (Sonnet) found two latent gaps in the new
+painting path -- partial option-rect coverage silently hiding uncovered
+selections, and no field/option page-match guard -- both fixed structurally
+by the all-or-nothing rule (commit b2a1ead6, test-pinned); round 2 (Opus)
+NO-GAPS. Opus outer review: two independent passes both NO-GAPS on the
+final diff first round (both independently verified the real i-90/all-kit
+shapes engage the mark path with zero cross-page or degenerate rects).
+Adopted 2 findings inline, deferred none.
 
 ## Lessons
 
