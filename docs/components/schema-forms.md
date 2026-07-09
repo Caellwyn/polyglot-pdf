@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-08. See [../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md](../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md) for closeout details.*
+*Last updated: 2026-07-08. See [../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md](../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md) for the view-mode resize + overlay-invariant test; [../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md](../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md) for the prior checkbox_group cleanup.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -92,8 +92,11 @@ toggle (`frontend/src/pdf-view/viewMode.ts`, sessionStorage-persisted, default
 Simplified) that swaps the form for the lazy
 `frontend/src/pdf-view/PreviewPane.tsx` PDF surface -- the overlays +
 ConnectionManager sit outside the switched container, so toggling never
-disturbs the voice session. With the flag off, none of that UI or its pdfjs
-chunks load.
+disturbs the voice session (pinned by `SchemaForm.test.tsx`, an overlay-DOM-
+identity-survives-toggle test, bd `polyglot-pdf-fdz8`). A live same-tab resize
+into mobile width also drops Preview back to Simplified (`viewModeAfterResize`,
+bd `polyglot-pdf-ipin`; details in [pdf-view.md](pdf-view.md)). With the flag
+off, none of that UI or its pdfjs chunks load.
 
 `FieldRenderer.tsx` routes by `field.type` to a component. **Implemented:** `text`,
 `email`, `tel`, `textarea`, `radio`, `checkbox`, `checkbox_group`, `date`, `select`

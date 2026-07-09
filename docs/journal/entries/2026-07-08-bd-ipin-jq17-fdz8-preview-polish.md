@@ -48,6 +48,18 @@ Three small deferred beads left open after the preview-mode epic
   breaking the code (a `key={viewMode}` on the overlay reddens the identity
   test; gating the resize reset off reddens the ipin test).
 
+## Doc freshness
+
+- **Updated** `docs/components/pdf-view.md` (viewMode + valuePainting sections)
+  and `docs/components/schema-forms.md` (the overlay-outside-switch invariant is
+  now test-pinned; live-resize reset noted). Both bumped to 2026-07-08.
+- **Left as-is** the ~20 other STALE docs the freshness checker flagged: they all
+  track backend / other-frontend files (`config.py`, `live_ai_gemini.py`,
+  `callback_handler.py`, `webFormConnection.ts`, `form_models.py`, ...) that this
+  branch did NOT touch. They were already stale from the schema-v2 + voice work
+  merged earlier today (PRs #346/#348), not by this change -- per the closeout
+  rule, a doc stale for files outside this diff is not this PR's to fix.
+
 ## Scar tissue / gotcha
 
 **jq17's concrete repro cases were dissolved by the schema-v2 flip, so its exit
