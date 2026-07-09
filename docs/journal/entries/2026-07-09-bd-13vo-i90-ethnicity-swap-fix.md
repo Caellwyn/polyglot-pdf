@@ -20,10 +20,13 @@ on a legal form.
 ## What shipped
 
 - Swapped the two options' `pdf_field_name` (`hispanic_or_latino` ->
-  `P3_checkbox6[1]`, `not_hispanic_or_latino` -> `P3_checkbox6[0]`), dropped
-  their `pdf_position` (and the field-level rect, which follows option 1)
-  and re-derived all three with `backfill_option_positions.py`; a second
-  `--check` run exits 0. The dump's own /TU tooltips are the ground truth:
+  `P3_checkbox6[1]`, `not_hispanic_or_latino` -> `P3_checkbox6[0]`). The
+  rects were re-derived by dropping them and re-running
+  `backfill_option_positions.py` (the committed diff shows the resulting
+  in-place value changes); a `--check` run exits 0, and the outer review
+  independently confirmed each rect matches its corrected widget's dump
+  rect (--check alone skips present-but-wrong rects by design). The dump's
+  own /TU tooltips are the ground truth:
   `[0]` = "Select Not Hispanic or Latino" (on_value `N`), `[1]` = "Select
   Hispanic or Latino" (on_value `H`).
 - End-to-end verification against the real backend (TestClient +
@@ -33,9 +36,11 @@ on a legal form.
   in the matching printed box BOTH ways. A headless-browser probe confirmed
   the Preview mark now paints in the "Not Hispanic or Latino" row (top
   187.24px = y 115.58 x scale 1.62).
-- Audit (bead exit criterion 3): every option of all 19 option-bearing
-  i-90 fields compared label-by-label against its claimed widget's dump
-  tooltip. Ethnicity was the ONLY mis-pair. Three ambiguous rows were
+- Audit (bead exit criterion 3): every option of all 19 i-90 fields whose
+  options CLAIM widgets (per-option `pdf_field_name` -- the class this bug
+  lives in; dropdown selects have no per-option widgets) compared
+  label-by-label against its claimed widget's dump tooltip. Ethnicity was
+  the ONLY mis-pair. Three ambiguous rows were
   chased to full text: the two 14th-birthday reasons pair correctly
   (AFTER -> 2.G.1, BEFORE -> 2.G.2) and both abandonment/removal "Select
   Yes" options map to widgets whose tooltips carry "Select Yes".
