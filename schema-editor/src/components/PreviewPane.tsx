@@ -14,8 +14,8 @@
 // standalone product.
 //
 // Scope (per the bead): interactive enough to test (a) radios mutually exclusive,
-// (b) checkboxes multi-select, (c) show_if / controls_fields visibility as the
-// controlling field changes. NOT full form validation/submission.
+// (b) checkboxes multi-select, (c) show_if visibility as the controlling field
+// changes. NOT full form validation/submission.
 
 import { useMemo, useState } from 'react';
 import type { FormField, FormSchema, FormSection } from '../types/schema';
