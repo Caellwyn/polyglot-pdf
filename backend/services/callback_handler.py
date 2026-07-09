@@ -424,6 +424,9 @@ class CallbackHandler:
         if normalized == "confirm_field":
             return await self._handle_confirm_field_tool(arguments)
 
+        if normalized == "skip_field":
+            return await self._handle_skip_field_tool(arguments)
+
         if normalized == "ask_secretary":
             return await self._handle_ask_secretary_tool(arguments)
 
@@ -963,6 +966,148 @@ class CallbackHandler:
 
         return response
 
+    async def _handle_skip_field_tool(
+        self,
+        arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Handle skip_field tool call from Gemini (bd polyglot-pdf-7yra).
+
+        Force-skip a REQUIRED field the user cannot answer right now (distinct from
+        marking a field not-applicable, which stays the update_form_fields '' path).
+        The frontend owns state, so it records the skip (markFieldSkipped) over a
+        synchronous round-trip -- mirroring confirm_field. A skipped field satisfies
+        the section, so on success this advances exactly like a confirm (next-field
+        hint, or the section-boundary short-circuit).
+        """
+        field_id = arguments.get("field_id", "") if isinstance(arguments, dict) else ""
+
+        # DTI current-field coercion (bd polyglot-pdf-h1bn), symmetric with the
+        # confirm/update paths: a hallucinated/empty id is coerced onto the current
+        # field; a RESOLVABLE id is authoritative (the user may skip a specific
+        # earlier field). Only an empty/unknown id -- the hallucination mode -- is
+        # coerced. Log ONLY the schema-validated current field id, never the raw
+        # model field_id (no-PII policy).
+        use_dti = self._get_use_dti() if self._get_use_dti else False
+        if use_dti and self._get_current_field_id is not None:
+            current_field_id = self._get_current_field_id()
+            sent_is_known = bool(field_id) and (
+                self._is_known_field(field_id) if self._is_known_field else False)
+            if current_field_id and field_id != current_field_id and not sent_is_known:
+                _log.info("dti_skip_coerced_to_current_field",
+                         session_id=self._session_id,
+                         current_field_id=current_field_id)
+                field_id = current_field_id
+
+        # Synchronous skip round-trip. An absent coordinator (None) means we cannot
+        # reach the frontend to record the skip -- the same epistemic state as a
+        # timeout, so we must NOT report success (collapse to the timeout path).
+        skip_ack = CONFIRM_REQUEST_TIMEOUT
+        if self._request_coordinator is not None:
+            skip_ack = await self._request_coordinator.request_skip_field(field_id)
+
+        if skip_ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(skip_ack, dict):
+            return self._skip_failure_response(
+                field_id,
+                "Could not record the skip right now (the form did not respond). "
+                "Do NOT assume the question was skipped -- ask the user to confirm "
+                "the skip again, or continue.",
+            )
+
+        if not skip_ack.get("recorded"):
+            reason = skip_ack.get("reason")
+            if reason == "already_filled":
+                # The field already holds a value -- skipping would blank it. Tell
+                # the model to CLEAR it intentionally (update_form_fields "") only
+                # if the user really wants it removed; otherwise it is already
+                # answered. Non-retryable: re-skipping fails identically.
+                guidance = (
+                    f"Field '{field_id}' already has a value, so it was NOT skipped "
+                    f"(skipping would erase the answer). If the user wants to remove "
+                    f"it, call update_form_fields with an empty value; otherwise it "
+                    f"is already answered -- move on. Do NOT retry skip_field."
+                )
+                return self._skip_failure_response(field_id, guidance, retryable=False)
+            guidance = (
+                f"Field '{field_id}' could not be skipped ({reason or 'unknown'}). "
+                f"Ask the user whether they want to skip it or provide a value."
+            )
+            return self._skip_failure_response(field_id, guidance)
+
+        # Recorded -- the skip took. Advance exactly like a confirm: a skipped field
+        # satisfies the section, so run the SAME section-boundary / next-field-hint
+        # logic. (No confirmation-logging: a skip is intentionally not a value.)
+        section_complete = bool(skip_ack.get("section_complete"))
+        if section_complete:
+            _log.info(
+                "skip_section_boundary_skip_hint",
+                field_id=field_id,
+                session_id=self._session_id,
+            )
+            if self._clear_current_field:
+                self._clear_current_field()
+            next_hint = None
+            next_field_schema = None
+            next_field_guidance = None
+            message = (
+                f"Field '{field_id}' skipped -- that completes this section. The "
+                f"form is advancing to the next section; wait for the next field."
+            )
+        else:
+            if self._request_coordinator is None:
+                next_hint_result = HINT_REQUEST_TIMEOUT
+            else:
+                next_hint_result = await self._request_coordinator.request_next_field_hint()
+            hint_timed_out = next_hint_result is HINT_REQUEST_TIMEOUT
+            next_hint = None if hint_timed_out else next_hint_result
+
+            next_field_schema = None
+            if self._get_next_field_schema_for_jit and next_hint:
+                next_field_schema = self._get_next_field_schema_for_jit(field_id)
+
+            # The skipped field is DONE -- clear the coercion pointer (symmetric with
+            # the confirm path); merge_field_schema re-sets it for the next field.
+            if self._clear_current_field:
+                self._clear_current_field()
+
+            next_field_guidance = None
+            use_dti_next = self._get_use_dti() if self._get_use_dti else False
+            if use_dti_next and next_hint and self._request_coordinator:
+                client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
+                if client_next_schema:
+                    fill_language = self._get_fill_language() if self._get_fill_language else None
+                    next_field_guidance = render_field_guidance(
+                        client_next_schema, fill_language=fill_language
+                    )
+                    if self._merge_field_schema:
+                        self._merge_field_schema(client_next_schema)
+
+            if hint_timed_out:
+                message = (
+                    f"Field '{field_id}' skipped. (Could not determine the next field "
+                    f"right now -- do NOT assume the form is complete; ask the user for "
+                    f"the next piece of information or call get_form_status.)"
+                )
+            elif not next_hint:
+                message = f"Field '{field_id}' skipped. All fields addressed."
+            else:
+                message = f"Field '{field_id}' skipped."
+
+        response = {
+            "success": True,
+            "field_skipped": field_id,
+            "next_field_hint": next_hint,
+            "message": message,
+        }
+        if next_field_schema:
+            response["next_field_schema"] = next_field_schema
+        if next_field_guidance:
+            response["next_field_guidance"] = next_field_guidance
+
+        _log.info("GEMINI TOOL RESPONSE", tool="skip_field", field_id=field_id)
+        _dev_log.log_tool_response("skip_field", response, session_id=self._session_id)
+
+        return response
+
     def _confirm_failure_response(self, field_id: str, message: str,
                                   retryable: bool = True) -> Dict[str, Any]:
         """Build the confirm_field tool response for a confirm that did NOT take
@@ -995,6 +1140,27 @@ class CallbackHandler:
         _log.info("GEMINI TOOL RESPONSE", tool="confirm_field", field_id=field_id, confirmed=False)
         _log.info("-" * 80)
         _dev_log.log_tool_response("confirm_field", response, session_id=self._session_id)
+        return response
+
+    def _skip_failure_response(self, field_id: str, message: str,
+                               retryable: bool = True) -> Dict[str, Any]:
+        """Build the skip_field tool response for a skip that did NOT take (bd
+        polyglot-pdf-7yra). Same WS-C2 structured-error shape as
+        _confirm_failure_response, but with skip-specific keys/labels
+        (``field_skipped`` + ``tool="skip_field"``) so the response and dev-log are
+        not mislabeled as a confirm. ``message`` is a fixed, caller-controlled
+        string -- never a field value (PII-free)."""
+        response = {
+            "success": False,
+            "field_skipped": None,
+            "next_field_hint": None,
+            "status": "error",
+            "retryable": retryable,
+            "error": message,
+            "message": message,
+        }
+        _log.info("GEMINI TOOL RESPONSE", tool="skip_field", field_id=field_id, skipped=False)
+        _dev_log.log_tool_response("skip_field", response, session_id=self._session_id)
         return response
 
     # Helper methods

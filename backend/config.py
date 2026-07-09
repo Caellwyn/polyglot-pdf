@@ -445,6 +445,37 @@ class Settings(BaseModel):
 				},
 				"required": ["query"]
 			}
+		},
+		{
+			# SKIP a required field the user cannot answer right now (bd
+			# polyglot-pdf-7yra). DISTINCT from "not applicable": N/A is a real
+			# answer (fill "" via update_form_fields), whereas skip_field defers a
+			# question that DOES apply but has no answer yet (ask a translator, look
+			# it up later). It marks the field skipped -- the form stays submittable
+			# and the field shows as "needs follow-up", printing blank. Use ONLY
+			# after the user confirms they want to skip. Do NOT use for a value the
+			# user simply hasn't given -- keep asking for that.
+			"name": "skip_field",
+			"description": (
+				"Skip a REQUIRED field the user cannot answer right now (they want "
+				"to ask a translator or look it up later). This is NOT 'not "
+				"applicable' -- for a question that does not apply (e.g. no middle "
+				"name), use update_form_fields with an empty value instead. First "
+				"CONFIRM with the user that they want to skip ('Would you like to "
+				"skip this question for now?'); only call this after they say yes. "
+				"The question stays flagged for follow-up and the form can still be "
+				"completed. Use the exact field_id from the schema."
+			),
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"field_id": {
+						"type": "string",
+						"description": 'Exact field "id" from schema (e.g., "firstName", "p1_checkbox4")'
+					}
+				},
+				"required": ["field_id"]
+			}
 		}
 	]
 
@@ -537,7 +568,9 @@ class Settings(BaseModel):
     "never ask a qualified question as if it were unqualified.\n"
     "- Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
     "- Sanity check dates/phones/ZIP codes\n"
-    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally.\n"
+    "- SKIP vs NOT-APPLICABLE (two different things):\n"
+    "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally. This is a real answer.\n"
+    "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm_field a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
     "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
 
     "ADDRESS CONSISTENCY:\n"
@@ -604,8 +637,10 @@ class Settings(BaseModel):
     "briefly convey that context in your own words WHILE asking -- one short sentence, "
     "not a lecture. It is the fine print the user needs to answer accurately; "
     "never ask a qualified question as if it were unqualified.\n"
-    "- For required fields: Ask naturally without pressuring (user may skip with 'next')\n"
-    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally.\n"
+    "- For required fields: Ask naturally without pressuring.\n"
+    "- SKIP vs NOT-APPLICABLE (two different things):\n"
+    "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally. This is a real answer.\n"
+    "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm_field a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
     "- Keep interactions conversational and empathetic - this is a medical form\n\n"
 
     "ADDRESS CONSISTENCY:\n"
@@ -681,9 +716,10 @@ class Settings(BaseModel):
     "- Never read field IDs aloud (use spoken names only).\n"
     "- Never abbreviate spoken names (use the full name from the guidance).\n"
     "- When asking for a field, use natural phrasing without mentioning 'field' or IDs.\n"
-    "- For required fields: ask naturally without pressuring (the user may skip with 'next').\n"
-    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: fill it "
-    "with value \"\" then confirm normally.\n"
+    "- For required fields: ask naturally without pressuring.\n"
+    "- SKIP vs NOT-APPLICABLE (two different things):\n"
+    "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: fill it with value \"\" then confirm normally. This is a real answer.\n"
+    "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
     "- Keep interactions conversational and empathetic - this is a medical form.\n\n"
 
     "ADDRESS CONSISTENCY:\n"

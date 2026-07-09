@@ -41,6 +41,7 @@ EXPECTED_TOOL_NAMES = {
     "get_field_value",
     "confirm_field",
     "ask_secretary",
+    "skip_field",
 }
 
 # A representative valid argument set per declared tool -- the REQUIRED params from
@@ -53,6 +54,7 @@ SAMPLE_ARGS = {
     "get_field_value": {"spoken_name": "first name"},
     "confirm_field": {"field_id": "p1_first_name", "confirmation_method": "verbal"},
     "ask_secretary": {"query": "what is their first name?"},
+    "skip_field": {"field_id": "p1_first_name"},
 }
 
 
@@ -68,7 +70,7 @@ def _decl_by_name() -> dict[str, dict]:
 # Part A -- the declarations are internally well-formed
 # --------------------------------------------------------------------------
 def test_declared_tool_names_match_expected_set():
-    """The declared tool names are exactly the 6 the backend supports -- a tool
+    """The declared tool names are exactly the 7 the backend supports -- a tool
     added/removed in config.py without updating this contract fails here."""
     names = {d["name"] for d in _declarations()}
     assert names == EXPECTED_TOOL_NAMES
@@ -112,6 +114,9 @@ def _make_handler() -> CallbackHandler:
     # confirmation, then (on success) request_next_field_hint fetches the next hint.
     coordinator.request_confirm_field = AsyncMock(return_value={"recorded": True})
     coordinator.request_next_field_hint = AsyncMock(return_value=None)
+    # skip_field path (bd polyglot-pdf-7yra): request_skip_field records the skip,
+    # then the shared advance logic fetches the next hint.
+    coordinator.request_skip_field = AsyncMock(return_value={"recorded": True})
     handler = CallbackHandler(
         websocket=MagicMock(),
         session_id="test_session",
@@ -160,6 +165,8 @@ async def test_every_declared_tool_is_dispatched_not_dropped(name):
         handler._request_form_state_from_client.assert_awaited_once()
     elif name == "confirm_field":
         handler._request_coordinator.request_confirm_field.assert_awaited_once()
+    elif name == "skip_field":
+        handler._request_coordinator.request_skip_field.assert_awaited_once()
     elif name == "ask_secretary":
         handler._handle_ask_secretary.assert_awaited_once()
 

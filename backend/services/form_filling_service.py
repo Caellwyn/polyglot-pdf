@@ -1708,6 +1708,30 @@ class FormFillingService:
         self._request_coordinator.handle_confirm_field_response(
             request_id, recorded, reason, section_complete)
 
+    def handle_skip_field_response(
+        self, request_id: str, recorded: bool, reason: Optional[str] = None,
+        section_complete: bool = False,
+    ) -> None:
+        """
+        Handle skip_field_response message from frontend (bd polyglot-pdf-7yra).
+
+        Delegates to RequestCoordinator -- completes the synchronous skip_field
+        round-trip.
+
+        Args:
+            request_id: ID matching the original skip_field request.
+            recorded: True if the frontend recorded the skip (markFieldSkipped).
+            reason: Fixed category token when not recorded; never a field value.
+            section_complete: True when the skip completed the section; the skip
+                handler then skips the racing next-field-hint request.
+        """
+        if not self._request_coordinator:
+            _log.warning("handle_skip_field_response_no_coordinator", session_id=self._session_id)
+            return
+
+        self._request_coordinator.handle_skip_field_response(
+            request_id, recorded, reason, section_complete)
+
     def _clear_current_field_id(self) -> None:
         """Invalidate the current-field coercion pointer (bd polyglot-pdf-h1bn).
 
