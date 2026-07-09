@@ -13,6 +13,7 @@ import React from 'react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import type { FormField } from '../schema-forms/types/schema';
 import { unwrapFieldValue } from '../schema-forms/utils/fieldValue';
+import { shouldShowField } from '../schema-forms/utils/validation';
 import { PDFPage } from './PDFPage';
 import { FieldOverlay, type FillState } from './FieldOverlay';
 
@@ -81,6 +82,10 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                       rawValue={raw}
                       fillState={fillStateFor(field.id, wrapped, raw, currentFieldId)}
                       scale={scale}
+                      // show_if-hidden fields DIM, never disappear -- they
+                      // exist on the printed page (bd polyglot-pdf-lp5v).
+                      // shouldShowField unwraps the wrapped map internally.
+                      dimmed={!shouldShowField(field, fieldValues, fields)}
                     />
                   );
                 })}

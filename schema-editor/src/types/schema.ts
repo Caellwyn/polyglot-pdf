@@ -116,9 +116,13 @@ export interface FieldOption {
   pdf_on_value?: string;
   // Optional backend-side option metadata, kept so a load -> edit -> save
   // round-trip does not strip them (backend FieldOption.spoken_label /
-  // label_translations).
+  // label_translations / pdf_position).
   spoken_label?: string;
   label_translations?: Record<string, string>;
+  // This option's own widget rect (mirrors backend FieldOption.pdf_position,
+  // bd polyglot-pdf-5f41; backfilled into the kit schemas from the AcroForm
+  // dump). Round-trip contract: editor saves must not strip it.
+  pdf_position?: PDFPosition;
   // The field type of the separate widget this option was merged FROM (bd
   // polyglot-pdf-s4dp.1). Recorded at merge time so un-merge can restore each
   // source field's original type (radio vs checkbox) instead of guessing --

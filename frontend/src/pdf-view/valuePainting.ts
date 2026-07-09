@@ -4,11 +4,15 @@
  *
  * This is a CLIENT-SIDE approximation for live feedback; the authoritative
  * fill is always PyMuPDF via /api/fill-pdf (the FilledPreviewModal / download
- * path). Radio and checkbox_group options have no per-option rects yet
- * (phase-2 backfill), so their selected LABELS paint at the field-level rect.
+ * path). When a selected radio/checkbox/checkbox_group option carries its own
+ * pdf_position (backfilled per-option rects, bd polyglot-pdf-5f41), a mark
+ * paints at that option's printed box (selectedOptionRects, bd
+ * polyglot-pdf-lp5v); options without rects fall back to selected LABELS at
+ * the field-level rect.
  */
 
-import type { FormField } from '../schema-forms/types/schema';
+import type { FormField, PDFPosition } from '../schema-forms/types/schema';
+import { hasValidCoordinates } from './pdfCoordinates';
 
 export type PaintedValue =
   | { kind: 'none' }
@@ -86,6 +90,51 @@ function paintSelectedLabels(field: FormField, raw: unknown): PaintedValue {
   }
   if (values.length === 0) return { kind: 'none' };
   return { kind: 'text', text: values.map((v) => optionLabel(field, v)).join(', ') };
+}
+
+/** The selected values of an option-bearing field, as slugs. */
+function selectedValues(field: FormField, raw: unknown): string[] {
+  switch (field.type) {
+    case 'radio':
+      return typeof raw === 'string' && raw !== '' ? [raw] : [];
+    case 'checkbox':
+    case 'checkbox_group': {
+      if (Array.isArray(raw)) return raw.map(String);
+      if (typeof raw === 'string') {
+        // Backcompat: comma-separated multi-select string.
+        return raw.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+      return [];
+    }
+    default:
+      // Selects are dropdowns: one shared widget, options are choice VALUES
+      // with no printed box of their own -- never option-rect painted.
+      return [];
+  }
+}
+
+export interface SelectedOptionRect {
+  value: string;
+  position: PDFPosition;
+}
+
+/**
+ * The rects to paint selection marks at: one per SELECTED option that carries
+ * a usable pdf_position (bd polyglot-pdf-lp5v). Empty when the field type is
+ * not option-rect paintable (select/text/...), nothing is selected, or the
+ * selected options have no usable rects -- callers then fall back to
+ * paintedValueFor's label-at-field-rect.
+ */
+export function selectedOptionRects(field: FormField, raw: unknown): SelectedOptionRect[] {
+  if (!field.options || field.options.length === 0) return [];
+  const rects: SelectedOptionRect[] = [];
+  for (const value of selectedValues(field, raw)) {
+    const opt = field.options.find((o) => o.value === value);
+    if (opt && hasValidCoordinates(opt.pdf_position)) {
+      rects.push({ value, position: opt.pdf_position });
+    }
+  }
+  return rects;
 }
 
 /**
