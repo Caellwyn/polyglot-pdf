@@ -507,17 +507,38 @@
         {
           "value": "yes_proceed_to_item_numbers_5_a_5_c",
           "label": "Yes (Proceed to Item Numbers 5.a. - 5.c.)",
-          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[0]"
+          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 61.0,
+            "y": 505.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "no_proceed_to_item_numbers_6_a_6_c",
           "label": "No (Proceed to Item Numbers 6.a. - 6.c.)",
-          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[1]"
+          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 61.0,
+            "y": 526.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "not_applicable_i_never_received_my_previous_card",
           "label": "Not Applicable - I never received my previous card",
-          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[2]"
+          "pdf_field_name": "form1[0].#subform[0].P1_checkbox4[2]",
+          "pdf_position": {
+            "page": 1,
+            "x": 61.0,
+            "y": 547.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -734,19 +755,40 @@
           "value": "suite",
           "label": "Suite",
           "pdf_field_name": "P1_checkbox6c_Unit[1]",
-          "spoken_label": "Suite"
+          "spoken_label": "Suite",
+          "pdf_position": {
+            "page": 1,
+            "x": 385.0,
+            "y": 346.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "floor",
           "label": "Floor",
           "pdf_field_name": "P1_checkbox6c_Unit[2]",
-          "spoken_label": "Floor"
+          "spoken_label": "Floor",
+          "pdf_position": {
+            "page": 1,
+            "x": 427.0,
+            "y": 346.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "apartment",
           "label": "Apartment",
           "pdf_field_name": "P1_checkbox6c_Unit[0]",
-          "spoken_label": "Apartment"
+          "spoken_label": "Apartment",
+          "pdf_position": {
+            "page": 1,
+            "x": 343.0,
+            "y": 346.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "spoken_name": "mailing unit type",
@@ -1232,19 +1274,40 @@
           "value": "apartment",
           "label": "Apartment",
           "pdf_field_name": "P1_checkbox7b_Unit[0]",
-          "spoken_label": "Apartment"
+          "spoken_label": "Apartment",
+          "pdf_position": {
+            "page": 1,
+            "x": 343.0,
+            "y": 574.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "suite",
           "label": "Suite",
           "pdf_field_name": "P1_checkbox7b_Unit[1]",
-          "spoken_label": "Suite"
+          "spoken_label": "Suite",
+          "pdf_position": {
+            "page": 1,
+            "x": 385.0,
+            "y": 574.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "floor",
           "label": "Floor",
           "pdf_field_name": "P1_checkbox7b_Unit[2]",
-          "spoken_label": "Floor"
+          "spoken_label": "Floor",
+          "pdf_position": {
+            "page": 1,
+            "x": 427.0,
+            "y": 574.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "spoken_name": "physical unit type",
@@ -1699,12 +1762,26 @@
         {
           "value": "male",
           "label": "Male",
-          "pdf_field_name": "form1[0].#subform[1].P1_Line8_male[0]"
+          "pdf_field_name": "form1[0].#subform[1].P1_Line8_male[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 107.81,
+            "y": 112.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "female",
           "label": "Female",
-          "pdf_field_name": "form1[0].#subform[1].P1_Line8_female[0]"
+          "pdf_field_name": "form1[0].#subform[1].P1_Line8_female[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 155.81,
+            "y": 112.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -1980,17 +2057,38 @@
         {
           "value": "lawful_permanent_resident",
           "label": "Lawful Permanent Resident",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[0]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 60.66,
+            "y": 570.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "permanent_resident_in_commuter_status",
           "label": "Permanent Resident - In Commuter Status",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[1]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[1]",
+          "pdf_position": {
+            "page": 2,
+            "x": 61.0,
+            "y": 589.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "conditional_permanent_resident",
           "label": "Conditional Permanent Resident",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[2]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox1[2]",
+          "pdf_position": {
+            "page": 2,
+            "x": 60.66,
+            "y": 618.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -2081,62 +2179,146 @@
         {
           "value": "my_name_or_other_biographic_information_has_been_legally_changed_since_issuance_of_my_existing_card",
           "label": "My name or other biographic information has been legally changed since issuance of my existing card",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[0]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 228.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_existing_card_has_already_expired_or_will_expire_within_six_months",
           "label": "My existing card has already expired or will expire within six months",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[1]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[1]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 258.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "i_have_reached_my_14th_birthday_and_am_registering_as_required_my_existing_card_will_expire_after_my_16th_birthday",
           "label": "I have reached my 14th birthday and am registering as required. My existing card will expire AFTER my 16th birthday.",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[2]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[2]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 288.82,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "i_have_reached_my_14th_birthday_and_am_registering_as_required_my_existing_card_will_expire_before_my_16th_birthday",
           "label": "I have reached my 14th birthday and am registering as required. My existing card will expire BEFORE my 16th birthday.",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[3]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[3]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 345.82,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_existing_card_has_incorrect_data_because_of_department_of_homeland_security",
           "label": "My existing card has incorrect data because of Department of Homeland Security",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[4]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[4]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 174.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_previous_card_has_been_lost_stolen_or_destroyed",
           "label": "My previous card has been lost, stolen, or destroyed",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[5]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[5]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 120.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_previous_card_was_issued_but_never_received",
           "label": "My previous card was issued but never received",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[6]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[6]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 138.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "my_existing_card_has_been_mutilated",
           "label": "My existing card has been mutilated",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[7]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[7]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 156.82,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "i_have_a_prior_edition_of_the_alien_registration_card_or_i_am_applying_to_replace_my_current_permanent_resident_card_for_a_reason_that_is_not_specified_above",
           "label": "I have a prior edition of the Alien Registration Card, or I am applying to replace my current Permanent Resident Card for a reason that is not specified above",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[8]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[8]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 600.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "i_am_a_commuter_who_is_taking_up_actual_residence_in_the_united_states",
           "label": "I am a commuter who is taking up actual residence in the United States",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[9]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[9]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 540.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "i_have_been_automatically_converted_to_lawful_permanent_resident_status",
           "label": "I have been automatically converted to lawful permanent resident status",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[10]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[10]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 570.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "i_am_a_permanent_resident_who_is_taking_up_commuter_status",
           "label": "I am a permanent resident who is taking up commuter status",
-          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[11]"
+          "pdf_field_name": "form1[0].#subform[1].P2_checkbox2[11]",
+          "pdf_position": {
+            "page": 2,
+            "x": 343.0,
+            "y": 456.81,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": true,
@@ -2372,12 +2554,26 @@
         {
           "value": "select_no",
           "label": "Select No",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[0]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 259.75,
+            "y": 520.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "select_yes",
           "label": "Select Yes",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[1]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox4[1]",
+          "pdf_position": {
+            "page": 3,
+            "x": 215.54,
+            "y": 520.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -2411,12 +2607,26 @@
         {
           "value": "select_no",
           "label": "Select No",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[0]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 259.75,
+            "y": 580.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "select_yes",
           "label": "Select Yes",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[1]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox5[1]",
+          "pdf_position": {
+            "page": 3,
+            "x": 215.54,
+            "y": 580.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -2447,16 +2657,37 @@
         {
           "value": "hispanic_or_latino",
           "label": "Hispanic or Latino",
-          "pdf_field_name": "P3_checkbox6[0]"
+          "pdf_field_name": "P3_checkbox6[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 115.58,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "not_hispanic_or_latino",
           "label": "Not Hispanic or Latino",
-          "pdf_field_name": "P3_checkbox6[1]"
+          "pdf_field_name": "P3_checkbox6[1]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 100.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "help": {
         "instructions": "Select one option for ethnicity."
+      },
+      "pdf_position": {
+        "page": 3,
+        "x": 344.0,
+        "y": 115.58,
+        "width": 10.0,
+        "height": 10.0
       }
     },
     {
@@ -2469,31 +2700,73 @@
         {
           "value": "white",
           "label": "White",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_White[0]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_White[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 148.58,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "asian",
           "label": "Asian",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Asian[0]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Asian[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 163.58,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "black_or_african_american",
           "label": "Black or African American",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Black[0]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Black[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 178.58,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "american_indian_or_alaska_native",
           "label": "American Indian or Alaska Native",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Indian[0]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Indian[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 193.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "native_hawaiian_or_other_pacific_islander",
           "label": "Native Hawaiian or Other Pacific Islander",
-          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Hawaiian[0]"
+          "pdf_field_name": "form1[0].#subform[2].P3_checkbox7_Hawaiian[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 208.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "help": {
         "instructions": "Select all applicable races."
+      },
+      "pdf_position": {
+        "page": 3,
+        "x": 344.0,
+        "y": 148.58,
+        "width": 10.0,
+        "height": 10.0
       }
     },
     {
@@ -2748,53 +3021,123 @@
         {
           "value": "black",
           "label": "Black",
-          "pdf_field_name": "P3_checkbox10[6]"
+          "pdf_field_name": "P3_checkbox10[6]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 295.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "blue",
           "label": "Blue",
-          "pdf_field_name": "P3_checkbox10[0]"
+          "pdf_field_name": "P3_checkbox10[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 410.0,
+            "y": 295.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "brown",
           "label": "Brown",
-          "pdf_field_name": "P3_checkbox10[5]"
+          "pdf_field_name": "P3_checkbox10[5]",
+          "pdf_position": {
+            "page": 3,
+            "x": 470.0,
+            "y": 295.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "gray",
           "label": "Gray",
-          "pdf_field_name": "P3_checkbox10[8]"
+          "pdf_field_name": "P3_checkbox10[8]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 310.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "green",
           "label": "Green",
-          "pdf_field_name": "P3_checkbox10[1]"
+          "pdf_field_name": "P3_checkbox10[1]",
+          "pdf_position": {
+            "page": 3,
+            "x": 410.0,
+            "y": 310.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "hazel",
           "label": "Hazel",
-          "pdf_field_name": "P3_checkbox10[2]"
+          "pdf_field_name": "P3_checkbox10[2]",
+          "pdf_position": {
+            "page": 3,
+            "x": 470.0,
+            "y": 310.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "maroon",
           "label": "Maroon",
-          "pdf_field_name": "P3_checkbox10[4]"
+          "pdf_field_name": "P3_checkbox10[4]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 325.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "pink",
           "label": "Pink",
-          "pdf_field_name": "P3_checkbox10[3]"
+          "pdf_field_name": "P3_checkbox10[3]",
+          "pdf_position": {
+            "page": 3,
+            "x": 410.0,
+            "y": 325.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "unknown_other",
           "label": "Unknown/Other",
-          "pdf_field_name": "P3_checkbox10[7]"
+          "pdf_field_name": "P3_checkbox10[7]",
+          "pdf_position": {
+            "page": 3,
+            "x": 470.0,
+            "y": 325.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "help": {
         "instructions": "Select your eye color."
       },
-      "question_number": "3.10"
+      "question_number": "3.10",
+      "pdf_position": {
+        "page": 3,
+        "x": 344.0,
+        "y": 295.59,
+        "width": 10.0,
+        "height": 10.0
+      }
     },
     {
       "id": "p3_hair_color",
@@ -2806,53 +3149,123 @@
         {
           "value": "bald",
           "label": "Bald",
-          "pdf_field_name": "P3_checkbox11[0]"
+          "pdf_field_name": "P3_checkbox11[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 361.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "black",
           "label": "Black",
-          "pdf_field_name": "P3_checkbox11[8]"
+          "pdf_field_name": "P3_checkbox11[8]",
+          "pdf_position": {
+            "page": 3,
+            "x": 434.0,
+            "y": 361.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "blond",
           "label": "Blond",
-          "pdf_field_name": "P3_checkbox11[1]"
+          "pdf_field_name": "P3_checkbox11[1]",
+          "pdf_position": {
+            "page": 3,
+            "x": 488.0,
+            "y": 361.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "brown",
           "label": "Brown",
-          "pdf_field_name": "P3_checkbox11[7]"
+          "pdf_field_name": "P3_checkbox11[7]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 376.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "gray",
           "label": "Gray",
-          "pdf_field_name": "P3_checkbox11[2]"
+          "pdf_field_name": "P3_checkbox11[2]",
+          "pdf_position": {
+            "page": 3,
+            "x": 434.0,
+            "y": 376.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "red",
           "label": "Red",
-          "pdf_field_name": "P3_checkbox11[6]"
+          "pdf_field_name": "P3_checkbox11[6]",
+          "pdf_position": {
+            "page": 3,
+            "x": 488.0,
+            "y": 376.59,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "sandy",
           "label": "Sandy",
-          "pdf_field_name": "P3_checkbox11[3]"
+          "pdf_field_name": "P3_checkbox11[3]",
+          "pdf_position": {
+            "page": 3,
+            "x": 344.0,
+            "y": 391.58,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "white",
           "label": "White",
-          "pdf_field_name": "P3_checkbox11[5]"
+          "pdf_field_name": "P3_checkbox11[5]",
+          "pdf_position": {
+            "page": 3,
+            "x": 434.0,
+            "y": 391.58,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "unknown_other",
           "label": "Unknown/Other",
-          "pdf_field_name": "P3_checkbox11[4]"
+          "pdf_field_name": "P3_checkbox11[4]",
+          "pdf_position": {
+            "page": 3,
+            "x": 488.0,
+            "y": 391.58,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "help": {
         "instructions": "Select your hair color."
       },
-      "question_number": "3.11"
+      "question_number": "3.11",
+      "pdf_position": {
+        "page": 3,
+        "x": 344.0,
+        "y": 361.59,
+        "width": 10.0,
+        "height": 10.0
+      }
     },
     {
       "id": "p4_checkbox1[1]",
@@ -2867,12 +3280,26 @@
         {
           "value": "select_no",
           "label": "Select No",
-          "pdf_field_name": "form1[0].#subform[2].P4_checkbox1[0]"
+          "pdf_field_name": "form1[0].#subform[2].P4_checkbox1[0]",
+          "pdf_position": {
+            "page": 3,
+            "x": 542.34,
+            "y": 529.9,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "select_yes",
           "label": "Select Yes",
-          "pdf_field_name": "form1[0].#subform[2].P4_checkbox1[1]"
+          "pdf_field_name": "form1[0].#subform[2].P4_checkbox1[1]",
+          "pdf_position": {
+            "page": 3,
+            "x": 500.34,
+            "y": 529.9,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -3126,17 +3553,38 @@
         {
           "value": "i_can_read_and_understand_english_and_i_have_read_and_understand_every_question_and_instruction_on_this_application_and_my_answer_to_every_question",
           "label": "I can read and understand English, and I have read and understand every question and instruction on this application, and my answer to every question",
-          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox1a[0]"
+          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox1a[0]",
+          "pdf_position": {
+            "page": 4,
+            "x": 61.02,
+            "y": 475.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "the_interpreter_named_in_part_6_has_read_to_me_every_question_and_instruction_on_this_application_and_my_answer_to_every_question_in_a_language_in_which_i_am_fluent_and_i_understood_everything",
           "label": "The interpreter named in Part 6. has read to me every question and instruction on this application and my answer to every question in a language in which I am fluent and I understood everything",
-          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox1b[0]"
+          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox1b[0]",
+          "pdf_position": {
+            "page": 4,
+            "x": 61.02,
+            "y": 523.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "at_my_request_the_preparer_named_in_part_7",
           "label": "At my request, the preparer named in Part 7",
-          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox2[0]"
+          "pdf_field_name": "form1[0].#subform[3].P5_Checkbox2[0]",
+          "pdf_position": {
+            "page": 4,
+            "x": 61.02,
+            "y": 619.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -3523,19 +3971,40 @@
           "value": "suite",
           "label": "Suite",
           "pdf_field_name": "P6_checkbox3b_Unit[1]",
-          "spoken_label": "Suite"
+          "spoken_label": "Suite",
+          "pdf_position": {
+            "page": 5,
+            "x": 102.81,
+            "y": 304.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "floor",
           "label": "Floor",
           "pdf_field_name": "P6_checkbox3b_Unit[2]",
-          "spoken_label": "Floor"
+          "spoken_label": "Floor",
+          "pdf_position": {
+            "page": 5,
+            "x": 144.81,
+            "y": 304.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "apartment",
           "label": "Apartment",
           "pdf_field_name": "P6_checkbox3b_Unit[0]",
-          "spoken_label": "Apartment"
+          "spoken_label": "Apartment",
+          "pdf_position": {
+            "page": 5,
+            "x": 60.81,
+            "y": 304.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "spoken_name": "interpreter's unit type",
@@ -4299,19 +4768,40 @@
           "value": "suite",
           "label": "Suite",
           "pdf_field_name": "P7_checkbox3b_Unit[1]",
-          "spoken_label": "Suite"
+          "spoken_label": "Suite",
+          "pdf_position": {
+            "page": 5,
+            "x": 385.35,
+            "y": 417.4,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "floor",
           "label": "Floor",
           "pdf_field_name": "P7_checkbox3b_Unit[2]",
-          "spoken_label": "Floor"
+          "spoken_label": "Floor",
+          "pdf_position": {
+            "page": 5,
+            "x": 427.35,
+            "y": 417.4,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "apartment",
           "label": "Apartment",
           "pdf_field_name": "P7_checkbox3b_Unit[0]",
-          "spoken_label": "Apartment"
+          "spoken_label": "Apartment",
+          "pdf_position": {
+            "page": 5,
+            "x": 343.35,
+            "y": 417.4,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "spoken_name": "preparer's unit type",
@@ -4867,12 +5357,26 @@
         {
           "value": "i_am_not_an_attorney_or_accredited_representative_but_have_prepared_this_application_on_behalf_of_the_applicant_and_with_the_applicant_s_consent",
           "label": "I am not an attorney or accredited representative but have prepared this application on behalf of the applicant and with the applicant's consent",
-          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[0]"
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[0]",
+          "pdf_position": {
+            "page": 6,
+            "x": 60.98,
+            "y": 151.0,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "i_am_an_attorney_or_accredited_representative_and_my_representation_of_the_applicant_in_this_case_extends_does_not_extend_beyond_the_preparation_of_this_application",
           "label": "I am an attorney or accredited representative and my representation of the applicant in this case extends / does not extend beyond the preparation of this application",
-          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[1]"
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7[1]",
+          "pdf_position": {
+            "page": 6,
+            "x": 60.98,
+            "y": 196.29,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": false,
@@ -4908,12 +5412,26 @@
         {
           "value": "yes",
           "label": "Yes",
-          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[0]"
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[0]",
+          "pdf_position": {
+            "page": 6,
+            "x": 81.98,
+            "y": 221.4,
+            "width": 10.0,
+            "height": 10.0
+          }
         },
         {
           "value": "no",
           "label": "No",
-          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[1]"
+          "pdf_field_name": "form1[0].#subform[5].P7_checkbox7Extend[1]",
+          "pdf_position": {
+            "page": 6,
+            "x": 129.98,
+            "y": 221.3,
+            "width": 10.0,
+            "height": 10.0
+          }
         }
       ],
       "read_only": true,

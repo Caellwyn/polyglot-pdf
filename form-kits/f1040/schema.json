@@ -945,27 +945,62 @@
         {
           "value": "single",
           "label": "Single",
-          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 97.6,
+            "y": 206.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "married_filing_jointly",
           "label": "Married filing jointly",
-          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 97.6,
+            "y": 218.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "married_filing_separately_mfs",
           "label": "Married filing separately (MFS)",
-          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[2]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].Checkbox_ReadOrder[0].c1_8[2]",
+          "pdf_position": {
+            "page": 1,
+            "x": 97.6,
+            "y": 230.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "head_of_household_hoh",
           "label": "Head of household (HOH)",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 349.6,
+            "y": 206.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "qualifying_surviving_spouse_qss",
           "label": "Qualifying surviving spouse (QSS)",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 349.6,
+            "y": 218.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -1071,12 +1106,26 @@
         {
           "value": "yes",
           "label": "Yes",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 518.4,
+            "y": 287.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "no",
           "label": "No",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 554.4,
+            "y": 287.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -2103,12 +2152,26 @@
         {
           "value": "1_line_3a",
           "label": "1 Line 3a",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_33[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_33[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 283.8,
+            "y": 596.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "2_line_3b",
           "label": "2 Line 3b",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_34[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_34[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 363.0,
+            "y": 596.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -2169,17 +2232,38 @@
         {
           "value": "1_rollover",
           "label": "1 Rollover",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_35[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_35[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 283.8,
+            "y": 620.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "2_qcd",
           "label": "2 QCD",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_36[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_36[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 363.0,
+            "y": 620.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "3",
           "label": "3",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_37[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_37[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 427.8,
+            "y": 620.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -2263,17 +2347,38 @@
         {
           "value": "1_rollover",
           "label": "1 Rollover",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_38[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_38[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 283.8,
+            "y": 644.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "2_pso",
           "label": "2 PSO",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_39[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_39[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 363.0,
+            "y": 644.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "3",
           "label": "3",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_40[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_40[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 427.8,
+            "y": 644.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -2411,12 +2516,26 @@
         {
           "value": "schedule_d_not_required",
           "label": "Schedule D not required",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_43[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_43[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 153.2,
+            "y": 704.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "includes_child_s_capital_gain_or_loss",
           "label": "Includes child's capital gain or (loss)",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_44[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_44[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 261.2,
+            "y": 704.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -2765,17 +2884,38 @@
         {
           "value": "1_form_8814",
           "label": "1 Form 8814",
-          "pdf_field_name": "topmostSubform[0].Page2[0].c2_9[0]"
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_9[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 312.6,
+            "y": 158.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "2_form_4972",
           "label": "2 Form 4972",
-          "pdf_field_name": "topmostSubform[0].Page2[0].c2_10[0]"
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_10[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 370.2,
+            "y": 158.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "3",
           "label": "3",
-          "pdf_field_name": "topmostSubform[0].Page2[0].c2_11[0]"
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_11[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 427.8,
+            "y": 158.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -3347,12 +3487,26 @@
         {
           "value": "checking",
           "label": "Checking",
-          "pdf_field_name": "topmostSubform[0].Page2[0].c2_16[0]"
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_16[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 377.4,
+            "y": 506.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "savings",
           "label": "Savings",
-          "pdf_field_name": "topmostSubform[0].Page2[0].c2_16[1]"
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_16[1]",
+          "pdf_position": {
+            "page": 2,
+            "x": 435.0,
+            "y": 506.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {
@@ -3450,12 +3604,26 @@
         {
           "value": "yes_complete_below",
           "label": "Yes. Complete below.",
-          "pdf_field_name": "topmostSubform[0].Page2[0].c2_17[0]"
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_17[0]",
+          "pdf_position": {
+            "page": 2,
+            "x": 432.0,
+            "y": 577.75,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "no",
           "label": "No",
-          "pdf_field_name": "topmostSubform[0].Page2[0].c2_17[1]"
+          "pdf_field_name": "topmostSubform[0].Page2[0].c2_17[1]",
+          "pdf_position": {
+            "page": 2,
+            "x": 540.0,
+            "y": 577.75,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ],
       "validation": {

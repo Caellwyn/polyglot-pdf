@@ -384,6 +384,12 @@ class FieldOption(BaseModel):
                     "for per-widget checkbox groups it is the widget's on_value "
                     "(usually with option-level pdf_field_name)."
     )
+    pdf_position: Optional[PDFPosition] = Field(
+        None,
+        description="Per-option widget rect, same shape as FormField.pdf_position "
+                    "(bd polyglot-pdf-5f41). Populated deterministically from the "
+                    "AcroForm dump, keyed by this option's widget."
+    )
 
 
 class TableColumn(BaseModel):

@@ -1,10 +1,20 @@
-"""Tests for extract_form.py's pdf_position back-fill (bd polyglot-pdf-7a9.18).
+"""Tests for extract_form.py's pdf_position back-fill (bd polyglot-pdf-7a9.18,
+extended by bd polyglot-pdf-5f41 to also back-fill per-OPTION pdf_position).
 
-The bug: the LLM emits a placeholder pdf_position {x:0,y:0,width:0,height:0}
-that is a truthy dict, so the original `if field.get('pdf_position'): continue`
-skipped back-fill and left the zeros -- the editor then could not map the field
-to the PDF (click-to-jump dead). The fix back-fills when the position is MISSING
-*or* DEGENERATE (non-positive width/height) from the deterministic AcroForm dump.
+The original bug: the LLM emits a placeholder pdf_position {x:0,y:0,width:0,
+height:0} that is a truthy dict, so the original `if field.get('pdf_position'):
+continue` skipped back-fill and left the zeros -- the editor then could not map
+the field to the PDF (click-to-jump dead). The fix back-fills when the position
+is MISSING *or* DEGENERATE (non-positive width/height) from the deterministic
+AcroForm dump.
+
+bd 5f41 extends the same join to each field's options[]: a radio/checkbox_group
+option's own widget rect is resolved the same way (name lookup is suffix-aware,
+matching schema_lint._match_dump_names' exact-then-dot-boundary-suffix
+convention), disambiguated by pdf_on_value when a name covers several widgets,
+or resolved purely by pdf_on_value for the shared-field-name radio/combo-group
+shape. `_backfill_positions` now returns
+{"fields_filled", "options_filled", "unmatched"} instead of a bare field count.
 
 These tests pin that behavior with synthetic data (no PDF / LLM needed): a
 degenerate-zero field and a missing-position field both get the dump rect; a
@@ -72,8 +82,8 @@ def test_backfill_replaces_degenerate_zero_position(tmp_path):
         "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
         "pdf_position": {"page": 1, "x": 0, "y": 0, "width": 0, "height": 0},
     }]}
-    filled = ef._backfill_positions(schema, dump)
-    assert filled == 1
+    result = ef._backfill_positions(schema, dump)
+    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": []}
     assert schema["fields"][0]["pdf_position"] == {
         "page": 1, "x": 100.0, "y": 200.0, "width": 8.0, "height": 8.0}
 
@@ -82,7 +92,8 @@ def test_backfill_fills_missing_position(tmp_path):
     dump = _write_dump(tmp_path, {
         "fld": {"page": 2, "x": 5, "y": 6, "width": 7, "height": 9}})
     schema = {"fields": [{"id": "a", "pdf_field_name": "fld"}]}  # no pdf_position
-    assert ef._backfill_positions(schema, dump) == 1
+    result = ef._backfill_positions(schema, dump)
+    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": []}
     assert schema["fields"][0]["pdf_position"]["page"] == 3  # 2 + 1
 
 
@@ -93,7 +104,8 @@ def test_backfill_preserves_a_usable_position(tmp_path):
         "fld": {"page": 0, "x": 999, "y": 999, "width": 1, "height": 1}})
     good = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
     schema = {"fields": [{"id": "a", "pdf_field_name": "fld", "pdf_position": dict(good)}]}
-    assert ef._backfill_positions(schema, dump) == 0
+    result = ef._backfill_positions(schema, dump)
+    assert result == {"fields_filled": 0, "options_filled": 0, "unmatched": []}
     assert schema["fields"][0]["pdf_position"] == good
 
 
@@ -107,9 +119,14 @@ def test_backfill_uses_first_option_widget_for_consolidated_field(tmp_path):
         "pdf_position": {"page": 1, "x": 0, "y": 0, "width": 0, "height": 0},
         "options": [{"value": "a", "pdf_field_name": "opt1"}],
     }]}
-    assert ef._backfill_positions(schema, dump) == 1
+    result = ef._backfill_positions(schema, dump)
+    # The field's own position AND its single option's position both resolve to
+    # the same "opt1" widget rect (one join, both levels backfilled).
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
     # Full rect, incl. the page +1 (dump page 0 -> schema page 1).
     assert schema["fields"][0]["pdf_position"] == {
+        "page": 1, "x": 1, "y": 2, "width": 8, "height": 8}
+    assert schema["fields"][0]["options"][0]["pdf_position"] == {
         "page": 1, "x": 1, "y": 2, "width": 8, "height": 8}
 
 
@@ -123,8 +140,12 @@ def test_backfill_prefers_top_level_pdf_field_name_over_options(tmp_path):
         "id": "f", "pdf_field_name": "top",
         "options": [{"value": "a", "pdf_field_name": "opt1"}],
     }]}
-    assert ef._backfill_positions(schema, dump) == 1
+    result = ef._backfill_positions(schema, dump)
+    # The field resolves via its own "top" name; the option independently
+    # resolves via its own "opt1" name -- the two levels don't share a value.
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
     assert schema["fields"][0]["pdf_position"]["x"] == 10  # top, not opt1
+    assert schema["fields"][0]["options"][0]["pdf_position"]["x"] == 99  # opt1
 
 
 def test_backfill_leaves_degenerate_when_no_dump_match(tmp_path):
@@ -135,8 +156,171 @@ def test_backfill_leaves_degenerate_when_no_dump_match(tmp_path):
         "id": "a", "pdf_field_name": "missing",
         "pdf_position": {"page": 1, "x": 0, "y": 0, "width": 0, "height": 0},
     }]}
-    assert ef._backfill_positions(schema, dump) == 0
+    result = ef._backfill_positions(schema, dump)
+    assert result == {"fields_filled": 0, "options_filled": 0, "unmatched": []}
     assert not ef._has_usable_position(schema["fields"][0]["pdf_position"])
+
+
+# --- option-level pdf_position back-fill (bd polyglot-pdf-5f41) -------------- #
+
+def _write_widget_dump(tmp_path, fields):
+    """Write a dump {fields:[{name, widgets:[{rect[, on_value]}, ...]}]}."""
+    p = tmp_path / "dump.json"
+    p.write_text(json.dumps({"fields": fields}), encoding="utf-8")
+    return str(p)
+
+
+def test_backfill_option_single_widget_via_own_pdf_field_name(tmp_path):
+    """A radio option with its own pdf_field_name resolving to exactly ONE
+    dump widget takes that widget's rect. Name resolution is suffix-aware
+    (schema stores the XFA leaf, dump stores the fully-qualified path)."""
+    dump = _write_widget_dump(tmp_path, [
+        {"name": "form1[0].#subform[0].P1_checkbox4[0]",
+         "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}]},
+    ])
+    schema = {"fields": [{
+        "id": "p1_checkbox4", "type": "radio",
+        "options": [{"value": "yes", "pdf_field_name": "P1_checkbox4[0]"}],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    # fields_filled=1: the positionless field ALSO resolves via its first
+    # option's widget (the pre-5f41 consolidated-field convention).
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
+    assert schema["fields"][0]["options"][0]["pdf_position"] == {
+        "page": 1, "x": 1, "y": 2, "width": 8, "height": 8}
+
+
+def test_backfill_option_multi_widget_disambiguated_by_on_value(tmp_path):
+    """When an option's pdf_field_name resolves to SEVERAL dump widgets (a
+    shared alias), pdf_on_value picks the matching widget's rect."""
+    dump = _write_widget_dump(tmp_path, [
+        {"name": "shared[0]", "widgets": [
+            {"rect": {"page": 0, "x": 1, "y": 1, "width": 8, "height": 8}, "on_value": "1"},
+            {"rect": {"page": 0, "x": 2, "y": 2, "width": 8, "height": 8}, "on_value": "2"},
+        ]},
+    ])
+    schema = {"fields": [{
+        "id": "f", "type": "radio",
+        "options": [{"value": "b", "pdf_field_name": "shared[0]", "pdf_on_value": "2"}],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    # fields_filled=1: the positionless field takes the group's FIRST widget
+    # (first-wins field convention); the option picks its on_value match.
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
+    assert schema["fields"][0]["options"][0]["pdf_position"]["x"] == 2
+
+
+def test_backfill_shared_field_name_radio_group_by_on_value(tmp_path):
+    """The documented shared-name radio-group shape (form_models.py
+    FieldOption.pdf_on_value docstring): the option carries NO pdf_field_name of
+    its own, only pdf_on_value, and the FIELD's pdf_field_name names the shared
+    TOGGLE-widget group (each widget carries an on_value)."""
+    dump = _write_widget_dump(tmp_path, [
+        {"name": "P3_Line8_HeightFeet[0]", "widgets": [
+            {"rect": {"page": 0, "x": 5, "y": 5, "width": 8, "height": 8}, "on_value": "2"},
+            {"rect": {"page": 0, "x": 6, "y": 6, "width": 8, "height": 8}, "on_value": "3"},
+        ]},
+    ])
+    schema = {"fields": [{
+        "id": "p3_line8_heightfeet", "type": "select",
+        "pdf_field_name": "P3_Line8_HeightFeet[0]",
+        "options": [
+            {"value": "2", "label": "2", "pdf_on_value": "2"},
+            {"value": "3", "label": "3", "pdf_on_value": "3"},
+        ],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["options_filled"] == 2
+    assert result["unmatched"] == []
+    opts = schema["fields"][0]["options"]
+    assert opts[0]["pdf_position"]["x"] == 5
+    assert opts[1]["pdf_position"]["x"] == 6
+
+
+def test_backfill_option_position_idempotent(tmp_path):
+    """An option that already carries a USABLE pdf_position is left untouched,
+    even though the dump has a different rect for its name (LLM/human value
+    wins when valid -- same idempotence contract as the field level)."""
+    dump = _write_widget_dump(tmp_path, [
+        {"name": "opt1", "widgets": [
+            {"rect": {"page": 0, "x": 999, "y": 999, "width": 1, "height": 1}}]},
+    ])
+    good = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
+    schema = {"fields": [{
+        "id": "f", "type": "radio",
+        "options": [{"value": "a", "pdf_field_name": "opt1", "pdf_position": dict(good)}],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    # The OPTION is untouched (options_filled=0); the positionless FIELD still
+    # back-fills from the option's widget name (pre-5f41 convention), so
+    # fields_filled=1 -- option idempotence is what this test pins.
+    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": []}
+    assert schema["fields"][0]["options"][0]["pdf_position"] == good
+
+
+def test_backfill_option_unmatched_bogus_name_is_reported_not_guessed(tmp_path):
+    """An option whose pdf_field_name matches NOTHING in the dump is recorded in
+    `unmatched` (field id, option value, reason) -- never guessed at (e.g. by
+    falling back to some other option's widget)."""
+    dump = _write_widget_dump(tmp_path, [
+        {"name": "real[0]", "widgets": [
+            {"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}]},
+    ])
+    schema = {"fields": [{
+        "id": "f", "type": "radio",
+        "options": [{"value": "a", "pdf_field_name": "totally_bogus_name[0]"}],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["options_filled"] == 0
+    assert "pdf_position" not in schema["fields"][0]["options"][0]
+    assert result["unmatched"] == [{
+        "field_id": "f", "option_value": "a",
+        "reason": "pdf_field_name 'totally_bogus_name[0]' not found in dump",
+    }]
+
+
+def test_backfill_dropdown_options_silently_skipped_not_unmatched(tmp_path):
+    """A shared-name group whose widgets carry NO on_value is a dropdown
+    (combobox/listbox -- real precedent: i-90's P3_Line8_HeightFeet /
+    HeightInches selects): its options are choice VALUES of one shared widget,
+    not separate printed boxes. They are silently skipped -- no option
+    pdf_position, and NOT reported as unmatched (Preview keeps painting the
+    selected label at the field-level rect)."""
+    dump = _write_widget_dump(tmp_path, [
+        {"name": "P3_Line8_HeightFeet[0]", "widgets": [
+            {"rect": {"page": 0, "x": 5, "y": 5, "width": 40, "height": 12}}]},
+    ])
+    schema = {"fields": [{
+        "id": "p3_line8_heightfeet", "type": "select",
+        "pdf_field_name": "P3_Line8_HeightFeet[0]",
+        "options": [
+            {"value": "2", "label": "2", "pdf_on_value": "2"},
+            {"value": "3", "label": "3", "pdf_on_value": "3"},
+        ],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["options_filled"] == 0
+    assert result["unmatched"] == []
+    assert all("pdf_position" not in o for o in schema["fields"][0]["options"])
+
+
+def test_backfill_shared_field_name_unmatched_on_value_is_reported(tmp_path):
+    """Shared-name shape where NO widget in the group carries the option's
+    pdf_on_value: reported in `unmatched`, not silently skipped or guessed."""
+    dump = _write_widget_dump(tmp_path, [
+        {"name": "grp[0]", "widgets": [
+            {"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}, "on_value": "1"}]},
+    ])
+    schema = {"fields": [{
+        "id": "f", "type": "select", "pdf_field_name": "grp[0]",
+        "options": [{"value": "9", "label": "9", "pdf_on_value": "9"}],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["options_filled"] == 0
+    assert result["unmatched"] == [{
+        "field_id": "f", "option_value": "9",
+        "reason": "no widget in 'grp[0]' group with on_value '9'",
+    }]
 
 
 # --- _backfill_unclaimed_widgets (bd polyglot-pdf-w0eq, P6.1c) --------------- #

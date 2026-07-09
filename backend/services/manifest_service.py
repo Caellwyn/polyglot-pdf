@@ -111,9 +111,17 @@ def get_next_field_schema(part_data: dict, current_field_id: str | None = None) 
     if next_field.get("required"):
         minimal_schema["required"] = next_field["required"]
 
-    # Include options/allowed_values for select/radio/checkbox fields
+    # Include options/allowed_values for select/radio/checkbox fields.
+    # SANITIZE each option to what the voice model needs (value/label/
+    # spoken_label): the schema option dicts also carry PDF plumbing
+    # (pdf_field_name, pdf_on_value, pdf_position -- bd polyglot-pdf-5f41) and
+    # label_translations, which are meaningless to the model and cost tokens
+    # in every JIT tool response.
     if next_field.get("options"):
-        minimal_schema["options"] = next_field["options"]
+        minimal_schema["options"] = [
+            {k: opt[k] for k in ("value", "label", "spoken_label") if opt.get(k) is not None}
+            for opt in next_field["options"]
+        ]
     elif next_field.get("allowed_values"):
         minimal_schema["allowed_values"] = next_field["allowed_values"]
 

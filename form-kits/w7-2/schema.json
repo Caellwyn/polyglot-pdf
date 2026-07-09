@@ -272,11 +272,11 @@
       "section_id": "sec_application_type",
       "pdf_field_name": null,
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 453.6,
+        "y": 97.75,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": true
@@ -285,12 +285,26 @@
         {
           "value": "apply_for_a_new_itin",
           "label": "Apply for a new ITIN",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 453.6,
+            "y": 97.75,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "renew_an_existing_itin",
           "label": "Renew an existing ITIN",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_1[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 453.6,
+            "y": 109.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ]
     },
@@ -302,11 +316,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_2[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 146.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -320,11 +334,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_3[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 158.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -338,11 +352,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_4[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 170.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -356,11 +370,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_5[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 182.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -374,11 +388,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_01[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 469.2,
+        "y": 180.0,
+        "width": 106.8,
+        "height": 11.0
       },
       "validation": {
         "required": false
@@ -400,11 +414,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_6[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 194.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -418,11 +432,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_02[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 515.32,
+        "y": 192.0,
+        "width": 60.68,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -448,11 +462,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_03[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 223.2,
+        "y": 204.0,
+        "width": 352.8,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -478,11 +492,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_7[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 218.5,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -496,11 +510,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 241.5,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -514,11 +528,11 @@
       "section_id": "sec_reason",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_9[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 52.4,
+        "y": 254.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -544,11 +558,11 @@
       "section_id": "sec_additional_treaty",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_04[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 151.2,
+        "y": 252.0,
+        "width": 424.8,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -574,11 +588,11 @@
       "section_id": "sec_additional_treaty",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_05[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 231.0,
+        "y": 264.0,
+        "width": 121.8,
+        "height": 10.0
       },
       "validation": {
         "required": false
@@ -604,11 +618,11 @@
       "section_id": "sec_name",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_06[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 448.8,
+        "y": 264.0,
+        "width": 127.2,
+        "height": 10.0
       },
       "validation": {
         "required": true
@@ -622,11 +636,11 @@
       "section_id": "sec_name",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_07[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 109.0,
+        "y": 286.0,
+        "width": 163.85,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -640,11 +654,11 @@
       "section_id": "sec_name",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_08[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 274.6,
+        "y": 286.0,
+        "width": 142.25,
+        "height": 14.0
       },
       "validation": {
         "required": true
@@ -658,11 +672,11 @@
       "section_id": "sec_name",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_09[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 418.6,
+        "y": 286.0,
+        "width": 157.4,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -676,11 +690,11 @@
       "section_id": "sec_name",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_10[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 109.0,
+        "y": 310.0,
+        "width": 163.85,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -694,11 +708,11 @@
       "section_id": "sec_name",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_11[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 274.6,
+        "y": 310.0,
+        "width": 142.25,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -712,11 +726,11 @@
       "section_id": "sec_mailing_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_12[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 418.6,
+        "y": 310.0,
+        "width": 157.4,
+        "height": 14.0
       },
       "validation": {
         "required": true
@@ -730,11 +744,11 @@
       "section_id": "sec_mailing_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_13[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 109.0,
+        "y": 334.0,
+        "width": 467.0,
+        "height": 14.0
       },
       "validation": {
         "required": true
@@ -748,11 +762,11 @@
       "section_id": "sec_foreign_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_14[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 109.0,
+        "y": 358.0,
+        "width": 467.0,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -766,11 +780,11 @@
       "section_id": "sec_foreign_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_15[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 109.0,
+        "y": 382.0,
+        "width": 467.0,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -784,11 +798,11 @@
       "section_id": "sec_birth",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_16[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 109.0,
+        "y": 406.0,
+        "width": 467.0,
+        "height": 14.0
       },
       "validation": {
         "required": true
@@ -802,11 +816,11 @@
       "section_id": "sec_birth",
       "pdf_field_name": "topmostSubform[0].Page1[0].Line4_ReadOrder[0].f1_17[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 129.6,
+        "y": 432.0,
+        "width": 100.8,
+        "height": 12.0
       },
       "validation": {
         "required": true
@@ -821,11 +835,11 @@
       "section_id": "sec_birth",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_18[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 253.0,
+        "y": 432.0,
+        "width": 120.65,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -839,11 +853,11 @@
       "section_id": "sec_birth",
       "pdf_field_name": null,
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 527.6,
+        "y": 422.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": true
@@ -852,12 +866,26 @@
         {
           "value": "male",
           "label": "Male",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 527.6,
+            "y": 422.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "female",
           "label": "Female",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_10[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 527.6,
+            "y": 433.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ]
     },
@@ -869,11 +897,11 @@
       "section_id": "sec_other_info",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_19[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 375.4,
+        "y": 432.0,
+        "width": 135.05,
+        "height": 12.0
       },
       "validation": {
         "required": true
@@ -887,11 +915,11 @@
       "section_id": "sec_other_info",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_20[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 109.0,
+        "y": 454.0,
+        "width": 127.85,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -905,11 +933,11 @@
       "section_id": "sec_other_info",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_21[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 237.6,
+        "y": 454.0,
+        "width": 129.6,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -922,11 +950,11 @@
       "type": "checkbox_group",
       "section_id": "sec_id_documents",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 129.6,
+        "y": 482.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -935,22 +963,50 @@
         {
           "value": "passport",
           "label": "Passport",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 129.6,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "driver_s_license_state_i_d",
           "label": "Driver's license/State I.D.",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 194.4,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "uscis_documentation",
           "label": "USCIS documentation",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[2]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[2]",
+          "pdf_position": {
+            "page": 1,
+            "x": 316.8,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "other",
           "label": "Other",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[3]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_11[3]",
+          "pdf_position": {
+            "page": 1,
+            "x": 432.0,
+            "y": 482.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ]
     },
@@ -962,11 +1018,11 @@
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_22[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 368.2,
+        "y": 454.0,
+        "width": 207.8,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -980,11 +1036,11 @@
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_23[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 468.0,
+        "y": 480.0,
+        "width": 108.0,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -998,11 +1054,11 @@
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_24[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 169.6,
+        "y": 492.0,
+        "width": 262.4,
+        "height": 11.0
       },
       "validation": {
         "required": false
@@ -1016,11 +1072,11 @@
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_25[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 164.6,
+        "y": 504.0,
+        "width": 145.0,
+        "height": 10.0
       },
       "validation": {
         "required": false
@@ -1034,11 +1090,11 @@
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_26[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 367.2,
+        "y": 504.0,
+        "width": 64.8,
+        "height": 10.0
       },
       "validation": {
         "required": false
@@ -1053,11 +1109,11 @@
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_27[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 511.2,
+        "y": 504.0,
+        "width": 64.8,
+        "height": 10.0
       },
       "validation": {
         "required": false
@@ -1072,11 +1128,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": null,
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 129.6,
+        "y": 529.75,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -1085,12 +1141,26 @@
         {
           "value": "no_don_t_know_skip_line_6f",
           "label": "No/Don't know. Skip line 6f.",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 129.6,
+            "y": 529.75,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "yes_complete_line_6f",
           "label": "Yes. Complete line 6f.",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_12[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 129.6,
+            "y": 541.5,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ]
     },
@@ -1102,11 +1172,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_28[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 247.2,
+        "y": 552.0,
+        "width": 40.8,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1131,11 +1201,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_29[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 297.6,
+        "y": 552.0,
+        "width": 26.4,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1160,11 +1230,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_30[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 333.6,
+        "y": 552.0,
+        "width": 55.2,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1189,11 +1259,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_31[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 434.4,
+        "y": 552.0,
+        "width": 40.8,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1218,11 +1288,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_32[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 484.8,
+        "y": 552.0,
+        "width": 26.4,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1247,11 +1317,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_33[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 520.8,
+        "y": 552.0,
+        "width": 55.2,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1276,11 +1346,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_34[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 266.4,
+        "y": 565.0,
+        "width": 93.6,
+        "height": 11.0
       },
       "validation": {
         "required": false
@@ -1304,11 +1374,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_35[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 367.2,
+        "y": 565.0,
+        "width": 86.4,
+        "height": 11.0
       },
       "validation": {
         "required": false
@@ -1327,11 +1397,11 @@
       "section_id": "sec_prior_itin",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_36[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 460.8,
+        "y": 565.0,
+        "width": 115.2,
+        "height": 11.0
       },
       "validation": {
         "required": false
@@ -1355,11 +1425,11 @@
       "section_id": "sec_college",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_37[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 335.6,
+        "y": 588.0,
+        "width": 240.4,
+        "height": 11.0
       },
       "validation": {
         "required": false
@@ -1373,11 +1443,11 @@
       "section_id": "sec_college",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_38[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 182.6,
+        "y": 600.0,
+        "width": 184.6,
+        "height": 10.0
       },
       "validation": {
         "required": false
@@ -1391,11 +1461,11 @@
       "section_id": "sec_college",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_39[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 436.6,
+        "y": 600.0,
+        "width": 139.4,
+        "height": 10.0
       },
       "validation": {
         "required": false
@@ -1409,11 +1479,11 @@
       "section_id": "sec_signature",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_40[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 417.6,
+        "y": 658.0,
+        "width": 158.4,
+        "height": 14.0
       },
       "validation": {
         "required": false
@@ -1427,11 +1497,11 @@
       "section_id": "sec_signature",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_41[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 111.0,
+        "y": 684.0,
+        "width": 212.25,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1445,11 +1515,11 @@
       "section_id": "sec_signature",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_42[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 449.6,
+        "y": 696.0,
+        "width": 126.4,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1463,11 +1533,11 @@
       "section_id": "sec_signature",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_43[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 440.6,
+        "y": 708.0,
+        "width": 135.4,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1481,11 +1551,11 @@
       "section_id": "sec_signature",
       "pdf_field_name": null,
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 333.2,
+        "y": 686.0,
+        "width": 8.0,
+        "height": 8.0
       },
       "validation": {
         "required": false
@@ -1494,17 +1564,38 @@
         {
           "value": "parent",
           "label": "Parent",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[0]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[0]",
+          "pdf_position": {
+            "page": 1,
+            "x": 333.2,
+            "y": 686.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "power_of_attorney",
           "label": "Power of attorney",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[1]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[1]",
+          "pdf_position": {
+            "page": 1,
+            "x": 383.6,
+            "y": 686.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         },
         {
           "value": "court_appointed_guardian",
           "label": "Court-appointed guardian",
-          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[2]"
+          "pdf_field_name": "topmostSubform[0].Page1[0].c1_13[2]",
+          "pdf_position": {
+            "page": 1,
+            "x": 470.0,
+            "y": 686.0,
+            "width": 8.0,
+            "height": 8.0
+          }
         }
       ]
     },
@@ -1516,11 +1607,11 @@
       "section_id": "sec_agent",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_44[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 111.0,
+        "y": 732.0,
+        "width": 184.2,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1534,11 +1625,11 @@
       "section_id": "sec_agent",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_45[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 296.2,
+        "y": 732.0,
+        "width": 106.25,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1552,11 +1643,11 @@
       "section_id": "sec_agent",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_46[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 424.8,
+        "y": 720.0,
+        "width": 64.8,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1571,11 +1662,11 @@
       "section_id": "sec_agent",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 514.6,
+        "y": 720.0,
+        "width": 61.4,
+        "height": 12.0
       },
       "validation": {
         "required": false
@@ -1590,11 +1681,11 @@
       "section_id": "sec_agent",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_48[0]",
       "pdf_position": {
-        "page": 0,
-        "x": 0,
-        "y": 0,
-        "width": 0,
-        "height": 0
+        "page": 1,
+        "x": 452.2,
+        "y": 732.0,
+        "width": 123.8,
+        "height": 12.0
       },
       "validation": {
         "required": false

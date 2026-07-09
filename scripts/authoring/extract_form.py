@@ -70,32 +70,86 @@ def _has_usable_position(pos: object) -> bool:
         return False
 
 
-def _backfill_positions(schema: dict, dump_path: str) -> int:
-    """Deterministically set `pdf_position` on each field from the AcroForm dump.
+def _backfill_positions(schema: dict, dump_path: str) -> dict:
+    """Deterministically set `pdf_position` on each field AND each option from the
+    AcroForm dump (bd polyglot-pdf-5f41 extends the field-only pass, bd 7a9.18).
 
     The LLM is flaky at copying widget coordinates (the B1 bake measured pos 0%
     on both arms), but the dump HAS every widget's rect keyed by its exact name,
     and the draft copies that name verbatim into `pdf_field_name`. So we fill
     pdf_position from the dump for free -- a deterministic gain over either raw
-    arm. Returns the number of fields filled. Dump rects are 0-based pages; the
-    gold/schema convention is 1-based, so we +1."""
+    arm. Dump rects are 0-based pages; the gold/schema convention is 1-based, so
+    we +1.
+
+    Field-level: a field's position = the rect of the FIRST widget of its
+    (first) pdf_field_name, or (when the field itself carries no name) the
+    first option's pdf_field_name -- same convention as the pre-5f41 pass,
+    except the name lookup is now suffix-aware too (a strict superset: it can
+    fill fields whose leaf-name claim the old exact match missed).
+
+    Option-level (new): for each option not already carrying a usable
+    pdf_position, resolve its widget --
+      a. option.pdf_field_name present: look up its widget group. A single
+         widget wins outright; several widgets are disambiguated by
+         option.pdf_on_value (matched against each widget's on_value), else the
+         first widget wins (same first-wins convention as the field level).
+      b. option.pdf_field_name absent but the FIELD has one and the option
+         carries pdf_on_value (the shared-name radio-group shape): pick the
+         widget in the field name's group whose on_value == pdf_on_value.
+         When NO widget in the group carries an on_value at all, the group is
+         a dropdown (combobox/listbox -- e.g. i-90's height selects), whose
+         options are choice values of one shared widget rather than printed
+         boxes: silently skipped, not unmatched.
+      c. otherwise, or when the lookup finds nothing: recorded as unmatched
+         (field id, option value, reason) -- never guessed.
+
+    Name lookups are suffix-aware (schema_lint._match_dump_names' exact-then-
+    dot-boundary-suffix convention): a schema's XFA leaf name (e.g.
+    "P1_checkbox6c_Unit[1]") must resolve to the dump's fully-qualified path
+    (e.g. "form1[0].#subform[0].P1_checkbox6c_Unit[1]") -- i-90 alone has 32
+    option pdf_field_names that only resolve this way.
+
+    Returns {"fields_filled": int, "options_filled": int, "unmatched": [...]}."""
     try:
         with open(dump_path, encoding="utf-8") as fh:
             dump = json.load(fh)
     except OSError:
-        return 0
+        return {"fields_filled": 0, "options_filled": 0, "unmatched": []}
+
+    sys.path.insert(0, _REPO)  # self-sufficient, like the other backend imports
+    from backend.services.schema_lint import _match_dump_names  # noqa: E402
+
+    dump_names = [f["name"] for f in dump.get("fields", []) if f.get("name")]
+
     name_to_rect: dict[str, dict] = {}
+    name_to_widgets: dict[str, list[dict]] = {}
     for f in dump.get("fields", []):
-        for w in f.get("widgets", []):
+        name = f.get("name")
+        if not name:
+            continue
+        widgets = f.get("widgets", [])
+        name_to_widgets[name] = widgets
+        for w in widgets:
             r = w.get("rect")
-            if r and f.get("name") and f["name"] not in name_to_rect:
-                name_to_rect[f["name"]] = r
+            if r and name not in name_to_rect:
+                name_to_rect[name] = r
 
     def rect_to_pos(r: dict) -> dict:
         return {"page": int(r["page"]) + 1, "x": r["x"], "y": r["y"],
                 "width": r["width"], "height": r["height"]}
 
-    filled = 0
+    def resolve_widgets(claim: str) -> list[dict]:
+        """The widget list for a schema-side pdf_field_name claim, suffix-aware."""
+        for name in _match_dump_names(claim, dump_names):
+            widgets = name_to_widgets.get(name)
+            if widgets:
+                return widgets
+        return []
+
+    fields_filled = 0
+    options_filled = 0
+    unmatched: list[dict] = []
+
     for field in schema.get("fields", []):
         # Back-fill when the position is MISSING *or* DEGENERATE. The LLM often
         # emits a placeholder {page, x:0, y:0, width:0, height:0} -- a truthy dict
@@ -104,21 +158,81 @@ def _backfill_positions(schema: dict, dump_path: str) -> int:
         # PDF, so click-to-jump dies -- bd 7a9.18). A real widget always has a
         # positive width AND height, so a non-positive either means it needs the
         # deterministic dump rect.
-        if _has_usable_position(field.get("pdf_position")):
-            continue
-        # A field's position = the rect of its (first) pdf_field_name; for a
-        # consolidated options[] field, use the first option's widget.
-        pfn = field.get("pdf_field_name")
-        if not pfn:
-            for o in (field.get("options") or []):
-                if o.get("pdf_field_name"):
-                    pfn = o["pdf_field_name"]
-                    break
-        rect = name_to_rect.get(pfn) if pfn else None
-        if rect:
-            field["pdf_position"] = rect_to_pos(rect)
-            filled += 1
-    return filled
+        field_pfn = field.get("pdf_field_name")
+        if not _has_usable_position(field.get("pdf_position")):
+            # A field's position = the rect of its (first) pdf_field_name; for a
+            # consolidated options[] field, use the first option's widget.
+            pfn = field_pfn
+            if not pfn:
+                for o in (field.get("options") or []):
+                    if o.get("pdf_field_name"):
+                        pfn = o["pdf_field_name"]
+                        break
+            widgets = resolve_widgets(pfn) if pfn else []
+            rect = (widgets[0].get("rect") if widgets else None) or name_to_rect.get(pfn)
+            if rect:
+                field["pdf_position"] = rect_to_pos(rect)
+                fields_filled += 1
+
+        for opt in (field.get("options") or []):
+            if _has_usable_position(opt.get("pdf_position")):
+                continue  # idempotent -- a usable option position is never re-derived
+            opt_pfn = opt.get("pdf_field_name")
+            on_value = opt.get("pdf_on_value")
+            rect = None
+            if opt_pfn:
+                widgets = resolve_widgets(opt_pfn)
+                if len(widgets) == 1:
+                    rect = widgets[0].get("rect")
+                elif len(widgets) > 1:
+                    if on_value:
+                        match = next(
+                            (w for w in widgets if w.get("on_value") == on_value),
+                            None,
+                        )
+                        rect = (match or widgets[0]).get("rect")
+                    else:
+                        rect = widgets[0].get("rect")  # first-wins, no on_value hint
+            elif field_pfn and on_value:
+                # Shared-name radio-group shape: the option has no name of its
+                # own, only an on_value distinguishing it within the field's
+                # widget group.
+                widgets = resolve_widgets(field_pfn)
+                if widgets and not any(w.get("on_value") for w in widgets):
+                    # No widget in the group carries an on_value: this is not a
+                    # toggle group but a dropdown (combobox/listbox -- e.g.
+                    # i-90's height selects), where options are choice VALUES
+                    # of one shared widget, not separate printed boxes. Nothing
+                    # option-level to place; Preview keeps field-rect painting.
+                    continue
+                match = next(
+                    (w for w in widgets if w.get("on_value") == on_value), None,
+                )
+                rect = match.get("rect") if match else None
+
+            if rect:
+                opt["pdf_position"] = rect_to_pos(rect)
+                options_filled += 1
+            elif opt_pfn or (field_pfn and on_value):
+                # Only a genuine attempt (a name or a shared-group hint to resolve)
+                # counts as unmatched -- an option with neither is simply not a
+                # PDF-backed option (e.g. a web-only choice) and is silently skipped.
+                reason = (
+                    f"pdf_field_name {opt_pfn!r} not found in dump"
+                    if opt_pfn else
+                    f"no widget in {field_pfn!r} group with on_value {on_value!r}"
+                )
+                unmatched.append({
+                    "field_id": field.get("id"),
+                    "option_value": opt.get("value"),
+                    "reason": reason,
+                })
+
+    return {
+        "fields_filled": fields_filled,
+        "options_filled": options_filled,
+        "unmatched": unmatched,
+    }
 
 
 def _build_name_to_tu(dump_path: str) -> dict[str, str]:
@@ -770,7 +884,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     lint_report = _lint_schema(schema, dump_data)
     schema.setdefault("_bakeoff", {})["authoring"] = {
         "tool": "extract_form.py", "prompt": "plain" if plain else "enriched",
-        "positions_filled": positions_filled,
+        # positions_filled stays the historical int (field-level count); the
+        # option-level pass (bd 5f41) reports its own keys alongside.
+        "positions_filled": positions_filled["fields_filled"],
+        "option_positions_filled": positions_filled["options_filled"],
+        "option_positions_unmatched": positions_filled["unmatched"],
         "instructions_filled": instructions_filled,
         "instructions_enriched": instructions_enriched,
         "widgets_backfilled": widgets_backfilled,
