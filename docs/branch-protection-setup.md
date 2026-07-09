@@ -1,6 +1,6 @@
 # Branch-protection setup (one-time, agent-executable)
 
-*Last updated: 2026-07-05.*
+*Last updated: 2026-07-08. External code review is retired -- review is now entirely Claude-based (no `copilot_code_review` rule, no Codex GitHub app); see [`doctrine/review-flow.md`](doctrine/review-flow.md).*
 
 This configures the GitHub rulesets the swarm workflow depends on. Run it once
 per repo. An agent can execute it via the `gh` CLI (shown) or the GitHub MCP if
@@ -13,9 +13,11 @@ One branch ruleset that is load-bearing today, plus one optional guard:
 
 1. **"To Dev"** -- targets `dev` (the integration branch). Requires PRs into `dev`.
    (This ruleset historically also enabled *Copilot* code review; that rule is
-   RETIRED -- the reviewer is now OpenAI Codex, which is a repo-level GitHub app
-   that auto-reviews on PR-open, NOT a `copilot_code_review` ruleset rule. See
-   step 2 below and [`doctrine/review-flow.md`](doctrine/review-flow.md).)
+   RETIRED. There is NO external model reviewer at all now -- Copilot, then Codex,
+   both retired (the maintainer's Codex subscription ended 2026-07-08). Review is
+   entirely Claude-based and procedural, not a ruleset rule. Do NOT add a
+   `copilot_code_review` rule. See step 2 below and
+   [`doctrine/review-flow.md`](doctrine/review-flow.md).)
 2. **"Defend Production"** -- targets `main`. OPTIONAL for this project: there is
    **no active production `main`** (this repo is a demo built for future investor
    demonstration, not a production app), so protecting `main` is not load-bearing.
@@ -56,15 +58,16 @@ gh api repos/<OWNER>/<REPO> --jq .allow_auto_merge    # expect: false
 
 This ruleset requires PRs into `dev` and blocks deletion / force-pushes.
 
-**Code review is NOT configured here.** The reviewer is **OpenAI Codex**, a
-repo-level GitHub app that **auto-reviews a PR on open** (and re-reviews on an
-`@codex review` comment) -- it is not a branch-ruleset rule. Codex replaced the
-former `copilot_code_review` ruleset rule at the Copilot->Codex cutover
-(bd `polyglot-pdf-hrn.8`/`hrn.9`); do NOT add a `copilot_code_review` rule (Copilot
-is retired here). How the review loop drives Codex lives in
-[`doctrine/review-flow.md`](doctrine/review-flow.md) and the closeout skill, not in
-GitHub ruleset config. (The no-draft-PR convention still holds -- Codex's auto-review
-fires on PR-open, so opening normal PRs is what triggers round 1.)
+**Code review is NOT configured here, and there is NO external reviewer.** Review
+is entirely Claude-based -- a fresh-eyes inner loop plus an Opus-4.8 outer review,
+run as orchestrator-driven subagents by the closeout skill, not any GitHub app or
+ruleset rule. The former `copilot_code_review` ruleset rule (and its successor, the
+OpenAI Codex GitHub app) are both retired (bd `polyglot-pdf-hrn.8`/`hrn.9` for the
+Copilot->Codex cutover; the maintainer's Codex subscription then ended
+2026-07-08). Do NOT add a `copilot_code_review` rule. How the review loop works
+lives in [`doctrine/review-flow.md`](doctrine/review-flow.md) and the closeout
+skill, not in GitHub ruleset config. (The no-draft-PR convention still holds --
+open normal PRs.)
 
 Save this as `to-dev-ruleset.json`:
 
@@ -141,9 +144,11 @@ You should see the "To Dev" ruleset `active` with `pull_request`, `deletion`, an
 
 ## Notes
 
-- **Code review is Codex, not a ruleset.** Codex (a repo-level GitHub app) reviews
-  PRs on open; there is nothing to configure in a branch ruleset for it. Do not add
-  a `copilot_code_review` rule (Copilot is retired -- bd `polyglot-pdf-hrn.8`/`hrn.9`).
+- **Code review is Claude-based and procedural, not a ruleset.** The fresh-eyes +
+  Opus-4.8 outer review runs in the closeout skill; there is nothing to configure
+  in a branch ruleset for it, and no external reviewer (Copilot and Codex both
+  retired -- bd `polyglot-pdf-hrn.8`/`hrn.9`; Codex ended 2026-07-08). Do not add a
+  `copilot_code_review` rule.
 - **GitHub MCP path:** if a GitHub MCP server is connected, it can create these
   rulesets too -- pass the same JSON bodies. Do not assume the MCP exists; the
   `gh` CLI is the portable path.

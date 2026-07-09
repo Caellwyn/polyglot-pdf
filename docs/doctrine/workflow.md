@@ -68,11 +68,11 @@ mechanical toil:
 - **`bd_safe.py`** -- `claim`/`close`/`dep-add` with pull/push bracketing,
   collision checks (will not claim a bead another worker's branch/PR already
   carries; excludes your own current worktree branch), and direction-safe edges.
-- **`pr_review_watcher.py <pr#>` (`--reviewer copilot|codex`, default codex since
-  the Copilot->Codex cutover, bd hrn.9)** -- watches a PR for the bot review's
-  COMPLETION and exits with a classified verdict (COMMENTS / CLEAN / ERROR /
-  TIMEOUT). Run via the harness background mechanism so the agent is woken once
-  with the result.
+- **`pr_review_watcher.py <pr#>` (RETIRED)** -- watched a PR for an external bot
+  review's completion (Copilot, then Codex). It is now dead path: review is
+  entirely Claude-based (an Opus-4.8 outer review run as orchestrator-driven
+  subagents, read directly -- see [`review-flow.md`](review-flow.md)), so the
+  closeout flow no longer launches this watcher. Retained only as inert history.
 - **`closeout_housekeeping.py`** -- pull + `bd orphans` + `bd stale` + push;
   surfaces lifecycle slips (closed-in-commits-but-open, stale in-progress).
 - **`journal_scaffold.py <bead-id>`** -- emits the journal-entry skeleton.

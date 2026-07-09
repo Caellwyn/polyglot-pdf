@@ -12,7 +12,7 @@ applied here. Deploys here are LOCAL/MANUAL via shell scripts, not branch-trigge
 
 ```
 worktree (feature branch)        one bead's work; where the agent commits
-        |  PR (reviewed: Codex + fresh-eyes, looped to clean)
+        |  PR (reviewed: fresh-eyes inner + Opus-4.8 outer, both Claude, looped to clean)
         v
 dev                              integration branch + PR base; auto-merge if routine/low-risk & clean, else maintainer merges
         |  deploy-demo.sh (front + backend; gated -- see below)

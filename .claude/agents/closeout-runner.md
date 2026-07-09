@@ -23,8 +23,6 @@ worse than a clean stop.
 The orchestrator's spawn prompt gives you a structured brief. It will contain:
 
 - **bead id(s)** (full, e.g. `polyglot-pdf-hrn.13`) + the close reason(s);
-- the **review-worthiness verdict**: `review-worthy` or `skip-review` (already
-  decided -- you NEVER decide this; you pass it through as the matching flag);
 - the **complete, filled journal entry text** -- full frontmatter (incl. the
   `tags:` line, already chosen) and all five sections (Trigger / What shipped /
   Lessons / Doc freshness / Files touched), as final prose. You write it; you do
@@ -33,9 +31,13 @@ The orchestrator's spawn prompt gives you a structured brief. It will contain:
 - the **feature branch name** and the **base** (usually `origin/dev`);
 - the **telemetry counters** (`--arm`, `--cost-category`, `--copilot-rounds`,
   `--maintainer-touchpoints`, `--deferred-nits`, `--haiku-escalations`,
-  `--errors-shipped`);
-- whether to pass **`--close-beads`** now (true only for a `skip-review` PR; false
-  for a `review-worthy` PR, whose beads close later after the review loop).
+  `--errors-shipped`).
+
+Both review layers (fresh-eyes + the Opus outer review) already cleared on the
+local branch BEFORE you were spawned, so `closeout_finish.py` opens the PR AND
+closes the bead(s) in one run -- there is no review-worthiness flag to pass and no
+deferred close. (`--close-beads` is the script's default now; you do not need to
+pass it.)
 
 If any of these is missing or ambiguous, **STOP** -- do not invent it.
 
@@ -92,29 +94,27 @@ R=...; WT=...; PY=...; PYTHONPATH="$WT" "$PY" "$WT/scripts/closeout_finish.py" \
   --bead <id> [--bead <id> ...] \
   --branch <feature-branch> --base <base> \
   --pr-title "<title>" --pr-body-file <path-you-wrote-the-body-to> \
-  ( --review-worthy | --skip-review ) \
   [--commit-message "<msg>"] \
   --arm <A|B|C|BC> --cost-category <production|audit> \
   --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> \
-  --haiku-escalations <n> --errors-shipped <n> \
-  [--close-beads]
+  --haiku-escalations <n> --errors-shipped <n>
 ```
 
-Write the PR body text to a temp file first and pass it via `--pr-body-file` (to
-avoid shell-quoting a multi-line body; the script requests the review bot as a
-reviewer, so there is no trigger string to keep out of the body). Read the
-script's `RESULT:` block.
+This ONE run opens the PR AND closes the bead(s) (review already cleared before you
+were spawned). There is no review-worthiness flag and no `--close-beads` to pass
+(it is the default). Write the PR body text to a temp file first and pass it via
+`--pr-body-file` (to avoid shell-quoting a multi-line body). Read the script's
+`RESULT:` block (`RESULT: OPENED-CLOSED` on success).
 
 **You may run `closeout_finish.py ... --dry-run` FIRST** to preview the plan if you
 want to confirm the paths before the real run -- it has zero side effects.
 
 ### 4. Relay back
 
-Return the script's `RESULT`/`PR`/`TS`/`WATCH_CMD`/`telemetry`/`beads_closed` block
-**verbatim**, plus the journal entry path you wrote, plus a one-line STATUS. The
-orchestrator takes it from here (launches the watcher from `WATCH_CMD`, spawns
-fresh-eyes, runs the review loop, and -- for a review-worthy PR -- does the later
-bead close + telemetry).
+Return the script's `RESULT`/`PR`/`telemetry`/`beads_closed` block **verbatim**,
+plus the journal entry path you wrote, plus a one-line STATUS. The orchestrator
+takes it from here (makes the merge decision -- auto-merge or ping). The bead(s)
+are already closed by this run; there is no post-PR review loop.
 
 ## STOP conditions (the safety contract)
 
@@ -126,15 +126,15 @@ script output, and make **no further calls**:
   judgment (mechanical-vs-structural); the script already aborted the rebase and
   left the branch clean, so just report it;
 - `closeout_finish.py` exits **1** (tooling failure) or **2** (precondition: a
-  missing/both review flag, a branch mismatch);
+  missing PR flag, or a branch mismatch);
 - any required brief input is missing or ambiguous;
 - the journal prose is incomplete.
 
 `telemetry: GAP` is **WARN-ONLY** -- do NOT stop; report it so the orchestrator
 notes the gap in the journal, and continue.
 
-You NEVER: start the Copilot watcher, read or classify Copilot/fresh-eyes findings,
-decide review-worthiness, pick the fresh-eyes model, resolve a merge conflict,
+You NEVER: launch a review watcher, read or classify review findings, decide
+review-worthiness, pick the fresh-eyes model, resolve a merge conflict,
 `gh pr merge`, or `git add` files the orchestrator didn't tell you to stage. Those
 are all the orchestrator's. (The merge itself is a judgment call -- auto-merge a
 routine low-risk clean PR vs. ping the maintainer for a consequence-bearing one --

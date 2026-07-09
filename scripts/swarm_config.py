@@ -15,11 +15,12 @@ DO differ per project live here, resolved in this precedence order:
 suffix from the FULL id at runtime, so this is only used for help text and
 validation hints.
 
-(The PR reviewer is OpenAI Codex. It AUTO-REVIEWS on PR open -- round 1 needs no
-trigger (the "@codex review" nudge rides in the PR body); round 2+ re-reviews use
-an "@codex review" comment posted by the closeout Step-7 loop, NOT by
-`closeout_finish.py`. There is no reviewer-slug config to set; the Copilot
-reviewer-API slug was removed at the Codex cutover, bd hrn.9.)
+(There is NO external PR reviewer and no reviewer-slug config. Review is entirely
+Claude-based and runs PRE-PR -- a fresh-eyes inner loop then an Opus-4.8 outer
+review, both on the local branch, before the PR opens (see
+`docs/doctrine/review-flow.md`). The OpenAI Codex reviewer -- and Copilot before
+it -- are retired (the maintainer's Codex subscription ended 2026-07-08); no bot
+reads the PR.)
 
 The kit's init script (`scripts/swarm_init.py`) writes swarm.config.json for
 you; you normally never edit this file.

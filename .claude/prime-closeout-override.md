@@ -14,11 +14,14 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 - **feature branch** — one bead's work; where you commit. Branch off freshly-
   pulled `dev`.
 - **PR into `dev`** — opened and driven by the `/closeout` skill (NOT
-  `gh pr create` by hand). Reviewed in two serial layers — a pre-PR adversarial
-  fresh-eyes assess loop (scored against the bead's exit criteria), then Codex as
-  the outer post-PR review when the PR is review-worthy — looped to clean. On
-  CLEAN, closeout **auto-merges a routine low-risk PR** (`gh pr merge`) or **pings
-  the maintainer** for a consequence-bearing one (autonomy increase 2026-07-04;
+  `gh pr create` by hand). Reviewed in two serial layers, both Claude, BOTH PRE-PR
+  (on the local branch) — a fresh-eyes assess loop (Sonnet/Haiku, scored against the
+  bead's exit criteria), then an Opus-4.8 outer review (two independent clearing
+  passes) when the change is review-worthy — each looped to clean. Only after both
+  clear does the PR open (and close the bead(s), one run). There is NO external
+  reviewer (the maintainer's Codex subscription ended 2026-07-08). On CLEAN,
+  closeout **auto-merges a routine low-risk PR** (`gh pr merge`) or **pings the
+  maintainer** for a consequence-bearing one (autonomy increase 2026-07-04;
   CLAUDE.md "Auto-merge vs. maintainer merge").
 - **Demo deploy** — there is NO `main`/prod tier; the demo remote is the live
   target. Deploys are manual (`deploy-demo.sh`, not branch-triggered). The agent

@@ -11,16 +11,16 @@ body invariants that, if broken, would silently change how the skill runs:
     inline, per the plan).
   - It must reference the deterministic scripts it wraps (the three step-2
     scripts + check_doc_freshness), so a rename without a skill update is caught.
-  - It must encode the NORMAL-PR parallel-review flow: open a non-draft PR
-    (Codex AUTO-REVIEWS on open -- round 1 needs no comment, just an `@codex
-    review` nudge in the PR body -- in parallel with fresh-eyes), fix the combined
-    issues, loop Codex until CLEAN via an `@codex review` comment per re-review
-    round, then close the bead and make the merge decision: auto-merge a routine
-    low-risk PR that reviewed CLEAN, else ping the maintainer for a
-    consequence-bearing one (bd 16pj). NO drafts and NO ready-flip. Regression
+  - It must encode the Claude-only review flow (2026-07-08): a Sonnet/Haiku
+    fresh-eyes inner loop (pre-PR, looped to NO-GAPS) and an Opus-4.8 outer review
+    (two independent clearing passes), then open a non-draft PR and make the merge
+    decision: auto-merge a routine low-risk PR that reviewed CLEAN, else ping the
+    maintainer for a consequence-bearing one (bd 16pj). There is NO external
+    reviewer -- the `@codex review` trigger, `pr_review_watcher.py`, and
+    `requested_reviewers` are dead path. NO drafts and NO ready-flip. Regression
     guards assert the old "hard stop before `gh pr create`" wording, the
     draft/ready-flip wording, AND the old blanket "never run `gh pr merge`" ban are
-    all gone. (Codex replaced Copilot at bd hrn.9.)
+    all gone.
 """
 
 import pathlib
@@ -114,14 +114,18 @@ def test_covers_doc_freshness_step(skill_text):
     assert "doc-architecture.md" in skill_text
 
 
-def test_opens_normal_pr_and_parallel_reviews(body):
-    # The flow opens a NORMAL PR (Codex auto-reviews on open) and runs
-    # fresh-eyes in parallel. Pin against the BODY so the operative
-    # instruction is checked, not a description mention.
+def test_opens_normal_pr_and_claude_reviews(body):
+    # The flow opens a NORMAL PR and reviews it entirely with Claude: a fresh-eyes
+    # inner loop (pre-PR) and an Opus-4.8 outer review. Pin against the BODY so the
+    # operative instruction is checked, not a description mention.
     lo = body.lower()
     assert "gh pr create" in body
-    assert "pr_review_watcher.py" in body  # review watcher started for a review-worthy PR
-    assert "fresh-eyes" in lo          # fresh-eyes spawned alongside
+    assert "fresh-eyes" in lo          # inner-loop reviewer
+    assert "opus" in lo                # outer-review model
+    # There is NO external bot watcher in the operative flow anymore -- the outer
+    # review is orchestrator-driven subagents read directly.
+    assert "no bot watcher" in lo or "read directly" in lo, \
+        "skill must state the outer review is read directly, not bot-watched"
 
 
 def test_no_draft_pr(body):
@@ -138,26 +142,29 @@ def test_no_draft_pr(body):
         "skill should explicitly forbid --draft"
 
 
-def test_codex_loops_until_clean(body):
-    # The Codex round is not one-shot: adopt -> push -> re-review until it reports
-    # CLEAN (a thumbs-up reaction / no findings). Assert against the BODY (not the
-    # description) so the operative loop instruction is what's pinned. The
-    # re-review is triggered by a fresh `@codex review` COMMENT (Codex's trigger
-    # mechanism -- bd hrn.9), and all four watch states (incl. TIMEOUT) must be
-    # handled -- a TIMEOUT must never be treated as clean.
+def test_outer_review_loops_until_clean(body):
+    # The Opus-4.8 outer review is not one-shot: fix -> re-spawn until two
+    # independent Opus passes both clear (NO-GAPS on the identical diff). Assert
+    # against the BODY so the operative loop instruction is pinned. Review is
+    # entirely Claude-based -- there is NO external reviewer and NO bot-trigger.
     lo = body.lower()
-    assert re.search(r"(until|loop)[^\n]*(clean|no comment)", lo), \
-        "skill body must loop Codex until it reports CLEAN"
-    assert "@codex review" in lo, \
-        "skill must re-trigger Codex via an `@codex review` comment"
-    # Regression guard: the Codex cutover (bd hrn.9) dropped the Copilot
-    # reviewer-API trigger. `requested_reviewers` may appear ONLY inside an
-    # explicit "do NOT use it" warning, never as the active trigger.
-    for line in body.splitlines():
-        if "requested_reviewers" in line.lower():
-            assert "never use" in line.lower() or "do not use" in line.lower(), \
-                "requested_reviewers may appear only in a do-not-use warning: {}".format(line)
-    assert "timeout" in lo, "skill must handle pr_review_watcher's TIMEOUT state"
+    assert "opus" in lo, "skill body must name the Opus-4.8 outer reviewer"
+    assert re.search(r"(until|loop)[^\n]*(clean|no-gaps)", lo), \
+        "skill body must loop the outer review until it clears"
+    assert "two independent" in lo, \
+        "skill must require two independent Opus clearing passes"
+    # Regression guard: the retired external-reviewer triggers must NOT be the
+    # active mechanism. `@codex review`, `requested_reviewers`, and
+    # `pr_review_watcher.py` may appear ONLY in an explicit retired/dead-path/
+    # do-not-use note, never as a live instruction.
+    for needle in ("@codex review", "requested_reviewers", "pr_review_watcher"):
+        for line in body.splitlines():
+            if needle in line.lower():
+                l = line.lower()
+                assert any(w in l for w in (
+                    "never", "do not", "retired", "dead path", "ignore", "no ")), \
+                    "{} may appear only in a retired/do-not-use note: {}".format(
+                        needle, line)
 
 
 def test_merge_endpoint_is_auto_merge_or_ping(body):

@@ -2,16 +2,23 @@
 
 What this is
 ------------
-The /closeout skill's Steps 5-8.5 are a string of orchestrator Bash turns that
+The /closeout skill's Steps 5-7 are a string of orchestrator Bash turns that
 each re-derive the ``$R``/``$WT``/``$PY`` worktree roots and run one git/gh/bd
-command: commit the staged closeout work, pre-push rebase, push, open the PR
-(and, for a review-worthy PR, capturing the PR-open time as the watch floor --
-Codex auto-reviews on open, so the PR BODY carries the ``@codex review`` line and
-no round-1 comment is posted), record the telemetry row, **commit + push that
-telemetry row**, and
-close the bead(s). Every one of those is **deterministic mechanics** -- no
-judgment -- so this script collapses the mechanical subset into ONE process where
-the path traps are solved once, internally (bd polyglot-pdf-hrn.13).
+command: commit the staged closeout work, pre-push rebase, push, open the PR,
+record the telemetry row, **commit + push that telemetry row**, and close the
+bead(s). Every one of those is **deterministic mechanics** -- no judgment -- so
+this script collapses the mechanical subset into ONE process where the path traps
+are solved once, internally (bd polyglot-pdf-hrn.13).
+
+Review happens BEFORE this script runs (2026-07-08 flow change). Both review
+layers -- the Sonnet/Haiku fresh-eyes inner loop and the Opus-4.8 outer loop --
+run on the LOCAL branch and clear to their terminal signals (inner ``NO-GAPS``,
+outer two-independent-``NO-GAPS``) before the PR is ever opened. There is NO
+external reviewer and NO post-PR review watch (the maintainer's Codex subscription
+ended 2026-07-08; the ``pr_review_watcher.py`` bot-watch path is retired). So by
+the time this script runs the review is already CLEAN: it opens the PR AND closes
+the bead(s) in the SAME run -- there is no review-worthiness gate here and no
+two-call watcher pattern.
 
 The telemetry row is written AFTER the closeout commit + push, so a dedicated
 ``commit_push_telemetry`` step commits + pushes the tool-owned row file by
@@ -25,39 +32,32 @@ polyglot-pdf-8o4). This is the ONE place the script commits its own files; it
 still never ``git add``s the orchestrator's content. WARN-ONLY, like the
 telemetry write itself.
 
-It is the Steps-5-8.5 analogue of how ``closeout_prep.py`` collapses Steps
+It is the Steps-5-7 analogue of how ``closeout_prep.py`` collapses Steps
 0/1/2/4. The orchestrator (or a cheap ``closeout-runner`` subagent it delegates
-to) runs this AFTER it has made every judgment call: the review-worthiness gate
-(passed in as ``--review-worthy``/``--skip-review``), the journal prose, the
-staged file set. This script executes those decisions; it never makes them.
+to) runs this AFTER it has made every judgment call and BOTH reviews have cleared
+on the local branch: the journal prose, the staged file set, the telemetry
+counters. This script executes those decisions; it never makes them.
 
 What it does NOT do (the judgment boundary)
 -------------------------------------------
-- decide review-worthiness (the verdict is a REQUIRED flag the caller passes);
-- triage fresh-eyes / Codex findings or run the review loop;
+- run the review loop or triage fresh-eyes / outer-review findings (both reviews
+  already cleared BEFORE this script runs -- SKILL Steps 5.5 + 5.6);
 - resolve a merge conflict (it aborts the rebase and exits REBASE-CONFLICT so
-  the orchestrator decides mechanical-vs-structural -- SKILL Step 7);
-- pick the fresh-eyes model, write journal prose, or ``git add`` (staging is the
-  orchestrator's content decision);
+  the orchestrator decides mechanical-vs-structural -- SKILL Step 5.6's
+  "Merge-conflict resolution");
+- write journal prose, or ``git add`` (staging is the orchestrator's content
+  decision);
 - ``gh pr merge`` (not this script's job -- the merge decision is an orchestrator
-  judgment call at closeout Step 8.2: auto-merge a routine low-risk clean PR, else
-  ping the maintainer);
-- start the Codex watcher (it PRINTS the command; the orchestrator launches it
-  as a ``run_in_background`` task so the harness wake-up wiring works).
+  judgment call at closeout Step 6: auto-merge a routine low-risk clean PR, else
+  ping the maintainer).
 
-Two-call bead-close pattern
----------------------------
-Bead close must happen AFTER the Codex review is CLEAN (SKILL Step 8). For a
-**review-skipped** PR (docs/beads/journal-only) there is no review loop, so the
-single call can carry ``--close-beads`` and close immediately. For a
-**review-worthy** PR, the first call opens the PR WITHOUT ``--close-beads``; the
-orchestrator drives the Codex review loop to CLEAN, then runs a tiny second call with
-**``--close-only``** -- which closes the bead(s) and does NOTHING else (no commit,
-rebase, push, PR, or telemetry). The telemetry row was already written by the
-first call, so ``--close-only`` is what prevents a DUPLICATE ledger row that would
-contaminate the A/B metrics (bd hrn.15). The script never blocks on the watcher
-(that would defeat the background-watch design and only help the rare
-zero-findings case).
+Bead close
+----------
+Because both reviews already cleared before this script runs, a normal run opens
+the PR AND closes the bead(s) in the SAME call -- ``--close-beads`` is the default.
+``--close-only`` remains as a standalone recovery tool: it closes the bead(s) and
+does NOTHING else (no commit/rebase/push/PR/telemetry), for the rare case where a
+PR was opened but its bead close failed or was deferred.
 
 Worktree safety
 ---------------
@@ -76,9 +76,8 @@ Exit codes
   0  all requested steps succeeded (or ``--dry-run`` printed the plan).
   1  a hard tooling failure (push failed, ``gh pr create`` failed, dirty tree
      after the commit, root resolution failed).
-  2  a precondition the script can mechanically check is unmet (neither or both
-     of ``--review-worthy``/``--skip-review``; the branch arg doesn't match the
-     checked-out branch).
+  2  a precondition the script can mechanically check is unmet (a missing PR-open
+     arg; the branch arg doesn't match the checked-out branch).
   4  REBASE-CONFLICT -- the pre-push rebase hit a conflict; the script aborted it
      (branch left clean) and hands the conflict back to the orchestrator
      (resolution is judgment).
@@ -89,12 +88,12 @@ Telemetry is WARN-ONLY: a non-zero ``harness_ledger.py`` exit becomes a
 Usage
 -----
   python scripts/closeout_finish.py --bead <id> --branch <feat> \\
-      --pr-title "..." --pr-body-file body.md --skip-review \\
+      --pr-title "..." --pr-body-file body.md \\
       --commit-message "..." --arm A --cost-category production \\
       --copilot-rounds 0 --maintainer-touchpoints 0 --deferred-nits 0 \\
-      --haiku-escalations 0 --errors-shipped 0 --close-beads
+      --haiku-escalations 0 --errors-shipped 0
 
-  python scripts/closeout_finish.py ... --review-worthy --dry-run
+  python scripts/closeout_finish.py ... --dry-run
 """
 from __future__ import annotations
 
@@ -129,18 +128,12 @@ EXIT_REBASE_CONFLICT = 4
 
 SUBPROCESS_TIMEOUT_SEC = 600
 
-# The review bot is OpenAI Codex (chatgpt-codex-connector[bot]). It AUTO-REVIEWS
-# on PR open, so ROUND 1 needs no explicit trigger -- the orchestrator just
-# includes an "@codex review" line in the PR BODY (belt-and-suspenders) and lets
-# the auto-review fire. ROUND 2+ (re-reviews after a fix-push) DO need an explicit
-# "@codex review" issue COMMENT, which the SKILL's Step-7 loop posts. Never use the
-# GitHub reviewer API (requested_reviewers) -- that fires Copilot, whose prepaid
-# credits are exhausted (bd hrn.8/hrn.9). Codex's clean verdict is a thumbs-up
-# ("+1") reaction on its summary comment; the watcher (pr_review_watcher.py
-# --reviewer codex, now the default) classifies that. The "@codex review" string
-# is the EXACT trigger -- "@codex please commit ..." would instead invoke its
-# commit path (see AGENTS.md "If you are reviewing a PR").
-CODEX_REVIEW_TRIGGER = "@codex review"
+# Review is entirely Claude-based and runs BEFORE this script (SKILL Steps 5.5 +
+# 5.6): a Sonnet/Haiku fresh-eyes inner loop and an Opus-4.8 outer loop, both on
+# the local branch, cleared to their terminal signals before the PR opens. There
+# is NO external reviewer and NO post-PR watch -- this script neither triggers a
+# bot nor emits a watch command (the maintainer's Codex subscription ended
+# 2026-07-08; the pr_review_watcher.py path is retired).
 
 
 class CloseoutError(Exception):
@@ -206,8 +199,7 @@ class Closeout:
         self.wt = str(WT)
         # Accumulated machine-readable output.
         self.out: dict[str, str] = {
-            "RESULT": "-", "PR": "-", "TS": "-", "WATCH_CMD": "-",
-            "telemetry": "-", "beads_closed": "-",
+            "RESULT": "-", "PR": "-", "telemetry": "-", "beads_closed": "-",
         }
 
     # -- individual mechanical steps ---------------------------------------- #
@@ -233,7 +225,8 @@ class Closeout:
             _run(["git", "-C", self.wt, "rebase", "--abort"], check=False)
             raise RebaseConflict(
                 "rebase onto {} conflicted; aborted and left the branch clean. "
-                "Resolve per SKILL Step 7 (mechanical inline / structural "
+                "Resolve per SKILL Step 5.6's Merge-conflict resolution "
+                "(mechanical inline / structural "
                 "escalate).\n{}".format(name, (proc.stdout or proc.stderr or "").strip())
             )
 
@@ -241,18 +234,8 @@ class Closeout:
         _run(["git", "-C", self.wt, "push", "-u", "origin", self.args.branch])
 
     def open_pr(self) -> None:
-        # Capture the round-1 watch floor BEFORE `gh pr create` -- Codex
-        # AUTO-REVIEWS the instant the PR opens, so a fast auto-review verdict can
-        # land within the create-call's network round-trip. A floor stamped AFTER
-        # create returns could exclude that verdict, making the watcher filter out
-        # the real round-1 review and TIMEOUT (Codex review, PR #118). Stamping
-        # before create guarantees the floor is <= any review surface. The PR's own
-        # creation is necessarily at/after this stamp too, so the floor never
-        # excludes a legitimately newer round. request_review() reads this stash.
-        # Only for review-worthy PRs -- a skip-review PR has no watch, so TS stays
-        # the "-" sentinel (the skip-review contract).
-        if self.args.review_worthy:
-            self.out["TS"] = _utcnow()
+        # Review already cleared locally before this script ran (SKILL Steps 5.5 +
+        # 5.6), so opening the PR triggers nothing and needs no watch floor.
         # gh wants the bare branch NAME for --base ('dev'), not the remote-
         # qualified ref ('origin/dev') the rebase step uses.
         proc = _run([
@@ -269,42 +252,6 @@ class Closeout:
         if not num.isdigit():
             raise CloseoutError("could not parse PR number from: {!r}".format(url))
         self.out["PR"] = num
-
-    def request_review(self) -> None:
-        """Emit the round-1 watch command (NO comment; floor stamped in open_pr).
-
-        Codex (chatgpt-codex-connector[bot]) AUTO-REVIEWS on PR open, so ROUND 1
-        needs no explicit trigger -- the orchestrator includes an ``@codex
-        review`` line in the PR BODY (see SKILL Step 6) and the auto-review fires
-        on its own. This method therefore posts NO comment; it only prints the
-        watch command. The ``--since`` floor was captured in ``open_pr()`` BEFORE
-        ``gh pr create`` (stashed in ``self.out["TS"]``): Codex auto-reviews
-        instantly on open, so a floor stamped AFTER create could exclude a fast
-        auto-review verdict and TIMEOUT the watch (Codex review, PR #118). Never
-        use the GitHub reviewer API (requested_reviewers) -- that fires Copilot
-        (credits exhausted, bd hrn.8/hrn.9). ROUND 2+ re-reviews ARE triggered by
-        an explicit ``@codex review`` comment, which the SKILL Step-7 loop posts
-        (not this script). The watch command carries ``--reviewer codex``
-        explicitly even though it is now the watcher default (self-documenting +
-        revert-safe).
-        """
-        if not self.args.review_worthy:
-            return
-        pr = self.out["PR"]
-        # The floor was stamped in open_pr() BEFORE `gh pr create` (see there).
-        ts = self.out["TS"]
-        # PRINT the watch command; the orchestrator launches it run_in_background.
-        watcher = self.WT / "scripts" / "pr_review_watcher.py"
-        # Round 1: --since is the PR-open time, NOT a trigger comment timestamp.
-        # The ack phase (--ack-timeout-min) only makes sense for round 2+ where
-        # --since is the @codex review comment's created_at that Codex reacts to
-        # with the eyes reaction. Round 1 omits --ack-timeout-min so a slow
-        # auto-review is never falsely NO-ACK'd.
-        self.out["WATCH_CMD"] = (
-            '"{}" "{}" {} --reviewer codex --since "{}"'.format(
-                self.PY, watcher, pr, ts
-            )
-        )
 
     def telemetry(self) -> None:
         """Write the telemetry row file. WARN-ONLY: never raises / changes exit code.
@@ -415,9 +362,10 @@ class Closeout:
             self.out["telemetry"] += " (committed+pushed)"
 
     def close_beads(self) -> None:
-        # --close-only exists solely to close, so it closes regardless of the
-        # --close-beads flag (a programmatic caller that set close_only but not
-        # close_beads should still close, not silently no-op -- fresh-eyes PR #59).
+        # A normal run always closes the bead(s) now (review already cleared before
+        # this script ran), and --close-only exists solely to close. Both paths
+        # append close_beads to the plan; the only time it must NOT close is a bare
+        # invocation that somehow reached here with neither -- guard defensively.
         if not self.args.close_beads and not self.args.close_only:
             return
         bd_safe = self.WT / "scripts" / "bd_safe.py"
@@ -434,10 +382,10 @@ class Closeout:
     def steps(self) -> list[tuple[str, object]]:
         """The ordered (label, callable) plan. Labels drive --dry-run output."""
         plan: list[tuple[str, object]] = []
-        # --close-only is the SECOND call of the two-call review-worthy pattern:
-        # the PR was already opened (and its telemetry row already written) by the
-        # first call, so here we ONLY close the bead(s). Skipping commit/rebase/
-        # push/PR/telemetry is what prevents a DUPLICATE ledger row (bd hrn.15).
+        # --close-only is a standalone recovery tool: the PR was already opened
+        # (and its telemetry row already written) elsewhere, so here we ONLY close
+        # the bead(s) -- no commit/rebase/push/PR/telemetry (which also avoids a
+        # duplicate ledger row).
         if self.args.close_only:
             plan.append((
                 '"{}" "{}/scripts/bd_safe.py" close {} --reason "..."'.format(
@@ -454,16 +402,13 @@ class Closeout:
                 self.wt, self.wt, name), self.rebase))
         plan.append(('git -C "{}" push -u origin {}'.format(self.wt, self.args.branch),
                      self.push))
+        # Both review layers already cleared locally (SKILL Steps 5.5 + 5.6), so
+        # opening the PR triggers no bot and needs no watch -- the PR opens and the
+        # bead(s) close in this same run.
         plan.append((
             'gh pr create --base {} --title "{}" --body-file {}'.format(
                 name, self.args.pr_title, self.args.pr_body_file),
             self.open_pr))
-        if self.args.review_worthy:
-            plan.append((
-                "(Codex auto-reviews on open; the PR body carries '{}' -- no "
-                "round-1 comment) capture the PR-open --since floor + PRINT the "
-                "run_in_background watch command".format(CODEX_REVIEW_TRIGGER),
-                self.request_review))
         plan.append((
             '"{}" "{}/scripts/harness_ledger.py" --bead {} --arm {} ... '
             "(warn-only)".format(self.PY, self.wt, ",".join(self.args.bead),
@@ -474,11 +419,10 @@ class Closeout:
             "docs/journal/telemetry/<row>.json && git push (warn-only; bd 3yf)".format(
                 self.wt),
             self.commit_push_telemetry))
-        if self.args.close_beads:
-            plan.append((
-                '"{}" "{}/scripts/bd_safe.py" close {} --reason "..."'.format(
-                    self.PY, self.wt, " ".join(self.args.bead)),
-                self.close_beads))
+        plan.append((
+            '"{}" "{}/scripts/bd_safe.py" close {} --reason "..."'.format(
+                self.PY, self.wt, " ".join(self.args.bead)),
+            self.close_beads))
         return plan
 
     def run(self) -> int:
@@ -492,8 +436,8 @@ class Closeout:
             if self.args.close_only:
                 print("mode = close-only (no PR / no telemetry)")
             else:
-                print("review = {}".format(
-                    "review-worthy" if self.args.review_worthy else "skip-review"))
+                print("mode = open-pr + close-beads (review already cleared "
+                      "pre-PR)")
             print("--- plan ---")
             for i, (label, _fn) in enumerate(plan, 1):
                 print("  {}. {}".format(i, label))
@@ -515,16 +459,15 @@ class Closeout:
         if self.args.close_only:
             self.out["RESULT"] = "CLOSED-ONLY"
         else:
-            self.out["RESULT"] = ("OPENED-REVIEW" if self.args.review_worthy
-                                  else "OPENED-NOREVIEW")
+            self.out["RESULT"] = "OPENED-CLOSED"
         self._emit()
         return EXIT_OK
 
     def _emit(self) -> None:
         print("=== closeout_finish RESULT ===")
-        for key in ("RESULT", "PR", "TS", "WATCH_CMD", "telemetry", "beads_closed"):
+        for key in ("RESULT", "PR", "telemetry", "beads_closed"):
             print("{}: {}".format(key, self.out[key])
-                  if key not in ("PR", "TS", "WATCH_CMD")
+                  if key != "PR"
                   else "{}={}".format(key, self.out[key]))
 
 
@@ -537,9 +480,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--bead", action="append", default=[], required=True,
                    help="Full bead id; repeat for a bundled PR.")
-    # --branch / --pr-title / --pr-body-file and the review gate are required for a
-    # normal open-the-PR run but NOT for --close-only (the second call closes a
-    # bead on an already-open PR); main() enforces them conditionally.
+    # --branch / --pr-title / --pr-body-file are required for a normal open-the-PR
+    # run but NOT for --close-only (which closes a bead on an already-open PR);
+    # main() enforces them conditionally.
     p.add_argument("--branch", default=None, help="The feature branch to push.")
     p.add_argument("--base", default="origin/dev",
                    help="Integration branch (default: origin/dev).")
@@ -547,14 +490,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--pr-body-file", default=None,
                    help="Path to the PR body (a file, to avoid shell-quoting a "
                         "multi-line body).")
-    gate = p.add_mutually_exclusive_group(required=False)
-    gate.add_argument("--review-worthy", action="store_true",
-                      help="This PR gets a Codex review (Codex auto-reviews on "
-                           "open; the @codex review nudge rides in the PR body). "
-                           "Captures the PR-open watch floor + prints the watch "
-                           "cmd; posts NO round-1 comment.")
-    gate.add_argument("--skip-review", action="store_true",
-                      help="Docs/beads/journal-only PR -- no Codex review.")
     p.add_argument("--commit-message", default=None,
                    help="Commit the ALREADY-STAGED closeout work (no git add).")
     p.add_argument("--arm", choices=["A", "B", "C", "BC"], default=None)
@@ -564,14 +499,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--deferred-nits", type=int, default=None)
     p.add_argument("--haiku-escalations", type=int, default=None)
     p.add_argument("--errors-shipped", type=int, default=None)
+    # A normal run always closes the bead(s) (review already cleared pre-PR), so
+    # main() sets this on. --close-beads is retained as an explicit no-op for
+    # backward compatibility with callers that still pass it.
     p.add_argument("--close-beads", action="store_true",
-                   help="Close the bead(s) now (only when review is already CLEAN; "
-                        "default OFF -- see the two-call pattern in the docstring).")
+                   help="Close the bead(s). Default ON for a normal run; retained "
+                        "as an explicit flag for backward compatibility.")
     p.add_argument("--close-only", action="store_true",
-                   help="SECOND call of the two-call review-worthy pattern: close "
-                        "the bead(s) ONLY -- no commit/rebase/push/PR/telemetry "
-                        "(the first call already wrote the telemetry row). Implies "
-                        "--close-beads. Avoids a duplicate ledger row (bd hrn.15).")
+                   help="Recovery tool: close the bead(s) ONLY -- no commit/rebase/"
+                        "push/PR/telemetry (for a PR opened elsewhere whose bead "
+                        "close failed or was deferred). Implies --close-beads.")
     p.add_argument("--dry-run", action="store_true",
                    help="Print the fully-resolved plan; perform ZERO MUTATING side "
                         "effects (read-only git root-resolution still runs).")
@@ -585,8 +522,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.close_only:
         args.close_beads = True
     else:
-        # Normal open-the-PR run: the PR flags + review gate are required here
-        # (they're argparse-optional only so --close-only can omit them).
+        # Normal open-the-PR run: the PR flags are required here (they're
+        # argparse-optional only so --close-only can omit them). Review already
+        # cleared pre-PR, so this run always closes the bead(s).
+        args.close_beads = True
         missing = [f for f, v in (("--branch", args.branch),
                                   ("--pr-title", args.pr_title),
                                   ("--pr-body-file", args.pr_body_file)) if not v]
@@ -594,11 +533,6 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(
                 "closeout_finish.py: missing required arg(s) for a PR-opening run: "
                 "{}\n".format(", ".join(missing)))
-            return EXIT_PRECONDITION
-        if not (args.review_worthy or args.skip_review):
-            sys.stderr.write(
-                "closeout_finish.py: exactly one of --review-worthy/--skip-review "
-                "is required for a PR-opening run.\n")
             return EXIT_PRECONDITION
 
     try:
