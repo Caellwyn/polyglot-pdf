@@ -314,6 +314,26 @@ def test_unconvertible_action_is_reported_not_silently_lost():
     assert unconv and unconv[0]["unconverted_actions"] == ["tgt"]
 
 
+def test_dangling_shows_or_makes_required_target_is_reported_not_dropped():
+    # bd polyglot-pdf-dghy: a shows/makes_required target id resolving to NO field
+    # (a typo'd/dangling ref) has nowhere to mirror into. Before, it was silently
+    # dropped from the audit trail with zero trace when the edge had no unconverted
+    # actions. Now it is REPORTED (dangling_controls_targets + the per-edge
+    # dangling_targets), and controls_fields is still removed.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "R[0]",
+                             "makes_required": ["ghost_field"]}]}
+    out, rep = mig.migrate(_v1([trigger]))  # no field named ghost_field
+    assert "controls_fields" not in out["fields"][0]
+    assert rep["dangling_controls_targets"] == ["ghost_field.require_if"]
+    dangling_edges = [u for u in rep["unmirrored_controls"] if u.get("dangling_targets")]
+    assert dangling_edges and dangling_edges[0]["dangling_targets"] == ["ghost_field.require_if"]
+    # It did NOT get miscounted as a clean drop.
+    assert rep["controls_fields_dropped"] == 0
+
+
 def test_duplicate_option_values_are_reported_not_collapsed():
     # fresh-eyes: two options sharing a v1 value are ambiguous to rewrite; the
     # collision is REPORTED and the value is left OUT of the rewrite map (so a

@@ -330,7 +330,7 @@ def migrate(schema: Dict[str, Any],
         "checkbox_groups": [], "standalone_unwrapped": [], "slug_maps": {},
         "operators_rewritten": 0, "behaviors_folded": 0,
         "controls_fields_dropped": 0, "controls_mirrored": 0,
-        "unmirrored_controls": [],
+        "unmirrored_controls": [], "dangling_controls_targets": [],
         "conditional_fields_dropped": 0, "options_from_dump": [],
         "needs_options": [], "duplicate_option_values": [],
     }
@@ -471,12 +471,19 @@ def migrate(schema: Dict[str, Any],
             # silently dropped require_if on 15 w7/w7-2 fields whose show_if
             # happened to match). Report any action key with no v2 equivalent.
             mirrored_here: List[str] = []
+            dangling_here: List[str] = []
             noop_here = 0
             for action, key in (("shows", "show_if"),
                                 ("makes_required", "require_if")):
                 for tid in control.get(action) or []:
                     target = fields_by_id.get(tid) if isinstance(tid, str) else None
                     if not isinstance(target, dict):
+                        # A shows/makes_required target id that resolves to no
+                        # field (a dangling/typo'd ref) has no place to mirror
+                        # into. REPORT it -- never drop it with no trace (bd
+                        # polyglot-pdf-dghy). No shipped kit has one today.
+                        if isinstance(tid, str):
+                            dangling_here.append(f"{tid}.{key}")
                         continue
                     if _target_has_condition(target, key, want):
                         noop_here += 1  # already mirrored in THIS bucket
@@ -488,17 +495,20 @@ def migrate(schema: Dict[str, Any],
                 for t in (control.get(k) or []) if isinstance(t, str)
             )
             report["controls_mirrored"] += len(mirrored_here)
-            if not mirrored_here and not unconverted and noop_here:
+            report["dangling_controls_targets"].extend(sorted(dangling_here))
+            if (not mirrored_here and not unconverted and not dangling_here
+                    and noop_here):
                 # Every action was a no-op (target already mirrored the edge).
                 report["controls_fields_dropped"] += 1
-            if unconverted:
-                # Actions with no target-side v2 equivalent -- the ONLY thing a
-                # human still needs to review (show/require are handled above).
+            if unconverted or dangling_here:
+                # An action a human must review: no v2 target-side equivalent
+                # (unconverted), or a dangling target that could not be mirrored.
                 report["unmirrored_controls"].append({
                     "trigger": trigger_id,
                     "operator": want.get("operator"),
                     "mirrored_into": sorted(mirrored_here),
                     "unconverted_actions": unconverted,
+                    "dangling_targets": sorted(dangling_here),
                 })
         # v2 carries no trigger-side logic: controls_fields is always removed.
         f.pop("controls_fields", None)
@@ -653,6 +663,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         for u in unconverted[:10]:
             print(f"    trigger={u['trigger']} -> unconverted "
                   f"{u['unconverted_actions']}", file=sys.stderr)
+    # A DANGLING target (a shows/makes_required id resolving to no field) could
+    # not be mirrored anywhere -- surface it (bd polyglot-pdf-dghy).
+    dangling = report["dangling_controls_targets"]
+    if dangling:
+        print(f"  WARNING: {len(dangling)} controls_fields shows/makes_required "
+              f"target(s) reference a non-existent field (dropped edge, needs "
+              f"human review): {dangling[:10]}", file=sys.stderr)
     return 0
 
 
