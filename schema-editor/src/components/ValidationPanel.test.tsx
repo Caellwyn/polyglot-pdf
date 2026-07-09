@@ -123,8 +123,9 @@ describe('ValidationPanel load-time lint display', () => {
     await waitFor(() =>
       expect(screen.getByText(/Could not check for issues/)).toBeInTheDocument(),
     );
-    // The completion stats (client-side) still render.
-    expect(screen.getByText('Total Fields')).toBeInTheDocument();
+    // The completion stats (client-side) still render -- as the slim one-line
+    // strip (bd tynm replaced the big stat cards).
+    expect(screen.getByText(/total/)).toBeInTheDocument();
   });
 
   it('reports a rotated access code to the host so it can re-prompt', async () => {

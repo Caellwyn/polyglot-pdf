@@ -51,7 +51,7 @@ afterEach(() => vi.clearAllMocks());
 
 describe('RemoteCatalogue', () => {
   it('lists every kit from the API, drafts included', async () => {
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
     expect(screen.getByText('Done Form')).toBeInTheDocument();
     expect(screen.getByText('Fresh Form')).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe('RemoteCatalogue', () => {
 
   it('opens a schema-bearing kit and disables a schemaless one', async () => {
     const onOpen = vi.fn();
-    render(<RemoteCatalogue onOpenKit={onOpen} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={onOpen} selectedKitId={null} role="editor" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Draft Form'));
@@ -75,7 +75,7 @@ describe('RemoteCatalogue', () => {
   });
 
   it('computes review progress from each kit schema (shared definition)', async () => {
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     // The one-field schema is incomplete -> 0% bars on both schema kits.
     await waitFor(() => expect(screen.getAllByText('0%').length).toBe(2));
     expect(vi.mocked(loadRemoteSchema)).toHaveBeenCalledWith('done-kit');
@@ -85,7 +85,7 @@ describe('RemoteCatalogue', () => {
   });
 
   it('marks a draft complete via the server and refreshes', async () => {
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Mark complete'));
@@ -99,7 +99,7 @@ describe('RemoteCatalogue', () => {
     vi.mocked(setRemoteStatus).mockRejectedValue(
       new Error('Schema does not validate against the form contract'),
     );
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Mark complete'));
@@ -112,6 +112,7 @@ describe('RemoteCatalogue', () => {
     const onAuthError = vi.fn();
     render(
       <RemoteCatalogue
+        defaultExpanded
         onOpenKit={() => {}} selectedKitId={null} role="editor"
         onAuthError={onAuthError}
       />,
@@ -128,6 +129,7 @@ describe('RemoteCatalogue', () => {
     const onAuthError = vi.fn();
     render(
       <RemoteCatalogue
+        defaultExpanded
         onOpenKit={() => {}} selectedKitId={null} role="editor"
         onAuthError={onAuthError}
       />,
@@ -141,6 +143,7 @@ describe('RemoteCatalogue', () => {
     const onAuthError = vi.fn();
     render(
       <RemoteCatalogue
+        defaultExpanded
         onOpenKit={() => {}} selectedKitId={null} role="editor"
         onAuthError={onAuthError}
       />,
@@ -152,7 +155,7 @@ describe('RemoteCatalogue', () => {
 
   it('shows the empty-workspace message when the store has no kits', async () => {
     vi.mocked(listRemoteKits).mockResolvedValue([]);
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     await waitFor(() =>
       expect(screen.getByText(/workspace is empty/)).toBeInTheDocument());
   });
@@ -162,6 +165,7 @@ describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
   it('remembers a SAVED kit progress after it stops being the live one', async () => {
     const { rerender } = render(
       <RemoteCatalogue
+        defaultExpanded
         onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
         liveProgress={{ kitId: 'draft-kit', saved: true, percent: 93, complete: 93, total: 100 }}
       />,
@@ -170,7 +174,7 @@ describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
     // The kit closes (liveProgress gone) -- the saved value must survive, not
     // revert to the mount-time scan (0%).
     rerender(
-      <RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />,
+      <RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />,
     );
     expect(screen.getByText('93%')).toBeInTheDocument();
   });
@@ -178,13 +182,14 @@ describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
   it('never remembers UNSAVED live progress', async () => {
     const { rerender } = render(
       <RemoteCatalogue
+        defaultExpanded
         onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
         liveProgress={{ kitId: 'draft-kit', saved: false, percent: 93, complete: 93, total: 100 }}
       />,
     );
     await waitFor(() => expect(screen.getByText('93%')).toBeInTheDocument());
     rerender(
-      <RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />,
+      <RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />,
     );
     // Discarded edit -> back to the scan value, no phantom 93%.
     await waitFor(() => expect(screen.queryByText('93%')).not.toBeInTheDocument());
@@ -193,27 +198,34 @@ describe('RemoteCatalogue Codex r1 fixes (PR #280)', () => {
   it('blocks Mark complete while the open kit has unsaved edits', async () => {
     render(
       <RemoteCatalogue
+        defaultExpanded
         onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
         liveProgress={{ kitId: 'draft-kit', saved: false, percent: 50, complete: 1, total: 2 }}
       />,
     );
-    await waitFor(() => expect(screen.getByText('Mark complete')).toBeInTheDocument());
-    const btn = screen.getByText('Mark complete');
-    expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute('title', expect.stringContaining('Save your changes first'));
-    fireEvent.click(btn);
+    // The selected kit's Mark-complete renders in BOTH the compact strip and
+    // its card (bd tynm) -- the unsaved-edits guard must hold on every copy.
+    await waitFor(() => expect(screen.getAllByText('Mark complete').length).toBeGreaterThan(0));
+    for (const btn of screen.getAllByText('Mark complete')) {
+      expect(btn).toBeDisabled();
+      expect(btn).toHaveAttribute('title', expect.stringContaining('Save your changes first'));
+      fireEvent.click(btn);
+    }
     expect(setRemoteStatus).not.toHaveBeenCalled();
   });
 
   it('allows Mark complete once the open kit is saved', async () => {
     render(
       <RemoteCatalogue
+        defaultExpanded
         onOpenKit={() => {}} selectedKitId="draft-kit" role="editor"
         liveProgress={{ kitId: 'draft-kit', saved: true, percent: 100, complete: 2, total: 2 }}
       />,
     );
-    await waitFor(() => expect(screen.getByText('Mark complete')).toBeInTheDocument());
-    expect(screen.getByText('Mark complete')).not.toBeDisabled();
+    await waitFor(() => expect(screen.getAllByText('Mark complete').length).toBeGreaterThan(0));
+    for (const btn of screen.getAllByText('Mark complete')) {
+      expect(btn).not.toBeDisabled();
+    }
   });
 });
 
@@ -223,7 +235,7 @@ describe('RemoteCatalogue Codex r2 fixes (PR #280)', () => {
     vi.mocked(loadRemoteSchema).mockResolvedValue(
       { fields: ['not', 'objects'], sections: [] } as never,
     );
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     await waitFor(() =>
       expect(screen.getAllByText(/unreadable/).length).toBeGreaterThan(0));
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
@@ -232,7 +244,7 @@ describe('RemoteCatalogue Codex r2 fixes (PR #280)', () => {
 
 describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
   it('editor role sees neither the upload nor the extraction controls', async () => {
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
     await waitFor(() => expect(screen.getByText('Fresh Form')).toBeInTheDocument());
     expect(screen.queryByText('Add a form (PDF)')).not.toBeInTheDocument();
     expect(screen.queryByText('Run extraction')).not.toBeInTheDocument();
@@ -243,7 +255,7 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
       id: 'new-kit', label: 'New Kit', status: 'draft', hasSchema: false,
       hasPdf: true, schemaFile: 'schema.json', pdfFile: 'form.pdf',
     });
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Add a form (PDF)')).toBeInTheDocument());
 
     const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'Form W-7.pdf',
@@ -257,7 +269,7 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
   });
 
   it('author uploading a non-PDF is refused client-side', async () => {
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Add a form (PDF)')).toBeInTheDocument());
     const bad = new File([new Uint8Array([1])], 'page.html', { type: 'text/html' });
     fireEvent.change(screen.getByTestId('upload-pdf-input'), { target: { files: [bad] } });
@@ -270,7 +282,7 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
     vi.mocked(extractRemoteKit).mockResolvedValue({
       ok: true, detail: '[OK] wrote schema.json -- 42 fields', fieldCount: 42,
     });
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Run extraction'));
@@ -285,7 +297,7 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
       ok: true, detail: '[ISSUES] wrote schema.json -- 42 fields', fieldCount: 42,
       storedWithIssues: true, errorCount: 3, warningCount: 1,
     });
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('Run extraction'));
@@ -298,7 +310,7 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
     vi.mocked(extractRemoteKit).mockRejectedValue(
       new Error('Extraction failed (exit 1): model refused'),
     );
-    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() =>
@@ -314,7 +326,7 @@ describe('RemoteCatalogue extraction progress state (fresh-eyes 92qe.3)', () => 
       () => new Promise((res) => { resolveExtract = res; }),
     );
     try {
-      render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="author" />);
+      render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
       await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
 
       fireEvent.click(screen.getByText('Run extraction'));
@@ -332,5 +344,63 @@ describe('RemoteCatalogue extraction progress state (fresh-eyes 92qe.3)', () => 
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('compact selector strip (bd tynm)', () => {
+  it('collapses the card grid by default; the dropdown lists every kit', async () => {
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+    // No card buttons in the collapsed default -- just the dropdown options.
+    expect(screen.queryByTitle('Open Draft Form for editing')).not.toBeInTheDocument();
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const labels = Array.from(select.options).map((o) => o.text);
+    expect(labels.some((t) => t.includes('Draft Form'))).toBe(true);
+    expect(labels.some((t) => t.includes('Fresh Form') && t.includes('no schema yet'))).toBe(true);
+  });
+
+  it('selecting a schema-bearing kit opens it; a schemaless kit only selects', async () => {
+    const onOpen = vi.fn();
+    render(<RemoteCatalogue onOpenKit={onOpen} selectedKitId={null} role="author" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+    const select = screen.getByLabelText('Select a form');
+
+    fireEvent.change(select, { target: { value: 'draft-kit' } });
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'draft-kit' }));
+
+    onOpen.mockClear();
+    fireEvent.change(select, { target: { value: 'fresh-kit' } });
+    expect(onOpen).not.toHaveBeenCalled();
+    // ...but the schemaless kit's Run extraction is reachable from the strip.
+    expect(screen.getByText('Run extraction')).toBeInTheDocument();
+  });
+
+  it('never offers Mark complete for a schema kit whose open was not confirmed', async () => {
+    // The open is async and can FAIL: selecting a kit sets the strip's local
+    // selection optimistically, but status-changing actions must only render
+    // once the parent confirms the open (selectedKitId). Here the parent never
+    // opens it (onOpenKit no-ops), so no Mark complete may appear (fresh-eyes,
+    // bd tynm: a failed open must not leave the strip offering to complete an
+    // unreviewed kit).
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Select a form'), {
+      target: { value: 'draft-kit' },
+    });
+    expect(screen.queryByText('Mark complete')).not.toBeInTheDocument();
+    expect(screen.queryByText('Revert to draft')).not.toBeInTheDocument();
+  });
+
+  it('the toggle expands the full card grid and collapses it again', async () => {
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByText('Show form cards')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Show form cards'));
+    expect(screen.getByTitle('Open Draft Form for editing')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Hide form cards'));
+    expect(screen.queryByTitle('Open Draft Form for editing')).not.toBeInTheDocument();
   });
 });
