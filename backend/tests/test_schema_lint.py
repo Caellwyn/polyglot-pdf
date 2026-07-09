@@ -333,6 +333,101 @@ def test_plain_string_options_get_value_hygiene_checks():
     assert lint_schema(_schema(fields)) == []
 
 
+def test_readonly_conditional_no_unlock_warns():
+    # bd 3fz7: a read_only field shown by a show_if but with no unlock_method is
+    # permanently non-fillable when shown. WARNING (guardrail-first inventory).
+    fields = [
+        _select("trig"),
+        {"id": "dep", "type": "checkbox", "read_only": True,
+         "show_if": {"field": "trig", "operator": "equals", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    rel = [f for f in findings if f.rule == "readonly-conditional-no-unlock"]
+    assert rel and rel[0].severity == SEVERITY_WARNING
+    assert "id=dep" in rel[0].path
+
+
+def test_readonly_conditional_WITH_unlock_is_clean():
+    # The same field WITH conditional_behavior.unlock_method is fine (it unlocks
+    # when shown -- i-90's 20 real read-only-text fields work this way).
+    fields = [
+        _select("trig"),
+        {"id": "dep", "type": "checkbox", "read_only": True,
+         "conditional_behavior": {"unlock_method": "flip_readonly_bit"},
+         "show_if": {"field": "trig", "operator": "equals", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    assert "readonly-conditional-no-unlock" not in _rules(findings)
+
+
+def test_readonly_but_NOT_conditional_does_not_warn():
+    # A read_only field with NO show_if/require_if (e.g. a signature) is read-only
+    # by nature, not a stuck-conditional -- must NOT trip the rule.
+    fields = [
+        {"id": "sig", "type": "signature", "read_only": True},
+    ]
+    findings = lint_schema(_schema(fields))
+    assert "readonly-conditional-no-unlock" not in _rules(findings)
+
+
+def test_readonly_conditional_with_NON_flip_unlock_still_warns():
+    # bd rsy3: only unlock_method="flip_readonly_bit" actually lifts read_only in
+    # FieldRenderer's shouldUnlock. A different value (e.g. set_property) leaves the
+    # field permanently non-fillable when shown, so it MUST still warn.
+    fields = [
+        _select("trig"),
+        {"id": "dep", "type": "checkbox", "read_only": True,
+         "conditional_behavior": {"unlock_method": "set_property"},
+         "show_if": {"field": "trig", "operator": "equals", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    rel = [f for f in findings if f.rule == "readonly-conditional-no-unlock"]
+    assert rel and rel[0].severity == SEVERITY_WARNING
+
+
+def test_readonly_conditional_unlock_via_LEGACY_conditional_logic_is_clean():
+    # The legacy conditional_logic alias (still emitted by generated kits, e.g.
+    # i-90) also lifts read_only in FieldRenderer, so a flip_readonly_bit there
+    # must ALSO suppress the warning.
+    fields = [
+        _select("trig"),
+        {"id": "dep", "type": "checkbox", "read_only": True,
+         "conditional_logic": {"unlock_method": "flip_readonly_bit"},
+         "show_if": {"field": "trig", "operator": "equals", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    assert "readonly-conditional-no-unlock" not in _rules(findings)
+
+
+def test_readonly_unlock_check_never_throws_on_malformed_conditional_keys():
+    # lint_schema must never raise on schema shape (POST /lint contract). A truthy
+    # NON-dict conditional_behavior/conditional_logic must not crash has_unlock's
+    # .get() -- it is treated as "no unlock" (so the field still warns).
+    fields = [
+        _select("trig"),
+        {"id": "dep", "type": "checkbox", "read_only": True,
+         "conditional_behavior": "garbage", "conditional_logic": ["also", "bad"],
+         "show_if": {"field": "trig", "operator": "equals", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))  # must not raise
+    rel = [f for f in findings if f.rule == "readonly-conditional-no-unlock"]
+    assert rel and rel[0].severity == SEVERITY_WARNING
+
+
+def test_readonly_conditional_via_require_if_only_warns():
+    # The rule keys on show_if OR require_if -- a field made REQUIRED (not shown)
+    # by a condition, read_only, no unlock, is equally stuck. Cover the require_if
+    # branch (bd rsy3: the show_if branch was the only one tested).
+    fields = [
+        _select("trig"),
+        {"id": "dep", "type": "checkbox", "read_only": True,
+         "require_if": {"field": "trig", "operator": "equals", "value": "alpha"}},
+    ]
+    findings = lint_schema(_schema(fields))
+    rel = [f for f in findings if f.rule == "readonly-conditional-no-unlock"]
+    assert rel and rel[0].severity == SEVERITY_WARNING
+
+
 def test_stale_controls_fields_on_a_v2_kit_is_a_lint_error():
     # controls_fields was DELETED at the P6.2 flip (bd h76m.16); the model IGNORES
     # the extra key, so a stale/mis-migrated V2 kit still carrying it would publish
@@ -433,10 +528,15 @@ def _load_kit_schema(kit):
 
 
 @pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2"])
-def test_shipped_kits_lint_clean(kit):
+def test_shipped_kits_lint_error_free(kit):
+    # The promotion gate is zero ERRORs (WARNINGs never block). Post the
+    # guardrail-first inventory (bd h76m.16 follow-up), the shipped kits DO carry
+    # known WARNINGs (i-90's readonly-conditional-no-unlock + dump-widget-unclaimed,
+    # bd 3fz7/0nxh) -- those are inventoried by test_kit_unfillable_field_inventory
+    # below, not asserted away here. This test pins only that no ERROR ships.
     findings = lint_schema(_load_kit_schema(kit))
-    assert findings == [], f"{kit}: {summarize(findings)}: " + "; ".join(
-        f"{f.rule} {f.path}" for f in findings[:5]
+    assert not has_errors(findings), f"{kit}: " + "; ".join(
+        f"{f.rule} {f.path}" for f in findings if f.severity == SEVERITY_ERROR
     )
 
 
@@ -454,6 +554,43 @@ def _dump_kit(kit):
     except ImportError:
         pytest.skip("acroform_dump (scripts/bakeoff) not importable")
     return acroform_dump.dump_pdf(str(pdf))
+
+
+# The "unfillable field" inventory (bd h76m.16 follow-up, guardrail-first): the
+# CURRENT, KNOWN count per kit of the two warning classes that mean "a field/widget
+# exists but can't be filled through the app":
+#   - dump-widget-unclaimed: a real fillable PDF widget with NO schema field
+#     (extraction dropped it) -- i-90's 4 were FIXED by bd 0nxh (now 0); f1040
+#     still has 12.
+#   - readonly-conditional-no-unlock: a read_only field shown/required by a
+#     condition but with no unlock_method -- bd 3fz7 (i-90: 3, still open).
+# These are WARNINGs (they do not block promotion). This baseline pins the current
+# state so a NEW regression (a fresh dropped widget / stuck field) fails CI, while
+# fixing a form's data (which LOWERS a count) also fails -- prompting a deliberate
+# baseline update as the inventory shrinks toward zero.
+_UNFILLABLE_BASELINE = {
+    "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 3},
+    "w7": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
+    "w7-2": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
+    "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
+}
+
+
+@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+def test_kit_unfillable_field_inventory(kit):
+    # Lint each committed kit WITH its AcroForm dump and pin the count of each
+    # "unfillable field" warning class against the known baseline. A mismatch is
+    # intentional-failure-to-force-review: either a regression (count went UP) or a
+    # form fix (count went DOWN, update the baseline). Fixing the underlying data
+    # is tracked per-kit (bd 0nxh, 3fz7); this test is the systemic guardrail.
+    findings = lint_schema(_load_kit_schema(kit), _dump_kit(kit))
+    counts = {rule: sum(1 for f in findings if f.rule == rule)
+              for rule in ("dump-widget-unclaimed", "readonly-conditional-no-unlock")}
+    assert counts == _UNFILLABLE_BASELINE[kit], (
+        f"{kit}: unfillable-field inventory changed. Got {counts}, baseline "
+        f"{_UNFILLABLE_BASELINE[kit]}. If a form was fixed, lower the baseline; "
+        f"if this is a new regression, a real widget/field is now unfillable."
+    )
 
 
 def test_i90_dump_unclaimed_excludes_machine_barcodes():

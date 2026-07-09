@@ -43,6 +43,14 @@ Rules (stable ids; one finding per violation site):
 - dump-widget-multiclaim ERROR  (dump only) one PDF widget claimed by more
                                 than one field, or by more than one option of
                                 the same field
+- dump-widget-unclaimed WARNING (dump only) a fillable PDF widget that NO field
+                                maps to (extraction dropped it -- unfillable
+                                through the app); buttons + barcodes excluded
+- readonly-conditional-no-unlock WARNING a read_only field shown/required by a
+                                condition but with no unlock_method -- it is
+                                permanently non-fillable when shown
+- legacy-trigger-side-logic ERROR (v2 only) a schema still carries the removed
+                                controls_fields / conditional_fields key
 
 ASCII only.
 """
@@ -617,6 +625,38 @@ def lint_schema(
         ):
             _check_atom(atom_path, atom, None, out, fields_by_id,
                         resolve_trigger=True, is_v2=is_v2)
+
+        # Read-only + conditional but NO unlock mechanism = a field that becomes
+        # VISIBLE under its show_if/require_if but is permanently NON-fillable,
+        # because FieldRenderer only lifts read_only when a conditional_behavior /
+        # conditional_logic unlock_method is present (bd polyglot-pdf-3fz7 -- i-90's
+        # 3 Part-4 accommodation checkboxes). A WARNING (guardrail-first inventory,
+        # bd polyglot-pdf-h76m.16 follow-up): a genuinely-fixed-read-only field
+        # (a computed/display value shown but never filled) is rare, so the human
+        # reviews it. Note: a signature is read-only-by-nature and NOT conditional,
+        # so it does not trip this.
+        # Only flip_readonly_bit actually lifts read_only in FieldRenderer's
+        # shouldUnlock (it string-compares that exact value on BOTH the canonical
+        # conditional_behavior key and the legacy conditional_logic alias). Any
+        # other unlock_method (e.g. set_property) lints as still-locked, matching
+        # runtime -- a non-flip value would leave the field permanently
+        # non-fillable when shown (bd polyglot-pdf-rsy3).
+        # isinstance-guard (not `or {}`): a truthy non-dict would crash .get(),
+        # breaking lint's never-throws contract on malformed editor input.
+        cb = f.get("conditional_behavior")
+        cb = cb if isinstance(cb, dict) else {}
+        cl = f.get("conditional_logic")
+        cl = cl if isinstance(cl, dict) else {}
+        has_unlock = "flip_readonly_bit" in (
+            cb.get("unlock_method"), cl.get("unlock_method"))
+        if (f.get("read_only") and not has_unlock
+                and (f.get("show_if") or f.get("require_if"))):
+            out.append(LintFinding(
+                SEVERITY_WARNING, "readonly-conditional-no-unlock", field_path,
+                "field is read_only and conditionally shown/required but has no "
+                "unlock_method -- it will be permanently non-fillable when shown "
+                "(add conditional_behavior.unlock_method=flip_readonly_bit)",
+            ))
 
         # controls_fields / conditional_fields were DELETED at the P6.2 flip (bd
         # h76m.16). The model IGNORES the extra key (extra="ignore"), so a stale
