@@ -1793,6 +1793,15 @@ class LiveAIGemini(ILiveAI):
         self._session_text_output_tokens = 0
         self._session_audio_output_tokens = 0
         self._cost_summary_emitted = False
+        # Belt-and-suspenders: force the readiness flag False at the START of a
+        # session loop (bd polyglot-pdf-3to5). It is already set False by the
+        # teardown paths (finalize / begin_graceful_shutdown) before a restart, and a
+        # spontaneous drop tears down the whole WS -> a fresh adapter -- so it never
+        # leaks True today. Resetting it here anyway keeps the pre-ready audio gate
+        # (stream_audio) correct even if a future caller starts a session loop without
+        # routing through those teardown paths first; it is flipped True below only at
+        # the handshake, once the sender loop is live.
+        self._session_ready = False
         # Reset timing state for this session (bd polyglot-pdf-cwsy).
         self._timing_last_activity_end = None
         self._timing_first_inbound_audio = None
