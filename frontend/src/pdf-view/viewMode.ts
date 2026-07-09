@@ -52,3 +52,25 @@ export function initialViewMode(
   if (viewportWidth <= MOBILE_INITIAL_BREAKPOINT) return 'simplified';
   return stored ?? 'simplified';
 }
+
+/**
+ * The view mode after a LIVE resize has classified the viewport as MOBILE (bd
+ * polyglot-pdf-ipin). The initial mode is chosen once at mount by
+ * initialViewMode(); this handles a same-tab resize (or device rotation) that
+ * crosses into mobile mid-session. To keep the mobile-defaults-Simplified
+ * intent (epic rubric #5) true for a live resize -- not only a fresh mount --
+ * being at mobile forces Preview back to Simplified.
+ *
+ * The caller decides "are we mobile now?" and only calls this when the answer
+ * is yes -- deliberately, so the reset shares the SAME mobile classification
+ * (dead-zone hysteresis) that drives which overlay renders, and the two can
+ * never disagree (a desktop overlay never pairs with a mobile-defaulted form).
+ *
+ * It is one-directional on purpose: entering mobile drops Preview, but leaving
+ * mobile does NOT auto-restore Preview (the user re-picks it). A desktop-width
+ * resize never calls this at all, so a deliberate desktop Simplified/Preview
+ * choice is never overridden.
+ */
+export function viewModeAfterResize(current: ViewMode): ViewMode {
+  return current === 'preview' ? 'simplified' : current;
+}

@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-07. See [../journal/entries/2026-07-07-bd-f58l-e2e-verify-pdf-view-doc.md](../journal/entries/2026-07-07-bd-f58l-e2e-verify-pdf-view-doc.md) for closeout details.*
+*Last updated: 2026-07-08. See [../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md](../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md) for the live-resize / single-option-checkbox / overlay-invariant polish; [../journal/entries/2026-07-07-bd-f58l-e2e-verify-pdf-view-doc.md](../journal/entries/2026-07-07-bd-f58l-e2e-verify-pdf-view-doc.md) for the prior E2E verification.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -32,9 +32,20 @@ deliberately OUTSIDE `SchemaFormState` (purely presentational; never in the WS
 handshake). `initialViewMode(flagOn, stored, viewportWidth)` decides fresh
 mounts: Simplified by default everywhere; a stored `'preview'` choice is
 honored only flag-on at desktop width (mobile-width mounts always start
-Simplified, epic rubric #5). SchemaForm renders the toggle and keeps the voice
-overlays + ConnectionManager OUTSIDE the switched container, so toggling never
-remounts them or disturbs the Gemini session.
+Simplified, epic rubric #5). `viewModeAfterResize(current)`
+extends that intent to a LIVE same-tab resize (or device rotation): once the
+resize classifies the viewport as MOBILE, it forces Preview back to Simplified
+mid-session. It is one-directional -- leaving mobile never auto-restores
+Preview, and a desktop-width resize never calls it -- so a deliberate desktop
+choice is never overridden (bd `polyglot-pdf-ipin`). SchemaForm calls it from
+the same debounced resize effect that classifies mobile/desktop, keyed on that
+SAME mobile decision (the dead-zone hysteresis: `isMobile` flips at `<=700`, not
+at 768) rather than an independent width threshold -- so the view mode can never
+disagree with which overlay (mobile vs desktop) is showing (a desktop-styled
+overlay never pairs with a mobile-defaulted Simplified form). SchemaForm renders
+the toggle while keeping the voice overlays + ConnectionManager OUTSIDE the
+switched container, so toggling never remounts them or disturbs the Gemini
+session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
 
 ## The live surface (PreviewPane -> PDFViewer -> FieldOverlay)
 
@@ -50,10 +61,16 @@ remounts them or disturbs the Gemini session.
 - `FieldOverlay`: one absolutely-positioned div per positioned field, colored
   by FILL state -- empty (gray outline), filled (blue), confirmed (green),
   current (orange) -- with the value painted inside (`valuePainting.ts`):
-  fitted text, an X for boolean checkboxes, option values resolved to LABELS
+  fitted text, an X for single-box checkboxes, option values resolved to LABELS
   for radio/select/checkbox_group (labels paint at the field-level rect until
-  per-option rects exist -- a phase-2 epic item). Read-only; click-to-edit is
-  phase 2.
+  per-option rects exist -- a phase-2 epic item). A single-box checkbox paints
+  an X whether it is a plain boolean OR a legacy single-OPTION checkbox (the
+  widget stores the checked state as a 1-element array, which would otherwise
+  paint the option's label overflowing an ~8x8pt box); only a TRUE multi-option
+  group (2+ options / `checkbox_group`) paints joined labels (bd
+  `polyglot-pdf-jq17`). Schema-v2 forbids a `checkbox` with options outright, so
+  the single-option path is defensive for hand-authored / pre-v2 kits.
+  Read-only; click-to-edit is phase 2.
 - `fillStateFor` (PDFViewer): `[]` and `false` count as empty (a cleared
   checkbox_group must not paint as filled); `current` wins over all.
 - Live updates ride the existing `schemaFormStateChange` channel one level up:

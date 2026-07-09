@@ -30,10 +30,18 @@ export function paintedValueFor(field: FormField, raw: unknown): PaintedValue {
 
   switch (field.type) {
     case 'checkbox': {
-      // Single boolean checkbox: an X in the box. A checkbox with options
-      // behaves like checkbox_group below.
-      if (!field.options || field.options.length === 0) {
-        return raw === true || raw === 'true' ? { kind: 'check' } : { kind: 'none' };
+      // A single-box checkbox paints an X, never a label. This covers both the
+      // plain boolean checkbox (no options) and a legacy single-OPTION checkbox
+      // -- the widget (CheckboxField) renders any options-bearing checkbox as a
+      // multi-box group and stores the checked state as a 1-element array like
+      // ['c1_2[0]'], so a 1-element rect would otherwise paint the option's
+      // label text overflowing an ~8x8pt box instead of a check (bd
+      // polyglot-pdf-jq17). Schema-v2 forbids a checkbox with options outright
+      // (a real group is type=checkbox_group, handled below), so this is a
+      // defensive path for hand-authored / pre-v2 shapes; a TRUE multi-option
+      // group still paints joined labels.
+      if (!field.options || field.options.length <= 1) {
+        return isCheckboxChecked(raw) ? { kind: 'check' } : { kind: 'none' };
       }
       return paintSelectedLabels(field, raw);
     }
@@ -50,6 +58,18 @@ export function paintedValueFor(field: FormField, raw: unknown): PaintedValue {
       return text === '' ? { kind: 'none' } : { kind: 'text', text };
     }
   }
+}
+
+/**
+ * Is a single-box checkbox checked? Accepts the plain boolean form (true /
+ * 'true') AND the array form CheckboxField stores for an options-bearing
+ * checkbox: a non-empty array (e.g. ['c1_2[0]']) means checked, [] means
+ * unchecked. Any other value is treated as unchecked.
+ */
+function isCheckboxChecked(raw: unknown): boolean {
+  if (raw === true || raw === 'true') return true;
+  if (Array.isArray(raw)) return raw.length > 0;
+  return false;
 }
 
 function paintSelectedLabels(field: FormField, raw: unknown): PaintedValue {

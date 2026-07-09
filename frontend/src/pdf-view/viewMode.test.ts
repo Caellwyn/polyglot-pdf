@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getStoredViewMode, storeViewMode, initialViewMode, MOBILE_INITIAL_BREAKPOINT } from './viewMode';
+import { getStoredViewMode, storeViewMode, initialViewMode, viewModeAfterResize, MOBILE_INITIAL_BREAKPOINT } from './viewMode';
 
 describe('viewMode storage', () => {
   beforeEach(() => {
@@ -43,5 +43,18 @@ describe('initialViewMode', () => {
 
   it('flag off is always simplified regardless of stored mode', () => {
     expect(initialViewMode(false, 'preview', DESKTOP)).toBe('simplified');
+  });
+});
+
+describe('viewModeAfterResize (bd polyglot-pdf-ipin)', () => {
+  // The caller only invokes this once it has classified the viewport as mobile
+  // (shared dead-zone decision), so the helper takes no width -- it just
+  // collapses Preview to Simplified and leaves Simplified alone.
+  it('drops Preview to Simplified (mobile forces the mobile default)', () => {
+    expect(viewModeAfterResize('preview')).toBe('simplified');
+  });
+
+  it('never auto-restores Preview: Simplified stays Simplified', () => {
+    expect(viewModeAfterResize('simplified')).toBe('simplified');
   });
 });

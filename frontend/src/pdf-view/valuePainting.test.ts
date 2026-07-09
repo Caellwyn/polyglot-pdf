@@ -37,6 +37,31 @@ describe('paintedValueFor', () => {
     expect(paintedValueFor(f, 'mystery')).toEqual({ kind: 'text', text: 'mystery' });
   });
 
+  it('paints an X (never a label) for a single-OPTION checkbox (bd polyglot-pdf-jq17)', () => {
+    // The combat-zone box on f1040 is the concrete repro: a single-box
+    // checkbox. CheckboxField renders any options-bearing checkbox as a
+    // multi-box group and stores the checked state as a 1-element array
+    // (['c1_2[0]']), not a boolean. Before the fix, valuePainting routed a
+    // 1-element options checkbox to paintSelectedLabels and painted the option
+    // LABEL text overflowing the ~8x8pt box. It must paint a check instead.
+    //
+    // (Schema-v2 now forbids a checkbox with options -- a real group is
+    // type=checkbox_group -- so this shape only arises from hand-authored /
+    // pre-v2 kits; the fix keeps valuePainting correct for it defensively.)
+    const f: FormField = {
+      ...base,
+      type: 'checkbox',
+      options: [{ value: 'c1_2[0]', label: 'Combat zone' }],
+    };
+    // Checked: CheckboxField's stored shape is a 1-element array.
+    expect(paintedValueFor(f, ['c1_2[0]'])).toEqual({ kind: 'check' });
+    // Unchecked: an empty array (a cleared group) paints nothing.
+    expect(paintedValueFor(f, [])).toEqual({ kind: 'none' });
+    // A bare boolean on the same field still reads as a check / none.
+    expect(paintedValueFor(f, true)).toEqual({ kind: 'check' });
+    expect(paintedValueFor(f, false)).toEqual({ kind: 'none' });
+  });
+
   it('joins checkbox_group selections as labels', () => {
     const f: FormField = {
       ...base,

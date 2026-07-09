@@ -27,7 +27,7 @@ import { createConnectionManager, type ConnectionManager } from "../../shared/co
 import { MIC_AUDIO_CONSTRAINTS } from "../../shared/audioConstraints";
 import { isTestHarnessEnabled } from "../../shared/config";
 import { isPreviewUiEnabled } from "../../pdf-view/featureFlag";
-import { getStoredViewMode, storeViewMode, initialViewMode, type ViewMode } from "../../pdf-view/viewMode";
+import { getStoredViewMode, storeViewMode, initialViewMode, viewModeAfterResize, type ViewMode } from "../../pdf-view/viewMode";
 
 // Lazy chunk boundary: pdfjs-dist and everything else in pdf-view/ load only
 // when these components actually render -- which requires the preview flag ON
@@ -92,8 +92,12 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     }
   }, [currentFieldId, state.fieldValues]);
 
-  // Mobile detection
+  // Mobile detection. The ref mirrors the state so the mount-once resize effect
+  // can read the CURRENT classification (dead-zone hysteresis needs the prior
+  // value) without a stale closure, and drive the view-mode reset off the SAME
+  // decision (bd polyglot-pdf-ipin).
   const [isMobile, setIsMobile] = useState(false);
+  const isMobileRef = useRef(false);
 
   // Voice overlay state
   const [connectionManager, setConnectionManager] = useState<ConnectionManager | null>(null);
@@ -135,21 +139,45 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
 
     const evaluate = (initial = false) => {
       const w = window.innerWidth;
-      setIsMobile(prev => {
-        let next = prev;
-        if (initial) {
-          next = w <= BREAKPOINT;          // first load: definitive, no dead zone
-        } else if (w <= MOBILE_MAX) {
-          next = true;
-        } else if (w >= DESKTOP_MIN) {
-          next = false;
-        }
-        // else (resize, within dead zone) -> keep `prev` (no flip)
-        if (prev !== next) {
-          console.log('[SchemaForm] [phone] Mobile mode changed:', next, 'width:', w);
-        }
-        return next;
-      });
+
+      // Classify mobile vs desktop with the dead-zone hysteresis, reading the
+      // CURRENT value from a ref (the effect runs once, so a captured state
+      // value would be stale). This single decision drives BOTH isMobile and
+      // the view-mode reset below, so the two can never disagree.
+      const prev = isMobileRef.current;
+      let nextIsMobile = prev;
+      if (initial) {
+        nextIsMobile = w <= BREAKPOINT;    // first load: definitive, no dead zone
+      } else if (w <= MOBILE_MAX) {
+        nextIsMobile = true;
+      } else if (w >= DESKTOP_MIN) {
+        nextIsMobile = false;
+      }
+      // else (resize, within dead zone) -> keep `prev` (no flip)
+
+      if (prev !== nextIsMobile) {
+        console.log('[SchemaForm] [phone] Mobile mode changed:', nextIsMobile, 'width:', w);
+      }
+      isMobileRef.current = nextIsMobile;
+      setIsMobile(nextIsMobile);
+
+      // A live resize that flips the classification to mobile drops Preview back
+      // to Simplified (bd polyglot-pdf-ipin), keeping the
+      // mobile-defaults-Simplified intent true mid-session and not only at a
+      // fresh mount. Keyed on THIS SAME mobile decision -- not an independent
+      // width threshold -- so the view mode can never disagree with which
+      // overlay (mobile vs desktop) is showing: a desktop-styled VoiceOverlay
+      // never pairs with a mobile-defaulted Simplified form (fresh-eyes finding;
+      // the dead zone flips isMobile at <=700, not at 768). One-directional:
+      // leaving mobile never auto-restores Preview. Skip the INITIAL classify --
+      // the mount already chose the mode via initialViewMode().
+      if (!initial && nextIsMobile) {
+        setViewMode(prevMode => {
+          const nextMode = viewModeAfterResize(prevMode);
+          if (nextMode !== prevMode) storeViewMode(nextMode);
+          return nextMode;
+        });
+      }
     };
 
     const onResize = () => {
