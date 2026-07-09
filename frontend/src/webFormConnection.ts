@@ -1874,7 +1874,18 @@ export class WebFormConnection {
     // holds a usable value: ack recorded:false (reason 'already_filled') and let
     // the model clear it intentionally (update_form_fields "") or move on. `[]`
     // (an empty checkbox group) is NOT usable -> still skippable.
-    const existing = this.state.fieldValues[field_id]?.value;
+    // Read via the SAME `[]`-alias fallback the confirm/update/validator paths use:
+    // a checkbox-group value may sit under the bracketed OR unbracketed variant
+    // (Gemini drops/adds the bracket, bd polyglot-pdf-5k52). An exact-key-only read
+    // would MISS an aliased filled value, the guard would pass, and markFieldSkipped
+    // would shadow that real answer -- the exact data loss this guard prevents
+    // (fresh-eyes review round 2).
+    const existing = (
+      this.state.fieldValues[field_id] ??
+      this.state.fieldValues[
+        field_id.endsWith('[]') ? field_id.slice(0, -2) : field_id + '[]'
+      ]
+    )?.value;
     const alreadyFilled =
       existing !== null && existing !== undefined && existing !== '' &&
       !(Array.isArray(existing) && existing.length === 0);

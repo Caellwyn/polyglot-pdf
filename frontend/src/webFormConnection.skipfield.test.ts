@@ -139,6 +139,29 @@ describe('WebFormConnection skip_field handler (bd polyglot-pdf-7yra)', () => {
     expect(fv?.skipped).toBeFalsy()
   })
 
+  it('REFUSES a skip when the value is stored under the []-alias key (no shadow data loss)', async () => {
+    // A checkbox-group value can be stored under the bracketed variant while the
+    // model sends the bare id (Gemini drops/adds the bracket). The guard must read
+    // via the []-alias fallback, or it would see undefined, pass, and let
+    // markFieldSkipped SHADOW the real aliased answer (fresh-eyes review round 2).
+    const { conn, ws } = await connected()
+
+    // Seed a filled value under the bracketed alias directly (mirrors how an
+    // aliased group value lands in state).
+    ;(conn as any).state.fieldValues['p1_uscis_number[]'] = { value: ['x'], confirmed: true }
+
+    fireSkip(ws, 'p1_uscis_number') // bare id
+    await Promise.resolve()
+
+    const acks = skipAcks(ws)
+    expect(acks).toHaveLength(1)
+    expect(acks[0].recorded).toBe(false)
+    expect(acks[0].reason).toBe('already_filled')
+    // The aliased real value is INTACT and the bare-key entry was NOT skip-shadowed.
+    expect((conn as any).state.fieldValues['p1_uscis_number[]'].value).toEqual(['x'])
+    expect((conn as any).state.fieldValues['p1_uscis_number']?.skipped).toBeFalsy()
+  })
+
   it('acks recorded:false for an unknown field id', async () => {
     const { ws } = await connected()
 
