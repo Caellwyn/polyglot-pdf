@@ -563,13 +563,14 @@ def _dump_kit(kit):
 #     (extraction dropped it) -- i-90's 4 were FIXED by bd 0nxh (now 0); f1040
 #     still has 12.
 #   - readonly-conditional-no-unlock: a read_only field shown/required by a
-#     condition but with no unlock_method -- bd 3fz7 (i-90: 3, still open).
+#     condition but with no unlock_method -- bd 3fz7 fixed i-90's 3 (p4_checkbox1a/
+#     b/c now carry flip_readonly_bit), so i-90 is now 0.
 # These are WARNINGs (they do not block promotion). This baseline pins the current
 # state so a NEW regression (a fresh dropped widget / stuck field) fails CI, while
 # fixing a form's data (which LOWERS a count) also fails -- prompting a deliberate
 # baseline update as the inventory shrinks toward zero.
 _UNFILLABLE_BASELINE = {
-    "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 3},
+    "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
     "w7": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
     "w7-2": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
     "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
