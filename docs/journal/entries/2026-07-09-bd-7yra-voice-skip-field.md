@@ -60,15 +60,17 @@ required-field skip deadlocks in a confirm loop.
 
 ## Verification
 
-- New `backend/tests/unit/test_skip_field_tool.py` (5 cases): recorded skip
+- New `backend/tests/unit/test_skip_field_tool.py` (6 cases): recorded skip
   advances; not-recorded -> failure (no advance); timeout -> failure; section
-  boundary short-circuits the hint; the declared `field_id` arg is read.
-- New `frontend/src/webFormConnection.skipfield.test.ts` (3 cases): an empty
+  boundary short-circuits the hint; an already-filled field -> non-retryable
+  failure with skip-specific labels; the declared `field_id` arg is read.
+- New `frontend/src/webFormConnection.skipfield.test.ts` (5 cases): an empty
   REQUIRED field is recorded skipped (the case confirm refuses) with `skipped`
-  flag + null value + recorded:true ack; unknown field -> recorded:false; no ack
-  without a request_id.
-- Full frontend suite green (51 files / 841 tests); full backend suite green; tsc
-  clean; tool + ws-protocol contract tests green.
+  flag + null value + recorded:true ack; an already-filled field (incl. one under
+  the `[]`-alias key) is REFUSED (`already_filled`) with the value intact; unknown
+  field -> recorded:false; no ack or state change without a request_id.
+- Full frontend suite green (53 files / 852 tests); full backend suite green (990
+  passed); tsc clean; tool + ws-protocol contract tests green.
 
 ## Not in scope
 
