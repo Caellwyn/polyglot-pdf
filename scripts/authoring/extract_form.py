@@ -309,9 +309,10 @@ def _extract_instructions_from_dump(schema: dict, dump_path: str) -> int:
 # checkbox widgets in these forms (i-90 has 16 legitimate radios built on
 # checkbox widgets that the rule wrongly converted). Radio-vs-group is a SEMANTIC
 # judgment from the printed label ("select one" vs "select all that apply") that
-# only the LLM can make; the --group-candidates hint already routes that decision
-# to the model. A mechanical override fights the model's correct judgment, so we
-# do not do it.
+# only the LLM can make; the group-candidates hint (now default ON, bd qmxb)
+# routes that decision to the model, and _complete_grouped_families only COMPLETES
+# a group the LLM already typed (never retypes it). A mechanical type override
+# fights the model's correct judgment, so we do not do it.
 
 
 # logical_type (from the AcroForm dump) -> schema FieldType for a backfilled
@@ -345,6 +346,115 @@ def _slugify_leaf(leaf: str) -> str:
     while "__" in slug:
         slug = slug.replace("__", "_")
     return slug or "widget"
+
+
+def _complete_grouped_families(schema: dict, dump_path: str) -> dict:
+    """Complete a PARTIALLY-grouped widget family in place (bd polyglot-pdf-qmxb).
+
+    The extractor's LLM pass stochastically drops some option-widgets of a
+    "select one/all of N checkboxes" question -- e.g. it modeled 1 of i-90's 5
+    P2_checkbox3 widgets (bd 0nxh). group_candidates.find_group_candidates mines
+    the dump for widget FAMILIES that belong to one logical question; when the LLM
+    consolidated SOME-but-not-all of a family into a single field's options[], the
+    missing members are almost certainly dropped options of THAT SAME field. This
+    deterministically appends them as options -- WITHOUT changing the field's type.
+
+    Type is never touched on purpose: single-select (radio) vs multi-select
+    (checkbox_group) is a semantic read of the printed label that only the LLM can
+    make (the widget-type retype that ignored this was built then removed -- bd
+    w0eq, see the NOTE above _LOGICAL_TO_FIELD_TYPE). Here the LLM has ALREADY made
+    that call (the field exists with a type); we only complete its option set, so
+    we never re-open the retype trap.
+
+    Fires ONLY when exactly ONE field owns the family (claims >=1 member via an
+    option AND 0 < claimed < all). Every other case is a SKIP -- the family is
+    split across fields (owners > 1), a false positive (0 claimed), or already
+    complete (all claimed) -- and _backfill_unclaimed_widgets still guarantees no
+    widget silently vanishes. Runs BEFORE that backfill so a completed member is
+    not also minted as a loose duplicate field.
+
+    Claim matching reuses schema_lint._match_dump_names / is_fillable_widget (the
+    single source of truth). Returns {"fields_completed", "options_added"}."""
+    sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))
+    from group_candidates import find_group_candidates  # noqa: E402
+    sys.path.insert(0, _REPO)
+    from backend.services.schema_lint import (  # noqa: E402 single source of truth
+        _match_dump_names, is_fillable_widget)
+    try:
+        with open(dump_path, encoding="utf-8") as fh:
+            dump = json.load(fh)
+    except OSError:
+        return {"fields_completed": 0, "options_added": 0}
+
+    families = find_group_candidates(dump)
+    if not families:
+        return {"fields_completed": 0, "options_added": 0}
+
+    entries = [e for e in dump.get("fields", []) if isinstance(e, dict)]
+    dump_names = [e.get("name") for e in entries if isinstance(e.get("name"), str)]
+
+    # Map each dump widget name -> the field(s) whose OPTION claims it (a family is
+    # only "owned" via consolidated options[], never via a field-level pfn -- a
+    # field-level pfn is a single-widget field, not a group).
+    fields = schema.get("fields", [])
+
+    def _option_claims(field) -> set:
+        claimed: set = set()
+        for o in (field.get("options") or []):
+            if isinstance(o, dict) and isinstance(o.get("pdf_field_name"), str):
+                claimed.update(_match_dump_names(o["pdf_field_name"], dump_names))
+        return claimed
+
+    field_claims = [(f, _option_claims(f)) for f in fields]
+    # Every widget claimed by ANY field via ANY route -- option pfn OR the
+    # field-level pfn of a standalone single-widget field. A completion must NEVER
+    # re-append a member already claimed elsewhere (that would double-claim the
+    # widget -> dump-widget-multiclaim; bd rsy3/qmxb Opus review). Ownership is
+    # still judged by OPTION claims only (a field-level pfn is a single-widget
+    # field, not a group), but MISSING excludes anything any field already holds.
+    all_claimed: set = set()
+    for f in fields:
+        pfn = f.get("pdf_field_name")
+        if isinstance(pfn, str) and pfn:
+            all_claimed.update(_match_dump_names(pfn, dump_names))
+    for _f, c in field_claims:
+        all_claimed |= c
+
+    fields_completed = 0
+    options_added = 0
+
+    for fam in families:
+        members = [m for m in fam.get("widgets", []) if isinstance(m, str)
+                   and is_fillable_widget(dump, m)]
+        member_set = set(members)
+        if len(member_set) < 2:
+            continue
+        # Which fields claim ANY member (via an option)?
+        owners = [(f, c & member_set) for f, c in field_claims if c & member_set]
+        if len(owners) != 1:
+            continue  # split across fields, or none -- deterministic merge is out of scope
+        field, claimed_members = owners[0]
+        # MISSING = members no field claims by ANY route (never re-append a widget
+        # another field already holds -- that manufactures a multiclaim).
+        missing = [m for m in members if m not in all_claimed]
+        if not claimed_members or not missing:
+            continue  # false positive (0 claimed) or already fully claimed elsewhere
+        # Complete the family: append each missing widget as an option of THIS
+        # field (placeholder value/label; a human editor + the repair pass refine
+        # them). pdf_field_name is the coverage-critical part.
+        opts = field.setdefault("options", [])
+        existing_vals = {o.get("value") for o in opts if isinstance(o, dict)}
+        for name in missing:
+            leaf = name.split(".")[-1]
+            val = _slugify_leaf(leaf)
+            while val in existing_vals:
+                val += "_x"
+            existing_vals.add(val)
+            opts.append({"value": val, "label": leaf, "pdf_field_name": name})
+            options_added += 1
+        fields_completed += 1
+
+    return {"fields_completed": fields_completed, "options_added": options_added}
 
 
 def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
@@ -797,7 +907,7 @@ def _lint_schema(schema: dict, dump: dict | None) -> dict:
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             model: str = "claude-opus-4-8", keep_dump: bool = False,
             instructions_pdf: str | None = None,
-            group_candidates: bool = False) -> dict:
+            group_candidates: bool = True) -> dict:
     """Run the full PDF -> draft-schema pass and write `out_path`. Returns the
     draft dict (with a `_bakeoff` provenance block).
 
@@ -807,8 +917,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
 
     group_candidates (bd h76m.12): when True, the prompt carries the
     deterministic pre-grouping candidates block (suggest, don't decide --
-    see scripts/bakeoff/group_candidates.py). Default OFF; flips on once the
-    eval_extraction ablation shows no held-out regression."""
+    see scripts/bakeoff/group_candidates.py). DEFAULT ON (bd qmxb): the
+    h76m.12 ablation showed no held-out regression and P5.2 repair (h76m.13)
+    now owns the ON-arm's repairable vocabulary defects; the deterministic
+    _complete_grouped_families safety net (3c2) backstops any residual drop.
+    Pass group_candidates=False (--no-group-candidates) to opt out."""
     # 1. Deterministic AcroForm dump (to a temp file unless --keep-dump).
     dump_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     if keep_dump:
@@ -832,6 +945,13 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs
         #     while the dump still exists (it is removed in the finally below).
         instructions_filled = _extract_instructions_from_dump(schema, dump_path)
+
+        # 3c2. Complete any partially-grouped widget family: when the LLM
+        #      consolidated SOME-but-not-all of a mined family into one field's
+        #      options[], append the missing members as options of that SAME field
+        #      (bd polyglot-pdf-qmxb) -- never retyping it. Runs BEFORE the backfill
+        #      so a completed member is not also minted as a loose duplicate.
+        group_completion = _complete_grouped_families(schema, dump_path)
 
         # 3d. Deterministically backfill any fillable dump widget NO field claims
         #     (bd polyglot-pdf-w0eq, P6.1c). The LLM pass stochastically omits a
@@ -891,6 +1011,7 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "option_positions_unmatched": positions_filled["unmatched"],
         "instructions_filled": instructions_filled,
         "instructions_enriched": instructions_enriched,
+        "group_completion": group_completion,
         "widgets_backfilled": widgets_backfilled,
         "schema_valid": ok, "validation": detail,
         "repair": repair_report,
@@ -977,9 +1098,10 @@ def main(argv: list[str] | None = None) -> int:
                      help="force the enriched-bundle prompt")
     ap.add_argument("--keep-dump", action="store_true",
                     help="keep the intermediate AcroForm dump (<out>_acroform.json)")
-    ap.add_argument("--group-candidates", action="store_true",
-                    help="include the deterministic pre-grouping candidates "
-                         "block in the prompt (bd h76m.12; default off)")
+    ap.add_argument("--no-group-candidates", dest="group_candidates",
+                    action="store_false", default=True,
+                    help="OPT OUT of the deterministic pre-grouping candidates "
+                         "block (bd h76m.12; default ON per bd qmxb)")
     ap.add_argument("--instructions-pdf", default=None,
                     help="OPTIONAL official instructions PDF; its text enriches "
                          "help.instructions on top of the /TU baseline (bd s4dp.3)")
