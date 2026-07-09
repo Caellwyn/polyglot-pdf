@@ -163,14 +163,33 @@ describe('selectedOptionRects (bd polyglot-pdf-lp5v)', () => {
     expect(selectedOptionRects(f, '2')).toEqual([]);
   });
 
-  it('skips selected values with no matching option', () => {
+  it('falls back ENTIRELY when any selected value lacks a usable rect (all-or-nothing)', () => {
+    // Partial marks would silently hide the uncovered selection; the label
+    // fallback shows every selected value instead.
     const f: FormField = {
       ...base,
       type: 'checkbox_group',
-      options: [{ value: 'a', label: 'Alpha', pdf_position: rect(100) }],
+      options: [
+        { value: 'a', label: 'Alpha', pdf_position: rect(100) },
+        { value: 'b', label: 'Beta' }, // no rect
+      ],
     };
-    expect(selectedOptionRects(f, ['a', 'mystery'])).toEqual([
-      { value: 'a', position: rect(100) },
-    ]);
+    expect(selectedOptionRects(f, ['a', 'b'])).toEqual([]);
+    // Same for a selected value with no matching option at all.
+    expect(selectedOptionRects(f, ['a', 'mystery'])).toEqual([]);
+    // A fully-covered selection still paints marks.
+    expect(selectedOptionRects(f, ['a'])).toEqual([{ value: 'a', position: rect(100) }]);
+  });
+
+  it('falls back when an option rect sits on a DIFFERENT page than the field', () => {
+    // PDFViewer buckets overlays into page containers by the FIELD's page; a
+    // cross-page option rect would paint at the wrong screen position.
+    const f: FormField = {
+      ...base,
+      type: 'radio',
+      pdf_position: { page: 1, x: 10, y: 10, width: 40, height: 12 },
+      options: [{ value: 'a', label: 'Alpha', pdf_position: rect(100) }], // page 3
+    };
+    expect(selectedOptionRects(f, 'a')).toEqual([]);
   });
 });

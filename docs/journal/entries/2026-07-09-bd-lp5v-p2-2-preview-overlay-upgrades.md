@@ -23,7 +23,12 @@ than painting like active fields.
   `pdf_position`. Radio (single slug), checkbox/checkbox_group (array or
   backcompat comma-string). Selects are deliberately excluded: a dropdown's
   options are choice values of one shared widget, no printed boxes (mirrors
-  the P2.1 backfill's dropdown-skip rule).
+  the P2.1 backfill's dropdown-skip rule). Coverage is ALL-OR-NOTHING per
+  selection (fresh-eyes round 1): any selected value without a usable
+  same-page rect sends the whole selection to the label fallback -- partial
+  marks would silently hide the uncovered selections, and a cross-page rect
+  would paint inside the wrong page container (PDFViewer buckets overlays by
+  the FIELD's page).
 - `FieldOverlay`: when `selectedOptionRects` is non-empty, X marks render as
   sibling divs at each option's own rect and the field-level box paints no
   duplicate label; the box itself stays (it is the `data-field-id` snap-to

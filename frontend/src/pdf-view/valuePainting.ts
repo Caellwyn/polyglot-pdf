@@ -119,20 +119,25 @@ export interface SelectedOptionRect {
 }
 
 /**
- * The rects to paint selection marks at: one per SELECTED option that carries
- * a usable pdf_position (bd polyglot-pdf-lp5v). Empty when the field type is
- * not option-rect paintable (select/text/...), nothing is selected, or the
- * selected options have no usable rects -- callers then fall back to
- * paintedValueFor's label-at-field-rect.
+ * The rects to paint selection marks at: one per SELECTED option (bd
+ * polyglot-pdf-lp5v). ALL-OR-NOTHING: if ANY selected value lacks a usable
+ * rect (unknown slug, missing/degenerate pdf_position, or a rect on a
+ * different page than the field's -- PDFViewer buckets overlays into page
+ * containers by the FIELD's page, so a cross-page rect would paint at the
+ * wrong screen position), the whole selection returns [] and callers fall
+ * back to paintedValueFor's label-at-field-rect, which shows every selected
+ * value. Partial marks would silently hide the uncovered selections.
  */
 export function selectedOptionRects(field: FormField, raw: unknown): SelectedOptionRect[] {
   if (!field.options || field.options.length === 0) return [];
+  const values = selectedValues(field, raw);
+  if (values.length === 0) return [];
   const rects: SelectedOptionRect[] = [];
-  for (const value of selectedValues(field, raw)) {
+  for (const value of values) {
     const opt = field.options.find((o) => o.value === value);
-    if (opt && hasValidCoordinates(opt.pdf_position)) {
-      rects.push({ value, position: opt.pdf_position });
-    }
+    if (!opt || !hasValidCoordinates(opt.pdf_position)) return [];
+    if (field.pdf_position && opt.pdf_position.page !== field.pdf_position.page) return [];
+    rects.push({ value, position: opt.pdf_position });
   }
   return rects;
 }

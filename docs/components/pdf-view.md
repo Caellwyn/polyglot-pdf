@@ -66,8 +66,11 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   all four kits, bd 5f41) paint an X mark at each SELECTED option's printed
   box (`selectedOptionRects`, bd lp5v): the marks render as sibling divs in
   the same page space while the field-level box stays as the `data-field-id`
-  snap-to anchor and paints no duplicate label. Options without rects fall
-  back to selected LABELS at the field-level rect; selects always paint the
+  snap-to anchor and paints no duplicate label. Coverage is ALL-OR-NOTHING
+  per selection: if any selected value lacks a usable same-page rect, the
+  whole selection falls back to selected LABELS at the field-level rect
+  (partial marks would silently hide the uncovered selections; a cross-page
+  rect would paint in the wrong page container). Selects always paint the
   label at the field rect (a dropdown's options have no printed boxes).
   A single-box checkbox paints
   an X whether it is a plain boolean OR a legacy single-OPTION checkbox (the
