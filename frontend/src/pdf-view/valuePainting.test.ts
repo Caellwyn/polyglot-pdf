@@ -38,16 +38,14 @@ describe('paintedValueFor', () => {
   });
 
   it('joins checkbox_group selections as labels', () => {
-    // 'checkbox_group' is a real runtime type from v2 form-kit schemas even
-    // though the FE FieldType union does not list it yet.
-    const f = {
+    const f: FormField = {
       ...base,
       type: 'checkbox_group',
       options: [
         { value: 'a', label: 'Alpha' },
         { value: 'b', label: 'Beta' },
       ],
-    } as FormField;
+    };
     expect(paintedValueFor(f, ['a', 'b'])).toEqual({ kind: 'text', text: 'Alpha, Beta' });
     // Backcompat comma-string form.
     expect(paintedValueFor(f, 'a, b')).toEqual({ kind: 'text', text: 'Alpha, Beta' });
