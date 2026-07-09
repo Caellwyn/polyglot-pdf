@@ -55,7 +55,10 @@ Folded the one-line correction in here (added checkbox_group to the Implemented
 list, noted checkbox/checkbox_group share CheckboxField via `options[]`) rather
 than defer a trivial accuracy fix to a phantom owner. `*Last updated:*` stamp
 left pointing at the h76m entry that last substantively revised the doc; this
-is a factual patch, not a rewrite.
+is a factual patch, not a rewrite. (Stamp bumped to 2026-07-08 pointing here,
+since the freshness checker flagged it -- the other `schema-forms/` sources it
+tracks show today's mtime only from this branch's checkout, the recurring
+worktree-mtime false-positive, not from this diff.)
 
 ## Files touched
 

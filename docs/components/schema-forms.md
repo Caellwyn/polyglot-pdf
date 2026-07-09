@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-07. See [../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md](../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md) for closeout details.*
+*Last updated: 2026-07-08. See [../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md](../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
