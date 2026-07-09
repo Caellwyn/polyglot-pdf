@@ -488,7 +488,12 @@ export class SchemaFormStateManager {
 
     for (const field of sectionFields) {
       // A shown, currently-required field must be filled OR force-skipped.
-      const shown = !field.hidden && shouldShowField(field, state.fieldValues, state.schema.fields);
+      // "Shown" MUST match FieldRenderer's own visibility test (shouldShowField
+      // alone, which already folds in field.hidden for the no-show_if case) --
+      // gating on an extra !field.hidden here would diverge from what actually
+      // renders: a field with hidden:true AND a satisfied show_if renders and is
+      // answerable, so it must still be required (fresh-eyes review).
+      const shown = shouldShowField(field, state.fieldValues, state.schema.fields);
       if (shown && isFieldRequired(field, state.fieldValues, state.schema.fields)) {
         const fieldValue = state.fieldValues[field.id];
         if (!fieldValue?.skipped) {

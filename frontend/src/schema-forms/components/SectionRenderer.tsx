@@ -58,8 +58,10 @@ export function SectionRenderer({
           // 4dxt: offer a "Skip" affordance only for a field that is currently
           // shown, currently required, still empty, and not already skipped -- the
           // exact case isSectionValid would otherwise block on. A skipped field
-          // instead shows a distinct "needs follow-up" badge.
-          const shown = !field.hidden && shouldShowField(field, fieldValues, fields);
+          // instead shows a distinct "needs follow-up" badge. "Shown" uses the
+          // SAME shouldShowField test FieldRenderer uses (see isSectionValid) so
+          // the skip button and the section gate agree on visibility.
+          const shown = shouldShowField(field, fieldValues, fields);
           const required = shown && isFieldRequired(field, fieldValues, fields);
           const empty = isEmptyValue(unwrapFieldValue(fieldValue));
           const canSkip = !!onFieldSkip && required && empty && !skipped && !disabled;
