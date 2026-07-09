@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-08. See [../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md](../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md) for the live-resize / single-option-checkbox / overlay-invariant polish; [../journal/entries/2026-07-07-bd-f58l-e2e-verify-pdf-view-doc.md](../journal/entries/2026-07-07-bd-f58l-e2e-verify-pdf-view-doc.md) for the prior E2E verification.*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-lp5v-p2-2-preview-overlay-upgrades.md](../journal/entries/2026-07-09-bd-lp5v-p2-2-preview-overlay-upgrades.md) for closeout details.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -61,16 +61,27 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
 - `FieldOverlay`: one absolutely-positioned div per positioned field, colored
   by FILL state -- empty (gray outline), filled (blue), confirmed (green),
   current (orange) -- with the value painted inside (`valuePainting.ts`):
-  fitted text, an X for single-box checkboxes, option values resolved to LABELS
-  for radio/select/checkbox_group (labels paint at the field-level rect until
-  per-option rects exist -- a phase-2 epic item). A single-box checkbox paints
+  fitted text, an X for single-box checkboxes. Radio/checkbox/checkbox_group
+  selections whose options carry their own `pdf_position` (backfilled into
+  all four kits, bd 5f41) paint an X mark at each SELECTED option's printed
+  box (`selectedOptionRects`, bd lp5v): the marks render as sibling divs in
+  the same page space while the field-level box stays as the `data-field-id`
+  snap-to anchor and paints no duplicate label. Options without rects fall
+  back to selected LABELS at the field-level rect; selects always paint the
+  label at the field rect (a dropdown's options have no printed boxes).
+  A single-box checkbox paints
   an X whether it is a plain boolean OR a legacy single-OPTION checkbox (the
   widget stores the checked state as a 1-element array, which would otherwise
   paint the option's label overflowing an ~8x8pt box); only a TRUE multi-option
   group (2+ options / `checkbox_group`) paints joined labels (bd
   `polyglot-pdf-jq17`). Schema-v2 forbids a `checkbox` with options outright, so
   the single-option path is defensive for hand-authored / pre-v2 kits.
-  Read-only; click-to-edit is phase 2.
+  show_if-hidden fields render DIMMED (`pdf-field-overlay--dimmed`: 0.35
+  opacity, dashed border), never removed -- they exist on paper -- and are
+  not clickable; `current` wins over dimmed. PDFViewer computes `dimmed` via
+  `shouldShowField` on the wrapped value map, so dimming flips live with the
+  controlling field (bd lp5v).
+  Read-only; click-to-edit is bead P2.3 (`polyglot-pdf-7esr`).
 - `fillStateFor` (PDFViewer): `[]` and `false` count as empty (a cleared
   checkbox_group must not paint as filled); `current` wins over all.
 - Live updates ride the existing `schemaFormStateChange` channel one level up:
@@ -106,8 +117,10 @@ approximation for feedback; this modal (and download) is the ground truth.
 
 - Client-painted text sizing approximates the PyMuPDF fill (comb spacing,
   font shrink); the FilledPreviewModal is the exact render.
-- Radio/checkbox-group selections paint their labels at the field-level rect
-  (tiny for 10px option boxes) until the per-option `pdf_position` backfill.
+- Radio/checkbox-group selections paint marks at their own option boxes only
+  where the schema carries per-option `pdf_position` (all four kits are
+  backfilled); a schema without option rects falls back to labels at the
+  field-level rect (tiny for 10px option boxes).
 - `signature` fields with a usable `pdf_position` DO get overlays (the i-90
   has 4 such): a signature is not paintable as text, so if one ever carried a
   string value it would render as raw text in its rect. (Coverage varies by
