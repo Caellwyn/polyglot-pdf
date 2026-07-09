@@ -94,14 +94,14 @@ export function validateField(field: FormField, value: any): string | null {
   //   - the literal "true"/"false" STRING (the backend tool contract's documented
   //     boolean encoding) is boolean-intent ONLY on a SINGLE-option checkbox (a real
   //     boolean toggle), NOT on a multi-option selection group.
-  // This matters because a real shipped standalone checkbox (form-kits/i-90
-  // p2_checkbox3) carries a ONE-element `options` array for its single PDF widget,
-  // so isStringEnumField's options.length>0 rule (bd polyglot-pdf-5jvn, matching
-  // canonicalizeAiCheckboxGroupValue/CheckboxField) calls it a "group" too; without
-  // this carve-out its true/false fill would enum-reject. `isCheckboxGroupField` is
-  // ALSO true for p2_checkbox3 (options.length>0), so it cannot distinguish the two;
+  // This matters because a standalone checkbox that carries a ONE-element
+  // `options` array (describing its single PDF widget) trips isStringEnumField's
+  // options.length>0 rule (bd polyglot-pdf-5jvn, matching
+  // canonicalizeAiCheckboxGroupValue/CheckboxField), which calls it a "group" too;
+  // without this carve-out its true/false fill would enum-reject. `isCheckboxGroupField`
+  // is ALSO true for such a field (options.length>0), so it cannot distinguish the two;
   // the load-bearing distinction is the OPTION COUNT -- a genuine boolean toggle has
-  // exactly one option, a selection group has 2+. Scoping the STRING case to
+  // at most one option, a selection group has 2+. Scoping the STRING case to
   // single-option checkboxes keeps the carve-out from reopening the 5jvn silent-drop
   // for a real group: an AI "true" on a multi-option group (e.g. p3_race) is NOT a
   // valid option, so it must still enum-reject (Opus fresh-eyes finding). Mirrors

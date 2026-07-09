@@ -415,22 +415,23 @@ describe('validateField (comma-separated checkbox-group values)', () => {
 });
 
 // Standalone checkbox fields are BOOLEAN per the backend contract ("For
-// checkbox: boolean"), even though a real shipped one (form-kits/i-90
-// p2_checkbox3) carries a ONE-element `options` array describing its single PDF
-// widget -- so isStringEnumField's options.length>0 checkbox-group rule (bd
-// polyglot-pdf-5jvn) calls it a "group" too. The enum gate must still NOT run on
-// a boolean-intent value (true/false, or the "true"/"false" strings the backend
-// tool contract documents), or every valid fill would enum-reject against the
-// single option value. Codex PR #145 round 3 + bd polyglot-pdf-5jvn.
+// checkbox: boolean"), even when one carries a ONE-element `options` array
+// describing its single PDF widget -- so isStringEnumField's options.length>0
+// checkbox-group rule (bd polyglot-pdf-5jvn) calls it a "group" too. The enum
+// gate must still NOT run on a boolean-intent value (true/false, or the
+// "true"/"false" strings the backend tool contract documents), or every valid
+// fill would enum-reject against the single option value. Codex PR #145 round 3 +
+// bd polyglot-pdf-5jvn.
 describe('validateField (standalone boolean checkbox)', () => {
   const standaloneCheckbox: FormField = {
-    id: 'p2_checkbox3',
+    id: 'single_option_checkbox',
     name: 'Previous card never received',
     spoken_name: 'previous card never received',
     type: 'checkbox',
     section_id: 'Part 2',
-    // NO group_kind -- exactly the real i-90 p2_checkbox3 shape. Still a
-    // standalone boolean checkbox despite the one-element options array.
+    // NO group_kind, and a one-element options array (a single PDF widget) --
+    // still a standalone boolean checkbox, which the OPTION-COUNT<=1 carve-out
+    // must treat as boolean despite the one-element options array.
     options: [{ value: 'P2_checkbox3[0]', label: 'My previous card was issued but never received' }],
   };
 
