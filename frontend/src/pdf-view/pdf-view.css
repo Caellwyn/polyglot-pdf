@@ -305,6 +305,74 @@
   cursor: default;
 }
 
+/* Click-to-edit affordance (bd polyglot-pdf-7esr): hover tint per the
+   schema-editor FieldOverlay precedent. pointer-events/cursor ride inline
+   (same inline-beats-class reason as the fill-state styles). */
+.pdf-field-overlay--clickable:hover {
+  background-color: rgba(59, 130, 246, 0.16) !important;
+}
+
+/* The in-place field editor (bd polyglot-pdf-7esr). Absolutely positioned in
+   page coordinate space (inside .pdf-viewer__page-inner), so it scrolls with
+   the page. Above the overlay layer (z-index 10) and option marks (11). */
+.pdf-field-edit-popover {
+  position: absolute;
+  z-index: 30;
+  background: #ffffff;
+  border: 1px solid rgba(100, 116, 139, 0.5);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-field-edit-popover__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.pdf-field-edit-popover__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111827;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-field-edit-popover__readonly {
+  font-size: 0.7rem;
+  color: #6b7280;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+}
+
+.pdf-field-edit-popover__close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 700;
+  color: #6b7280;
+  padding: 0.1rem 0.35rem;
+  line-height: 1;
+}
+
+.pdf-field-edit-popover__close:hover {
+  color: #111827;
+}
+
+.pdf-field-edit-popover__body {
+  padding: 0.6rem 0.65rem;
+  overflow-y: auto;
+}
+
 .pdf-preview-pane__notice {
   max-width: 64rem;
   margin: 1rem auto;
