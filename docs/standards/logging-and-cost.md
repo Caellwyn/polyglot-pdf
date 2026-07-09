@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code; folded the `gemini_go_away_received` log fact into the timing-checkpoints section). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-5c2h-structured-token-stdout-emit.md](../journal/entries/2026-07-09-bd-5c2h-structured-token-stdout-emit.md) for closeout details.*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
