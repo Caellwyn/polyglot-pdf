@@ -198,7 +198,7 @@ separate, future work.
 - **Spoken Name** - User-friendly name for voice AI
 - **Help Text** - Instructions for users
 - **Validation** - Patterns, formats, constraints
-- **Conditional Logic** - `show_if` (reactive) and `controls_fields` (trigger-side)
+- **Conditional Logic** - `show_if` (conditional visibility) and `require_if` (conditionally required)
 
 ### Move Through the Fields Fast
 
@@ -553,7 +553,7 @@ If overlays don't show on PDF:
 Red errors in validation panel indicate schema issues:
 - **Duplicate IDs** - Field IDs must be unique
 - **Missing sections** - Field references non-existent section
-- **Broken references** - show_if or controls_fields reference missing field
+- **Broken references** - show_if or require_if reference a missing field
 
 Fix by:
 1. Click on error to see field ID
@@ -1226,8 +1226,8 @@ interface FormField {
   help?: FieldHelp;                // Instructions + format hint
   validation?: ValidationRules;    // Patterns and constraints
   options?: FieldOption[];         // For select/radio
-  show_if?: ConditionalDisplay;    // Conditional visibility
-  controls_fields?: ConditionalControl[]; // Field dependencies (a LIST of rules)
+  show_if?: FieldCondition;        // Show this field only when the condition holds
+  require_if?: FieldCondition;     // Make this field required when the condition holds
   pdf_position?: PDFPosition;      // Coordinates on PDF
   question_number?: string;        // Order in form
   // ... other properties
@@ -1245,53 +1245,58 @@ interface PDFPosition {
 }
 ```
 
-**ConditionalControl** (Field dependencies):
+**FieldCondition** (`show_if` / `require_if`):
 ```typescript
-// A field's `controls_fields` is an ARRAY of these rules. Each rule fires when
-// the controlling field's value matches `value` under `operator`, and then acts
-// on the listed target field ids. This matches the runtime contract
-// (frontend/src/schema-forms/types/schema.ts) -- it is NOT a single object.
-interface ConditionalControl {
-  operator: ConditionalOperator;  // equals | not_equals | contains | is_checked | ...
-  value: string | number | boolean | Array<string | number | boolean>;
-  shows?: string[];          // field ids to reveal
-  hides?: string[];          // field ids to hide
-  unlocks?: string[];        // field ids to make editable (clear read_only)
-  locks?: string[];          // field ids to make read_only
-  makes_required?: string[]; // field ids to mark required
-  makes_optional?: string[]; // field ids to mark optional
+// A field's show_if / require_if is TARGET-SIDE: the dependent field itself
+// carries the condition, not the controlling field. Two shapes are accepted:
+// a single atom, OR a one-level composite of all_of/any_of/none_of.
+type FieldCondition = ConditionalDisplay | CompositeConditionalDisplay;
+
+interface ConditionalDisplay {          // a single atomic condition
+  field: string;                        // id of the controlling field
+  operator: ConditionalOperator;        // see below
+  value?: string | number | boolean | Array<string | number | boolean>;
+}
+
+interface CompositeConditionalDisplay { // "(A AND B) AND NOT C"
+  all_of?: ConditionalDisplay[];        // every atom must hold
+  any_of?: ConditionalDisplay[];        // at least one must hold
+  none_of?: ConditionalDisplay[];       // none may hold
+}
+
+// operators: equals | not_equals | contains | greater_than | less_than |
+//   is_checked | is_empty | is_not_empty | in | not_in |
+//   includes | not_includes   (the last two test membership in a
+//   checkbox_group's selected set)
+```
+
+**Authoring conditions (v2).** There is no trigger-side "this field controls those
+fields" mechanism -- express dependencies on the DEPENDENT field via `show_if`
+(visibility) or `require_if` (make required). Both use the identical shape and
+evaluator. A field is `show_if`-hidden until its condition holds; a field is
+required when its `require_if` holds. To make a read-only field editable once its
+condition reveals it, give it `conditional_behavior.unlock_method:
+"flip_readonly_bit"` (a read-only field shown by a condition with no unlock stays
+greyed-out -- the editor's lint flags that as `readonly-conditional-no-unlock`).
+
+```json
+// "Representative name" is required only when "Filing for someone else?" is Yes:
+"require_if": { "field": "filing_for_other", "operator": "equals", "value": "yes" }
+
+// A checkbox_group trigger uses membership (includes), and composites combine atoms:
+"show_if": {
+  "all_of": [
+    { "field": "reason", "operator": "includes", "value": "name_change" },
+    { "field": "has_prior_name", "operator": "is_checked" }
+  ]
 }
 ```
 
-**Authoring controls_fields.** A field that drives others (a checkbox, a yes/no
-radio) carries a `controls_fields` LIST -- one `ConditionalControl` per distinct
-trigger value. For example, an "Are you filing for someone else?" checkbox whose
-checked state UNLOCKS (makes editable) the representative-name fields -- the real
-I-90 targets are already visible, so this rule only clears their read-only bit. To
-also reveal a hidden target, add it to `shows` (use `hides`/`locks`/
-`makes_required`/`makes_optional` for the inverse actions):
-
-```json
-"controls_fields": [
-  {
-    "operator": "equals",
-    "value": "P1_checkbox4[0]",
-    "unlocks": ["p1_line5a_familyname", "p1_line5b_givenname"]
-  }
-]
-```
-
-Here `value` is the controlling field's STORED value to match against (under
-`operator`), NOT a target field id. The example value `"P1_checkbox4[0]"` is taken
-verbatim from the real I-90 schema, where this checkbox stores its own PDF widget
-name as its checked value -- so for a new form, set `value` to whatever the
-controlling field actually stores when the rule should fire (often `"true"` /
-`"Yes"` / an option value), not a widget name by convention.
-
-Every id listed in `shows`/`hides`/`unlocks`/`locks`/`makes_required`/
-`makes_optional` must be a real field id in the schema -- the editor's validator
-flags any that is not (a `controls_fields references non-existent field` warning),
-checking across all rules in the list and tolerating forward references (a target
+Here `field` is the controlling field's id and `value` is the value to match under
+`operator` (an option `value`/slug, `"Yes"`, `"true"`, etc. -- never a target field
+id). Every `field` referenced must be a real field id in the schema -- the editor's
+validator flags a dangling reference (a `show_if references non-existent field`
+warning), checking composite atoms too and tolerating forward references (a field
 declared later in `fields`).
 
 ### Validation Types
