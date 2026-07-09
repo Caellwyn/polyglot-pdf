@@ -2175,22 +2175,52 @@
     },
     {
       "id": "p2_checkbox3",
-      "name": "Select My previous card was issued but never received",
-      "type": "checkbox",
+      "name": "Reason for replacement (conditional permanent resident)",
+      "type": "radio",
       "section_id": "Part 2 - Application Type",
-      "pdf_field_name": "P2_checkbox3[0]",
       "consolidated_widgets": [
-        "P2_checkbox3[0]"
+        "P2_checkbox3[4]",
+        "P2_checkbox3[0]",
+        "P2_checkbox3[1]",
+        "P2_checkbox3[2]",
+        "P2_checkbox3[3]"
       ],
-      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. B. Select My previous card was issued but never received.",
+      "options": [
+        {
+          "value": "my_previous_card_has_been_lost_stolen_or_destroyed",
+          "label": "My previous card has been lost, stolen, or destroyed",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[4]"
+        },
+        {
+          "value": "my_previous_card_was_issued_but_never_received",
+          "label": "My previous card was issued but never received",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[0]"
+        },
+        {
+          "value": "my_existing_card_has_been_mutilated",
+          "label": "My existing card has been mutilated",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[1]"
+        },
+        {
+          "value": "my_existing_card_has_incorrect_data_because_of_dhs_error",
+          "label": "My existing card has incorrect data because of DHS error",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[2]"
+        },
+        {
+          "value": "my_name_or_other_biographic_information_has_legally_changed_since_issuance_of_my_existing_card",
+          "label": "My name or other biographic information has legally changed since the issuance of my existing card",
+          "pdf_field_name": "form1[0].#subform[2].P2_checkbox3[3]"
+        }
+      ],
+      "label": "Part 2. Application Type. Reason for Application (select only one box). Section B. (To be used only by a conditional permanent resident.) 3. Select the reason for your replacement card.",
       "read_only": true,
       "required": false,
       "multiline": false,
       "is_comb": false,
       "hidden": false,
-      "spoken_name": "my previous card was issued but never received",
+      "spoken_name": "reason for replacing your card",
       "help": {
-        "instructions": "Select this reason if you never received your card. Submit a copy of the latest Form I-797 for Form I-485 or Form I-90 that should have resulted in issuance of your Permanent Resident Card."
+        "instructions": "Section B is only for conditional permanent residents. Select the one reason that applies: your previous card was lost/stolen/destroyed, was issued but never received, your existing card is mutilated, has incorrect data because of DHS error, or your name or other biographic information has legally changed since the card was issued."
       },
       "show_if": {
         "field": "p2_checkbox1",
