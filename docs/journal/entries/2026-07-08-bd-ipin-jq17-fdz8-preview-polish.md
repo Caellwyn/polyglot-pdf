@@ -56,6 +56,21 @@ Three small deferred beads left open after the preview-mode epic
   breaking the code (a `key={viewMode}` on the overlay reddens the identity
   test; gating the resize reset off reddens the ipin test).
 
+## Review
+
+- **Exit-criteria scorecard:** all 4 criteria (ipin.1, jq17.1, jq17.2, fdz8.1)
+  PASS, each mutation-verified (the pinning test reddens when its target logic
+  is broken, greens on current code).
+- **Fresh-eyes (Step 5.5):** Sonnet first round found ONE real gap -- the
+  flat-768 vs dead-zone-700 threshold mismatch (fixed, see the ipin bullet
+  above). Re-spawned Opus clearing round returned `NO-GAPS`. Adopt 1 / reject 0
+  / defer 0; no out-of-scope beads filed.
+- **Opus outer review (Step 5.6):** two independent Opus passes both returned
+  `NO-GAPS` on the identical final diff (commit before PR). The second reviewer's
+  only note (a bare-string single-option checkbox painting `none`) it
+  self-refuted -- CheckboxField only stores `string[]` for options-bearing
+  checkboxes and v2 forbids the shape, so no real value takes that path.
+
 ## Doc freshness
 
 - **Updated** `docs/components/pdf-view.md` (viewMode + valuePainting sections)
