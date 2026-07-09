@@ -10,8 +10,11 @@
  * separate playback AudioContext.
  *
  * These constraints were duplicated across four call sites with drifting values
- * (some omitted channelCount); this is the ONE definition they all consume so an
- * AEC change lands everywhere at once rather than in three of four places.
+ * (some omitted channelCount); this is the ONE definition the three PRODUCTION
+ * sites (audioManager.ts, schema-forms/SchemaForm.tsx, demo/useDemoVAD.ts) consume,
+ * so an AEC change lands across the user-facing path at once. The dev-only
+ * vad-tuning/VADTuningDashboard.tsx keeps its own inline copy on purpose (it is not
+ * a user path); fold it in here too if it ever ships to users.
  *
  * NOTE: this deliberately uses ONLY the standard, spec'd MediaTrackConstraints.
  * The legacy Chrome-specific `goog*` echo hints were considered and rejected --
