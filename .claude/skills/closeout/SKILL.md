@@ -9,7 +9,7 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 
 **The bead(s) for this closeout** (if the user passed one): `$1`. If `$1` is empty, infer the primary bead from the branch name (`<type>/<id-suffix>-<slug>`) or ask. A PR may resolve **more than one** bead (small beads are often bundled to avoid a full PR cycle each) -- if so, note every bead this PR closes; you'll close them **all** in Step 6. A PR must close **at least one** bead, and no bead may span multiple PRs (split it first if it would).
 
-> **Portability note.** This skill assumes the claude-swarm-kit stack: beads (`bd`) for issues, GitHub PRs, and git worktrees. **Review is entirely Claude-based** -- an Opus-4.8 outer review (two independent clearing passes; Step 7), NOT an external bot. (The repo previously used OpenAI Codex, and Copilot before it; both are retired -- the maintainer's Codex subscription ended 2026-07-08.) The integration config (repo slug, bead prefix) lives in `swarm.config.json` -- the scripts read it automatically.
+> **Portability note.** This skill assumes the claude-swarm-kit stack: beads (`bd`) for issues, GitHub PRs, and git worktrees. **Review is entirely Claude-based** -- an Opus-4.8 outer review (two independent clearing passes; Step 5.6, PRE-PR), NOT an external bot. (The repo previously used OpenAI Codex, and Copilot before it; both are retired -- the maintainer's Codex subscription ended 2026-07-08.) The integration config (repo slug, bead prefix) lives in `swarm.config.json` -- the scripts read it automatically.
 
 > **This repo's layout (polyglot-pdf).** The Python interpreter is the backend
 > venv, which lives ONLY in the main repo at `backend/.venv` -- worktrees do NOT
@@ -489,7 +489,7 @@ Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 
 
 **There is NO trigger comment and NO watcher.** Do NOT put an `@codex review` line in the PR body, do NOT use the `requested_reviewers` reviewer API, and do NOT launch `pr_review_watcher.py` -- all retired dead path. If `closeout_finish.py` prints a `WATCH_CMD`, ignore it.
 
-1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; for a review-SKIPPED change, also note "review record: fresh-eyes NO-GAPS, round <n>"; for a reviewed change, note "review record: Opus outer review, two independent NO-GAPS"). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. If opening by hand:
+1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, **write + commit + push the telemetry row** (from the counters you pass it -- see Step 7 for what they mean), and close the bead(s). Pass the telemetry counters ON THIS run (`--arm`, `--cost-category`, `--copilot-rounds`, `--maintainer-touchpoints`, `--deferred-nits`, `--haiku-escalations`, `--errors-shipped`); do NOT re-run `harness_ledger.py` in Step 7 (that duplicates the row). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; for a review-SKIPPED change, also note "review record: fresh-eyes NO-GAPS, round <n>"; for a reviewed change, note "review record: Opus outer review, two independent NO-GAPS"). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. If opening BY HAND (not via `closeout_finish.py`), you must also run the Step-7 `harness_ledger.py` command yourself (that is its fallback role):
    ```bash
    git -C "<WT>" fetch origin && git -C "<WT>" pull --rebase origin dev
    git -C "<WT>" push -u origin <branch>
@@ -509,7 +509,18 @@ Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 
 
 The PR is a normal, mergeable PR the moment it opens -- there is no flip step and no post-PR review wait. For a routine low-risk PR that reviewed CLEAN, **you merge it** (`gh pr merge`) and notify; for a consequence-bearing PR, pinging the maintainer is the autonomous endpoint. Force-push and `bd dolt push --force` are never yours regardless.
 
-## Step 7 -- Record the harness telemetry row (deterministic)
+## Step 7 -- The harness telemetry row (deterministic)
+
+The telemetry row is written by **`closeout_finish.py` itself in Step 6** -- you
+pass it the counters (`--arm`, `--cost-category`, `--copilot-rounds`,
+`--maintainer-touchpoints`, `--deferred-nits`, `--haiku-escalations`,
+`--errors-shipped`) and it runs `harness_ledger.py` and commits+pushes the row
+internally as part of the same run. **Do NOT run `harness_ledger.py` a second time
+here** -- that would write a DUPLICATE row and contaminate the A/B cost-arm
+counters (the exact double-count the hrn.15 discipline exists to prevent). This
+step is the REFERENCE for what those counters mean (below), plus the **hand-run
+fallback** for when you did NOT open the PR via `closeout_finish.py` (e.g. a manual
+`gh pr create`): only then do you run the ledger yourself.
 
 Write one JSON file to `docs/journal/telemetry/` capturing this closeout's
 cost (bd polyglot-pdf-hrn.1). Each closeout writes its own file (named by
@@ -517,8 +528,9 @@ timestamp + session prefix), so parallel PRs never touch the same path and
 GitHub merges them without conflict -- no custom merge driver needed. The script
 is **zero-model-token**: it parses the session transcript JSONL for the token
 split (orchestrator-vs-subagent, by model) and wall-clock; you only pass the
-handful of numbers a script can't read off the transcript. Run the **worktree's
-copy** so the file path resolves into THIS checkout (same `$WT` rule as Steps 3/4):
+handful of numbers a script can't read off the transcript. **Fallback only**
+(when the PR was NOT opened via `closeout_finish.py`) -- run the **worktree's copy**
+so the file path resolves into THIS checkout (same `$WT` rule as Steps 3/4):
 
 `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/harness_ledger.py" --bead <bead-id> --arm <A|B|C|BC> --cost-category <production|audit> --recorded-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> --haiku-escalations <n> --errors-shipped <n>`
 

@@ -32,11 +32,11 @@ polyglot-pdf-8o4). This is the ONE place the script commits its own files; it
 still never ``git add``s the orchestrator's content. WARN-ONLY, like the
 telemetry write itself.
 
-It is the Steps-5-8.5 analogue of how ``closeout_prep.py`` collapses Steps
+It is the Steps-5-7 analogue of how ``closeout_prep.py`` collapses Steps
 0/1/2/4. The orchestrator (or a cheap ``closeout-runner`` subagent it delegates
-to) runs this AFTER it has made every judgment call: the review-worthiness gate
-(passed in as ``--review-worthy``/``--skip-review``), the journal prose, the
-staged file set. This script executes those decisions; it never makes them.
+to) runs this AFTER it has made every judgment call and BOTH reviews have cleared
+on the local branch: the journal prose, the staged file set, the telemetry
+counters. This script executes those decisions; it never makes them.
 
 What it does NOT do (the judgment boundary)
 -------------------------------------------

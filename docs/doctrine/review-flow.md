@@ -206,8 +206,8 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   change the same logic/contract incompatibly so keeping both is wrong and
   choosing is a design call; ambiguous counts as structural. On escalation, abort
   the rebase first so the branch is left clean. Full procedure + the inline-vs-
-  escalate boundary: the closeout skill's Step-7 "Merge-conflict resolution in the
-  loop" (bd polyglot-pdf-hrn.6).
+  escalate boundary: the closeout skill's "Merge-conflict resolution" subsection
+  under Step 5.6 (bd polyglot-pdf-hrn.6).
 - **Merge is autonomous for routine low-risk PRs, the maintainer's for
   consequence-bearing ones** (autonomy increase 2026-07-04). Once review is CLEAN
   and checks are green, a PR that is NOT consequence-bearing is merged with

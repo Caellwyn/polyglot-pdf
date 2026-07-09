@@ -446,7 +446,7 @@ class TestCloseBeadsGated:
 
 
 # --------------------------------------------------------------------------- #
-# --close-only (the two-call second call) — must NOT write a telemetry row
+# --close-only (recovery tool) -- must NOT write a telemetry row
 # --------------------------------------------------------------------------- #
 class TestCloseOnly:
     def test_closes_bead_and_writes_no_telemetry_row(self):
