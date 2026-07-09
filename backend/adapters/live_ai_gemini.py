@@ -765,7 +765,7 @@ class LiveAIGemini(ILiveAI):
         _native_vad = not bool(getattr(_settings, "DISABLE_GEMINI_VAD", False))
         _gapfill_enabled = _native_vad and bool(getattr(_settings, "AUDIO_GAPFILL_ENABLED", False))
         _gapfill_timeout_s = (
-            max(1, int(getattr(_settings, "AUDIO_GAPFILL_INTERVAL_MS", 40))) / 1000.0
+            max(1, int(getattr(_settings, "AUDIO_GAPFILL_INTERVAL_MS", 25))) / 1000.0
         )
         # One chunk of mono PCM16 silence at AUDIO_IN_RATE = rate * (ms/1000) * 2 bytes.
         _chunk_ms = max(1, int(getattr(_settings, "WS_CHUNK_MS", 20)))

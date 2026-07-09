@@ -115,7 +115,7 @@ branch changed); noted here rather than bumped.
 
 - `backend/config.py` -- new `AUDIO_GAPFILL_ENABLED` / `AUDIO_GAPFILL_INTERVAL_MS` knobs.
 - `backend/adapters/live_ai_gemini.py` -- audio sender lifted to `_audio_sender_loop` method with gap-fill.
-- `backend/tests/unit/test_audio_gapfill.py` -- NEW, 5 gap-fill tests.
+- `backend/tests/unit/test_audio_gapfill.py` -- NEW, 6 gap-fill tests.
 - `frontend/src/shared/audioConstraints.ts` -- NEW, canonical `MIC_AUDIO_CONSTRAINTS`.
 - `frontend/src/shared/audioManager.ts` -- consume shared constraints.
 - `frontend/src/schema-forms/components/SchemaForm.tsx` -- consume shared constraints.
