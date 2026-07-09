@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -123,12 +123,12 @@ instant the local VAD fires, for sub-perceptual latency (see
 ## Tool calling
 
 Tool calls are routed to `CallbackHandler.on_tool_call`
-(`backend/services/callback_handler.py`), which dispatches the six tools declared
+(`backend/services/callback_handler.py`), which dispatches the seven tools declared
 in `backend/config.py`. The full call/response sequence (code expectation vs. the
 actual wire payload) is mapped in [tool-call-flow.md](tool-call-flow.md); when
 debugging tool reliability, the adapter captures FULL message bodies locally via
 `_dev_log_io` (`.env.DEV`-gated, never in production) to
-`backend/logs/gemini_<date>.jsonl`. The six tools:
+`backend/logs/gemini_<date>.jsonl`. The seven tools:
 
 - `update_form_fields` — single field per call (hallucination mitigation).
 - `confirm_field` — enum `verbal`/`manual`; see
@@ -140,6 +140,10 @@ debugging tool reliability, the adapter captures FULL message bodies locally via
   helper that holds the whole form catalog + current answers and replies in
   prose (bd polyglot-pdf-jnjj.45); the principal uses it instead of trying to
   recall a past answer or another field itself.
+- `skip_field` -- force-skip a required field the user cannot answer right now
+  (bd polyglot-pdf-7yra), DISTINCT from not-applicable (which stays the
+  `update_form_fields ""` path). Maps to the frontend `markFieldSkipped` (the
+  `skipped` flag); the SI requires a verbal confirm first.
 
 The `complete_section` tool was **removed** — section completion is frontend-driven
 (see [websocket-routing.md](websocket-routing.md)).

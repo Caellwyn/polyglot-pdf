@@ -1006,7 +1006,7 @@ class CallbackHandler:
             skip_ack = await self._request_coordinator.request_skip_field(field_id)
 
         if skip_ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(skip_ack, dict):
-            return self._confirm_failure_response(
+            return self._skip_failure_response(
                 field_id,
                 "Could not record the skip right now (the form did not respond). "
                 "Do NOT assume the question was skipped -- ask the user to confirm "
@@ -1015,11 +1015,23 @@ class CallbackHandler:
 
         if not skip_ack.get("recorded"):
             reason = skip_ack.get("reason")
+            if reason == "already_filled":
+                # The field already holds a value -- skipping would blank it. Tell
+                # the model to CLEAR it intentionally (update_form_fields "") only
+                # if the user really wants it removed; otherwise it is already
+                # answered. Non-retryable: re-skipping fails identically.
+                guidance = (
+                    f"Field '{field_id}' already has a value, so it was NOT skipped "
+                    f"(skipping would erase the answer). If the user wants to remove "
+                    f"it, call update_form_fields with an empty value; otherwise it "
+                    f"is already answered -- move on. Do NOT retry skip_field."
+                )
+                return self._skip_failure_response(field_id, guidance, retryable=False)
             guidance = (
                 f"Field '{field_id}' could not be skipped ({reason or 'unknown'}). "
                 f"Ask the user whether they want to skip it or provide a value."
             )
-            return self._confirm_failure_response(field_id, guidance)
+            return self._skip_failure_response(field_id, guidance)
 
         # Recorded -- the skip took. Advance exactly like a confirm: a skipped field
         # satisfies the section, so run the SAME section-boundary / next-field-hint
@@ -1128,6 +1140,27 @@ class CallbackHandler:
         _log.info("GEMINI TOOL RESPONSE", tool="confirm_field", field_id=field_id, confirmed=False)
         _log.info("-" * 80)
         _dev_log.log_tool_response("confirm_field", response, session_id=self._session_id)
+        return response
+
+    def _skip_failure_response(self, field_id: str, message: str,
+                               retryable: bool = True) -> Dict[str, Any]:
+        """Build the skip_field tool response for a skip that did NOT take (bd
+        polyglot-pdf-7yra). Same WS-C2 structured-error shape as
+        _confirm_failure_response, but with skip-specific keys/labels
+        (``field_skipped`` + ``tool="skip_field"``) so the response and dev-log are
+        not mislabeled as a confirm. ``message`` is a fixed, caller-controlled
+        string -- never a field value (PII-free)."""
+        response = {
+            "success": False,
+            "field_skipped": None,
+            "next_field_hint": None,
+            "status": "error",
+            "retryable": retryable,
+            "error": message,
+            "message": message,
+        }
+        _log.info("GEMINI TOOL RESPONSE", tool="skip_field", field_id=field_id, skipped=False)
+        _dev_log.log_tool_response("skip_field", response, session_id=self._session_id)
         return response
 
     # Helper methods

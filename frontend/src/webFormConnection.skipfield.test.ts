@@ -115,6 +115,30 @@ describe('WebFormConnection skip_field handler (bd polyglot-pdf-7yra)', () => {
     expect(fv?.value ?? null).toBeNull()
   })
 
+  it('REFUSES to skip an already-filled field (no data loss) and acks already_filled', async () => {
+    const { conn, ws } = await connected()
+
+    // Fill the field first (production field_update path keyed by name).
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'field_update', updates: { 'USCIS Number': 'A123456789' } }),
+    })
+    await Promise.resolve()
+    ws.send.mockClear()
+
+    fireSkip(ws, 'p1_uscis_number')
+    await Promise.resolve()
+
+    const acks = skipAcks(ws)
+    expect(acks).toHaveLength(1)
+    expect(acks[0].recorded).toBe(false)
+    expect(acks[0].reason).toBe('already_filled')
+
+    // The real value is INTACT -- not blanked, not marked skipped.
+    const fv = (conn as any).state.fieldValues['p1_uscis_number']
+    expect(fv?.value).toBe('A123456789')
+    expect(fv?.skipped).toBeFalsy()
+  })
+
   it('acks recorded:false for an unknown field id', async () => {
     const { ws } = await connected()
 

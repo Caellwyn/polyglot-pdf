@@ -1865,6 +1865,25 @@ export class WebFormConnection {
       return;
     }
 
+    // DATA-LOSS GUARD (fresh-eyes review): markFieldSkipped BLANKS the value, so a
+    // skip aimed at an already-FILLED field would silently destroy a real answer
+    // (and mark it confirmed, so it is never re-prompted). Unlike confirm_field --
+    // which only sets confirmed:true and can never blank a value -- skip is a new
+    // destructive path, and the default non-DTI mode has no current-field coercion
+    // to catch a wrong/misheard field_id. So refuse to skip a field that already
+    // holds a usable value: ack recorded:false (reason 'already_filled') and let
+    // the model clear it intentionally (update_form_fields "") or move on. `[]`
+    // (an empty checkbox group) is NOT usable -> still skippable.
+    const existing = this.state.fieldValues[field_id]?.value;
+    const alreadyFilled =
+      existing !== null && existing !== undefined && existing !== '' &&
+      !(Array.isArray(existing) && existing.length === 0);
+    if (alreadyFilled) {
+      console.warn('[WebFormConnection] skip_field refused -- field already has a value:', field_id);
+      this.sendSkipFieldResponse(request_id, false, 'already_filled');
+      return;
+    }
+
     // Record the skip in state (empty value + skipped flag, counts as confirmed
     // so it does not re-prompt). ai_voice: the skip came through the voice tool.
     this.state = SchemaFormStateManager.markFieldSkipped(this.state, field_id, 'ai_voice');

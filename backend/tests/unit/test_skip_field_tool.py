@@ -122,6 +122,28 @@ class TestSkipFieldTool:
         mock_coordinator.request_next_field_hint.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_skip_already_filled_is_non_retryable_failure(self, callback_handler, mock_coordinator):
+        """When the FE refuses because the field already has a value
+        (reason='already_filled'), the tool returns a NON-retryable failure and
+        does not advance -- re-skipping fails identically, and the field is already
+        answered."""
+        mock_coordinator.request_skip_field = AsyncMock(
+            return_value={"recorded": False, "reason": "already_filled"}
+        )
+
+        response = await callback_handler.on_tool_call(
+            tool_name="skip_field",
+            arguments={"field_id": "p1_first_name"},
+        )
+
+        assert response.get("success") is not True
+        assert response.get("retryable") is False
+        # Skip-specific labels (not confirm's), fresh-eyes finding 2.
+        assert "field_skipped" in response
+        assert "field_confirmed" not in response
+        mock_coordinator.request_next_field_hint.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_skip_field_arg_is_read(self, callback_handler, mock_coordinator):
         """The handler reads the declared 'field_id' arg and passes it verbatim to
         the coordinator (a rename of the key would break this)."""
