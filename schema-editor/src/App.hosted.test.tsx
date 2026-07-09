@@ -119,12 +119,20 @@ async function passGate() {
   await waitFor(() => expect(screen.getByTestId('remote-catalogue')).toBeInTheDocument());
 }
 
+/** Open a kit through the compact selector strip (the default UI, bd tynm). */
+async function openKit(kitId: string) {
+  await waitFor(() =>
+    expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText('Select a form'), { target: { value: kitId } });
+}
+
 describe('App hosted mode (bd 92qe.2)', () => {
   it('prompts for an access code, validates it, and shows the remote catalogue', async () => {
     await passGate();
     expect(probeSession).toHaveBeenCalled();
     // The kit list came from the API, and the local-folder UI never rendered.
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Draft Form/ })).toBeInTheDocument());
     expect(screen.queryByText('Open form-kits folder')).not.toBeInTheDocument();
   });
 
@@ -161,8 +169,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
 
   it('opens a kit from the remote catalogue: schema + PDF via the routes', async () => {
     await passGate();
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('pdf')).toBeInTheDocument());
     expect(loadRemoteSchema).toHaveBeenCalledWith('draft-kit');
     expect(loadRemotePdfBlobUrl).toHaveBeenCalledWith('draft-kit');
@@ -170,8 +177,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
 
   it('Cmd+S saves the edited schema back through the remote store', async () => {
     await passGate();
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
 
     // Dirty the schema, then save.
@@ -193,8 +199,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
       applied: 2, dropped: 0, aliasHits: 1, repairs: [], errorCount: 0, warningCount: 0,
     });
     await passGate();
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('vp')).toBeInTheDocument());
     // The host passed onRepairAll (author tier on an open kit).
     expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('yes');
@@ -209,8 +214,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
   it('editor tier gets NO Repair-all callback (author-only)', async () => {
     vi.mocked(probeSession).mockResolvedValue({ role: 'editor' });
     await passGate();
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('vp')).toBeInTheDocument());
     expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('no');
     expect(screen.queryByTestId('repair-all')).toBeNull();
@@ -220,8 +224,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
     vi.mocked(probeSession).mockResolvedValue({ role: 'author' });
     vi.mocked(repairKit).mockRejectedValue(new AuthError());
     await passGate();
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('repair-all')).toBeInTheDocument());
     // A dead code mid-repair drops back to the access gate (probeSession still
     // resolves author here, so the gate would re-open; assert the re-prompt).
@@ -251,14 +254,13 @@ describe('App hosted mode (bd 92qe.2)', () => {
     );
 
     await passGate();
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Draft Form'));           // open kit A
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('repair-all')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('repair-all'));          // repair A (hangs)
     await waitFor(() => expect(repairKit).toHaveBeenCalledWith('draft-kit'));
 
     // Open kit B while A's repair is still in flight.
-    fireEvent.click(screen.getByText('Second Form'));
+    await openKit('second-kit');
     await waitFor(() => expect(loadRemoteSchema).toHaveBeenCalledWith('second-kit'));
 
     // Now let A's repair finish -- its reload must be abandoned (stale token).
@@ -277,7 +279,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
     (window as unknown as Record<string, unknown>).showDirectoryPicker = dirPicker;
     try {
       await passGate();
-      fireEvent.click(screen.getByText('Draft Form'));
+      await openKit('draft-kit');
       await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
       fireEvent.click(screen.getByTestId('edit-field'));
       fireEvent.keyDown(window, { key: 's', metaKey: true });
@@ -295,7 +297,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
 
   it('a mid-session 401 on save drops back to the access gate', async () => {
     await passGate();
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('edit-field'));
     vi.mocked(saveRemoteSchema).mockRejectedValue(new AuthError());
@@ -315,14 +317,14 @@ describe('App hosted mode (bd 92qe.2)', () => {
       vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
       vi.mocked(loadRemotePdfBlobUrl).mockResolvedValueOnce('blob:kit-a');
       await passGate();
-      fireEvent.click(screen.getByText('Draft Form'));
+      await openKit('draft-kit');
       await waitFor(() =>
         expect(screen.getByTestId('pdf')).toHaveTextContent('blob:kit-a'));
 
       // Open kit B: schema loads, but the PDF fetch answers 401.
       vi.mocked(loadRemotePdfBlobUrl).mockRejectedValueOnce(new AuthError());
       vi.mocked(probeSession).mockRejectedValueOnce(new AuthError());
-      fireEvent.click(screen.getByText('Second Form'));
+      await openKit('second-kit');
       const input = await screen.findByLabelText('Access code');
 
       // Kit A's URL was never revoked mid-open...
@@ -345,7 +347,7 @@ describe('App hosted mode (bd 92qe.2)', () => {
     // re-entering a valid code the editor resumes where it was, and the save
     // goes through re-authenticated with the NEW code.
     await passGate();
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('edit-field')); // dirty the schema
 
@@ -392,7 +394,7 @@ describe('App hosted mode Codex r1 fixes (PR #280)', () => {
       () => new Promise<void>((res) => { resolveSave = res; }),
     );
     await passGate();
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId('edit-field')); // dirty -> payload v1
@@ -426,8 +428,8 @@ describe('App hosted mode Codex r1 fixes (PR #280)', () => {
     );
 
     await passGate();
-    fireEvent.click(screen.getByText('Draft Form'));   // A: hangs
-    fireEvent.click(screen.getByText('Second Form'));  // B: completes
+    await openKit('draft-kit');
+    await openKit('second-kit');  // B: completes
     await waitFor(() =>
       expect(screen.getByTestId('pdf')).toHaveTextContent('blob:second-kit'));
 
@@ -443,8 +445,7 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
   async function openAndDirtyKit() {
     await passGate();
     fireEvent.click(screen.getByText('Got it')); // clear the first-run guide
-    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Draft Form'));
+    await openKit('draft-kit');
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('edit-field'));
   }

@@ -24,6 +24,12 @@ interface RemoteCatalogueProps {
     kitId: string; saved: boolean; percent: number; complete: number; total: number;
     version?: KitVersionInfo;
   } | null;
+  /**
+   * Start with the full card grid visible (bd tynm). Default FALSE: the
+   * catalogue renders as a compact selector strip and the cards live behind a
+   * "Show form cards" toggle, so the header gives its space to the editor.
+   */
+  defaultExpanded?: boolean;
 }
 
 interface RemoteKitProgress {
@@ -53,8 +59,18 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   onOpenKit, selectedKitId, role, onAuthError, liveProgress,
+  defaultExpanded = false,
 }) => {
   const [kits, setKits] = React.useState<RemoteKitEntry[]>([]);
+  // bd tynm: the card grid is collapsed by default behind a compact selector
+  // strip; `actionKitId` is the strip's selection (a schemaless kit can be
+  // selected for its actions -- e.g. Run extraction -- without being opened).
+  const [expanded, setExpanded] = React.useState(defaultExpanded);
+  const [actionKitId, setActionKitId] = React.useState<string | null>(null);
+  // When the parent CONFIRMS an open (selectedKitId changes -- via the dropdown,
+  // a card, or any other route), drop the local optimistic selection so the
+  // strip tracks the kit that is actually open.
+  React.useEffect(() => { setActionKitId(null); }, [selectedKitId]);
   const [progress, setProgress] = React.useState<Record<string, RemoteKitProgress>>({});
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -282,7 +298,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   }, [kits]);
 
   return (
-    <div data-testid="remote-catalogue" className="p-4 bg-white border-b border-gray-200">
+    <div data-testid="remote-catalogue" className="px-4 py-2 bg-white border-b border-gray-200">
       <div className="flex items-center gap-3 flex-wrap">
         <button className="btn btn-secondary" onClick={() => void refresh(true)} disabled={busy || extractingId !== null}>
           Refresh
@@ -340,7 +356,107 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         </div>
       )}
 
+      {/* bd tynm: the compact selector strip -- the default, low-footprint way
+          to switch forms. The full card grid stays available behind the toggle. */}
       {kits.length > 0 && (
+        <div className="mt-2 flex items-center gap-2 flex-wrap" data-testid="catalogue-strip">
+          <select
+            className="input text-sm max-w-xs"
+            aria-label="Select a form"
+            value={(actionKitId ?? selectedKitId) ?? ''}
+            onChange={(e) => {
+              const kit = kits.find((k) => k.id === e.target.value) ?? null;
+              setActionKitId(kit?.id ?? null);
+              // Opening needs a schema; a schemaless kit is still selectable so
+              // its actions (Run extraction) are reachable from the strip.
+              if (kit?.hasSchema) onOpenKit(kit);
+            }}
+          >
+            <option value="" disabled>
+              Select a form...
+            </option>
+            {kits.map((k) => {
+              const pct = liveProgress && liveProgress.kitId === k.id
+                ? liveProgress.percent
+                : (editedProgress[k.id]?.percent ?? progress[k.id]?.reviewPercent ?? null);
+              return (
+                <option key={k.id} value={k.id}>
+                  {k.label} -- {k.status}
+                  {pct !== null ? `, ${pct}%` : ''}
+                  {k.hasSchema ? '' : ' (no schema yet)'}
+                </option>
+              );
+            })}
+          </select>
+          {(() => {
+            const kit = kits.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
+            if (!kit) return null;
+            // The open is ASYNC and can fail: `actionKitId` is set on selection
+            // (optimistically), but selectedKitId only advances when the parent
+            // CONFIRMS the open. Status-changing actions (Mark complete/Revert)
+            // must never render for a schema-bearing kit that is not actually
+            // open -- else a failed open would leave the strip offering to
+            // complete a kit the user never reviewed (fresh-eyes, bd tynm). A
+            // SCHEMALESS kit has no open semantics, so its actions (Run
+            // extraction) are always safe to show.
+            if (kit.hasSchema && kit.id !== selectedKitId) return null;
+            const stripDirty = liveProgress !== null && liveProgress !== undefined
+              && liveProgress.kitId === kit.id && !liveProgress.saved;
+            return (
+              <>
+                <span className={`text-xs px-2 py-0.5 rounded ${STATUS_STYLE[kit.status]}`}>
+                  {kit.status}
+                </span>
+                {kit.hasSchema && (kit.status === 'complete' ? (
+                  <button
+                    className="btn-sm btn-secondary text-xs"
+                    onClick={() => void handleSetStatus(kit, 'draft')}
+                    disabled={busy}
+                    title="Revert to draft (removes it from the next deploy)"
+                  >
+                    Revert to draft
+                  </button>
+                ) : (
+                  <button
+                    className="btn-sm btn-primary text-xs"
+                    onClick={() => void handleSetStatus(kit, 'complete')}
+                    disabled={busy || stripDirty}
+                    title={stripDirty
+                      ? 'Save your changes first (Cmd+S) -- completing now '
+                        + 'would publish the last saved version, not your edits'
+                      : "Mark complete (ships with the maintainer's next deploy)"}
+                  >
+                    Mark complete
+                  </button>
+                ))}
+                {isAuthor && !kit.hasSchema && kit.hasPdf && (
+                  <button
+                    className="btn-sm btn-primary text-xs"
+                    onClick={() => void handleRunExtraction(kit)}
+                    disabled={busy || extractingId !== null}
+                    title="Run the automated PDF -> schema extraction on the server (takes a few minutes)"
+                  >
+                    {extractingId === kit.id
+                      ? `Extracting... ${extractElapsed}s`
+                      : 'Run extraction'}
+                  </button>
+                )}
+              </>
+            );
+          })()}
+          <button
+            className="btn-sm btn-secondary text-xs ml-auto"
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded
+              ? 'Collapse the form cards back to the compact selector'
+              : 'Show every form as a card (status, version, review progress, actions)'}
+          >
+            {expanded ? 'Hide form cards' : 'Show form cards'}
+          </button>
+        </div>
+      )}
+
+      {expanded && kits.length > 0 && (
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {kits.map((kit) => {
             const prog = progress[kit.id];

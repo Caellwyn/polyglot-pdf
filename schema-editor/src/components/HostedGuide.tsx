@@ -85,8 +85,8 @@ const SECTIONS: GuideSection[] = [
           <li>
             <K>Save, then mark it complete.</K> Press <K>Cmd+S</K> (
             <K>Ctrl+S</K>) to save. When every field is green, click{' '}
-            <K>Mark complete</K> on the form's card so the maintainer can publish
-            it.
+            <K>Mark complete</K> next to the form selector (or on its card via
+            <K>Show form cards</K>) so the maintainer can publish it.
           </li>
         </UL>
       </>
@@ -293,8 +293,8 @@ const SECTIONS: GuideSection[] = [
         </P>
         <H>2. Attach the official instructions PDF (do this whenever one exists)</H>
         <P>
-          Before running extraction, click <K>+ instructions PDF</K> on the new
-          card and attach the form's official instructions document (the guide
+          Before running extraction, click <K>Show form cards</K>, then
+          <K>+ instructions PDF</K> on the new card to attach the form's official instructions document (the guide
           the issuing agency publishes alongside the form).
         </P>
         <P>
@@ -333,7 +333,8 @@ const SECTIONS: GuideSection[] = [
             <K>Cmd+Shift+Z</K> (Ctrl on Windows/Linux).
           </li>
           <li>
-            <K>Mark complete</K> on a form's card promotes it. Save first -- the
+            <K>Mark complete</K> (in the selector strip, or on a form's card)
+            promotes it. Save first -- the
             button uses your last saved version. The server validates the schema
             and refuses a broken one with the reason.
           </li>

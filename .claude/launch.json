@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "--prefix", "schema-editor", "dev"],
       "port": 3001
+    },
+    {
+      "name": "schema-editor-hosted",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "--prefix", "schema-editor", "dev", "--", "--mode", "hosted"],
+      "port": 3001
     }
   ]
 }
