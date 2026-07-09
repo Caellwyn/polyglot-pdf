@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PDFPageProxy } from 'pdfjs-dist';
 import type { FormSchema } from '../schema-forms/types/schema';
 import { usePDFDocument } from './usePDFDocument';
+import { shouldShowField } from '../schema-forms/utils/validation';
 import { hasValidCoordinates } from './pdfCoordinates';
 import { PDFViewer } from './PDFViewer';
 import { useSnapToField } from './useSnapToField';
@@ -69,6 +70,18 @@ export default function PreviewPane({
   useEffect(() => {
     setEditingFieldId(null);
   }, [currentFieldId, scale]);
+  // Auto-close when the edited field's show_if flips FALSE mid-edit (e.g.
+  // the voice session changes the controlling field): the overlay dims,
+  // FieldRenderer would render null, and a chrome-only popover would float
+  // with an empty body (fresh-eyes 7esr r1). Re-runs per fill (fieldValues
+  // churns identity) but only acts when the field is actually hidden.
+  useEffect(() => {
+    if (!editingFieldId) return;
+    const f = schema.fields.find((x) => x.id === editingFieldId);
+    if (f && !shouldShowField(f, fieldValues, schema.fields)) {
+      setEditingFieldId(null);
+    }
+  }, [editingFieldId, fieldValues, schema.fields]);
 
   // QA surface: any field that cannot paint (no usable rect) is listed once
   // per pane mount. Deps are deliberately empty: `schema` gets a fresh object

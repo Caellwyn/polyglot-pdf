@@ -105,6 +105,28 @@ describe('PreviewPane click-to-edit state (bd polyglot-pdf-7esr)', () => {
     expect(screen.queryByTestId('pdf-field-edit-popover-name')).toBeNull();
   });
 
+  it('auto-closes when the edited field show_if flips false mid-edit (no chrome-only popover)', () => {
+    // apt is visible while has_apt is checked...
+    const visible = { has_apt: { value: true, confirmed: true } };
+    const { rerender } = renderPane({ fieldValues: visible });
+    fireEvent.click(screen.getByTestId('pdf-field-overlay-apt'));
+    expect(screen.getByTestId('pdf-field-edit-popover-apt')).toBeTruthy();
+
+    // ...then the controlling field flips (voice session / another edit)
+    // WITHOUT a currentFieldId or scale change.
+    rerender(
+      <PreviewPane
+        pdfUrl="/fake.pdf"
+        schema={schema}
+        fieldValues={{ has_apt: { value: false, confirmed: true } }}
+        validationErrors={{}}
+        onFieldChange={vi.fn()}
+        onFieldBlur={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId('pdf-field-edit-popover-apt')).toBeNull();
+  });
+
   it('the clickable overlay is keyboard-activatable (Enter opens the editor)', () => {
     renderPane();
     const box = screen.getByTestId('pdf-field-overlay-name');
