@@ -2,7 +2,7 @@
 
 What this is
 ------------
-The /closeout skill's Steps 5-8.5 are a string of orchestrator Bash turns that
+The /closeout skill's Steps 5-7 are a string of orchestrator Bash turns that
 each re-derive the ``$R``/``$WT``/``$PY`` worktree roots and run one git/gh/bd
 command: commit the staged closeout work, pre-push rebase, push, open the PR,
 record the telemetry row, **commit + push that telemetry row**, and close the
@@ -43,11 +43,12 @@ What it does NOT do (the judgment boundary)
 - run the review loop or triage fresh-eyes / outer-review findings (both reviews
   already cleared BEFORE this script runs -- SKILL Steps 5.5 + 5.6);
 - resolve a merge conflict (it aborts the rebase and exits REBASE-CONFLICT so
-  the orchestrator decides mechanical-vs-structural -- SKILL Step 7);
+  the orchestrator decides mechanical-vs-structural -- SKILL Step 5.6's
+  "Merge-conflict resolution");
 - write journal prose, or ``git add`` (staging is the orchestrator's content
   decision);
 - ``gh pr merge`` (not this script's job -- the merge decision is an orchestrator
-  judgment call at closeout Step 8: auto-merge a routine low-risk clean PR, else
+  judgment call at closeout Step 6: auto-merge a routine low-risk clean PR, else
   ping the maintainer).
 
 Bead close
@@ -224,7 +225,8 @@ class Closeout:
             _run(["git", "-C", self.wt, "rebase", "--abort"], check=False)
             raise RebaseConflict(
                 "rebase onto {} conflicted; aborted and left the branch clean. "
-                "Resolve per SKILL Step 7 (mechanical inline / structural "
+                "Resolve per SKILL Step 5.6's Merge-conflict resolution "
+                "(mechanical inline / structural "
                 "escalate).\n{}".format(name, (proc.stdout or proc.stderr or "").strip())
             )
 

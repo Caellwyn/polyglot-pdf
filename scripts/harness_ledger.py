@@ -7,7 +7,8 @@ polyglot-pdf-hrn.1). It parses the Claude Code session transcript JSONL and
 writes one JSON file to ``docs/journal/telemetry/`` so the A/B harness
 experiment has a real dataset instead of anecdote. Each closeout gets its own
 file (named by timestamp + session prefix), so parallel PRs never conflict on
-GitHub. Closeout calls it at the end (Step 8.5). It spends no model tokens --
+GitHub. Closeout writes the row via closeout_finish.py (Step 6); the standalone
+call documented at Step 7 is the hand-run fallback. It spends no model tokens --
 the orchestrator only passes the handful of facts a script cannot read off the
 transcript (Copilot rounds, maintainer touchpoints, etc.) as flags.
 
