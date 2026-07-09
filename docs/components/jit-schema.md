@@ -2,7 +2,7 @@
 
 **Tracks:** backend/services/manifest_service.py backend/services/ai_context.py backend/routes/websocket_routes.py backend/services/form_filling_service.py backend/services/callback_handler.py backend/config.py frontend/src/schema-forms/utils/manifestUtils.ts frontend/src/schema-forms/state/schemaFormState.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: re-verified every claim against current code -- no behavioral drift; refreshed stale line-number citations, added callback_handler.py + config.py to Tracks, and noted the JIT handshake now also carries full_schema for the secretary agent). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-5f41-p2-1-option-pdf-position-model-backfill-tool-kit.md](../journal/entries/2026-07-09-bd-5f41-p2-1-option-pdf-position-model-backfill-tool-kit.md) for closeout details.*
 
 The JIT path (`USE_JIT_SCHEMA=true`, default OFF) was built by weaker models, audited
 under A1, and repaired under A2. This doc is the audit catalog: the **fix-now** gaps
@@ -156,7 +156,10 @@ OK but tokens/turns wasted -- **[CLEAN]** cleanliness / robustness / dead code.
   `manifest_service.get_next_field_schema(part_data=self._schema, current_field_id)`
   (inside `get_next_field_schema_for_jit`, `form_filling_service.py:1681`), which finds "next" by INDEX within
   `part_data["fields"]` (`manifest_service.py:78-94`) -- it never consults the
-  manifest. But in JIT mode `self._schema["fields"]` is `[first_field_schema]`
+  manifest. (Since bd polyglot-pdf-5f41 the minimal schema SANITIZES option
+  dicts to `value`/`label`/`spoken_label`: `pdf_field_name`, `pdf_on_value`,
+  per-option `pdf_position`, and `label_translations` never ride the tool
+  response -- pdf plumbing stays out of model-facing payloads.) But in JIT mode `self._schema["fields"]` is `[first_field_schema]`
   (length 1, `websocket_routes.py:671`), so the index lookup returns
   `current_index+1 >= len(fields)` -> None for EVERY field. Nothing ever appends
   loaded fields back into `self._schema["fields"]`. Net effect: the model gets

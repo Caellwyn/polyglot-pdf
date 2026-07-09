@@ -99,6 +99,46 @@ def test_get_next_field_schema_walks_fields(sample_part):
     assert get_next_field_schema(sample_part, "field_2") is None
 
 
+def test_get_next_field_schema_strips_pdf_plumbing_from_options():
+    """The JIT next_field_schema rides inside confirm_field tool responses --
+    a model-facing payload. Schema option dicts carry PDF plumbing
+    (pdf_field_name, pdf_on_value, and per-option pdf_position since bd
+    polyglot-pdf-5f41) plus label_translations, none of which the voice model
+    can use: assert options are sanitized to value/label/spoken_label only
+    (epic polyglot-pdf-oaiz rubric R5)."""
+    part = {"id": "p", "label": "P", "fields": [{
+        "id": "eth", "name": "Ethnicity", "spoken_name": "ethnicity",
+        "type": "radio",
+        "options": [
+            {"value": "hispanic", "label": "Hispanic or Latino",
+             "spoken_label": "Hispanic or Latino",
+             "label_translations": {"es": "Hispano o Latino"},
+             "pdf_field_name": "P3_checkbox5_Hispanic[0]",
+             "pdf_on_value": "1",
+             "pdf_position": {"page": 3, "x": 344.0, "y": 115.58,
+                              "width": 10.0, "height": 10.0}},
+            {"value": "not_hispanic", "label": "Not Hispanic"},
+        ],
+    }]}
+    options = get_next_field_schema(part, None)["options"]
+    assert options == [
+        {"value": "hispanic", "label": "Hispanic or Latino",
+         "spoken_label": "Hispanic or Latino"},
+        {"value": "not_hispanic", "label": "Not Hispanic"},
+    ]
+
+
+def test_get_next_field_schema_passes_bare_string_options_through():
+    """An options list of bare strings (allowed_values-style) must pass
+    through the sanitizer unchanged, not crash -- the pre-sanitizer code
+    tolerated this shape and ai_context renders it via str(opt)."""
+    part = {"id": "p", "label": "P", "fields": [{
+        "id": "f", "name": "F", "spoken_name": "f", "type": "select",
+        "options": ["alpha", "beta"],
+    }]}
+    assert get_next_field_schema(part, None)["options"] == ["alpha", "beta"]
+
+
 def test_should_include_schema_in_response_tracks_loaded_state():
     loaded = set()
     assert should_include_schema_in_response("field_1", loaded) is True

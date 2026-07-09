@@ -1,9 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-07-07 (bd polyglot-pdf-h76m.16 P6.2 strictness flip: the
-retired-vocabulary section now reflects the DELETION of controls_fields /
-conditional_fields / group_kind / the vq4m hack from the model + evaluators). See
-[../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md](../journal/entries/2026-07-07-bd-h76m16-strictness-flip.md).*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-5f41-p2-1-option-pdf-position-model-backfill-tool-kit.md](../journal/entries/2026-07-09-bd-5f41-p2-1-option-pdf-position-model-backfill-tool-kit.md) for closeout details.*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -80,8 +77,8 @@ both dialects parse.
 | Term | Meaning in v2 |
 |------|---------------|
 | **checkbox** | A STANDALONE boolean field. `options` are **forbidden** on it. Never a group. |
-| **checkbox_group** | ONE logical multi-select question; the only group mechanism is its `options[]`. Value shape is a `List[str]` of option slugs. No field-level `pdf_field_name`; per-box PDF identity lives on `options[].pdf_field_name` (+ `pdf_on_value`). |
-| **radio** | Single-select choice field (value is one option slug). PDF mapping is per-option `pdf_field_name` OR a shared field-level `pdf_field_name` + per-option `pdf_on_value` (true-AcroForm kids). |
+| **checkbox_group** | ONE logical multi-select question; the only group mechanism is its `options[]`. Value shape is a `List[str]` of option slugs. No field-level `pdf_field_name`; per-box PDF identity lives on `options[].pdf_field_name` (+ `pdf_on_value`, + the per-option `pdf_position` rect since bd polyglot-pdf-5f41). |
+| **radio** | Single-select choice field (value is one option slug). PDF mapping is per-option `pdf_field_name` OR a shared field-level `pdf_field_name` + per-option `pdf_on_value` (true-AcroForm kids); each option may also carry its own `pdf_position` rect (bd polyglot-pdf-5f41). |
 | **option slug** | `FieldOption.value` in v2: a SEMANTIC slug minted deterministically from the label (lowercase ascii `[a-z0-9_-]`, no commas/spaces, unique per field, immutable once minted). Widget identity never lives in `value`. |
 | **ConditionGroup** | The composite condition: one level of `all_of` / `any_of` / `none_of` buckets of atomic `{field, operator, value}` conditions. Flat by construction -- no nesting. "(A AND B) AND NOT C" = `all_of:[A,B] + none_of:[C]`. |
 | **require_if** | Field-level condition (same shape as `show_if`) under which the field becomes REQUIRED. Replaces `controls_fields.makes_required`. |
