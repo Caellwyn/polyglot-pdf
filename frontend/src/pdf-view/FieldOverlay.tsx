@@ -3,19 +3,21 @@
  * state and painting the user's value inside it (bd polyglot-pdf-ogrt).
  *
  * Diverged from the schema editor's FieldOverlay: the editor colors by
- * metadata completeness and is clickable; this one colors by fill state
- * (empty / filled / confirmed / current) and is READ-ONLY (click-to-edit is
- * bead P2.3, polyglot-pdf-7esr).
+ * metadata completeness; this one colors by fill state
+ * (empty / filled / confirmed / current).
  *
- * bd polyglot-pdf-lp5v adds two things:
- * - option-rect painting: a selected radio/checkbox/checkbox_group option
- *   with its own pdf_position gets an X mark at that option's printed box
- *   (rendered as sibling divs in the same page-coordinate space; the
+ * - option-rect painting (bd lp5v): a selected radio/checkbox/checkbox_group
+ *   option with its own pdf_position gets an X mark at that option's printed
+ *   box (rendered as sibling divs in the same page-coordinate space; the
  *   field-level state box stays, keeping data-field-id for snap-to). Options
  *   without rects fall back to the label-at-field-rect painting.
- * - show_if dimming: a conditionally-hidden field renders dimmed (never
- *   removed -- it exists on paper) and is not clickable; `current` wins over
- *   dimmed (never dim the field the voice model is on).
+ * - show_if dimming (bd lp5v): a conditionally-hidden field renders dimmed
+ *   (never removed -- it exists on paper) and is not clickable; `current`
+ *   wins over dimmed (never dim the field the voice model is on).
+ * - click-to-edit (bd 7esr): with `onClick` present and the field not
+ *   dimmed, the overlay (and its option marks, as extra pointer targets)
+ *   opens the whole-field FieldEditPopover; the field box is the single
+ *   accessible button (Enter/Space).
  */
 
 import React from 'react';
