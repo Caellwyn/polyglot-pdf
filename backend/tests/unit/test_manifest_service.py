@@ -128,6 +128,17 @@ def test_get_next_field_schema_strips_pdf_plumbing_from_options():
     ]
 
 
+def test_get_next_field_schema_passes_bare_string_options_through():
+    """An options list of bare strings (allowed_values-style) must pass
+    through the sanitizer unchanged, not crash -- the pre-sanitizer code
+    tolerated this shape and ai_context renders it via str(opt)."""
+    part = {"id": "p", "label": "P", "fields": [{
+        "id": "f", "name": "F", "spoken_name": "f", "type": "select",
+        "options": ["alpha", "beta"],
+    }]}
+    assert get_next_field_schema(part, None)["options"] == ["alpha", "beta"]
+
+
 def test_should_include_schema_in_response_tracks_loaded_state():
     loaded = set()
     assert should_include_schema_in_response("field_1", loaded) is True

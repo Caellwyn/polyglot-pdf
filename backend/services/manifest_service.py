@@ -118,8 +118,13 @@ def get_next_field_schema(part_data: dict, current_field_id: str | None = None) 
     # label_translations, which are meaningless to the model and cost tokens
     # in every JIT tool response.
     if next_field.get("options"):
+        # Bare-string options (allowed_values-style lists) pass through
+        # unchanged -- every other option consumer guards the same way
+        # (ai_context isinstance checks), and the pre-sanitizer code never
+        # crashed on them.
         minimal_schema["options"] = [
-            {k: opt[k] for k in ("value", "label", "spoken_label") if opt.get(k) is not None}
+            opt if not isinstance(opt, dict)
+            else {k: opt[k] for k in ("value", "label", "spoken_label") if opt.get(k) is not None}
             for opt in next_field["options"]
         ]
     elif next_field.get("allowed_values"):
