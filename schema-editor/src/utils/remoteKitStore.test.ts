@@ -8,6 +8,7 @@ import {
   AuthError,
   apiBaseUrl,
   clearAccessCode,
+  extractRemoteKit,
   getAccessCode,
   isHostedMode,
   listRemoteKits,
@@ -171,6 +172,34 @@ describe('endpoints', () => {
     );
     await expect(setRemoteStatus('broken', 'complete'))
       .rejects.toThrow('does not validate');
+  });
+
+  it('extractRemoteKit NEVER sends an empty multipart body (bd 1ysc)', async () => {
+    // A zero-part FormData body is rejected by python-multipart with a parse
+    // error starlette does not catch -> FastAPI 400 "There was an error parsing
+    // the body" BEFORE the route runs. The client must always append `force`.
+    // (A fresh Response per call: a Response body is single-read.)
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+
+    // Bare Run-extraction click: no force, no instructions PDF.
+    await extractRemoteKit('form-2');
+    let [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/editor/kits/form-2/extract');
+    let body = (init as RequestInit).body as FormData;
+    expect(body.get('force')).toBe('false');       // present, never empty
+    expect(body.get('instructions_pdf')).toBeNull();
+
+    // force path still sends true.
+    await extractRemoteKit('form-2', { force: true });
+    body = (fetchMock.mock.calls[1][1] as RequestInit).body as FormData;
+    expect(body.get('force')).toBe('true');
+
+    // instructions PDF still attaches alongside force.
+    const pdf = new File([new Uint8Array([1])], 'instr.pdf', { type: 'application/pdf' });
+    await extractRemoteKit('form-2', { instructionsPdf: pdf });
+    body = (fetchMock.mock.calls[2][1] as RequestInit).body as FormData;
+    expect(body.get('force')).toBe('false');
+    expect((body.get('instructions_pdf') as File).name).toBe('instr.pdf');
   });
 });
 

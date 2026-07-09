@@ -301,7 +301,13 @@ export async function extractRemoteKit(
   opts: { force?: boolean; instructionsPdf?: File } = {},
 ): Promise<RemoteExtractionResult> {
   const form = new FormData();
-  if (opts.force) form.append('force', 'true');
+  // ALWAYS append force (true or false) so the multipart body is never empty.
+  // A bare Run-extraction click (no force, no instructions PDF) used to send a
+  // zero-part body, which python-multipart rejects with a MultipartParseError
+  // that starlette does not catch -- FastAPI then 400s with "There was an error
+  // parsing the body" BEFORE the route runs (bd polyglot-pdf-1ysc). The backend
+  // declares force: Form() = False and coerces the string, so this is safe.
+  form.append('force', opts.force ? 'true' : 'false');
   if (opts.instructionsPdf) {
     form.append('instructions_pdf', opts.instructionsPdf, opts.instructionsPdf.name);
   }
