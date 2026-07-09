@@ -51,18 +51,25 @@ export function SectionRenderer({
       <div className="section__fields">
         {fields.map((field) => {
           const fieldValue = fieldValues[field.id];
+
+          // Match FieldRenderer's own visibility gate (it returns null for an
+          // unshown field): render NO wrapper for a hidden/show_if-unmet field, or
+          // an empty .section__field flex-child would allocate a phantom gap for
+          // every hidden conditional field (fresh-eyes review). "Shown" uses the
+          // SAME shouldShowField test FieldRenderer + isSectionValid use, so the
+          // skip button, the badge, and the section gate all agree on visibility.
+          const shown = shouldShowField(field, fieldValues, fields);
+          if (!shown) return null;
+
           // Extract confirmation status from FieldValue object
           const confirmed = fieldValue?.confirmed === true;
           const skipped = fieldValue?.skipped === true;
 
           // 4dxt: offer a "Skip" affordance only for a field that is currently
-          // shown, currently required, still empty, and not already skipped -- the
-          // exact case isSectionValid would otherwise block on. A skipped field
-          // instead shows a distinct "needs follow-up" badge. "Shown" uses the
-          // SAME shouldShowField test FieldRenderer uses (see isSectionValid) so
-          // the skip button and the section gate agree on visibility.
-          const shown = shouldShowField(field, fieldValues, fields);
-          const required = shown && isFieldRequired(field, fieldValues, fields);
+          // required, still empty, and not already skipped -- the exact case
+          // isSectionValid would otherwise block on. A skipped field instead shows
+          // a distinct "needs follow-up" badge.
+          const required = isFieldRequired(field, fieldValues, fields);
           const empty = isEmptyValue(unwrapFieldValue(fieldValue));
           const canSkip = !!onFieldSkip && required && empty && !skipped && !disabled;
 

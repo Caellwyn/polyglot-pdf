@@ -79,4 +79,27 @@ describe('SectionRenderer: 4dxt skip affordance', () => {
     render(<SectionRenderer {...baseProps} fieldValues={{}} />);
     expect(screen.queryByRole('button', { name: /Skip for now/i })).toBeNull();
   });
+
+  it('renders NO wrapper node for a hidden (show_if-unmet) field (no phantom gap)', () => {
+    // A field gated on trigger=yes; with trigger unset it is not shown and must
+    // produce no .section__field node (matches FieldRenderer returning null).
+    const gatedSection: FormSection = { id: 'sec', label: 'Sec', order: 1, fields: ['gated'] };
+    const gatedFields: FormField[] = [
+      { id: 'gated', name: 'Gated', spoken_name: 'gated', type: 'text', section_id: 'sec',
+        validation: { required: true },
+        show_if: { field: 'trigger', operator: 'equals', value: 'yes' } },
+    ];
+    const { container } = render(
+      <SectionRenderer
+        {...baseProps}
+        section={gatedSection}
+        fields={gatedFields}
+        fieldValues={{}}
+        onFieldSkip={vi.fn()}
+      />
+    );
+    // Not shown -> no field wrapper, no skip button.
+    expect(container.querySelector('.section__field')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Skip for now/i })).toBeNull();
+  });
 });
