@@ -149,6 +149,32 @@ export async function setKitStatus(
   return readKitEntry(entry.id, dir);
 }
 
+/** Rename a kit's DISPLAY label (bd 15ic) -- the local-mode mirror of the
+ * hosted /label route: a read-merge-write of metadata.json's `label`. The kit's
+ * identity (directory name / id) never changes, so nothing downstream breaks. */
+export async function setKitLabel(
+  entry: CatalogueEntry, label: string,
+): Promise<CatalogueEntry> {
+  const trimmed = label.trim();
+  if (!trimmed) throw new Error('Label must not be empty');
+  if (trimmed.length > 200) throw new Error('Label too long (max 200 characters)');
+  // Mirror the hosted route's _safe_label ban (load-bearing, not cosmetic):
+  // deploy-all.sh extracts this label from metadata.json with grep/sed and
+  // splices it into index.json by string concatenation -- a double quote,
+  // backslash, or control character would ship an INVALID manifest the voice
+  // app cannot parse (bd 15ic, Opus review).
+  // eslint-disable-next-line no-control-regex
+  if (/["\\]|[\x00-\x1f]/.test(trimmed)) {
+    throw new Error('Label may not contain double quotes, backslashes, or control characters');
+  }
+  const dir = entry.dirHandle;
+  const metaHandle = await tryGetFile(dir, METADATA_FILE);
+  const existing = metaHandle ? await readJsonFile<KitMetadata>(metaHandle) : null;
+  const next: KitMetadata = { ...(existing || {}), label: trimmed };
+  await writeFile(dir, METADATA_FILE, JSON.stringify(next, null, 2) + '\n');
+  return readKitEntry(entry.id, dir);
+}
+
 // --- Review-progress metric (bd polyglot-pdf-vl3o, D3) ---------------------- //
 //
 // "Review progress" for a form is the SAME field-completion signal the editor

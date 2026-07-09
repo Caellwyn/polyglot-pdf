@@ -5,7 +5,7 @@
  * resulting CatalogueEntry must reflect the new status.
  */
 import { describe, it, expect } from 'vitest';
-import { setKitStatus, type CatalogueEntry } from './formKitDirectory';
+import { setKitLabel, setKitStatus, type CatalogueEntry } from './formKitDirectory';
 
 // A mock directory handle backing a single metadata.json. Captures the last
 // written content so the test can assert the merged result, mirroring the
@@ -73,5 +73,43 @@ describe('setKitStatus', () => {
 
     expect(updated.status).toBe('complete');
     expect(JSON.parse(mock.read()!).status).toBe('complete');
+  });
+});
+
+describe('setKitLabel (bd 15ic)', () => {
+  it('renames the display label, preserving other metadata fields', async () => {
+    const mock = mockKitDir(JSON.stringify({ label: 'Form 2', status: 'draft', notes: 'keep' }));
+    const updated = await setKitLabel(entry('form-2', mock.dirHandle), '  IRS W-9  ');
+
+    expect(updated.id).toBe('form-2');           // identity untouched
+    const written = JSON.parse(mock.read()!);
+    expect(written.label).toBe('IRS W-9');       // trimmed
+    expect(written.status).toBe('draft');        // preserved
+    expect(written.notes).toBe('keep');          // preserved
+  });
+
+  it('rejects manifest-poison characters without writing (bd 15ic Opus review)', async () => {
+    // deploy-all.sh splices this label into index.json by string concatenation;
+    // a quote/backslash/control char would ship an invalid manifest. Mirror of
+    // the hosted route's _safe_label ban.
+    const mock = mockKitDir(JSON.stringify({ label: 'Form 2', status: 'draft' }));
+    for (const bad of ['My "Special" Form', 'Path\\Back', 'Tab\there', 'x'.repeat(201)]) {
+      await expect(setKitLabel(entry('form-2', mock.dirHandle), bad))
+        .rejects.toThrow(/quotes|control|too long/i);
+    }
+    expect(JSON.parse(mock.read()!).label).toBe('Form 2');  // unchanged
+  });
+
+  it('allows legitimate punctuation and unicode', async () => {
+    const mock = mockKitDir(JSON.stringify({ label: 'Form 2', status: 'draft' }));
+    await setKitLabel(entry('form-2', mock.dirHandle), "O'Brien's Form (2024), Rev-2");
+    expect(JSON.parse(mock.read()!).label).toBe("O'Brien's Form (2024), Rev-2");
+  });
+
+  it('rejects a blank label without writing', async () => {
+    const mock = mockKitDir(JSON.stringify({ label: 'Form 2', status: 'draft' }));
+    await expect(setKitLabel(entry('form-2', mock.dirHandle), '   '))
+      .rejects.toThrow('must not be empty');
+    expect(JSON.parse(mock.read()!).label).toBe('Form 2');  // unchanged
   });
 });

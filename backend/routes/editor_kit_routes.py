@@ -161,6 +161,12 @@ class KitStatusBody(BaseModel):
     status: Literal["draft", "complete"]
 
 
+class KitLabelBody(BaseModel):
+    """The new display label for a kit (bd 15ic). Whitespace-stripped server-side;
+    an empty/blank label is a 422."""
+    label: str
+
+
 class LintFindingOut(BaseModel):
     """One lint finding as the editor's ValidationPanel renders it.
 
@@ -713,6 +719,35 @@ async def set_editor_kit_status(
     return {"ok": True, "status": body.status}
 
 
+@router.post("/kits/{kit_id}/label")
+async def set_editor_kit_label(
+    kit_id: str,
+    body: KitLabelBody,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> dict:
+    """Rename a kit's DISPLAY label (bd polyglot-pdf-15ic), preserving every
+    other metadata key -- the exact read-merge-write shape of the status flip.
+
+    The label is pure display: the catalogue and the voice app's form picker
+    render it, but nothing keys on it (the kit's identity is the immutable
+    kit_id / storage path). Onboarding derives a label from the PDF filename, so
+    nameless uploads collide into "Form", "Form 2", ... -- this lets a human fix
+    that after the fact. The identity is deliberately NOT renameable here.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    label = _safe_label(body.label)
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+    next_meta = {**(meta or {}), "label": label}
+    try:
+        await store.put_metadata(kit_id, next_meta)
+    except FormKitStoreError as exc:
+        _log.error("editor_label_save_failed", kit_id=kit_id, error=str(exc))
+        raise HTTPException(status_code=502, detail="Unable to update label") from exc
+    _log.info("editor_label_set", kit_id=kit_id, role=role)
+    return {"ok": True, "label": label}
+
+
 # --- author tier: PDF onboarding + hosted extraction (bd polyglot-pdf-92qe.3) --
 #
 # The (a)-tier contractor permission from the 2026-07-01 goal: collect (upload a
@@ -740,6 +775,31 @@ def _derive_kit_id(filename: str) -> str:
 
 def _friendly_label(kit_id: str) -> str:
     return re.sub(r"\b\w", lambda m: m.group(0).upper(), kit_id.replace("-", " ").replace("_", " "))
+
+
+def _safe_label(raw: str) -> str:
+    """Validate a caller-supplied DISPLAY label (bd 15ic); returns it stripped.
+
+    Raises 422 on: blank; >200 chars (a display name, not a document); a double
+    quote, backslash, or control character. The character ban is LOAD-BEARING,
+    not cosmetic: the deploy scripts extract the label from metadata.json with
+    a grep/sed pipeline and splice it into index.json by string concatenation
+    (deploy-all.sh / scripts/deploy-form-kit.sh) -- a quote or backslash there
+    truncates the extraction and ships INVALID manifest JSON, which the voice
+    app cannot parse (no forms would load). Opus review, bd 15ic.
+    """
+    label = (raw or "").strip()
+    if not label:
+        raise HTTPException(status_code=422, detail="Label must not be empty")
+    if len(label) > 200:
+        raise HTTPException(status_code=422, detail="Label too long (max 200 characters)")
+    if '"' in label or "\\" in label or any(ord(ch) < 32 for ch in label):
+        raise HTTPException(
+            status_code=422,
+            detail="Label may not contain double quotes, backslashes, or "
+                   "control characters",
+        )
+    return label
 
 
 # ONE extraction subprocess per instance at a time: each run holds a PDF +
@@ -852,7 +912,11 @@ async def onboard_editor_kit(
         # The derived id must survive the same guard every later route applies.
         kit_id = _safe_kit_id(kit_id)
 
-        kit_label = label.strip() if isinstance(label, str) and label.strip() else _friendly_label(kit_id)
+        # A caller-supplied label goes through the same validation as a rename
+        # (the deploy-manifest pipeline cannot tolerate quotes/backslashes --
+        # see _safe_label); absent/blank falls back to the derived name.
+        kit_label = (_safe_label(label) if isinstance(label, str) and label.strip()
+                     else _friendly_label(kit_id))
         try:
             await store.put_pdf_bytes(kit_id, data, "form.pdf")
             await store.put_metadata(kit_id, {"label": kit_label, "status": "draft"})

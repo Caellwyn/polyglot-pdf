@@ -1044,6 +1044,86 @@ def test_status_flip_preserves_other_metadata(client):
     assert meta["description"] == "Green card"   # preserved
 
 
+# --- POST /kits/{kit_id}/label (rename the display label, bd 15ic) ---------- #
+
+def test_label_rename_preserves_other_metadata(client):
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA,
+              label="Form 2", extra_meta={"description": "the mystery form"})
+    r = c.post(
+        "/api/editor/kits/form-2/label",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"label": "  IRS W-9 (2024)  "},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "label": "IRS W-9 (2024)"}  # stripped
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert meta["label"] == "IRS W-9 (2024)"
+    assert meta["status"] == "draft"                      # preserved
+    assert meta["description"] == "the mystery form"      # preserved
+
+
+def test_label_rename_rejects_a_blank_label(client):
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2")
+    r = c.post(
+        "/api/editor/kits/form-2/label",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"label": "   "},
+    )
+    assert r.status_code == 422
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert meta["label"] == "Form 2"  # unchanged
+
+
+def test_label_rename_rejects_an_absurdly_long_label(client):
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2")
+    r = c.post(
+        "/api/editor/kits/form-2/label",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"label": "x" * 201},
+    )
+    assert r.status_code == 422
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert meta["label"] == "Form 2"  # unchanged
+
+
+def test_label_rename_rejects_manifest_poison_characters(client):
+    # A double quote or backslash in a label would truncate the deploy scripts'
+    # grep/sed extraction and splice INVALID JSON into the deployed index.json
+    # (the voice app then fails to parse the manifest -- no forms load). The
+    # route is the single choke point, so it must refuse them (Opus review).
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2")
+    for bad in ['My "Special" Form', 'Path\Back', "Tab	here"]:
+        r = c.post(
+            "/api/editor/kits/form-2/label",
+            headers={"X-Editor-Token": "edit-tok"},
+            json={"label": bad},
+        )
+        assert r.status_code == 422, bad
+    meta = json.loads((root / "form-2" / "metadata.json").read_text())
+    assert meta["label"] == "Form 2"  # unchanged by every attempt
+
+
+def test_label_rename_404s_on_an_unknown_kit(client):
+    c, _store, _root = client
+    r = c.post(
+        "/api/editor/kits/no-such-kit/label",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"label": "Anything"},
+    )
+    assert r.status_code == 404
+
+
+def test_label_rename_requires_the_access_token(client):
+    c, _store, root = client
+    _make_kit(root, "form-2", status="draft", schema=VALID_SCHEMA, label="Form 2")
+    r = c.post("/api/editor/kits/form-2/label", json={"label": "New Name"})
+    assert r.status_code == 401
+
+
 def test_status_revert_to_draft_is_unconditional(client):
     c, _store, root = client
     # Broken schema -- reverting to draft must still work (only PROMOTION gates).

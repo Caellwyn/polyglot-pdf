@@ -136,8 +136,13 @@ generate_manifest() {
             continue
         fi
 
-        # Extract label from schema.json (title field)
-        local label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
+        # Label precedence mirrors the store's (metadata.label -> schema title ->
+        # kit_id, backend/services/form_kits.py): metadata.json's label is the
+        # RENAMEABLE display name (bd 15ic).
+        local label=$(grep -o '"label"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/metadata.json" 2>/dev/null | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+        if [ -z "$label" ]; then
+            label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/schema.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
+        fi
         if [ -z "$label" ]; then
             label="$kit_id"
         fi

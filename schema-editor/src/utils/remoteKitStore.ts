@@ -262,6 +262,17 @@ export async function setRemoteStatus(
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the status'));
 }
 
+/** Rename a kit's DISPLAY label (bd 15ic) -- metadata-only; the kit's identity
+ * (id / storage path) never changes, so nothing downstream breaks. */
+export async function setRemoteLabel(kitId: string, label: string): Promise<void> {
+  const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/label`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  });
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not rename the form'));
+}
+
 // --- author tier (bd polyglot-pdf-92qe.3) ----------------------------------
 // Onboarding + hosted extraction: multipart POSTs (no manual Content-Type --
 // the browser sets the boundary). Both need the AUTHOR access code; the server
