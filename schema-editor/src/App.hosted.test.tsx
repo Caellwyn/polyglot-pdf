@@ -532,12 +532,15 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
     ).toBeInTheDocument();
   });
 
-  it('local (non-hosted) mode gets neither the guide nor the Help button', async () => {
+  it('local (non-hosted) mode gets the Help button but no auto-opened guide', async () => {
+    // The Help button (and the in-app guide it opens) is available in local mode
+    // too -- the editing content is identical. Only the FIRST-RUN auto-open stays
+    // hosted-only, so no dialog is shown until the user clicks Help.
     vi.mocked(isHostedMode).mockReturnValue(false);
     render(<App />);
     await waitFor(() =>
       expect(screen.getByText(/Welcome to PDF Schema Editor/)).toBeInTheDocument());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByText('Help')).not.toBeInTheDocument();
+    expect(screen.getByText('Help')).toBeInTheDocument();
   });
 });

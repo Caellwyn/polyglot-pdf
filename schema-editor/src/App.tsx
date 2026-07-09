@@ -694,15 +694,13 @@ export const App: React.FC = () => {
             ) : null}
           </div>
           <div className="flex gap-2">
-            {hosted && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => setGuideOpen(true)}
-                title="Reopen the getting-started guide"
-              >
-                Help
-              </button>
-            )}
+            <button
+              className="btn btn-secondary"
+              onClick={() => setGuideOpen(true)}
+              title="Open the help &amp; guide"
+            >
+              Help
+            </button>
             <button
               className="btn btn-secondary"
               onClick={undo}
@@ -841,7 +839,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {guideOpen && <HostedGuide onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <HostedGuide role={role} onClose={() => setGuideOpen(false)} />}
 
       {/* Main Content */}
       {loading && (
