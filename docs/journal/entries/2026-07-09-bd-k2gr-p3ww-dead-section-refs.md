@@ -15,9 +15,17 @@ Neither was introduced by P6.2 (both present in origin/dev before it) and neithe
 is caught by the promotion lint (which checks show_if/require_if references, not
 section.fields).
 
-- **i-90 (k2gr):** the "Part 2 - Application Type" section listed the real
-  `p2_checkbox3` group AND `p2_checkbox3[1..4]` -- the individual widget leaves that
-  were consolidated INTO that checkbox_group. The `[1..4]` are dead refs.
+- **i-90 (k2gr):** the "Part 2 - Application Type" section listed the real field
+  `p2_checkbox3` AND `p2_checkbox3[1..4]`, which are NOT fields in `schema.fields`
+  -- so they are dangling refs and were removed. IMPORTANT (fresh-eyes, verified
+  against the PDF, NOT assumed): `p2_checkbox3` is a standalone `type: "checkbox"`
+  covering only the widget `P2_checkbox3[0]`; it is NOT a checkbox_group and does
+  NOT consolidate `[1..4]`. The AcroForm dump shows `P2_checkbox3[0..4]` are 5
+  distinct real checkbox widgets (I-90 Part 2 Q3 sub-reasons, on-states 3a-3e), of
+  which only `[0]` is modeled. So removing these dangling SECTION refs is the right
+  fix for the validate_all_references error, but it does NOT recover the 4 real,
+  currently-unfillable-through-the-app checkboxes `[1..4]` -- that underlying
+  extraction gap is tracked separately in bd polyglot-pdf-0nxh.
 - **w7-2 (p3ww):** the `sec_agent` section listed 5 real agent_* fields PLUS
   `agent_company`/`agent_ein`/`agent_ptin`/`agent_office_code` -- phantom ids never
   extracted as fields. Verified against the AcroForm dump: w7-2's schema covers ALL
