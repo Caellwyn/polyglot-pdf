@@ -2,7 +2,7 @@
 
 **Tracks:** backend/utils/token_file_logger.py backend/config.py backend/adapters/live_ai_gemini.py backend/utils/log_schemas.py backend/utils/structured_logger.py
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code; folded the `gemini_go_away_received` log fact into the timing-checkpoints section). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-5c2h-structured-token-stdout-emit.md](../journal/entries/2026-07-09-bd-5c2h-structured-token-stdout-emit.md) for closeout details.*
 
 How this project tracks Gemini token usage + cost, where the per-token rates live,
 and the phased roadmap from "JSONL file for local analysis" to a real
@@ -88,10 +88,14 @@ value field.
 
 `backend/utils/structured_logger.py` (`StructuredLogger` / `get_logger()`) imports
 these schemas and exposes a typed, stdout-JSON emit API for the Cloud Run → BigQuery
-pipeline ("LOGGING_OVERHAUL_PLAN Phase 1"). But **it emits nothing yet**: the only
-non-test reference is a single dead import in `live_ai_gemini.py`
-(`get_logger as get_structured_logger`) that is never called. So the typed event
-stream is scaffolding — the contract is defined, the wiring lands in Phases 2–4 below.
+pipeline ("LOGGING_OVERHAUL_PLAN Phase 1"). The **one** wired emitter today is the
+per-turn token event: `live_ai_gemini.py` calls
+`get_structured_logger().log_gemini_api_response(...)` alongside the file write, so
+every turn's counts + costs land as a `gemini_api_response` `jsonPayload` line in
+Cloud Logging — queryable/exportable off a deployed run without scraping the
+`print()` block (bd `polyglot-pdf-5c2h`). The remaining event types (session
+lifecycle, field, error) are still scaffolding — the contract is defined, the wiring
+lands in Phases 2–4 below.
 
 (Routine application logging today goes through `structlog` — `structlog.get_logger()`
 bound per module — not through `StructuredLogger`.)

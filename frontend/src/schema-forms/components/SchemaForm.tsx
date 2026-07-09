@@ -624,6 +624,9 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             schema={state.schema}
             fieldValues={state.fieldValues}
             currentFieldId={currentFieldId}
+            validationErrors={state.validationErrors}
+            onFieldChange={handleFieldChange}
+            onFieldBlur={handleFieldBlur}
           />
         </React.Suspense>
       ) : (

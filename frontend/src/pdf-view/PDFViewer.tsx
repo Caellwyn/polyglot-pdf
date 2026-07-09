@@ -14,8 +14,10 @@ import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import type { FormField } from '../schema-forms/types/schema';
 import { unwrapFieldValue } from '../schema-forms/utils/fieldValue';
 import { shouldShowField } from '../schema-forms/utils/validation';
+import { pdfToScreenCoords, hasValidCoordinates } from './pdfCoordinates';
 import { PDFPage } from './PDFPage';
 import { FieldOverlay, type FillState } from './FieldOverlay';
+import { FieldEditPopover } from './FieldEditPopover';
 
 export interface PDFViewerProps {
   document: PDFDocumentProxy;
@@ -26,6 +28,17 @@ export interface PDFViewerProps {
   fieldValues: Record<string, any>;
   currentFieldId?: string | null;
   onFirstPageLoad?: (page: PDFPageProxy) => void;
+  /**
+   * Click-to-edit (bd polyglot-pdf-7esr). All four arrive together from
+   * PreviewPane (which owns the editing state); absent, the surface is
+   * read-only exactly as before.
+   */
+  editingFieldId?: string | null;
+  onOverlayClick?: (fieldId: string) => void;
+  onCloseEditor?: () => void;
+  validationErrors?: Record<string, string>;
+  onFieldChange?: (fieldId: string, value: any) => void;
+  onFieldBlur?: (fieldId: string) => void;
 }
 
 export function fillStateFor(
@@ -56,12 +69,28 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   fieldValues,
   currentFieldId,
   onFirstPageLoad,
+  editingFieldId,
+  onOverlayClick,
+  onCloseEditor,
+  validationErrors,
+  onFieldChange,
+  onFieldBlur,
 }) => {
+  const editable = !!(onOverlayClick && onCloseEditor && onFieldChange && onFieldBlur);
+  const editingField =
+    editable && editingFieldId ? fields.find((f) => f.id === editingFieldId) : undefined;
   return (
     <>
       {Array.from({ length: numPages }, (_, i) => {
         const pageNum = i + 1;
         const pageFields = fields.filter((f) => f.pdf_position?.page === pageNum);
+        // The popover renders inside ITS field's page container, in the same
+        // page coordinate space as the overlays (scrolls with the page).
+        const editingHere =
+          editingField && editingField.pdf_position?.page === pageNum &&
+          hasValidCoordinates(editingField.pdf_position)
+            ? editingField
+            : undefined;
         return (
           <div key={pageNum} className="pdf-viewer__page" data-page-number={pageNum}>
             <div className="pdf-viewer__page-inner">
@@ -86,10 +115,23 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                       // exist on the printed page (bd polyglot-pdf-lp5v).
                       // shouldShowField unwraps the wrapped map internally.
                       dimmed={!shouldShowField(field, fieldValues, fields)}
+                      onClick={editable ? onOverlayClick : undefined}
                     />
                   );
                 })}
               </div>
+              {editingHere && (
+                <FieldEditPopover
+                  field={editingHere}
+                  value={fieldValues[editingHere.id]}
+                  allFieldValues={fieldValues}
+                  error={validationErrors?.[editingHere.id] ?? null}
+                  onChange={(value) => onFieldChange!(editingHere.id, value)}
+                  onBlur={onFieldBlur!}
+                  onClose={onCloseEditor!}
+                  anchor={pdfToScreenCoords(editingHere.pdf_position!, scale)}
+                />
+              )}
             </div>
             <div className="pdf-preview-pane__page-label">
               Page {pageNum} of {numPages}

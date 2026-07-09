@@ -211,10 +211,13 @@ def test_one_command_emits_the_multi_form_table(capsys, tmp_path):
     rc = ev.main(["--json", str(out_json)])
     table = capsys.readouterr().out
     # Every benchmark form has a row.
-    for name in ("w7", "w7-2", "f1040", "w9-heldout"):
+    for name in ("i-90", "w7", "w7-2", "f1040", "w9-heldout"):
         assert name in table
     # Structural assertion column is rendered.
     assert "PASS (8w" in table
+    # i-90's P2_checkbox3 select-one group is pinned + recognized as consolidated
+    # (bd ox6y -- the regression guard for the qmxb grouping fix).
+    assert "PASS (5w, 1 group)" in table
     # The held-out form (no draft, no gold -- by design) is explicit, not silent.
     assert "held-out" in table
     # Post the P6.2 flip (bd h76m.16) every shipped kit is migrated to v2 and
@@ -222,8 +225,8 @@ def test_one_command_emits_the_multi_form_table(capsys, tmp_path):
     # is resolved by the migration, so the whole table is GREEN -> exit 0.
     assert "RED" not in table and rc == 0
     rows = json.loads(out_json.read_text(encoding="utf-8"))
-    assert len(rows) == 4
-    # The three real kits score OK; the held-out row carries no verdict.
+    assert len(rows) == 5
+    # The four real kits score OK; the held-out row carries no verdict.
     assert all(r.get("verdict", "OK") == "OK" for r in rows)
 
 
@@ -267,3 +270,40 @@ def test_held_out_note_widget_claims_match_the_real_pdf():
     assert checkboxes == expected  # the form IS what the note says it is
     for leaf in sorted(expected):
         assert leaf in note, f"NOTE.md no longer names {leaf}"
+
+
+# --------------------------------------------------------------------------- #
+# bd ox6y: i-90's select-one group is pinned + measured (the qmxb regression guard)
+# --------------------------------------------------------------------------- #
+
+def test_i90_pins_the_p2_checkbox3_select_one_group():
+    form = next((f for f in ev._FORMS if f["name"] == "i-90"), None)
+    assert form is not None, "i-90 must be in the eval benchmark"
+    assert form["widgets"] == [f"P2_checkbox3[{i}]" for i in range(5)]
+    # The shipped gold models it as ONE consolidated field (the 0nxh fix). The
+    # coverage check is modeling-agnostic: a DROP/de-identification fails it (the
+    # regression qmxb prevents), while a clean split still passes but is flagged
+    # consolidated=False. So assert the gold both passes AND is consolidated.
+    gold = json.loads(pathlib.Path(form["gold"]).read_text(encoding="utf-8"))
+    r = ev.check_widget_coverage(gold, form["widgets"])
+    assert r["passed"] and r["consolidated"] and r["widgets"] == 5
+
+
+def test_i90_pin_catches_a_dropped_widget_but_allows_a_clean_split():
+    """Pin the guard's ACTUAL semantics (modeling-agnostic): a DROP fails the
+    check (the qmxb regression); a clean split into standalone checkboxes still
+    passes but is flagged consolidated=False."""
+    leaves = [f"P2_checkbox3[{i}]" for i in range(5)]
+    # DROP: a radio modeling only 1 of the 5 -> the other 4 unclaimed -> FAIL.
+    dropped = {"fields": [{"id": "reason", "type": "radio", "options": [
+        {"value": "v0", "pdf_field_name": "top.P2_checkbox3[0]"}]}]}
+    assert not ev.check_widget_coverage(dropped, leaves)["passed"]
+    # SPLIT: 5 standalone checkboxes each claiming one widget -> passes, but NOT
+    # consolidated (the row surfaces that it was not recognized as one field).
+    split = {"fields": [
+        {"id": f"r{i}", "type": "checkbox", "pdf_field_name": f"top.P2_checkbox3[{i}]",
+         "options": [{"value": f"P2_checkbox3[{i}]",
+                      "pdf_field_name": f"top.P2_checkbox3[{i}]"}]}
+        for i in range(5)]}
+    rs = ev.check_widget_coverage(split, leaves)
+    assert rs["passed"] and not rs["consolidated"]
