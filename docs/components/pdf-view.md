@@ -1,8 +1,8 @@
 # pdf-view -- the Preview-mode PDF surface
 
-**Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
+**Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-lp5v-p2-2-preview-overlay-upgrades.md](../journal/entries/2026-07-09-bd-lp5v-p2-2-preview-overlay-upgrades.md) for closeout details.*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-7esr-p2-3-click-to-edit-popover.md](../journal/entries/2026-07-09-bd-7esr-p2-3-click-to-edit-popover.md) for closeout details.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -84,7 +84,20 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   not clickable; `current` wins over dimmed. PDFViewer computes `dimmed` via
   `shouldShowField` on the wrapped value map, so dimming flips live with the
   controlling field (bd lp5v).
-  Read-only; click-to-edit is bead P2.3 (`polyglot-pdf-7esr`).
+- Click-to-edit (`FieldEditPopover`, bd 7esr): clicking a non-dimmed overlay
+  (or one of its option marks -- extra hit targets for the SAME whole-field
+  editor, never a direct toggle) opens a popover hosting the SAME
+  `FieldRenderer` input Simplified mode uses (one widget per type, one
+  validation path, read_only + flip_readonly_bit for free). It is absolutely
+  positioned in page coordinate space (scrolls with the page, no scroll
+  listeners): below the rect, flipped above near the page bottom, clamped
+  horizontally, internal scroll for long option lists. Write-through on
+  change via SchemaForm's `handleFieldChange` (the single place stamping
+  `confirmed` + `manual_edit` and fanning out `copy_to`) -- overlays repaint
+  live while typing. Dismissal: Esc, click-outside, the X button, a voice
+  advance (`currentFieldId` change), and zoom (scale change). PreviewPane
+  owns the editing state; without the edit handlers the surface is
+  read-only. Overlays are keyboard-activatable (`role=button`, Enter/Space).
 - `fillStateFor` (PDFViewer): `[]` and `false` count as empty (a cleared
   checkbox_group must not paint as filled); `current` wins over all.
 - Live updates ride the existing `schemaFormStateChange` channel one level up:
