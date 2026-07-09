@@ -10,6 +10,33 @@ import structlog
 
 _log = structlog.get_logger(__name__)
 
+# The only option keys a voice/text model needs. The schema option dicts also
+# carry PDF plumbing (pdf_field_name, pdf_on_value, per-option pdf_position -- bd
+# polyglot-pdf-5f41) and label_translations, which are meaningless to the model,
+# cost tokens in every tool response, and are PDF-internal detail that must not
+# leak into a model-facing payload.
+_MODEL_FACING_OPTION_KEYS = ("value", "label", "spoken_label")
+
+
+def _sanitize_options(options: list | None) -> list | None:
+    """Strip option dicts to the model-facing keys (value/label/spoken_label).
+
+    Shared by get_next_field_schema (JIT path) and get_field_guidance (DTI path)
+    so both apply the SAME sanitization boundary (bd polyglot-pdf-lj5v; the
+    boundary was first established for the JIT path in bd polyglot-pdf-5f41).
+
+    Bare-string options (allowed_values-style lists) pass through unchanged --
+    every other option consumer guards the same way (ai_context isinstance
+    checks), and the pre-sanitizer code never crashed on them.
+    """
+    if not options:
+        return options
+    return [
+        opt if not isinstance(opt, dict)
+        else {k: opt[k] for k in _MODEL_FACING_OPTION_KEYS if opt.get(k) is not None}
+        for opt in options
+    ]
+
 
 def generate_part_manifest(
     part_data: dict,
@@ -113,20 +140,12 @@ def get_next_field_schema(part_data: dict, current_field_id: str | None = None) 
 
     # Include options/allowed_values for select/radio/checkbox fields.
     # SANITIZE each option to what the voice model needs (value/label/
-    # spoken_label): the schema option dicts also carry PDF plumbing
-    # (pdf_field_name, pdf_on_value, pdf_position -- bd polyglot-pdf-5f41) and
-    # label_translations, which are meaningless to the model and cost tokens
-    # in every JIT tool response.
+    # spoken_label) via the shared helper (bd polyglot-pdf-lj5v) -- the schema
+    # option dicts also carry PDF plumbing (pdf_field_name, pdf_on_value,
+    # pdf_position -- bd polyglot-pdf-5f41) and label_translations, which are
+    # meaningless to the model and cost tokens in every JIT tool response.
     if next_field.get("options"):
-        # Bare-string options (allowed_values-style lists) pass through
-        # unchanged -- every other option consumer guards the same way
-        # (ai_context isinstance checks), and the pre-sanitizer code never
-        # crashed on them.
-        minimal_schema["options"] = [
-            opt if not isinstance(opt, dict)
-            else {k: opt[k] for k in ("value", "label", "spoken_label") if opt.get(k) is not None}
-            for opt in next_field["options"]
-        ]
+        minimal_schema["options"] = _sanitize_options(next_field["options"])
     elif next_field.get("allowed_values"):
         minimal_schema["allowed_values"] = next_field["allowed_values"]
 
@@ -203,9 +222,13 @@ def get_field_guidance(field: dict) -> dict | None:
         guidance["format_hint"] = format_hint
 
     # Options for select/radio/checkbox (label/value pairs or bare values).
+    # SANITIZE via the shared helper (bd polyglot-pdf-lj5v) so this DTI path
+    # applies the SAME value/label/spoken_label boundary as the JIT
+    # get_next_field_schema path -- never leak pdf_field_name/pdf_on_value/
+    # pdf_position/label_translations into a model-facing payload.
     options = field.get("options") or field.get("allowed_values")
     if options:
-        guidance["options"] = options
+        guidance["options"] = _sanitize_options(options)
 
     # Validation hints that help the model guide the user (no internal-only keys).
     validation = field.get("validation")
