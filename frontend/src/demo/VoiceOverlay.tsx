@@ -1386,6 +1386,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// This keeps the gate a pure, reactive function of `status` and lets the
 	// mic-energy meter effect below share the exact same visibility condition.
 	const isListening = status.toLowerCase() === 'connected' || status.toLowerCase().startsWith('connected ')
+	// Not-listening-yet transient states (bd polyglot-pdf-3to5): the system is coming
+	// up or recovering but is NOT consuming mic audio (shouldSendMicChunk drops audio
+	// in these states, and the backend now drops any pre-ready frames too). Show the
+	// ear CROSSED-OUT here so "the system isn't listening" is explicit + language-
+	// neutral during the handshake / reconnect window, instead of the ear vanishing.
+	const isNotListeningTransient = status.toLowerCase() === 'connecting' ||
+		status.toLowerCase().startsWith('reconnecting') ||
+		status.toLowerCase() === 'switching_section'
+	// The ear is rendered while listening OR while in a not-listening-yet transient
+	// (muted). It stays HIDDEN for paused / disconnected / error / idle_timeout --
+	// those are explicit end/user states already carried by the status text + FAB.
+	const showEar = isListening || isNotListeningTransient
 	const isPausedState = status.toLowerCase() === 'paused'
 	const isWarming = status.toLowerCase().includes('warming')
 	const isReady = status.toLowerCase() === 'ready'
@@ -1438,28 +1450,43 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						    it was NOT. Language-neutral: the ear glyph replaces the English
 						    word so it reads the same across all 18 spoken languages. The
 						    meter still distinguishes mic-alive-but-gated (grey bar) from
-						    audio-reaching-the-backend (green, --sending). Gated on
-						    `isListening` (send-capable states) not `isConnected`, so it
-						    stays hidden while reconnecting. */}
-						{isListening && (
+						    audio-reaching-the-backend (green, --sending). Shown while
+						    listening OR crossed-out (--muted) during a not-listening-yet
+						    transient (connecting / reconnecting / switching_section), so the
+						    handshake/reconnect window reads as "not listening" rather than
+						    the ear vanishing (bd polyglot-pdf-3to5). */}
+						{showEar && (
 							<span
-								className={`vff-listening${micSending ? ' vff-listening--sending' : ''}`}
-								title={micSending
-									? `Listening -- sending audio (energy ${micEnergy.toFixed(0)})`
-									: `Listening -- mic active, not sending (energy ${micEnergy.toFixed(0)})`}
-								aria-label="Listening"
+								className={
+									isListening
+										? `vff-listening${micSending ? ' vff-listening--sending' : ''}`
+										: 'vff-listening vff-listening--muted'
+								}
+								title={isListening
+									? (micSending
+										? `Listening -- sending audio (energy ${micEnergy.toFixed(0)})`
+										: `Listening -- mic active, not sending (energy ${micEnergy.toFixed(0)})`)
+									: 'Not listening -- connecting to the assistant'}
+								aria-label={isListening ? 'Listening' : 'Not listening'}
 								role="status"
 							>
 								{/* Ear glyph via an ASCII-safe Unicode escape (U+1F442) so the
 								    .tsx source stays ASCII per AGENTS.md; it still renders the ear
-								    emoji at runtime. Language-neutral -- no word to translate. */}
+								    emoji at runtime. Language-neutral -- no word to translate. The
+								    crossed-out "not listening" state is a CSS strike on this glyph
+								    (.vff-listening--muted .vff-listening-ear::after), so no separate
+								    "no-ear" glyph is needed. */}
 								<span className="vff-listening-ear" aria-hidden="true">{'\u{1F442}'}</span>
-								<span className="vff-mic-meter">
-									<span
-										className="vff-mic-meter-bar"
-										style={{ width: `${Math.min(100, micEnergy)}%` }}
-									></span>
-								</span>
+								{/* Live mic-energy meter only while genuinely listening -- there
+								    is no mic energy to show during the not-listening transient. */}
+								{isListening && (
+									<span className="vff-mic-meter">
+										<span
+											className="vff-mic-meter-bar"
+											style={{ width: `${Math.min(100, micEnergy)}%` }}
+										></span>
+									</span>
+								)}
 							</span>
 						)}
 					</div>
@@ -1774,9 +1801,39 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					border-color: #10b981;
 				}
 
+				/* Not-listening (bd polyglot-pdf-3to5): the system is connecting /
+				   reconnecting / switching and is NOT consuming mic audio. Dim the chip
+				   and strike the ear glyph so it reads as "not listening yet". */
+				.vff-listening--muted {
+					background: #f3f4f6;
+					border-color: #d1d5db;
+					opacity: 0.65;
+				}
+
 				.vff-listening-ear {
 					font-size: 14px;
 					line-height: 1;
+				}
+
+				.vff-listening--muted .vff-listening-ear {
+					position: relative;
+					filter: grayscale(1);
+				}
+
+				/* Diagonal red strike across the ear -> "not listening". Pure CSS
+				   pseudo-element, so no separate "no-ear" glyph is needed and the .tsx
+				   source stays ASCII. */
+				.vff-listening--muted .vff-listening-ear::after {
+					content: "";
+					position: absolute;
+					left: -2px;
+					right: -2px;
+					top: 50%;
+					height: 2px;
+					background: #ef4444;
+					transform: rotate(-45deg);
+					transform-origin: center;
+					border-radius: 2px;
 				}
 
 				/* Thinking indicator (bd polyglot-pdf-wpw.5): three calm pulsing dots

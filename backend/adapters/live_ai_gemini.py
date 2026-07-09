@@ -471,6 +471,20 @@ class LiveAIGemini(ILiveAI):
         self._timing_last_activity_end: Optional[float] = None
         self._timing_first_inbound_audio: Optional[float] = None
         self._timing_audio_dropped: int = 0
+        # Count of inbound audio frames dropped because they arrived BEFORE the
+        # Gemini session was ready (bd polyglot-pdf-3to5). stream_audio drops these
+        # rather than enqueuing them into a consumerless queue that would overflow
+        # and then burst on drain -> 1011. Surfaced in the session-close rollup so
+        # the handshake-gate is observable. Reset per session in _run_session_loop.
+        self._pre_ready_dropped: int = 0
+
+        # Injectable clock + sleep for the real-time audio pacer (bd
+        # polyglot-pdf-3to5). Default to the real monotonic clock and asyncio.sleep;
+        # tests substitute a fake clock that only advances when _sleep is awaited, so
+        # "exactly N frames over T seconds" is deterministic without wall-clock flake.
+        # See _audio_sender_loop's fixed-cadence tick.
+        self._clock = time.monotonic
+        self._sleep = asyncio.sleep
 
         # Structured logger for this adapter
         self._log = structlog.get_logger().bind(
@@ -735,20 +749,27 @@ class LiveAIGemini(ILiveAI):
             self._log.exception("on_session_dropped_callback_error")
 
     async def _audio_sender_loop(self, session):
-        """Forward queued audio frames into the live session, with gap-filling.
+        """Forward queued audio frames into the live session at a real-time cadence.
 
-        Backend audio-cadence gap-filling (bd polyglot-pdf-7f7m). Native-VAD mode
-        needs a CONTINUOUS PCM stream; if the client stutters, a gap on the wire
-        can starve Gemini's keepalive and trip a 1011. When AUDIO_GAPFILL_ENABLED,
-        we wait for a real chunk only up to AUDIO_GAPFILL_INTERVAL_MS and, on
-        timeout, send ONE synthetic silence frame so the cadence never breaks.
+        Real-time pacing (bd polyglot-pdf-3to5). The client sends mic audio at a
+        clean 1.0x real-time but in bursty 8ms/256-byte frames. The OLD sender
+        forwarded each frame the instant it dequeued AND injected an un-paced
+        gap-fill silence frame on every sub-interval gap, so the OUTBOUND stream ran
+        ~2.2x real-time (silence was ~54% of bytes) and tripped a recurring Gemini
+        1011 "sending data too fast". When AUDIO_PACING_ENABLED (default), this runs
+        a fixed WS_CHUNK_MS monotonic-clock tick that emits exactly one
+        WS_CHUNK_MS-sized frame per tick from a byte accumulator -- the wire cadence
+        is real-time, never faster -- and gap-fill silence is sent ONLY on a genuine
+        underrun tick. When disabled, the legacy wait_for/timeout gap-fill path runs
+        (a clean revert switch preserving the bd 7f7m behavior).
 
-        Gap-fill fires ONLY after real audio has started (nothing to keep alive
-        before the first frame) and NOT once a graceful shutdown has begun (the
-        drain path owns the socket + sentinel then). The None sentinel still exits
-        the loop cleanly on either path. Config is read ONCE per session (values
-        are static for its lifetime); extracted to a method (not a closure) so the
-        cadence logic is unit-testable with a mock session.
+        Gap-fill / silence still fires ONLY after real audio has started and NOT once
+        a graceful shutdown has begun (the drain path owns the socket + sentinel
+        then); the None sentinel exits cleanly on either path. Native-VAD only:
+        manual-VAD (DISABLE_GEMINI_VAD=true) brackets turns with activity_start/end,
+        so injecting silence between turns is wrong (bd 7f7m). Config is read ONCE per
+        session; extracted to a method (not a closure) so the cadence logic is
+        unit-testable with a mock session + injectable clock.
         """
         chunk_count = 0
         from backend.config import get_settings
@@ -769,8 +790,13 @@ class LiveAIGemini(ILiveAI):
         )
         # One chunk of mono PCM16 silence at AUDIO_IN_RATE = rate * (ms/1000) * 2 bytes.
         _chunk_ms = max(1, int(getattr(_settings, "WS_CHUNK_MS", 20)))
-        _silence_frame = bytes((_in_rate * _chunk_ms // 1000) * 2)
-        _seen_real_audio = False
+        _frame_bytes = (_in_rate * _chunk_ms // 1000) * 2
+        _silence_frame = bytes(_frame_bytes)
+        _pacing_enabled = bool(getattr(_settings, "AUDIO_PACING_ENABLED", True))
+        _max_buffer_ms = max(_chunk_ms, int(getattr(_settings, "AUDIO_MAX_BUFFER_MS", 200)))
+        _max_buffer_bytes = (_in_rate * _max_buffer_ms // 1000) * 2
+        _frame_interval_s = _chunk_ms / 1000.0
+        # nonlocal-mutated counters shared with _send_frame.
         _silence_frames_sent = 0
 
         async def _send_frame(data: bytes, *, is_silence: bool):
@@ -815,45 +841,183 @@ class LiveAIGemini(ILiveAI):
                 # swallow for robustness
                 pass
 
+        if _pacing_enabled:
+            await self._run_paced_sender(
+                _send_frame,
+                frame_bytes=_frame_bytes,
+                frame_interval_s=_frame_interval_s,
+                max_buffer_bytes=_max_buffer_bytes,
+                silence_frame=_silence_frame,
+                gapfill_enabled=_gapfill_enabled,
+            )
+        else:
+            await self._run_legacy_sender(
+                _send_frame,
+                silence_frame=_silence_frame,
+                gapfill_enabled=_gapfill_enabled,
+                gapfill_timeout_s=_gapfill_timeout_s,
+            )
+        self._log.info("[stop] [Sender] Audio sender stopping",
+                       total_chunks_sent=chunk_count,
+                       silence_frames_sent=_silence_frames_sent)
+
+    async def _run_paced_sender(
+        self,
+        send_frame,
+        *,
+        frame_bytes: int,
+        frame_interval_s: float,
+        max_buffer_bytes: int,
+        silence_frame: bytes,
+        gapfill_enabled: bool,
+    ) -> None:
+        """Fixed-cadence drain: emit exactly one frame per frame_interval_s tick.
+
+        A monotonic `next_send` deadline advances by a FIXED frame_interval each
+        tick, so the outbound cadence is real-time and can never burst to "catch
+        up" -- the property that stops the 1011. Variable-size inbound frames feed a
+        byte accumulator that is re-chunked to fixed frame_bytes on emit. On a tick
+        with a full frame buffered we send real audio; on an underrun we send one
+        silence frame (native-VAD gap-fill) if allowed, else nothing. The
+        accumulator is capped at max_buffer_bytes (drop OLDEST, frame-aligned) so we
+        never fall more than AUDIO_MAX_BUFFER_MS behind real-time.
+        """
+        buf = bytearray()
+        seen_real_audio = False
+        stopping = False  # sentinel seen -> stop pulling new input, drain buf, exit
+
+        # Pre-first-audio: block for the first real chunk (or sentinel). Emit
+        # nothing before real audio exists -- there is no cadence to keep yet.
+        while not seen_real_audio:
+            item = await self._audio_queue.get()
+            if item is None:
+                return
+            seen_real_audio = True
+            buf.extend(item)
+
+        next_send = self._clock()
         while True:
-            # Use a sentinel (None) to allow graceful shutdown without relying
-            # solely on task cancellation. This wakes the sender if it's blocked
-            # on get().
-            #
-            # Gap-fill path: when enabled and we have already seen real audio,
-            # bound the wait so a client stutter yields a silence frame instead of
-            # a wire gap. Otherwise block indefinitely (pre-first-audio, or
-            # gap-fill disabled) -- no busy-wait.
-            if _gapfill_enabled and _seen_real_audio:
+            # Bound latency: never buffer more than max_buffer_bytes; drop the
+            # OLDEST whole frames beyond the cap (keeps the freshest audio, best for
+            # turn-taking / barge-in). frame-aligned so we never emit a half-sample.
+            if len(buf) > max_buffer_bytes and frame_bytes > 0:
+                overflow = ((len(buf) - max_buffer_bytes) // frame_bytes) * frame_bytes
+                if overflow > 0:
+                    del buf[:overflow]
+                    self._timing_audio_dropped += overflow // frame_bytes
+                    now = self._clock()
+                    if now - self._last_audio_queue_warning >= self._audio_queue_warning_interval:
+                        self._last_audio_queue_warning = now
+                        self._log.warn(
+                            "[warn] AUDIO_PACING_DROP_OLDEST",
+                            message="Dropping oldest buffered audio to bound latency "
+                                    "(input outpaced real-time; suppressing similar "
+                                    "warnings for 5s)",
+                            dropped_frames_session=self._timing_audio_dropped,
+                        )
+
+            # Pull everything currently ready (non-blocking) into the accumulator,
+            # bounded by the tick deadline. Once the sentinel is seen we stop pulling
+            # but keep PACED-emitting the buffered remainder (so trailing real audio
+            # is not discarded and is still sent at real-time cadence).
+            if not stopping:
+                sentinel = await self._drain_ready_into(buf, frame_bytes, next_send)
+                if sentinel:
+                    stopping = True
+
+            if stopping and len(buf) < frame_bytes:
+                # Buffer drained to at most a sub-frame remainder (<=19ms); drop it
+                # and exit. This is the only place a partial frame is discarded.
+                break
+
+            if len(buf) >= frame_bytes:
+                frame = bytes(buf[:frame_bytes])
+                del buf[:frame_bytes]
+                await send_frame(frame, is_silence=False)
+            elif not stopping and gapfill_enabled and not (
+                self._close_after_flush or self._intentional_shutdown
+            ):
+                # Genuine underrun: one silence frame keeps native-VAD's stream
+                # continuous. Suppressed once a graceful shutdown owns the socket or
+                # a sentinel has begun the drain.
+                await send_frame(silence_frame, is_silence=True)
+            # else: emit nothing this tick (manual VAD, gap-fill off, or shutting down)
+
+            # Advance the deadline by a FIXED interval (not now+interval) so cadence
+            # never drifts. Sleep until it; if we fell a full frame behind (a slow
+            # send_realtime_input), reset to now -- degrade to real-time-or-slower,
+            # NEVER faster. That clamp is what prevents the too-fast 1011.
+            next_send += frame_interval_s
+            now = self._clock()
+            if now < next_send:
+                await self._sleep(next_send - now)
+            elif now > next_send + frame_interval_s:
+                next_send = now
+
+    async def _drain_ready_into(self, buf: bytearray, frame_bytes: int, deadline: float) -> bool:
+        """Pull queued audio into `buf` without blocking past `deadline`.
+
+        Non-blocking get_nowait drains everything already queued; if still short of a
+        full frame and time remains before the tick deadline, wait for ONE more item
+        up to the remaining time (this doubles as the inter-tick idle wait so an idle
+        native-VAD stream still ticks silence every interval without busy-spinning).
+        Returns True iff the None sentinel was seen (caller should stop).
+        """
+        while True:
+            try:
+                item = self._audio_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if item is None:
+                return True
+            buf.extend(item)
+
+        if len(buf) < frame_bytes:
+            remaining = deadline - self._clock()
+            if remaining > 0:
+                try:
+                    item = await asyncio.wait_for(self._audio_queue.get(), timeout=remaining)
+                    if item is None:
+                        return True
+                    buf.extend(item)
+                except asyncio.TimeoutError:
+                    pass
+        return False
+
+    async def _run_legacy_sender(
+        self,
+        send_frame,
+        *,
+        silence_frame: bytes,
+        gapfill_enabled: bool,
+        gapfill_timeout_s: float,
+    ) -> None:
+        """Legacy un-paced drain + gap-fill (bd 7f7m), kept behind AUDIO_PACING_ENABLED=false
+        as a clean revert switch. Forwards each real chunk immediately; on a stall
+        longer than gapfill_timeout_s (and after real audio, not during shutdown)
+        emits one silence frame. Does NOT pace -- retained only for rollback.
+        """
+        seen_real_audio = False
+        while True:
+            if gapfill_enabled and seen_real_audio:
                 try:
                     chunk = await asyncio.wait_for(
-                        self._audio_queue.get(), timeout=_gapfill_timeout_s
+                        self._audio_queue.get(), timeout=gapfill_timeout_s
                     )
                 except asyncio.TimeoutError:
-                    # No real chunk arrived in time. Keep the cadence alive UNLESS
-                    # a graceful shutdown has begun -- once _close_after_flush /
-                    # _intentional_shutdown is set, the drain path owns the socket
-                    # and will send the None sentinel; manufacturing silence then
-                    # would race a closing session.
                     if self._close_after_flush or self._intentional_shutdown:
-                        # Fall back to a blocking get so we still pick up the
-                        # sentinel promptly and exit cleanly.
                         chunk = await self._audio_queue.get()
                     else:
-                        await _send_frame(_silence_frame, is_silence=True)
+                        await send_frame(silence_frame, is_silence=True)
                         continue
             else:
                 chunk = await self._audio_queue.get()
 
             if chunk is None:
-                # Sentinel received: exit the send loop cleanly
-                self._log.info("[stop] [Sender] Audio sender stopping",
-                               total_chunks_sent=chunk_count,
-                               silence_frames_sent=_silence_frames_sent)
                 break
 
-            _seen_real_audio = True
-            await _send_frame(chunk, is_silence=False)
+            seen_real_audio = True
+            await send_frame(chunk, is_silence=False)
 
     async def stream_audio(self, audio_chunk: bytes):
         """Enqueue an audio chunk to be sent to the live session.
@@ -865,6 +1029,25 @@ class LiveAIGemini(ILiveAI):
             # If the queue isn't started, drop audio (no-op) to keep behavior
             # safe for unit tests where live AI is not configured.
             self._log.warn("[warn] AUDIO_QUEUE_NOT_STARTED", message="Audio dropped - queue not initialized")
+            return
+        # Handshake readiness gate (bd polyglot-pdf-3to5). The audio sender loop does
+        # not exist until AFTER live.connect() completes (~4.5s locally); _session_ready
+        # flips True at that same moment. Frames that arrive BEFORE the session is
+        # ready have NO consumer -- enqueuing them fills the maxsize queue, which then
+        # bursts on drain into a too-fast stream and trips a 1011. Audio is
+        # loss-tolerant, so DROP pre-ready frames rather than buffering a backlog
+        # ("don't buffer during handshake"). Count + rate-limited log for observability.
+        if not self._session_ready:
+            self._pre_ready_dropped += 1
+            now = time.monotonic()
+            if now - self._last_audio_queue_warning >= self._audio_queue_warning_interval:
+                self._last_audio_queue_warning = now
+                self._log.info(
+                    "[mic] AUDIO_DROPPED_PRE_READY",
+                    message="Dropping mic audio -- Gemini session not ready yet "
+                            "(suppressing similar for 5s)",
+                    pre_ready_dropped_session=self._pre_ready_dropped,
+                )
             return
         try:
             # Log first audio chunk to verify queueing
@@ -1194,6 +1377,11 @@ class LiveAIGemini(ILiveAI):
                         # checkpoint 9: include drop count in session summary
                         # so every cost-summary row shows whether frames were dropped.
                         audio_frames_dropped=self._timing_audio_dropped,
+                        # Handshake-gate observability (bd polyglot-pdf-3to5): frames
+                        # dropped because they arrived before the Gemini session was
+                        # ready. A modest count at connect is expected + healthy (it
+                        # proves the gate prevented a pre-ready backlog).
+                        pre_ready_dropped=self._pre_ready_dropped,
                     )
                 except Exception as e:  # noqa: BLE001 -- summary must never block teardown
                     self._log.warning("session_cost_summary_failed", error=str(e))
@@ -1609,6 +1797,9 @@ class LiveAIGemini(ILiveAI):
         self._timing_last_activity_end = None
         self._timing_first_inbound_audio = None
         self._timing_audio_dropped = 0
+        # Reset the pre-ready drop counter per session (bd polyglot-pdf-3to5) so each
+        # (re)connect's handshake-window drops are attributed to that session only.
+        self._pre_ready_dropped = 0
         # Reset spontaneous-drop markers per session so a clean end this time is not
         # misread as a drop from a prior session (bd polyglot-pdf-ppfy).
         self._spontaneous_drop_exc = None

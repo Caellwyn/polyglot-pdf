@@ -702,6 +702,17 @@ export function createConnectionManager(
 			paused = false
 			onStatusChange('connected')
 
+			// Un-block AI playback. pause() called flushAudioQueue(), which sets
+			// playbackBlocked=true to discard in-flight AI audio; without clearing it
+			// here, EVERY AI audio chunk after resume is silently dropped in
+			// playAudio() -- the mic re-arms but the AI's voice never returns. Nothing
+			// else clears it on the default path: onVADSpeechEnd (the only other
+			// resumePlayback caller) early-returns under both PTT and native VAD, which
+			// are the defaults. So resume() must reset it itself (bd audio-resume).
+			if (audioManager) {
+				audioManager.resumePlayback()
+			}
+
 			// Restart recording through the shared rehydration routine (bd
 			// polyglot-pdf-z9bc). `paused` was just cleared above, so this arms the
 			// mic and re-syncs PTT in one place.
