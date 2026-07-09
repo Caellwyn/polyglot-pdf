@@ -47,20 +47,14 @@ describe('initialViewMode', () => {
 });
 
 describe('viewModeAfterResize (bd polyglot-pdf-ipin)', () => {
-  const DESKTOP = 1280;
-  const MOBILE = 390;
-
-  it('drops Preview to Simplified when a resize crosses into mobile width', () => {
-    expect(viewModeAfterResize('preview', MOBILE)).toBe('simplified');
-    expect(viewModeAfterResize('preview', MOBILE_INITIAL_BREAKPOINT)).toBe('simplified');
+  // The caller only invokes this once it has classified the viewport as mobile
+  // (shared dead-zone decision), so the helper takes no width -- it just
+  // collapses Preview to Simplified and leaves Simplified alone.
+  it('drops Preview to Simplified (mobile forces the mobile default)', () => {
+    expect(viewModeAfterResize('preview')).toBe('simplified');
   });
 
-  it('keeps Preview at desktop width (a wide resize never drops it)', () => {
-    expect(viewModeAfterResize('preview', DESKTOP)).toBe('preview');
-  });
-
-  it('never auto-restores Preview: Simplified stays Simplified at any width', () => {
-    expect(viewModeAfterResize('simplified', DESKTOP)).toBe('simplified');
-    expect(viewModeAfterResize('simplified', MOBILE)).toBe('simplified');
+  it('never auto-restores Preview: Simplified stays Simplified', () => {
+    expect(viewModeAfterResize('simplified')).toBe('simplified');
   });
 });

@@ -19,12 +19,20 @@ Three small deferred beads left open after the preview-mode epic
   user in Preview on a wide window who resized the SAME tab down to mobile (or
   rotated a device) stayed in Preview -- the mobile-defaults-Simplified intent
   (epic rubric #5) held only for a fresh mount. Added a pure
-  `viewModeAfterResize(current, viewportWidth)` helper in `viewMode.ts` and
-  wired it into SchemaForm's existing debounced resize effect: crossing INTO
-  mobile width (`<= MOBILE_INITIAL_BREAKPOINT`, 768) forces Preview back to
-  Simplified. One-directional on purpose -- growing back to desktop does NOT
-  auto-restore Preview, and a desktop-width resize keeps the current mode, so a
-  deliberate desktop choice is never overridden.
+  `viewModeAfterResize(current)` helper in `viewMode.ts` and wired it into
+  SchemaForm's existing debounced resize effect: once the resize classifies the
+  viewport as mobile, Preview drops to Simplified. One-directional on purpose --
+  leaving mobile does NOT auto-restore Preview, and a desktop-width resize never
+  triggers it, so a deliberate desktop choice is never overridden. **The reset
+  is keyed on the SAME mobile classification that picks the overlay** (the
+  effect's dead-zone hysteresis, `isMobile` flipping at `<=700`), read via a new
+  `isMobileRef` so the mount-once effect isn't stale -- NOT an independent 768
+  threshold. This was the fresh-eyes finding: an earlier draft used a flat
+  `<=768` in `viewModeAfterResize`, which for a desktop->`(700, 768]` resize
+  would force Simplified while `isMobile` (and thus the desktop `VoiceOverlay`)
+  stayed put -- a "mobile-defaulted form + desktop overlay" mismatch. Sharing
+  the one decision makes the two unable to disagree; a regression test pins the
+  dead-zone case (750px keeps both Preview AND the desktop overlay).
 
 - **jq17 -- single-option checkbox paints an X, not a label.** `valuePainting.ts`
   routed ANY options-bearing `checkbox` (even a 1-element options array) to

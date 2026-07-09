@@ -210,4 +210,46 @@ describe('SchemaForm view-mode structure (bd polyglot-pdf-fdz8)', () => {
       vi.useRealTimers();
     }
   });
+
+  it('does NOT drop Preview in the dead-zone band, so the view never mismatches the overlay (bd polyglot-pdf-ipin, fresh-eyes)', async () => {
+    // The view-mode reset is keyed on the SAME mobile classification that picks
+    // the overlay (dead-zone hysteresis: isMobile flips only at <=700), NOT an
+    // independent 768 threshold. So a desktop->intermediate resize that lands in
+    // the (700, 768] dead zone must keep BOTH Preview AND the desktop overlay --
+    // never a "mobile-defaulted Simplified form + desktop overlay" mismatch.
+    vi.useFakeTimers();
+    try {
+      render(<SchemaForm schema={makeSchema()} kitId="test" />);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+      });
+      expect(screen.getByTestId('preview-pane')).toBeTruthy();
+      // Desktop overlay is showing at the 1280px mount width.
+      expect(screen.getByTestId('voice-overlay')).toBeTruthy();
+      expect(screen.queryByTestId('voice-overlay-mobile')).toBeNull();
+
+      // Resize into the dead zone (750px is in (700, 820), and is > the 768
+      // breakpoint the OLD flat-threshold code would have reset on).
+      act(() => {
+        setWidth(750);
+        window.dispatchEvent(new Event('resize'));
+        vi.advanceTimersByTime(300);
+      });
+
+      // Preview is KEPT (no mobile-default reset), and the overlay is STILL the
+      // desktop one -- the two agree. This is the consistency the fresh-eyes
+      // finding required; the old flat-768 reset would have flipped to Simplified
+      // here while the overlay stayed desktop.
+      expect(screen.getByTestId('preview-pane')).toBeTruthy();
+      expect(screen.getByRole('tab', { name: 'Preview' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByTestId('voice-overlay')).toBeTruthy();
+      expect(screen.queryByTestId('voice-overlay-mobile')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

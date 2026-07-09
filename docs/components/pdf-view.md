@@ -32,17 +32,20 @@ deliberately OUTSIDE `SchemaFormState` (purely presentational; never in the WS
 handshake). `initialViewMode(flagOn, stored, viewportWidth)` decides fresh
 mounts: Simplified by default everywhere; a stored `'preview'` choice is
 honored only flag-on at desktop width (mobile-width mounts always start
-Simplified, epic rubric #5). `viewModeAfterResize(current, viewportWidth)`
-extends that intent to a LIVE same-tab resize (or device rotation): a viewport
-that shrinks to the mobile breakpoint forces Preview back to Simplified
-mid-session. It is one-directional -- growing back to desktop never
-auto-restores Preview, and a desktop-width resize keeps the current mode -- so a
-deliberate desktop choice is never overridden (bd `polyglot-pdf-ipin`).
-SchemaForm calls it from the same debounced resize effect that classifies
-mobile/desktop, and renders the toggle while keeping the voice overlays +
-ConnectionManager OUTSIDE the switched container, so toggling never remounts
-them or disturbs the Gemini session (pinned by
-`SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
+Simplified, epic rubric #5). `viewModeAfterResize(current)`
+extends that intent to a LIVE same-tab resize (or device rotation): once the
+resize classifies the viewport as MOBILE, it forces Preview back to Simplified
+mid-session. It is one-directional -- leaving mobile never auto-restores
+Preview, and a desktop-width resize never calls it -- so a deliberate desktop
+choice is never overridden (bd `polyglot-pdf-ipin`). SchemaForm calls it from
+the same debounced resize effect that classifies mobile/desktop, keyed on that
+SAME mobile decision (the dead-zone hysteresis: `isMobile` flips at `<=700`, not
+at 768) rather than an independent width threshold -- so the view mode can never
+disagree with which overlay (mobile vs desktop) is showing (a desktop-styled
+overlay never pairs with a mobile-defaulted Simplified form). SchemaForm renders
+the toggle while keeping the voice overlays + ConnectionManager OUTSIDE the
+switched container, so toggling never remounts them or disturbs the Gemini
+session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
 
 ## The live surface (PreviewPane -> PDFViewer -> FieldOverlay)
 
