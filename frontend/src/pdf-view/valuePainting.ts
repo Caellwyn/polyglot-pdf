@@ -28,10 +28,7 @@ function optionLabel(field: FormField, value: string): string {
 export function paintedValueFor(field: FormField, raw: unknown): PaintedValue {
   if (raw === null || raw === undefined || raw === '') return { kind: 'none' };
 
-  // Widened to string: form-kit schemas carry the v2 'checkbox_group' type at
-  // runtime, which the frontend FieldType union does not list yet (bd
-  // polyglot-pdf-w146; the backend model is the shape's source of truth).
-  switch (field.type as string) {
+  switch (field.type) {
     case 'checkbox': {
       // Single boolean checkbox: an X in the box. A checkbox with options
       // behaves like checkbox_group below.
