@@ -36,6 +36,13 @@ Status: Production Ready - All 5 phases complete (see the test suites under
 
 # User Guide
 
+> **New here?** The fastest orientation is the **in-app guide**: open the editor
+> and click the **Help** button in the header. It walks through quick start,
+> navigation, field properties (including what Instructions and Format Hint do),
+> common tasks, extraction (author tier), saving, and troubleshooting -- in plain
+> language, with the exact on-screen labels. This document is the fuller
+> developer-facing reference.
+
 ## Why This Exists
 
 Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ forms to extract and 132+ fields per form, we needed a tool that makes human correction:
@@ -323,9 +330,10 @@ header's **Help** button.
 ### Keyboard Shortcuts
 
 - **Cmd/Ctrl + S** - Save schema
-- **Escape** - Deselect field (coming soon)
-- **Tab** - Cycle through fields (coming soon)
-- **Arrow Keys** - Navigate spatially (coming soon)
+- **Cmd/Ctrl + Z** / **Cmd/Ctrl + Shift + Z** - Undo / redo
+- **N** - Jump to the next field needing review
+- **Arrow Up / Arrow Down** - Step through the visible field list
+- **Escape** - Deselect the current field
 
 ## Common Tasks
 
@@ -432,7 +440,10 @@ Some forms have checkbox groups that should be radio buttons:
 3. Change remaining to type: radio
 4. Add options manually
 
-**Coming Soon:** Visual consolidation tool
+**In the field list (shipped):** tick two or more checkbox/radio fields in the
+same section, then click **Merge (several)** for a multi-select checkbox group or
+**Merge (exactly one)** for a single-choice radio. Select the resulting group and
+click **Ungroup** in the editor to split it back.
 
 ## Tips & Best Practices
 

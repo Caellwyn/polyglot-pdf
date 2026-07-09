@@ -117,19 +117,22 @@ npm run test       # Run tests in watch mode
 npm run test:run   # Run tests once
 ```
 
+## In-app help
+
+The primary contractor-facing guide now lives **inside the editor**: click the
+**Help** button in the header to open a sectioned, tier-aware guide (quick start,
+getting around, field properties, common tasks, extraction for authors, saving,
+and troubleshooting). It is the recommended starting point for new users; this
+README and `EDITOR_GUIDE.md` are the developer-facing references.
+
 ## Known Limitations
 
-- No undo/redo (browser back button works)
-- No keyboard shortcuts for zoom/page navigation yet (Phase 6)
-- Field list doesn't auto-scroll when clicking PDF field (Phase 6)
-- Scroll position not maintained when zooming (Phase 6 potential enhancement)
+- No keyboard shortcuts for zoom/page navigation yet
+- Scroll position not maintained when zooming
 
 ## Future Enhancements
 
-- **Phase 6**: Polish & performance (keyboard shortcuts, virtual scrolling) - NEXT
-- Drag-and-drop field reordering
 - Bulk operations (change type for multiple fields)
-- Field consolidation tool (merge checkbox groups into radio)
 - Conditional logic visual graph
 - Template system for help text
 - Export to multiple formats

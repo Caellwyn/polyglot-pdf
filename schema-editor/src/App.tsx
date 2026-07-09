@@ -645,8 +645,10 @@ export const App: React.FC = () => {
     if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
   }, []);
 
-  // First-run guide: hosted contractors get the 3-step overlay once per
-  // browser, after the access code validates (bd 92qe.5).
+  // First-run guide: hosted contractors get the in-app guided-help overlay
+  // once per browser, after the access code validates (bd 92qe.5). The Help
+  // button reopens it any time (in local mode too); only this auto-open is
+  // hosted-only.
   React.useEffect(() => {
     if (hosted && role && !hasSeenGuide()) setGuideOpen(true);
   }, [hosted, role]);
@@ -694,15 +696,13 @@ export const App: React.FC = () => {
             ) : null}
           </div>
           <div className="flex gap-2">
-            {hosted && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => setGuideOpen(true)}
-                title="Reopen the getting-started guide"
-              >
-                Help
-              </button>
-            )}
+            <button
+              className="btn btn-secondary"
+              onClick={() => setGuideOpen(true)}
+              title="Open the help and guide"
+            >
+              Help
+            </button>
             <button
               className="btn btn-secondary"
               onClick={undo}
@@ -841,7 +841,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {guideOpen && <HostedGuide onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <HostedGuide role={role} onClose={() => setGuideOpen(false)} />}
 
       {/* Main Content */}
       {loading && (
