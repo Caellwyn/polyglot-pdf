@@ -58,7 +58,15 @@ repaint; Esc / click-outside / X / editor-moves-between-fields.
 `PreviewPane.popover.test.tsx`: voice-advance dismissal,
 dimmed-not-clickable, no-handlers read-only, keyboard activation.
 
-Review record: (filled at closeout -- fresh-eyes + Opus outer review.)
+Review record: fresh-eyes round 1 (Sonnet) found one blocker -- a field
+whose show_if flipped false while its popover was open left chrome-only
+popover with an empty body -- fixed by PreviewPane's auto-close effect
+(commit 36aa9020, test-pinned); its option-mark keyboard observation was
+DEFENDED as-designed (one accessible button per field -- the box; per-option
+tab stops would be duplicate announcements for the same editor) and the
+Opus rounds accepted the defense. Round 2 (Opus) NO-GAPS. Opus outer
+review: two independent passes both NO-GAPS on the final diff first round.
+Adopted 1 finding inline, defended 1, deferred none.
 
 ## Lessons
 

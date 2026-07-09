@@ -95,9 +95,11 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   change via SchemaForm's `handleFieldChange` (the single place stamping
   `confirmed` + `manual_edit` and fanning out `copy_to`) -- overlays repaint
   live while typing. Dismissal: Esc, click-outside, the X button, a voice
-  advance (`currentFieldId` change), and zoom (scale change). PreviewPane
-  owns the editing state; without the edit handlers the surface is
-  read-only. Overlays are keyboard-activatable (`role=button`, Enter/Space).
+  advance (`currentFieldId` change), zoom (scale change), and the edited
+  field's `show_if` flipping false mid-edit (no chrome-only popover over a
+  now-dimmed field). PreviewPane owns the editing state; without the edit
+  handlers the surface is read-only. Overlays are keyboard-activatable
+  (`role=button`, Enter/Space).
 - `fillStateFor` (PDFViewer): `[]` and `false` count as empty (a cleared
   checkbox_group must not paint as filled); `current` wins over all.
 - Live updates ride the existing `schemaFormStateChange` channel one level up:
