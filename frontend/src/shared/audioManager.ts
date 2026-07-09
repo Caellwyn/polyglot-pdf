@@ -8,6 +8,8 @@
  * - Audio context lifecycle
  */
 
+import { MIC_AUDIO_CONSTRAINTS } from './audioConstraints'
+
 const RECORDING_SAMPLE_RATE = 16000 // Gemini input
 const PLAYBACK_SAMPLE_RATE = 24000  // Gemini output
 
@@ -191,13 +193,9 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 				// Request microphone access with optimal settings
 				// These match the VAD stream to ensure consistency
 				nodes.stream = await navigator.mediaDevices.getUserMedia({
-					audio: {
-						channelCount: 1,
-						sampleRate: RECORDING_SAMPLE_RATE,
-						echoCancellation: true,      // Prevents Gemini's audio from being recorded
-						noiseSuppression: true,       // Reduces background noise
-						autoGainControl: true,        // Normalizes microphone volume
-					},
+					// Canonical AEC/mic constraints (bd polyglot-pdf-gnmo) plus the
+					// recording rate this site pins.
+					audio: { ...MIC_AUDIO_CONSTRAINTS, sampleRate: RECORDING_SAMPLE_RATE },
 				})
 				console.log('[AudioManager] [mic] Created new microphone stream')
 			} else {
