@@ -238,6 +238,50 @@
   vertical-align: middle;
 }
 
+/* 4dxt: force-skip a required-but-unanswered field. The "Skip for now" button
+   appears under a shown, required, empty field; the "Skipped" badge + note
+   replace it once skipped so the field reads as deliberately-deferred, never
+   silently blank or falsely complete. */
+.form-field__skip-button {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background-color: transparent;
+  color: #b26a00;
+  border: 1px solid #f0b357;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.form-field__skip-button:hover {
+  background-color: #fff3e0;
+}
+
+.form-field__skipped {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0 0;
+  font-size: 0.8125rem;
+  color: #8a6d3b;
+}
+
+.form-field__skipped-badge {
+  flex: none;
+  padding: 0.125rem 0.5rem;
+  background-color: #f0ad4e;
+  color: #3d2c00;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.form-field__skipped-note {
+  font-style: italic;
+}
+
 /* ============================================================================
    Radio Buttons
    ============================================================================ */

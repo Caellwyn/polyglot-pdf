@@ -375,4 +375,14 @@ export interface FieldValue {
   // field (max-resteer bound, contract 3 invariant 2). Set by markFieldsSteered when
   // a validation_result conflict names the field.
   steered?: boolean;
+
+  // 4dxt: the user was asked a REQUIRED field but has no answer right now (defer
+  // to a translator, or it genuinely does not apply) and chose to skip it. The
+  // `value` stays empty/null -- `skipped` is a SEPARATE marker, never a sentinel
+  // value string, so a real answer can never collide with it. A skipped required
+  // field SATISFIES the section-validity gate (isSectionValid), renders visibly
+  // distinct ("skipped -- needs follow-up", not blank/falsely-complete), and
+  // fills BLANK on the PDF (unwrapFieldValue returns the empty value). Setting a
+  // real value later clears this flag. CLIENT-OWNED (stateless backend).
+  skipped?: boolean;
 }

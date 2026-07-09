@@ -14,7 +14,7 @@
 
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
-import { normalizeFieldValue } from "../utils/validation";
+import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
 // navigation.ts back-references SchemaFormState as a TYPE-only import, so this
 // does not create a runtime import cycle (bd polyglot-pdf-jnjj.9).
@@ -463,7 +463,20 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Check if current section is valid (all required fields filled)
+   * Check if current section is valid (all required fields filled).
+   *
+   * "Required" is evaluated DYNAMICALLY via isFieldRequired (bd c7st): a field is
+   * required if it is statically required OR a satisfied require_if condition makes
+   * it required right now. The prior gate read only the static field.validation?.
+   * required, so every conditionally-required field (e.g. f1040 designee
+   * name/phone/pin when "allow" is yes) was never actually insisted on.
+   *
+   * A required field is SATISFIED when it has a non-empty value OR the user
+   * force-skipped it (FieldValue.skipped, bd 4dxt) -- a required field must stay
+   * skippable (defer to a translator, or genuinely no answer) or the user is
+   * trapped. A field that is not currently SHOWN (its show_if is unmet) is never
+   * required here: it cannot be filled, so require_if on a hidden field must not
+   * block the section.
    */
   static isSectionValid(state: SchemaFormState, sectionId: string): boolean {
     const section = state.schema.sections.find((s) => s.id === sectionId);
@@ -474,12 +487,20 @@ export class SchemaFormStateManager {
       .filter((f): f is FormField => f !== undefined);
 
     for (const field of sectionFields) {
-      // Check if required field is filled
-      if (field.validation?.required) {
+      // A shown, currently-required field must be filled OR force-skipped.
+      const shown = !field.hidden && shouldShowField(field, state.fieldValues, state.schema.fields);
+      if (shown && isFieldRequired(field, state.fieldValues, state.schema.fields)) {
         const fieldValue = state.fieldValues[field.id];
-        const actualValue = fieldValue?.value;
-        if (actualValue === null || actualValue === undefined || actualValue === "") {
-          return false;
+        if (!fieldValue?.skipped) {
+          const actualValue = fieldValue?.value;
+          const isEmpty =
+            actualValue === null ||
+            actualValue === undefined ||
+            actualValue === "" ||
+            (Array.isArray(actualValue) && actualValue.length === 0);
+          if (isEmpty) {
+            return false;
+          }
         }
       }
 
@@ -926,6 +947,53 @@ export class SchemaFormStateManager {
       },
       lastUpdated: Date.now()
     };
+
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * 4dxt: force-skip a required-but-unanswered field. The user was asked a
+   * required field but has no answer right now (defer to a translator, or it
+   * genuinely does not apply). Sets FieldValue.skipped=true and clears the value
+   * to empty so the field:
+   *   - SATISFIES the section-validity gate (isSectionValid honors `skipped`),
+   *   - renders visibly distinct as "skipped -- needs follow-up" (the `skipped`
+   *     flag with an empty value, NOT a silent blank),
+   *   - fills BLANK on the PDF (unwrapFieldValue returns the empty value).
+   * It counts as confirmed via the given method so it does not re-prompt. Setting
+   * a real value later (updateField) drops `skipped` (a fresh FieldValue), which
+   * is the intended "answered after all" transition. A field with no prior entry
+   * gets a fresh skipped entry (skipping an untouched required field is valid).
+   */
+  static markFieldSkipped(
+    state: SchemaFormState,
+    fieldId: string,
+    method: 'ai_voice' | 'manual_edit' = 'manual_edit'
+  ): SchemaFormState {
+    const prior = state.fieldValues[fieldId];
+    const newState = {
+      ...state,
+      fieldValues: {
+        ...state.fieldValues,
+        [fieldId]: {
+          ...prior,
+          value: null,
+          skipped: true,
+          confirmed: true,
+          confirmedAt: new Date().toISOString(),
+          confirmationMethod: method,
+          lastModified: Date.now(),
+        },
+      },
+      lastUpdated: Date.now(),
+    };
+
+    // A skipped field is intentionally empty -- clear any stale validation error.
+    if (newState.validationErrors[fieldId]) {
+      const { [fieldId]: _removed, ...rest } = newState.validationErrors;
+      newState.validationErrors = rest;
+    }
 
     this.save(newState);
     return newState;
