@@ -256,11 +256,7 @@
         "agent_sign_date",
         "agent_phone",
         "agent_fax",
-        "agent_name_title",
-        "agent_company",
-        "agent_ein",
-        "agent_ptin",
-        "agent_office_code"
+        "agent_name_title"
       ],
       "page_numbers": [
         0

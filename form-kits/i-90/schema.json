@@ -153,10 +153,6 @@
       "fields": [
         "p2_checkbox1",
         "p2_checkbox3",
-        "p2_checkbox3[1]",
-        "p2_checkbox3[2]",
-        "p2_checkbox3[3]",
-        "p2_checkbox3[4]",
         "p2_checkbox2[5]",
         "p2_line2h1_cityandstate"
       ]
