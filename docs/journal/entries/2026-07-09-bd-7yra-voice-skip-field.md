@@ -31,9 +31,11 @@ required-field skip deadlocks in a confirm loop.
 ## Implementation (skip_field mirrors confirm_field's synchronous round-trip)
 
 - **backend/config.py:** new `skip_field` tool declaration (auto-registers via
-  the adapter's `_function_declarations`); SI wording in both templates now
-  distinguishes SKIP vs NOT-APPLICABLE and requires a verbal confirm before
-  `skip_field`.
+  the adapter's `_function_declarations`); SI wording in ALL THREE templates (the
+  legacy `SYSTEM_INSTRUCTION` full-schema default, the DTI thin-principal, and the
+  JIT template) now distinguishes SKIP vs NOT-APPLICABLE and requires a verbal
+  confirm before `skip_field` -- the tool is registered in every mode, so every
+  template needs the guidance.
 - **backend/services/request_coordinator.py:** `request_skip_field(field_id)`
   (copies `request_confirm_field`) sends `{type:"skip_field", request_id,
   field_id}` and awaits the FE ack; `handle_skip_field_response` resolves it.

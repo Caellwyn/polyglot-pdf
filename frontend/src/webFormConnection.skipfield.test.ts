@@ -127,15 +127,20 @@ describe('WebFormConnection skip_field handler (bd polyglot-pdf-7yra)', () => {
     expect(acks[0].reason).toBe('unknown_field')
   })
 
-  it('does not send a skip ack when request_id is missing', async () => {
-    const { ws } = await connected()
+  it('does not ack OR mutate state when request_id is missing', async () => {
+    const { conn, ws } = await connected()
 
-    // No request_id -> the ack has nothing to correlate; the handler must not send.
+    // No request_id -> the handler cannot ack the synchronous round-trip, so it
+    // must NOT record the skip or advance (that would silently diverge from what
+    // the backend believes). The real backend always sends request_id.
     ws.onmessage?.({
       data: JSON.stringify({ type: 'skip_field', field_id: 'p1_uscis_number' }),
     })
     await Promise.resolve()
 
     expect(skipAcks(ws)).toHaveLength(0)
+    // State untouched: the field is not marked skipped.
+    const fv = (conn as any).state.fieldValues['p1_uscis_number']
+    expect(fv?.skipped).toBeFalsy()
   })
 })

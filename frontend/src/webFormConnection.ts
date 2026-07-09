@@ -1845,6 +1845,16 @@ export class WebFormConnection {
 
     console.log('[WebFormConnection] Skipping field:', field_id);
 
+    // A skip is a SYNCHRONOUS round-trip: without a request_id we cannot ack, so
+    // the backend future would time out and tell Gemini the skip failed. Do NOT
+    // mutate state or advance in that case, or the FE would silently skip+advance
+    // while the backend believes it failed (a divergence). The real backend always
+    // sends request_id; this guards a malformed message (fresh-eyes review).
+    if (!request_id) {
+      console.warn('[WebFormConnection] skip_field with no request_id -- ignoring (cannot ack).');
+      return;
+    }
+
     const field = this.state.schema.fields.find(f => f.id === field_id);
     if (!field) {
       // Unknown field id -- cannot skip. Ack not-recorded so the backend tells

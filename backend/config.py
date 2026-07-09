@@ -568,7 +568,9 @@ class Settings(BaseModel):
     "never ask a qualified question as if it were unqualified.\n"
     "- Follow format requirements (e.g., yyyy-MM-dd for dates)\n"
     "- Sanity check dates/phones/ZIP codes\n"
-    "- Optional field does not apply (e.g. no middle name) or user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally.\n"
+    "- SKIP vs NOT-APPLICABLE (two different things):\n"
+    "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally. This is a real answer.\n"
+    "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm_field a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
     "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
 
     "ADDRESS CONSISTENCY:\n"
