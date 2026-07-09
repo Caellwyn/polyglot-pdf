@@ -1175,4 +1175,105 @@ describe('SchemaFormStateManager', () => {
       expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBe(true)
     })
   })
+
+  // ==========================================================================
+  // isSectionValid: require_if enforcement (bd c7st) + skip-placeholder (bd 4dxt)
+  // ==========================================================================
+  describe('isSectionValid + require_if enforcement + skip (c7st/4dxt)', () => {
+    // A minimal schema: section 'sec' with a statically-required field 'req', a
+    // conditionally-required field 'cond' (required only when trigger == 'yes'),
+    // and the 'trigger'. shouldShowField/isFieldRequired read the wrapped
+    // fieldValues map directly (they unwrap internally).
+    const condSchema = (): FormSchema => ({
+      source: 'pdf',
+      form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'X' },
+      sections: [{ id: 'sec', label: 'Sec', order: 1, fields: ['trigger', 'req', 'cond'] }],
+      fields: [
+        { id: 'trigger', name: 'Allow designee', spoken_name: 'allow designee', type: 'radio', section_id: 'sec',
+          options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
+        { id: 'req', name: 'Always required', spoken_name: 'always required', type: 'text', section_id: 'sec',
+          validation: { required: true } },
+        { id: 'cond', name: 'Designee name', spoken_name: 'designee name', type: 'text', section_id: 'sec',
+          require_if: { field: 'trigger', operator: 'equals', value: 'yes' } },
+      ],
+    })
+
+    it('blocks the section while a statically-required field is empty', () => {
+      const state = SchemaFormStateManager.init(condSchema())
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(false)
+    })
+
+    it('passes once the statically-required field is filled and no require_if fires', () => {
+      let state = SchemaFormStateManager.init(condSchema())
+      state = SchemaFormStateManager.updateField(state, 'req', 'Jane')
+      // trigger unset -> cond not required
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(true)
+    })
+
+    it('ENFORCES require_if: a conditionally-required field must be filled when its condition holds (c7st)', () => {
+      let state = SchemaFormStateManager.init(condSchema())
+      state = SchemaFormStateManager.updateField(state, 'req', 'Jane')
+      state = SchemaFormStateManager.updateField(state, 'trigger', 'yes')
+      // cond is now required but empty -> section invalid
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(false)
+      state = SchemaFormStateManager.updateField(state, 'cond', 'Bob')
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(true)
+    })
+
+    it('does NOT require a conditionally-required field when its condition is unmet', () => {
+      let state = SchemaFormStateManager.init(condSchema())
+      state = SchemaFormStateManager.updateField(state, 'req', 'Jane')
+      state = SchemaFormStateManager.updateField(state, 'trigger', 'no')
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(true)
+    })
+
+    it('lets a force-SKIPPED required field satisfy the gate (4dxt)', () => {
+      let state = SchemaFormStateManager.init(condSchema())
+      state = SchemaFormStateManager.updateField(state, 'req', 'Jane')
+      state = SchemaFormStateManager.updateField(state, 'trigger', 'yes')
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(false)
+      state = SchemaFormStateManager.markFieldSkipped(state, 'cond')
+      // skipped required field satisfies the gate; form is submittable
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(true)
+    })
+
+    it('markFieldSkipped keeps the value empty (PDF prints blank) but marks it skipped + confirmed', () => {
+      let state = SchemaFormStateManager.init(condSchema())
+      state = SchemaFormStateManager.markFieldSkipped(state, 'req')
+      const fv = state.fieldValues['req'] as FieldValue
+      expect(fv.skipped).toBe(true)
+      expect(fv.confirmed).toBe(true)
+      expect(fv.value).toBeNull()
+    })
+
+    it('setting a real value AFTER a skip drops the skipped flag (answered after all)', () => {
+      let state = SchemaFormStateManager.init(condSchema())
+      state = SchemaFormStateManager.markFieldSkipped(state, 'req')
+      expect((state.fieldValues['req'] as FieldValue).skipped).toBe(true)
+      state = SchemaFormStateManager.updateField(state, 'req', 'Jane')
+      expect((state.fieldValues['req'] as FieldValue).skipped).toBeUndefined()
+      expect((state.fieldValues['req'] as FieldValue).value).toBe('Jane')
+    })
+
+    it('does not block on a HIDDEN required field (require_if on an unshown field)', () => {
+      // 'cond' is required-when-trigger=yes AND shown-when-trigger=yes; if it were
+      // required but hidden, it could never be filled. Model that: gate on show_if.
+      const schema: FormSchema = {
+        source: 'pdf',
+        form_metadata: { title: 'T', version: '1', language: 'en', form_number: 'X' },
+        sections: [{ id: 'sec', label: 'Sec', order: 1, fields: ['trigger', 'hidden_req'] }],
+        fields: [
+          { id: 'trigger', name: 'Trigger', spoken_name: 'trigger', type: 'radio', section_id: 'sec',
+            options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
+          { id: 'hidden_req', name: 'Hidden required', spoken_name: 'hidden required', type: 'text', section_id: 'sec',
+            validation: { required: true },
+            show_if: { field: 'trigger', operator: 'equals', value: 'yes' } },
+        ],
+      }
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'trigger', 'no')
+      // hidden_req is required but NOT shown -> must not block the section
+      expect(SchemaFormStateManager.isSectionValid(state, 'sec')).toBe(true)
+    })
+  })
 })

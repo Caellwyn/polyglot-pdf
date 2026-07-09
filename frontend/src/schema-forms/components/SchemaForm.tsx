@@ -377,6 +377,15 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     });
   };
 
+  // 4dxt: force-skip a required-but-unanswered field. The user may defer to a
+  // translator or have no answer; the field is marked skipped (empty value,
+  // satisfies the section-validity gate, renders "needs follow-up", PDF blank).
+  const handleFieldSkip = (fieldId: string) => {
+    setState(prevState =>
+      SchemaFormStateManager.markFieldSkipped(prevState, fieldId, 'manual_edit')
+    );
+  };
+
   const handleFieldBlur = (fieldId: string) => {
     // Validate field on blur
     setState(prevState => {
@@ -654,6 +663,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             validationErrors={state.validationErrors}
             onFieldChange={handleFieldChange}
             onFieldBlur={handleFieldBlur}
+            onFieldSkip={handleFieldSkip}
           />
         )}
 
