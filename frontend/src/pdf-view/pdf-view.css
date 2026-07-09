@@ -279,6 +279,32 @@
   font-family: Helvetica, Arial, sans-serif;
 }
 
+/* A selected option's mark at ITS OWN printed box (bd polyglot-pdf-lp5v).
+   Sibling of the field-level state box in the same page coordinate space. */
+.pdf-field-overlay__option-mark {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: #111827;
+  font-weight: 700;
+  line-height: 1;
+  font-family: Helvetica, Arial, sans-serif;
+  z-index: 11;
+}
+
+/* show_if-hidden fields: dimmed, never removed (they exist on paper), and
+   never clickable -- P2.3's click-to-edit must respect this (bd
+   polyglot-pdf-lp5v). Border/background overrides ride inline in
+   FieldOverlay (inline fill-state styles would beat a class rule). */
+.pdf-field-overlay--dimmed {
+  opacity: 0.35;
+  pointer-events: none !important;
+  cursor: default;
+}
+
 .pdf-preview-pane__notice {
   max-width: 64rem;
   margin: 1rem auto;

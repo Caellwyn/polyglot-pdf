@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { paintedValueFor, fittedFontSize } from './valuePainting';
+import { paintedValueFor, fittedFontSize, selectedOptionRects } from './valuePainting';
 import type { FormField } from '../schema-forms/types/schema';
 
 const base = { id: 'f1', name: 'F1', spoken_name: 'f one', section_id: 's1' } as any;
@@ -91,5 +91,105 @@ describe('fittedFontSize', () => {
 
   it('never goes below the 6px floor', () => {
     expect(fittedFontSize('x'.repeat(500), 30, 20)).toBe(6);
+  });
+});
+
+describe('selectedOptionRects (bd polyglot-pdf-lp5v)', () => {
+  const rect = (y: number) => ({ page: 3, x: 344, y, width: 10, height: 10 });
+
+  it('returns one rect per SELECTED option that carries a usable pdf_position', () => {
+    const f: FormField = {
+      ...base,
+      type: 'checkbox_group',
+      options: [
+        { value: 'a', label: 'Alpha', pdf_position: rect(100) },
+        { value: 'b', label: 'Beta', pdf_position: rect(120) },
+        { value: 'c', label: 'Gamma', pdf_position: rect(140) },
+      ],
+    };
+    expect(selectedOptionRects(f, ['a', 'c'])).toEqual([
+      { value: 'a', position: rect(100) },
+      { value: 'c', position: rect(140) },
+    ]);
+    // Backcompat comma-string form selects the same rects.
+    expect(selectedOptionRects(f, 'a, c')).toEqual([
+      { value: 'a', position: rect(100) },
+      { value: 'c', position: rect(140) },
+    ]);
+  });
+
+  it('resolves a radio selection to its single option rect', () => {
+    const f: FormField = {
+      ...base,
+      type: 'radio',
+      options: [
+        { value: 'yes', label: 'Yes', pdf_position: rect(100) },
+        { value: 'no', label: 'No', pdf_position: rect(120) },
+      ],
+    };
+    expect(selectedOptionRects(f, 'no')).toEqual([{ value: 'no', position: rect(120) }]);
+    expect(selectedOptionRects(f, '')).toEqual([]);
+  });
+
+  it('returns [] when options carry no rects (label-at-field-rect fallback)', () => {
+    const f: FormField = {
+      ...base,
+      type: 'radio',
+      options: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+      ],
+    };
+    expect(selectedOptionRects(f, 'yes')).toEqual([]);
+  });
+
+  it('rejects degenerate (zero-size) option rects', () => {
+    const f: FormField = {
+      ...base,
+      type: 'radio',
+      options: [
+        { value: 'yes', label: 'Yes', pdf_position: { page: 1, x: 0, y: 0, width: 0, height: 0 } },
+      ],
+    };
+    expect(selectedOptionRects(f, 'yes')).toEqual([]);
+  });
+
+  it('never paints option rects for a select (dropdowns have no printed boxes)', () => {
+    const f: FormField = {
+      ...base,
+      type: 'select',
+      options: [{ value: '2', label: '2', pdf_position: rect(100) }],
+    };
+    expect(selectedOptionRects(f, '2')).toEqual([]);
+  });
+
+  it('falls back ENTIRELY when any selected value lacks a usable rect (all-or-nothing)', () => {
+    // Partial marks would silently hide the uncovered selection; the label
+    // fallback shows every selected value instead.
+    const f: FormField = {
+      ...base,
+      type: 'checkbox_group',
+      options: [
+        { value: 'a', label: 'Alpha', pdf_position: rect(100) },
+        { value: 'b', label: 'Beta' }, // no rect
+      ],
+    };
+    expect(selectedOptionRects(f, ['a', 'b'])).toEqual([]);
+    // Same for a selected value with no matching option at all.
+    expect(selectedOptionRects(f, ['a', 'mystery'])).toEqual([]);
+    // A fully-covered selection still paints marks.
+    expect(selectedOptionRects(f, ['a'])).toEqual([{ value: 'a', position: rect(100) }]);
+  });
+
+  it('falls back when an option rect sits on a DIFFERENT page than the field', () => {
+    // PDFViewer buckets overlays into page containers by the FIELD's page; a
+    // cross-page option rect would paint at the wrong screen position.
+    const f: FormField = {
+      ...base,
+      type: 'radio',
+      pdf_position: { page: 1, x: 10, y: 10, width: 40, height: 12 },
+      options: [{ value: 'a', label: 'Alpha', pdf_position: rect(100) }], // page 3
+    };
+    expect(selectedOptionRects(f, 'a')).toEqual([]);
   });
 });
