@@ -602,6 +602,10 @@ export class WebFormConnection {
           this.handleConfirmFieldRequest(message);
           break;
 
+        case "skip_field":
+          this.handleSkipFieldRequest(message);
+          break;
+
         case "error":
           this.handleServerError(message);
           break;
@@ -1828,6 +1832,84 @@ export class WebFormConnection {
   }
 
   /**
+   * Handle skip_field request from backend (Gemini called the skip_field tool,
+   * bd polyglot-pdf-7yra). The user asked to skip a REQUIRED field they cannot
+   * answer right now. Unlike confirm_field there is NO usable-value gate -- the
+   * whole point is to record an EMPTY field as intentionally skipped
+   * (markFieldSkipped: skipped flag, empty value, satisfies the section gate,
+   * prints blank on the PDF). After recording, this advances exactly like a
+   * successful confirm (a skipped field satisfies the section).
+   */
+  private async handleSkipFieldRequest(message: any): Promise<void> {
+    const { field_id, request_id } = message;
+
+    console.log('[WebFormConnection] Skipping field:', field_id);
+
+    const field = this.state.schema.fields.find(f => f.id === field_id);
+    if (!field) {
+      // Unknown field id -- cannot skip. Ack not-recorded so the backend tells
+      // Gemini to re-ask rather than confabulating a skip. `reason` is a fixed
+      // category token, never a field value (PII-safe).
+      console.warn('[WebFormConnection] skip_field for unknown field:', field_id);
+      this.sendSkipFieldResponse(request_id, false, 'unknown_field');
+      return;
+    }
+
+    // Record the skip in state (empty value + skipped flag, counts as confirmed
+    // so it does not re-prompt). ai_voice: the skip came through the voice tool.
+    this.state = SchemaFormStateManager.markFieldSkipped(this.state, field_id, 'ai_voice');
+    SchemaFormStateManager.save(this.state);
+
+    // A skipped field satisfies the section, so advance exactly like a confirm.
+    // Compute the next field / section boundary BEFORE acking (mirrors the
+    // confirm path's section_complete handling, bd polyglot-pdf-njvh).
+    const nextField = computeNextField(this.state, { skipConfirmed: true });
+    const nextSectionForAck = (nextField || this.continuousSessionEnabled)
+      ? null
+      : SchemaFormStateManager.getNextSection(this.state);
+    const sectionComplete = !nextField && !!nextSectionForAck;
+
+    // Ack the synchronous skip round-trip: recorded, carrying section_complete so
+    // the backend can skip the racing next-field-hint at a section boundary.
+    this.sendSkipFieldResponse(request_id, true, undefined, sectionComplete);
+
+    // Emit section_complete (the cheap-model validator boundary) exactly as the
+    // confirm path does -- guarded so a boundary fires once.
+    if (sectionComplete && !this.switchInFlight && !this.pendingSectionSwitch) {
+      this.send({
+        type: 'section_complete',
+        section_id: this.state.currentSectionId,
+        fields: this.buildValidatorFields(
+          SchemaFormStateManager.getCurrentSectionFields(this.state)
+        ),
+      });
+    }
+
+    // Whole-form completeness check on every skip (idempotent / guarded), same as
+    // the confirm path.
+    this.maybeEmitFormComplete();
+
+    // A skip of the tracked unconfirmable field is genuine progress -- restore the
+    // re-prompt budget (mirrors the confirm path).
+    if (field_id === this.lastUnconfirmableFieldId) {
+      this.resetUnconfirmableTracking();
+    }
+
+    if (!nextField) {
+      const nextSection = nextSectionForAck;
+      if (nextSection && this.switchInFlight) {
+        console.log('[WebFormConnection] [skip] Section switch already in flight; ignoring duplicate boundary skip.');
+      } else if (nextSection) {
+        await this.proceedSectionSwitch(nextSection.id);
+      } else {
+        if (this.callbacks.onFormComplete) {
+          this.callbacks.onFormComplete();
+        }
+      }
+    }
+  }
+
+  /**
    * B4 (bd polyglot-pdf-jnjj.16): the section auto-switch seam. Extracted from the
    * confirm handler so the switch is INTERCEPTABLE without touching that handler.
    * In B4 it runs the switch immediately (behavior identical to the prior inline
@@ -2290,6 +2372,30 @@ export class WebFormConnection {
       // bd polyglot-pdf-njvh: only present (true) when this confirm completed the
       // section, so the backend can skip the doomed next-field-hint round-trip that
       // would race the imminent socket teardown for switchToSection.
+      ...(sectionComplete ? { section_complete: true } : {}),
+    });
+  }
+
+  /**
+   * Ack a skip_field request (bd polyglot-pdf-7yra), mirroring
+   * sendConfirmFieldResponse: tells the backend whether the frontend recorded the
+   * skip so the skip_field tool round-trip completes. `reason` is a fixed category
+   * token (never a field value); section_complete rides the same njvh optimization.
+   */
+  private sendSkipFieldResponse(
+    request_id: string | undefined,
+    recorded: boolean,
+    reason?: string,
+    sectionComplete?: boolean
+  ): void {
+    if (!request_id) {
+      return;
+    }
+    this.send({
+      type: 'skip_field_response',
+      request_id,
+      recorded,
+      ...(reason ? { reason } : {}),
       ...(sectionComplete ? { section_complete: true } : {}),
     });
   }

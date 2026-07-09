@@ -361,6 +361,69 @@ class RequestCoordinator:
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
+    async def request_skip_field(self, field_id: str) -> Any:
+        """
+        Ask the frontend to force-skip a required field the user cannot answer
+        (bd polyglot-pdf-7yra). The frontend owns all field state, so it -- not
+        the backend -- records the skip (SchemaFormStateManager.markFieldSkipped:
+        the field is marked skipped with an empty value, satisfying the section
+        gate and printing blank on the PDF). This is a synchronous round-trip like
+        request_confirm_field: the frontend acks whether the skip was recorded.
+
+        Returns:
+            - A dict ``{"recorded": bool, "reason": Optional[str],
+              "section_complete": bool}`` when the frontend answered (same shape as
+              request_confirm_field, so the skip handler can advance a completed
+              section the same way). ``reason`` is a fixed category token, never a
+              field value (PII-free).
+            - CONFIRM_REQUEST_TIMEOUT (the module sentinel) when the frontend did
+              NOT answer in time / the request could not be sent. Callers must NOT
+              treat this as recorded.
+        """
+        if not self._websocket:
+            _log.warning("request_skip_field_no_websocket", session_id=self._session_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        request_id, future = self._register("skip_field", field_id=field_id)
+
+        try:
+            await self._websocket.send_json({
+                "type": "skip_field",
+                "request_id": request_id,
+                "field_id": field_id,
+            })
+        except Exception as exc:
+            _log.error("failed_to_send_skip_field_request",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        _t_coord_sf = time.monotonic()
+        try:
+            result = await asyncio.wait_for(future, timeout=2.0)
+            _coord_sf_ms = round((time.monotonic() - _t_coord_sf) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="skip_field",
+                request_id=request_id,
+                roundtrip_ms=_coord_sf_ms,
+                session_id=self._session_id,
+            )
+            return result
+        except asyncio.TimeoutError:
+            _log.error("skip_field_request_timeout",
+                      session_id=self._session_id,
+                      request_id=request_id)
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+        except Exception as exc:
+            _log.error("skip_field_request_error",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
     async def request_field_value(self, spoken_name: str) -> Dict[str, Any]:
         """
         Request field value from frontend using spoken name.
@@ -591,6 +654,30 @@ class RequestCoordinator:
                 polyglot-pdf-njvh).
         """
         self._resolve(request_id, "confirm_field",
+                      {"recorded": bool(recorded), "reason": reason,
+                       "section_complete": bool(section_complete)})
+
+    def handle_skip_field_response(
+        self, request_id: str, recorded: bool, reason: Optional[str] = None,
+        section_complete: bool = False,
+    ) -> None:
+        """
+        Handle skip_field_response message from frontend (bd polyglot-pdf-7yra).
+
+        Completes the synchronous skip_field round-trip by resolving the keyed
+        future with whether the frontend recorded the skip. Same ack shape as
+        confirm_field, so the skip handler can advance a completed section
+        identically.
+
+        Args:
+            request_id: ID matching the original skip_field request.
+            recorded: True if the frontend recorded the skip (markFieldSkipped).
+            reason: Fixed category token when not recorded; never a field value.
+            section_complete: True when the skip completed the section (the FE is
+                about to switchToSection), so the handler skips the racing
+                next-field-hint request.
+        """
+        self._resolve(request_id, "skip_field",
                       {"recorded": bool(recorded), "reason": reason,
                        "section_complete": bool(section_complete)})
 

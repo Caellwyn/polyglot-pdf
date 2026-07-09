@@ -439,6 +439,23 @@ async def _handle_fill_session(
 							_log.error("confirm_field_response_handling_failed", error_type=type(e).__name__, request_id=request_id)
 						# No acknowledgment needed - this completes the async request cycle
 					continue
+				elif mtype == "skip_field_response":
+					# Frontend responds to a skip_field request: whether it recorded the
+					# skip (markFieldSkipped, bd polyglot-pdf-7yra). Same ack shape as
+					# confirm_field_response so a section-completing skip advances too.
+					request_id = obj.get("request_id")
+					recorded = obj.get("recorded", False)
+					reason = obj.get("reason")  # fixed category token, never PII
+					section_complete = bool(obj.get("section_complete", False))
+					if not request_id:
+						await websocket.send_json({"type": "error", "code": "invalid_response", "reason": "request_id_required"})
+					else:
+						try:
+							service.handle_skip_field_response(request_id, bool(recorded), reason, section_complete)
+						except Exception as e:
+							_log.error("skip_field_response_handling_failed", error_type=type(e).__name__, request_id=request_id)
+						# No acknowledgment needed - this completes the async request cycle
+					continue
 				elif mtype == "manual_field_update":
 					# Frontend notifies backend when user manually edits a field
 					# Backend forwards this to Gemini to keep context synchronized
