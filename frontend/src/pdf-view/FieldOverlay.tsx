@@ -38,6 +38,13 @@ export interface FieldOverlayProps {
   scale: number;
   /** show_if says the field is hidden: render dimmed, not removed. */
   dimmed?: boolean;
+  /**
+   * Click-to-edit (bd polyglot-pdf-7esr): when present and the field is not
+   * dimmed, the overlay (and its option marks -- bigger hit targets for the
+   * SAME whole-field editor, never a direct toggle) becomes clickable and
+   * keyboard-activatable. Dimmed fields are never clickable.
+   */
+  onClick?: (fieldId: string) => void;
 }
 
 const BORDERS: Record<FillState, string> = {
@@ -62,6 +69,7 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   fillState,
   scale,
   dimmed = false,
+  onClick,
 }) => {
   if (!hasValidCoordinates(field.pdf_position)) {
     return null;
@@ -70,6 +78,27 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // `current` always wins: the field the voice model is on is never dimmed
   // (the border/background/snap cues must stay visible).
   const isDimmed = dimmed && fillState !== 'current';
+
+  // Dimmed = visible-but-inert: the cue for "make this active" is the
+  // controlling field, and editing an invisible-in-Simplified field could
+  // contradict it.
+  const clickable = !!onClick && !isDimmed;
+  const activate = clickable ? () => onClick(field.id) : undefined;
+  const interactiveProps = clickable
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        'aria-label': `Edit ${field.name}`,
+        onClick: activate,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            activate!();
+          }
+        },
+        style: { pointerEvents: 'auto' as const, cursor: 'pointer' },
+      }
+    : { style: {} };
 
   const pos = pdfToScreenCoords(field.pdf_position, scale);
 
@@ -107,11 +136,14 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
     }
   }
 
-  const stateClass = `pdf-field-overlay pdf-field-overlay--${fillState}`;
+  const classes = ['pdf-field-overlay', `pdf-field-overlay--${fillState}`];
+  if (isDimmed) classes.push('pdf-field-overlay--dimmed');
+  if (clickable) classes.push('pdf-field-overlay--clickable');
+  const { style: interactiveStyle, ...interactiveRest } = interactiveProps;
   return (
     <>
       <div
-        className={isDimmed ? `${stateClass} pdf-field-overlay--dimmed` : stateClass}
+        className={classes.join(' ')}
         style={{
           left: `${pos.x}px`,
           top: `${pos.y}px`,
@@ -119,32 +151,40 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
           height: `${pos.height}px`,
           border: isDimmed ? DIMMED_BORDER : BORDERS[fillState],
           backgroundColor: isDimmed ? 'transparent' : BACKGROUNDS[fillState],
+          ...interactiveStyle,
         }}
         data-field-id={field.id}
         data-fill-state={fillState}
         data-dimmed={isDimmed || undefined}
         data-testid={`pdf-field-overlay-${field.id}`}
+        {...interactiveRest}
       >
         {content}
       </div>
       {optionRects.map(({ value, position }) => {
         const optPos = pdfToScreenCoords(position, scale);
+        const markClasses = ['pdf-field-overlay__option-mark'];
+        if (isDimmed) markClasses.push('pdf-field-overlay--dimmed');
+        if (clickable) markClasses.push('pdf-field-overlay--clickable');
         return (
           <div
             key={value}
-            className={
-              isDimmed
-                ? 'pdf-field-overlay__option-mark pdf-field-overlay--dimmed'
-                : 'pdf-field-overlay__option-mark'
-            }
+            className={markClasses.join(' ')}
             style={{
               left: `${optPos.x}px`,
               top: `${optPos.y}px`,
               width: `${optPos.width}px`,
               height: `${optPos.height}px`,
               fontSize: `${Math.max(8, Math.min(optPos.height * 0.8, 24))}px`,
+              ...interactiveStyle,
             }}
             data-testid={`pdf-option-mark-${field.id}-${value}`}
+            {...(clickable
+              ? // An option mark is an extra hit target for the SAME
+                // whole-field editor -- the field box carries the accessible
+                // button role; marks stay presentation with a click handler.
+                { onClick: activate }
+              : {})}
           >
             X
           </div>

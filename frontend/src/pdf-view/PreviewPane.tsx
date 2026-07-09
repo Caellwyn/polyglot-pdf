@@ -6,8 +6,8 @@
  * answers paint into their printed rects live as the voice session (or a
  * manual edit) fills them. SchemaForm passes the wrapped FieldValue map down
  * on every schemaFormStateChange, so no extra subscription lives here.
- * Read-only; click-to-edit and the snap-to camera are later beads
- * (phase 2 / polyglot-pdf-35t0).
+ * Click a field overlay to edit it in place (FieldEditPopover, bd
+ * polyglot-pdf-7esr); the snap-to camera is bd polyglot-pdf-35t0.
  *
  * Lazy-loaded from SchemaForm (React.lazy), so pdfjs stays out of the default
  * bundle while the preview flag is off.
@@ -28,6 +28,17 @@ export interface PreviewPaneProps {
   /** Wrapped FieldValue map from SchemaFormState (fresh on every change). */
   fieldValues: Record<string, any>;
   currentFieldId?: string | null;
+  /**
+   * Click-to-edit (bd polyglot-pdf-7esr): SchemaForm's existing
+   * handleFieldChange / handleFieldBlur / validationErrors. handleFieldChange
+   * is the single place stamping {confirmed: true, confirmationMethod:
+   * 'manual_edit'} and fanning out copy_to -- Preview edits get exact parity
+   * with Simplified-mode edits. All optional: absent, the surface stays
+   * read-only.
+   */
+  validationErrors?: Record<string, string>;
+  onFieldChange?: (fieldId: string, value: any) => void;
+  onFieldBlur?: (fieldId: string) => void;
 }
 
 const MIN_SCALE = 0.5;
@@ -38,11 +49,26 @@ export default function PreviewPane({
   schema,
   fieldValues,
   currentFieldId,
+  validationErrors,
+  onFieldChange,
+  onFieldBlur,
 }: PreviewPaneProps) {
   const { document: pdfDoc, numPages, isLoading, error } = usePDFDocument(pdfUrl ?? null);
   const [scale, setScale] = useState(1.0);
   const paneRef = useRef<HTMLDivElement>(null);
   const fitAppliedRef = useRef(false);
+
+  // Click-to-edit popover state (bd polyglot-pdf-7esr). Closed on voice
+  // advance (a currentFieldId change snaps the camera; keeping a popover
+  // anchored to a now-off-screen rect would disorient, and write-through
+  // means the typed value is already committed) and on zoom (the anchor's
+  // screen rect changes under it).
+  const editable = !!(onFieldChange && onFieldBlur);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const closeEditor = useCallback(() => setEditingFieldId(null), []);
+  useEffect(() => {
+    setEditingFieldId(null);
+  }, [currentFieldId, scale]);
 
   // QA surface: any field that cannot paint (no usable rect) is listed once
   // per pane mount. Deps are deliberately empty: `schema` gets a fresh object
@@ -129,6 +155,12 @@ export default function PreviewPane({
             fieldValues={fieldValues}
             currentFieldId={currentFieldId}
             onFirstPageLoad={handleFirstPageLoad}
+            editingFieldId={editable ? editingFieldId : null}
+            onOverlayClick={editable ? setEditingFieldId : undefined}
+            onCloseEditor={editable ? closeEditor : undefined}
+            validationErrors={validationErrors}
+            onFieldChange={onFieldChange}
+            onFieldBlur={onFieldBlur}
           />
         )}
       </div>
