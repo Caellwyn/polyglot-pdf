@@ -62,7 +62,16 @@ fixed three wrong test expectations, and finished the remaining surfaces.
   `backend/tests/unit/test_manifest_service.py`. Full backend suite green
   (1729 passed).
 
-Fresh-eyes triage: recorded in the PR merge report (see closeout).
+Review record: fresh-eyes round 1 (Sonnet) found the branch was based one
+commit behind origin/dev, silently reverting PR #355's i-90 p2_checkbox3
+fix -- fixed by rebasing and re-running the backfill (the restored 5 options
+got their own rects); round 2 (Opus) NO-GAPS. Opus outer review: round 1's
+second confirming pass caught the sanitizer crashing on bare-string options
+(AttributeError; the pre-sanitizer pass-through tolerated them) -- fixed with
+an isinstance guard + test; round 2, both independent Opus passes NO-GAPS on
+the final diff. Adopted 2 findings inline, deferred 1 as bead
+polyglot-pdf-lj5v (get_field_guidance option-sanitizer parity), FE type sync
+already owned by P2.2 polyglot-pdf-lp5v.
 
 ## Lessons
 
