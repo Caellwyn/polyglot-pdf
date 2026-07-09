@@ -24,6 +24,7 @@ import { FIELD_HIGHLIGHT_DURATION_MS } from "../utils/fieldHighlight";
 import { VoiceOverlay } from "../../demo/VoiceOverlay";
 import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
+import { MIC_AUDIO_CONSTRAINTS } from "../../shared/audioConstraints";
 import { isTestHarnessEnabled } from "../../shared/config";
 import { isPreviewUiEnabled } from "../../pdf-view/featureFlag";
 import { getStoredViewMode, storeViewMode, initialViewMode, type ViewMode } from "../../pdf-view/viewMode";
@@ -185,13 +186,9 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     async function initSharedStream() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: 1,
-            sampleRate: 16000,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
+          // Canonical AEC/mic constraints (bd polyglot-pdf-gnmo) plus this
+          // site's pinned 16kHz recording rate.
+          audio: { ...MIC_AUDIO_CONSTRAINTS, sampleRate: 16000 },
         });
 
         if (mounted) {

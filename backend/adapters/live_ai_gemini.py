@@ -734,6 +734,118 @@ class LiveAIGemini(ILiveAI):
         except Exception:
             self._log.exception("on_session_dropped_callback_error")
 
+    async def _audio_sender_loop(self, session):
+        """Forward queued audio frames into the live session, with gap-filling.
+
+        Backend audio-cadence gap-filling (bd polyglot-pdf-7f7m). Native-VAD mode
+        needs a CONTINUOUS PCM stream; if the client stutters, a gap on the wire
+        can starve Gemini's keepalive and trip a 1011. When AUDIO_GAPFILL_ENABLED,
+        we wait for a real chunk only up to AUDIO_GAPFILL_INTERVAL_MS and, on
+        timeout, send ONE synthetic silence frame so the cadence never breaks.
+
+        Gap-fill fires ONLY after real audio has started (nothing to keep alive
+        before the first frame) and NOT once a graceful shutdown has begun (the
+        drain path owns the socket + sentinel then). The None sentinel still exits
+        the loop cleanly on either path. Config is read ONCE per session (values
+        are static for its lifetime); extracted to a method (not a closure) so the
+        cadence logic is unit-testable with a mock session.
+        """
+        chunk_count = 0
+        from backend.config import get_settings
+        _settings = get_settings()
+        _gapfill_enabled = bool(getattr(_settings, "AUDIO_GAPFILL_ENABLED", False))
+        _gapfill_timeout_s = (
+            max(1, int(getattr(_settings, "AUDIO_GAPFILL_INTERVAL_MS", 40))) / 1000.0
+        )
+        # One chunk of mono PCM16 silence at AUDIO_IN_RATE = rate * (ms/1000) * 2 bytes.
+        _chunk_ms = max(1, int(getattr(_settings, "WS_CHUNK_MS", 20)))
+        _in_rate = int(getattr(_settings, "AUDIO_IN_RATE", 16000))
+        _silence_frame = bytes((_in_rate * _chunk_ms // 1000) * 2)
+        _seen_real_audio = False
+        _silence_frames_sent = 0
+
+        async def _send_frame(data: bytes, *, is_silence: bool):
+            nonlocal chunk_count, _silence_frames_sent
+            try:
+                chunk_count += 1
+                # Log first REAL chunk only (verify sender is working).
+                if chunk_count == 1 and not is_silence:
+                    self._log.info("[mic] [Sender] First audio chunk sending to Gemini", bytes=len(data))
+
+                await session.send_realtime_input(
+                    audio=types.Blob(data=data, mime_type="audio/pcm;rate=16000")
+                )
+
+                if is_silence:
+                    _silence_frames_sent += 1
+                    # Rollup only (never per-frame) so gap-fill is observable
+                    # without flooding logs.
+                    if _silence_frames_sent == 1 or _silence_frames_sent % 100 == 0:
+                        self._dev_log_io("send", "gemini_gapfill", {
+                            "silence_frames": _silence_frames_sent,
+                        })
+
+                # ACTUAL send-to-Gemini rollup (bd polyglot-pdf-2m9): this fires
+                # AFTER send_realtime_input returns, so it proves audio crossed
+                # the backend->Gemini boundary -- distinct from stream_audio's
+                # "audio_summary" which only proves it reached the queue. If
+                # "gemini_send" frames lag the queued frames, audio is stuck in
+                # the queue / the sender is starved; if they match but Gemini
+                # stays silent, the problem is on Gemini's side.
+                self._gemini_sent_bytes = getattr(self, "_gemini_sent_bytes", 0) + len(data)
+                if chunk_count == 1 or chunk_count % 100 == 0:
+                    self._dev_log_io("send", "gemini_send", {
+                        "frames": chunk_count,
+                        "bytes": self._gemini_sent_bytes,
+                    })
+            except Exception as e:
+                self._log.error("[error] AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
+                self._dev_log_io("send", "gemini_send_failed", {
+                    "chunk_number": chunk_count, "error": str(e),
+                })
+                # swallow for robustness
+                pass
+
+        while True:
+            # Use a sentinel (None) to allow graceful shutdown without relying
+            # solely on task cancellation. This wakes the sender if it's blocked
+            # on get().
+            #
+            # Gap-fill path: when enabled and we have already seen real audio,
+            # bound the wait so a client stutter yields a silence frame instead of
+            # a wire gap. Otherwise block indefinitely (pre-first-audio, or
+            # gap-fill disabled) -- no busy-wait.
+            if _gapfill_enabled and _seen_real_audio:
+                try:
+                    chunk = await asyncio.wait_for(
+                        self._audio_queue.get(), timeout=_gapfill_timeout_s
+                    )
+                except asyncio.TimeoutError:
+                    # No real chunk arrived in time. Keep the cadence alive UNLESS
+                    # a graceful shutdown has begun -- once _close_after_flush /
+                    # _intentional_shutdown is set, the drain path owns the socket
+                    # and will send the None sentinel; manufacturing silence then
+                    # would race a closing session.
+                    if self._close_after_flush or self._intentional_shutdown:
+                        # Fall back to a blocking get so we still pick up the
+                        # sentinel promptly and exit cleanly.
+                        chunk = await self._audio_queue.get()
+                    else:
+                        await _send_frame(_silence_frame, is_silence=True)
+                        continue
+            else:
+                chunk = await self._audio_queue.get()
+
+            if chunk is None:
+                # Sentinel received: exit the send loop cleanly
+                self._log.info("[stop] [Sender] Audio sender stopping",
+                               total_chunks_sent=chunk_count,
+                               silence_frames_sent=_silence_frames_sent)
+                break
+
+            _seen_real_audio = True
+            await _send_frame(chunk, is_silence=False)
+
     async def stream_audio(self, audio_chunk: bytes):
         """Enqueue an audio chunk to be sent to the live session.
         
@@ -1552,50 +1664,11 @@ class LiveAIGemini(ILiveAI):
                 # Track if Gemini has responded (to implement fallback retry)
                 gemini_has_responded = False
 
-                # Start a task to forward queued audio into the session
-                async def audio_sender():
-                    chunk_count = 0
-                    while True:
-                        # Use a sentinel (None) to allow graceful shutdown without
-                        # relying solely on task cancellation. This wakes the
-                        # sender if it's blocked on get().
-                        chunk = await self._audio_queue.get()
-                        if chunk is None:
-                            # Sentinel received: exit the send loop cleanly
-                            self._log.info("[stop] [Sender] Audio sender stopping", total_chunks_sent=chunk_count)
-                            break
-                        try:
-                            chunk_count += 1
-                            # Log first chunk only (verify sender is working)
-                            if chunk_count == 1:
-                                self._log.info("[mic] [Sender] First audio chunk sending to Gemini", bytes=len(chunk))
-
-                            await session.send_realtime_input(
-                                audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
-                            )
-
-                            # ACTUAL send-to-Gemini rollup (bd polyglot-pdf-2m9): this fires
-                            # AFTER send_realtime_input returns, so it proves audio crossed
-                            # the backend->Gemini boundary -- distinct from stream_audio's
-                            # "audio_summary" which only proves it reached the queue. If
-                            # "gemini_send" frames lag the queued frames, audio is stuck in
-                            # the queue / the sender is starved; if they match but Gemini
-                            # stays silent, the problem is on Gemini's side.
-                            self._gemini_sent_bytes = getattr(self, "_gemini_sent_bytes", 0) + len(chunk)
-                            if chunk_count == 1 or chunk_count % 100 == 0:
-                                self._dev_log_io("send", "gemini_send", {
-                                    "frames": chunk_count,
-                                    "bytes": self._gemini_sent_bytes,
-                                })
-                        except Exception as e:
-                            self._log.error("[error] AUDIO_SEND_FAILED", error=str(e), chunk_number=chunk_count)
-                            self._dev_log_io("send", "gemini_send_failed", {
-                                "chunk_number": chunk_count, "error": str(e),
-                            })
-                            # swallow for robustness
-                            pass
-                
-                sender_task = asyncio.create_task(audio_sender())
+                # Start a task to forward queued audio into the session. The loop
+                # body lives in _audio_sender_loop (a method, not a closure) so the
+                # gap-fill cadence logic is unit-testable with a mock session
+                # (bd polyglot-pdf-7f7m).
+                sender_task = asyncio.create_task(self._audio_sender_loop(session))
                 # Record the running sender so external finalizers can
                 # cancel/await it reliably.
                 self._current_sender_task = sender_task

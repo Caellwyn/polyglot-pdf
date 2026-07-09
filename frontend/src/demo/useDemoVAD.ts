@@ -57,6 +57,7 @@ SOFTWARE.
 
 import { useRef, useEffect } from 'react'
 import * as VAD from "@ricky0123/vad-react"
+import { MIC_AUDIO_CONSTRAINTS } from "../shared/audioConstraints"
 
 /**
  * Get VAD asset base URL (uses CDN for reliability)
@@ -172,13 +173,9 @@ export function useDemoVAD(options?: VADOptions): DemoVAD {
 				return streamRef.current
 			}
 			console.log('[useDemoVAD] Creating new stream')
+			// Canonical AEC/mic constraints (bd polyglot-pdf-gnmo).
 			return await navigator.mediaDevices.getUserMedia({
-				audio: {
-					echoCancellation: true,      // Browser AEC prevents echo feedback
-					noiseSuppression: true,       // Reduces background noise
-					autoGainControl: true,        // Normalizes microphone volume
-					channelCount: 1,              // Mono audio (matches recording)
-				},
+				audio: { ...MIC_AUDIO_CONSTRAINTS },
 			})
 		},
 

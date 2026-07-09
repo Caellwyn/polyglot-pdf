@@ -127,6 +127,18 @@ class Settings(BaseModel):
 	AUDIO_OUT_RATE: int = 24000
 	MAX_UPLOAD_MB: int = 5
 	WS_CHUNK_MS: int = 20
+	# Backend audio-cadence gap-filling (bd polyglot-pdf-7f7m). Native-VAD mode
+	# requires a CONTINUOUS PCM stream to Gemini; a stutter/gap on the client can
+	# starve the server keepalive and trigger a 1011 close. When enabled, the
+	# audio sender emits a synthetic silence frame if no real chunk arrives within
+	# AUDIO_GAPFILL_INTERVAL_MS during an active stream, so the wire cadence never
+	# breaks. Env-overridable so the demo can flip it without a redeploy. The
+	# interval defaults to one chunk plus slack (~WS_CHUNK_MS + a jitter margin) so
+	# it fills only genuine gaps, never racing real audio.
+	AUDIO_GAPFILL_ENABLED: bool = (
+		os.getenv("AUDIO_GAPFILL_ENABLED", "true").lower() == "true"
+	)
+	AUDIO_GAPFILL_INTERVAL_MS: int = int(os.getenv("AUDIO_GAPFILL_INTERVAL_MS", "40"))
 	WS_PING_INTERVAL_SEC: int = 15
 	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 120s of no received message (audio/ping/control)
 	# B5 (bd polyglot-pdf-jnjj.17): backend-side fail-OPEN bound for the boundary
