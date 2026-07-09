@@ -88,10 +88,14 @@ value field.
 
 `backend/utils/structured_logger.py` (`StructuredLogger` / `get_logger()`) imports
 these schemas and exposes a typed, stdout-JSON emit API for the Cloud Run → BigQuery
-pipeline ("LOGGING_OVERHAUL_PLAN Phase 1"). But **it emits nothing yet**: the only
-non-test reference is a single dead import in `live_ai_gemini.py`
-(`get_logger as get_structured_logger`) that is never called. So the typed event
-stream is scaffolding — the contract is defined, the wiring lands in Phases 2–4 below.
+pipeline ("LOGGING_OVERHAUL_PLAN Phase 1"). The **one** wired emitter today is the
+per-turn token event: `live_ai_gemini.py` calls
+`get_structured_logger().log_gemini_api_response(...)` alongside the file write, so
+every turn's counts + costs land as a `gemini_api_response` `jsonPayload` line in
+Cloud Logging — queryable/exportable off a deployed run without scraping the
+`print()` block (bd `polyglot-pdf-5c2h`). The remaining event types (session
+lifecycle, field, error) are still scaffolding — the contract is defined, the wiring
+lands in Phases 2–4 below.
 
 (Routine application logging today goes through `structlog` — `structlog.get_logger()`
 bound per module — not through `StructuredLogger`.)

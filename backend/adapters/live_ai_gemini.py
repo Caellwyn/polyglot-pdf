@@ -2631,6 +2631,45 @@ class LiveAIGemini(ILiveAI):
                                                 except Exception as log_err:
                                                     # Don't fail silently - we need to know if logging fails
                                                     self._log.warning("token_file_logging_error", error=str(log_err))
+
+                                                # Structured stdout emit for Cloud Logging (bd polyglot-pdf-5c2h).
+                                                # The file above is local-dev-only and lives on the Cloud Run
+                                                # container's ephemeral FS; this emits the SAME per-turn counts +
+                                                # costs as one JSON line to stdout so a deployed run's per-turn
+                                                # token burn survives as queryable jsonPayload (not just the
+                                                # human-readable print() block). Counts + costs ONLY -- the
+                                                # StructuredLogger schema carries no field-value slot, so this
+                                                # stays HIPAA-safe by construction. Additive: never disturbs the
+                                                # file write or the print() block above.
+                                                try:
+                                                    get_structured_logger().log_gemini_api_response(
+                                                        form_id=self._form_id,
+                                                        form_version="",
+                                                        form_session_id=self._form_session_id,
+                                                        ws_session_id=self._instance_id,
+                                                        metadata={
+                                                            # This turn's counts (raw + per-modality)
+                                                            "prompt_token_count": prompt_tokens,
+                                                            "candidates_token_count": response_tokens,
+                                                            "total_token_count": total_tokens,
+                                                            "text_input": text_input_tokens,
+                                                            "audio_input": audio_input_tokens,
+                                                            "text_output": text_output_tokens,
+                                                            "audio_output": audio_output_tokens,
+                                                            # This turn's costs (per-modality + total)
+                                                            "text_input_cost_usd": round(text_input_cost, 8),
+                                                            "audio_input_cost_usd": round(audio_input_cost, 8),
+                                                            "text_output_cost_usd": round(text_output_cost, 8),
+                                                            "audio_output_cost_usd": round(audio_output_cost, 8),
+                                                            "cost_estimate_usd": round(total_cost, 8),
+                                                            # Session cumulative totals
+                                                            "session_tokens_so_far": self._session_total_tokens,
+                                                            "session_cost_so_far_usd": round(self._session_total_cost, 8),
+                                                            "section_id": self._current_section_id,
+                                                        },
+                                                    )
+                                                except Exception as emit_err:
+                                                    self._log.warning("token_structured_emit_error", error=str(emit_err))
                                             else:
                                                 # Debug: Why didn't we log?
                                                 self._log.debug("token_file_logging_skipped",
