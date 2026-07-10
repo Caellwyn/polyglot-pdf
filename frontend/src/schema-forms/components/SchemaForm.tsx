@@ -18,6 +18,7 @@ import {
 } from "../state/schemaFormState";
 import { SectionRenderer } from "./SectionRenderer";
 import { PdfViewErrorBoundary } from "./PdfViewErrorBoundary";
+import { PdfPreviewFallback } from "./PdfPreviewFallback";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
 import { unwrapFieldValue } from "../utils/fieldValue";
@@ -619,7 +620,22 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       {previewUiEnabled && viewMode === 'preview' ? (
         <PdfViewErrorBoundary
           fallback={
-            <div className="pdf-preview-pane__notice">
+            // Inline styles on purpose: pdf-view.css (which defines
+            // pdf-preview-pane__notice) is imported only by the lazy pdf-view
+            // chunk, so it is unavailable exactly when this fallback renders
+            // (the chunk failed to load) -- see PdfPreviewFallback.tsx.
+            <div
+              className="pdf-preview-pane__notice"
+              style={{
+                maxWidth: '64rem',
+                margin: '1rem auto',
+                padding: '1rem',
+                background: '#fefce8',
+                border: '1px solid #fde68a',
+                borderRadius: '6px',
+                color: '#713f12',
+              }}
+            >
               The PDF preview could not be loaded. Check your connection and reload the page to
               try again.
             </div>
@@ -766,25 +782,7 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
           the same /api/fill-pdf call as download/print and renders the bytes. */}
       {previewUiEnabled && showPDFPreview && pdfUrl && (
         <PdfViewErrorBoundary
-          fallback={
-            <div className="pdf-preview-modal__backdrop" role="dialog" aria-modal="true">
-              <div className="pdf-preview-modal">
-                <div className="pdf-preview-pane__notice">
-                  The PDF preview could not be loaded. Check your connection and reload the page
-                  to try again.
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <button
-                      type="button"
-                      className="pdf-preview-modal__close"
-                      onClick={() => setShowPDFPreview(false)}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          }
+          fallback={<PdfPreviewFallback onClose={() => setShowPDFPreview(false)} />}
         >
           <React.Suspense fallback={null}>
             <FilledPreviewModal
