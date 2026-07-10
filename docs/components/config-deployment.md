@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-07-06. See [../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md](../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md) for closeout details.*
+*Last updated: 2026-07-09. See [../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md](../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -28,7 +28,7 @@ which bypasses the cache).
 
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
-  `DISABLE_GEMINI_VAD`, `USE_JIT_SCHEMA`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
+  `DISABLE_GEMINI_VAD`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
@@ -48,8 +48,7 @@ which bypasses the cache).
 | `USE_PREMIUM_MODEL` | `false` | Flips the active native-audio model tier — `false` → 2.5 standard (default for its audio-path behavior), `true` → 3.1 premium (opt-in; now tool-call-reliable since the untyped-param fix, `bd polyglot-pdf-wpw.4`). See [ai-models.md](../standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Pin an exact model string; **non-empty wins** over `USE_PREMIUM_MODEL` (resolved in `Settings._resolve_model`). |
 | `DISABLE_MODEL_THINKING` | `true` | Turn off model "thinking" tokens on the live session (the form-fill loop needs no chain-of-thought; thinking bills at the output rate). When on and the model is 2.5-family, the connect config carries `thinking_config={"thinking_budget": 0}`; 3.1 (different `thinking_level` field) is left at default. Effect on native-audio Live is unverified upstream, so safe-if-ignored. See [voice-ai.md](voice-ai.md). |
-| `USE_JIT_SCHEMA` | `false` | Send a field **manifest** + load each full field schema just-in-time (token reduction), using `JIT_SYSTEM_INSTRUCTION` instead of `SYSTEM_INSTRUCTION`. See [schema-forms.md](schema-forms.md). |
-| `USE_DTI` | `false` | Dynamic Turn Injection -- a thin-principal SI carrying only the static backbone plus the CURRENT field's guidance; each next field's guidance rides the `confirm_field` tool response instead of a manifest/schema dump. Mutually exclusive with `USE_JIT_SCHEMA` at the SI level (DTI takes precedence) but reuses JIT's `confirm_field` plumbing. See [schema-forms.md](schema-forms.md) and [websocket-routing.md](websocket-routing.md). |
+| `USE_DTI` | `false` | Dynamic Turn Injection -- the shipped reduced-SI mode (the demo deploy runs `USE_DTI=true`). A thin-principal SI carrying only the static backbone; the CURRENT field's guidance rides the initiating message and each next field's guidance rides the `confirm_field` tool response, instead of dumping the section's fields into the SI. `false` -> the legacy full-SI fallback (`SYSTEM_INSTRUCTION` with the whole current-section field dump). DTI is carried over the manifest-first handshake transport (`handshake_jit` / `jit_mode`). See [schema-forms.md](schema-forms.md), [websocket-routing.md](websocket-routing.md), and [../standards/si-reduction.md](../standards/si-reduction.md). |
 | `DISABLE_GEMINI_VAD` | `false` (env-overridable) | `false` → native mode (Gemini's automatic VAD detects turns); `true` → manual mode (the client drives turn-taking with `activity_start/end`). See [voice-and-vad.md](../standards/voice-and-vad.md). |
 
 ## Form-kit storage (`FORM_KITS_MODE`)
