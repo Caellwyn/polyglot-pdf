@@ -42,6 +42,7 @@ import copy
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.models import conditional_vocabulary as vocab
+from backend.services import controls_fields_mirror as cfm
 
 _CHOICE_TYPES = frozenset({"select", "radio", "checkbox_group"})
 _GROUP_MEMBERSHIP_TYPES = frozenset({"checkbox_group", "checkbox"})
@@ -327,6 +328,27 @@ def _rewrite_atom(atom: dict, trigger: Optional[dict],
     return out
 
 
+def _walk_condition_atoms(cond: Any) -> List[dict]:
+    """Every atomic {field, operator, value} dict in a show_if/require_if.
+
+    Handles a single atom and a composite group (all_of/any_of/none_of buckets
+    of atoms). Depth <= 1 by the v2 contract. Mirrors
+    migrate_schema_v2._walk_condition_atoms (kept local rather than shared: it
+    is a trivial v2-shape walk with no controls_fields-specific logic, so it
+    does not belong in the extracted controls_fields_mirror core)."""
+    if not isinstance(cond, dict):
+        return []
+    buckets = vocab.CONDITION_GROUP_BUCKETS & cond.keys()
+    if not buckets:
+        return [cond]
+    atoms: List[dict] = []
+    for bucket in buckets:
+        members = cond.get(bucket)
+        if isinstance(members, list):
+            atoms.extend(m for m in members if isinstance(m, dict))
+    return atoms
+
+
 def _rewrite_condition(cond: Any, owner_path: str, fields_by_id: Dict[str, dict],
                        resolution: Dict[str, Dict[str, str]],
                        repairs: List[dict],
@@ -468,6 +490,22 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
     resolution = _mint_slugs(fields, repairs)
     fields_by_id = {str(f.get("id")): f for f in fields}
 
+    # A lone-option checkbox is the standalone-boolean idiom (bd c5r8): its
+    # single option's OLD raw value has no v2 referent once a controls_fields
+    # condition against it is mirrored -- `equals <that value>` must become
+    # is_checked, same fixup migrate_schema_v2 Pass 1/4 apply. Unlike the
+    # migration, repair() never unwraps the options[] itself (a v2-stamped
+    # draft's checkbox is already boolean), so this map is built read-only from
+    # whatever single-option list still happens to be present on the trigger.
+    standalone_old_value: Dict[str, str] = {}
+    for f in fields:
+        fid = f.get("id")
+        if (f.get("type") == "checkbox" and isinstance(fid, str)
+                and isinstance(f.get("options"), list) and len(f["options"]) == 1):
+            opt = f["options"][0]
+            if isinstance(opt, dict) and opt.get("value") is not None:
+                standalone_old_value[fid] = str(opt["value"])
+
     for i, f in enumerate(fields):
         fid = str(f.get("id"))
         for kind in ("show_if", "require_if"):
@@ -481,8 +519,132 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
             else:
                 f[kind] = new_cond
 
-        # controls_fields was DELETED at the P6.2 strictness flip (bd h76m.16):
-        # dead at runtime, removed from the model. Nothing to repair here.
+    # controls_fields / conditional_fields: v2 has NO trigger-side conditional
+    # logic (bd h76m.16 deleted both from the model). Rather than silently
+    # dropping a draft's controls_fields (leaving its shows/makes_required
+    # behavior lost, and the schema RED under legacy-trigger-side-logic),
+    # mirror each edge into the TARGET field's show_if/require_if -- the same
+    # deterministic conversion scripts/migrate_schema_v2.py Pass 4 proved (bd
+    # polyglot-pdf-c3y6). The mirrored atom is routed through THIS module's
+    # own atom-rewrite machinery (_rewrite_atom, via the resolution/alias map
+    # already built above) so it gets the identical slug/operator aliasing
+    # every other repaired atom gets.
+    #
+    # This is a SECOND pass over fields, deliberately AFTER the show_if/
+    # require_if rewrite loop above finished for ALL fields (mirroring
+    # migrate_schema_v2's Pass 2 -> Pass 4 ordering): the already-mirrored
+    # suppression compares the NORMALIZED mirrored atom against the target's
+    # condition, so every target must already be normalized -- a fused single
+    # loop would compare against a raw not-yet-rewritten condition whenever
+    # the trigger precedes its target in field order, missing the match and
+    # duplicating the edge into a spurious any_of (fresh-eyes finding on this
+    # bead).
+    for i, f in enumerate(fields):
+        fid = str(f.get("id"))
+        controls = f.get("controls_fields")
+        if isinstance(controls, list):
+            path = f"fields[{i}] (id={fid}).controls_fields"
+
+            def _normalize(atom: dict, _path=path) -> Optional[dict]:
+                trig = fields_by_id.get(atom.get("field")) \
+                    if isinstance(atom.get("field"), str) else None
+                # v1-semantics pre-pass (migrate_schema_v2._rewrite_atom_value
+                # parity -- Opus review gap on this bead): a controls_fields
+                # edge is a v1 construct, so equals/not_equals on a
+                # checkbox_group trigger MEANS membership -- alias it the way
+                # the migration does instead of letting the v2 fail-open
+                # trigger-compat drop lose the edge. Emptiness first, then
+                # membership, mirroring the migration's ordering. This applies
+                # ONLY to mirrored v1 edges; a native v2 show_if atom keeps
+                # the stricter drop policy.
+                op = atom.get("operator")
+                ttype = str(trig.get("type")) if isinstance(trig, dict) else None
+                if (op in ("equals", "not_equals")
+                        and str(atom.get("value", "")) == ""):
+                    # v1 emptiness idiom, ANY trigger type (migrate applies it
+                    # unguarded, BEFORE the membership rewrite): equals ""
+                    # means "field is empty" -- v2 spells that is_empty/
+                    # is_not_empty (no value).
+                    atom["operator"] = ("is_empty" if op == "equals"
+                                        else "is_not_empty")
+                    atom.pop("value", None)
+                elif ttype == "checkbox_group" and op in ("equals", "not_equals"):
+                    new_op = ("includes" if op == "equals"
+                              else "not_includes")
+                    repairs.append({
+                        "action": "alias-operator", "path": _path,
+                        "detail": f"{op} on checkbox_group trigger -> "
+                                  f"{new_op} (v1 controls_fields "
+                                  "membership reading)",
+                        "error": False,
+                    })
+                    count_alias(f"{op}@controls_fields")
+                    atom["operator"] = new_op
+                elif (op == "is_checked"
+                        and ttype in vocab.CHOICE_FIELD_TYPES):
+                    # is_checked on an OPTION-BEARING trigger (checkbox_group/
+                    # radio/select) means "a selection exists" -> is_not_empty
+                    # (migrate _rewrite_atom_value's dual-fate rule; the
+                    # standalone `checkbox` trigger keeps is_checked). Without
+                    # this the mirrored atom itself lints operator-trigger RED
+                    # (Opus review gap, round 2).
+                    repairs.append({
+                        "action": "alias-operator", "path": _path,
+                        "detail": f"is_checked on {ttype!r} trigger -> "
+                                  "is_not_empty (v1 controls_fields "
+                                  "selection-exists reading)",
+                        "error": False,
+                    })
+                    count_alias("is_checked@controls_fields")
+                    atom["operator"] = "is_not_empty"
+                    atom.pop("value", None)
+                return _rewrite_atom(atom, trig, resolution, _path, repairs,
+                                     count_alias)
+
+            outcome = cfm.mirror_controls_fields(
+                f, fields_by_id, _walk_condition_atoms, _normalize,
+                standalone_old_value)
+            for m in outcome["mirrored"]:
+                repairs.append({
+                    "action": "mirror-controls-fields",
+                    "path": path,
+                    "detail": f"{m['trigger']} {m['key']} <- "
+                              f"{m['atom']} (mirrored onto {m['target']})",
+                    "error": False,
+                })
+            for tid in outcome["dangling"]:
+                repairs.append({
+                    "action": "controls-fields-dangling",
+                    "path": path,
+                    "detail": f"controls_fields target {tid!r} resolves to no "
+                              "field -- edge dropped, needs human review",
+                    "error": True,
+                })
+            for u in outcome["unconverted"]:
+                if u["unconverted_action_keys"]:
+                    repairs.append({
+                        "action": "controls-fields-unmirrored",
+                        "path": path,
+                        "detail": f"trigger {u['trigger']!r} action(s) "
+                                  f"{u['unconverted_action_keys']} have no v2 "
+                                  "target-side equivalent -- dropped, needs "
+                                  "human review",
+                        "error": False,
+                    })
+        # conditional_fields is a plain legacy list of field ids (no
+        # trigger-side actions to mirror -- unlike controls_fields it never
+        # carried operator/value/action-key structure), so there is nothing
+        # target-side to convert it INTO; it is simply removed, logged.
+        if "conditional_fields" in f:
+            repairs.append({
+                "action": "drop-conditional-fields",
+                "path": f"fields[{i}] (id={fid}).conditional_fields",
+                "detail": "legacy conditional_fields removed (no v2 "
+                          "target-side equivalent to mirror into)",
+                "error": False,
+            })
+        f.pop("controls_fields", None)
+        f.pop("conditional_fields", None)
 
     if alias_hits:
         repairs.append({

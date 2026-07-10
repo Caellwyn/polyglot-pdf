@@ -129,6 +129,21 @@ def test_contract_allows_multi_bucket_composite_conditions():
     assert "MORE THAN ONE bucket" in contract
 
 
+def test_contract_forbids_removed_trigger_side_keys():
+    # bd polyglot-pdf-c3y6: the extractor emitted controls_fields (removed at
+    # the v2 flip) because the contract still documented it as an emittable
+    # key. The contract must now EXPLICITLY forbid both removed trigger-side
+    # keys, and the old JSON-shape exemplar line must be gone -- pin the
+    # forbidding language so a later rewording cannot silently drop it.
+    contract = sc.render_contract()
+    assert "NEVER emit controls_fields or conditional_fields" in contract
+    assert "NEVER emit either key" in contract
+    # The old FIELD SHAPE block documented the key as an emittable JSON line
+    # ('"controls_fields": [...]'); only the forbidding prose may mention it.
+    assert '"controls_fields"' not in contract
+    assert '"conditional_fields"' not in contract
+
+
 def test_option_value_note_is_qualified_to_choice_triggers():
     # Codex PR #316: value_must_be_trigger_option is only enforced on choice-field
     # triggers; on text/date/number triggers the value is a literal. The rendered
