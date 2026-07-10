@@ -53,7 +53,24 @@ and 6s71 is now blocked by it.
   migrate_schema_v2 on identical input, and idempotency. Suites: repair
   27/27, migrate 21/21 unchanged, contract-sync 11/11, harness tests/
   798 passed / 1 skipped, backend/tests 982 passed / 2 skipped.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: FIVE rounds, three real gaps found and fixed --
+  round 1 (sonnet): the fused rewrite+mirror loop duplicated already-
+  mirrored edges when the trigger preceded its target (fixed: two-pass
+  restructure matching migrate's Pass 2 -> Pass 4 ordering; regression test
+  proven to fail against the fused loop). Round 2 (sonnet): criterion 3's
+  forbidding language unpinned (fixed: test_contract_forbids_removed_
+  trigger_side_keys). Opus round 1: equals/not_equals on a checkbox_group
+  trigger dropped instead of aliasing to membership like migrate (fixed +
+  parity test). Opus round 2: is_checked on option-bearing triggers kept
+  as-is, minting an operator-trigger lint ERROR (fixed: is_not_empty dual-
+  fate rule + parity test). Opus round 3: the emptiness idiom was scoped to
+  checkbox_group only (fixed: hoisted to any trigger + parity test). Opus
+  round 4: NO-GAPS -- _normalize verified branch-for-branch against
+  migrate's _rewrite_atom_value. Non-blocking notes deliberately left:
+  unread "noop" return counter; inline-dict fixtures; this entry's "Pass 4
+  delegates" wording (the three leaf helpers are shared; migrate keeps its
+  own loop body). Outer review (Step 5.6): primary Opus NO-GAPS + second
+  independent Opus NO-GAPS on the identical final diff.
 
 ## Lessons
 
