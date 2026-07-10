@@ -75,6 +75,10 @@ runs are byte-identical on every form.
    Fresh-eyes confirmed this is content mislabeling, not just duplicate
    labels; filed as bead `polyglot-pdf-h1eo` (sub-heading reach needs a
    limiter in bead 6cfu.2, e.g. line-number range or vertical-gap cutoff).
+   Related quirk (outer-review finding): the page-7 re-entry name fields are
+   `P1_`-named, so the derived Part 1 grouping non-contiguously spans pages
+   1-7 (sections still never span pages; parts can). 6cfu.2 decides whether
+   re-entry blocks stay with their named part or join the page's part.
 5. The cap is enforced by construction EXCEPT when a single same-family run
    (a repeated row block) exceeds the cap by itself -- the splitter keeps the
    run whole and emits a NOTE ("kept whole"). None of the 5 forms hit this
