@@ -1,6 +1,6 @@
 # Journal entry tags -- canonical vocabulary
 
-*Last updated: 2026-05-30.*
+*Last updated: 2026-07-10.*
 
 Tags used in the YAML frontmatter of [`entries/*.md`](entries/). **Adding a tag
 is a deliberate edit to THIS file** -- never invent a tag ad-hoc in an entry.
@@ -24,6 +24,7 @@ Renaming a tag means editing every entry that uses it (avoid).
 - postmortem
 - harness
 - doctrine
+- extractor
 
 ## Usage example
 
