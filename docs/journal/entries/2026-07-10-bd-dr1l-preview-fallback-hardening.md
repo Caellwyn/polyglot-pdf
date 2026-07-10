@@ -37,7 +37,12 @@ classes live in the very lazy chunk whose failure triggers the fallback.
   orchestrator.
 - 6 new tests; schema-forms + pdf-view suites 25 files / 601 tests green;
   tsc clean.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) cleared all four criteria with one
+  nit, adopted (Close-button aria-label parity). Required Opus final round
+  NO-GAPS with one low-confidence cosmetic note, deferred per the
+  nit-deferral rule as bd polyglot-pdf-715i (the retained secondary-hook
+  classNames could bind stale chunk CSS in the opened-once-then-failed
+  scenario). Outer review (Step 5.6): two independent Opus NO-GAPS.
 
 ## Lessons
 
