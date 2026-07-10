@@ -17,6 +17,7 @@ import {
   type SchemaFormState,
 } from "../state/schemaFormState";
 import { SectionRenderer } from "./SectionRenderer";
+import { PdfViewErrorBoundary } from "./PdfViewErrorBoundary";
 import { validateField } from "../utils/validation";
 import { fillPDF, downloadPDF, printPDF } from "../utils/pdfFiller";
 import { unwrapFieldValue } from "../utils/fieldValue";
@@ -616,19 +617,28 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       )}
 
       {previewUiEnabled && viewMode === 'preview' ? (
-        <React.Suspense
-          fallback={<div className="pdf-preview-pane__notice">Loading the preview...</div>}
+        <PdfViewErrorBoundary
+          fallback={
+            <div className="pdf-preview-pane__notice">
+              The PDF preview could not be loaded. Check your connection and reload the page to
+              try again.
+            </div>
+          }
         >
-          <PreviewPane
-            pdfUrl={pdfUrl}
-            schema={state.schema}
-            fieldValues={state.fieldValues}
-            currentFieldId={currentFieldId}
-            validationErrors={state.validationErrors}
-            onFieldChange={handleFieldChange}
-            onFieldBlur={handleFieldBlur}
-          />
-        </React.Suspense>
+          <React.Suspense
+            fallback={<div className="pdf-preview-pane__notice">Loading the preview...</div>}
+          >
+            <PreviewPane
+              pdfUrl={pdfUrl}
+              schema={state.schema}
+              fieldValues={state.fieldValues}
+              currentFieldId={currentFieldId}
+              validationErrors={state.validationErrors}
+              onFieldChange={handleFieldChange}
+              onFieldBlur={handleFieldBlur}
+            />
+          </React.Suspense>
+        </PdfViewErrorBoundary>
       ) : (
       <form className="schema-form" onSubmit={handleSubmit}>
         {/* Form Header */}
@@ -755,15 +765,37 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       {/* True filled-PDF preview (flag-gated, epic js7q): the modal fills via
           the same /api/fill-pdf call as download/print and renders the bytes. */}
       {previewUiEnabled && showPDFPreview && pdfUrl && (
-        <React.Suspense fallback={null}>
-          <FilledPreviewModal
-            kitId={kitId}
-            pdfUrl={pdfUrl}
-            schema={state.schema}
-            fieldValues={state.fieldValues}
-            onClose={() => setShowPDFPreview(false)}
-          />
-        </React.Suspense>
+        <PdfViewErrorBoundary
+          fallback={
+            <div className="pdf-preview-modal__backdrop" role="dialog" aria-modal="true">
+              <div className="pdf-preview-modal">
+                <div className="pdf-preview-pane__notice">
+                  The PDF preview could not be loaded. Check your connection and reload the page
+                  to try again.
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className="pdf-preview-modal__close"
+                      onClick={() => setShowPDFPreview(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <React.Suspense fallback={null}>
+            <FilledPreviewModal
+              kitId={kitId}
+              pdfUrl={pdfUrl}
+              schema={state.schema}
+              fieldValues={state.fieldValues}
+              onClose={() => setShowPDFPreview(false)}
+            />
+          </React.Suspense>
+        </PdfViewErrorBoundary>
       )}
 
       {/* Voice Overlay - Render mobile or desktop based on screen size */}

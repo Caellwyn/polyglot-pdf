@@ -157,6 +157,39 @@ describe('RadioField - Bug 1 & 2 Fixes', () => {
     });
   });
 
+  describe('required prop (bd eaof: dynamic require_if state)', () => {
+    it('shows the asterisk when required=true even if validation.required is falsy', () => {
+      const onChange = vi.fn();
+      render(
+        <RadioField field={mockField} value="" onChange={onChange} required={true} />
+      );
+
+      expect(document.querySelector('.form-field__required')).toBeTruthy();
+    });
+
+    it('suppresses the asterisk when required=false even if validation.required is true', () => {
+      const onChange = vi.fn();
+      const requiredField: FormField = { ...mockField, validation: { required: true } };
+
+      render(
+        <RadioField field={requiredField} value="" onChange={onChange} required={false} />
+      );
+
+      expect(document.querySelector('.form-field__required')).toBeNull();
+    });
+
+    it('falls back to static validation.required when the prop is omitted', () => {
+      const onChange = vi.fn();
+      const requiredField: FormField = { ...mockField, validation: { required: true } };
+
+      render(
+        <RadioField field={requiredField} value="" onChange={onChange} />
+      );
+
+      expect(document.querySelector('.form-field__required')).toBeTruthy();
+    });
+  });
+
   describe('Radio Group Rendering', () => {
     it('should render all radio options', () => {
       const onChange = vi.fn();

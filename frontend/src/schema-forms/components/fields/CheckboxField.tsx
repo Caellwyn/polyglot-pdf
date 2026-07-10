@@ -13,6 +13,9 @@ export interface CheckboxFieldProps {
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
+  // Dynamic required state from isFieldRequired (bd eaof); falls back to the
+  // field's static validation.required when omitted.
+  required?: boolean;
 }
 
 export function CheckboxField({
@@ -23,6 +26,7 @@ export function CheckboxField({
   error,
   disabled = false,
   confirmed = false,
+  required,
 }: CheckboxFieldProps) {
   // Single checkbox (no options)
   if (!field.options) {
@@ -49,7 +53,7 @@ export function CheckboxField({
           />
           <span className="form-field__checkbox-text">
             {field.name}
-            {field.validation?.required && <span className="form-field__required">*</span>}
+            {(required ?? field.validation?.required) && <span className="form-field__required">*</span>}
             {confirmed && (
               <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
                 ✓
@@ -91,7 +95,7 @@ export function CheckboxField({
       <fieldset className="form-field__fieldset">
         <legend className="form-field__label">
           {field.name}
-          {field.validation?.required && <span className="form-field__required">*</span>}
+          {(required ?? field.validation?.required) && <span className="form-field__required">*</span>}
           {confirmed && (
             <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
               ✓

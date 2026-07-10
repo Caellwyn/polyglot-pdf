@@ -154,6 +154,49 @@ describe('TextField - Bug 1: [object Object] Fix', () => {
     });
   });
 
+  describe('required prop (bd eaof: dynamic require_if state)', () => {
+    it('shows the asterisk when required=true even if validation.required is falsy', () => {
+      const onChange = vi.fn();
+      render(
+        <TextField field={mockField} value="" onChange={onChange} required={true} />
+      );
+
+      expect(document.querySelector('.form-field__required')).toBeTruthy();
+    });
+
+    it('suppresses the asterisk when required=false even if validation.required is true', () => {
+      const onChange = vi.fn();
+      const requiredField: FormField = { ...mockField, validation: { required: true } };
+
+      render(
+        <TextField field={requiredField} value="" onChange={onChange} required={false} />
+      );
+
+      expect(document.querySelector('.form-field__required')).toBeNull();
+    });
+
+    it('falls back to static validation.required when the prop is omitted', () => {
+      const onChange = vi.fn();
+      const requiredField: FormField = { ...mockField, validation: { required: true } };
+
+      render(
+        <TextField field={requiredField} value="" onChange={onChange} />
+      );
+
+      expect(document.querySelector('.form-field__required')).toBeTruthy();
+    });
+
+    it('shows no asterisk when the prop is omitted and validation.required is falsy', () => {
+      const onChange = vi.fn();
+
+      render(
+        <TextField field={mockField} value="" onChange={onChange} />
+      );
+
+      expect(document.querySelector('.form-field__required')).toBeNull();
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle numeric string value', () => {
       const onChange = vi.fn();
