@@ -932,6 +932,48 @@ describe('optionValueReferencedBy (Codex PR #310)', () => {
     // 'dep' references grp.b, not other.b -> deleting other.b is unblocked.
     expect(optionValueReferencedBy(s, 'other', 'b')).toEqual([]);
   });
+
+  it('blocks a delete when ONLY a section show_if references the slug (bd qy29)', () => {
+    // The 6b7z bead gave sections first-class show_if rewrites; the delete
+    // guard must see a section-level reference too, or deleting the option
+    // silently strands the section's condition.
+    const s = groupSchema();
+    // Remove the field-level references so the section is the ONLY referencer.
+    s.fields = s.fields.map(f =>
+      f.id === 'dep' || f.id === 'dep2' ? { ...f, show_if: undefined, require_if: undefined } : f,
+    );
+    s.sections = [{
+      ...s.sections[0],
+      show_if: { field: 'grp', operator: 'includes' as const, value: 'b' },
+    }];
+    expect(optionValueReferencedBy(s, 'grp', 'b')).toEqual(['section "S1"']);
+    // The other slug stays unblocked by the section.
+    expect(optionValueReferencedBy(s, 'grp', 'b_no_such')).toEqual([]);
+  });
+
+  it('lists field AND section referencers together (fields first)', () => {
+    const s = groupSchema();
+    s.sections = [{
+      ...s.sections[0],
+      show_if: { field: 'grp', operator: 'includes' as const, value: 'b' },
+    }];
+    expect(optionValueReferencedBy(s, 'grp', 'b')).toEqual(['dep', 'dep2', 'section "S1"']);
+  });
+
+  it('a section without show_if never blocks (the common case)', () => {
+    // groupSchema()'s section carries no show_if; existing expectations hold.
+    expect(optionValueReferencedBy(groupSchema(), 'grp', 'no_such_slug')).toEqual([]);
+  });
+
+  it('an empty section label falls back to the section id in the message', () => {
+    const s = groupSchema();
+    s.sections = [{
+      ...s.sections[0],
+      label: '',
+      show_if: { field: 'grp', operator: 'includes' as const, value: 'b' },
+    }];
+    expect(optionValueReferencedBy(s, 'grp', 'b')).toEqual(['dep', 'dep2', 'section "s1"']);
+  });
 });
 
 // Renaming a referenced option's LABEL re-mints its slug (bd polyglot-pdf-432u).
