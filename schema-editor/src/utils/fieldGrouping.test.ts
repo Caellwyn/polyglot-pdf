@@ -1197,6 +1197,27 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
     expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'dep')!, 'checkbox_group')).toBe(false);
   });
 
+  it('REFUSES a radio -> checkbox_group flip when a SECTION show_if holds in/not_in on the group', () => {
+    // A section's show_if is the legacy single atom only (backend
+    // FormSection.show_if) -- it can NEVER hold the any_of composite that
+    // expanding a fully-live `in [a,b]` mints, so the flip must be blocked
+    // even though a FIELD carrying the same condition could expand (bd
+    // polyglot-pdf-6b7z, Opus outer-review finding).
+    const s = grpKindSchema('radio');
+    // Sanity: without the section condition the flip is allowed (pins that
+    // the block below comes from the section, not the fixture).
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(true);
+
+    s.sections[0] = {
+      ...s.sections[0],
+      show_if: { field: 'grp', operator: 'in' as const, value: ['a', 'b'] },
+    };
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    // And changeGroupKind is a no-op (same reference) rather than minting a
+    // composite into the section's show_if.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
   // A radio trigger can carry a list-valued in/not_in dependent (a value that is
   // an array of option slugs -- ConditionBuilder offers in/not_in on a radio).
   // A checkbox_group trigger cannot (in/not_in are scalar-trigger-only), so a

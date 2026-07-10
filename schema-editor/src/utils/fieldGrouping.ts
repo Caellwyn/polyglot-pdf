@@ -725,8 +725,21 @@ function hasUnflippableListMembership(
     // Top-level legacy: block only when not losslessly expandable (shape (b)).
     return topLevelNotLossless(cond);
   };
-  return schema.fields.some(
-    f => f.id !== groupId && (blocks(f.show_if) || blocks(f.require_if)),
+  // A SECTION's show_if can never hold a composite -- the backend types it as
+  // the legacy single atom only (form_models.py FormSection.show_if) -- so a
+  // section's in/not_in on this group has NO expandable form at all: ANY
+  // list-membership atom blocks, even the fully-live top-level list a FIELD
+  // could expand to any_of (bd polyglot-pdf-6b7z, Opus outer-review finding).
+  const sectionBlocks = (cond: FieldCondition | undefined): boolean => {
+    if (!cond) return false;
+    return conditionAtomsOf(cond).some(
+      atom => atom.field === groupId && LIST_MEMBERSHIP_OPERATORS.has(atom.operator),
+    );
+  };
+  return (
+    schema.fields.some(
+      f => f.id !== groupId && (blocks(f.show_if) || blocks(f.require_if)),
+    ) || schema.sections.some(s => sectionBlocks(s.show_if))
   );
 }
 
@@ -767,8 +780,11 @@ export function canChangeGroupKind(
 //   'same-kind'     -- already the requested kind
 //   'pdf-widgets'   -- radio -> checkbox_group but the group has no per-option
 //                      widget shape (shared-name radio); re-plumb widgets
-//   'nested-list-membership' -- a dependent has an in/not_in atom nested in a
-//                      composite that one-level v2 cannot expand; retarget it
+//   'nested-list-membership' -- a dependent (field OR section) has an in/not_in
+//                      atom that cannot be expanded: nested in a composite
+//                      (one-level v2 has nowhere to expand), or ON A SECTION
+//                      (a section's show_if cannot hold the composite an
+//                      expansion mints at all); retarget it
 export type ChangeGroupKindBlockReason =
   | 'not-a-group'
   | 'same-kind'
