@@ -1368,10 +1368,12 @@ describe('section show_if rewriting across group mutations (bd polyglot-pdf-6b7z
     });
 
     // Lossless ungroup (stash present) restores the section's original show_if
-    // verbatim.
+    // verbatim -- AND the field membership in the same pass (the two section
+    // rewrites land together; pin their interaction, fresh-eyes nit).
     const unmerged = ungroupField(merged, 'reason_a');
     const restoredSection = unmerged.sections.find(s => s.id === 'reason')!;
     expect(restoredSection.show_if).toEqual(originalShowIf);
+    expect(restoredSection.fields).toEqual(schema.sections[0].fields);
   });
 
   it('ungroupField fallback path (no stash) remaps a section atom the same way it remaps a dependent field atom', () => {
