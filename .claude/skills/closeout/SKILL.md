@@ -158,7 +158,7 @@ re-run it standalone after a fix: `R="$(dirname "$(git rev-parse --path-format=a
 - **SLIP-FOUND** -> triage what it surfaced:
   - An orphan (closed-in-commits but still open) -> close it with `scripts/bd_safe.py close <id> --reason "..."`.
   - A stale IN_PROGRESS bead -> decide its real state (close / defer / drop) and transition it.
-- File a NEW bead (via `bd_safe.py` or bracketed `bd create`) for EVERY deferred / out-of-scope finding surfaced this sprint. Commit-message notes are not tracker entries. If the sprint identified ordered next steps, wire them with `bd dep add <later> <earlier>` (the FIRST arg is what gets blocked; for an epic, the epic is blocked BY its children, so `bd dep add <epic> <child>`) so `bd ready` surfaces only the unblocked step. `bd_safe.py dep-add --epic/--child` (or `--blocked/--prereq`) makes the direction un-invertible.
+- File a NEW bead (via `bd_safe.py` or bracketed `bd create`) for EVERY deferred / out-of-scope finding surfaced this sprint. Commit-message notes are not tracker entries. If the sprint identified ordered next steps, wire them with `bd dep add <later> <earlier>` (the FIRST arg is what gets blocked) so `bd ready` surfaces only the unblocked step. Epic wiring is a parent-child edge, not a blocks edge (bd rejects task-blocks-epic): `bd dep add <child> <epic> -t parent-child`. `bd_safe.py dep-add --epic/--child` (or `--blocked/--prereq`) makes the edge un-invertible.
 
 ## Step 2 detail -- Doc freshness (triage if prep flagged `docs`)
 

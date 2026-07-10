@@ -144,7 +144,8 @@ recorded number, not a kill-switch.)
 - `arm_B > 10 and arm_C > 10` → "Independent arms done — report; if both adopted, run BC."
 - `arm_BC > 10` → "Combined arm done — final report."
 
-**Files:** new `scripts/harness_ledger.py`; closeout Step 8.5 calls it; allowlist entry;
+**Files:** new `scripts/harness_ledger.py`; closeout Step 7 documents the telemetry row
+(written by `closeout_finish.py` in Step 6); allowlist entry;
 fixture-based unit test (like `tests/test_doc_freshness.py`).
 
 ### Change #2 — Diff-size tiering + Haiku self-escalation
@@ -281,8 +282,8 @@ post-merge defect rate.
 - **#1 ledger / counter:** run against a known past session's transcript JSONL; eyeball
   vs `/usage`. Unit test on a fixture JSONL asserts parsed totals, `cost_category`
   bucketing, provenance tagging (A/B/C/BC), counter transitions (A→B/C→BC→report).
-  Confirm it appends at closeout Step 8.5 without erroring on worktree/resumed-session
-  transcript paths.
+  Confirm it appends at closeout Step 7 (via `closeout_finish.py` in Step 6) without
+  erroring on worktree/resumed-session transcript paths.
 - **#4 `closeout_prep.py`:** run on the current branch; confirm its TODO matches the
   manual Steps 0/1/2/4 (same stale docs, orphans, test result).
 - **#5b conflict resolution:** stage a synthetic mechanical conflict (reordered journal

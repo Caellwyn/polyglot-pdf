@@ -80,8 +80,10 @@ Decompose the epic into child beads. Each child:
 - declares its **`metadata.surfaces`** (the files/dirs it will MODIFY -- the
   change-surface collision guard keys on this);
 - gets a **parent-child dep** wired with `scripts/bd_safe.py dep-add --epic
-  <epic-id> --child <child-id>` (direction-safe: the epic is blocked BY its
-  children);
+  <epic-id> --child <child-id>` (direction-safe: emits `bd dep add <child>
+  <epic> -t parent-child`, the only edge form bd accepts for epic wiring --
+  bd rejects task-blocks-epic blocks edges; sibling ORDERING, when needed,
+  stays a plain blocks edge via `dep-add --blocked/--prereq`);
 - carries a **`## Exit criteria`** section in its body **inheriting >= 1 epic
   criterion** (the criteria-inheritance rule: every child names which epic
   criterion/criteria it is on the hook for).

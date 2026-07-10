@@ -25,10 +25,12 @@ CLAUDE.md mandates a strict cadence around every beads write:
          AFTER a branch/PR exists; check 3 catches it at claim time. Skippable
          with --no-surface-check for a deliberate maintainer re-claim.
   - Dependency direction is easy to invert (scar tissue rule 13): the FIRST
-    arg to `bd dep add` is what gets BLOCKED, the SECOND unblocks it. The
-    epic trap: an epic is BLOCKED BY its children, so the epic is the first
-    arg. This script exposes `--epic`/`--child` so the direction cannot be
-    typed backwards.
+    arg to `bd dep add` is what gets BLOCKED, the SECOND unblocks it. Epic
+    wiring is a different edge type entirely: bd rejects a task-blocks-epic
+    blocks edge ("epics can only block other epics"), so epic-child uses
+    `bd dep add <child> <epic> -t parent-child` (bd polyglot-pdf-vj3x).
+    This script exposes `--epic`/`--child` so neither the direction nor the
+    edge type can be typed wrong.
 
 Doing all of this by hand every write is exactly the deterministic toil the
 agent swarm (bd 32qp) pushes out of the model. This script is the mechanism
@@ -46,8 +48,8 @@ Subcommands
         Pull -> close -> push.
 
     python scripts/bd_safe.py dep-add --epic <epic-id> --child <child-id>
-        Pull -> `bd dep add <epic> <child>` (epic BLOCKED BY child) -> push.
-        Semantic flags make the direction un-invertible.
+        Pull -> `bd dep add <child> <epic> -t parent-child` (child gains
+        PARENT = epic) -> push. Semantic flags make the edge un-invertible.
 
     python scripts/bd_safe.py dep-add --blocked <id> --prereq <id>
         Pull -> `bd dep add <blocked> <prereq>` -> push. The general
@@ -722,16 +724,20 @@ def cmd_close(args: argparse.Namespace) -> int:
 
 
 def cmd_dep_add(args: argparse.Namespace) -> int:
-    """Pull -> `bd dep add <blocked> <prereq>` -> push, direction-safe.
+    """Pull -> `bd dep add ...` -> push, direction-safe.
 
-    Resolves the semantic flags to the (blocked, prereq) pair so the
-    direction cannot be inverted:
-      --epic X --child Y     -> blocked=X (the epic), prereq=Y (the child)
-      --blocked X --prereq Y -> blocked=X, prereq=Y
+    Resolves the semantic flags to the right bd edge so the direction
+    cannot be inverted:
+      --epic X --child Y     -> `bd dep add Y X -t parent-child`
+                                (child Y gains PARENT = epic X)
+      --blocked X --prereq Y -> `bd dep add X Y` (X BLOCKED BY Y)
 
-    `bd dep add <blocked> <prereq>` makes <blocked> BLOCKED BY <prereq>
-    (scar rule 13). An epic is blocked by its children, so the epic is the
-    first arg -- enforced here by mapping --epic to `blocked`.
+    The epic/child form uses a parent-child edge, NOT a blocks edge: the
+    installed bd rejects a task-blocks-epic edge ("epics can only block
+    other epics"), so epic wiring is `bd dep add <child> <epic>
+    -t parent-child` (bd polyglot-pdf-vj3x). For blocks edges (scar rule
+    13), the FIRST arg is what gets BLOCKED -- enforced here by mapping
+    --blocked to the first position.
     """
     epic_pair = args.epic is not None or args.child is not None
     generic_pair = args.blocked is not None or args.prereq is not None
@@ -745,20 +751,29 @@ def cmd_dep_add(args: argparse.Namespace) -> int:
         if args.epic is None or args.child is None:
             print("ERROR: --epic and --child must be given together.")
             return EXIT_FAIL
-        blocked, prereq = args.epic, args.child
+        dep_cmd = ["bd", "dep", "add", args.child, args.epic, "-t", "parent-child"]
+        done_msg = (
+            "DEP-ADD: {child} now has PARENT {epic} "
+            "(verify with `bd show {child}`).".format(
+                child=args.child, epic=args.epic
+            )
+        )
     else:
         if args.blocked is None or args.prereq is None:
             print("ERROR: pass either --epic/--child or --blocked/--prereq.")
             return EXIT_FAIL
-        blocked, prereq = args.blocked, args.prereq
+        dep_cmd = ["bd", "dep", "add", args.blocked, args.prereq]
+        done_msg = (
+            "DEP-ADD: {} is now BLOCKED BY {} "
+            "(verify with `bd show {}`).".format(
+                args.blocked, args.prereq, args.blocked
+            )
+        )
 
     _dolt_pull()
-    _run(["bd", "dep", "add", blocked, prereq])
+    _run(dep_cmd)
     _dolt_push()
-    print(
-        "DEP-ADD: {} is now BLOCKED BY {} "
-        "(verify with `bd show {}`).".format(blocked, prereq, blocked)
-    )
+    print(done_msg)
     return EXIT_OK
 
 
@@ -785,10 +800,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_dep = sub.add_parser(
         "dep-add",
-        help="Direction-safe dependency edge (epic BLOCKED BY child).",
+        help="Direction-safe dependency edge (epic/child = parent-child).",
     )
-    p_dep.add_argument("--epic", default=None, help="Epic id (gets blocked)")
-    p_dep.add_argument("--child", default=None, help="Child id (unblocks epic)")
+    p_dep.add_argument("--epic", default=None, help="Epic id (becomes the parent)")
+    p_dep.add_argument("--child", default=None, help="Child id (gains PARENT = epic)")
     p_dep.add_argument("--blocked", default=None, help="Generic: id that is blocked")
     p_dep.add_argument("--prereq", default=None, help="Generic: id that unblocks it")
     p_dep.set_defaults(func=cmd_dep_add)
