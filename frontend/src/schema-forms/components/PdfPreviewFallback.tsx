@@ -85,7 +85,12 @@ export function PdfPreviewFallback({ onClose }: PdfPreviewFallbackProps): React.
           The PDF preview could not be loaded. Check your connection and reload the page to
           try again.
         </p>
-        <button type="button" style={buttonStyle} onClick={onClose}>
+        <button
+          type="button"
+          style={buttonStyle}
+          onClick={onClose}
+          aria-label="Close preview"
+        >
           Close
         </button>
       </div>
