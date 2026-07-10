@@ -68,10 +68,19 @@ runs are byte-identical on every form.
    (bead 6cfu.2) should reduce these to zero by starting from the dump.
 3. **f1040 has 4 fields with no `pdf_position`** (`fld_1a..fld_1d`) --
    pre-existing kit gaps, listed as unassigned.
-4. i-90 page 7 produces two adjacent sections both labeled "Your Full Name"
-   (the re-entry name block is `P1_`-named while its neighbors are `P8_`);
-   cosmetic, resolvable in bead 6cfu.2 (e.g. suffix the part).
-5. IRS margin headings are vertically centered on their blocks, so a pure
+4. i-90 page 7 mislabels one section: the printed "Your Full Name"
+   sub-heading's reach extends down over the Part 8 answer rows
+   (Page/Part/Item/Additional Information), because no printed boundary
+   intervenes -- so a second "Your Full Name" section holds non-name fields.
+   Fresh-eyes confirmed this is content mislabeling, not just duplicate
+   labels; filed as bead `polyglot-pdf-h1eo` (sub-heading reach needs a
+   limiter in bead 6cfu.2, e.g. line-number range or vertical-gap cutoff).
+5. The cap is enforced by construction EXCEPT when a single same-family run
+   (a repeated row block) exceeds the cap by itself -- the splitter keeps the
+   run whole and emits a NOTE ("kept whole"). None of the 5 forms hit this
+   edge; a future form with a >20-field family would exceed the cap with
+   only the note as evidence (surface it in bead 6cfu.2's integration).
+6. IRS margin headings are vertically centered on their blocks, so a pure
    y-threshold can mis-assign a boundary row in theory; margin-strip rule
    segments (PyMuPDF `get_drawings`) exactly delimit the blocks (verified on
    w7: rules at y 276/324/372/420/444/612/696 = the heading tops) and are the

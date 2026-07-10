@@ -58,8 +58,10 @@ _USCIS_NAME_RE = re.compile(
 # Looser variant for the applicability test and for part-only names like
 # P4_checkbox1a[0] / P6_Language[0]: the part prefix is still authoritative.
 _USCIS_PART_RE = re.compile(r"^P[t]?(?P<part>\d+)[_.](?P<rest>.*)$")
-# IRS widget-name convention tail: f1_04[0] / c2_17[0] (page counter + seq).
-_IRS_SEQ_RE = re.compile(r"(?:^|\.)(?P<kind>[fc])(?P<page>\d+)_(?P<seq>\d+)\[\d+\]$")
+# IRS widget names carry only a page + sequence counter (f1_04[0] / c2_17[0]);
+# the printed-heading strategy orders fields by geometry (page, y, x), which is
+# sufficient for the single-column IRS layouts. Name-sequence anchoring is the
+# bead 6cfu.2 refinement if boundary precision needs tightening.
 
 
 class FieldRec:
@@ -412,7 +414,7 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
                 # Tolerance 0.6x heading size: the first field row of a
                 # section often has its rect top a few points above the
                 # heading's baseline.
-                if h.page == f.page and hcol == col and h.y <= f.y + 0.6 * 12.0:
+                if h.page == f.page and hcol == col and h.y <= f.y + 0.6 * h.size:
                     if best is None or h.y > best.y:
                         best = h
             if best is None:
@@ -423,7 +425,7 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
             for h in partheads:
                 hcol = 0 if h.x < page_width / 2 else 1
                 if (h.page == f.page and hcol == col
-                        and best.y < h.y <= f.y + 0.6 * 12.0):
+                        and best.y < h.y <= f.y + 0.6 * h.size):
                     return None
             return best
 
