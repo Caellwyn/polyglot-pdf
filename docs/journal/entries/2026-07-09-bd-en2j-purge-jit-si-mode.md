@@ -64,7 +64,15 @@ Code (net -1320 lines):
   from it. This preserves the DTI->legacy rollback window (a client with a stale
   persisted `jitModeEnabled` sends one more `handshake_jit` before `session_ready`
   corrects it). Caught by the Opus outer review; pinned by
-  `test_jit_mode_schema_routes_to_dti_si_when_dti_off`.
+  `test_jit_mode_schema_routes_to_dti_si_when_dti_off`. HONEST caveat (Opus review):
+  "rollback safety" here means the SI no longer MISDESCRIBES the section as one
+  field -- it does NOT make that transient session fully functional, because the
+  per-field guidance injection is `USE_DTI`-gated and so does not fire when
+  `USE_DTI` is off. The degradation (a static SI with no injected field guidance for
+  one connect) is inherent to deleting the JIT mode, not introduced by this guard;
+  the session self-corrects on the next connect once `session_ready` resets the
+  client's flag. This is an unexercised path in practice (the demo runs
+  `USE_DTI=true`; nothing flips it off).
 - `form_filling_service.py`: removed `get_next_field_schema_for_jit`,
   `_loaded_field_ids`, the manifest_service import, the handler injection.
 - `callback_handler.py`: removed the JIT `next_field_schema` drip + its response

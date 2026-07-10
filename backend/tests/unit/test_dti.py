@@ -265,11 +265,18 @@ def test_jit_mode_schema_routes_to_dti_si_when_dti_off(monkeypatch):
     schema["jit_mode"] = True  # the marker websocket_routes sets on handshake_jit
     si = build_form_context(schema, {}, "English", section_number=1,
                             total_sections=8, section_label="Part 1")
-    # DTI static SI selected: it equals the static template and does NOT carry the
-    # legacy full-dump markers (which would describe the one synthesized field).
-    assert si.startswith(_Off.DTI_SYSTEM_INSTRUCTION[:60])
-    assert "field two" not in si  # names-only manifest is not dumped into the SI
-    assert "f2" not in si
+    # The DTI static SI is selected: since it is fully static (no placeholders),
+    # the rendered SI is EXACTLY the template (no is_reconnect here). This is the
+    # load-bearing discriminator -- if the selector regressed to the legacy branch,
+    # the SI would be the SYSTEM_INSTRUCTION dump (different text, section/field
+    # markers filled in), not an exact match of the DTI template.
+    assert si == _Off.DTI_SYSTEM_INSTRUCTION
+    # And it is specifically NOT the legacy branch: the legacy SYSTEM_INSTRUCTION
+    # renders the section field dump under a "Fields" style block + the field's
+    # spoken name; assert the one synthesized field's spoken name is absent (the
+    # legacy branch WOULD render it -- so this now discriminates, unlike the
+    # names-only-manifest fields which neither branch dumps).
+    assert NESTED_FIELD["spoken_name"] not in si
 
 
 def test_coordinator_late_response_does_not_stash_stale_schema():
