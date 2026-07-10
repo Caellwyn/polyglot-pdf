@@ -22,9 +22,10 @@ retarget, on the delete path (out of 6b7z's scope by its own criterion).
   human-readable `section "<label>"` entries (fields stay bare ids, the
   existing pinned behavior), so FieldEditor's blocked-reason message reads
   naturally with zero changes to the consumer.
-- 4 new tests: section-only reference blocks the delete; combined
-  field+section listing; wrong-slug unblocked; no-show_if sections never
-  block. Editor suite 37 files / 661 tests green; tsc clean.
+- 4 new tests: section-only reference blocks the delete (incl. the
+  wrong-slug-unblocked assertion); combined field+section listing;
+  no-show_if sections never block; empty-label sections fall back to the
+  section id in the message. Editor suite green; tsc clean.
 - Fresh-eyes triage: (filled at closeout -- see below)
 
 ## Lessons

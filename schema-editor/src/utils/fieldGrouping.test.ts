@@ -964,6 +964,16 @@ describe('optionValueReferencedBy (Codex PR #310)', () => {
     // groupSchema()'s section carries no show_if; existing expectations hold.
     expect(optionValueReferencedBy(groupSchema(), 'grp', 'no_such_slug')).toEqual([]);
   });
+
+  it('an empty section label falls back to the section id in the message', () => {
+    const s = groupSchema();
+    s.sections = [{
+      ...s.sections[0],
+      label: '',
+      show_if: { field: 'grp', operator: 'includes' as const, value: 'b' },
+    }];
+    expect(optionValueReferencedBy(s, 'grp', 'b')).toEqual(['dep', 'dep2', 'section "s1"']);
+  });
 });
 
 // Renaming a referenced option's LABEL re-mints its slug (bd polyglot-pdf-432u).
