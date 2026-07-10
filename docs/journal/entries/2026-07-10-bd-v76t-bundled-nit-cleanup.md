@@ -33,7 +33,13 @@ from dr1l's Opus round), and pofh (filed by the n3mn Opus reviewer itself).
   aliases/drops exactly like the field-level key.
 - 3 new tests; repair/contract-sync/migrate suites 77 green; schema-forms +
   pdf-view 25 files / 601 green.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) cleared all five criteria with two
+  informational notes -- the sibling pane fallback's harmless className
+  (left; its CSS rule carries no risky properties) and a PRE-EXISTING
+  latent gap (section show_if never goes through slug-mint alias
+  resolution), which the orchestrator filed as bd polyglot-pdf-ei8b.
+  Required Opus final round NO-GAPS. Outer review (Step 5.6): two
+  independent Opus NO-GAPS on the identical final diff.
 
 ## Lessons
 
