@@ -102,16 +102,16 @@ def _extract_json(text: str) -> dict:
 def build_fewshot(truth_path: str) -> str:
     """Distill a few-shot convention exemplar from a DIFFERENT form's gold schema.
 
-    Shows the model the TARGET conventions it should imitate: how sections are
-    id'd/labeled, and a couple of fully-formed fields (a plain text field, a
-    consolidated radio/checkbox set with options, and a field carrying a
-    relationship key). We deliberately keep it small -- it teaches STYLE, not the
-    target form's content (exactly 3 exemplar fields).
+    Shows the model the TARGET conventions it should imitate: a couple of
+    fully-formed fields (a plain text field, a consolidated radio/checkbox set
+    with options, and a field carrying a relationship key). We deliberately
+    keep it small -- it teaches STYLE, not the target form's content (exactly 3
+    exemplar fields). Divisions (parts/sections/section_id) are stripped: the
+    contract tells the model NOT to emit them (derived post-extraction, bd
+    6cfu.2), so the exemplar must not showcase them either.
     """
     with open(truth_path, encoding="utf-8") as fh:
         truth = json.load(fh)
-    parts = truth.get("parts") or []
-    sections = truth.get("sections") or []
     fields = truth.get("fields") or []
 
     # Pick exemplar fields: 1 plain, 1 with options, 1 with a relationship.
@@ -128,24 +128,22 @@ def build_fewshot(truth_path: str) -> str:
     def trim(f):
         if not f:
             return None
-        keep = ("id", "name", "type", "section_id", "pdf_field_name", "options",
+        keep = ("id", "name", "type", "pdf_field_name", "options",
                 "validation") + rel_keys
         return {k: f[k] for k in keep if f.get(k) is not None}
 
     exemplar = {
         "form_metadata": {k: truth.get("form_metadata", {}).get(k)
                           for k in ("title", "form_number") if truth.get("form_metadata", {}).get(k)},
-        "parts": [{"id": p.get("id"), "label": p.get("label")} for p in parts[:3]],
-        "sections": [{"id": s.get("id"), "label": s.get("label")} for s in sections[:6]],
         "fields": [trim(f) for f in (plain, with_opts, with_rel) if f],
     }
     note = (
         "FEW-SHOT CONVENTION EXAMPLE -- this is a DIFFERENT form's hand-authored "
-        "gold schema, shown ONLY so you imitate its STYLE: how `id` and "
-        "`section_id` strings are formed, how a consolidated options[] field is "
-        "shaped, and how a relationship key (show_if/copy_to/...) is attached. "
-        "Match THIS convention for section_id and field id slugs. Do NOT copy its "
-        "content -- the form you are extracting is different.\n"
+        "gold schema, shown ONLY so you imitate its STYLE: how `id` strings are "
+        "formed, how a consolidated options[] field is shaped, and how a "
+        "relationship key (show_if/copy_to/...) is attached. Match THIS "
+        "convention for field id slugs. Do NOT copy its content -- the form you "
+        "are extracting is different.\n"
     )
     return note + json.dumps(exemplar, ensure_ascii=True, indent=2)
 

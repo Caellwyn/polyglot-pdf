@@ -84,7 +84,17 @@ def test_rendered_example_is_ascii_and_parses():
     import json
     text = sc.render_example()
     text.encode("ascii")  # raises if any non-ASCII slipped in
-    assert json.loads(text) == sc.CANONICAL_EXAMPLE
+    # The default (prompt) rendering is CANONICAL_EXAMPLE minus the divisions
+    # the model is told not to emit (bd 6cfu.2); the opt-in rendering is the
+    # canonical object verbatim.
+    expected = {k: v for k, v in sc.CANONICAL_EXAMPLE.items()
+                if k not in ("parts", "sections")}
+    expected["fields"] = [{k: v for k, v in f.items() if k != "section_id"}
+                          for f in sc.CANONICAL_EXAMPLE["fields"]]
+    assert json.loads(text) == expected
+    full = sc.render_example(include_divisions=True)
+    full.encode("ascii")
+    assert json.loads(full) == sc.CANONICAL_EXAMPLE
 
 
 def test_render_contract_embeds_operator_block_and_example():
@@ -205,3 +215,24 @@ def test_drift_is_detected(monkeypatch):
     # And the static-vs-render equality assertion (the module's real guard) fails.
     with pytest.raises(AssertionError):
         assert sc._STATIC_OPERATOR_LINES == sc.render_operator_lines()
+
+
+def test_prompt_example_omits_divisions_but_canonical_example_keeps_them():
+    """bd polyglot-pdf-6cfu.2: form divisions are derived deterministically
+    post-extraction, so the PROMPT tells the model not to emit parts/sections/
+    section_id and its rendered example omits them -- while CANONICAL_EXAMPLE
+    keeps them, because FormSchema requires them to validate (the guarantee
+    test_canonical_example_validates_as_v2 pins)."""
+    import json
+
+    rendered = json.loads(sc.render_example())
+    assert "parts" not in rendered and "sections" not in rendered
+    assert all("section_id" not in f for f in rendered["fields"])
+    # The validated object is untouched (and the strip is a copy, not a pop).
+    assert sc.CANONICAL_EXAMPLE["sections"]
+    assert all(f["section_id"] for f in sc.CANONICAL_EXAMPLE["fields"])
+    # The contract prose carries the do-not-emit instruction.
+    assert "Do NOT emit parts, sections" in sc.SCHEMA_CONTRACT
+    # And the opt-in rendering (used nowhere in the prompt) still has them.
+    full = json.loads(sc.render_example(include_divisions=True))
+    assert full["sections"]

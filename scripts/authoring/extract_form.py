@@ -38,8 +38,10 @@ import fitz  # PyMuPDF -- page-1 text + doc.metadata for version extraction.
 # Reuse the bakeoff machinery (the bead: "reuse the validated scripts/bakeoff/").
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))
+sys.path.insert(0, os.path.join(_REPO, "scripts", "authoring"))
 import acroform_dump  # noqa: E402
 import arm_llm_native  # noqa: E402
+import derive_sections  # noqa: E402 (deterministic form divisions, bd 6cfu.2)
 
 # Confidence tiers for the version determination (bd polyglot-pdf-s4dp.2). A
 # specific Edition/Rev pattern is HIGH; a generic bare-year/loose-OMB fallback is
@@ -467,10 +469,16 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
     closes the gap: any USER-FILLABLE dump widget (per schema_lint's
     is_fillable_widget -- buttons + machine barcodes excluded) unclaimed by any
     field's pdf_field_name / option pdf_field_name is added back as a basic field,
-    typed from its dump logical_type, positioned from its dump rect, and filed
-    into the section covering its page. The recovered field is functional-but-
-    plain -- a human editor refines its label; the point is that NO widget
-    silently vanishes. Returns the number added.
+    typed from its dump logical_type and positioned from its dump rect. The
+    recovered field is functional-but-plain -- a human editor refines its label;
+    the point is that NO widget silently vanishes. Returns the number added.
+
+    Section filing is NOT done here (bd polyglot-pdf-6cfu.2): the recovered
+    field carries a placeholder section_id="" and the deterministic division
+    pass (derive_sections.derive_and_apply, pipeline step 3e) re-files EVERY
+    field -- recovered ones included -- into derived sections right after,
+    using the dump rect this step attaches. A positionless recovery lands in
+    the derived 'To review (unplaced)' bucket, so nothing is orphaned.
 
     Claim matching + fillability reuse schema_lint's helpers (single source of
     truth) so backfill and the under-claim lint rule can never disagree on what
@@ -510,37 +518,6 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
                         "width": r["width"], "height": r["height"]}
         return None
 
-    sections = schema.setdefault("sections", [])
-    had_original_sections = bool(sections)
-
-    def _section_for_page(page):
-        for sec in sections:
-            if page in (sec.get("page_numbers") or []):
-                return sec
-        if had_original_sections:
-            # A real (LLM-authored) section exists but none covers this page --
-            # file into the last one (a human editor re-files if needed), and add
-            # the page to its page_numbers so field-page and section-page agree.
-            last = sections[-1]
-            if page not in last.setdefault("page_numbers", []):
-                last["page_numbers"].append(page)
-            return last
-        # No sections at all: create/reuse a dedicated bucket so a recovered field
-        # is never orphaned with section_id="" (which validates + lints clean but
-        # is unreachable via section navigation -- defeats the "no widget vanishes"
-        # goal). A human editor re-files it. Reuse across pages, accumulating each
-        # page into page_numbers.
-        for sec in sections:
-            if sec.get("id") == "recovered_fields":
-                if page not in sec.setdefault("page_numbers", []):
-                    sec["page_numbers"].append(page)
-                return sec
-        bucket = {"id": "recovered_fields", "label": "Recovered fields",
-                  "order": len(sections) + 1, "fields": [],
-                  "page_numbers": [page]}
-        sections.append(bucket)
-        return bucket
-
     existing_ids = {f.get("id") for f in schema.get("fields", [])}
     added = 0
     for name in dump_names:
@@ -558,14 +535,14 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
         # label; fall back to the id so name/spoken_name are never blank.
         label = leaf or fid
         pos = _rect_pos(name)
-        page = pos["page"] if pos else 1
-        sec = _section_for_page(page)
         field = {
             "id": fid,
             "name": label,  # plain placeholder label -- editor refines it
             "spoken_name": label.replace("_", " "),
             "type": _LOGICAL_TO_FIELD_TYPE.get(logical, "text"),
-            "section_id": sec["id"],
+            # Placeholder only: the deterministic division pass (step 3e)
+            # re-files every field into derived sections right after this.
+            "section_id": "",
             "pdf_field_name": name,
         }
         if pos:
@@ -575,7 +552,6 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
         # takes no options. We deliberately never mint an options-bearing type
         # here (radio/select need >=2 options a bare widget can't supply).
         schema.setdefault("fields", []).append(field)
-        sec.setdefault("fields", []).append(fid)
         added += 1
     return added
 
@@ -907,13 +883,17 @@ def _lint_schema(schema: dict, dump: dict | None) -> dict:
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             model: str = "claude-opus-4-8", keep_dump: bool = False,
             instructions_pdf: str | None = None,
-            group_candidates: bool = True) -> dict:
+            group_candidates: bool = True,
+            division_cap: int = derive_sections.DEFAULT_CAP) -> dict:
     """Run the full PDF -> draft-schema pass and write `out_path`. Returns the
     draft dict (with a `_bakeoff` provenance block).
 
     instructions_pdf: optional path to the form's official instructions PDF. When
     given, its text enriches each field's help.instructions on top of the /TU
     baseline (bd polyglot-pdf-s4dp.3); when absent, help.instructions is /TU-only.
+
+    division_cap (bd 6cfu.2): the display-sanity cap on fields per derived
+    section (derive_sections.DEFAULT_CAP; splits are balanced).
 
     group_candidates (bd h76m.12): when True, the prompt carries the
     deterministic pre-grouping candidates block (suggest, don't decide --
@@ -968,6 +948,19 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         if not keep_dump and os.path.exists(dump_path):
             os.remove(dump_path)
 
+    # 3e. Deterministic form divisions (bd polyglot-pdf-6cfu.2): derive parts/
+    #     sections from the PDF itself (widget-name conventions -> printed
+    #     headings -> page fallback) and OVERWRITE whatever the LLM emitted --
+    #     stored boundaries are 100% derivation output, never LLM-decided (the
+    #     contract no longer asks for sections, and this overwrite guarantees
+    #     it either way). Runs after every field exists (positions backfilled,
+    #     families completed, unclaimed widgets recovered) so recovered fields
+    #     are filed too; fields that fit no division land in per-page
+    #     'To review' sections (well-known sec_to_review id prefix) for a
+    #     human to re-file in the editor.
+    division = derive_sections.derive_and_apply(schema, pdf_path,
+                                                cap=division_cap)
+
     # 3b. Deterministically recover real version metadata (edition/rev, OMB,
     #     expiration) from the PDF and merge it in BEFORE normalize, so real values
     #     win and normalize only fills genuinely-absent scalars (bd s4dp.2).
@@ -1013,6 +1006,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "instructions_enriched": instructions_enriched,
         "group_completion": group_completion,
         "widgets_backfilled": widgets_backfilled,
+        # The derived-division record (bd 6cfu.2): strategy + cap actually
+        # used, and the 'To review' section/field ids the editor gates on.
+        "division": division,
         "schema_valid": ok, "validation": detail,
         "repair": repair_report,
         "lint": lint_report,
@@ -1028,6 +1024,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         instr_note += f" + {instructions_enriched} from instructions PDF"
     print(f"[{status}] wrote {out_path} -- {nf} fields, prompt="
           f"{'plain' if plain else 'enriched'}{instr_note}; {detail}")
+    print(f"division: {division['strategy']} -- {division['parts']} part(s) / "
+          f"{division['sections']} section(s), cap {division['cap']}"
+          + (f", {len(division['to_review_field_ids'])} field(s) in "
+             f"'To review' for human re-filing"
+             if division["to_review_field_ids"] else ""))
     if repair_report.get("skipped"):
         print(f"repair: skipped ({repair_report['skipped']})", file=sys.stderr)
     elif repair_report.get("failed"):
@@ -1105,13 +1106,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--instructions-pdf", default=None,
                     help="OPTIONAL official instructions PDF; its text enriches "
                          "help.instructions on top of the /TU baseline (bd s4dp.3)")
+    ap.add_argument("--division-cap", type=int,
+                    default=derive_sections.DEFAULT_CAP,
+                    help="display-sanity cap on fields per derived section "
+                         f"(bd 6cfu.2; default {derive_sections.DEFAULT_CAP}, "
+                         "splits are balanced)")
     args = ap.parse_args(argv)
 
     plain = DEFAULT_PLAIN if args.plain is None else args.plain
     schema = extract(args.pdf, args.out, plain=plain, model=args.model,
                      keep_dump=args.keep_dump,
                      instructions_pdf=args.instructions_pdf,
-                     group_candidates=args.group_candidates)
+                     group_candidates=args.group_candidates,
+                     division_cap=args.division_cap)
     # Tri-state exit (bd v96b): 0 valid+clean / 3 stored-with-issues / 1 no
     # usable draft. The draft was already written unconditionally in extract().
     return _classify_exit(schema)

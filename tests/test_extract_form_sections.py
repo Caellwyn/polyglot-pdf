@@ -1,0 +1,117 @@
+"""Integration tests for the derived-division extraction step (bd 6cfu.2).
+
+Exercises derive_and_apply -- the exact call extract_form.py makes at
+pipeline step 3e -- against REAL checked-in kits (no LLM, no network):
+
+- the applied schema's sections/parts are 100% derivation output and every
+  field's section_id points into them (exit criterion 1);
+- re-running derivation on the same PDF + schema is section-stable
+  (exit criterion 2);
+- derived sections carry 1-based page numbers matching field
+  pdf_position.page;
+- the applied schema still passes FormSchema.model_validate.
+
+Imports the scripts by file path (repo precedent:
+test_extract_form_backfill.py). ASCII only.
+"""
+
+import copy
+import importlib.util
+import json
+import pathlib
+import sys
+import warnings
+
+import pytest
+
+_REPO = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
+_SCRIPT = _REPO / "scripts" / "authoring" / "derive_sections.py"
+spec = importlib.util.spec_from_file_location("derive_sections_it", _SCRIPT)
+ds = importlib.util.module_from_spec(spec)
+sys.modules["derive_sections_it"] = ds
+spec.loader.exec_module(ds)
+
+_W7 = _REPO / "form-kits" / "w7"
+_I90 = _REPO / "form-kits" / "i-90"
+
+pytestmark = pytest.mark.skipif(
+    not (_W7 / "form.pdf").exists() or not (_I90 / "form.pdf").exists(),
+    reason="checked-in form kits unavailable",
+)
+
+
+def _load_kit(kit_dir):
+    with open(kit_dir / "schema.json", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+@pytest.fixture(scope="module")
+def w7_applied():
+    schema = _load_kit(_W7)
+    summary = ds.derive_and_apply(schema, str(_W7 / "form.pdf"))
+    return schema, summary
+
+
+def test_apply_replaces_divisions_and_files_every_field(w7_applied):
+    schema, summary = w7_applied
+    section_ids = {s["id"] for s in schema["sections"]}
+    # Every field's section_id points at a derived section, and every
+    # section's fields[] entry is a real field (bidirectional consistency).
+    field_ids = {f["id"] for f in schema["fields"]}
+    for f in schema["fields"]:
+        assert f["section_id"] in section_ids
+    listed = [fid for s in schema["sections"] for fid in s["fields"]]
+    assert set(listed) == field_ids
+    assert len(listed) == len(field_ids)  # each field filed exactly once
+    # Parts reference derived sections only.
+    for p in schema["parts"]:
+        assert set(p["section_ids"]) <= section_ids
+    assert summary["strategy"] == "printed-heading"  # w7 = IRS margin headings
+
+
+def test_derived_pages_are_one_based_and_match_field_positions(w7_applied):
+    schema, _ = w7_applied
+    by_id = {s["id"]: s for s in schema["sections"]}
+    for f in schema["fields"]:
+        pos = f.get("pdf_position") or {}
+        sec = by_id[f["section_id"]]
+        if pos.get("page") is not None and "page_number" in sec:
+            assert sec["page_number"] == pos["page"]  # 1-based on both sides
+    assert all(s.get("page_number", 1) >= 1 for s in schema["sections"])
+
+
+def test_rerun_is_section_stable(w7_applied):
+    """Exit criterion 2: deriving again from the SAME PDF + the already-derived
+    schema reproduces identical sections/parts and section_id assignments."""
+    schema, _ = w7_applied
+    again = copy.deepcopy(schema)
+    ds.derive_and_apply(again, str(_W7 / "form.pdf"))
+    assert again["sections"] == schema["sections"]
+    assert again["parts"] == schema["parts"]
+    assert [f["section_id"] for f in again["fields"]] == \
+           [f["section_id"] for f in schema["fields"]]
+
+
+def test_applied_w7_schema_validates(w7_applied):
+    from backend.models.form_models import FormSchema
+    schema, _ = w7_applied
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        FormSchema.model_validate(schema)
+
+
+def test_i90_uses_name_convention_and_files_strays_to_review():
+    """The USCIS family: P{N}_Line names drive the division; the kit's
+    pdf_field_name-less fields land in per-page sec_to_review sections."""
+    schema = _load_kit(_I90)
+    summary = ds.derive_and_apply(schema, str(_I90 / "form.pdf"))
+    assert summary["strategy"] == "name-convention"
+    assert all(sid.startswith("sec_to_review")
+               for sid in summary["to_review_section_ids"])
+    section_ids = {s["id"] for s in schema["sections"]}
+    assert set(summary["to_review_section_ids"]) <= section_ids
+    # Recorded review fields really sit in review sections.
+    by_field = {f["id"]: f["section_id"] for f in schema["fields"]}
+    for fid in summary["to_review_field_ids"]:
+        assert by_field[fid].startswith("sec_to_review")
