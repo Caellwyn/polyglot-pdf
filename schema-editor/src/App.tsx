@@ -32,7 +32,7 @@ import {
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
-import { mergeFields, ungroupField } from './utils/fieldGrouping';
+import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
 import type { FormField, FormConfig, FormSchema } from './types/schema';
 
@@ -443,6 +443,21 @@ export const App: React.FC = () => {
     commitSchema(next);
     setSelectedFieldId(fieldId); // primary keeps its id
   }, [schema, commitSchema]);
+
+  // Flip an existing consolidated group between checkbox_group (multi-select)
+  // and radio (single-select) in place, without an ungroup/re-merge round trip
+  // (bd polyglot-pdf-checkbox-radio). Dependents' show_if/require_if are moved
+  // across the membership boundary by changeGroupKind. The group keeps its id,
+  // so the selection is preserved.
+  const handleChangeGroupKind = React.useCallback(
+    (fieldId: string, kind: 'checkbox_group' | 'radio') => {
+      if (!schema) return;
+      const next = changeGroupKind(schema, fieldId, kind);
+      if (next === schema) return; // not a group, or already that kind -- no-op
+      commitSchema(next);
+    },
+    [schema, commitSchema],
+  );
 
   // Suggested filename for a fresh save (the form's schema basename, *_edited).
   const suggestedFileName = React.useCallback(() => {
@@ -1027,6 +1042,7 @@ export const App: React.FC = () => {
                   schema={schema}
                   onUpdateField={handleUpdateField}
                   onUnmergeField={handleUnmergeField}
+                  onChangeGroupKind={handleChangeGroupKind}
                   onUpdateMetadata={handleUpdateMetadata}
                   onUpdateFields={handleUpdateFields}
                   authorTier={!hosted || role === 'author'}

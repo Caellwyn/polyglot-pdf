@@ -589,6 +589,105 @@ export function mergeFields(
   };
 }
 
+// Flip an EXISTING consolidated group between its two kinds -- checkbox_group
+// (multi-select) and radio (single-select) -- WITHOUT going through an
+// ungroup/re-merge round trip (bd polyglot-pdf-checkbox-radio). A group that
+// extraction produced (e.g. W-7 reason_for_submission arriving as a
+// checkbox_group that should be a radio) otherwise has no reachable path to the
+// other kind: the Field Type picker is read-only for a group, and Merge only
+// offers the kind choice when combining >=2 loose widgets, not on an existing
+// group.
+//
+// The two kinds share option identity byte-for-byte -- the same options[], the
+// same slugs, the same per-option pdf_field_name; the group carries no
+// field-level pdf_field_name either way. The ONLY runtime-meaningful difference
+// is how dependents reference a selected option: a checkbox_group is
+// multi-select so membership (includes/not_includes) is correct, a radio is
+// single-select so equality (equals/not_equals). So the flip is: set the type,
+// and rewrite every dependent's show_if/require_if atom that targets one of
+// THIS group's option slugs across that membership boundary. Nothing else in the
+// schema changes.
+//
+// Returns the schema unchanged (same reference) if the field is not a
+// consolidated group, or is already the requested kind (a no-op the caller can
+// detect to skip a commit).
+export function changeGroupKind(
+  schema: FormSchema,
+  fieldId: string,
+  kind: MergeKind,
+): FormSchema {
+  const field = schema.fields.find(f => f.id === fieldId);
+  // Only a real consolidated group (has options[]) that is currently one of the
+  // two group kinds can be flipped; anything else is a no-op.
+  if (
+    !field ||
+    !field.options ||
+    field.options.length === 0 ||
+    (field.type !== 'checkbox_group' && field.type !== 'radio')
+  ) {
+    return schema;
+  }
+  if (field.type === kind) return schema; // already the requested kind
+
+  const membership = kind === 'checkbox_group';
+  // The option slugs a dependent could reference on THIS group. Only atoms whose
+  // .field is this group AND whose value is one of these slugs get rewritten; a
+  // whole-group operator (is_checked/is_empty on the group, no value) is
+  // kind-agnostic and left untouched.
+  const optionSlugs = new Set(
+    field.options.map(o => String(o.value)).filter(v => v !== ''),
+  );
+
+  // Map ONE atom targeting this group across the membership boundary. Positive
+  // selection (equals/includes) -> includes (multi) or equals (single); negative
+  // (not_equals/not_includes) -> not_includes or not_equals. Any other operator
+  // (a whole-group is_checked/is_empty, or a non-selection op) is preserved.
+  const flipAtom = (atom: ConditionalDisplay): ConditionalDisplay => {
+    if (atom.field !== fieldId) return atom;
+    if (atom.value === undefined || !optionSlugs.has(String(atom.value))) return atom;
+    if (atom.operator === 'equals' || atom.operator === 'includes') {
+      return { ...atom, operator: membership ? 'includes' : 'equals' };
+    }
+    if (atom.operator === 'not_equals' || atom.operator === 'not_includes') {
+      return { ...atom, operator: membership ? 'not_includes' : 'not_equals' };
+    }
+    return atom;
+  };
+
+  const flipCondition = (cond: FieldCondition): FieldCondition => {
+    if (isCompositeCondition(cond)) {
+      const out: CompositeConditionalDisplay = {};
+      for (const bucket of CONDITION_BUCKETS) {
+        const members = cond[bucket];
+        if (members) out[bucket] = members.map(flipAtom);
+      }
+      return out;
+    }
+    return flipAtom(cond);
+  };
+
+  const newFields = schema.fields.map(f => {
+    if (f.id === fieldId) return { ...f, type: kind };
+    // A dependent's show_if/require_if that selects one of this group's options
+    // must move across the membership boundary too, else a checkbox_group ->
+    // radio flip would strand an `includes` op that never fires on a
+    // single-select value (and vice versa).
+    let changed = false;
+    const next: FormField = { ...f };
+    if (f.show_if && conditionReferencesAny(f.show_if, new Set([fieldId]))) {
+      next.show_if = flipCondition(f.show_if);
+      changed = true;
+    }
+    if (f.require_if && conditionReferencesAny(f.require_if, new Set([fieldId]))) {
+      next.require_if = flipCondition(f.require_if);
+      changed = true;
+    }
+    return changed ? next : f;
+  });
+
+  return { ...schema, fields: newFields };
+}
+
 // Un-merge a consolidated field back into its separate per-widget fields. When a
 // stash is present (a field merged in-editor), it is a LOSSLESS inverse: the
 // original source fields and rewritten dependent conditionals are restored

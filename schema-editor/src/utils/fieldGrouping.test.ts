@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   mergeFields,
   ungroupField,
+  changeGroupKind,
   canUngroup,
   isGroupableField,
   mergeBlockReason,
@@ -1008,5 +1009,111 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
   it('is a no-op (same array identity) when no dependent references the old slug', () => {
     const s = groupSchema();
     expect(retargetOptionValueReferences(s.fields, 'grp', 'no_such_slug', 'whatever')).toBe(s.fields);
+  });
+});
+
+describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
+  // A consolidated group with two dependents: one gated on a specific option
+  // slug (must move across the membership boundary), one gated on a whole-group
+  // operator (kind-agnostic, must stay put).
+  function grpKindSchema(type: 'checkbox_group' | 'radio'): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: {
+        title: 'T', form_number: 'T', total_widgets: 2, total_fields: 3,
+        version: '1', language: 'en',
+      },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep', 'whole'] }],
+      fields: [
+        {
+          id: 'grp', name: 'Group', type, section_id: 's1',
+          pdf_field_name: '', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
+          ],
+        } as unknown as FormField,
+        // Gated on a SPECIFIC option slug -- the operator must flip with the kind.
+        {
+          id: 'dep', name: 'Dep', type: 'text', section_id: 's1',
+          pdf_field_name: 'dep[0]', read_only: false, required: false,
+          show_if: {
+            field: 'grp',
+            operator: type === 'checkbox_group' ? 'includes' : 'equals',
+            value: 'a',
+          },
+          require_if: {
+            field: 'grp',
+            operator: type === 'checkbox_group' ? 'not_includes' : 'not_equals',
+            value: 'b',
+          },
+        } as unknown as FormField,
+        // Gated on a WHOLE-GROUP operator (no specific option) -- kind-agnostic.
+        {
+          id: 'whole', name: 'Whole', type: 'text', section_id: 's1',
+          pdf_field_name: 'whole[0]', read_only: false, required: false,
+          show_if: { field: 'grp', operator: 'is_checked' },
+        } as unknown as FormField,
+      ],
+    };
+  }
+
+  it('flips checkbox_group -> radio and rewrites option-slug dependents to equality', () => {
+    const s = grpKindSchema('checkbox_group');
+    const next = changeGroupKind(s, 'grp', 'radio');
+    expect(next).not.toBe(s);
+    expect(next.fields.find(f => f.id === 'grp')!.type).toBe('radio');
+    // options[] unchanged (same slugs + per-option pdf_field_name).
+    const opts = next.fields.find(f => f.id === 'grp')!.options!;
+    expect(opts.map(o => o.value)).toEqual(['a', 'b']);
+    expect(opts.map(o => o.pdf_field_name)).toEqual(['ga[0]', 'gb[0]']);
+    // Positive membership -> equality; negative membership -> not_equals.
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(asAtom(dep.show_if)).toEqual({ field: 'grp', operator: 'equals', value: 'a' });
+    expect(asAtom(dep.require_if)).toEqual({ field: 'grp', operator: 'not_equals', value: 'b' });
+    // Whole-group operator is kind-agnostic -- left untouched.
+    const whole = next.fields.find(f => f.id === 'whole')!;
+    expect(asAtom(whole.show_if)).toEqual({ field: 'grp', operator: 'is_checked' });
+  });
+
+  it('flips radio -> checkbox_group and rewrites option-slug dependents to membership', () => {
+    const s = grpKindSchema('radio');
+    const next = changeGroupKind(s, 'grp', 'checkbox_group');
+    expect(next).not.toBe(s);
+    expect(next.fields.find(f => f.id === 'grp')!.type).toBe('checkbox_group');
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(asAtom(dep.show_if)).toEqual({ field: 'grp', operator: 'includes', value: 'a' });
+    expect(asAtom(dep.require_if)).toEqual({ field: 'grp', operator: 'not_includes', value: 'b' });
+  });
+
+  it('rewrites dependents inside a COMPOSITE condition, atom-wise', () => {
+    const s = grpKindSchema('checkbox_group');
+    // Replace dep's show_if with a composite referencing grp.a AND an unrelated atom.
+    s.fields.find(f => f.id === 'dep')!.show_if = {
+      all_of: [
+        { field: 'grp', operator: 'includes', value: 'a' },
+        { field: 'other', operator: 'equals', value: 'x' },
+      ],
+    };
+    const next = changeGroupKind(s, 'grp', 'radio');
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    const composite = dep.show_if as { all_of: { field: string; operator: string; value: unknown }[] };
+    expect(composite.all_of[0]).toEqual({ field: 'grp', operator: 'equals', value: 'a' });
+    // The unrelated atom is untouched.
+    expect(composite.all_of[1]).toEqual({ field: 'other', operator: 'equals', value: 'x' });
+  });
+
+  it('is a no-op (same reference) when already the requested kind', () => {
+    const s = grpKindSchema('radio');
+    expect(changeGroupKind(s, 'grp', 'radio')).toBe(s);
+  });
+
+  it('is a no-op (same reference) for a non-group field or a missing id', () => {
+    const s = grpKindSchema('radio');
+    // A plain text field is not a group.
+    expect(changeGroupKind(s, 'dep', 'checkbox_group')).toBe(s);
+    // No such field.
+    expect(changeGroupKind(s, 'nope', 'checkbox_group')).toBe(s);
   });
 });

@@ -21,6 +21,13 @@ interface FieldEditorProps {
   // Un-merge a consolidated options[] field back into separate per-widget fields
   // (bd polyglot-pdf-s4dp.1). Optional so the editor still renders without it.
   onUnmergeField?: (fieldId: string) => void;
+  // Flip an existing consolidated group between checkbox_group (multi-select)
+  // and radio (single-select) in place (bd polyglot-pdf-checkbox-radio). A group
+  // extracted as the wrong kind otherwise has no reachable path to the other kind
+  // (the Field Type picker is read-only for a group, and Merge only offers the
+  // kind choice when combining loose widgets). Optional so the editor still
+  // renders without it (the control is simply not shown).
+  onChangeGroupKind?: (fieldId: string, kind: 'checkbox_group' | 'radio') => void;
   // Commit a schema-wide field list, e.g. after retargeting dependents' show_if
   // / require_if to an option's freshly-renamed slug (bd polyglot-pdf-432u).
   // Separate from onUpdateField, which can only patch the SINGLE field being
@@ -268,6 +275,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   schema,
   onUpdateField,
   onUnmergeField,
+  onChangeGroupKind,
   onUpdateMetadata,
   onUpdateFields,
   authorTier = true,
@@ -297,17 +305,30 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           <h4 className="text-sm font-semibold text-gray-900">Basic Properties</h4>
 
           {/* Field Type. A field that already carries options[] is a GROUP
-              (checkbox_group / a consolidated radio); raw-switching its type
-              would strand the options or mint a model-invalid group, so the
-              picker is read-only for groups -- change the group via Merge /
-              Ungroup instead. checkbox_group is only OFFERED as a target to
-              authors, since building a valid one requires per-option PDF
-              mapping (Codex PR #310 round 2). */}
+              (checkbox_group / a consolidated radio); raw-switching its type to
+              a NON-group type (text, date, ...) would strand the options, so the
+              base picker stays read-only for groups. But flipping BETWEEN the two
+              group kinds (checkbox_group <-> radio) is safe -- they share the same
+              options[] and per-option PDF mapping, differing only in single- vs
+              multi-select -- so a group gets a dedicated "Group behaves as"
+              selector below (bd polyglot-pdf-checkbox-radio) instead of the old
+              dead-end "reversed by Ungroup" hint. checkbox_group is only OFFERED
+              as a target to authors, since building a valid one requires
+              per-option PDF mapping (Codex PR #310 round 2). */}
           {(() => {
             const isGroup = !!field.options && field.options.length > 0;
             const typeChoices = FIELD_TYPES.filter(
               t => t !== 'checkbox_group' || authorTier || field.type === 'checkbox_group',
             );
+            // The in-place kind flip is offered only for a group that is
+            // currently one of the two kinds and only when the caller wired the
+            // handler (author-tier: minting a checkbox_group needs author
+            // surfaces, matching the type picker's checkbox_group gate).
+            const canFlipKind =
+              isGroup &&
+              !!onChangeGroupKind &&
+              authorTier &&
+              (field.type === 'checkbox_group' || field.type === 'radio');
             return (
               <div>
                 <label className="label">Field Type</label>
@@ -317,7 +338,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   value={field.type}
                   disabled={isGroup}
                   title={isGroup
-                    ? 'This is a group (has options). Change it via Merge / Ungroup, not a type switch.'
+                    ? 'This is a group (has options). Switch single- vs multi-select below; use Ungroup to split it into separate fields.'
                     : undefined}
                   onChange={(e) => updateField({ type: e.target.value as FieldType })}
                 >
@@ -327,11 +348,40 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     </option>
                   ))}
                 </select>
-                {isGroup && (
+                {isGroup && !canFlipKind && (
                   <p className="text-xs text-gray-500 mt-1">
                     Group type is set by Merge (several = checkbox group, exactly
                     one = radio) and reversed by Ungroup.
                   </p>
+                )}
+                {canFlipKind && (
+                  <div className="mt-2">
+                    <label className="label" htmlFor="group-kind-select">
+                      Group behaves as
+                    </label>
+                    <select
+                      id="group-kind-select"
+                      className="input"
+                      aria-label="Group behaves as"
+                      value={field.type}
+                      onChange={(e) =>
+                        onChangeGroupKind!(
+                          field.id,
+                          e.target.value as 'checkbox_group' | 'radio',
+                        )
+                      }
+                    >
+                      <option value="radio">Radio (choose exactly one)</option>
+                      <option value="checkbox_group">
+                        Checkbox group (choose several)
+                      </option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Both kinds share the same options and PDF mapping; only
+                      single- vs multi-select changes. To split the group back
+                      into separate fields, use Ungroup.
+                    </p>
+                  </div>
                 )}
               </div>
             );
