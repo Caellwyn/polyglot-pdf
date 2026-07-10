@@ -17,6 +17,7 @@ import {
   probeSession,
   saveRemoteSchema,
   setAccessCode,
+  setRemoteLabel,
   setRemoteStatus,
 } from './remoteKitStore';
 
@@ -172,6 +173,18 @@ describe('endpoints', () => {
     );
     await expect(setRemoteStatus('broken', 'complete'))
       .rejects.toThrow('does not validate');
+  });
+
+  it('setRemoteLabel POSTs the new label and surfaces the refusal detail', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, label: 'W-9' }));
+    await setRemoteLabel('form-2', 'W-9');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/editor/kits/form-2/label');
+    expect((init as RequestInit).method).toBe('POST');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ label: 'W-9' });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'Label must not be empty' }, 422));
+    await expect(setRemoteLabel('form-2', '   ')).rejects.toThrow('must not be empty');
   });
 
   it('extractRemoteKit NEVER sends an empty multipart body (bd 1ysc)', async () => {

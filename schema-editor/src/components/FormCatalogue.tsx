@@ -4,7 +4,7 @@ import {
   type FsDirectoryHandle,
 } from '../utils/fileSystemAccess';
 import {
-  listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitStatus,
+  listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitLabel, setKitStatus,
   writeInstructionsPdf,
   type CatalogueEntry, type KitProgress, type KitStatus, type KitVersionInfo,
 } from '../utils/formKitDirectory';
@@ -220,6 +220,29 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     }
   }, [root, refresh]);
 
+  // Rename a kit's DISPLAY label (bd 15ic): a metadata.json-only write; the
+  // kit's directory/id never changes.
+  const [renamingId, setRenamingId] = React.useState<string | null>(null);
+  const [renameText, setRenameText] = React.useState('');
+  const handleRename = React.useCallback(async (kit: CatalogueEntry) => {
+    if (!root) return;
+    const label = renameText.trim();
+    setRenamingId(null);
+    if (!label || label === kit.label) return;  // no-op rename
+    setNotice(null);
+    setBusy(true);
+    setError(null);
+    try {
+      await setKitLabel(kit, label);
+      setNotice(`Renamed "${kit.label}" to "${label}".`);
+      await refresh(root);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename the form');
+    } finally {
+      setBusy(false);
+    }
+  }, [root, renameText, refresh]);
+
   // Probe the host extraction endpoint once on mount (dev-only; absent in a
   // static build). Errors resolve false inside the client, so this never throws.
   React.useEffect(() => {
@@ -414,6 +437,47 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                   complete (so it deploys) or revert a complete kit to draft.
                   Only for kits that have a schema -- a PDF-only kit can't be
                   complete (the deploy gate skips schema-less kits anyway). */}
+              <div className="mt-1 flex items-center justify-end gap-2 px-1">
+                {renamingId === kit.id ? (
+                  <span className="flex items-center gap-1">
+                    <input
+                      className="input text-sm w-40"
+                      aria-label="New form name"
+                      value={renameText}
+                      autoFocus
+                      onChange={(e) => setRenameText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void handleRename(kit);
+                        if (e.key === 'Escape') setRenamingId(null);
+                      }}
+                      disabled={busy}
+                    />
+                    <button
+                      className="btn-sm btn-primary text-xs"
+                      onClick={() => void handleRename(kit)}
+                      disabled={busy || !renameText.trim()}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="btn-sm btn-secondary text-xs"
+                      onClick={() => setRenamingId(null)}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    className="btn-sm btn-secondary text-xs"
+                    onClick={() => { setRenameText(kit.label); setRenamingId(kit.id); }}
+                    disabled={busy}
+                    title="Rename this form's display name (its folder and files stay unchanged)"
+                  >
+                    Rename
+                  </button>
+                )}
+              </div>
               {kit.hasSchema && (
                 <div className="mt-1 flex items-center justify-end gap-2 px-1">
                   {kit.status === 'complete' ? (

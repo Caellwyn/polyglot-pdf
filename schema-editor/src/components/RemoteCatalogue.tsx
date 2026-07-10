@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  onboardRemoteKit, setRemoteStatus,
+  onboardRemoteKit, setRemoteLabel, setRemoteStatus,
   type EditorRole, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { getCompletionStats } from '../utils/validation';
@@ -218,6 +218,32 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     }
   }, [refresh, onAuthError]);
 
+  // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it is safe for
+  // ANY selected kit (no open involved -- unlike the status actions, which
+  // need the parent-confirmed open). renamingId gates the inline input.
+  const [renamingId, setRenamingId] = React.useState<string | null>(null);
+  const [renameText, setRenameText] = React.useState('');
+  const handleRename = React.useCallback(async (kit: RemoteKitEntry) => {
+    const label = renameText.trim();
+    setRenamingId(null);
+    if (!label || label === kit.label) return;  // no-op rename
+    setNotice(null);
+    setBusy(true);
+    setError(null);
+    try {
+      await setRemoteLabel(kit.id, label);
+      setNotice(`Renamed "${kit.label}" to "${label}".`);
+      await refresh();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthError?.();
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Failed to rename the form');
+      setBusy(false);
+    }
+  }, [renameText, refresh, onAuthError]);
+
   // Author tier (bd 92qe.3): upload a blank form PDF -> a new draft kit in the
   // shared store (the hosted counterpart of the local drag-drop onboarding).
   const handleUploadPdf = React.useCallback(async (file: File) => {
@@ -388,6 +414,55 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
               );
             })}
           </select>
+          {(() => {
+            // Rename (bd 15ic): metadata-only, safe for ANY selected kit --
+            // no open involved, so it is deliberately NOT gated on the
+            // parent-confirmed open (unlike the status actions below).
+            const kit = kits.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
+            if (!kit) return null;
+            if (renamingId === kit.id) {
+              return (
+                <span className="flex items-center gap-1">
+                  <input
+                    className="input text-sm w-44"
+                    aria-label="New form name"
+                    value={renameText}
+                    autoFocus
+                    onChange={(e) => setRenameText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handleRename(kit);
+                      if (e.key === 'Escape') setRenamingId(null);
+                    }}
+                    disabled={busy}
+                  />
+                  <button
+                    className="btn-sm btn-primary text-xs"
+                    onClick={() => void handleRename(kit)}
+                    disabled={busy || !renameText.trim()}
+                  >
+                    Save
+                  </button>
+                  <button
+                    className="btn-sm btn-secondary text-xs"
+                    onClick={() => setRenamingId(null)}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                </span>
+              );
+            }
+            return (
+              <button
+                className="btn-sm btn-secondary text-xs"
+                onClick={() => { setRenameText(kit.label); setRenamingId(kit.id); }}
+                disabled={busy}
+                title="Rename this form's display name (its id and files stay unchanged)"
+              >
+                Rename
+              </button>
+            );
+          })()}
           {(() => {
             const kit = kits.find((k) => k.id === (actionKitId ?? selectedKitId)) ?? null;
             if (!kit) return null;

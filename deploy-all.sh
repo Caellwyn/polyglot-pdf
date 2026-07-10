@@ -306,8 +306,12 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
             continue
         fi
 
-        # Extract title from the resolved schema file (custom filename per bd snpi)
-        label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/$schema_file" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
+        # Label precedence mirrors the store's (metadata.label -> schema title ->
+        # kit_id, backend/services/form_kits.py): metadata.json's label is the
+        # RENAMEABLE display name (bd 15ic) -- without this, an editor rename
+        # would never reach the deployed voice-app manifest.
+        label=$(grep -o '"label"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/metadata.json" 2>/dev/null | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+        [ -z "$label" ] && label=$(grep -o '"title"[[:space:]]*:[[:space:]]*"[^"]*"' "$kit_dir/$schema_file" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/' || echo "$kit_id")
         [ -z "$label" ] && label="$kit_id"
         
         # Find PDF file

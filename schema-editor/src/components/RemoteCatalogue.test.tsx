@@ -14,6 +14,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     listRemoteKits: vi.fn(),
     loadRemoteSchema: vi.fn(),
     setRemoteStatus: vi.fn(),
+    setRemoteLabel: vi.fn(),
     onboardRemoteKit: vi.fn(),
     extractRemoteKit: vi.fn(),
   };
@@ -22,7 +23,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
 import { RemoteCatalogue } from './RemoteCatalogue';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  onboardRemoteKit, setRemoteStatus,
+  onboardRemoteKit, setRemoteLabel, setRemoteStatus,
   type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 
@@ -402,5 +403,44 @@ describe('compact selector strip (bd tynm)', () => {
     expect(screen.getByTitle('Open Draft Form for editing')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Hide form cards'));
     expect(screen.queryByTitle('Open Draft Form for editing')).not.toBeInTheDocument();
+  });
+});
+
+describe('rename from the selector strip (bd 15ic)', () => {
+  it('renames the selected kit via the inline input (works without an open)', async () => {
+    vi.mocked(setRemoteLabel).mockResolvedValue(undefined);
+    // onOpenKit no-ops: rename must work even for a kit whose open was never
+    // confirmed (it is metadata-only).
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Select a form'), {
+      target: { value: 'draft-kit' },
+    });
+
+    fireEvent.click(screen.getByText('Rename'));
+    const input = screen.getByLabelText('New form name') as HTMLInputElement;
+    expect(input.value).toBe('Draft Form');  // pre-filled with the current label
+    fireEvent.change(input, { target: { value: '  IRS W-9  ' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() =>
+      expect(setRemoteLabel).toHaveBeenCalledWith('draft-kit', 'IRS W-9'));
+    // The catalogue refreshed after the rename.
+    await waitFor(() =>
+      expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('Escape cancels the rename without a server call', async () => {
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Select a form')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Select a form'), {
+      target: { value: 'draft-kit' },
+    });
+    fireEvent.click(screen.getByText('Rename'));
+    fireEvent.keyDown(screen.getByLabelText('New form name'), { key: 'Escape' });
+    expect(screen.queryByLabelText('New form name')).not.toBeInTheDocument();
+    expect(setRemoteLabel).not.toHaveBeenCalled();
   });
 });
