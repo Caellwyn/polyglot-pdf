@@ -25,8 +25,10 @@ durable work.
   worker already owns. Skipping the claim is what causes duplicate-work
   collisions even when the pull cadence is followed.
 - **Dependency direction is easy to invert:** the FIRST arg to `bd dep add` is
-  what gets BLOCKED. An epic is blocked BY its children, so `bd dep add <epic>
-  <child>`. `bd_safe.py dep-add --epic/--child` makes this un-invertible.
+  what gets BLOCKED. Epic wiring is a different edge type: bd rejects a
+  task-blocks-epic blocks edge, so epic-child is `bd dep add <child> <epic>
+  -t parent-child`. `bd_safe.py dep-add --epic/--child` emits that form and
+  makes it un-invertible; `--blocked/--prereq` covers plain blocks edges.
 
 ## Self-selection + the change-surface collision guard
 

@@ -196,8 +196,9 @@ def test_close_brackets_and_passes_reason(monkeypatch):
 
 # --- dep-add: direction cannot be inverted ---
 
-def test_dep_add_epic_child_blocks_the_epic(monkeypatch):
-    # scar rule 13: epic is BLOCKED BY child -> `bd dep add <epic> <child>`.
+def test_dep_add_epic_child_emits_parent_child_edge(monkeypatch):
+    # bd rejects a task-blocks-epic blocks edge, so epic wiring must be
+    # `bd dep add <child> <epic> -t parent-child` (bd polyglot-pdf-vj3x).
     recorder = _RunRecorder([])
     monkeypatch.setattr(bs, "_run", recorder)
     args = types.SimpleNamespace(
@@ -206,9 +207,13 @@ def test_dep_add_epic_child_blocks_the_epic(monkeypatch):
     )
     rc = bs.cmd_dep_add(args)
     assert rc == bs.EXIT_OK
-    # First arg to `bd dep add` is the epic (blocked); second is the child.
+    # First arg is the CHILD, second the epic, with the parent-child type.
     dep_call = next(c for c in recorder.calls if "dep" in c and "add" in c)
-    assert dep_call == ["bd", "dep", "add", "yourturn-group-32qp", "yourturn-group-nbj1"]
+    assert dep_call == [
+        "bd", "dep", "add",
+        "yourturn-group-nbj1", "yourturn-group-32qp",
+        "-t", "parent-child",
+    ]
 
 
 def test_dep_add_blocked_prereq_general_form(monkeypatch):
