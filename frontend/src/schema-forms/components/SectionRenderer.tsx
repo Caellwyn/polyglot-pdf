@@ -84,6 +84,7 @@ export function SectionRenderer({
                 disabled={disabled}
                 allFieldValues={fieldValues}
                 confirmed={confirmed}
+                required={required}
               />
               {skipped && (
                 <p className="form-field__skipped" role="status">

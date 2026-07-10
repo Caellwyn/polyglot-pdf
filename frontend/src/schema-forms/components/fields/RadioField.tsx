@@ -13,6 +13,9 @@ export interface RadioFieldProps {
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
+  // Dynamic required state from isFieldRequired (bd eaof); falls back to the
+  // field's static validation.required when omitted.
+  required?: boolean;
 }
 
 export function RadioField({
@@ -23,6 +26,7 @@ export function RadioField({
   error,
   disabled = false,
   confirmed = false,
+  required,
 }: RadioFieldProps) {
   if (!field.options) {
     console.error(`[RadioField] Field ${field.id} has no options`);
@@ -42,7 +46,7 @@ export function RadioField({
       <fieldset className="form-field__fieldset">
         <legend className="form-field__label">
           {field.name}
-          {field.validation?.required && <span className="form-field__required">*</span>}
+          {(required ?? field.validation?.required) && <span className="form-field__required">*</span>}
           {confirmed && (
             <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
               ✓

@@ -80,6 +80,46 @@ describe('SectionRenderer: 4dxt skip affordance', () => {
     expect(screen.queryByRole('button', { name: /Skip for now/i })).toBeNull();
   });
 
+  it('shows the required asterisk (bd eaof) when a require_if trigger is met', () => {
+    const requireIfSection: FormSection = { id: 'sec', label: 'Sec', order: 1, fields: ['conditional'] };
+    const requireIfFields: FormField[] = [
+      { id: 'conditional', name: 'Conditional field', spoken_name: 'conditional field', type: 'text',
+        section_id: 'sec',
+        require_if: { field: 'trigger', operator: 'equals', value: 'yes' } },
+    ];
+    const values: Record<string, FieldValue> = { trigger: { value: 'yes' } };
+    render(
+      <SectionRenderer
+        {...baseProps}
+        section={requireIfSection}
+        fields={requireIfFields}
+        fieldValues={values}
+        onFieldSkip={vi.fn()}
+      />
+    );
+    expect(document.querySelector('.form-field__required')).toBeTruthy();
+  });
+
+  it('does NOT show the required asterisk (bd eaof) when a require_if trigger is unmet', () => {
+    const requireIfSection: FormSection = { id: 'sec', label: 'Sec', order: 1, fields: ['conditional'] };
+    const requireIfFields: FormField[] = [
+      { id: 'conditional', name: 'Conditional field', spoken_name: 'conditional field', type: 'text',
+        section_id: 'sec',
+        require_if: { field: 'trigger', operator: 'equals', value: 'yes' } },
+    ];
+    const values: Record<string, FieldValue> = { trigger: { value: 'no' } };
+    render(
+      <SectionRenderer
+        {...baseProps}
+        section={requireIfSection}
+        fields={requireIfFields}
+        fieldValues={values}
+        onFieldSkip={vi.fn()}
+      />
+    );
+    expect(document.querySelector('.form-field__required')).toBeNull();
+  });
+
   it('renders NO wrapper node for a hidden (show_if-unmet) field (no phantom gap)', () => {
     // A field gated on trigger=yes; with trigger unset it is not shown and must
     // produce no .section__field node (matches FieldRenderer returning null).

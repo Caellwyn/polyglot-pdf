@@ -13,6 +13,9 @@ export interface TextAreaFieldProps {
   error?: string | null;
   disabled?: boolean;
   confirmed?: boolean; // AI voice confirmation status
+  // Dynamic required state from isFieldRequired (bd eaof); falls back to the
+  // field's static validation.required when omitted.
+  required?: boolean;
 }
 
 export function TextAreaField({
@@ -23,6 +26,7 @@ export function TextAreaField({
   error,
   disabled = false,
   confirmed = false,
+  required,
 }: TextAreaFieldProps) {
   // Determine rows based on textarea size
   const getRows = (): number => {
@@ -49,7 +53,7 @@ export function TextAreaField({
     <div className={`form-field ${confirmed ? 'form-field--confirmed' : ''}`}>
       <label htmlFor={field.id} className="form-field__label">
         {field.name}
-        {field.validation?.required && <span className="form-field__required">*</span>}
+        {(required ?? field.validation?.required) && <span className="form-field__required">*</span>}
         {confirmed && (
           <span className="form-field__confirmed-badge" title="Confirmed by AI assistant">
             ✓

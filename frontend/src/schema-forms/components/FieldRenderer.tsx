@@ -23,6 +23,9 @@ export interface FieldRendererProps {
   disabled?: boolean;
   allFieldValues?: Record<string, any>; // For conditional logic
   confirmed?: boolean; // Field confirmation status from AI voice
+  // Dynamic required state from isFieldRequired (bd eaof); falls back to the
+  // field's static validation.required when omitted.
+  required?: boolean;
 }
 
 export function FieldRenderer({
@@ -34,6 +37,7 @@ export function FieldRenderer({
   disabled = false,
   allFieldValues = {},
   confirmed = false,
+  required,
 }: FieldRendererProps) {
   // Check if field should be shown based on conditional logic
   const isShown = shouldShowField(field, allFieldValues);
@@ -93,6 +97,7 @@ export function FieldRenderer({
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
+          required={required}
         />
       );
 
@@ -106,6 +111,7 @@ export function FieldRenderer({
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
+          required={required}
         />
       );
 
@@ -119,6 +125,7 @@ export function FieldRenderer({
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
+          required={required}
         />
       );
 
@@ -138,6 +145,7 @@ export function FieldRenderer({
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
+          required={required}
         />
       );
 
@@ -151,6 +159,7 @@ export function FieldRenderer({
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
+          required={required}
         />
       );
 
@@ -164,6 +173,7 @@ export function FieldRenderer({
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
+          required={required}
         />
       );
 
@@ -179,6 +189,7 @@ export function FieldRenderer({
           error={error}
           disabled={isDisabled}
           confirmed={confirmed}
+          required={required}
         />
       );
 
