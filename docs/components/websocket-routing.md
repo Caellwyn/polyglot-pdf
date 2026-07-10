@@ -29,11 +29,13 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
    (`receive_text()` → `json.loads`). There is no `hello`/`hello_ack` here.
 3. `type` selects the mode:
    - `"handshake"` (legacy) — carries the full `schema`.
-   - `"handshake_jit"` — carries a `manifest` + `first_field_schema` +
-     `loaded_field_ids` for token-lean loading; the backend builds a minimal schema
-     from the manifest. The mode is selected by the handshake `type` and accepted
-     **unconditionally** — `USE_JIT_SCHEMA` does **not** gate it; that flag is only
-     *reported back* in `session_ready.jit_mode_enabled`.
+   - `"handshake_jit"` — the manifest-first TRANSPORT: carries a `manifest` +
+     `first_field_schema` + `loaded_field_ids`; the backend builds a minimal schema
+     from the manifest. This is DTI's carrier (the JIT SI mode was removed, bd
+     polyglot-pdf-en2j). The mode is selected by the handshake `type` and accepted
+     **unconditionally** — no backend flag gates acceptance; the backend only
+     *reports back* whether to build it via `session_ready.jit_mode_enabled`
+     (`= settings.USE_DTI`).
 4. The handshake also carries `current_values` (pre-filled answers, used on
    reconnect — **not stored**, see stateless-architecture), `fill_language`, the
    persistent `form_session_id`, section metadata (`section_id`/`section_number`/

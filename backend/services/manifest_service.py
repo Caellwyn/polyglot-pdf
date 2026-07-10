@@ -96,9 +96,8 @@ def get_field_guidance(field: dict) -> dict | None:
         guidance["format_hint"] = format_hint
 
     # Options for select/radio/checkbox (label/value pairs or bare values).
-    # SANITIZE via the shared helper (bd polyglot-pdf-lj5v) so this DTI path
-    # applies the SAME value/label/spoken_label boundary as the JIT
-    # get_next_field_schema path -- never leak pdf_field_name/pdf_on_value/
+    # SANITIZE via the shared helper (bd polyglot-pdf-lj5v) to the
+    # value/label/spoken_label boundary -- never leak pdf_field_name/pdf_on_value/
     # pdf_position/label_translations into a model-facing payload.
     options = field.get("options") or field.get("allowed_values")
     if options:
