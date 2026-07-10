@@ -535,6 +535,20 @@ export class WebFormConnection {
       return;
     }
 
+    // Re-read the CURRENT sessionStorage state before building the handshake
+    // (bd polyglot-pdf-fn1m). this.state is the constructor's init() snapshot;
+    // on a soft page refresh a brand-new connection is built and this.state can
+    // predate the latest save, so the handshake would serialize a stale
+    // currentSectionId / fieldValues and the resumed (stateless) backend would
+    // rebuild context from prior-section values the client no longer holds --
+    // the "model asserts a value from a previous section" symptom. reloadState()
+    // pulls the freshest sessionStorage back in so the handshake reflects the
+    // client's actual current field state. No-op if storage is empty (keeps the
+    // constructor snapshot). Must run BEFORE getHandshakePayload below; the
+    // post-session_ready load() (handleSessionReady) fires too late for the very
+    // first handshake.
+    this.reloadState();
+
     // Send handshake with schema + current_values + fill_language.
     // Pass resume:true on reconnects so the backend skips the greeting
     // and section re-introduction (bd polyglot-pdf-vmxx).

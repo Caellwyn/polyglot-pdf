@@ -189,12 +189,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				return
 			}
 			console.log('[VoiceOverlay] Language pre-selected from onboarding:', initialLanguage)
+			// On a SOFT PAGE REFRESH mid-session the disclaimer may ALREADY have
+			// been accepted (it is persisted in schema_form_state). Re-showing it
+			// while the resumed voice session is already speaking mid-section is
+			// the "disclaimer re-shows while Gemini talks" desync
+			// (bd polyglot-pdf-fn1m). So gate the disclaimer step on
+			// disclaimerAccepted here, mirroring the alreadyLive branch above and
+			// the language handler: reconnect either way (to resume the session),
+			// but only surface the agree step when it has NOT been accepted.
+			const alreadyAccepted = SchemaFormStateManager.load()?.disclaimerAccepted
 			// Trigger the same flow as handleInitialLanguageSelect
 			const triggerDisclaimerFlow = async () => {
 				try {
-					setPendingDisclaimerRead(true)
+					if (!alreadyAccepted) {
+						setPendingDisclaimerRead(true)
+					}
 					await handleConnect()
-					setShowDisclaimerModal(true)
+					if (!alreadyAccepted) {
+						setShowDisclaimerModal(true)
+					} else {
+						console.log('[VoiceOverlay] Soft-refresh resume (disclaimer already accepted) - reconnecting without re-showing the agree step')
+					}
 				} catch (err) {
 					console.error('[VoiceOverlay] Failed to connect after pre-selected language:', err)
 					setError(err instanceof Error ? err.message : 'Connection failed')

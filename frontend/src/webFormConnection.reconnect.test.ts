@@ -18,6 +18,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebFormConnection } from './webFormConnection'
+import { SchemaFormStateManager } from './schema-forms/state/schemaFormState'
+import type { SchemaFormState } from './schema-forms/state/schemaFormState'
 import type { FormSchema } from './schema-forms/types/schema'
 
 // Mock WebSocket that records instances and exposes the lifecycle callbacks so a
@@ -193,5 +195,94 @@ describe('WebFormConnection auto-reconnect (bd polyglot-pdf-uov.5)', () => {
     expect(conn.getStatus()).toBe('reconnecting')
     vi.advanceTimersByTime(1000)
     expect(MockWebSocket.instances.length).toBe(before + 1)
+  })
+})
+
+/**
+ * Handshake freshness on (re)connect / soft page-refresh (bd polyglot-pdf-fn1m).
+ *
+ * The handshake is built from this.state, which is the constructor's init()
+ * snapshot. On a soft page refresh a brand-new WebFormConnection is built and
+ * this.state can predate the latest sessionStorage save, so the stateless backend
+ * would rebuild context from a STALE currentSectionId / fieldValues -- the "model
+ * asserts a value from a previous section" symptom. handleOpen now calls
+ * reloadState() (re-read sessionStorage into this.state) BEFORE building the
+ * handshake, so it reflects the client's actual current field state.
+ */
+describe('WebFormConnection handshake reflects fresh sessionStorage on open (bd polyglot-pdf-fn1m)', () => {
+  const TWO_SECTION_SCHEMA: FormSchema = {
+    source: 'web',
+    fields: [],
+    sections: [
+      { id: 's1', label: 'S1', order: 1, fields: [] },
+      { id: 's2', label: 'S2', order: 2, fields: [] },
+    ],
+  } as unknown as FormSchema
+
+  beforeEach(() => {
+    MockWebSocket.instances = []
+    // @ts-expect-error -- override global WebSocket with the mock for the test
+    global.WebSocket = MockWebSocket
+    global.window = globalThis as any
+    const store: Record<string, string> = {}
+    global.sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+      clear: () => { for (const k of Object.keys(store)) delete store[k] },
+      key: () => null,
+      length: 0,
+    } as unknown as Storage
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('builds the handshake from the CURRENT sessionStorage state, not the constructor snapshot', async () => {
+    // Constructor snapshots section s1 (init() seeds a fresh session at the first
+    // section for an empty store).
+    const conn = new WebFormConnection(TWO_SECTION_SCHEMA)
+
+    // Simulate the client having advanced to s2 and filled a field AFTER the
+    // constructor ran (the state a soft refresh must resume from). reloadState()
+    // reads this via SchemaFormStateManager.load(); return it fresh here.
+    const freshState: SchemaFormState = {
+      schema: TWO_SECTION_SCHEMA,
+      fieldValues: { name_changed: { value: 'No', confirmed: true } },
+      currentSectionId: 's2',
+      completedSections: new Set<string>(['s1']),
+      validationErrors: {},
+      lastUpdated: 1,
+      formSessionId: 'fss_test',
+      loadedFieldIds: new Set<string>(),
+      jitModeEnabled: false,
+      disclaimerAccepted: true,
+      selectedLanguage: 'English',
+    } as unknown as SchemaFormState
+    const loadSpy = vi
+      .spyOn(SchemaFormStateManager, 'load')
+      .mockReturnValue(freshState)
+
+    // Open the socket -> handleOpen fires -> reloadState() + handshake send.
+    const p = conn.connect('wss://example/ws/fill')
+    const sock = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+    sock.open()
+    await p
+
+    // reloadState() (which calls load()) must have run on open.
+    expect(loadSpy).toHaveBeenCalled()
+
+    // The handshake actually sent must reflect the FRESH state (s2 + the filled
+    // value), not the constructor's s1 snapshot.
+    const handshakeStr = (sock.send.mock.calls
+      .map((c: any[]) => c[0])
+      .find((s: any) => typeof s === 'string' && s.includes('"type":"handshake"'))) as string
+    expect(handshakeStr).toBeDefined()
+    const handshake = JSON.parse(handshakeStr)
+    expect(handshake.section_label).toBe('S2')
+    expect(handshake.section_number).toBe(2)
+    expect(handshake.current_values).toHaveProperty('name_changed')
+    expect(handshake.resume).toBe(false) // first connect of this instance
   })
 })
