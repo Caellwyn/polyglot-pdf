@@ -106,7 +106,6 @@ async def test_update_form_fields_dict_options_invalid_does_not_raise_typeerror(
         handle_switch_section=lambda *a, **k: None,
         handle_get_field_value=lambda *a, **k: None,
         request_form_state_from_client=AsyncMock(return_value={}),
-        get_next_field_schema_for_jit=lambda *a, **k: None,
     )
 
     # The invalid value is what made the model's update_form_fields call fail.

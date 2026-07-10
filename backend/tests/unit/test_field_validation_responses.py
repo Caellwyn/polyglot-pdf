@@ -106,7 +106,6 @@ def create_callback_handler(mock_websocket, mock_coordinator, update_handler):
         handle_switch_section=AsyncMock(),
         handle_get_field_value=AsyncMock(),
         request_form_state_from_client=AsyncMock(),
-        get_next_field_schema_for_jit=MagicMock(return_value=None),
     )
 
     return handler

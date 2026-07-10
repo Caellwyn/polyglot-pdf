@@ -921,11 +921,13 @@ async def fill_form_from_schema(
 		"type": "session_ready",
 		"session_id": ephemeral_id,
 		"ephemeral": True,  # Signal to client this is stateless
-		# JIT and DTI both use the manifest-first handshake shape (manifest +
-		# first_field_schema), so signal jit_mode for EITHER so the frontend builds
-		# that handshake. dti_mode_enabled additionally tells the client to send each
-		# next field's full schema on next_field_hint_response (bd polyglot-pdf-jnjj.22).
-		"jit_mode_enabled": settings.USE_JIT_SCHEMA or settings.USE_DTI,  # Signal manifest-first handshake
+		# DTI uses the manifest-first handshake shape (manifest + first_field_schema),
+		# so signal jit_mode when DTI is on so the frontend builds that handshake. The
+		# jit_mode_enabled flag names the manifest-first TRANSPORT, which survives the
+		# JIT SI-mode removal (bd polyglot-pdf-en2j); the JIT SI mode itself is gone.
+		# dti_mode_enabled additionally tells the client to send each next field's full
+		# schema on next_field_hint_response (bd polyglot-pdf-jnjj.22).
+		"jit_mode_enabled": settings.USE_DTI,  # Signal manifest-first handshake transport
 		"dti_mode_enabled": settings.USE_DTI,  # Signal Dynamic Turn Injection (client supplies next-field schema)
 		# Continuous-session mode (bd polyglot-pdf-x8rt): tell the client to build a
 		# single whole-form handshake and stop advancing sections, so the whole form

@@ -34,7 +34,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |
-| `USE_JIT_SCHEMA` | `false` | Feature flag: JIT (manifest-only) system instruction vs. full schema. |
+| `USE_DTI` | `false` | Feature flag: DTI (thin static SI + per-field guidance injection) vs. the legacy full-schema SI. DTI is the shipped reduced-SI mode. |
 | `FORM_KITS_MODE` | `local` | Form-kit store backend (`local` FS vs. GCS/remote). |
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`) -- a behavioral switch worth knowing when deploying. Env-overridable so demo/prod can flip without a code edit. |

@@ -3,11 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import json
 from backend.config import get_settings
-from backend.services.manifest_service import (
-    format_manifest_for_context,
-    get_field_guidance,
-    get_next_field_schema
-)
+from backend.services.manifest_service import get_field_guidance
 
 
 def render_field_guidance(
@@ -452,118 +448,25 @@ def build_form_context(
     #   - form/section metadata (title, section n/total, label, progress,
     #     previous names, confirmation policy) -> render_section_metadata on the
     #     initiating message at session/section start (bd polyglot-pdf-uogm).
-    # Precedence: DTI takes priority over JIT (mutually exclusive at the SI level).
-    # getattr-guard so a minimal settings stub (some unit tests) without USE_DTI
-    # falls through to the JIT/legacy branches rather than AttributeError-ing.
-    if getattr(settings, "USE_DTI", False):
+    # SI-mode selection: DTI (thin static SI + per-field injection) when USE_DTI,
+    # else the legacy full-SI dump. getattr-guard so a minimal settings stub (some
+    # unit tests) without USE_DTI falls through to the legacy branch rather than
+    # AttributeError-ing. The JIT manifest SI mode was removed (bd polyglot-pdf-en2j);
+    # the manifest-first handshake transport (handshake_jit / schema["jit_mode"])
+    # survives as DTI's carrier and is handled by the DTI static SI, which does not
+    # read schema["fields"].
+    #
+    # ALSO route a jit_mode-shaped schema to the DTI static SI even when USE_DTI is
+    # off (rollback safety, originally Codex PR #229): such a schema carries only the
+    # synthesized first field in schema["fields"] + a names-only manifest, so the
+    # legacy full-dump branch would describe ONE field and lose the section. This
+    # bites the DTI->legacy rollback window -- a client with a stale persisted
+    # jitModeEnabled sends one more handshake_jit before session_ready corrects it.
+    # The manifest lacks the full field dicts needed to rebuild a rich legacy dump,
+    # so the static DTI SI (section-agnostic, no one-field dump) is the correct
+    # handler for a manifest-first schema regardless of the flag.
+    if getattr(settings, "USE_DTI", False) or schema.get("jit_mode"):
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION
-    # Phase 2.6: JIT Schema Loading - Use manifest-first approach when enabled.
-    # Also fire on a JIT-SHAPED schema (schema["jit_mode"], set by websocket_routes
-    # when a handshake_jit arrives) even if USE_JIT_SCHEMA is off: such a schema has
-    # only first_field_schema in ["fields"] + a manifest, so the legacy full-dump
-    # branch would describe one field and LOSE the section. This makes rollback safe
-    # -- a client that persisted jit_mode and sends one more handshake_jit after both
-    # flags are turned off still renders the whole section (Codex PR #229).
-    elif settings.USE_JIT_SCHEMA or schema.get("jit_mode"):
-        # Consume the section manifest the CLIENT sent on the handshake
-        # (schema["manifest"]), NOT a manifest regenerated from schema["fields"]
-        # -- in JIT mode schema["fields"] is only the synthesized first-field
-        # schema, so regenerating would describe one field, not the section
-        # (bd polyglot-pdf-jnjj.9; see docs/components/jit-schema.md gaps A/B/C/N).
-        client_manifest = schema.get("manifest") or {}
-        current_section = client_manifest.get("current_section") or {}
-        # Section field list as {field_id, spoken_name} pairs (the real section).
-        section_fields = current_section.get("fields", [])
-
-        # Build the SI manifest text from the real section + previous sections,
-        # so {manifest_text} lists every field in the section and the cheap
-        # cross-section lookup block is populated (gaps A/B/C).
-        manifest_for_context = {
-            "current_part": {
-                "part_id": current_section.get("section_id", section_label_text),
-                "part_label": current_section.get("section_label", section_label_text),
-                "fields": section_fields,
-            },
-            "previous_parts": [
-                {
-                    "part_id": prev.get("section_id", "unknown"),
-                    "part_label": prev.get("section_label", "Unknown"),
-                    "fields": prev.get("fields", []),
-                }
-                for prev in client_manifest.get("previous_sections", [])
-            ],
-        }
-        manifest_text = format_manifest_for_context(manifest_for_context)
-
-        # Recompute progress from the REAL section field set, not the one-field
-        # schema["fields"] (gap N: "Progress: x/1" on every section otherwise).
-        # Key on the manifest being PRESENT (current_section truthy), not on the
-        # field list being non-empty -- an empty section must read 0/0, not fall
-        # back to the one-field "x/1" symptom (fresh-eyes). With no manifest at all
-        # (e.g. a legacy reconnect hitting this branch) keep the pre-branch values.
-        if current_section:
-            total_fields = len(section_fields)
-            filled_count = sum(
-                1 for f in section_fields if current_values.get(f.get("field_id"))
-            )
-            unfilled_count = total_fields - filled_count
-
-        # Render the field schema the CLIENT sent as schema["fields"][0]. The
-        # frontend now selects the first UNFILLED field (not the section's
-        # positional first field), so on a reconnect/revisit the SI points at the
-        # actual next field, not an already-confirmed one (gap D; the selection
-        # lives in schemaFormState.getJITHandshakePayload). The backend renders
-        # whatever single field-schema the handshake carried -- it does not hold
-        # the other fields' full schemas in JIT mode (that is the point of JIT).
-        first_field_schema = get_next_field_schema(schema, current_field_id=None)
-
-        # Format first field schema as readable text (similar to fields_text format above)
-        if first_field_schema:
-            field_id = first_field_schema.get("id", "")
-            field_name = first_field_schema.get("name", "")
-            spoken_name = first_field_schema.get("spoken_name", field_name)
-            field_type = first_field_schema.get("type", "text")
-            required = first_field_schema.get("required", False)
-
-            next_field_schema_text = f"ID: {field_id} | Spoken: {spoken_name} | Name: {field_name} | Type: {field_type} | Required: {required}"
-
-            # Add options if present
-            allowed_values = first_field_schema.get("allowed_values") or first_field_schema.get("options")
-            if allowed_values:
-                allowed_strs = []
-                for opt in allowed_values:
-                    if isinstance(opt, dict):
-                        opt_value = opt.get("value", "")
-                        opt_label = opt.get("label", "")
-                        if opt_label and opt_value and opt_label != opt_value:
-                            allowed_strs.append(f'"{opt_label}" (use value: {opt_value})')
-                        elif opt_label:
-                            allowed_strs.append(opt_label)
-                        else:
-                            allowed_strs.append(opt_value)
-                    else:
-                        allowed_strs.append(str(opt))
-
-                next_field_schema_text += f" | Options: [{', '.join(allowed_strs)}]"
-        else:
-            next_field_schema_text = "No fields available"
-
-        # Use JIT_SYSTEM_INSTRUCTION template
-        system_instruction = settings.JIT_SYSTEM_INSTRUCTION.format(
-            form_title=form_title,
-            section_number=section_num_text,
-            total_sections=total_sections_text,
-            section_label=section_label_text,
-            section_list=section_list_text,
-            filled_count=filled_count,
-            total_fields=total_fields,
-            manifest_text=manifest_text,
-            fill_language=fill_language,
-            previous_spoken_names=previous_names_text,
-            next_field_hint=next_field_hint or "the first unfilled field",
-            next_field_schema=next_field_schema_text,
-            confirmation_policy=confirmation_policy
-        )
     else:
         # Legacy mode: Use full schema with SYSTEM_INSTRUCTION template
         system_instruction = settings.SYSTEM_INSTRUCTION.format(
