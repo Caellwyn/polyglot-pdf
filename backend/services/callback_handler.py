@@ -903,9 +903,10 @@ class CallbackHandler:
                     )
                     # Merge the field into the backend's validation schema so the
                     # SUBSEQUENT update_form_fields for this field is not rejected as
-                    # 'unknown' (in DTI/JIT mode _schema['fields'] holds only field 1;
-                    # Codex PR #229). Schema only -- no user values. (Re-sets the
-                    # current-field pointer cleared just above.)
+                    # 'unknown' (in DTI mode, on the manifest-first handshake,
+                    # _schema['fields'] holds only field 1; Codex PR #229). Schema
+                    # only -- no user values. (Re-sets the current-field pointer
+                    # cleared just above.)
                     if self._merge_field_schema:
                         self._merge_field_schema(client_next_schema)
 

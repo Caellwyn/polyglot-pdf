@@ -120,8 +120,9 @@ def doc_handshake_legacy_keys() -> set[str]:
 
 
 def doc_handshake_jit_keys() -> set[str]:
-    """Keys in the doc's JIT-mode handshake key table."""
-    return set(_doc_table_rows("### JIT-mode keys"))
+    """Keys in the doc's manifest-first transport handshake key table (the
+    handshake_jit transport; the JIT SI mode was removed, bd polyglot-pdf-en2j)."""
+    return set(_doc_table_rows("### Manifest-first transport keys"))
 
 
 def doc_session_ready_keys() -> set[str]:

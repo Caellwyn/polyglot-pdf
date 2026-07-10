@@ -221,22 +221,27 @@ The dashboard is particularly useful for tracking the JIT (Just-In-Time) schema 
 - Initial handshake: ~7,400 tokens
 - Each turn adds minimal tokens
 
-**After JIT** (Manifest Mode):
-- Initial handshake: ~456 tokens (94% reduction)
-- Tokens accumulate gradually as schemas load on-demand
-- Part switching adds previous part manifests
+**With DTI** (Dynamic Turn Injection -- the shipped reduced-SI mode):
+- The system instruction is a thin static backbone; each field's guidance is
+  injected per-turn via the `confirm_field` tool response instead of a whole-form
+  or manifest dump.
+- Tokens accumulate gradually as per-field guidance drips in.
 
-**How to Monitor JIT Impact**:
+> Note: the earlier "JIT" manifest mode (`USE_JIT_SCHEMA`) was removed (bd
+> polyglot-pdf-en2j); DTI is the reduced-SI mode. The dashboard still works the
+> same way for observing token growth.
+
+**How to Monitor**:
 1. Start the dashboard: `scripts/start-token-monitor.bat` (Windows) or `./scripts/start-token-monitor.sh` (Mac/Linux)
-2. Enable JIT mode in backend: Set `USE_JIT_SCHEMA=true` in `backend/.env`
+2. Enable DTI in backend: set `USE_DTI=true` in `backend/.env`
 3. Use the form at `http://localhost:5174/schema-form-demo.html`
 4. Watch token usage in real-time on the dashboard
-5. Compare "Cumulative Tokens Over Time" chart between JIT and non-JIT sessions
+5. Compare "Cumulative Tokens Over Time" between DTI and legacy full-SI sessions
 
 The dashboard filters let you compare sessions:
 - Filter by Gemini Session to see individual session progression
 - Compare token accumulation across multiple form parts
-- Track cost differences between JIT and non-JIT modes
+- Track cost differences between DTI and legacy full-SI modes
 
 ## Development
 

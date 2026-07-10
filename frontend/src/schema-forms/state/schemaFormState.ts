@@ -858,9 +858,10 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Phase 3: JIT Schema Loading - Enable/disable JIT mode
-   *
-   * Called during handshake based on backend USE_JIT_SCHEMA flag
+   * Enable/disable the manifest-first handshake TRANSPORT (the `jitMode` name is
+   * historical -- it is the carrier DTI rides on, not the removed JIT SI mode; bd
+   * polyglot-pdf-en2j). Set during handshake from the backend's
+   * session_ready.jit_mode_enabled signal, which is now `= settings.USE_DTI`.
    */
   static setJitMode(state: SchemaFormState, enabled: boolean): SchemaFormState {
     if (state.jitModeEnabled === enabled) {

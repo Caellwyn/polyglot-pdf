@@ -136,9 +136,10 @@ class FormFillingService:
 
         Delegates to field_utils.build_fields_from_schema for the actual logic.
 
-        In DTI/JIT mode self._schema['fields'] holds only the first field, so the
-        client-supplied fields recorded via merge_field_schema (DTI, bd
-        polyglot-pdf-jnjj.22) are folded in here for validation -- WITHOUT mutating
+        In DTI mode (on the manifest-first handshake) self._schema['fields'] holds
+        only the first field, so the client-supplied fields recorded via
+        merge_field_schema (DTI, bd polyglot-pdf-jnjj.22) are folded in here for
+        validation -- WITHOUT mutating
         self._schema (which the SI builder reads for the current field).
         """
         schema = self._schema or {}
@@ -824,7 +825,7 @@ class FormFillingService:
                  session_active_after=is_active_after)
 
         # DTI: the rebuilt SI is fully static (epic polyglot-pdf-13w7), so unlike the
-        # legacy/JIT SI it carries NO field data -- after a restart (e.g. Level-3
+        # legacy full-SI it carries NO field data -- after a restart (e.g. Level-3
         # farewell reconnect) the model would have no current-field guidance and no
         # form/section metadata until the next confirm. Fire the initiating message
         # so the current field's guidance + the metadata block reach Gemini, exactly
@@ -856,7 +857,7 @@ class FormFillingService:
         change to the user. In DTI mode the per-turn field-guidance render
         reads the live value (see callback_handler -- bd polyglot-pdf-uogm),
         so subsequent turns pick up the new language without a reset. In
-        legacy/JIT modes (USE_DTI=false) the active session keeps its original
+        legacy mode (USE_DTI=false) the active session keeps its original
         system instruction, so the new language reliably applies only from the
         next section switch or reconnect.
 
