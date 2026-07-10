@@ -203,3 +203,32 @@ Unassigned (no pdf_position): fld_1a, fld_1b, fld_1c, fld_1d
 |---|-----------------|------|--------|-----------------------------------|
 | 1 | Page 1 (top) | 1 | 18 | - (18) |
 | 2 | Part I | 1 | 5 | - (5) |
+
+## Lessons
+
+- The AcroForm dump + text spans carry enough deterministic signal to replace
+  LLM section-splitting entirely on all forms tested: USCIS encodes structure
+  in widget NAMES (`P{N}_Line{item}`), IRS prints machine-detectable margin
+  headings. Geometry alone is NOT enough (the i-90 two-column page defeats
+  y-ordering; IRS margin headings are block-centered) -- names first, text
+  styles second, geometry last.
+- Comparing derived output against the CURRENT kit is also a kit AUDIT: the
+  "boundary bleeds" the comparison surfaced on w7 were a real shipped
+  field-to-widget mapping bug, not derivation errors. Derived-vs-current
+  disagreement is signal in BOTH directions.
+
+## Doc freshness
+
+- Added `docs/sprint_10_deterministic-divisions_plan.md` (new plan of record,
+  epic polyglot-pdf-6cfu) + its INDEX.md active-sprints row.
+- Added the `extractor` tag to `docs/journal/TAGS.md` (already in de-facto use
+  by earlier entries; own atomic commit per that file's rule).
+- The freshness checker's STALE warnings (voice-ai, ws-protocol, etc.) track
+  files this branch did NOT touch -- pre-existing mtime drift from other
+  merges; reviewed and left.
+
+## Files touched
+
+- `scripts/authoring/derive_sections.py` (new -- the prototype)
+- `docs/sprint_10_deterministic-divisions_plan.md` (new), `docs/INDEX.md`
+- `docs/journal/TAGS.md`, this entry
