@@ -27,7 +27,10 @@ type names; F3 owns their payload shapes).
 The first text frame on `/ws/fill` is a JSON object. The backend reads it in
 `backend/routes/websocket_routes.py` (extraction at lines 777-856; dispatched
 into `_handle_fill_session` at line 914). It branches on `type` into two
-modes -- **legacy** (full section schema) and **JIT** (manifest + first field).
+handshake shapes -- the **legacy** full-section-schema handshake and the
+**manifest-first transport** (`handshake_jit`: manifest + first field). The
+`jit` name is historical; the manifest-first transport is DTI's carrier, not the
+removed JIT SI mode (bd polyglot-pdf-en2j).
 
 ### Mode selector + shared keys
 
@@ -210,11 +213,11 @@ the callout above).
 
 ### Pillar A -- SI reduction
 
-Pillar A's wire surface already exists: the JIT-mode `manifest` +
-`loaded_field_ids` handshake keys above. A may EXTEND the `manifest` shape, but
+Pillar A's wire surface already exists: the manifest-first transport's `manifest`
++ `loaded_field_ids` handshake keys above. A may EXTEND the `manifest` shape, but
 that shape is owned by [si-reduction.md](si-reduction.md) (the F1 contract) --
 reference it, do not redefine the manifest here. No new top-level handshake key
-or message type is reserved for A beyond the existing JIT keys.
+or message type is reserved for A beyond the existing manifest-first transport keys.
 
 ---
 
