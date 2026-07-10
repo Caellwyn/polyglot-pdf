@@ -33,7 +33,10 @@ polyglot-pdf-xrf4, a stale-docs chore from the 97mu fresh-eyes pass.
 - xrf4: `docs/sprint_1_harness-tuning_plan.md` no longer references the
   nonexistent "closeout Step 8.5"; the telemetry step is Step 7, with the row
   written by `closeout_finish.py` in Step 6.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) NO-GAPS; required Opus final round
+  NO-GAPS. Nothing adopted/rejected/deferred (zero findings); no beads filed.
+  Outer review (Step 5.6): primary Opus NO-GAPS + second independent Opus
+  NO-GAPS on the identical final diff, one round each.
 
 ## Lessons
 
