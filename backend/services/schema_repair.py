@@ -548,6 +548,35 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
             def _normalize(atom: dict, _path=path) -> Optional[dict]:
                 trig = fields_by_id.get(atom.get("field")) \
                     if isinstance(atom.get("field"), str) else None
+                # v1-semantics pre-pass (migrate_schema_v2._rewrite_atom_value
+                # parity -- Opus review gap on this bead): a controls_fields
+                # edge is a v1 construct, so equals/not_equals on a
+                # checkbox_group trigger MEANS membership -- alias it the way
+                # the migration does instead of letting the v2 fail-open
+                # trigger-compat drop lose the edge. Emptiness first, then
+                # membership, mirroring the migration's ordering. This applies
+                # ONLY to mirrored v1 edges; a native v2 show_if atom keeps
+                # the stricter drop policy.
+                op = atom.get("operator")
+                if (isinstance(trig, dict)
+                        and str(trig.get("type")) == "checkbox_group"
+                        and op in ("equals", "not_equals")):
+                    if str(atom.get("value", "")) == "":
+                        atom["operator"] = ("is_empty" if op == "equals"
+                                            else "is_not_empty")
+                        atom.pop("value", None)
+                    else:
+                        new_op = ("includes" if op == "equals"
+                                  else "not_includes")
+                        repairs.append({
+                            "action": "alias-operator", "path": _path,
+                            "detail": f"{op} on checkbox_group trigger -> "
+                                      f"{new_op} (v1 controls_fields "
+                                      "membership reading)",
+                            "error": False,
+                        })
+                        count_alias(f"{op}@controls_fields")
+                        atom["operator"] = new_op
                 return _rewrite_atom(atom, trig, resolution, _path, repairs,
                                      count_alias)
 
