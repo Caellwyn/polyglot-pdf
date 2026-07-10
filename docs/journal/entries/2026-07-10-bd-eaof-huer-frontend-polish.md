@@ -39,7 +39,17 @@ Two small deferred frontend findings bundled into one PR:
   PdfViewErrorBoundary tests including a rejecting React.lazy import inside
   Suspense. Full schema-forms + pdf-view vitest run: 24 files / 595 tests
   green; tsc --noEmit clean.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) cleared all rubric criteria with 3
+  non-blocking hardening notes; required Opus final round NO-GAPS, adding a
+  4th cosmetic note. All 4 deferred (none fixed inline -- none is a
+  behavior/correctness risk) as ONE nits bead, polyglot-pdf-dr1l: modal
+  fallback a11y/dismiss parity; reopen-reset regression test; client error
+  telemetry; fallback CSS living in the lazy chunk (unstyled-but-functional).
+  Outer review (Step 5.6): primary Opus NO-GAPS + second independent Opus
+  NO-GAPS on the identical final diff, one round each.
+- Both beads were legacy (no formal exit-criteria section); a retrospective
+  4-criterion rubric was written at closeout and scored PASS on all four
+  (a creation-time-norm slip the claim-time gate should have caught).
 
 ## Lessons
 
