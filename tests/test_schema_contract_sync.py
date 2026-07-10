@@ -164,7 +164,11 @@ def test_contract_supplements_shape_matches_the_model():
             f"contract's supplements shape no longer advertises required "
             f"FormSupplement field {name!r}")
     # And the OLD wrong shape must not come back: label-only, without name.
-    assert '"label": str}}' not in window
+    # Single-brace form: the contract SOURCE doubles braces for the f-string,
+    # but render_contract() collapses them, so the rendered window carries
+    # single braces (the double-brace spelling could never match -- a dead
+    # assertion, bd polyglot-pdf-v76t).
+    assert '"label": str}' not in window
 
 
 def test_option_value_note_is_qualified_to_choice_triggers():
