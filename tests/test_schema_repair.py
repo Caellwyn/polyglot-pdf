@@ -539,6 +539,40 @@ def test_controls_fields_atom_routed_through_repairs_own_slug_resolution():
     assert not has_errors(lint_schema(repaired))
 
 
+def test_already_mirrored_suppression_with_trigger_before_raw_target():
+    # Fresh-eyes finding (bd c3y6): mirroring must run AFTER the show_if/
+    # require_if rewrite pass has normalized ALL fields (migrate's Pass 2 ->
+    # Pass 4 ordering). A fused single loop compared the normalized mirrored
+    # atom against the target's RAW, not-yet-rewritten condition whenever the
+    # trigger preceded its target in field order -- missing the match and
+    # duplicating the edge into a spurious {any_of: [X, X]} plus a misleading
+    # mirror-controls-fields audit entry. Here the target's pre-existing
+    # show_if uses the invented is_selected operator that only becomes equal
+    # to the mirrored atom after repair's own aliasing.
+    trigger = {
+        "id": "grp", "type": "checkbox_group",
+        "options": [
+            {"value": "alpha", "label": "Alpha", "pdf_field_name": "a[0]"},
+            {"value": "beta", "label": "Beta", "pdf_field_name": "b[0]"},
+        ],
+        "controls_fields": [{"operator": "includes", "value": "alpha",
+                             "shows": ["dep"]}],
+    }
+    dep = {"id": "dep", "type": "text", "pdf_field_name": "D[0]",
+           "show_if": {"field": "grp", "operator": "is_selected",
+                       "value": "alpha"}}
+    draft = _v2_schema([trigger, dep])  # trigger BEFORE target: the bad order
+    repaired, repairs = repair(draft)
+
+    dep_out = next(f for f in repaired["fields"] if f["id"] == "dep")
+    # The normalized pre-existing condition IS the mirrored edge: stays a
+    # single atom, never wrapped into an any_of duplicate.
+    assert dep_out["show_if"] == {
+        "field": "grp", "operator": "includes", "value": "alpha"}
+    assert _mirror_repairs(repairs) == []  # suppressed, no spurious entry
+    assert not has_errors(lint_schema(repaired))
+
+
 def _load_migrate_module():
     import importlib.util
     path = _REPO / "scripts" / "migrate_schema_v2.py"

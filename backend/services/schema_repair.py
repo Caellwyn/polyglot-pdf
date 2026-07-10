@@ -519,17 +519,28 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
             else:
                 f[kind] = new_cond
 
-        # controls_fields / conditional_fields: v2 has NO trigger-side
-        # conditional logic (bd h76m.16 deleted both from the model). Rather
-        # than silently dropping a draft's controls_fields (leaving its
-        # shows/makes_required behavior lost, and the schema RED under
-        # legacy-trigger-side-logic), mirror each edge into the TARGET field's
-        # show_if/require_if -- the same deterministic conversion
-        # scripts/migrate_schema_v2.py Pass 4 proved (bd polyglot-pdf-c3y6).
-        # The mirrored atom is routed through THIS module's own atom-rewrite
-        # machinery (_rewrite_atom, via the resolution/alias map already built
-        # above) so it gets the identical slug/operator aliasing every other
-        # repaired atom gets.
+    # controls_fields / conditional_fields: v2 has NO trigger-side conditional
+    # logic (bd h76m.16 deleted both from the model). Rather than silently
+    # dropping a draft's controls_fields (leaving its shows/makes_required
+    # behavior lost, and the schema RED under legacy-trigger-side-logic),
+    # mirror each edge into the TARGET field's show_if/require_if -- the same
+    # deterministic conversion scripts/migrate_schema_v2.py Pass 4 proved (bd
+    # polyglot-pdf-c3y6). The mirrored atom is routed through THIS module's
+    # own atom-rewrite machinery (_rewrite_atom, via the resolution/alias map
+    # already built above) so it gets the identical slug/operator aliasing
+    # every other repaired atom gets.
+    #
+    # This is a SECOND pass over fields, deliberately AFTER the show_if/
+    # require_if rewrite loop above finished for ALL fields (mirroring
+    # migrate_schema_v2's Pass 2 -> Pass 4 ordering): the already-mirrored
+    # suppression compares the NORMALIZED mirrored atom against the target's
+    # condition, so every target must already be normalized -- a fused single
+    # loop would compare against a raw not-yet-rewritten condition whenever
+    # the trigger precedes its target in field order, missing the match and
+    # duplicating the edge into a spurious any_of (fresh-eyes finding on this
+    # bead).
+    for i, f in enumerate(fields):
+        fid = str(f.get("id"))
         controls = f.get("controls_fields")
         if isinstance(controls, list):
             path = f"fields[{i}] (id={fid}).controls_fields"
