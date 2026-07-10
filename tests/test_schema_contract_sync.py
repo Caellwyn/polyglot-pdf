@@ -102,16 +102,18 @@ def test_contract_advertises_every_scorer_graded_key():
     # systematically drop scored data. These are the attribute + relationship +
     # structure keys schema_score reads (schema_score.py rel_keys + attr scoring).
     #
-    # DELIBERATELY EXCLUDES conditional_fields: schema_score grades it, but it is a
-    # v1-LEGACY key the v2 model REJECTS (form_models._collect_v2_problems: "legacy
-    # conditional_fields is not part of schema v2"), so a v2-targeted contract must
-    # NOT advertise it -- the dependency goes on the target's show_if instead. The
-    # scorer/gold still grading it (and comparing v1 widget-leaf option values) is
-    # the v1->v2 transition scoring skew tracked in bd polyglot-pdf-d9lz.
+    # DELIBERATELY EXCLUDES the v1-legacy trigger-side keys conditional_fields AND
+    # controls_fields: both were DELETED from the v2 model (form_models.py
+    # _enforce_v2_rules: "the trigger-side controls_fields / group_kind /
+    # conditional_fields fields have been deleted from the model") and are
+    # lint-ERRORed as legacy-trigger-side-logic, so a v2 arm never emits them. The
+    # scorer no longer grades either as a relationship-recall key (bd
+    # polyglot-pdf-d9lz reconciled schema_score.rel_keys to v2), so this coupling
+    # list must not require the contract to advertise them.
     contract = sc.render_contract()
     scored_keys = [
         "pdf_position", "max_length", "read_only", "multiline",  # attributes
-        "show_if", "require_if", "controls_fields", "copy_to",   # relationships
+        "show_if", "require_if", "copy_to",                      # relationships
         "conditional_behavior", "conditional_logic",
         "overflow_to_supplement", "multi_entry",                 # structure/overflow
     ]

@@ -11,8 +11,9 @@ SEPARATELY:
       partition-agreement metric, NOT exact section_id string match; bd
       polyglot-pdf-7a9.13)?
   (b) RELATIONSHIP/logic -- did it recover the parts/sections structure and the
-      conditional dependencies (show_if, controls_fields, conditional_fields,
-      copy_to, supplements + overflow_to_supplement, tables/multi_entry)?
+      conditional dependencies (v2 keys: show_if, require_if, conditional_logic,
+      conditional_behavior, copy_to, supplements + overflow_to_supplement,
+      tables/multi_entry)?
 
 The two halves are scored independently and printed as separate tables, because
 the bake-off needs to see WHERE a given extractor fails -- the working hypothesis
@@ -261,9 +262,16 @@ def _opts_match(t: dict, d: dict) -> bool:
     both misses AND spurious extras, so a conservative extractor isn't unfairly
     beaten by a noisy one.
     """
-    t_opts = {(_norm_text(o.get("value")) or _norm_text(o.get("label")))
+    # Match on LABEL first, value second (bd polyglot-pdf-d9lz). In v2 the option
+    # `value` is a semantic slug the extractor derives from the label
+    # ('new_application'), so two correct extractions of the same option can carry
+    # DIFFERENT slugs -- and the v1->v2 gold migration slugged the same labels
+    # independently. The `label` is the human-readable text both the gold and any
+    # extraction derive verbatim from the PDF, so it is the dialect-stable key;
+    # slug-vs-slug (value-first) scored correct v2 extractions as option mismatches.
+    t_opts = {(_norm_text(o.get("label")) or _norm_text(o.get("value")))
               for o in (t.get("options") or [])}
-    d_opts = {(_norm_text(o.get("value")) or _norm_text(o.get("label")))
+    d_opts = {(_norm_text(o.get("label")) or _norm_text(o.get("value")))
               for o in (d.get("options") or [])}
     t_opts.discard("")
     d_opts.discard("")
@@ -476,9 +484,17 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
             return False
         return bool(d_field.get(key))
 
-    rel_keys = ["show_if", "controls_fields", "conditional_fields",
-                "conditional_logic", "conditional_behavior", "copy_to",
-                "overflow_to_supplement"]
+    # v2 relationship vocabulary (bd polyglot-pdf-d9lz). Dropped BOTH v1-legacy
+    # trigger-side keys `conditional_fields` and `controls_fields`: neither is a
+    # v2 FormField model field, both were DELETED at the P6.2 flip and are
+    # lint-ERRORed as `legacy-trigger-side-logic` (schema_lint.py), and both are
+    # 0/0 across every v2 gold kit -- so a v2 arm can never emit them and they only
+    # diluted the conditionals table with dead buckets. Added `require_if`, the v2
+    # target-side require path (a live key the scorer was missing). The remaining
+    # keys (show_if, conditional_logic, conditional_behavior, copy_to,
+    # overflow_to_supplement) are all live v2 model fields / tolerated aliases.
+    rel_keys = ["show_if", "require_if", "conditional_logic",
+                "conditional_behavior", "copy_to", "overflow_to_supplement"]
     field_rels: dict[str, list[int]] = {k: [0, 0] for k in rel_keys}  # [recovered, total]
     for t in truth.get("fields", []):
         for k in rel_keys:
