@@ -26,7 +26,11 @@ retarget, on the delete path (out of 6b7z's scope by its own criterion).
   wrong-slug-unblocked assertion); combined field+section listing;
   no-show_if sections never block; empty-label sections fall back to the
   section id in the message. Editor suite green; tsc clean.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) NO-GAPS with two nits, both adopted
+  (journal test-count corrected; empty-label fallback test added). Required
+  Opus final round NO-GAPS. Outer review (Step 5.6): primary Opus NO-GAPS +
+  second independent Opus NO-GAPS on the identical final diff. No beads
+  filed.
 
 ## Lessons
 
