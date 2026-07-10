@@ -5,6 +5,7 @@ import type {
   FormSchema,
 } from '../types/schema';
 import {
+  canChangeGroupKind,
   canUngroup,
   mintOptionSlug,
   mintUniqueSlugs,
@@ -354,35 +355,59 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                     one = radio) and reversed by Ungroup.
                   </p>
                 )}
-                {canFlipKind && (
-                  <div className="mt-2">
-                    <label className="label" htmlFor="group-kind-select">
-                      Group behaves as
-                    </label>
-                    <select
-                      id="group-kind-select"
-                      className="input"
-                      aria-label="Group behaves as"
-                      value={field.type}
-                      onChange={(e) =>
-                        onChangeGroupKind!(
-                          field.id,
-                          e.target.value as 'checkbox_group' | 'radio',
-                        )
-                      }
-                    >
-                      <option value="radio">Radio (choose exactly one)</option>
-                      <option value="checkbox_group">
-                        Checkbox group (choose several)
-                      </option>
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Both kinds share the same options and PDF mapping; only
-                      single- vs multi-select changes. To split the group back
-                      into separate fields, use Ungroup.
-                    </p>
-                  </div>
-                )}
+                {canFlipKind && (() => {
+                  // The two kinds are NOT symmetric: a shared-name radio
+                  // (field-level pdf_field_name + option pdf_on_value, no
+                  // per-option pdf_field_name) has no VALID checkbox_group form
+                  // (a checkbox_group forbids a field-level pdf_field_name and
+                  // needs each option to carry its own). So disable the
+                  // checkbox_group choice when the flip would mint a schema the
+                  // backend rejects, and explain why (bd polyglot-pdf-8qfj,
+                  // fresh-eyes gap). Flipping TO radio is always valid.
+                  const canBecomeCheckboxGroup =
+                    field.type === 'checkbox_group' ||
+                    canChangeGroupKind(field, 'checkbox_group');
+                  return (
+                    <div className="mt-2">
+                      <label className="label" htmlFor="group-kind-select">
+                        Group behaves as
+                      </label>
+                      <select
+                        id="group-kind-select"
+                        className="input"
+                        aria-label="Group behaves as"
+                        value={field.type}
+                        onChange={(e) =>
+                          onChangeGroupKind!(
+                            field.id,
+                            e.target.value as 'checkbox_group' | 'radio',
+                          )
+                        }
+                      >
+                        <option value="radio">Radio (choose exactly one)</option>
+                        <option
+                          value="checkbox_group"
+                          disabled={!canBecomeCheckboxGroup}
+                        >
+                          Checkbox group (choose several)
+                          {!canBecomeCheckboxGroup ? ' -- needs per-option PDF widgets' : ''}
+                        </option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Both kinds share the same options and PDF mapping; only
+                        single- vs multi-select changes. To split the group back
+                        into separate fields, use Ungroup.
+                      </p>
+                      {!canBecomeCheckboxGroup && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          This group shares one PDF widget across its options, so
+                          it can only be a radio (choose one). A checkbox group
+                          needs a separate PDF widget per option.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}

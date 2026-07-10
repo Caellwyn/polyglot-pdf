@@ -589,6 +589,35 @@ export function mergeFields(
   };
 }
 
+// Whether an existing consolidated group can be flipped to `kind` and stay a
+// VALID v2 group (bd polyglot-pdf-8qfj, fresh-eyes gap). The two kinds are NOT
+// symmetric in the backend model (form_models.py group-validity rules):
+//   - A checkbox_group's boxes are independent widgets: it carries NO
+//     field-level pdf_field_name, and EVERY option must carry its OWN
+//     pdf_field_name.
+//   - A radio IS a shared AcroForm field: an option is fillable via its own
+//     pdf_field_name OR the shared-name shape (a field-level pdf_field_name +
+//     option pdf_on_value).
+// So a shared-name radio (field-level pdf_field_name, options carrying
+// pdf_on_value but no per-option pdf_field_name) has no valid checkbox_group
+// form -- flipping it would mint a schema the backend rejects at promotion.
+// changeGroupKind only changes type + dependent operators; it does NOT
+// re-plumb widget identity, so it must REFUSE a flip that would produce an
+// invalid group. Flipping TO radio is always valid (radio accepts either
+// per-option pdf_field_name or the shared-name shape, and a checkbox_group's
+// per-option names satisfy the former). Returns true if the flip is safe.
+export function canChangeGroupKind(field: FormField, kind: MergeKind): boolean {
+  const isGroup = !!field.options && field.options.length > 0;
+  if (!isGroup) return false;
+  if (field.type !== 'checkbox_group' && field.type !== 'radio') return false;
+  if (field.type === kind) return false; // already that kind -- nothing to flip
+  if (kind === 'radio') return true; // any existing group is a valid radio
+  // kind === 'checkbox_group': forbid a field-level pdf_field_name, and require
+  // every option to carry its own pdf_field_name (pdf_on_value is NOT enough).
+  if (field.pdf_field_name) return false;
+  return (field.options || []).every(o => !!o.pdf_field_name);
+}
+
 // Flip an EXISTING consolidated group between its two kinds -- checkbox_group
 // (multi-select) and radio (single-select) -- WITHOUT going through an
 // ungroup/re-merge round trip (bd polyglot-pdf-checkbox-radio). A group that
@@ -617,17 +646,11 @@ export function changeGroupKind(
   kind: MergeKind,
 ): FormSchema {
   const field = schema.fields.find(f => f.id === fieldId);
-  // Only a real consolidated group (has options[]) that is currently one of the
-  // two group kinds can be flipped; anything else is a no-op.
-  if (
-    !field ||
-    !field.options ||
-    field.options.length === 0 ||
-    (field.type !== 'checkbox_group' && field.type !== 'radio')
-  ) {
-    return schema;
-  }
-  if (field.type === kind) return schema; // already the requested kind
+  // Only a real consolidated group can flip, only to the OTHER kind, and only
+  // when the target kind stays a VALID v2 group (canChangeGroupKind rejects a
+  // shared-name radio -> checkbox_group flip that the backend would reject).
+  // Anything else is a no-op the caller can detect via the returned reference.
+  if (!field || !canChangeGroupKind(field, kind)) return schema;
 
   const membership = kind === 'checkbox_group';
   // The option slugs a dependent could reference on THIS group. Only atoms whose
@@ -635,7 +658,7 @@ export function changeGroupKind(
   // whole-group operator (is_checked/is_empty on the group, no value) is
   // kind-agnostic and left untouched.
   const optionSlugs = new Set(
-    field.options.map(o => String(o.value)).filter(v => v !== ''),
+    (field.options || []).map(o => String(o.value)).filter(v => v !== ''),
   );
 
   // Map ONE atom targeting this group across the membership boundary. Positive

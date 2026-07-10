@@ -1,0 +1,108 @@
+---
+date: 2026-07-10
+bead: polyglot-pdf-8qfj
+title: "fix(schema-editor): let an existing consolidated group flip checkbox_group <-> radio in place"
+tags: [hotfix, testing]
+---
+
+## Trigger
+
+User-reported editor bug: on W-7, "Reason for submitting Form W-7" was extracted
+as a `checkbox_group` but should be a radio (choose exactly one), and the editor
+offered no way to change it -- the Field Type dropdown was greyed out with the
+hint "Group type is set by Merge (several = checkbox group, exactly one = radio)
+and reversed by Ungroup."
+
+Root cause: the Field Type picker is deliberately read-only for any field that
+carries `options[]` (a "group"), and the only sanctioned way to SET a group's
+kind was Merge -- which offers the radio-vs-checkbox_group choice ONLY when
+combining two or more loose widgets. Once a group exists, its boxes are already
+consolidated, so Merge is not offered, and the picker is disabled. That left a
+group extraction produced as the wrong kind with NO reachable path to the other
+kind. The maintainer's ask was explicitly to fix the editor, not just this form.
+
+## What shipped
+
+An in-place group-kind toggle. Flipping `checkbox_group <-> radio` is safe: the
+two kinds share identical `options[]`, slugs, and per-option `pdf_field_name`;
+the only runtime-meaningful difference is single- vs multi-select, which changes
+how a dependent field references a selected option (membership
+`includes`/`not_includes` for a checkbox_group vs equality `equals`/`not_equals`
+for a radio). That is exactly the `membership` distinction the existing
+merge/ungroup rewrite logic already models.
+
+- `schema-editor/src/utils/fieldGrouping.ts`: new pure `changeGroupKind(schema,
+  fieldId, kind)` -- sets `field.type` and rewrites every dependent's
+  `show_if`/`require_if` atom that selects one of THIS group's option slugs
+  across the membership boundary, walking both the legacy single condition and
+  the v2 composite (`all_of`/`any_of`/`none_of`) shape. Whole-group operators
+  (`is_checked`/`is_empty`, no option value) are kind-agnostic and left
+  untouched; unrelated atoms (other fields) are untouched. No-op (same schema
+  reference) when the field is not a group or is already the requested kind.
+- `schema-editor/src/components/FieldEditor.tsx`: replaced the dead "reversed by
+  Ungroup" hint with a live "Group behaves as" selector (author-tier). The base
+  Field Type picker stays disabled for groups (raw-switching a group to a
+  non-group type would strand the options).
+- `schema-editor/src/App.tsx`: `handleChangeGroupKind` wires the flip through the
+  schema commit/undo history; the group keeps its id, so the selection survives.
+
+**Fresh-eyes gap (adopted, fixed inline).** The Sonnet assessor found that the
+two kinds are NOT symmetric against the backend model. A *shared-name radio* (a
+field-level `pdf_field_name` plus options carrying `pdf_on_value` but no
+per-option `pdf_field_name` -- the shape extraction emits for a shared-name
+AcroForm radio) has NO valid `checkbox_group` form: `form_models.py` forbids a
+field-level `pdf_field_name` on a checkbox_group and requires every option to
+carry its own `pdf_field_name`. My first cut flipped `type` unconditionally, so
+that one direction would silently mint an un-promotable schema. Fixed by adding
+`canChangeGroupKind(field, kind)`: flipping TO radio is always valid; flipping TO
+checkbox_group is allowed only when there is no field-level `pdf_field_name` and
+every option carries its own `pdf_field_name`. `changeGroupKind` now refuses an
+invalid flip (no-op), and the FieldEditor disables the checkbox_group choice with
+an explanation ("This group shares one PDF widget across its options, so it can
+only be a radio...") when the target would be invalid.
+
+Fresh-eyes triage: 1 blocker adopted + fixed inline (the shared-name asymmetry
+above); 2 low-confidence findings rejected as non-blocking (a self-referential
+group condition -- no code path lets a group reference its own id, and merge does
+not guard it either; and the deliberate empty-string-slug exclusion in
+`optionSlugs`, which mirrors `mintOptionSlug`'s own empty-slug guard). The
+reviewer filed `polyglot-pdf-cv9x` for the blocker; since it was in-scope against
+this bead's own exit criterion 3 and fixed here, that bead was closed as fixed
+inline (not a separate follow-up).
+
+Tests: 18 net-new across `fieldGrouping.test.ts` (both flip directions, composite
+rewrite, whole-group-operator preservation, no-op cases, `canChangeGroupKind`
+validity, and the shared-name-radio refusal) and `FieldEditor.groupkind.test.tsx`
+(the render -> select-change -> callback wiring, the author-tier/handler gating,
+and the disabled+explained checkbox_group option for a shared-name radio). Full
+schema-editor suite green: 633 passed, 37 files. `tsc --noEmit` clean.
+
+## Lessons
+
+Editor mutations that only change a field's `type` must be validated against the
+backend's group-validity rules (`form_models.py`), because the two group kinds
+are asymmetric on PDF-widget plumbing: a checkbox_group needs a distinct widget
+per option, a radio can share one. A pure `type` flip that ignores that mints an
+un-promotable schema with no in-editor signal. This is specific to the editor's
+group model, not a codebase-wide rule, so it stays in this entry rather than a
+`docs/standards/*.md` one-liner.
+
+## Doc freshness
+
+The schema editor has no tier-2 component doc (its details live in the journal,
+tier 3), so there was no surface doc to bump. `closeout_prep.py` flagged a batch
+of STALE docs under `docs/standards/*` plus `docs/technical_guide.md`; none of
+them carry a `**Tracks:**` glob covering `schema-editor/**`, so they were already
+stale before this branch and are left untouched (this change did not introduce
+their staleness).
+
+## Files touched
+
+- `schema-editor/src/utils/fieldGrouping.ts` -- new `changeGroupKind` +
+  `canChangeGroupKind`.
+- `schema-editor/src/components/FieldEditor.tsx` -- "Group behaves as" selector,
+  invalid-target disable + explanation.
+- `schema-editor/src/App.tsx` -- `handleChangeGroupKind` wiring.
+- `schema-editor/src/utils/fieldGrouping.test.ts` -- flip + validity tests.
+- `schema-editor/src/components/FieldEditor.groupkind.test.tsx` -- new component
+  test file.

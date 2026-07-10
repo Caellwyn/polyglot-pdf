@@ -8,6 +8,7 @@ import {
   mergeFields,
   ungroupField,
   changeGroupKind,
+  canChangeGroupKind,
   canUngroup,
   isGroupableField,
   mergeBlockReason,
@@ -1115,5 +1116,60 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
     expect(changeGroupKind(s, 'dep', 'checkbox_group')).toBe(s);
     // No such field.
     expect(changeGroupKind(s, 'nope', 'checkbox_group')).toBe(s);
+  });
+
+  // A shared-name radio (field-level pdf_field_name + option pdf_on_value, no
+  // per-option pdf_field_name) has NO valid checkbox_group form -- the backend
+  // rejects a checkbox_group with a field-level pdf_field_name / options lacking
+  // their own pdf_field_name (bd polyglot-pdf-8qfj, fresh-eyes gap).
+  function sharedNameRadioSchema(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp'] }],
+      fields: [
+        {
+          id: 'grp', name: 'Group', type: 'radio', section_id: 's1',
+          pdf_field_name: 'form1[0].grp[0]', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_on_value: 'A' },
+            { value: 'b', label: 'B', pdf_on_value: 'B' },
+          ],
+        } as unknown as FormField,
+      ],
+    };
+  }
+
+  it('REFUSES a shared-name radio -> checkbox_group flip (would mint an invalid group)', () => {
+    const s = sharedNameRadioSchema();
+    expect(canChangeGroupKind(s.fields[0], 'checkbox_group')).toBe(false);
+    // changeGroupKind is a no-op (same reference) rather than producing an
+    // un-promotable schema.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('canChangeGroupKind: flipping TO radio is always valid for a group', () => {
+    // A per-option-pdf checkbox_group can always become a radio.
+    const s = grpKindSchema('checkbox_group');
+    expect(canChangeGroupKind(s.fields.find(f => f.id === 'grp')!, 'radio')).toBe(true);
+    // Even a shared-name group is a valid radio (it already is one).
+    const shared = sharedNameRadioSchema();
+    expect(canChangeGroupKind(shared.fields[0], 'radio')).toBe(false); // already radio
+  });
+
+  it('canChangeGroupKind: a per-option-pdf radio CAN become a checkbox_group', () => {
+    // grpKindSchema('radio') options each carry pdf_field_name and there is no
+    // field-level pdf_field_name -> a valid checkbox_group target.
+    const s = grpKindSchema('radio');
+    expect(canChangeGroupKind(s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(true);
+    // And the flip actually happens.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).not.toBe(s);
+  });
+
+  it('canChangeGroupKind: rejects a non-group field', () => {
+    const s = grpKindSchema('radio');
+    expect(canChangeGroupKind(s.fields.find(f => f.id === 'dep')!, 'radio')).toBe(false);
+    expect(canChangeGroupKind(s.fields.find(f => f.id === 'dep')!, 'checkbox_group')).toBe(false);
   });
 });

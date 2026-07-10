@@ -106,6 +106,34 @@ describe('FieldEditor group-kind flip', () => {
     expect(screen.queryByLabelText('Group behaves as')).not.toBeInTheDocument();
   });
 
+  it('disables the checkbox_group option for a shared-name radio (no valid checkbox_group form)', () => {
+    // A shared-name radio: field-level pdf_field_name + option pdf_on_value, no
+    // per-option pdf_field_name -> cannot become a valid checkbox_group.
+    const field = {
+      id: 'reason_for_submission', name: 'Reason', type: 'radio', section_id: 's1',
+      pdf_field_name: 'form1[0].reason[0]', read_only: false, required: false,
+      options: [
+        { value: 'a', label: 'A', pdf_on_value: 'A' },
+        { value: 'b', label: 'B', pdf_on_value: 'B' },
+      ],
+    } as unknown as FormField;
+    render(
+      <FieldEditor
+        field={field}
+        schema={schemaWith(field)}
+        onUpdateField={vi.fn()}
+        onChangeGroupKind={vi.fn()}
+      />,
+    );
+    // The control still renders (it's a valid radio), but the checkbox_group
+    // target is disabled with an explanation.
+    const select = screen.getByLabelText('Group behaves as');
+    expect(select).toBeInTheDocument();
+    const cbOption = screen.getByRole('option', { name: /Checkbox group/i }) as HTMLOptionElement;
+    expect(cbOption).toBeDisabled();
+    expect(screen.getByText(/can only be a radio/i)).toBeInTheDocument();
+  });
+
   it('does NOT render the flip control for a non-group field (plain checkbox)', () => {
     const field = {
       id: 'agree', name: 'Agree', type: 'checkbox', section_id: 's1',
