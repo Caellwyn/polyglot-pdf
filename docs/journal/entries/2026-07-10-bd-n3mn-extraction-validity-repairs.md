@@ -49,7 +49,17 @@ that run; the maintainer green-lit continuing on the surfaced issues.
   supplement completion; f1040: 37 unwraps; w7: untouched).
 - 9 new tests (39 total in test_schema_repair.py); migrate 21/21 and
   contract-sync 12/12 unchanged/green.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) found 3 gaps, all adopted -- a
+  contract-sync test now pins the supplements shape against
+  FormSupplement.model_fields itself; _complete_supplements synthesizes a
+  missing id (all four required keys); the label-synthesis docstring no
+  longer overstates its scope. Opus final round NO-GAPS; it filed one
+  out-of-scope bug itself (bd polyglot-pdf-pofh: the nested
+  MultiEntryConfig.overflow_to_supplement enum is not covered). Outer
+  review (Step 5.6): two independent Opus NO-GAPS; three non-blocking
+  quality notes deferred as ONE nits bead, polyglot-pdf-v76t
+  (section-level retarget after unwrap; a dead assertion in the new
+  contract test; supplement-id dedupe).
 
 ## Lessons
 
