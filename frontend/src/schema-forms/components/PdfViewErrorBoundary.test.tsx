@@ -67,4 +67,35 @@ describe('PdfViewErrorBoundary', () => {
 
     spy.mockRestore();
   });
+
+  it('recovers on a fresh mount after a tripped instance is unmounted (reopen-reset)', () => {
+    // The SchemaForm mounts sit inside conditionals (showPDFPreview / viewMode),
+    // so closing the preview unmounts the boundary and reopening it mounts a
+    // FRESH, untripped instance -- there is no explicit reset() path, recovery
+    // is just React discarding the old instance's hasError state. A refactor
+    // that shared ONE long-lived boundary instance across opens (e.g. hoisting
+    // it above the conditional) would break this recovery, since hasError
+    // would stay true forever after the first crash. This test pins the
+    // mechanism (bd polyglot-pdf-dr1l).
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { unmount } = render(
+      <PdfViewErrorBoundary fallback={<div>fallback shown</div>}>
+        <Thrower />
+      </PdfViewErrorBoundary>
+    );
+    expect(screen.getByText('fallback shown')).toBeTruthy();
+
+    unmount();
+
+    render(
+      <PdfViewErrorBoundary fallback={<div>fallback shown</div>}>
+        <div>all good</div>
+      </PdfViewErrorBoundary>
+    );
+    expect(screen.getByText('all good')).toBeTruthy();
+    expect(screen.queryByText('fallback shown')).toBeNull();
+
+    spy.mockRestore();
+  });
 });
