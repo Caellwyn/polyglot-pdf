@@ -141,6 +141,22 @@ class Settings(BaseModel):
 		os.getenv("AUDIO_GAPFILL_ENABLED", "true").lower() == "true"
 	)
 	AUDIO_GAPFILL_INTERVAL_MS: int = int(os.getenv("AUDIO_GAPFILL_INTERVAL_MS", "25"))
+	# Real-time audio pacing to Gemini (bd polyglot-pdf-3to5). The client sends mic
+	# audio at exactly 1.0x real-time but in bursty 8ms frames; the OLD sender
+	# forwarded each frame immediately AND injected an un-paced gap-fill silence
+	# frame on every sub-interval gap, so the outbound stream ran ~2.2x real-time and
+	# tripped a recurring Gemini 1011 "sending data too fast". When AUDIO_PACING_ENABLED
+	# the sender instead runs a fixed WS_CHUNK_MS monotonic-clock tick: it re-chunks a
+	# byte accumulator to exactly one WS_CHUNK_MS frame per tick, so the wire cadence
+	# is real-time (never faster), and gap-fill silence is emitted ONLY on a genuine
+	# underrun tick. When disabled, the legacy wait_for/timeout gap-fill path runs
+	# (a clean revert switch). AUDIO_MAX_BUFFER_MS bounds how far behind real-time the
+	# accumulator may fall before the OLDEST buffered audio is dropped (frame-aligned),
+	# capping added latency during a burst. Env-overridable for a no-redeploy flip.
+	AUDIO_PACING_ENABLED: bool = (
+		os.getenv("AUDIO_PACING_ENABLED", "true").lower() == "true"
+	)
+	AUDIO_MAX_BUFFER_MS: int = int(os.getenv("AUDIO_MAX_BUFFER_MS", "200"))
 	WS_PING_INTERVAL_SEC: int = 15
 	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 120s of no received message (audio/ping/control)
 	# B5 (bd polyglot-pdf-jnjj.17): backend-side fail-OPEN bound for the boundary

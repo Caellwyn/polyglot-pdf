@@ -402,6 +402,22 @@ describe('Connection Manager (connection.ts)', () => {
       expect(audioManagerMock.setPTTMode).not.toHaveBeenCalled()
     })
 
+    it('resume() un-blocks AI playback that pause() flushed (bd audio-resume)', async () => {
+      const manager = await connected()
+      // Pause flushes the AI audio queue, which sets playbackBlocked=true so any
+      // in-flight AI audio is discarded.
+      manager.pause()
+      expect(audioManagerMock.flushAudioQueue).toHaveBeenCalled()
+      audioManagerMock.resumePlayback.mockClear()
+
+      // resume() must clear that block; otherwise every AI audio chunk after resume
+      // is silently dropped in playAudio() -- the mic comes back but the AI's voice
+      // never does. Nothing else clears it on the default path (onVADSpeechEnd early-
+      // returns under PTT and native VAD, both defaults).
+      await manager.resume()
+      expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
+    })
+
     it('a PTT press landing DURING the fresh-arm await is NOT clobbered by the resting-mute (bd qt7w)', async () => {
       const manager = await connected()
       // Fresh-arm branch: mic not yet recording at the reconnect ready-callback.

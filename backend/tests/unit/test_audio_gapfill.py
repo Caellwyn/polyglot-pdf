@@ -46,6 +46,12 @@ def _make_adapter(monkeypatch, *, enabled=True, interval_ms=20, native_vad=True)
     monkeypatch.setattr(settings, "WS_CHUNK_MS", 20, raising=False)
     monkeypatch.setattr(settings, "AUDIO_IN_RATE", 16000, raising=False)
     monkeypatch.setattr(settings, "DISABLE_GEMINI_VAD", not native_vad, raising=False)
+    # These tests pin the LEGACY (un-paced) gap-fill path (bd polyglot-pdf-7f7m):
+    # verbatim pass-through + wall-clock stall -> silence. The real-time pacer (bd
+    # polyglot-pdf-3to5) re-chunks + clocks output, so it is covered separately in
+    # test_audio_pacing.py; force pacing OFF here so this file keeps exercising the
+    # preserved rollback path (AUDIO_PACING_ENABLED=false).
+    monkeypatch.setattr(settings, "AUDIO_PACING_ENABLED", False, raising=False)
 
     adapter = LiveAIGemini(api_key="test_key")
     adapter._audio_queue = asyncio.Queue(maxsize=100)

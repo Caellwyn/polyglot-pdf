@@ -11,15 +11,19 @@
 // and NOT the transient `switching_section` / `reconnecting` windows where the
 // mic send gate can drop audio (Codex PR #278).
 //
-// This pins the gate so a revert to the old VAD-based condition fails CI:
-//   - connected            -> indicator SHOWN
-//   - switching_section    -> indicator HIDDEN (socket may be closed mid-switch)
+// This pins the gate so a revert to the old VAD-based condition fails CI. Since
+// bd polyglot-pdf-3to5 the ear is ALSO shown -- CROSSED-OUT (--muted) -- during the
+// not-listening-yet transient states, so the handshake / reconnect window reads as
+// "not listening" instead of the ear vanishing:
+//   - connected            -> indicator SHOWN, listening (not --muted)
+//   - connecting           -> indicator SHOWN, --muted (not listening yet)
+//   - switching_section    -> indicator SHOWN, --muted (socket may be closed mid-switch)
+//   - reconnecting         -> indicator SHOWN, --muted (mic gate drops audio)
 //   - paused               -> indicator HIDDEN
 //   - disconnected         -> indicator HIDDEN
-//   - reconnecting         -> indicator HIDDEN (mic gate drops audio)
-// Exercised for BOTH the desktop and mobile overlays. The gate is `connected*`
-// only -- the transient turn-taking states are deliberately excluded because the
-// mic send gate can drop audio in those windows (Codex PR #278).
+// Exercised for BOTH the desktop and mobile overlays. The LISTENING (green/grey,
+// meter) state stays `connected*`-only; the transient states render the muted
+// (crossed-out, no meter) variant because the mic send gate drops audio there.
 //
 // Mobile note: the indicator lives in the EXPANDED panel, so the test expands
 // it (the FAB is collapsed by default). The desktop panel is always expanded.
@@ -203,19 +207,31 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
   }
 
   const listeningEl = (c: HTMLElement) => c.querySelector('.vff-listening')
+  const mutedEl = (c: HTMLElement) => c.querySelector('.vff-listening--muted')
 
-  it('desktop: SHOWS when connected', () => {
+  it('desktop: SHOWS (listening, not muted) when connected', () => {
     const { container } = renderDesktop('connected')
     const el = listeningEl(container)
     expect(el).toBeTruthy()
-    // ear glyph + nested mic-energy meter present
+    // ear glyph + nested mic-energy meter present, NOT the crossed-out muted state
     expect(within(el as HTMLElement).queryByText('\u{1F442}')).toBeTruthy()
     expect((el as HTMLElement).querySelector('.vff-mic-meter')).toBeTruthy()
+    expect(mutedEl(container)).toBeNull()
   })
 
-  it('desktop: HIDDEN during switching_section (socket may be closed mid-switch)', () => {
+  it('desktop: SHOWS crossed-out (muted) during connecting (bd polyglot-pdf-3to5)', () => {
+    const { container } = renderDesktop('connecting')
+    const el = listeningEl(container)
+    expect(el).toBeTruthy()
+    expect(mutedEl(container)).toBeTruthy()
+    // No live meter while not listening.
+    expect((el as HTMLElement).querySelector('.vff-mic-meter')).toBeNull()
+  })
+
+  it('desktop: SHOWS crossed-out (muted) during switching_section (bd polyglot-pdf-3to5)', () => {
     const { container } = renderDesktop('switching_section')
-    expect(listeningEl(container)).toBeNull()
+    expect(listeningEl(container)).toBeTruthy()
+    expect(mutedEl(container)).toBeTruthy()
   })
 
   it('desktop: HIDDEN when paused', () => {
@@ -228,21 +244,30 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     expect(listeningEl(container)).toBeNull()
   })
 
-  it('desktop: HIDDEN while reconnecting (mic gate drops audio -- Codex PR #278)', () => {
+  it('desktop: SHOWS crossed-out (muted) while reconnecting (bd polyglot-pdf-3to5)', () => {
     const { container } = renderDesktop('reconnecting')
-    expect(listeningEl(container)).toBeNull()
+    expect(listeningEl(container)).toBeTruthy()
+    expect(mutedEl(container)).toBeTruthy()
   })
 
-  it('mobile: SHOWS when connected', () => {
+  it('mobile: SHOWS (listening, not muted) when connected', () => {
     const { container } = renderMobileExpanded('connected')
     const el = listeningEl(container)
     expect(el).toBeTruthy()
     expect((el as HTMLElement).querySelector('.vff-mic-meter')).toBeTruthy()
+    expect(mutedEl(container)).toBeNull()
   })
 
-  it('mobile: HIDDEN during switching_section (socket may be closed mid-switch)', () => {
+  it('mobile: SHOWS crossed-out (muted) during connecting (bd polyglot-pdf-3to5)', () => {
+    const { container } = renderMobileExpanded('connecting')
+    expect(listeningEl(container)).toBeTruthy()
+    expect(mutedEl(container)).toBeTruthy()
+  })
+
+  it('mobile: SHOWS crossed-out (muted) during switching_section (bd polyglot-pdf-3to5)', () => {
     const { container } = renderMobileExpanded('switching_section')
-    expect(listeningEl(container)).toBeNull()
+    expect(listeningEl(container)).toBeTruthy()
+    expect(mutedEl(container)).toBeTruthy()
   })
 
   it('mobile: HIDDEN when paused', () => {
@@ -250,9 +275,10 @@ describe('Voice overlay listening indicator gate (bd polyglot-pdf-1dvp)', () => 
     expect(listeningEl(container)).toBeNull()
   })
 
-  it('mobile: HIDDEN while reconnecting (Codex PR #278)', () => {
+  it('mobile: SHOWS crossed-out (muted) while reconnecting (bd polyglot-pdf-3to5)', () => {
     const { container } = renderMobileExpanded('reconnecting')
-    expect(listeningEl(container)).toBeNull()
+    expect(listeningEl(container)).toBeTruthy()
+    expect(mutedEl(container)).toBeTruthy()
   })
 })
 
