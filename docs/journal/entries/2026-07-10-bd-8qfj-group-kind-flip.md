@@ -61,21 +61,40 @@ invalid flip (no-op), and the FieldEditor disables the checkbox_group choice wit
 an explanation ("This group shares one PDF widget across its options, so it can
 only be a radio...") when the target would be invalid.
 
-Fresh-eyes triage: 1 blocker adopted + fixed inline (the shared-name asymmetry
-above); 2 low-confidence findings rejected as non-blocking (a self-referential
-group condition -- no code path lets a group reference its own id, and merge does
-not guard it either; and the deliberate empty-string-slug exclusion in
-`optionSlugs`, which mirrors `mintOptionSlug`'s own empty-slug guard). The
-reviewer filed `polyglot-pdf-cv9x` for the blocker; since it was in-scope against
-this bead's own exit criterion 3 and fixed here, that bead was closed as fixed
-inline (not a separate follow-up).
+**Second fresh-eyes gap (Opus round, adopted, fixed inline).** The Opus closing
+round found a related asymmetry: a radio trigger can carry a list-valued
+`in`/`not_in` dependent (value = an array of option slugs; the editor's
+ConditionBuilder offers `in`/`not_in` on a radio), but a checkbox_group trigger
+cannot -- the backend scopes `in`/`not_in` to scalar triggers and requires
+membership on a checkbox_group. My first cut only handled the scalar quartet
+(`equals`/`not_equals`/`includes`/`not_includes`), so a radio -> checkbox_group
+flip stranded an `in`/`not_in` atom, minting a schema the backend rejects and one
+the runtime mis-evaluates (it compares the list against an array trigger value).
+Fixed: on a radio -> checkbox_group flip, a TOP-LEVEL legacy `in [a,b]` expands to
+`any_of[includes a, includes b]` and `not_in` to `none_of[...]`. An `in`/`not_in`
+atom already NESTED in a composite bucket cannot expand (v2 is one level), so
+`canChangeGroupKind` refuses that flip (the same defensive stance as the
+shared-name guard), and the UI disables + explains the checkbox_group target.
 
-Tests: 18 net-new across `fieldGrouping.test.ts` (both flip directions, composite
+Fresh-eyes triage: 2 blockers adopted + fixed inline (the shared-name fillability
+asymmetry, Sonnet round; the `in`/`not_in` list-membership asymmetry, Opus round);
+2 low-confidence findings rejected as non-blocking (a self-referential group
+condition -- no code path lets a group reference its own id, and merge does not
+guard it either; and the deliberate empty-string-slug exclusion in `optionSlugs`,
+which mirrors `mintOptionSlug`'s own empty-slug guard). The Sonnet reviewer filed
+`polyglot-pdf-cv9x` for the first blocker; since it was in-scope against this
+bead's own exit criterion 3 and fixed here, that bead was closed as fixed inline
+(not a separate follow-up). The Opus reviewer filed no bead (in-scope, reported
+inline).
+
+Tests: net-new across `fieldGrouping.test.ts` (both flip directions, composite
 rewrite, whole-group-operator preservation, no-op cases, `canChangeGroupKind`
-validity, and the shared-name-radio refusal) and `FieldEditor.groupkind.test.tsx`
-(the render -> select-change -> callback wiring, the author-tier/handler gating,
-and the disabled+explained checkbox_group option for a shared-name radio). Full
-schema-editor suite green: 633 passed, 37 files. `tsc --noEmit` clean.
+validity, the shared-name-radio refusal, the `in`/`not_in` top-level expansion in
+both directions, and the in-composite `in`/`not_in` refusal) and
+`FieldEditor.groupkind.test.tsx` (the render -> select-change -> callback wiring,
+the author-tier/handler gating, and the disabled+explained checkbox_group option
+for a shared-name radio). Full schema-editor suite green (636 tests, 37 files).
+`tsc --noEmit` clean.
 
 ## Lessons
 

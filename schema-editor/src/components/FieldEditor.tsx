@@ -366,7 +366,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   // fresh-eyes gap). Flipping TO radio is always valid.
                   const canBecomeCheckboxGroup =
                     field.type === 'checkbox_group' ||
-                    canChangeGroupKind(field, 'checkbox_group');
+                    canChangeGroupKind(schema, field, 'checkbox_group');
                   return (
                     <div className="mt-2">
                       <label className="label" htmlFor="group-kind-select">

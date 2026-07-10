@@ -589,6 +589,39 @@ export function mergeFields(
   };
 }
 
+// A radio/select trigger can carry list-valued set-membership operators
+// (`in` / `not_in`, value = an array of option slugs -- see the editor's
+// ConditionBuilder.operatorsForTrigger). A checkbox_group trigger CANNOT: the
+// backend scopes `in`/`not_in` to scalar triggers and requires membership
+// (`includes`/`not_includes`) on a checkbox_group. So a radio -> checkbox_group
+// flip must convert an `in [a,b]` dependent into a checkbox_group-valid
+// membership condition. `in [a,b]` ("trigger is one of a,b") becomes "the
+// selected set includes a OR b" = any_of[includes a, includes b]; `not_in`
+// becomes none_of[includes ...]. That expansion turns ONE atom into a composite,
+// which v2 (one level of all_of/any_of/none_of) can only represent when the atom
+// is a TOP-LEVEL legacy condition. An `in`/`not_in` atom already nested INSIDE a
+// composite bucket cannot expand (no nested composites), so such a flip is
+// refused (canChangeGroupKind returns false) rather than stranding a
+// checkbox_group-invalid `in` operator (bd polyglot-pdf-8qfj, fresh-eyes round 2).
+const LIST_MEMBERSHIP_OPERATORS = new Set(['in', 'not_in']);
+
+// True if any dependent's show_if/require_if has an `in`/`not_in` atom targeting
+// `groupId` that sits INSIDE a composite bucket (so it cannot be expanded to a
+// checkbox_group-valid any_of/none_of on a radio -> checkbox_group flip).
+function hasUnflippableListMembership(schema: FormSchema, groupId: string): boolean {
+  const inCompositeBlocks = (cond: FieldCondition | undefined): boolean => {
+    if (!cond || !isCompositeCondition(cond)) return false;
+    return CONDITION_BUCKETS.some(b =>
+      (cond[b] ?? []).some(
+        atom => atom.field === groupId && LIST_MEMBERSHIP_OPERATORS.has(atom.operator),
+      ),
+    );
+  };
+  return schema.fields.some(
+    f => f.id !== groupId && (inCompositeBlocks(f.show_if) || inCompositeBlocks(f.require_if)),
+  );
+}
+
 // Whether an existing consolidated group can be flipped to `kind` and stay a
 // VALID v2 group (bd polyglot-pdf-8qfj, fresh-eyes gap). The two kinds are NOT
 // symmetric in the backend model (form_models.py group-validity rules):
@@ -605,8 +638,15 @@ export function mergeFields(
 // re-plumb widget identity, so it must REFUSE a flip that would produce an
 // invalid group. Flipping TO radio is always valid (radio accepts either
 // per-option pdf_field_name or the shared-name shape, and a checkbox_group's
-// per-option names satisfy the former). Returns true if the flip is safe.
-export function canChangeGroupKind(field: FormField, kind: MergeKind): boolean {
+// per-option names satisfy the former). It ALSO refuses a radio ->
+// checkbox_group flip when a dependent carries an `in`/`not_in` atom nested in a
+// composite that cannot be expanded to a checkbox_group-valid membership
+// condition (see hasUnflippableListMembership). Returns true if the flip is safe.
+export function canChangeGroupKind(
+  schema: FormSchema,
+  field: FormField,
+  kind: MergeKind,
+): boolean {
   const isGroup = !!field.options && field.options.length > 0;
   if (!isGroup) return false;
   if (field.type !== 'checkbox_group' && field.type !== 'radio') return false;
@@ -615,7 +655,11 @@ export function canChangeGroupKind(field: FormField, kind: MergeKind): boolean {
   // kind === 'checkbox_group': forbid a field-level pdf_field_name, and require
   // every option to carry its own pdf_field_name (pdf_on_value is NOT enough).
   if (field.pdf_field_name) return false;
-  return (field.options || []).every(o => !!o.pdf_field_name);
+  if (!(field.options || []).every(o => !!o.pdf_field_name)) return false;
+  // ...and refuse if a dependent has an un-expandable in-composite in/not_in atom
+  // on this group (it would strand a checkbox_group-invalid list operator).
+  if (hasUnflippableListMembership(schema, field.id)) return false;
+  return true;
 }
 
 // Flip an EXISTING consolidated group between its two kinds -- checkbox_group
@@ -648,9 +692,10 @@ export function changeGroupKind(
   const field = schema.fields.find(f => f.id === fieldId);
   // Only a real consolidated group can flip, only to the OTHER kind, and only
   // when the target kind stays a VALID v2 group (canChangeGroupKind rejects a
-  // shared-name radio -> checkbox_group flip that the backend would reject).
+  // shared-name radio -> checkbox_group flip the backend would reject, and a flip
+  // that would strand an un-expandable in-composite in/not_in dependent).
   // Anything else is a no-op the caller can detect via the returned reference.
-  if (!field || !canChangeGroupKind(field, kind)) return schema;
+  if (!field || !canChangeGroupKind(schema, field, kind)) return schema;
 
   const membership = kind === 'checkbox_group';
   // The option slugs a dependent could reference on THIS group. Only atoms whose
@@ -660,6 +705,14 @@ export function changeGroupKind(
   const optionSlugs = new Set(
     (field.options || []).map(o => String(o.value)).filter(v => v !== ''),
   );
+
+  // The option slugs named by a list-valued (`in`/`not_in`) atom, filtered to
+  // this group's real options. Used to expand `in`/`not_in` into a
+  // checkbox_group-valid membership composite on a radio -> checkbox_group flip.
+  const listValueSlugs = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.map(String).filter(v => optionSlugs.has(v))
+      : [];
 
   // Map ONE atom targeting this group across the membership boundary. Positive
   // selection (equals/includes) -> includes (multi) or equals (single); negative
@@ -677,6 +730,34 @@ export function changeGroupKind(
     return atom;
   };
 
+  // Flip a TOP-LEVEL legacy condition. Besides the scalar quartet (flipAtom), a
+  // radio -> checkbox_group flip must expand a list-valued `in`/`not_in` on this
+  // group into a checkbox_group-valid membership composite: `in [a,b]` ("is one
+  // of a,b") -> any_of[includes a, includes b]; `not_in [a,b]` -> none_of[same].
+  // (canChangeGroupKind has already refused the flip if such an atom is nested in
+  // a composite, which one-level v2 cannot expand -- so only a top-level legacy
+  // in/not_in reaches here.) The reverse (checkbox_group -> radio) never sees
+  // in/not_in from the editor (a group trigger only offers includes/not_includes)
+  // and in/not_in are valid on a radio anyway, so it falls through unchanged.
+  const flipTopLevelLegacy = (atom: ConditionalDisplay): FieldCondition => {
+    if (
+      membership &&
+      atom.field === fieldId &&
+      LIST_MEMBERSHIP_OPERATORS.has(atom.operator)
+    ) {
+      const slugs = listValueSlugs(atom.value);
+      if (slugs.length > 0) {
+        const includesAtoms: ConditionalDisplay[] = slugs.map(v => ({
+          field: fieldId, operator: 'includes', value: v,
+        }));
+        return atom.operator === 'in'
+          ? { any_of: includesAtoms }
+          : { none_of: includesAtoms };
+      }
+    }
+    return flipAtom(atom);
+  };
+
   const flipCondition = (cond: FieldCondition): FieldCondition => {
     if (isCompositeCondition(cond)) {
       const out: CompositeConditionalDisplay = {};
@@ -686,7 +767,7 @@ export function changeGroupKind(
       }
       return out;
     }
-    return flipAtom(cond);
+    return flipTopLevelLegacy(cond);
   };
 
   const newFields = schema.fields.map(f => {
