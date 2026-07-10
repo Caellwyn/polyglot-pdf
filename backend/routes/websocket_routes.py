@@ -797,8 +797,12 @@ async def fill_form_from_schema(
 		await websocket.close(code=1007)
 		return
 
-	# Extract handshake data
-	# Check for JIT mode (manifest-based) vs legacy mode (full schema)
+	# Extract handshake data.
+	# The manifest-first TRANSPORT ("handshake_jit") vs the legacy full-schema
+	# handshake. The "jit" name is historical -- this transport is DTI's carrier,
+	# NOT the removed JIT SI mode (bd polyglot-pdf-en2j): the backend builds a
+	# minimal per-section schema from the manifest, and ai_context renders the DTI
+	# static SI (or legacy full-SI when USE_DTI is off) from it.
 	handshake_type = handshake.get("type", "handshake")
 	is_jit_mode = handshake_type == "handshake_jit"
 
@@ -806,13 +810,14 @@ async def fill_form_from_schema(
 	form_session_id = handshake.get("form_session_id")
 
 	if is_jit_mode:
-		# JIT mode: Extract manifest and first field schema
+		# Manifest-first transport: extract the manifest + first field schema.
 		manifest = handshake.get("manifest")
 		first_field_schema = handshake.get("first_field_schema")
 		loaded_field_ids = handshake.get("loaded_field_ids", [])
-		# Form title rides on the JIT handshake so {form_title} in the SI is the
-		# real form, not the literal "Form" (bd polyglot-pdf-jnjj.9, gap O: the JIT
-		# schema dict has no form_metadata, so ai_context fell back to "Form").
+		# Form title rides on the manifest-first handshake so {form_title} in the
+		# legacy SI is the real form, not the literal "Form" (bd polyglot-pdf-jnjj.9,
+		# gap O: the minimal schema dict has no form_metadata, so ai_context fell
+		# back to "Form").
 		jit_form_title = handshake.get("form_title")
 
 		# Build minimal schema from manifest for validation

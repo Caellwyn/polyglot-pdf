@@ -807,10 +807,18 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
             "CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR": False,
         }
     elif arm == "section-reset-jit":
-        # The JIT cost arm (bd polyglot-pdf-jnjj.6 / G2): same per-section-reset
-        # flow as "section-reset", but build_form_context renders the JIT manifest
-        # SI instead of the full per-section field dump.
-        overrides = {"USE_JIT_SCHEMA": True}
+        # The JIT SI mode was REMOVED (bd polyglot-pdf-en2j): USE_JIT_SCHEMA no
+        # longer exists, so this arm can no longer render a distinct JIT manifest
+        # SI -- it would silently measure the legacy full-SI while labeling the
+        # output "section-reset-jit" (mislabeled cost data). Fail loudly instead of
+        # producing misleading numbers (bd polyglot-pdf-el92). Use --arm dti for the
+        # shipped reduced-SI cost path, or --arm section-reset for the full-SI
+        # baseline.
+        raise SystemExit(
+            "--arm section-reset-jit is removed: the JIT SI mode was deleted in bd "
+            "polyglot-pdf-en2j. Use --arm dti (shipped reduced-SI) or --arm "
+            "section-reset (full-SI baseline)."
+        )
     elif arm == "dti":
         # The Dynamic Turn Injection cost arm (bd polyglot-pdf-jnjj.25): same
         # per-section-reset flow + JIT-shaped handshake, but USE_DTI makes

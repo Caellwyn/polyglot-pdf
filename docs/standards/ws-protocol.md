@@ -33,7 +33,7 @@ modes -- **legacy** (full section schema) and **JIT** (manifest + first field).
 
 | Key | Type | Mode | Meaning |
 |-----|------|------|---------|
-| `type` | `"handshake"` \| `"handshake_jit"` | both | Selects mode. `handshake_jit` -> JIT mode (line 780). Anything else (incl. missing) -> legacy. |
+| `type` | `"handshake"` \| `"handshake_jit"` | both | Selects the handshake shape. `handshake_jit` -> the manifest-first transport (DTI's carrier; line 780). Anything else (incl. missing) -> the legacy full-schema handshake. |
 | `form_session_id` | string | both | Persistent, frontend-managed ID; survives reconnects. Logging/metrics correlation only -- never used for server-side state (line 783). |
 | `current_values` | object (field_id -> FieldValue) | both | Pre-filled values for reconnect; defaults to `{}` (line 830). |
 | `full_schema` | object (`{source, fields, sections, parts, ...}`) \| absent | both | The WHOLE form schema (all parts/sections/fields), for the secretary catalog (bd polyglot-pdf-p68s / jnjj.45d). Distinct from `schema`/`manifest`, which carry only the CURRENT section. The backend caches it in-session in `FormFillingService._full_schema` and `handle_ask_secretary` renders the secretary's static catalog from it; preserved across same-form section switches. Schema only -- no PII; rebuilt from this on every (re)connect (stateless invariant). Optional: an older client that omits it makes the secretary fall back to the per-section `schema`. |
@@ -52,16 +52,22 @@ modes -- **legacy** (full section schema) and **JIT** (manifest + first field).
 |-----|------|---------|
 | `schema` | object (`{source, fields, sections, ...}`) | The WHOLE current section's schema. Required; an invalid/missing `schema` closes the socket with `invalid_schema` (lines 822-828). `schema.source` must be `"web"` or `"pdf"` (lines 858-864). |
 
-### JIT-mode keys (`type: "handshake_jit"`)
+### Manifest-first transport keys (`type: "handshake_jit"`)
+
+This is the manifest-first handshake TRANSPORT -- DTI's carrier. The `jit` name is
+historical; the JIT SI mode was removed (bd polyglot-pdf-en2j), but the transport
+survives and DTI rides it. The backend synthesizes a minimal per-section `schema`
+from these keys and ai_context renders the DTI static SI (or the legacy full-SI
+when `USE_DTI` is off) from it.
 
 | Key | Type | Meaning |
 |-----|------|---------|
-| `manifest` | `HandshakeManifest` | The frontend builds it as `{current_section, previous_sections, parts}` (`frontend/src/schema-forms/utils/manifestUtils.ts:35-41`) -- NOT a top-level `fields` array. The backend stores the whole object and (since A2, bd polyglot-pdf-jnjj.9) CONSUMES `manifest.current_section.fields` + `manifest.previous_sections` to build the JIT `{manifest_text}` and progress count, plus `manifest.parts` for the section nav list. Manifest field-entry shape is owned by [si-reduction.md](si-reduction.md). |
-| `first_field_schema` | object \| null | Full schema for the FIRST-UNFILLED field of the section (selected via `computeNextField`, A2 gap D), not the positional first field. The backend renders this as `{next_field_schema}` -- in JIT mode it holds no other field's full schema. |
-| `loaded_field_ids` | string[] | Field IDs whose full schema the client has already sent to Gemini; defaults to `[]`. The backend seeds its de-dup set from this at session start so schemas are not re-sent across reconnects (A2 gap L). |
-| `form_title` | string | The form's display title (`schema.form_metadata.title`). Added by A2 (gap O) so the JIT SI's `{form_title}` is the real form, not the literal "Form"; the backend stores it into `schema["form_metadata"]["title"]`. |
+| `manifest` | `HandshakeManifest` | The frontend builds it as `{current_section, previous_sections, parts}` (`frontend/src/schema-forms/utils/manifestUtils.ts:35-41`) -- NOT a top-level `fields` array. The backend stores the whole object; it consumes `manifest.current_section.fields` + `manifest.previous_sections` for progress/section context and `manifest.parts` for the section nav list. Manifest field-entry shape is owned by [si-reduction.md](si-reduction.md). |
+| `first_field_schema` | object \| null | Full schema for the FIRST-UNFILLED field of the section (selected via `computeNextField`), not the positional first field. The backend stores it as the section's single `schema["fields"]` entry; DTI's per-field guidance for field 1 is derived from it. |
+| `loaded_field_ids` | string[] | Field IDs whose full schema the client has already sent to Gemini; defaults to `[]`. Part of the transport contract (the backend no longer de-dups on it since the JIT drip was removed, but the key is still sent). |
+| `form_title` | string | The form's display title (`schema.form_metadata.title`), so `{form_title}` in the legacy SI is the real form, not the literal "Form"; the backend stores it into `schema["form_metadata"]["title"]`. |
 
-In JIT mode `schema` is synthesized backend-side from `manifest` +
+With this transport, `schema` is synthesized backend-side from `manifest` +
 `first_field_schema` (lines 796-805), so the legacy `schema` key is absent.
 
 ### Handshake acknowledgement (backend -> frontend)

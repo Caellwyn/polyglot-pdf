@@ -356,12 +356,19 @@ SECTION_SI_CHARS = [4_571, 3_832, 5_700, 4_090, 3_543, 3_616, 3_660, 6_314,
 def recompute_si_scenarios() -> dict:
     """Recompute every SI size live from the backend templates + real schema
     (imports the backend; offline -- no network). The notebook calls this and
-    surfaces any drift from the literals above."""
+    surfaces any drift from the literals above.
+
+    NOTE (bd polyglot-pdf-el92): the 'jit' scenario is no longer live-computable
+    -- the JIT SI mode was removed (bd polyglot-pdf-en2j), so there is no distinct
+    JIT SI to measure (a USE_JIT_SCHEMA override is a silent no-op now). We return
+    the FROZEN historical literal for 'jit' so the notebook's drift-check does not
+    silently report a false 0 from a legacy-vs-legacy comparison, and so the
+    historical full/jit/drip analysis narrative still renders. 'full', 'drip', and
+    'sections' are still recomputed live (they use the surviving legacy full-SI)."""
     import sys
     root = str(Path(__file__).resolve().parent.parent.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
-    from backend import config as _config
     from backend.services import ai_context
 
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -370,22 +377,19 @@ def recompute_si_scenarios() -> dict:
     for f in schema["fields"]:
         secs.setdefault(f.get("section_id") or "section-1", []).append(f)
 
-    def _si_len(sch, jit):
-        s = _config.Settings(USE_JIT_SCHEMA=jit)
-        orig = ai_context.get_settings
-        ai_context.get_settings = lambda: s  # patch THE MODULE-LOCAL binding
-        try:
-            return len(ai_context.build_form_context(
-                sch, {}, section_number=1, total_sections=15, section_label="X"))
-        finally:
-            ai_context.get_settings = orig
+    def _si_len(sch):
+        # Legacy full-SI (USE_DTI off, the default) -- the only SI mode these
+        # length probes can build now that JIT is gone.
+        return len(ai_context.build_form_context(
+            sch, {}, section_number=1, total_sections=15, section_label="X"))
 
     return {
-        "full": _si_len(full, False),
-        "jit": _si_len(full, True),
-        "drip": _si_len({"form_metadata": schema["form_metadata"], "fields": []}, False),
+        "full": _si_len(full),
+        # Frozen historical value -- JIT SI removed, no longer live-computable.
+        "jit": list(SI_SCENARIOS_CHARS.values())[1],
+        "drip": _si_len({"form_metadata": schema["form_metadata"], "fields": []}),
         "sections": [_si_len({"form_metadata": schema["form_metadata"],
-                              "fields": fl}, False) for fl in secs.values()],
+                              "fields": fl}) for fl in secs.values()],
     }
 
 
