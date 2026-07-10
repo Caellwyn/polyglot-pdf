@@ -453,9 +453,19 @@ def build_form_context(
     # unit tests) without USE_DTI falls through to the legacy branch rather than
     # AttributeError-ing. The JIT manifest SI mode was removed (bd polyglot-pdf-en2j);
     # the manifest-first handshake transport (handshake_jit / schema["jit_mode"])
-    # survives as DTI's carrier and is handled by the DTI branch, which builds a
-    # state-free static SI and does not read schema["fields"].
-    if getattr(settings, "USE_DTI", False):
+    # survives as DTI's carrier and is handled by the DTI static SI, which does not
+    # read schema["fields"].
+    #
+    # ALSO route a jit_mode-shaped schema to the DTI static SI even when USE_DTI is
+    # off (rollback safety, originally Codex PR #229): such a schema carries only the
+    # synthesized first field in schema["fields"] + a names-only manifest, so the
+    # legacy full-dump branch would describe ONE field and lose the section. This
+    # bites the DTI->legacy rollback window -- a client with a stale persisted
+    # jitModeEnabled sends one more handshake_jit before session_ready corrects it.
+    # The manifest lacks the full field dicts needed to rebuild a rich legacy dump,
+    # so the static DTI SI (section-agnostic, no one-field dump) is the correct
+    # handler for a manifest-first schema regardless of the flag.
+    if getattr(settings, "USE_DTI", False) or schema.get("jit_mode"):
         system_instruction = settings.DTI_SYSTEM_INSTRUCTION
     else:
         # Legacy mode: Use full schema with SYSTEM_INSTRUCTION template

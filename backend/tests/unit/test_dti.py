@@ -245,6 +245,33 @@ def test_merge_field_schema_extends_validation_set_without_mutating_schema():
     assert {f.id for f in svc._build_fields_from_schema()} == {"f1", "f2"}
 
 
+def test_jit_mode_schema_routes_to_dti_si_when_dti_off(monkeypatch):
+    """Rollback safety (originally Codex PR #229, preserved through the JIT purge
+    bd polyglot-pdf-en2j): a jit_mode-shaped schema (fields=[first field only] +
+    names-only manifest) that arrives while USE_DTI is OFF must render the DTI
+    STATIC SI, NOT the legacy full-dump branch -- the legacy branch would describe
+    the single synthesized field and lose the section. This is the DTI->legacy
+    rollback window: a client with a stale persisted jitModeEnabled sends one more
+    handshake_jit before session_ready corrects it."""
+    from backend.config import get_settings as _gs
+
+    class _Off:
+        USE_DTI = False
+        DTI_SYSTEM_INSTRUCTION = _gs().DTI_SYSTEM_INSTRUCTION
+        SYSTEM_INSTRUCTION = _gs().SYSTEM_INSTRUCTION
+    monkeypatch.setattr(ai_context_mod, "get_settings", lambda: _Off())
+
+    schema = _dti_schema()
+    schema["jit_mode"] = True  # the marker websocket_routes sets on handshake_jit
+    si = build_form_context(schema, {}, "English", section_number=1,
+                            total_sections=8, section_label="Part 1")
+    # DTI static SI selected: it equals the static template and does NOT carry the
+    # legacy full-dump markers (which would describe the one synthesized field).
+    assert si.startswith(_Off.DTI_SYSTEM_INSTRUCTION[:60])
+    assert "field two" not in si  # names-only manifest is not dumped into the SI
+    assert "f2" not in si
+
+
 def test_coordinator_late_response_does_not_stash_stale_schema():
     """A LATE hint response (no matching pending request -> _resolve returns False)
     must NOT stash its schema, or it would leak into the next confirm's consume
