@@ -56,8 +56,15 @@ Code (net -1320 lines):
   `format_manifest_for_context`, `should_include_schema_in_response`,
   `estimate_manifest_tokens`. KEPT `_sanitize_options` (shared) + `get_field_guidance`
   (DTI).
-- `ai_context.py`: removed the JIT `elif` (SI selection is now `if USE_DTI else
-  legacy`).
+- `ai_context.py`: removed the JIT `elif` (SI selection is now `if USE_DTI or
+  schema.get("jit_mode") else legacy`). The `schema.get("jit_mode")` disjunct is
+  the rollback-safety guard (originally Codex PR #229): a manifest-first schema
+  arriving while `USE_DTI` is off routes to the DTI STATIC SI, not the legacy
+  one-field dump -- the manifest is names-only, so the legacy dump can't be rebuilt
+  from it. This preserves the DTI->legacy rollback window (a client with a stale
+  persisted `jitModeEnabled` sends one more `handshake_jit` before `session_ready`
+  corrects it). Caught by the Opus outer review; pinned by
+  `test_jit_mode_schema_routes_to_dti_si_when_dti_off`.
 - `form_filling_service.py`: removed `get_next_field_schema_for_jit`,
   `_loaded_field_ids`, the manifest_service import, the handler injection.
 - `callback_handler.py`: removed the JIT `next_field_schema` drip + its response
