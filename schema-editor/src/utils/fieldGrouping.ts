@@ -286,14 +286,19 @@ function rewriteCondition(
   return rewriteShowIf(cond, mergedAwayToValue, primaryId, membership) ?? cond;
 }
 
-// Field IDs of dependents whose show_if / require_if references a specific
-// option slug of `triggerFieldId` (bd h76m.10, Codex PR #310). Deleting such an
-// option must NOT silently strip the condition -- for a positive trigger
+// Dependents whose show_if / require_if references a specific option slug of
+// `triggerFieldId` (bd h76m.10, Codex PR #310). Deleting such an option must
+// NOT silently strip the condition -- for a positive trigger
 // (includes/equals) that would flip the dependent from correctly-hidden to
 // shown-for-everyone (round-2 finding). So the editor BLOCKS the delete and
 // tells the author to retarget the dependent first, keeping the schema
-// ref-clean without a silent semantic change. Returns the referencing field
-// ids (empty = safe to delete).
+// ref-clean without a silent semantic change. Returns human-readable
+// referencer names for the guard's message: bare field ids, plus
+// `section "<label>"` entries for SECTION-level show_if (a section can
+// reference an option slug the same way a field does -- the group mutations
+// actively rewrite section conditions since bd polyglot-pdf-6b7z, so the
+// delete guard must see them too, bd polyglot-pdf-qy29). Empty = safe to
+// delete.
 export function optionValueReferencedBy(
   schema: FormSchema,
   triggerFieldId: string,
@@ -307,9 +312,13 @@ export function optionValueReferencedBy(
     }
     return false;
   };
-  return schema.fields
+  const fieldRefs = schema.fields
     .filter(f => f.id !== triggerFieldId && (refs(f.show_if) || refs(f.require_if)))
     .map(f => f.id);
+  const sectionRefs = schema.sections
+    .filter(s => refs(s.show_if))
+    .map(s => `section "${s.label || s.id}"`);
+  return [...fieldRefs, ...sectionRefs];
 }
 
 // Flatten a legacy-or-composite condition to its atomic conditions.
