@@ -580,6 +580,38 @@ def test_equals_on_group_controls_edge_mirrors_as_membership_like_migrate():
     assert mig_dep["require_if"] == dep_out["require_if"]
 
 
+def test_is_checked_on_group_controls_edge_mirrors_as_is_not_empty():
+    # Opus review gap round 2 (bd c3y6): is_checked on an OPTION-BEARING
+    # trigger (checkbox_group/radio/select) means "a selection exists" -- the
+    # v1 dual-fate rule migrate applies (-> is_not_empty; only a standalone
+    # `checkbox` keeps is_checked). Without the rewrite the mirrored atom
+    # itself lints operator-trigger RED (i-90 really uses is_checked on radio
+    # groups, so this is a shipped shape).
+    for gtype in ("checkbox_group", "radio"):
+        trigger = {
+            "id": "grp", "type": gtype,
+            "options": [
+                {"value": "alpha", "label": "Alpha", "pdf_field_name": "a[0]"},
+                {"value": "beta", "label": "Beta", "pdf_field_name": "b[0]"},
+            ],
+            "controls_fields": [{"operator": "is_checked", "shows": ["dep"]}],
+        }
+        dep = {"id": "dep", "type": "text", "pdf_field_name": "D[0]"}
+        draft = _v2_schema([trigger, dep])
+        repaired, repairs = repair(draft)
+
+        dep_out = next(f for f in repaired["fields"] if f["id"] == "dep")
+        assert dep_out["show_if"] == {
+            "field": "grp", "operator": "is_not_empty"}, gtype
+        assert not has_errors(lint_schema(repaired)), gtype
+
+        # Evaluator-equivalence with migrate Pass 4 on the same input.
+        mig = _load_migrate_module()
+        mig_out, _ = mig.migrate(_v1_equivalent([trigger, dep]))
+        mig_dep = {f["id"]: f for f in mig_out["fields"]}["dep"]
+        assert mig_dep["show_if"] == dep_out["show_if"], gtype
+
+
 def test_already_mirrored_suppression_with_trigger_before_raw_target():
     # Fresh-eyes finding (bd c3y6): mirroring must run AFTER the show_if/
     # require_if rewrite pass has normalized ALL fields (migrate's Pass 2 ->

@@ -558,9 +558,8 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                 # ONLY to mirrored v1 edges; a native v2 show_if atom keeps
                 # the stricter drop policy.
                 op = atom.get("operator")
-                if (isinstance(trig, dict)
-                        and str(trig.get("type")) == "checkbox_group"
-                        and op in ("equals", "not_equals")):
+                ttype = str(trig.get("type")) if isinstance(trig, dict) else None
+                if ttype == "checkbox_group" and op in ("equals", "not_equals"):
                     if str(atom.get("value", "")) == "":
                         atom["operator"] = ("is_empty" if op == "equals"
                                             else "is_not_empty")
@@ -577,6 +576,24 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                         })
                         count_alias(f"{op}@controls_fields")
                         atom["operator"] = new_op
+                elif (op == "is_checked"
+                        and ttype in vocab.CHOICE_FIELD_TYPES):
+                    # is_checked on an OPTION-BEARING trigger (checkbox_group/
+                    # radio/select) means "a selection exists" -> is_not_empty
+                    # (migrate _rewrite_atom_value's dual-fate rule; the
+                    # standalone `checkbox` trigger keeps is_checked). Without
+                    # this the mirrored atom itself lints operator-trigger RED
+                    # (Opus review gap, round 2).
+                    repairs.append({
+                        "action": "alias-operator", "path": _path,
+                        "detail": f"is_checked on {ttype!r} trigger -> "
+                                  "is_not_empty (v1 controls_fields "
+                                  "selection-exists reading)",
+                        "error": False,
+                    })
+                    count_alias("is_checked@controls_fields")
+                    atom["operator"] = "is_not_empty"
+                    atom.pop("value", None)
                 return _rewrite_atom(atom, trig, resolution, _path, repairs,
                                      count_alias)
 
