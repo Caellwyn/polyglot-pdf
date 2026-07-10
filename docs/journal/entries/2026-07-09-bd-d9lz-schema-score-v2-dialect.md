@@ -26,21 +26,31 @@ is that reconciliation.
    option and score as an option mismatch even when labels + pdf_field_names are
    identical.
 
-2. **`conditional_fields` in `rel_keys`.** The relationship-recall loop counted
-   `conditional_fields`, a v1-legacy key that is NOT a field on the v2 FormField
-   model and is not advertised by the v2 extractor contract. A v2 arm can never
-   emit it, so its recall was pinned at 0/0 noise. The scorer also MISSED
-   `require_if`, a live v2 target-side relationship key.
+2. **Two dead v1-legacy trigger-side keys in `rel_keys`.** The relationship-recall
+   loop counted `conditional_fields` AND `controls_fields`. Both were deleted from
+   the v2 FormField model at the P6.2 flip (form_models.py `_enforce_v2_rules`:
+   "the trigger-side controls_fields / group_kind / conditional_fields fields have
+   been deleted from the model"), both are lint-ERRORed as
+   `legacy-trigger-side-logic` (schema_lint.py), and both are 0/0 across every v2
+   gold kit (i-90, w7, w7-2, f1040) -- so a v2 arm can never emit them and they
+   only diluted the conditionals table with dead buckets. The scorer also MISSED
+   `require_if`, a live v2 target-side relationship key
+   (populated 9/14/6 in w7/w7-2/f1040; 0 in i-90, which simply has no require_if
+   relationships).
 
 ## What shipped
 
 - `_opts_match`: key options on `label` first, `value` as fallback (bare-value
   options still match). Dialect-stable, since the label is the text both gold and
   every extraction derive verbatim from the PDF.
-- `rel_keys`: dropped `conditional_fields` (dead v1 key); added `require_if`
-  (live v2 key). The remaining keys (`show_if`, `controls_fields`,
-  `conditional_logic`, `conditional_behavior`, `copy_to`,
-  `overflow_to_supplement`) are all valid v2 model fields and stay.
+- `rel_keys`: dropped BOTH v1-legacy trigger-side keys `conditional_fields` and
+  `controls_fields` (deleted from the v2 model, lint-ERRORed, 0/0 in every v2
+  gold); added `require_if` (live v2 key). The remaining keys (`show_if`,
+  `require_if`, `conditional_logic`, `conditional_behavior`, `copy_to`,
+  `overflow_to_supplement`) are all live v2 model fields / tolerated aliases.
+- Reconciled the coupling test `tests/test_schema_contract_sync.py`
+  (`test_contract_advertises_every_scorer_graded_key`): removed `controls_fields`
+  from its scorer-graded-key list to match the reconciled `rel_keys`.
 - Module docstring updated to the v2 key list.
 - New `tests/test_schema_score_v2_dialect.py`: label-first match incl. the
   divergent-slug recovery case, a wrong-label penalty (Jaccard bar still bites),

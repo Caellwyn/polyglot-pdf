@@ -11,9 +11,9 @@ SEPARATELY:
       partition-agreement metric, NOT exact section_id string match; bd
       polyglot-pdf-7a9.13)?
   (b) RELATIONSHIP/logic -- did it recover the parts/sections structure and the
-      conditional dependencies (v2 keys: show_if, require_if, controls_fields,
-      conditional_logic, conditional_behavior, copy_to, supplements +
-      overflow_to_supplement, tables/multi_entry)?
+      conditional dependencies (v2 keys: show_if, require_if, conditional_logic,
+      conditional_behavior, copy_to, supplements + overflow_to_supplement,
+      tables/multi_entry)?
 
 The two halves are scored independently and printed as separate tables, because
 the bake-off needs to see WHERE a given extractor fails -- the working hypothesis
@@ -484,16 +484,17 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
             return False
         return bool(d_field.get(key))
 
-    # v2 relationship vocabulary (bd polyglot-pdf-d9lz). Dropped the v1-legacy
-    # `conditional_fields`: it is NOT a v2 FormField model field and the v2
-    # extractor contract does not advertise it, so a v2 arm can never emit it and
-    # its recall was pinned at 0/0 noise. Added `require_if`, the v2 target-side
-    # require path (a live relationship key the scorer was missing). The remaining
-    # keys (show_if, controls_fields, conditional_logic, conditional_behavior,
-    # copy_to, overflow_to_supplement) are all valid v2 model fields.
-    rel_keys = ["show_if", "require_if", "controls_fields",
-                "conditional_logic", "conditional_behavior", "copy_to",
-                "overflow_to_supplement"]
+    # v2 relationship vocabulary (bd polyglot-pdf-d9lz). Dropped BOTH v1-legacy
+    # trigger-side keys `conditional_fields` and `controls_fields`: neither is a
+    # v2 FormField model field, both were DELETED at the P6.2 flip and are
+    # lint-ERRORed as `legacy-trigger-side-logic` (schema_lint.py), and both are
+    # 0/0 across every v2 gold kit -- so a v2 arm can never emit them and they only
+    # diluted the conditionals table with dead buckets. Added `require_if`, the v2
+    # target-side require path (a live key the scorer was missing). The remaining
+    # keys (show_if, conditional_logic, conditional_behavior, copy_to,
+    # overflow_to_supplement) are all live v2 model fields / tolerated aliases.
+    rel_keys = ["show_if", "require_if", "conditional_logic",
+                "conditional_behavior", "copy_to", "overflow_to_supplement"]
     field_rels: dict[str, list[int]] = {k: [0, 0] for k in rel_keys}  # [recovered, total]
     for t in truth.get("fields", []):
         for k in rel_keys:

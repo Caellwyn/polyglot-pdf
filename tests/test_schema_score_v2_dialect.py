@@ -110,7 +110,11 @@ def test_rel_keys_reflect_v2_vocabulary():
     result = schema_score.score_relationships(truth, draft, match)
     conds = result["conditionals"]
     assert "require_if" in conds
+    # BOTH v1-legacy trigger-side keys must be gone (deleted from the v2 model,
+    # lint-ERRORed, 0/0 across every v2 gold kit) -- grading them is dead-bucket
+    # noise. conditional_fields AND controls_fields.
     assert "conditional_fields" not in conds
+    assert "controls_fields" not in conds
     # require_if recall recovered (1 present in gold, 1 recovered in draft).
     assert conds["require_if"]["recovered"] == 1
     assert conds["require_if"]["total"] == 1
