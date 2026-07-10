@@ -1239,4 +1239,40 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
     expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
     expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
   });
+
+  // A top-level in/not_in is only losslessly expandable when EVERY member is a
+  // current option slug. An empty list, a stale member, or a non-array value
+  // must refuse the flip rather than strand a checkbox_group-invalid `in` or
+  // silently drop members (bd polyglot-pdf-8qfj, fresh-eyes round 4).
+  it('REFUSES a top-level `in` whose members are ALL stale (resolves to zero live slugs)', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'in', value: ['deleted_slug'] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    // No-op rather than emitting a raw `in` on a checkbox_group.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('REFUSES a top-level `not_in` with SOME stale members (would silently widen none_of)', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'not_in', value: ['a', 'stale_x'] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('REFUSES a top-level `in` with a non-array value', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'in', value: 'a' as unknown as string[] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('ALLOWS a fully-live top-level `in` (every member a current slug) and expands it', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'in', value: ['a', 'c'] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(true);
+    const next = changeGroupKind(s, 'grp', 'checkbox_group');
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(dep.show_if).toEqual({
+      any_of: [
+        { field: 'grp', operator: 'includes', value: 'a' },
+        { field: 'grp', operator: 'includes', value: 'c' },
+      ],
+    });
+  });
 });

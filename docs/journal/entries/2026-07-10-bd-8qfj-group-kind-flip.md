@@ -76,16 +76,31 @@ atom already NESTED in a composite bucket cannot expand (v2 is one level), so
 `canChangeGroupKind` refuses that flip (the same defensive stance as the
 shared-name guard), and the UI disables + explains the checkbox_group target.
 
-Fresh-eyes triage: 2 blockers adopted + fixed inline (the shared-name fillability
-asymmetry, Sonnet round; the `in`/`not_in` list-membership asymmetry, Opus round);
-2 low-confidence findings rejected as non-blocking (a self-referential group
-condition -- no code path lets a group reference its own id, and merge does not
-guard it either; and the deliberate empty-string-slug exclusion in `optionSlugs`,
-which mirrors `mintOptionSlug`'s own empty-slug guard). The Sonnet reviewer filed
-`polyglot-pdf-cv9x` for the first blocker; since it was in-scope against this
-bead's own exit criterion 3 and fixed here, that bead was closed as fixed inline
-(not a separate follow-up). The Opus reviewer filed no bead (in-scope, reported
-inline).
+**Third fresh-eyes gap (Opus OUTER review, adopted, fixed inline).** The two
+independent Opus outer reviews split: one cleared, the other found that the
+top-level `in`/`not_in` expansion was only guarded for the NESTED case. A
+top-level `in`/`not_in` whose value resolves to ZERO current option slugs (all
+members stale/renamed) fell through and emitted a raw `in`/`not_in` on the flipped
+checkbox_group -- backend-invalid; and a PARTIALLY-stale list silently dropped its
+stale members (narrowing `in`, widening `not_in`'s `none_of`). Per "ambiguous =
+blocker" this was adopted: `hasUnflippableListMembership` now ALSO refuses a
+top-level `in`/`not_in` that is not losslessly expandable (non-array value, empty
+list, or any stale member). A FULLY-LIVE top-level `in`/`not_in` still flips
+(expands to `any_of`/`none_of` of `includes`). The UI's retarget hint already
+covered this case.
+
+Fresh-eyes triage across rounds: 3 blockers adopted + fixed inline (shared-name
+fillability asymmetry, Sonnet assess; `in`/`not_in` list-membership asymmetry,
+Opus assess; the reason-specific UI hint, Opus assess; and the top-level
+stale-`in`/`not_in` guard, Opus outer review). Low-confidence findings rejected as
+non-blocking: a self-referential group condition (no code path lets a group
+reference its own id, and merge does not guard it either); the empty-string-slug
+exclusion in `optionSlugs` (mirrors `mintOptionSlug`'s own guard); and a
+non-PDF-source over-refusal (unreachable -- the editor is a PDF-form authoring
+tool, and the over-refusal is safe, never minting an invalid schema). The Sonnet
+assessor filed `polyglot-pdf-cv9x` for the shared-name blocker; since it was
+in-scope against this bead's exit criterion 3 and fixed here, that bead was closed
+as fixed inline. The Opus reviewers filed no beads (in-scope, reported inline).
 
 Tests: net-new across `fieldGrouping.test.ts` (both flip directions, composite
 rewrite, whole-group-operator preservation, no-op cases, `canChangeGroupKind`

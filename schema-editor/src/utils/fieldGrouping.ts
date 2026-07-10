@@ -606,19 +606,50 @@ export function mergeFields(
 const LIST_MEMBERSHIP_OPERATORS = new Set(['in', 'not_in']);
 
 // True if any dependent's show_if/require_if has an `in`/`not_in` atom targeting
-// `groupId` that sits INSIDE a composite bucket (so it cannot be expanded to a
-// checkbox_group-valid any_of/none_of on a radio -> checkbox_group flip).
-function hasUnflippableListMembership(schema: FormSchema, groupId: string): boolean {
-  const inCompositeBlocks = (cond: FieldCondition | undefined): boolean => {
-    if (!cond || !isCompositeCondition(cond)) return false;
-    return CONDITION_BUCKETS.some(b =>
-      (cond[b] ?? []).some(
-        atom => atom.field === groupId && LIST_MEMBERSHIP_OPERATORS.has(atom.operator),
-      ),
-    );
+// `groupId` that CANNOT be losslessly converted to a checkbox_group-valid
+// membership condition on a radio -> checkbox_group flip -- so the flip must be
+// refused rather than strand a checkbox_group-invalid `in` operator (bd
+// polyglot-pdf-8qfj, fresh-eyes rounds 2 + 4). Two un-flippable shapes:
+//   (a) NESTED in a composite bucket -- `in [a,b]` must expand to an any_of of
+//       includes, but v2 is one level, so a nested atom has nowhere to expand.
+//   (b) TOP-LEVEL but not losslessly expandable -- the value is not an array, or
+//       resolving it to the group's REAL option slugs drops a member (a stale /
+//       renamed slug, or the whole list). Expanding such an atom would silently
+//       narrow (`in`) or widen (`not_in` -> none_of) the condition, or -- if the
+//       resolved set is empty -- leave a raw `in`/`not_in` the backend rejects.
+//       A FULLY-LIVE top-level `in`/`not_in` (every member a current slug) IS
+//       flippable and is NOT flagged here (changeGroupKind expands it).
+// `groupOptionSlugs` is the group's current option-value set.
+function hasUnflippableListMembership(
+  schema: FormSchema,
+  groupId: string,
+  groupOptionSlugs: Set<string>,
+): boolean {
+  // A top-level `in`/`not_in` on this group is lossless-expandable ONLY if its
+  // value is an array and every member resolves to a current option slug.
+  const topLevelNotLossless = (atom: ConditionalDisplay): boolean => {
+    if (atom.field !== groupId || !LIST_MEMBERSHIP_OPERATORS.has(atom.operator)) {
+      return false;
+    }
+    if (!Array.isArray(atom.value)) return true; // non-array `in` value: cannot expand
+    if (atom.value.length === 0) return true;    // empty list: nothing to expand
+    return !atom.value.every(v => groupOptionSlugs.has(String(v))); // any stale member
+  };
+  const blocks = (cond: FieldCondition | undefined): boolean => {
+    if (!cond) return false;
+    if (isCompositeCondition(cond)) {
+      // ANY in/not_in on this group nested in a composite blocks (shape (a)).
+      return CONDITION_BUCKETS.some(b =>
+        (cond[b] ?? []).some(
+          atom => atom.field === groupId && LIST_MEMBERSHIP_OPERATORS.has(atom.operator),
+        ),
+      );
+    }
+    // Top-level legacy: block only when not losslessly expandable (shape (b)).
+    return topLevelNotLossless(cond);
   };
   return schema.fields.some(
-    f => f.id !== groupId && (inCompositeBlocks(f.show_if) || inCompositeBlocks(f.require_if)),
+    f => f.id !== groupId && (blocks(f.show_if) || blocks(f.require_if)),
   );
 }
 
@@ -681,9 +712,17 @@ export function changeGroupKindBlockReason(
   // every option to carry its own pdf_field_name (pdf_on_value is NOT enough).
   if (field.pdf_field_name) return 'pdf-widgets';
   if (!(field.options || []).every(o => !!o.pdf_field_name)) return 'pdf-widgets';
-  // ...and refuse if a dependent has an un-expandable in-composite in/not_in atom
-  // on this group (it would strand a checkbox_group-invalid list operator).
-  if (hasUnflippableListMembership(schema, field.id)) return 'nested-list-membership';
+  // ...and refuse if a dependent has an in/not_in atom on this group that cannot
+  // be losslessly expanded to a checkbox_group-valid membership condition (nested
+  // in a composite, or a top-level list that is non-array / empty / has a stale
+  // member) -- else the flip would strand a checkbox_group-invalid list operator
+  // or silently narrow/widen the condition (bd polyglot-pdf-8qfj).
+  const optionSlugs = new Set(
+    (field.options || []).map(o => String(o.value)).filter(v => v !== ''),
+  );
+  if (hasUnflippableListMembership(schema, field.id, optionSlugs)) {
+    return 'nested-list-membership';
+  }
   return null;
 }
 
