@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-ezg2: the `manual_field_update` arm reads an optional `next_field_schema` and threads it to `send_manual_field_update`, which re-establishes the DTI current-field pointer via `merge_field_schema`). Also 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the `confirm_field_response.section_complete` sub-flag (bd njvh) into the control-channel table; verified accurate against current code otherwise -- see [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md)). Prior: 2026-07-02 (bd polyglot-pdf-puu8: `/ws/echo` + `/ws/audio` are now dev-only -- handshake rejected in prod behind the `backend/.env.DEV` marker gate; `/ws/fill` unchanged).*
+*Last updated: 2026-07-10 (bd polyglot-pdf-fn1m: added the "Soft page refresh (reload rehydration)" section -- the disclaimer step is gated on persisted `disclaimerAccepted` and `handleOpen` re-reads sessionStorage before the handshake. See [../journal/entries/2026-07-10-bd-fn1m-soft-refresh-rehydration.md](../journal/entries/2026-07-10-bd-fn1m-soft-refresh-rehydration.md).)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -184,6 +184,26 @@ against the code:
   `next_field_hint` rather than a full reconnect.
 - **Cold path:** otherwise it dials `wsUrl`, falling back to the cloud URL on
   failure, re-creating the audio + field managers if they were destroyed.
+
+## Soft page refresh (reload rehydration)
+
+A soft page refresh (F5/reload) during an active session is distinct from the
+in-memory reconnect above: the whole SPA re-mounts, so the connection is rebuilt
+from scratch and the UI step must be re-derived from persisted state. Two
+invariants keep the resumed session consistent with the client (bd
+polyglot-pdf-fn1m):
+
+- **UI step restore.** Both voice overlays' mount auto-connect effect reconnects
+  to resume the session, but the disclaimer/agree step is gated on the persisted
+  `disclaimerAccepted` (in `schema_form_state`) — an already-accepted session
+  reconnects **without** re-showing or re-reading the disclaimer, so the agree
+  screen never re-appears while the agent is mid-section.
+- **Fresh handshake state.** `webFormConnection.handleOpen` calls `reloadState()`
+  (re-read `schema_form_state` into `this.state`) **before** building the
+  handshake, so `current_values` + `section_id` reflect the client's actual
+  current field state — not the constructor's `init()` snapshot, which on a
+  refresh can predate the latest save (which would let the resumed backend assert
+  a stale previous-section value).
 
 ## Terminal reconnect failure (connection-timeout modal)
 

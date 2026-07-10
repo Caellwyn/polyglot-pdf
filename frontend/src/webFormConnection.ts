@@ -535,6 +535,25 @@ export class WebFormConnection {
       return;
     }
 
+    // Re-read the CURRENT sessionStorage state before building the handshake
+    // (bd polyglot-pdf-fn1m). this.state is the constructor's init() snapshot.
+    // init() already REUSES recent matching persisted state, so on a typical
+    // soft page refresh this.state is usually current -- but a brand-new
+    // connection is built on reload, and any save() that lands between that
+    // construction and this open (or a store already ahead of the snapshot)
+    // would leave this.state predating the latest currentSectionId / fieldValues.
+    // The handshake would then serialize stale values and the resumed (stateless)
+    // backend would rebuild context from prior-section data the client no longer
+    // holds -- the "model asserts a value from a previous section" symptom.
+    // reloadState() pulls the freshest sessionStorage back in so the handshake
+    // reflects the client's actual current field state; it is a strict safety
+    // net (never regresses, since every this.state mutator save()s synchronously
+    // so the store is always >= as fresh as this.state). No-op if storage is
+    // empty (keeps the snapshot). Must run BEFORE getHandshakePayload below; the
+    // post-session_ready load() (handleSessionReady) fires too late for the very
+    // first handshake.
+    this.reloadState();
+
     // Send handshake with schema + current_values + fill_language.
     // Pass resume:true on reconnects so the backend skips the greeting
     // and section re-introduction (bd polyglot-pdf-vmxx).
@@ -3352,12 +3371,19 @@ export class WebFormConnection {
   /**
    * Reload this connection's in-memory state from sessionStorage.
    *
-   * TEST-SUPPORT (bd polyglot-pdf-o1c): the E2E voice harness clears a field's
-   * state between same-page reruns by routing through SchemaFormStateManager
-   * (save + dispatch), which refreshes SchemaForm's React state but NOT this
-   * connection's own `this.state` copy. Calling this after such a clear pulls the
-   * updated state back in so a same-page rerun does not drive Gemini off a stale
-   * filled/confirmed value. No-op if storage is empty.
+   * `this.state` is a copy seeded at construction (init()); this pulls the latest
+   * persisted `schema_form_state` back into it. No-op if storage is empty (keeps
+   * the current copy). Two production callers:
+   *
+   * 1. `handleOpen` (bd polyglot-pdf-fn1m): on every (re)connect, before building
+   *    the handshake, so a soft page refresh -- which builds a BRAND-NEW connection
+   *    whose init() snapshot can predate the latest save -- serializes the client's
+   *    actual current section + field values, not a stale snapshot. This is the
+   *    primary real-world purpose; do NOT treat this method as test-only.
+   * 2. TEST-SUPPORT (bd polyglot-pdf-o1c): the E2E voice harness clears a field's
+   *    state between same-page reruns via SchemaFormStateManager (save + dispatch),
+   *    which refreshes SchemaForm's React state but NOT this connection's copy;
+   *    calling this after such a clear pulls the updated state back in.
    */
   reloadState(): void {
     const loaded = SchemaFormStateManager.load();

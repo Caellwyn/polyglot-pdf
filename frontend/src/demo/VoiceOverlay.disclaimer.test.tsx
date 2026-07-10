@@ -315,4 +315,65 @@ describe('VoiceOverlay disclaimer-agree interrupt ordering (bd ovi6)', () => {
   it('mobile (VoiceOverlayMobile): skips activity_end on the reconnect path (ala0)', async () => {
     await assertReconnectSkipsActivityEnd(VoiceOverlayMobile)
   })
+
+  /**
+   * Soft page-refresh mid-session (bd polyglot-pdf-fn1m): the mount auto-connect
+   * fall-through must NOT re-show the disclaimer (nor request it be read aloud)
+   * when it was ALREADY accepted -- otherwise the agree screen re-appears while
+   * the resumed voice session is speaking mid-section. It must still RECONNECT
+   * (to resume the session). Modeled by a stored state with
+   * disclaimerAccepted=true and a NOT-yet-live connection at mount (so the
+   * alreadyLive guard is skipped and the reload fall-through runs).
+   */
+  async function assertAcceptedSoftRefreshResumeSkipsDisclaimer(
+    Overlay: typeof VoiceOverlay | typeof VoiceOverlayMobile,
+  ) {
+    const calls: string[] = []
+    const manager = makeMockManager(calls)
+    // Not yet connected at mount, so the alreadyLive guard is false and the
+    // reload fall-through path (the one this bead fixes) runs.
+    manager.__forceStale()
+
+    vi.spyOn(SchemaFormStateManager, 'load').mockImplementation(() => ({
+      schema: MINIMAL_SCHEMA,
+      fieldValues: {},
+      currentSectionId: 'section_1',
+      completedSections: new Set<string>(),
+      validationErrors: {},
+      lastUpdated: 0,
+      formSessionId: 'fss_test',
+      loadedFieldIds: new Set<string>(),
+      jitModeEnabled: false,
+      disclaimerAccepted: true, // already accepted -> a soft-refresh resume
+      selectedLanguage: 'English',
+    } as any))
+    vi.spyOn(SchemaFormStateManager, 'save').mockImplementation(() => {})
+
+    render(
+      <Overlay
+        schema={MINIMAL_SCHEMA}
+        connectionManager={manager}
+        status="disconnected"
+        initialLanguage="English"
+      />
+    )
+
+    // The mount effect reconnects to resume the session...
+    await waitFor(() => expect(manager.connect).toHaveBeenCalled())
+
+    // ...but the disclaimer is NOT re-shown (no "I Agree") and is NOT read aloud
+    // (readDisclaimer, driven by pendingDisclaimerRead, never fires). Give any
+    // pending microtasks/effects a beat to settle before asserting absence.
+    await waitFor(() => expect(manager.connect).toHaveBeenCalled())
+    expect(screen.queryByText('I Agree')).toBeNull()
+    expect(manager.readDisclaimer).not.toHaveBeenCalled()
+  }
+
+  it('desktop (VoiceOverlay): soft-refresh resume with disclaimer accepted reconnects WITHOUT re-showing/re-reading the disclaimer (fn1m)', async () => {
+    await assertAcceptedSoftRefreshResumeSkipsDisclaimer(VoiceOverlay)
+  })
+
+  it('mobile (VoiceOverlayMobile): soft-refresh resume with disclaimer accepted reconnects WITHOUT re-showing/re-reading the disclaimer (fn1m)', async () => {
+    await assertAcceptedSoftRefreshResumeSkipsDisclaimer(VoiceOverlayMobile)
+  })
 })
