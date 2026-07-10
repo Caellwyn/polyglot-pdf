@@ -106,6 +106,29 @@ class FieldRec:
         self.label = label
 
 
+def _widget_leaf(name: Optional[str]) -> Optional[str]:
+    """The dot-leaf of a widget name: the name-convention regexes anchor on
+    'P{N}_...' leaves, but option-level pdf_field_names (and PDF-only dump
+    names) are often fully-qualified XFA paths like
+    'form1[0].#subform[2].P3_checkbox7_White[0]'."""
+    return name.split(".")[-1] if name else name
+
+
+def _field_widget_name(f: dict) -> Optional[str]:
+    """The PDF widget name backing a field: its own pdf_field_name, else the
+    FIRST option's (a consolidated options[] field -- checkbox_group/radio --
+    carries the name per option; same convention as extract_form's
+    _field_pdf_name). Without this fallback every consolidated field looks
+    like a nameless stray and lands in 'To review' (fresh-eyes, 6cfu.2)."""
+    pfn = f.get("pdf_field_name")
+    if pfn:
+        return pfn
+    for o in (f.get("options") or []):
+        if isinstance(o, dict) and o.get("pdf_field_name"):
+            return o["pdf_field_name"]
+    return None
+
+
 def fields_from_schema(schema: dict) -> list[FieldRec]:
     """FieldRecs from an in-memory schema dict (kit schema or draft).
 
@@ -118,7 +141,7 @@ def fields_from_schema(schema: dict) -> list[FieldRec]:
         pos = f.get("pdf_position") or {}
         fields.append(FieldRec(
             fid=f["id"],
-            name=f.get("pdf_field_name"),
+            name=_widget_leaf(_field_widget_name(f)),
             page=pos.get("page"),
             x=float(pos.get("x", 0.0)),
             y=float(pos.get("y", 0.0)),
@@ -147,7 +170,7 @@ def load_fields(kit_dir: str, pdf_path: str) -> tuple[list[FieldRec], dict]:
         w0 = widgets[0]["rect"]
         fields.append(FieldRec(
             fid=f["name"],
-            name=f["name"],
+            name=_widget_leaf(f["name"]),
             page=w0["page"] + 1,
             x=w0["x"],
             y=w0["y"],

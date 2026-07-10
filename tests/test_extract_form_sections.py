@@ -101,17 +101,22 @@ def test_applied_w7_schema_validates(w7_applied):
         FormSchema.model_validate(schema)
 
 
-def test_i90_uses_name_convention_and_files_strays_to_review():
-    """The USCIS family: P{N}_Line names drive the division; the kit's
-    pdf_field_name-less fields land in per-page sec_to_review sections."""
+def test_i90_uses_name_convention_with_no_spurious_to_review():
+    """The USCIS family: P{N}_ names drive the division -- INCLUDING
+    consolidated options[] fields whose widget name lives on the options,
+    not the field (fresh-eyes regression, 6cfu.2: without the option-name
+    fallback 18 real i-90 fields -- sex, ethnicity, race, ... -- were
+    misfiled into 'To review'). Every i-90 kit field derives a real home."""
     schema = _load_kit(_I90)
     summary = ds.derive_and_apply(schema, str(_I90 / "form.pdf"))
     assert summary["strategy"] == "name-convention"
-    assert all(sid.startswith("sec_to_review")
-               for sid in summary["to_review_section_ids"])
-    section_ids = {s["id"] for s in schema["sections"]}
-    assert set(summary["to_review_section_ids"]) <= section_ids
-    # Recorded review fields really sit in review sections.
+    assert summary["to_review_field_ids"] == []
+    assert summary["to_review_section_ids"] == []
     by_field = {f["id"]: f["section_id"] for f in schema["fields"]}
-    for fid in summary["to_review_field_ids"]:
-        assert by_field[fid].startswith("sec_to_review")
+    # The consolidated option-bearing fields land in real derived sections.
+    for fid in ("p3_race", "p3_ethnicity", "p1_line8_male", "p5_checkbox1a"):
+        assert not by_field[fid].startswith("sec_to_review"), fid
+    # Recorded review ids (none here) would have to sit in review sections;
+    # the invariant is pinned synthetically in test_derive_sections.py.
+    section_ids = {s["id"] for s in schema["sections"]}
+    assert not any(sid.startswith("sec_to_review") for sid in section_ids)

@@ -50,9 +50,16 @@ and the amended cap policy (display-sanity ~40, not a validator constraint).
   number, so i-90's page-7 `P1_`-named re-entry fields make derived Part 1
   span pages non-contiguously -- mirrors the form's own naming; the related
   sub-heading-bleed limiter is bead `polyglot-pdf-h1eo` (already filed).
-- Fresh-eyes assess loop + Opus outer review results are recorded in the PR
-  and merge ping (this entry is written pre-review; gaps found there ship in
-  the same PR).
+- **Fresh-eyes round 1 (Sonnet) found one correct blocker, fixed inline**:
+  `fields_from_schema` read only the field-level `pdf_field_name`, so
+  consolidated options[] fields (whose widget names live per-option, often
+  as fully-qualified XFA paths) looked like nameless strays -- 18 real i-90
+  fields (sex, ethnicity, race, ...) misfiled into 'To review'. Fix:
+  `_field_widget_name` (field name, else first option's -- extract_form's
+  `_field_pdf_name` convention) + `_widget_leaf` (dot-leaf before the
+  convention regexes). i-90 now derives with ZERO to-review fields; pinned
+  by `test_i90_uses_name_convention_with_no_spurious_to_review`. Later
+  rounds' outcomes are in the PR + merge ping.
 
 ## Lessons
 
