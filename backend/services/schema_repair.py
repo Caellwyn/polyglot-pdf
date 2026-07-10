@@ -559,23 +559,27 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                 # the stricter drop policy.
                 op = atom.get("operator")
                 ttype = str(trig.get("type")) if isinstance(trig, dict) else None
-                if ttype == "checkbox_group" and op in ("equals", "not_equals"):
-                    if str(atom.get("value", "")) == "":
-                        atom["operator"] = ("is_empty" if op == "equals"
-                                            else "is_not_empty")
-                        atom.pop("value", None)
-                    else:
-                        new_op = ("includes" if op == "equals"
-                                  else "not_includes")
-                        repairs.append({
-                            "action": "alias-operator", "path": _path,
-                            "detail": f"{op} on checkbox_group trigger -> "
-                                      f"{new_op} (v1 controls_fields "
-                                      "membership reading)",
-                            "error": False,
-                        })
-                        count_alias(f"{op}@controls_fields")
-                        atom["operator"] = new_op
+                if (op in ("equals", "not_equals")
+                        and str(atom.get("value", "")) == ""):
+                    # v1 emptiness idiom, ANY trigger type (migrate applies it
+                    # unguarded, BEFORE the membership rewrite): equals ""
+                    # means "field is empty" -- v2 spells that is_empty/
+                    # is_not_empty (no value).
+                    atom["operator"] = ("is_empty" if op == "equals"
+                                        else "is_not_empty")
+                    atom.pop("value", None)
+                elif ttype == "checkbox_group" and op in ("equals", "not_equals"):
+                    new_op = ("includes" if op == "equals"
+                              else "not_includes")
+                    repairs.append({
+                        "action": "alias-operator", "path": _path,
+                        "detail": f"{op} on checkbox_group trigger -> "
+                                  f"{new_op} (v1 controls_fields "
+                                  "membership reading)",
+                        "error": False,
+                    })
+                    count_alias(f"{op}@controls_fields")
+                    atom["operator"] = new_op
                 elif (op == "is_checked"
                         and ttype in vocab.CHOICE_FIELD_TYPES):
                     # is_checked on an OPTION-BEARING trigger (checkbox_group/

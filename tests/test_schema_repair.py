@@ -612,6 +612,45 @@ def test_is_checked_on_group_controls_edge_mirrors_as_is_not_empty():
         assert mig_dep["show_if"] == dep_out["show_if"], gtype
 
 
+def test_empty_value_controls_edge_mirrors_as_emptiness_any_trigger():
+    # Opus review gap round 3 (bd c3y6): the v1 emptiness idiom (equals "" /
+    # not_equals "" means "field is (not) empty") applies to ANY trigger type
+    # in migrate's _rewrite_atom_value -- not just checkbox_group. On a radio
+    # trigger repair used to DROP the edge ("" resolves to no option); on a
+    # text trigger it kept a semantically different equals "".
+    radio = {
+        "id": "rad", "type": "radio",
+        "options": [
+            {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]",
+             "pdf_on_value": "Y"},
+            {"value": "no", "label": "No", "pdf_field_name": "R[1]",
+             "pdf_on_value": "N"},
+        ],
+        "controls_fields": [{"operator": "equals", "value": "",
+                             "shows": ["dep1"]}],
+    }
+    text = {"id": "txt", "type": "text", "pdf_field_name": "T[0]",
+            "controls_fields": [{"operator": "not_equals", "value": "",
+                                 "makes_required": ["dep2"]}]}
+    dep1 = {"id": "dep1", "type": "text", "pdf_field_name": "D1[0]"}
+    dep2 = {"id": "dep2", "type": "text", "pdf_field_name": "D2[0]"}
+    draft = _v2_schema([radio, text, dep1, dep2])
+    repaired, _ = repair(draft)
+
+    out = {f["id"]: f for f in repaired["fields"]}
+    assert out["dep1"]["show_if"] == {"field": "rad", "operator": "is_empty"}
+    assert out["dep2"]["require_if"] == {
+        "field": "txt", "operator": "is_not_empty"}
+    assert not has_errors(lint_schema(repaired))
+
+    # Evaluator-equivalence with migrate Pass 4 on the same input.
+    mig = _load_migrate_module()
+    mig_out, _ = mig.migrate(_v1_equivalent([radio, text, dep1, dep2]))
+    mig_fields = {f["id"]: f for f in mig_out["fields"]}
+    assert mig_fields["dep1"]["show_if"] == out["dep1"]["show_if"]
+    assert mig_fields["dep2"]["require_if"] == out["dep2"]["require_if"]
+
+
 def test_already_mirrored_suppression_with_trigger_before_raw_target():
     # Fresh-eyes finding (bd c3y6): mirroring must run AFTER the show_if/
     # require_if rewrite pass has normalized ALL fields (migrate's Pass 2 ->
