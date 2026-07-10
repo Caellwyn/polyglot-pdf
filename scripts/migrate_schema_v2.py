@@ -55,6 +55,7 @@ if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
 from backend.models import conditional_vocabulary as vocab  # noqa: E402
+from backend.services import controls_fields_mirror as cfm  # noqa: E402
 
 # The controls_fields action keys (trigger-side).
 _ACTION_KEYS = ("shows", "hides", "unlocks", "locks",
@@ -520,31 +521,10 @@ def migrate(schema: Dict[str, Any],
 def _add_target_condition(target: Dict[str, Any], key: str,
                           atom: Dict[str, Any]) -> None:
     """Add a mirrored show_if/require_if atom to a target field as an OR
-    alternative -- the field is shown/required under its OWN condition OR the
-    mirrored trigger.
-
-    Appending in place is safe ONLY when the existing condition is a PURE any_of
-    (no all_of/none_of alongside it): appending into an any_of that sits beside an
-    all_of/none_of would read as `all_of AND (any_of OR new) AND none_of`, NOT
-    `(whole old condition) OR new` (Codex PR #346). For anything else -- a single
-    atom, or a composite carrying all_of/none_of -- wrap the WHOLE existing
-    condition as one arm of a fresh any_of so its AND/NOT semantics are preserved
-    as a single OR alternative. (No shipped kit hits the composite case today;
-    this keeps the merge correct for a future one.)"""
-    existing = target.get(key)
-    if not existing:
-        target[key] = atom
-        return
-    is_pure_any_of = (
-        isinstance(existing, dict)
-        and isinstance(existing.get("any_of"), list)
-        and not existing.get("all_of")
-        and not existing.get("none_of")
-    )
-    if is_pure_any_of:
-        existing["any_of"].append(atom)
-    else:
-        target[key] = {"any_of": [existing, atom]}
+    alternative. Delegates to the shared core (bd polyglot-pdf-c3y6) -- see
+    backend/services/controls_fields_mirror.add_target_condition for the full
+    semantics (the any_of-append-vs-wrap merge rule, Codex PR #346)."""
+    cfm.add_target_condition(target, key, atom)
 
 
 def _control_condition(control: Dict[str, Any], trigger_id: Any,
@@ -555,13 +535,23 @@ def _control_condition(control: Dict[str, Any], trigger_id: Any,
     Includes the standalone-unwrap fixup: `equals <the unwrapped trigger's old
     value>` -> is_checked, matching what pass 2 did to the target's show_if (bd
     c5r8) -- without it a genuinely-mirrored edge on a standalone checkbox would
-    fail to match and be needlessly kept."""
-    op = control.get("operator", "equals")
-    val = control.get("value")
-    if (standalone_old_val is not None and op == "equals"
-            and str(val) == standalone_old_val):
-        return {"field": trigger_id, "operator": "is_checked"}
-    atom = {"field": trigger_id, "operator": op, "value": val}
+    fail to match and be needlessly kept.
+
+    The standalone-fixup + raw-atom construction is the shared core (bd
+    polyglot-pdf-c3y6, backend/services/controls_fields_mirror.control_condition);
+    THIS migration's own _rewrite_atom_value normalization (slug map + trigger
+    type) is layered on top here, same as before extraction. The standalone
+    fixup is recognized by comparing against the control's OWN raw operator
+    (not the fixed-up result), so a control whose operator happens to already
+    BE "is_checked" (not a fixup) still gets the normal _rewrite_atom_value
+    pass (e.g. its option-bearing-trigger -> is_not_empty rewrite)."""
+    raw = cfm.control_condition(control, trigger_id, standalone_old_val)
+    is_standalone_fixup = (
+        str(control.get("operator", "equals")) != "is_checked"
+        and raw.get("operator") == "is_checked")
+    if is_standalone_fixup:
+        return raw  # already normalized by the fixup; no value to rewrite
+    atom = dict(raw)
     _rewrite_atom_value(atom, slug_map, trigger_type)
     # A no-value operator (is_checked / is_empty / is_not_empty) carries no value.
     if atom.get("operator") in ("is_checked", "is_empty", "is_not_empty"):
@@ -573,21 +563,11 @@ def _target_has_condition(target: Dict[str, Any], key: str,
                           want: Dict[str, Any]) -> bool:
     """True if the target's condition under `key` (show_if OR require_if -- the
     SPECIFIC bucket, not both) already carries an atom MATCHING the control's
-    implied condition on (field, operator, value).
-
-    Key-specific by design (bd h76m.16, fresh-eyes r2): a `shows` action mirrors
-    into show_if and a `makes_required` action into require_if, so a `shows` edge
-    is "already mirrored" ONLY if show_if covers it -- a matching require_if (or
-    vice versa) is a DIFFERENT effect and must NOT suppress the mirror, or the
-    edge's real effect is silently lost. Also value/polarity-aware: an atom naming
-    the same trigger but a different option value is a distinct condition, not a
-    mirror."""
-    for atom in _walk_condition_atoms(target.get(key)):
-        if (atom.get("field") == want.get("field")
-                and atom.get("operator") == want.get("operator")
-                and atom.get("value") == want.get("value")):
-            return True
-    return False
+    implied condition on (field, operator, value). Delegates to the shared core
+    (bd polyglot-pdf-c3y6) -- see
+    backend/services/controls_fields_mirror.target_has_condition for the full
+    semantics (key-specific matching, fresh-eyes r2)."""
+    return cfm.target_has_condition(target, key, want, _walk_condition_atoms)
 
 
 

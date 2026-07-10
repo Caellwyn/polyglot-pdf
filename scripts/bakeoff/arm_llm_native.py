@@ -118,7 +118,10 @@ def build_fewshot(truth_path: str) -> str:
     plain = next((f for f in fields if f.get("type") in ("text", "date", "number")
                   and not f.get("options")), None)
     with_opts = next((f for f in fields if f.get("options")), None)
-    rel_keys = ("show_if", "controls_fields", "copy_to", "overflow_to_supplement",
+    # controls_fields / conditional_fields are REMOVED v1 mechanisms (bd
+    # polyglot-pdf-c3y6) -- excluded here so the few-shot exemplar never
+    # showcases a populated controls_fields example to imitate.
+    rel_keys = ("show_if", "copy_to", "overflow_to_supplement",
                 "conditional_logic", "conditional_behavior")
     with_rel = next((f for f in fields if any(f.get(k) for k in rel_keys)), None)
 

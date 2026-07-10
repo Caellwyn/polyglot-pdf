@@ -164,7 +164,7 @@ def render_operator_block() -> str:
     """The CONDITIONAL OPERATORS section of the contract (registry-rendered)."""
     header = (
         "CONDITIONAL OPERATORS (the ONLY operators allowed in show_if / "
-        "require_if / controls_fields -- name | value arity | valid trigger "
+        "require_if -- name | value arity | valid trigger "
         "field types | notes):"
     )
     return header + "\n" + "\n".join(render_operator_lines())
@@ -241,14 +241,12 @@ FIELD SHAPE (the unit the scorer grades hardest):
   "multi_entry": {{...}},                  // repeating-row config (or type=table)
   // A READ-ONLY field that a choice unlocks carries the unlock descriptor ON
   // ITSELF (that is what the runtime + PDF filler read) -- conditional_behavior /
-  // conditional_logic below, plus a show_if naming the choice. controls_fields
-  // is the trigger-side mirror of that intent; a bare shows/makes_required here
-  // is NOT applied at runtime in v2, so a plain "show / require this field when
-  // X" dependency belongs on the DEPENDENT field's show_if / require_if.
-  "controls_fields": [ {{"operator": str, "value": any,
-                        "shows": [str], "hides": [str], "unlocks": [str],
-                        "locks": [str], "makes_required": [str],
-                        "makes_optional": [str]}} ],
+  // conditional_logic below, plus a show_if naming the choice.
+  // controls_fields / conditional_fields are REMOVED v1 trigger-side mechanisms
+  // -- NEVER emit either key. v2 has NO trigger-side conditional logic at all;
+  // express a "show / require this field when X" dependency ONLY as show_if /
+  // require_if ON THE DEPENDENT (target) field, never as an action list on the
+  // trigger field.
   // On the read-only dependent field: how it unlocks when its show_if holds.
   "conditional_behavior": {{"unlock_method": "flip_readonly_bit"}},
   "conditional_logic": {{"unlock_method": "flip_readonly_bit",
@@ -271,7 +269,9 @@ RULES:
   require_if ON THE DEPENDENT FIELD. For a read-only field a choice unlocks, put
   the unlock descriptor (conditional_behavior / conditional_logic) ON THAT FIELD
   with a show_if naming the choice -- that is what the runtime and PDF filler
-  read; controls_fields alone does not unlock anything at runtime in v2.
+  read. NEVER emit controls_fields or conditional_fields: both are REMOVED v1
+  mechanisms with no v2 reader; a trigger-side action list does nothing at
+  runtime, so any dependency must be expressed target-side instead.
 - Output MUST be a single valid JSON object, UTF-8, ASCII-safe, no trailing commas.
 
 CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):
@@ -286,10 +286,10 @@ CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):
   ASCII [a-z0-9_-], no commas or spaces, UNIQUE within the field. Do NOT use a
   widget-leaf identifier or a raw on-state as the value -- the widget identity
   lives in option.pdf_field_name (and pdf_on_value for shared-name radio kids).
-- Any show_if / require_if / controls_fields that references a choice field's
-  option MUST use that option's SLUG as the value, with a membership operator
-  (includes / not_includes) for a checkbox_group trigger, or equals / in for a
-  radio/select trigger.
+- Any show_if / require_if that references a choice field's option MUST use
+  that option's SLUG as the value, with a membership operator (includes /
+  not_includes) for a checkbox_group trigger, or equals / in for a radio/select
+  trigger.
 
 CANONICAL v2 EXAMPLE (this object validates against the FormSchema contract --
 imitate its conventions: slug option values, per-box pdf_field_name, and an
