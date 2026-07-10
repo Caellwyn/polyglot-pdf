@@ -645,6 +645,10 @@ def build_output(form_id: str, strategy: str, sections: list[DerivedSection],
                     else "sec_to_review_unplaced")
         else:
             base = f"sec_{_slug(sec.label)}_p{sec.page}"
+            if base.startswith("sec_to_review"):
+                # A printed heading that literally slugs to 'to_review' must
+                # not squat on the review-gate prefix (fresh-eyes r2).
+                base = f"sec_x_{_slug(sec.label)}_p{sec.page}"
         sid = base
         n = 2
         while sid in used_ids:
@@ -734,6 +738,8 @@ def compare_report(form_id: str, out: dict, fields: list[FieldRec],
 def _derive_with_doc(fields: list[FieldRec], doc: "fitz.Document", cap: int,
                      form_id: str) -> tuple[dict, list[Heading]]:
     """The strategy ladder over already-loaded fields + an OPEN document."""
+    if cap < 1:
+        raise ValueError(f"cap must be >= 1 (got {cap})")
     if doc.page_count == 0:
         raise ValueError("PDF has no pages -- nothing to derive divisions from")
     headings = detect_headings(doc)

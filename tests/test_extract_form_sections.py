@@ -34,9 +34,11 @@ spec.loader.exec_module(ds)
 
 _W7 = _REPO / "form-kits" / "w7"
 _I90 = _REPO / "form-kits" / "i-90"
+_F1040 = _REPO / "form-kits" / "f1040"
 
 pytestmark = pytest.mark.skipif(
-    not (_W7 / "form.pdf").exists() or not (_I90 / "form.pdf").exists(),
+    not (_W7 / "form.pdf").exists() or not (_I90 / "form.pdf").exists()
+    or not (_F1040 / "form.pdf").exists(),
     reason="checked-in form kits unavailable",
 )
 
@@ -120,3 +122,17 @@ def test_i90_uses_name_convention_with_no_spurious_to_review():
     # the invariant is pinned synthetically in test_derive_sections.py.
     section_ids = {s["id"] for s in schema["sections"]}
     assert not any(sid.startswith("sec_to_review") for sid in section_ids)
+
+
+def test_f1040_dependents_cap_split_is_balanced():
+    """The motivating real-kit case for the balanced-split policy (maintainer
+    feedback at the 6cfu.1 checkpoint): f1040's 'Dependents' block (42 fields
+    at cap 40) splits 21+21, never greedy 40+2. Pins _balanced_chunks +
+    _row_family + printed-heading bucketing end-to-end against the real PDF."""
+    schema = _load_kit(_F1040)
+    summary = ds.derive_and_apply(schema, str(_F1040 / "form.pdf"))
+    assert summary["strategy"] == "printed-heading"
+    dep = [s for s in schema["sections"] if s["label"].startswith("Dependents")]
+    assert [s["label"] for s in dep] == ["Dependents (1 of 2)",
+                                         "Dependents (2 of 2)"]
+    assert [len(s["fields"]) for s in dep] == [21, 21]
