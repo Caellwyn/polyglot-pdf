@@ -917,7 +917,7 @@ async def fill_form_from_schema(
 	print(f"Form Session ID: {form_session_id}")
 	print(f"Ephemeral ID: {ephemeral_id}")
 	print(f"Section: {section_id} ({section_number}/{total_sections}) - {section_label}")
-	print(f"JIT Mode: {is_jit_mode}")
+	print(f"Manifest-first transport: {is_jit_mode}")
 	print(f"Resume: {is_reconnect}")
 	print(f"{'='*80}\n")
 
