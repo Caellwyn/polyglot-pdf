@@ -148,10 +148,14 @@ def test_unresolvable_value_drops_the_condition():
 # --------------------------------------------------------------------------- #
 
 def test_is_selected_aliases_to_registry_valid_membership():
-    # checkbox_group trigger -> includes; v1 checkbox-with-options trigger ->
-    # equals (the registry forbids includes there; the evaluator's array
-    # branch gives equals membership semantics).
-    for ftype, expected in (("checkbox_group", "includes"), ("checkbox", "equals")):
+    # Both spellings land on `includes`: a checkbox_group trigger directly,
+    # and a v1 checkbox-with-options trigger via the shape normalization
+    # (bd polyglot-pdf-n3mn) -- it retypes to checkbox_group FIRST (migrate
+    # Pass 1 parity; a checkbox with options fails FormSchema outright), so
+    # the alias sees the final group type. (Before the normalization, repair
+    # left the v1 type in place and had to pick `equals`, the only
+    # registry-valid reading on a bare checkbox.)
+    for ftype in ("checkbox_group", "checkbox"):
         fields = [
             _group(ftype=ftype),
             {"id": "dep", "type": "text",
@@ -159,8 +163,10 @@ def test_is_selected_aliases_to_registry_valid_membership():
                          "value": "alpha"}},
         ]
         repaired, repairs = repair(_schema(fields))
+        grp = next(f for f in repaired["fields"] if f["id"] == "grp")
+        assert grp["type"] == "checkbox_group", ftype  # normalized shape
         dep = next(f for f in repaired["fields"] if f["id"] == "dep")
-        assert dep["show_if"]["operator"] == expected, ftype
+        assert dep["show_if"]["operator"] == "includes", ftype
         assert not has_errors(lint_schema(repaired)), ftype
 
 
@@ -233,7 +239,11 @@ def test_contains_on_group_trigger_gets_membership_reading():
     ]
     repaired, _ = repair(_schema(fields))
     dep = next(f for f in repaired["fields"] if f["id"] == "dep")
-    assert dep["show_if"]["operator"] == "equals"  # registry-valid membership
+    # The v1 checkbox-with-options trigger retypes to checkbox_group first
+    # (shape normalization, bd polyglot-pdf-n3mn), so the membership reading
+    # is the group's canonical `includes` (was `equals` when the v1 type was
+    # left in place).
+    assert dep["show_if"]["operator"] == "includes"
     assert not has_errors(lint_schema(repaired))
 
 
@@ -421,15 +431,18 @@ def test_show_if_does_not_suppress_a_makes_required_mirror_same_trigger():
     draft = _v2_schema([trig, rel_d])
     repaired, repairs = repair(draft)
     t = {f["id"]: f for f in repaired["fields"]}["rel_d"]
-    # The pre-existing show_if is NOT touched by the controls_fields-specific
-    # standalone fixup (that fixup only normalizes the MIRRORED atom); equals
-    # is registry-valid on a checkbox trigger so repair's generic atom rewrite
-    # leaves it as-is.
-    assert t["show_if"] == {"field": "reason_d", "operator": "equals", "value": "yes"}
-    # The MIRRORED require_if (a fresh atom repair had to build from the
-    # controls_fields edge) gets the standalone-checkbox idiom fixup applied:
-    # the trigger's lone option's raw value has no v2 referent once mirrored.
+    # The shape normalization (bd polyglot-pdf-n3mn) unwraps the lone-option
+    # checkbox and retargets the pre-existing `equals yes` to the standalone
+    # is_checked idiom -- the value vanished with the unwrap (migrate Pass 2
+    # parity; both buckets now carry the SAME canonical representation, the
+    # exact two-representations wart the c3y6 outer review noted).
+    assert t["show_if"] == {"field": "reason_d", "operator": "is_checked"}
+    # ...and the makes_required mirror is still NOT suppressed by the
+    # matching show_if (key-specific suppression): require_if gets its own
+    # is_checked atom.
     assert t["require_if"] == {"field": "reason_d", "operator": "is_checked"}
+    trig_out = {f["id"]: f for f in repaired["fields"]}["reason_d"]
+    assert "options" not in trig_out  # unwrapped standalone boolean
     assert not has_errors(lint_schema(repaired))
 
 
@@ -698,3 +711,182 @@ def _load_migrate_module():
 def _v1_equivalent(fields):
     return {"source": "pdf", "form_metadata": {"title": "T", "version": "unknown"},
             "sections": [], "fields": copy.deepcopy(fields)}
+
+
+# --------------------------------------------------------------------------- #
+# Strict-model validity fixes (bd polyglot-pdf-n3mn -- surfaced by the 6s71
+# paid verification: i-90 invented an overflow_to_supplement value and a
+# contract-shaped supplements entry; f1040 emitted 37 lone-option checkboxes).
+# --------------------------------------------------------------------------- #
+
+def _validatable(fields, supplements=None):
+    """A draft that passes FormSchema.model_validate once its fields do --
+    all the schema-level required plumbing filled in."""
+    schema = {
+        "source": "pdf", "schema_version": "2",
+        "form_metadata": {"title": "T", "version": "1"},
+        "sections": [{"id": "s1", "label": "S1", "order": 0,
+                      "fields": [f["id"] for f in fields]}],
+        "fields": copy.deepcopy(fields),
+        "extraction_info": {"extracted_at": "2026-07-10T00:00:00Z",
+                            "extraction_confidence": 0.9,
+                            "extractor_version": "test",
+                            "manual_review_required": True},
+    }
+    for f in schema["fields"]:
+        f.setdefault("section_id", "s1")
+        f.setdefault("spoken_name", f.get("name", f["id"]))
+        f.setdefault("read_only", False)
+    if supplements is not None:
+        schema["supplements"] = supplements
+    return schema
+
+
+def _model_validates(schema) -> str:
+    from backend.models.form_models import FormSchema
+    try:
+        FormSchema.model_validate(schema)
+        return ""
+    except Exception as exc:  # noqa: BLE001 -- the message IS the assertion aid
+        return str(exc)
+
+
+def test_invalid_overflow_supplement_string_aliases_to_enum():
+    # i-90 emitted 'additional_information' where SupplementType allows only
+    # 'supplement_a' -- same intent, invented name. Alias, never drop.
+    f = {"id": "t1", "name": "T1", "type": "text", "pdf_field_name": "T[0]",
+         "overflow_to_supplement": "additional_information"}
+    draft = _validatable([f])
+    assert "overflow_to_supplement" in _model_validates(draft)  # RED going in
+
+    repaired, repairs = repair(draft)
+    assert repaired["fields"][0]["overflow_to_supplement"] == "supplement_a"
+    assert any(r["action"] == "alias-overflow-supplement" for r in repairs)
+    assert _model_validates(repaired) == ""
+
+
+def test_valid_overflow_supplement_untouched_nonstring_dropped():
+    ok = {"id": "t1", "name": "T1", "type": "text", "pdf_field_name": "T[0]",
+          "overflow_to_supplement": "supplement_a"}
+    bad = {"id": "t2", "name": "T2", "type": "text", "pdf_field_name": "T[1]",
+           "overflow_to_supplement": {"weird": True}}
+    repaired, repairs = repair(_validatable([ok, bad]))
+    assert repaired["fields"][0]["overflow_to_supplement"] == "supplement_a"
+    assert "overflow_to_supplement" not in repaired["fields"][1]
+    acts = [r["action"] for r in repairs]
+    assert "drop-overflow-supplement" in acts
+    assert "alias-overflow-supplement" not in acts  # the valid one untouched
+
+
+def test_lone_option_checkbox_unwraps_to_standalone_boolean():
+    # f1040's 37x shape: {"value": "1", "pdf_on_value": "1"} single option,
+    # no label, on a type=checkbox field -- v2 forbids options on a checkbox
+    # entirely, so the unwrap (migrate Pass 1 parity) is the repair, not a
+    # synthesized label.
+    chk = {"id": "chk", "name": "Filed pursuant to section", "type": "checkbox",
+           "options": [{"value": "1", "pdf_on_value": "1",
+                        "pdf_field_name": "c[0]"}]}
+    dep = {"id": "dep", "name": "Dep", "type": "text", "pdf_field_name": "D[0]",
+           "show_if": {"field": "chk", "operator": "equals", "value": "1"}}
+    draft = _validatable([chk, dep])
+    assert _model_validates(draft) != ""  # RED going in
+
+    repaired, repairs = repair(draft)
+    out = {f["id"]: f for f in repaired["fields"]}
+    assert "options" not in out["chk"]
+    assert out["chk"]["pdf_field_name"] == "c[0]"  # lifted from the option
+    # The native condition that referenced the vanished option value moved to
+    # the standalone idiom (migrate Pass 2 parity).
+    assert out["dep"]["show_if"] == {"field": "chk", "operator": "is_checked"}
+    assert any(r["action"] == "unwrap-standalone-checkbox" for r in repairs)
+    assert _model_validates(repaired) == ""
+    assert not has_errors(lint_schema(repaired))
+
+    # Idempotent: a second pass has nothing left to do.
+    again, repairs2 = repair(repaired)
+    assert again == repaired
+    assert not any(r["action"] == "unwrap-standalone-checkbox" for r in repairs2)
+
+
+def test_multi_option_checkbox_retypes_to_checkbox_group():
+    grp = {"id": "grp", "name": "Grp", "type": "checkbox",
+           "pdf_field_name": "G[0]",  # a group must NOT carry one -- dropped
+           "options": [
+               {"value": "alpha", "label": "Alpha", "pdf_field_name": "a[0]"},
+               {"value": "beta", "label": "Beta", "pdf_field_name": "b[0]"},
+           ]}
+    repaired, repairs = repair(_validatable([grp]))
+    out = repaired["fields"][0]
+    assert out["type"] == "checkbox_group"
+    assert "pdf_field_name" not in out
+    assert any(r["action"] == "retype-checkbox-group" for r in repairs)
+    assert _model_validates(repaired) == ""
+
+
+def test_option_label_synthesis_for_groups():
+    # A group option missing its label: humanized slug when the value has
+    # words; the numeric-only value falls through to "Option N".
+    grp = {"id": "grp", "name": "Grp", "type": "checkbox_group",
+           "options": [
+               {"value": "married_filing_jointly", "pdf_field_name": "a[0]"},
+               {"value": "2", "pdf_on_value": "2", "pdf_field_name": "b[0]"},
+           ]}
+    repaired, repairs = repair(_validatable([grp]))
+    opts = repaired["fields"][0]["options"]
+    assert opts[0]["label"] == "Married filing jointly"
+    assert opts[1]["label"] == "Option 2"
+    assert sum(1 for r in repairs
+               if r["action"] == "synthesize-option-label") == 2
+    assert _model_validates(repaired) == ""
+
+
+def test_option_label_synthesis_prefers_dump_tooltip():
+    grp = {"id": "grp", "name": "Grp", "type": "checkbox_group",
+           "options": [
+               {"value": "opt_a", "pdf_field_name": "boxes.a[0]"},
+           ]}
+    dump = {"fields": [{"name": "boxes.a[0]", "tu": "Reason A tooltip"}]}
+    repaired, _ = repair(_validatable([grp]), dump)
+    assert repaired["fields"][0]["options"][0]["label"] == "Reason A tooltip"
+
+
+def test_single_option_radio_label_falls_back_to_field_name():
+    # A lone-option NON-checkbox keeps its options (only the checkbox
+    # unwraps); its missing label reuses the field's own question.
+    rad = {"id": "rad", "name": "Are you exempt?", "type": "radio",
+           "options": [{"value": "yes", "pdf_field_name": "r[0]",
+                        "pdf_on_value": "Y"}]}
+    repaired, _ = repair(_schema([rad]))
+    assert repaired["fields"][0]["options"][0]["label"] == "Are you exempt?"
+
+
+def test_contract_shaped_supplements_entry_is_completed():
+    # i-90 followed the contract's OLD {id, label} supplements shape;
+    # FormSupplement requires {id, name, purpose, fields}.
+    f = {"id": "t1", "name": "T1", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _validatable([f], supplements=[
+        {"id": "additional_information",
+         "label": "Part 8. Additional Information"}])
+    assert "supplements" in _model_validates(draft)  # RED going in
+
+    repaired, repairs = repair(draft)
+    supp = repaired["supplements"][0]
+    assert supp["name"] == "Part 8. Additional Information"
+    assert supp["purpose"] == supp["name"]
+    assert supp["fields"] == []
+    assert any(r["action"] == "complete-supplement" for r in repairs)
+    assert _model_validates(repaired) == ""
+
+
+def test_supplements_entry_missing_id_gets_one_synthesized():
+    # Fresh-eyes gap: id is required too; a label-only entry must complete
+    # ALL FOUR FormSupplement keys, not three.
+    f = {"id": "t1", "name": "T1", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _validatable([f], supplements=[{"label": "Extra Space"}])
+    assert "supplements" in _model_validates(draft)
+
+    repaired, _ = repair(draft)
+    supp = repaired["supplements"][0]
+    assert supp["id"] == "extra_space"  # slugified from the label
+    assert supp["name"] == "Extra Space"
+    assert _model_validates(repaired) == ""

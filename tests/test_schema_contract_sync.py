@@ -144,6 +144,29 @@ def test_contract_forbids_removed_trigger_side_keys():
     assert '"conditional_fields"' not in contract
 
 
+def test_contract_supplements_shape_matches_the_model():
+    # bd polyglot-pdf-n3mn root cause: the contract taught supplements as
+    # {id, label} while FormSupplement requires {id, name, purpose, fields}
+    # -- the LLM followed the contract faithfully and the model rejected the
+    # draft. Pin the advertised shape against the MODEL's own required
+    # fields so the next FormSupplement change (or a prose rewording back to
+    # the old shape) trips here instead of on a paid extraction run.
+    from backend.models.form_models import FormSupplement
+    contract = sc.render_contract()
+    required = [n for n, f in FormSupplement.model_fields.items()
+                if f.is_required()]
+    supp_line_start = contract.index('"supplements"')
+    # The shape prose sits within a few lines of the key; scan a bounded
+    # window so an unrelated later mention cannot satisfy the assertion.
+    window = contract[supp_line_start:supp_line_start + 400]
+    for name in required:
+        assert f'"{name}"' in window, (
+            f"contract's supplements shape no longer advertises required "
+            f"FormSupplement field {name!r}")
+    # And the OLD wrong shape must not come back: label-only, without name.
+    assert '"label": str}}' not in window
+
+
 def test_option_value_note_is_qualified_to_choice_triggers():
     # Codex PR #316: value_must_be_trigger_option is only enforced on choice-field
     # triggers; on text/date/number triggers the value is a literal. The rendered

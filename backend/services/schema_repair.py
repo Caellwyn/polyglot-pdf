@@ -42,6 +42,7 @@ import copy
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.models import conditional_vocabulary as vocab
+from backend.models.form_models import SupplementType
 from backend.services import controls_fields_mirror as cfm
 
 _CHOICE_TYPES = frozenset({"select", "radio", "checkbox_group"})
@@ -467,6 +468,252 @@ def _check_widgets_exist(fields: List[dict], dump: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Step 4: strict-model validity fixes the LLM keeps getting wrong
+# (bd polyglot-pdf-n3mn -- surfaced by the 6s71 paid verification run).
+# --------------------------------------------------------------------------- #
+
+_VALID_SUPPLEMENTS = frozenset(m.value for m in SupplementType)
+
+
+def _normalize_checkbox_shapes(fields: List[dict],
+                               repairs: List[dict]) -> Dict[str, str]:
+    """The v1/LLM checkbox idioms that v2's model rejects (migrate Pass 1
+    parity -- _is_group_checkbox / _unwrap_single_option_checkbox).
+
+    - A checkbox with EXACTLY ONE option is a standalone boolean box: v2
+      forbids options on a `checkbox`, so lift the option's pdf_field_name
+      onto the field (when the field lacks one) and drop options[]. The
+      f1040 draft carries 37 of these (bd polyglot-pdf-n3mn).
+    - A checkbox with >= 2 options is the v1 group idiom: retype to
+      checkbox_group (whose per-box identity lives on options[]), dropping
+      any field-level pdf_field_name the group must not carry.
+
+    Returns trigger id -> the unwrapped single option's OLD value, so
+    conditions that referenced it can move to the is_checked idiom (the
+    value vanishes with the unwrap -- bd c5r8)."""
+    standalone_old: Dict[str, str] = {}
+    for i, f in enumerate(fields):
+        if f.get("type") != "checkbox":
+            continue
+        fid = f.get("id")
+        path = f"fields[{i}] (id={fid})"
+        opts = f.get("options")
+        if not isinstance(opts, list) or not opts:
+            continue
+        if len(opts) == 1:
+            opt = opts[0]
+            if isinstance(opt, dict):
+                if opt.get("value") is not None and isinstance(fid, str):
+                    standalone_old[fid] = str(opt["value"])
+                if not f.get("pdf_field_name") and opt.get("pdf_field_name"):
+                    f["pdf_field_name"] = opt["pdf_field_name"]
+            f.pop("options", None)
+            repairs.append({
+                "action": "unwrap-standalone-checkbox", "path": path,
+                "detail": "single-option checkbox -> plain v2 boolean "
+                          "checkbox (options dropped)",
+                "error": False,
+            })
+        else:
+            f["type"] = "checkbox_group"
+            f.pop("pdf_field_name", None)
+            repairs.append({
+                "action": "retype-checkbox-group", "path": path,
+                "detail": f"checkbox with {len(opts)} options -> "
+                          "checkbox_group (v1 group idiom)",
+                "error": False,
+            })
+    return standalone_old
+
+
+def _retarget_unwrapped_conditions(fields: List[dict],
+                                   standalone_old: Dict[str, str],
+                                   repairs: List[dict]) -> None:
+    """Rewrite `equals <old single-option value>` on an unwrapped standalone
+    checkbox to `is_checked` -- the option (and its value) vanished with the
+    unwrap, so the equals would dangle against the now-boolean trigger and
+    never fire (migrate Pass 2's standalone fixup; bd c5r8). Only `equals`
+    moves; migrate deliberately leaves a standalone not_equals for human
+    review, and repair matches that."""
+    if not standalone_old:
+        return
+    for i, f in enumerate(fields):
+        for kind in ("show_if", "require_if"):
+            cond = f.get(kind)
+            if not isinstance(cond, dict):
+                continue
+            for atom in _walk_condition_atoms(cond):
+                tid = atom.get("field")
+                old = standalone_old.get(tid) if isinstance(tid, str) else None
+                if (old is not None and atom.get("operator") == "equals"
+                        and str(atom.get("value")) == old):
+                    atom["operator"] = "is_checked"
+                    atom.pop("value", None)
+                    repairs.append({
+                        "action": "alias-operator",
+                        "path": f"fields[{i}] (id={f.get('id')}).{kind}",
+                        "detail": f"equals {old!r} on unwrapped standalone "
+                                  "checkbox -> is_checked",
+                        "error": False,
+                    })
+
+
+def _repair_overflow_supplement(f: dict, path: str, repairs: List[dict]) -> None:
+    """Alias an invented overflow_to_supplement value to the enum.
+
+    SupplementType has a single member ("supplement_a", the feature is not
+    fully implemented), but the LLM improvises names for the same intent
+    (i-90 emitted "additional_information" -- its supplement IS the
+    "Additional Information" part). Any invalid STRING means "overflows to
+    the supplement", so alias it; a non-string has no readable intent and is
+    dropped. Either way the draft passes FormSchema.model_validate instead
+    of failing the enum."""
+    val = f.get("overflow_to_supplement")
+    if val is None or (isinstance(val, str) and val in _VALID_SUPPLEMENTS):
+        return
+    if isinstance(val, str):
+        canonical = SupplementType.TYPE.value
+        f["overflow_to_supplement"] = canonical
+        repairs.append({
+            "action": "alias-overflow-supplement", "path": path,
+            "detail": f"{val!r} -> {canonical!r} (only SupplementType member)",
+            "error": False,
+        })
+    else:
+        f.pop("overflow_to_supplement", None)
+        repairs.append({
+            "action": "drop-overflow-supplement", "path": path,
+            "detail": f"non-string overflow_to_supplement {val!r} dropped",
+            "error": False,
+        })
+
+
+def _complete_supplements(schema: dict, repairs: List[dict]) -> None:
+    """Complete a contract-shaped supplements entry to the model shape.
+
+    The extractor contract's top-level shape taught `supplements` as
+    {id, label} while FormSupplement requires {id, name, purpose, fields}
+    (bd polyglot-pdf-n3mn -- the i-90 draft followed the contract faithfully
+    and failed the model). Deterministic completion: name <- label (or the
+    humanized id); purpose <- name (the model wants prose the draft does not
+    carry; the human editor refines it); fields <- [] when absent. The
+    contract now teaches the full shape too -- this is the net for older
+    drafts and model drift."""
+    supps = schema.get("supplements")
+    if not isinstance(supps, list):
+        return
+    for j, s in enumerate(supps):
+        if not isinstance(s, dict):
+            continue
+        completed = []
+        if not s.get("id"):
+            base = s.get("label") or s.get("name") or f"supplement_{j + 1}"
+            slug = "".join(c if c.isalnum() else "_" for c in str(base).lower())
+            s["id"] = slug.strip("_") or f"supplement_{j + 1}"
+            completed.append("id")
+        if not s.get("name"):
+            s["name"] = (s.get("label") or _humanize_slug(s.get("id"))
+                         or f"Supplement {j + 1}")
+            completed.append("name")
+        if not s.get("purpose"):
+            s["purpose"] = s["name"]
+            completed.append("purpose")
+        if not isinstance(s.get("fields"), list):
+            s["fields"] = []
+            completed.append("fields")
+        if completed:
+            repairs.append({
+                "action": "complete-supplement",
+                "path": f"supplements[{j}] (id={s.get('id')})",
+                "detail": "filled required key(s) the draft lacked: "
+                          + ", ".join(completed),
+                "error": False,
+            })
+
+
+def _dump_tu_by_name(dump: Optional[dict]) -> Dict[str, str]:
+    """pdf field name -> /TU tooltip, from an acroform dump (when given).
+
+    Tolerant of the dump's nesting: a field entry may carry "tu" at its top
+    level or on a member of its "widgets" list (acroform_dump emits both
+    shapes across versions)."""
+    out: Dict[str, str] = {}
+    if not isinstance(dump, dict):
+        return out
+    for e in dump.get("fields") or []:
+        if not isinstance(e, dict) or not isinstance(e.get("name"), str):
+            continue
+        tu = e.get("tu")
+        if not tu:
+            for w in e.get("widgets") or []:
+                if isinstance(w, dict) and w.get("tu"):
+                    tu = w["tu"]
+                    break
+        if isinstance(tu, str) and tu.strip():
+            out[e["name"]] = tu.strip()
+    return out
+
+
+def _humanize_slug(val: Any) -> Optional[str]:
+    """A display label from a semantic slug, or None if it has no words
+    (e.g. the bare "1" an f1040 checkbox option carries)."""
+    if val is None:
+        return None
+    s = str(val).replace("_", " ").replace("-", " ").strip()
+    if not s or not any(c.isalpha() for c in s):
+        return None
+    return s[0].upper() + s[1:]
+
+
+def _synthesize_option_labels(f: dict, path: str, tu_by_name: Dict[str, str],
+                              repairs: List[dict]) -> None:
+    """Fill in a missing/empty option label (FormSchema requires one).
+
+    The LLM omits option labels (f1040 emitted 37 label-less options; those
+    particular ones were lone-option checkboxes, which the shape
+    normalization now unwraps entirely -- this covers the remaining
+    option-bearing shapes: radio / select / checkbox_group). Source
+    priority: the widget's /TU tooltip (when a dump was supplied) -> the
+    FIELD's own label/name when it is the field's ONLY option (a lone
+    option's label IS the field's question) -> a humanized value slug ->
+    a humanized pdf_on_value -> "Option N".
+
+    Scope note: the label is the ONLY thing synthesized here. A lone-option
+    radio/select/checkbox_group is still model-invalid on the separate
+    >=2-options rule -- recovering the missing options needs the PDF dump
+    (migrate's _recover_options_from_dump; never ported to repair), which is
+    out of this step's scope."""
+    opts = f.get("options")
+    if not isinstance(opts, list):
+        return
+    single = len(opts) == 1
+    for j, o in enumerate(opts):
+        if not isinstance(o, dict) or o.get("label"):
+            continue
+        label: Optional[str] = None
+        pfn = o.get("pdf_field_name")
+        if isinstance(pfn, str) and pfn:
+            label = tu_by_name.get(pfn) or next(
+                (tu for name, tu in tu_by_name.items()
+                 if name.endswith("." + pfn)), None)
+        if not label and single:
+            fl = f.get("label") or f.get("name")
+            label = fl.strip() if isinstance(fl, str) and fl.strip() else None
+        if not label:
+            label = (_humanize_slug(o.get("value"))
+                     or _humanize_slug(o.get("pdf_on_value")))
+        if not label:
+            label = f"Option {j + 1}"
+        o["label"] = label
+        repairs.append({
+            "action": "synthesize-option-label",
+            "path": f"{path}.options[{j}]",
+            "detail": f"missing label -> {label!r}",
+            "error": False,
+        })
+
+
+# --------------------------------------------------------------------------- #
 # Entry point.
 # --------------------------------------------------------------------------- #
 
@@ -487,24 +734,20 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
     def count_alias(name: str) -> None:
         alias_hits[name] = alias_hits.get(name, 0) + 1
 
+    # Checkbox-shape normalization FIRST (before slug minting and the
+    # condition rewrites, matching migrate's Pass 1 -> Pass 2 ordering): a
+    # lone-option checkbox unwraps to the standalone boolean idiom (its old
+    # option value feeding both the native-condition retarget below and the
+    # controls_fields mirroring's is_checked fixup -- bd c5r8 / bd
+    # polyglot-pdf-n3mn), and a multi-option checkbox retypes to
+    # checkbox_group so minting sees the final type.
+    standalone_old_value = _normalize_checkbox_shapes(fields, repairs)
+    _retarget_unwrapped_conditions(fields, standalone_old_value, repairs)
+
     resolution = _mint_slugs(fields, repairs)
     fields_by_id = {str(f.get("id")): f for f in fields}
 
-    # A lone-option checkbox is the standalone-boolean idiom (bd c5r8): its
-    # single option's OLD raw value has no v2 referent once a controls_fields
-    # condition against it is mirrored -- `equals <that value>` must become
-    # is_checked, same fixup migrate_schema_v2 Pass 1/4 apply. Unlike the
-    # migration, repair() never unwraps the options[] itself (a v2-stamped
-    # draft's checkbox is already boolean), so this map is built read-only from
-    # whatever single-option list still happens to be present on the trigger.
-    standalone_old_value: Dict[str, str] = {}
-    for f in fields:
-        fid = f.get("id")
-        if (f.get("type") == "checkbox" and isinstance(fid, str)
-                and isinstance(f.get("options"), list) and len(f["options"]) == 1):
-            opt = f["options"][0]
-            if isinstance(opt, dict) and opt.get("value") is not None:
-                standalone_old_value[fid] = str(opt["value"])
+    tu_by_name = _dump_tu_by_name(dump)
 
     for i, f in enumerate(fields):
         fid = str(f.get("id"))
@@ -518,6 +761,13 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                 f.pop(kind, None)
             else:
                 f[kind] = new_cond
+
+        # Strict-model validity fixes (bd polyglot-pdf-n3mn): an invented
+        # overflow_to_supplement enum value and a missing option label both
+        # fail FormSchema.model_validate on an otherwise-clean draft.
+        _repair_overflow_supplement(f, f"fields[{i}] (id={fid})", repairs)
+        _synthesize_option_labels(f, f"fields[{i}] (id={fid})", tu_by_name,
+                                  repairs)
 
     # controls_fields / conditional_fields: v2 has NO trigger-side conditional
     # logic (bd h76m.16 deleted both from the model). Rather than silently
@@ -645,6 +895,10 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
             })
         f.pop("controls_fields", None)
         f.pop("conditional_fields", None)
+
+    # Schema-level: complete a contract-shaped supplements entry (bd
+    # polyglot-pdf-n3mn).
+    _complete_supplements(repaired, repairs)
 
     if alias_hits:
         repairs.append({
