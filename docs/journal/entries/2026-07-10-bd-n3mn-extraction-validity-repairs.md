@@ -41,7 +41,10 @@ that run; the maintainer green-lit continuing on the surfaced issues.
 - Option-label synthesis for group options missing the required label:
   dump /TU tooltip -> field's own name for a lone option -> humanized
   value slug -> "Option N".
-- Replayed all three saved 6s71 drafts through the new repair: every one
+- Replayed all three saved 6s71 drafts through the new repair (in-session
+  scratch copies -- the drafts are transient artifacts, not committed, so
+  this replay is recorded here rather than reproducible from the repo; the
+  committed tests carry synthetic fixtures of the same shapes): every one
   passes FormSchema.model_validate with lint clean (i-90: 2 aliases + 1
   supplement completion; f1040: 37 unwraps; w7: untouched).
 - 9 new tests (39 total in test_schema_repair.py); migrate 21/21 and

@@ -606,6 +606,11 @@ def _complete_supplements(schema: dict, repairs: List[dict]) -> None:
         if not isinstance(s, dict):
             continue
         completed = []
+        if not s.get("id"):
+            base = s.get("label") or s.get("name") or f"supplement_{j + 1}"
+            slug = "".join(c if c.isalnum() else "_" for c in str(base).lower())
+            s["id"] = slug.strip("_") or f"supplement_{j + 1}"
+            completed.append("id")
         if not s.get("name"):
             s["name"] = (s.get("label") or _humanize_slug(s.get("id"))
                          or f"Supplement {j + 1}")
@@ -671,7 +676,13 @@ def _synthesize_option_labels(f: dict, path: str, tu_by_name: Dict[str, str],
     priority: the widget's /TU tooltip (when a dump was supplied) -> the
     FIELD's own label/name when it is the field's ONLY option (a lone
     option's label IS the field's question) -> a humanized value slug ->
-    a humanized pdf_on_value -> "Option N"."""
+    a humanized pdf_on_value -> "Option N".
+
+    Scope note: the label is the ONLY thing synthesized here. A lone-option
+    radio/select/checkbox_group is still model-invalid on the separate
+    >=2-options rule -- recovering the missing options needs the PDF dump
+    (migrate's _recover_options_from_dump; never ported to repair), which is
+    out of this step's scope."""
     opts = f.get("options")
     if not isinstance(opts, list):
         return

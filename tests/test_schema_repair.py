@@ -876,3 +876,17 @@ def test_contract_shaped_supplements_entry_is_completed():
     assert supp["fields"] == []
     assert any(r["action"] == "complete-supplement" for r in repairs)
     assert _model_validates(repaired) == ""
+
+
+def test_supplements_entry_missing_id_gets_one_synthesized():
+    # Fresh-eyes gap: id is required too; a label-only entry must complete
+    # ALL FOUR FormSupplement keys, not three.
+    f = {"id": "t1", "name": "T1", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _validatable([f], supplements=[{"label": "Extra Space"}])
+    assert "supplements" in _model_validates(draft)
+
+    repaired, _ = repair(draft)
+    supp = repaired["supplements"][0]
+    assert supp["id"] == "extra_space"  # slugified from the label
+    assert supp["name"] == "Extra Space"
+    assert _model_validates(repaired) == ""
