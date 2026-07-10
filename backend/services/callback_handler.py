@@ -66,7 +66,6 @@ class CallbackHandler:
         self._handle_switch_section = None
         self._handle_get_field_value = None
         self._request_form_state_from_client = None
-        self._get_next_field_schema_for_jit = None
         self._merge_field_schema = None
         # Secretary (bd polyglot-pdf-jnjj.45c): async handler that runs the
         # ask_secretary lookup. Injected by FormFillingService; None until then.
@@ -108,7 +107,6 @@ class CallbackHandler:
         handle_switch_section,
         handle_get_field_value,
         request_form_state_from_client,
-        get_next_field_schema_for_jit,
         merge_field_schema=None,
         handle_ask_secretary=None,
         get_fill_language=None,
@@ -122,7 +120,6 @@ class CallbackHandler:
         self._handle_switch_section = handle_switch_section
         self._handle_get_field_value = handle_get_field_value
         self._request_form_state_from_client = request_form_state_from_client
-        self._get_next_field_schema_for_jit = get_next_field_schema_for_jit
         self._merge_field_schema = merge_field_schema
         self._handle_ask_secretary = handle_ask_secretary
         self._get_fill_language = get_fill_language
@@ -135,7 +132,6 @@ class CallbackHandler:
         self,
         data: Optional[Dict[str, Any]],
         applied_fields: Optional[list] = None,
-        next_field_schema: Optional[dict] = None,
         request_hint: bool = False,
     ) -> Optional[str]:
         """
@@ -144,7 +140,6 @@ class CallbackHandler:
         Args:
             data: Form state data to send
             applied_fields: List of field IDs that were actually applied
-            next_field_schema: Schema for next field (JIT mode only)
             request_hint: If True, await a next_field_hint round-trip and return it.
                 Callers on the update_form_fields path leave this False (the hint is
                 always discarded there -- bd polyglot-pdf-vfb2); only callers that
@@ -157,8 +152,6 @@ class CallbackHandler:
             payload = {"form_state": data}
             if applied_fields is not None:
                 payload["applied_fields"] = applied_fields
-            if next_field_schema is not None:
-                payload["next_field_schema"] = next_field_schema
 
             await self._websocket.send_json({"type": "form_updated", "data": payload})
 
@@ -493,11 +486,7 @@ class CallbackHandler:
         # Send form update to frontend (no next field info - save tokens)
         # Next field info will be sent after confirm_field to reduce round trips
         if not validation_errors and not unknown_fields and applied_fields:
-            await self.send_form_update(
-                result.get("form_state"),
-                applied_fields,
-                None  # No next_field_schema - send after confirmation
-            )
+            await self.send_form_update(result.get("form_state"), applied_fields)
             _log.info("field_update_success", applied=len(applied_fields))
         else:
             # Validation failed - send empty form_state so frontend doesn't apply invalid values
@@ -509,7 +498,6 @@ class CallbackHandler:
             unknown_fields,
             applied_fields,
             None,  # No next_field_hint - send after confirmation
-            None,  # No next_field_schema - send after confirmation
             rejected_count=len(rejected_fields)
         )
 
@@ -849,7 +837,6 @@ class CallbackHandler:
             if self._clear_current_field:
                 self._clear_current_field()
             next_hint = None
-            next_field_schema = None
             next_field_guidance = None
             message = (
                 f"Field '{field_id}' confirmed -- that completes this section. The "
@@ -881,12 +868,6 @@ class CallbackHandler:
             # sentinel to None for the wire, but keep the timeout distinction in the
             # message text below.
             next_hint = None if hint_timed_out else next_hint_result
-
-            # Get next field schema for JIT mode (consolidated here to save tokens).
-            # Skip on timeout: we don't know what the next field is.
-            next_field_schema = None
-            if self._get_next_field_schema_for_jit and next_hint:
-                next_field_schema = self._get_next_field_schema_for_jit(field_id)
 
             # DTI (bd polyglot-pdf-jnjj.22): the next field's full guidance is
             # CLIENT-SUPPLIED -- the client owns the schema, so it rides the
@@ -946,10 +927,6 @@ class CallbackHandler:
             "next_field_hint": next_hint,
             "message": message,
         }
-
-        # Add next field schema if available (JIT mode)
-        if next_field_schema:
-            response["next_field_schema"] = next_field_schema
 
         # Add the rendered next-field guidance (DTI mode). This is the per-field
         # guidance the thin-principal SI points at ("use the LATEST confirm_field
@@ -1046,7 +1023,6 @@ class CallbackHandler:
             if self._clear_current_field:
                 self._clear_current_field()
             next_hint = None
-            next_field_schema = None
             next_field_guidance = None
             message = (
                 f"Field '{field_id}' skipped -- that completes this section. The "
@@ -1059,10 +1035,6 @@ class CallbackHandler:
                 next_hint_result = await self._request_coordinator.request_next_field_hint()
             hint_timed_out = next_hint_result is HINT_REQUEST_TIMEOUT
             next_hint = None if hint_timed_out else next_hint_result
-
-            next_field_schema = None
-            if self._get_next_field_schema_for_jit and next_hint:
-                next_field_schema = self._get_next_field_schema_for_jit(field_id)
 
             # The skipped field is DONE -- clear the coercion pointer (symmetric with
             # the confirm path); merge_field_schema re-sets it for the next field.
@@ -1098,8 +1070,6 @@ class CallbackHandler:
             "next_field_hint": next_hint,
             "message": message,
         }
-        if next_field_schema:
-            response["next_field_schema"] = next_field_schema
         if next_field_guidance:
             response["next_field_guidance"] = next_field_guidance
 
@@ -1214,7 +1184,6 @@ class CallbackHandler:
         unknown_fields: list,
         applied_fields: list,
         next_field_hint: Optional[str],
-        next_field_schema: Optional[Dict[str, Any]] = None,
         rejected_count: int = 0
     ) -> Dict[str, Any]:
         """Build tool response for update_form_fields.
@@ -1224,7 +1193,6 @@ class CallbackHandler:
             unknown_fields: List of unknown field IDs
             applied_fields: List of successfully applied field IDs
             next_field_hint: Spoken name hint for next field
-            next_field_schema: Full schema for next field (JIT loading - Phase 2.5)
             rejected_count: Number of fields rejected due to multi-field constraint
 
         Returns:
@@ -1288,19 +1256,14 @@ class CallbackHandler:
                 "message": "\n".join(message_parts)
             }
         else:
-            # All fields valid - include next_field_schema (if JIT enabled)
-            # Don't put hint in message - it confuses Gemini since next_field_schema has different field
+            # All fields valid. Next-field guidance is sent after confirm_field
+            # (DTI), not on the update response, to reduce round trips.
             tool_response = {
                 "success": True,
                 "applied_fields": applied_fields,
                 "message": "Fields updated successfully.",
             }
 
-            # Include next field schema if available (Phase 2.5: JIT schema loading)
-            # This contains id, name, spoken_name, type - everything Gemini needs
-            if next_field_schema:
-                tool_response["next_field_schema"] = next_field_schema
-        
         _log.info("-" * 80)
         _log.info("GEMINI TOOL RESPONSE", success=tool_response.get("success"), 
                  applied_count=len(tool_response.get("applied_fields", [])),

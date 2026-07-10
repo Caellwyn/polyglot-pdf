@@ -60,10 +60,6 @@ def mock_handlers():
         "switch_section": AsyncMock(return_value={"success": True}),
         "get_field_value": AsyncMock(return_value={"found": True, "value": "test"}),
         "request_form_state": AsyncMock(return_value={}),
-        "get_next_field_schema": MagicMock(return_value={
-            "id": "next_field",
-            "spoken_name": "Next Field"
-        })
     }
 
 
@@ -82,7 +78,6 @@ def callback_handler(mock_websocket, mock_coordinator, mock_handlers):
         handle_switch_section=mock_handlers["switch_section"],
         handle_get_field_value=mock_handlers["get_field_value"],
         request_form_state_from_client=mock_handlers["request_form_state"],
-        get_next_field_schema_for_jit=mock_handlers["get_next_field_schema"],
     )
     
     return handler
@@ -115,7 +110,6 @@ class TestCallbackRegistration:
             handle_switch_section=switch_handler,
             handle_get_field_value=get_value_handler,
             request_form_state_from_client=request_state_handler,
-            get_next_field_schema_for_jit=MagicMock(return_value=None),
         )
 
         assert handler._handle_update_fields == update_handler
@@ -419,7 +413,6 @@ class TestAskSecretaryRouting:
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
-            get_next_field_schema_for_jit=MagicMock(),
             handle_ask_secretary=ask,
         )
 
@@ -449,7 +442,6 @@ class TestAskSecretaryRouting:
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
-            get_next_field_schema_for_jit=MagicMock(),
             handle_ask_secretary=AsyncMock(return_value={"status": "pending", "answer": ""}),
         )
 
@@ -481,7 +473,6 @@ class TestAskSecretaryRouting:
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
-            get_next_field_schema_for_jit=MagicMock(),
             handle_ask_secretary=AsyncMock(return_value={"status": "failed", "answer": ""}),
         )
 
@@ -533,7 +524,6 @@ class TestAskSecretaryRouting:
             handle_switch_section=AsyncMock(),
             handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
-            get_next_field_schema_for_jit=MagicMock(),
             handle_ask_secretary=AsyncMock(side_effect=RuntimeError("boom")),
         )
         with _patch.object(cbh._log, "error") as mock_error:

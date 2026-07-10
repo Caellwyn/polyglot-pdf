@@ -91,9 +91,7 @@ def _dti_settings():
 
     class _S:
         USE_DTI = True
-        USE_JIT_SCHEMA = False
         DTI_SYSTEM_INSTRUCTION = real.DTI_SYSTEM_INSTRUCTION
-        JIT_SYSTEM_INSTRUCTION = real.JIT_SYSTEM_INSTRUCTION
         SYSTEM_INSTRUCTION = real.SYSTEM_INSTRUCTION
     return _S()
 
@@ -245,30 +243,6 @@ def test_merge_field_schema_extends_validation_set_without_mutating_schema():
     svc.merge_field_schema({})
     svc.merge_field_schema(None)
     assert {f.id for f in svc._build_fields_from_schema()} == {"f1", "f2"}
-
-
-def test_jit_shaped_schema_renders_manifest_branch_when_flags_off(monkeypatch):
-    """Rollback safety (Codex PR #229): a JIT-shaped schema (jit_mode=True, only
-    first_field_schema in fields) must NOT hit the legacy full-dump branch when both
-    USE_DTI and USE_JIT_SCHEMA are off -- that would describe one field and lose the
-    section. It must render via the manifest-aware JIT branch."""
-    from backend.config import get_settings as _gs
-
-    class _Off:
-        USE_DTI = False
-        USE_JIT_SCHEMA = False
-        SYSTEM_INSTRUCTION = _gs().SYSTEM_INSTRUCTION
-        JIT_SYSTEM_INSTRUCTION = _gs().JIT_SYSTEM_INSTRUCTION
-    monkeypatch.setattr(ai_context_mod, "get_settings", lambda: _Off())
-
-    schema = _dti_schema()
-    schema["jit_mode"] = True  # the marker websocket_routes sets on handshake_jit
-    si = build_form_context(schema, {}, "English", section_number=1,
-                            total_sections=8, section_label="P1")
-    # Manifest branch -> the whole section is listed (FIELD MANIFEST present),
-    # NOT a one-field legacy dump.
-    assert "FIELD MANIFEST" in si
-    assert "/3" in si  # progress over the real 3-field section, not "/1"
 
 
 def test_coordinator_late_response_does_not_stash_stale_schema():

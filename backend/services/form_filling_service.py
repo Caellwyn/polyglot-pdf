@@ -22,7 +22,6 @@ from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
 from .callback_handler import CallbackHandler
-from .manifest_service import get_next_field_schema, should_include_schema_in_response
 from .validator_service import ValidatorService
 
 # Logger for service-level diagnostics
@@ -69,8 +68,6 @@ class FormFillingService:
         self._last_section_metadata: Optional[Dict[str, Any]] = None
         self._fill_language: str = "English"  # Default fill language
         self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
-        # JIT schema loading: Track which field schemas have been sent to Gemini
-        self._loaded_field_ids: set = set()  # Prevents duplicate schemas in context
         # DTI (bd polyglot-pdf-jnjj.22): client-supplied field schemas merged for
         # VALIDATION only -- kept SEPARATE from self._schema['fields'] so the DTI SI
         # branch's "fields[0] is the current field" assumption is never disturbed by
@@ -260,19 +257,11 @@ class FormFillingService:
             self._full_schema = full_schema
         # Note: current_values are ignored by backend - client is source of truth
 
-        # Seed the JIT schema de-dup set from the handshake's loaded_field_ids --
-        # the field schemas the client has ALREADY delivered to Gemini (this list
-        # survives reconnects on the client). Without this, a mid-session reconnect
-        # reset the set to empty and re-sent schemas Gemini already had
-        # (bd polyglot-pdf-jnjj.9 gap L). Idempotent: a fresh connect sends [].
-        if schema:
-            self._loaded_field_ids = set(schema.get("loaded_field_ids", []))
-
         # Reset the DTI validation extras on every (re)start, INCLUDING a section
         # switch (which calls start_session with the new section's schema). Otherwise
         # client-supplied field schemas from a PREVIOUS section would linger and let
         # the validator wrongly accept a stale cross-section field id (fresh-eyes
-        # substitute review, Codex PR #229). Parallels the _loaded_field_ids reseed.
+        # substitute review, Codex PR #229).
         self._dti_extra_fields = {}
         # Clear the current-field coercion pointer too (bd polyglot-pdf-h1bn): the new
         # section's field 1 sets it when send_initiating_message fires after this
@@ -307,7 +296,6 @@ class FormFillingService:
             handle_switch_section=self.handle_switch_section,
             handle_get_field_value=self.handle_get_field_value,
             request_form_state_from_client=self.request_form_state_from_client,
-            get_next_field_schema_for_jit=self.get_next_field_schema_for_jit,
             merge_field_schema=self.merge_field_schema,
             handle_ask_secretary=self.handle_ask_secretary,
             # Live getter so fields 2..N's guidance carries the CURRENT fill language
@@ -1776,52 +1764,6 @@ class FormFillingService:
         # overwritten each turn, no user values, re-established by the client on
         # reconnect) -- NOT persisted field state, so the stateless invariant holds.
         self._current_field_id = fid
-
-    def get_next_field_schema_for_jit(self, updated_field_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get next field's full schema for JIT loading (Phase 2.5: Token Reduction).
-
-        Called after successful field update to include next field schema in tool response.
-        Tracks loaded_field_ids to prevent duplicate schemas in Gemini context.
-
-        Args:
-            updated_field_id: ID of the field that was just updated
-
-        Returns:
-            Next field's complete schema dict, or None if no next field
-        """
-        if not self._settings.USE_JIT_SCHEMA:
-            return None
-
-        if not self._schema:
-            return None
-
-        # Get current part data from schema
-        # For now, assume single part/section - in future this could be enhanced
-        # to handle multi-part forms by tracking current part
-        part_data = self._schema
-
-        # Get next field schema using manifest service
-        next_schema = get_next_field_schema(part_data, updated_field_id)
-
-        if next_schema and next_schema.get('id'):
-            next_id = next_schema['id']
-            # ACTUALLY gate on the de-dup set before returning. The set was being
-            # populated but never checked, so a repeat confirm_field on the same
-            # field (the no-value retry path) -- or a reconnect -- re-delivered a
-            # schema Gemini already has, the exact duplication JIT exists to avoid
-            # (bd polyglot-pdf-jnjj.9 gaps G/L, bug polyglot-pdf-h2ii;
-            # should_include_schema_in_response was dead code).
-            if not should_include_schema_in_response(next_id, self._loaded_field_ids):
-                _log.debug("jit_schema_deduped", field_id=next_id,
-                           total_loaded=len(self._loaded_field_ids))
-                return None
-            # First delivery: mark as sent so the next call de-dups it.
-            self._loaded_field_ids.add(next_id)
-            _log.debug("jit_schema_sent", field_id=next_id,
-                      total_loaded=len(self._loaded_field_ids))
-
-        return next_schema
 
     def get_form_status_for_ai(self, session_id: str) -> Optional[Dict[str, Any]]:
         """

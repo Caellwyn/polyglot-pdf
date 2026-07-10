@@ -132,7 +132,6 @@ def _make_handler() -> CallbackHandler:
         handle_switch_section=AsyncMock(return_value={"success": True}),
         handle_get_field_value=AsyncMock(return_value={"found": True, "value": "x"}),
         request_form_state_from_client=AsyncMock(return_value={}),
-        get_next_field_schema_for_jit=MagicMock(return_value=None),
         handle_ask_secretary=AsyncMock(return_value="a prose answer"),
     )
     # send_form_update touches the websocket; stub it so update routing is isolated.
