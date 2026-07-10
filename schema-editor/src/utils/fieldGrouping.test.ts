@@ -7,6 +7,8 @@ import { describe, it, expect } from 'vitest';
 import {
   mergeFields,
   ungroupField,
+  changeGroupKind,
+  canChangeGroupKind,
   canUngroup,
   isGroupableField,
   mergeBlockReason,
@@ -1008,5 +1010,269 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
   it('is a no-op (same array identity) when no dependent references the old slug', () => {
     const s = groupSchema();
     expect(retargetOptionValueReferences(s.fields, 'grp', 'no_such_slug', 'whatever')).toBe(s.fields);
+  });
+});
+
+describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
+  // A consolidated group with two dependents: one gated on a specific option
+  // slug (must move across the membership boundary), one gated on a whole-group
+  // operator (kind-agnostic, must stay put).
+  function grpKindSchema(type: 'checkbox_group' | 'radio'): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: {
+        title: 'T', form_number: 'T', total_widgets: 2, total_fields: 3,
+        version: '1', language: 'en',
+      },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep', 'whole'] }],
+      fields: [
+        {
+          id: 'grp', name: 'Group', type, section_id: 's1',
+          pdf_field_name: '', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
+          ],
+        } as unknown as FormField,
+        // Gated on a SPECIFIC option slug -- the operator must flip with the kind.
+        {
+          id: 'dep', name: 'Dep', type: 'text', section_id: 's1',
+          pdf_field_name: 'dep[0]', read_only: false, required: false,
+          show_if: {
+            field: 'grp',
+            operator: type === 'checkbox_group' ? 'includes' : 'equals',
+            value: 'a',
+          },
+          require_if: {
+            field: 'grp',
+            operator: type === 'checkbox_group' ? 'not_includes' : 'not_equals',
+            value: 'b',
+          },
+        } as unknown as FormField,
+        // Gated on a WHOLE-GROUP operator (no specific option) -- kind-agnostic.
+        {
+          id: 'whole', name: 'Whole', type: 'text', section_id: 's1',
+          pdf_field_name: 'whole[0]', read_only: false, required: false,
+          show_if: { field: 'grp', operator: 'is_checked' },
+        } as unknown as FormField,
+      ],
+    };
+  }
+
+  it('flips checkbox_group -> radio and rewrites option-slug dependents to equality', () => {
+    const s = grpKindSchema('checkbox_group');
+    const next = changeGroupKind(s, 'grp', 'radio');
+    expect(next).not.toBe(s);
+    expect(next.fields.find(f => f.id === 'grp')!.type).toBe('radio');
+    // options[] unchanged (same slugs + per-option pdf_field_name).
+    const opts = next.fields.find(f => f.id === 'grp')!.options!;
+    expect(opts.map(o => o.value)).toEqual(['a', 'b']);
+    expect(opts.map(o => o.pdf_field_name)).toEqual(['ga[0]', 'gb[0]']);
+    // Positive membership -> equality; negative membership -> not_equals.
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(asAtom(dep.show_if)).toEqual({ field: 'grp', operator: 'equals', value: 'a' });
+    expect(asAtom(dep.require_if)).toEqual({ field: 'grp', operator: 'not_equals', value: 'b' });
+    // Whole-group operator is kind-agnostic -- left untouched.
+    const whole = next.fields.find(f => f.id === 'whole')!;
+    expect(asAtom(whole.show_if)).toEqual({ field: 'grp', operator: 'is_checked' });
+  });
+
+  it('flips radio -> checkbox_group and rewrites option-slug dependents to membership', () => {
+    const s = grpKindSchema('radio');
+    const next = changeGroupKind(s, 'grp', 'checkbox_group');
+    expect(next).not.toBe(s);
+    expect(next.fields.find(f => f.id === 'grp')!.type).toBe('checkbox_group');
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(asAtom(dep.show_if)).toEqual({ field: 'grp', operator: 'includes', value: 'a' });
+    expect(asAtom(dep.require_if)).toEqual({ field: 'grp', operator: 'not_includes', value: 'b' });
+  });
+
+  it('rewrites dependents inside a COMPOSITE condition, atom-wise', () => {
+    const s = grpKindSchema('checkbox_group');
+    // Replace dep's show_if with a composite referencing grp.a AND an unrelated atom.
+    s.fields.find(f => f.id === 'dep')!.show_if = {
+      all_of: [
+        { field: 'grp', operator: 'includes', value: 'a' },
+        { field: 'other', operator: 'equals', value: 'x' },
+      ],
+    };
+    const next = changeGroupKind(s, 'grp', 'radio');
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    const composite = dep.show_if as { all_of: { field: string; operator: string; value: unknown }[] };
+    expect(composite.all_of[0]).toEqual({ field: 'grp', operator: 'equals', value: 'a' });
+    // The unrelated atom is untouched.
+    expect(composite.all_of[1]).toEqual({ field: 'other', operator: 'equals', value: 'x' });
+  });
+
+  it('is a no-op (same reference) when already the requested kind', () => {
+    const s = grpKindSchema('radio');
+    expect(changeGroupKind(s, 'grp', 'radio')).toBe(s);
+  });
+
+  it('is a no-op (same reference) for a non-group field or a missing id', () => {
+    const s = grpKindSchema('radio');
+    // A plain text field is not a group.
+    expect(changeGroupKind(s, 'dep', 'checkbox_group')).toBe(s);
+    // No such field.
+    expect(changeGroupKind(s, 'nope', 'checkbox_group')).toBe(s);
+  });
+
+  // A shared-name radio (field-level pdf_field_name + option pdf_on_value, no
+  // per-option pdf_field_name) has NO valid checkbox_group form -- the backend
+  // rejects a checkbox_group with a field-level pdf_field_name / options lacking
+  // their own pdf_field_name (bd polyglot-pdf-8qfj, fresh-eyes gap).
+  function sharedNameRadioSchema(): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp'] }],
+      fields: [
+        {
+          id: 'grp', name: 'Group', type: 'radio', section_id: 's1',
+          pdf_field_name: 'form1[0].grp[0]', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_on_value: 'A' },
+            { value: 'b', label: 'B', pdf_on_value: 'B' },
+          ],
+        } as unknown as FormField,
+      ],
+    };
+  }
+
+  it('REFUSES a shared-name radio -> checkbox_group flip (would mint an invalid group)', () => {
+    const s = sharedNameRadioSchema();
+    expect(canChangeGroupKind(s, s.fields[0], 'checkbox_group')).toBe(false);
+    // changeGroupKind is a no-op (same reference) rather than producing an
+    // un-promotable schema.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('canChangeGroupKind: flipping TO radio is always valid for a group', () => {
+    // A per-option-pdf checkbox_group can always become a radio.
+    const s = grpKindSchema('checkbox_group');
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'radio')).toBe(true);
+    // Even a shared-name group is a valid radio (it already is one).
+    const shared = sharedNameRadioSchema();
+    expect(canChangeGroupKind(shared, shared.fields[0], 'radio')).toBe(false); // already radio
+  });
+
+  it('canChangeGroupKind: a per-option-pdf radio CAN become a checkbox_group', () => {
+    // grpKindSchema('radio') options each carry pdf_field_name and there is no
+    // field-level pdf_field_name -> a valid checkbox_group target.
+    const s = grpKindSchema('radio');
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(true);
+    // And the flip actually happens.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).not.toBe(s);
+  });
+
+  it('canChangeGroupKind: rejects a non-group field', () => {
+    const s = grpKindSchema('radio');
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'dep')!, 'radio')).toBe(false);
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'dep')!, 'checkbox_group')).toBe(false);
+  });
+
+  // A radio trigger can carry a list-valued in/not_in dependent (a value that is
+  // an array of option slugs -- ConditionBuilder offers in/not_in on a radio).
+  // A checkbox_group trigger cannot (in/not_in are scalar-trigger-only), so a
+  // radio -> checkbox_group flip must expand a TOP-LEVEL in/not_in into a
+  // membership composite, and REFUSE the flip when the atom is nested in a
+  // composite (bd polyglot-pdf-8qfj, fresh-eyes round 2).
+  function radioWithListDep(depCond: FormField['show_if']): FormSchema {
+    return {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 2, total_fields: 2, version: '1', language: 'en' },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep'] }],
+      fields: [
+        {
+          id: 'grp', name: 'Group', type: 'radio', section_id: 's1',
+          pdf_field_name: '', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
+            { value: 'c', label: 'C', pdf_field_name: 'gc[0]' },
+          ],
+        } as unknown as FormField,
+        {
+          id: 'dep', name: 'Dep', type: 'text', section_id: 's1',
+          pdf_field_name: 'dep[0]', read_only: false, required: false,
+          show_if: depCond,
+        } as unknown as FormField,
+      ],
+    };
+  }
+
+  it('expands a TOP-LEVEL `in` dependent to any_of[includes...] on radio -> checkbox_group', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'in', value: ['a', 'b'] });
+    const next = changeGroupKind(s, 'grp', 'checkbox_group');
+    expect(next).not.toBe(s);
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(dep.show_if).toEqual({
+      any_of: [
+        { field: 'grp', operator: 'includes', value: 'a' },
+        { field: 'grp', operator: 'includes', value: 'b' },
+      ],
+    });
+  });
+
+  it('expands a TOP-LEVEL `not_in` dependent to none_of[includes...] on radio -> checkbox_group', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'not_in', value: ['a', 'c'] });
+    const next = changeGroupKind(s, 'grp', 'checkbox_group');
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(dep.show_if).toEqual({
+      none_of: [
+        { field: 'grp', operator: 'includes', value: 'a' },
+        { field: 'grp', operator: 'includes', value: 'c' },
+      ],
+    });
+  });
+
+  it('REFUSES the flip when an in/not_in atom is NESTED in a composite (cannot expand in one level)', () => {
+    const s = radioWithListDep({
+      all_of: [
+        { field: 'grp', operator: 'in', value: ['a', 'b'] },
+        { field: 'other', operator: 'equals', value: 'x' },
+      ],
+    });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  // A top-level in/not_in is only losslessly expandable when EVERY member is a
+  // current option slug. An empty list, a stale member, or a non-array value
+  // must refuse the flip rather than strand a checkbox_group-invalid `in` or
+  // silently drop members (bd polyglot-pdf-8qfj, fresh-eyes round 4).
+  it('REFUSES a top-level `in` whose members are ALL stale (resolves to zero live slugs)', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'in', value: ['deleted_slug'] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    // No-op rather than emitting a raw `in` on a checkbox_group.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('REFUSES a top-level `not_in` with SOME stale members (would silently widen none_of)', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'not_in', value: ['a', 'stale_x'] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('REFUSES a top-level `in` with a non-array value', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'in', value: 'a' as unknown as string[] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
+  it('ALLOWS a fully-live top-level `in` (every member a current slug) and expands it', () => {
+    const s = radioWithListDep({ field: 'grp', operator: 'in', value: ['a', 'c'] });
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(true);
+    const next = changeGroupKind(s, 'grp', 'checkbox_group');
+    const dep = next.fields.find(f => f.id === 'dep')!;
+    expect(dep.show_if).toEqual({
+      any_of: [
+        { field: 'grp', operator: 'includes', value: 'a' },
+        { field: 'grp', operator: 'includes', value: 'c' },
+      ],
+    });
   });
 });
