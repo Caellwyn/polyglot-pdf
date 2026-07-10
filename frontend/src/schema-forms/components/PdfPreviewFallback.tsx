@@ -68,8 +68,12 @@ export function PdfPreviewFallback({ onClose }: PdfPreviewFallbackProps): React.
   }, [onClose]);
 
   return (
+    // No chunk-CSS classNames here on purpose (bd polyglot-pdf-715i): the
+    // inline styles are the whole contract. Keeping pdf-preview-modal* as
+    // "secondary hooks" let a stale .pdf-preview-modal{height:100%} rule bind
+    // in the opened-once-then-failed scenario (chunk CSS already injected,
+    // later open fails) and stretch the notice card to full viewport height.
     <div
-      className="pdf-preview-modal__backdrop"
       style={backdropStyle}
       onClick={onClose}
       role="dialog"
@@ -77,7 +81,6 @@ export function PdfPreviewFallback({ onClose }: PdfPreviewFallbackProps): React.
       aria-label="Filled PDF preview"
     >
       <div
-        className="pdf-preview-modal"
         style={cardStyle}
         onClick={(e) => e.stopPropagation()}
       >

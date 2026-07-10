@@ -527,6 +527,7 @@ def _normalize_checkbox_shapes(fields: List[dict],
 
 
 def _retarget_unwrapped_conditions(fields: List[dict],
+                                   sections: List[dict],
                                    standalone_old: Dict[str, str],
                                    repairs: List[dict]) -> None:
     """Rewrite `equals <old single-option value>` on an unwrapped standalone
@@ -534,28 +535,39 @@ def _retarget_unwrapped_conditions(fields: List[dict],
     unwrap, so the equals would dangle against the now-boolean trigger and
     never fire (migrate Pass 2's standalone fixup; bd c5r8). Only `equals`
     moves; migrate deliberately leaves a standalone not_equals for human
-    review, and repair matches that."""
+    review, and repair matches that.
+
+    SECTIONS are retargeted too (bd polyglot-pdf-v76t): a section's show_if
+    is validated by the same operator matrix as a field's, and a dangling
+    equals there would stay model-valid but semantically dead."""
     if not standalone_old:
         return
+
+    def _retarget(cond: Any, path: str) -> None:
+        if not isinstance(cond, dict):
+            return
+        for atom in _walk_condition_atoms(cond):
+            tid = atom.get("field")
+            old = standalone_old.get(tid) if isinstance(tid, str) else None
+            if (old is not None and atom.get("operator") == "equals"
+                    and str(atom.get("value")) == old):
+                atom["operator"] = "is_checked"
+                atom.pop("value", None)
+                repairs.append({
+                    "action": "alias-operator",
+                    "path": path,
+                    "detail": f"equals {old!r} on unwrapped standalone "
+                              "checkbox -> is_checked",
+                    "error": False,
+                })
+
     for i, f in enumerate(fields):
         for kind in ("show_if", "require_if"):
-            cond = f.get(kind)
-            if not isinstance(cond, dict):
-                continue
-            for atom in _walk_condition_atoms(cond):
-                tid = atom.get("field")
-                old = standalone_old.get(tid) if isinstance(tid, str) else None
-                if (old is not None and atom.get("operator") == "equals"
-                        and str(atom.get("value")) == old):
-                    atom["operator"] = "is_checked"
-                    atom.pop("value", None)
-                    repairs.append({
-                        "action": "alias-operator",
-                        "path": f"fields[{i}] (id={f.get('id')}).{kind}",
-                        "detail": f"equals {old!r} on unwrapped standalone "
-                                  "checkbox -> is_checked",
-                        "error": False,
-                    })
+            _retarget(f.get(kind), f"fields[{i}] (id={f.get('id')}).{kind}")
+    for i, s in enumerate(sections):
+        if isinstance(s, dict):
+            _retarget(s.get("show_if"),
+                      f"sections[{i}] (id={s.get('id')}).show_if")
 
 
 def _repair_overflow_supplement(f: dict, path: str, repairs: List[dict]) -> None:
@@ -602,6 +614,10 @@ def _complete_supplements(schema: dict, repairs: List[dict]) -> None:
     supps = schema.get("supplements")
     if not isinstance(supps, list):
         return
+    # Ids already present count toward uniqueness so a synthesized id never
+    # collides with an explicit one either (bd polyglot-pdf-v76t).
+    used_ids = {s.get("id") for s in supps
+                if isinstance(s, dict) and s.get("id")}
     for j, s in enumerate(supps):
         if not isinstance(s, dict):
             continue
@@ -609,7 +625,13 @@ def _complete_supplements(schema: dict, repairs: List[dict]) -> None:
         if not s.get("id"):
             base = s.get("label") or s.get("name") or f"supplement_{j + 1}"
             slug = "".join(c if c.isalnum() else "_" for c in str(base).lower())
-            s["id"] = slug.strip("_") or f"supplement_{j + 1}"
+            slug = slug.strip("_") or f"supplement_{j + 1}"
+            candidate, n = slug, 1
+            while candidate in used_ids:
+                n += 1
+                candidate = f"{slug}_{n}"
+            s["id"] = candidate
+            used_ids.add(candidate)
             completed.append("id")
         if not s.get("name"):
             s["name"] = (s.get("label") or _humanize_slug(s.get("id"))
@@ -742,7 +764,10 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
     # polyglot-pdf-n3mn), and a multi-option checkbox retypes to
     # checkbox_group so minting sees the final type.
     standalone_old_value = _normalize_checkbox_shapes(fields, repairs)
-    _retarget_unwrapped_conditions(fields, standalone_old_value, repairs)
+    sections = [s for s in (repaired.get("sections") or [])
+                if isinstance(s, dict)]
+    _retarget_unwrapped_conditions(fields, sections, standalone_old_value,
+                                   repairs)
 
     resolution = _mint_slugs(fields, repairs)
     fields_by_id = {str(f.get("id")): f for f in fields}
@@ -764,8 +789,15 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
 
         # Strict-model validity fixes (bd polyglot-pdf-n3mn): an invented
         # overflow_to_supplement enum value and a missing option label both
-        # fail FormSchema.model_validate on an otherwise-clean draft.
+        # fail FormSchema.model_validate on an otherwise-clean draft. The
+        # SAME enum also lives on the multi_entry sub-config (bd
+        # polyglot-pdf-pofh) -- the helper reads the key generically, so it
+        # runs on that dict too.
         _repair_overflow_supplement(f, f"fields[{i}] (id={fid})", repairs)
+        if isinstance(f.get("multi_entry"), dict):
+            _repair_overflow_supplement(
+                f["multi_entry"], f"fields[{i}] (id={fid}).multi_entry",
+                repairs)
         _synthesize_option_labels(f, f"fields[{i}] (id={fid})", tu_by_name,
                                   repairs)
 

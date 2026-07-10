@@ -890,3 +890,61 @@ def test_supplements_entry_missing_id_gets_one_synthesized():
     assert supp["id"] == "extra_space"  # slugified from the label
     assert supp["name"] == "Extra Space"
     assert _model_validates(repaired) == ""
+
+
+# --------------------------------------------------------------------------- #
+# Bundled nit fixes (bd polyglot-pdf-v76t + polyglot-pdf-pofh).
+# --------------------------------------------------------------------------- #
+
+def test_section_condition_retargeted_after_standalone_unwrap():
+    # bd v76t: a SECTION's show_if referencing an unwrapped lone-option
+    # checkbox by its old option value stayed model-valid but semantically
+    # dead (a boolean trigger never equals the vanished value). Sections now
+    # get the same equals-old -> is_checked retarget as fields.
+    chk = {"id": "chk", "name": "Standalone", "type": "checkbox",
+           "options": [{"value": "yes", "pdf_on_value": "Y",
+                        "pdf_field_name": "c[0]"}]}
+    draft = _validatable([chk])
+    draft["sections"][0]["show_if"] = {
+        "field": "chk", "operator": "equals", "value": "yes"}
+
+    repaired, repairs = repair(draft)
+    assert repaired["sections"][0]["show_if"] == {
+        "field": "chk", "operator": "is_checked"}
+    assert any(r["action"] == "alias-operator"
+               and r["path"].startswith("sections[0]") for r in repairs)
+    assert _model_validates(repaired) == ""
+
+
+def test_synthesized_supplement_ids_deduplicate():
+    # bd v76t: two id-less entries sharing a label used to collide on the
+    # slugified id; and a synthesized id must not collide with an explicit one.
+    f = {"id": "t1", "name": "T1", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _validatable([f], supplements=[
+        {"label": "Extra Space"},
+        {"label": "Extra Space"},
+        {"id": "extra_space_2", "name": "N", "purpose": "P", "fields": []},
+    ])
+    repaired, _ = repair(draft)
+    ids = [s["id"] for s in repaired["supplements"]]
+    assert len(set(ids)) == 3, ids
+    assert ids[0] == "extra_space"
+    assert ids[1] not in ("extra_space", "extra_space_2")
+    assert _model_validates(repaired) == ""
+
+
+def test_multi_entry_overflow_supplement_aliases_like_field_level():
+    # bd pofh: the SAME SupplementType enum lives on the multi_entry
+    # sub-config; an invented value there also failed model_validate.
+    f = {"id": "t1", "name": "T1", "type": "text", "pdf_field_name": "T[0]",
+         "multi_entry": {"min_entries": 1, "initial_rows": 1,
+                         "overflow_to_supplement": "additional_children"}}
+    draft = _validatable([f])
+    assert "overflow_to_supplement" in _model_validates(draft)  # RED going in
+
+    repaired, repairs = repair(draft)
+    assert repaired["fields"][0]["multi_entry"]["overflow_to_supplement"] == \
+        "supplement_a"
+    assert any(r["action"] == "alias-overflow-supplement"
+               and r["path"].endswith(".multi_entry") for r in repairs)
+    assert _model_validates(repaired) == ""
