@@ -285,4 +285,44 @@ describe('WebFormConnection handshake reflects fresh sessionStorage on open (bd 
     expect(handshake.current_values).toHaveProperty('name_changed')
     expect(handshake.resume).toBe(false) // first connect of this instance
   })
+
+  it('also refreshes the JIT handshake (loaded_field_ids + current_values) from fresh state', async () => {
+    const conn = new WebFormConnection(TWO_SECTION_SCHEMA)
+
+    // A JIT/DTI session's fresh state: reloadState() must feed getJITHandshakePayload
+    // so the manifest-first handshake carries the current section, filled values,
+    // and loaded_field_ids -- not the constructor snapshot.
+    const freshJitState: SchemaFormState = {
+      schema: TWO_SECTION_SCHEMA,
+      fieldValues: { name_changed: { value: 'No', confirmed: true } },
+      currentSectionId: 's2',
+      completedSections: new Set<string>(['s1']),
+      validationErrors: {},
+      lastUpdated: 1,
+      formSessionId: 'fss_test',
+      loadedFieldIds: new Set<string>(['name_changed']),
+      jitModeEnabled: true,
+      continuousSessionEnabled: false,
+      disclaimerAccepted: true,
+      selectedLanguage: 'English',
+    } as unknown as SchemaFormState
+    vi.spyOn(SchemaFormStateManager, 'load').mockReturnValue(freshJitState)
+
+    const p = conn.connect('wss://example/ws/fill')
+    const sock = MockWebSocket.instances[MockWebSocket.instances.length - 1]
+    sock.open()
+    await p
+
+    const handshakeStr = (sock.send.mock.calls
+      .map((c: any[]) => c[0])
+      .find((s: any) => typeof s === 'string' && s.includes('"type":"handshake_jit"'))) as string
+    expect(handshakeStr).toBeDefined()
+    const handshake = JSON.parse(handshakeStr)
+    expect(handshake.type).toBe('handshake_jit')
+    expect(handshake.section_label).toBe('S2')
+    // loadedFieldIds is a Set on state; getJITHandshakePayload serializes it to an
+    // array -- reloadState() must have reconstructed it so the array is non-empty.
+    expect(handshake.loaded_field_ids).toContain('name_changed')
+    expect(handshake.current_values).toHaveProperty('name_changed')
+  })
 })
