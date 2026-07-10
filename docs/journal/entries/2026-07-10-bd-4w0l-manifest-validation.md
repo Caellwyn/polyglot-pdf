@@ -38,7 +38,12 @@ at the route); this is the defense-in-depth fix.
   aborts, and the two scripts' helper copies are asserted byte-identical (no
   shared lib -- the scripts already duplicate the whole manifest block, so the
   identity test is the drift guard).
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) NO-GAPS (two low-confidence latent
+  notes -- raw-manifest echo on the abort path, spaces-in-override-path word
+  splitting -- both judged non-blocking by the reviewer and by me, no beads
+  filed); required Opus final round NO-GAPS. Outer review (Step 5.6):
+  primary Opus NO-GAPS + second independent Opus NO-GAPS on the identical
+  final diff, one round each.
 
 ## Lessons
 
