@@ -34,6 +34,44 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# Resolve a python interpreter for manifest validation. python3 is not
+# guaranteed on Windows Git Bash, so fall back to python, then the py
+# launcher. Each candidate must actually RUN (-c pass), not merely exist:
+# Windows ships a python3 App-Execution-Alias stub that command -v finds but
+# that cannot execute, which would misreport every manifest as invalid.
+# Candidates are env-overridable for tests. MUST match deploy-all.sh's copy
+# exactly.
+find_manifest_python() {
+    local cand
+    for cand in ${MANIFEST_PYTHON_CANDIDATES:-python3 python py}; do
+        if "$cand" -c "pass" >/dev/null 2>&1; then
+            echo "$cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Validate the string-concatenated manifest JSON and pretty-print it into the
+# output file. A validation FAILURE aborts the deploy: shipping invalid JSON
+# silently breaks the voice app's form list with zero deploy-time signal
+# (bd polyglot-pdf-4w0l). No python interpreter at all is also fatal -- with
+# no validator we cannot know the manifest is safe to ship (gcloud itself
+# requires Python, so a working deploy machine always has one). MUST match
+# deploy-all.sh's copy exactly.
+write_validated_manifest() {
+    local content="$1" out="$2" py
+    if ! py=$(find_manifest_python); then
+        log_error "No python interpreter found (tried: ${MANIFEST_PYTHON_CANDIDATES:-python3 python py}) -- cannot validate the manifest; aborting deploy."
+        return 1
+    fi
+    if ! echo "$content" | "$py" -m json.tool > "$out" 2>/dev/null; then
+        log_error "Generated manifest is INVALID JSON -- aborting deploy (nothing uploaded)."
+        log_error "Offending manifest content: $content"
+        return 1
+    fi
+}
+
 # Draft-leak gate: only a kit whose metadata.json is status:complete may reach
 # GCS / the voice-app manifest (bd b0pe / nr8u). MUST match deploy-all.sh's
 # kit_is_complete exactly (same tolerant grep, no jq) -- this script is the
@@ -174,9 +212,13 @@ generate_manifest() {
 
     manifest_content+=']}'
 
-    # Write manifest locally first
+    # Write manifest locally first; an invalid manifest aborts the deploy
+    # before anything is uploaded (bd polyglot-pdf-4w0l).
     local temp_manifest=$(mktemp)
-    echo "$manifest_content" | python3 -m json.tool > "$temp_manifest" 2>/dev/null || echo "$manifest_content" > "$temp_manifest"
+    if ! write_validated_manifest "$manifest_content" "$temp_manifest"; then
+        rm -f "$temp_manifest"
+        exit 1
+    fi
 
     # Upload manifest
     gcloud storage cp "$temp_manifest" "gs://$BUCKET_NAME/$PREFIX/$MANIFEST_FILE"
