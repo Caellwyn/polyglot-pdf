@@ -34,7 +34,7 @@ import {
 import { getCompletionStats } from './utils/validation';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
-import type { FormField, FormConfig, FormSchema } from './types/schema';
+import type { FormField, FormConfig, FormSchema, FormSection } from './types/schema';
 
 // Live review stats for the open kit's catalogue bar (percent + the matching
 // complete/total counts, so the bar AND its hover detail both track edits).
@@ -330,13 +330,16 @@ export const App: React.FC = () => {
     commitSchema(newSchema);
   }, [schema, commitSchema]);
 
-  // Replace the whole field list at once (bd polyglot-pdf-432u): used when an
-  // edit needs to touch MULTIPLE fields atomically, e.g. retargeting every
-  // dependent's show_if/require_if after an option-slug rename -- unlike
-  // handleUpdateField, which can only patch the single field being edited.
-  const handleUpdateFields = React.useCallback((fields: FormField[]) => {
+  // Replace the whole field list (and optionally sections) at once (bd
+  // polyglot-pdf-432u, extended by polyglot-pdf-6b7z): used when an edit needs
+  // to touch MULTIPLE fields/sections atomically, e.g. retargeting every
+  // dependent's (and every section's) show_if/require_if after an
+  // option-slug rename -- unlike handleUpdateField, which can only patch the
+  // single field being edited. `sections` is optional so callers that only
+  // touch fields (no section referenced the renamed slug) can omit it.
+  const handleUpdateFields = React.useCallback((fields: FormField[], sections?: FormSection[]) => {
     if (!schema) return;
-    commitSchema({ ...schema, fields });
+    commitSchema({ ...schema, fields, ...(sections ? { sections } : {}) });
   }, [schema, commitSchema]);
 
   // Update form-level metadata (version, edition, OMB, expiration -- bd

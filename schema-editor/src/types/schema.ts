@@ -42,6 +42,18 @@ export interface FormSection {
   label: string;
   order: number;
   fields: string[];
+  // The backend only accepts the LEGACY single-atom shape on a section
+  // (form_models.py FormSection.show_if, ~line 627) -- a section can never
+  // carry the composite all_of/any_of/none_of shape. The editor never AUTHORS
+  // a section show_if; this typing exists so the group mutations (merge /
+  // ungroup / change-kind / retarget) can REWRITE a loaded kit's section
+  // condition instead of stranding it when its referenced field's group kind
+  // changes (bd polyglot-pdf-6b7z). Typed as the full union (not just
+  // ConditionalDisplay) so a malformed/composite value from a hand-edited kit
+  // is still representable; the rewrite helpers handle both shapes
+  // defensively even though a backend-valid kit only ever carries a single
+  // atom here.
+  show_if?: FieldCondition;
 }
 
 export interface FormField {
