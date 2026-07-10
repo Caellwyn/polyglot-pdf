@@ -44,9 +44,22 @@ strand -- documenting the hole would leave a live promotion-rejection path).
   unvalidated cast; the stash is session-only but the guard is free).
 - Implementation delegated to a Sonnet subagent (model-tiering); diff
   reviewed by the orchestrator, which added the stash guard.
-- 9 new tests; editor suite 37 files / 657 tests green (648 baseline);
+- 10 new tests; editor suite 37 files / 658 tests green (648 baseline);
   tsc clean.
-- Fresh-eyes triage: (filled at closeout -- see below)
+- Fresh-eyes triage: round 1 (sonnet) cleared the rubric, filed one
+  out-of-scope bug itself (bd polyglot-pdf-qy29: the option-delete guard
+  optionValueReferencedBy never scans sections) and noted one test nit
+  (adopted: the round-trip test now pins membership + show_if restore
+  together). Opus clearing round 1 found a REAL in-scope gap: a
+  radio->checkbox_group flip on a group whose SECTION show_if carried a
+  fully-live top-level in/not_in expanded it into an any_of composite the
+  backend rejects on sections, and hasUnflippableListMembership never
+  scanned sections. Fixed (sections scan blocks ANY list-membership atom on
+  the group; fields keep the expandable-list allowance) + a test pinning the
+  block. Opus clearing round 2 on the updated diff: NO-GAPS. Outer review
+  (Step 5.6): primary Opus NO-GAPS + second independent Opus NO-GAPS on the
+  identical final diff (both flagged only this journal's then-stale test
+  count, corrected here).
 
 ## Lessons
 
