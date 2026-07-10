@@ -12,6 +12,7 @@ from backend.services.manifest_service import (
     estimate_manifest_tokens,
     format_manifest_for_context,
     generate_part_manifest,
+    get_field_guidance,
     get_next_field_schema,
     should_include_schema_in_response,
 )
@@ -137,6 +138,49 @@ def test_get_next_field_schema_passes_bare_string_options_through():
         "options": ["alpha", "beta"],
     }]}
     assert get_next_field_schema(part, None)["options"] == ["alpha", "beta"]
+
+
+def test_get_field_guidance_strips_pdf_plumbing_from_options():
+    """The DTI get_field_guidance dict feeds both the system instruction and the
+    confirm_field tool response -- a model-facing payload, like the JIT path.
+    Its options must be sanitized to value/label/spoken_label with the SAME
+    shared helper, so pdf_field_name/pdf_on_value/pdf_position/label_translations
+    never leak (bd polyglot-pdf-lj5v; mirrors the JIT path's 5f41 boundary)."""
+    field = {
+        "id": "eth", "name": "Ethnicity", "spoken_name": "ethnicity",
+        "type": "radio",
+        "options": [
+            {"value": "hispanic", "label": "Hispanic or Latino",
+             "spoken_label": "Hispanic or Latino",
+             "label_translations": {"es": "Hispano o Latino"},
+             "pdf_field_name": "P3_checkbox5_Hispanic[0]",
+             "pdf_on_value": "1",
+             "pdf_position": {"page": 3, "x": 344.0, "y": 115.58,
+                              "width": 10.0, "height": 10.0}},
+            {"value": "not_hispanic", "label": "Not Hispanic"},
+        ],
+    }
+    options = get_field_guidance(field)["options"]
+    assert options == [
+        {"value": "hispanic", "label": "Hispanic or Latino",
+         "spoken_label": "Hispanic or Latino"},
+        {"value": "not_hispanic", "label": "Not Hispanic"},
+    ]
+    # Belt-and-suspenders: no pdf plumbing key survives anywhere in the payload.
+    flat = json.dumps(get_field_guidance(field))
+    for leaked in ("pdf_field_name", "pdf_on_value", "pdf_position",
+                   "label_translations"):
+        assert leaked not in flat
+
+
+def test_get_field_guidance_passes_bare_string_options_through():
+    """get_field_guidance must tolerate bare-string options (allowed_values
+    shape) unchanged, matching the JIT path."""
+    field = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": "select",
+        "allowed_values": ["alpha", "beta"],
+    }
+    assert get_field_guidance(field)["options"] == ["alpha", "beta"]
 
 
 def test_should_include_schema_in_response_tracks_loaded_state():
