@@ -211,7 +211,10 @@ TOP-LEVEL SHAPE:
   "sections": [ {{"id": str, "label": str, "order": int, "fields": [str(field id)],
                  "page_numbers": [int], "show_if": {{...optional...}}}} ],
   "fields":   [ FIELD, ... ],
-  "supplements": [ {{"id": str, "label": str}} ]   // only if the form overflows
+  "supplements": [ {{"id": str, "name": str, "purpose": str,
+                    "fields": [str(field id), ...may be empty]}} ]
+                             // only if the form overflows. ALL FOUR keys are
+                             // required -- {{id, label}} alone is rejected.
 }}
 
 FIELD SHAPE (the unit the scorer grades hardest):
