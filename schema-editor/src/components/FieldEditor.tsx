@@ -3,6 +3,7 @@ import type {
   FormField,
   FieldType,
   FormSchema,
+  FormSection,
 } from '../types/schema';
 import {
   changeGroupKindBlockReason,
@@ -29,13 +30,15 @@ interface FieldEditorProps {
   // kind choice when combining loose widgets). Optional so the editor still
   // renders without it (the control is simply not shown).
   onChangeGroupKind?: (fieldId: string, kind: 'checkbox_group' | 'radio') => void;
-  // Commit a schema-wide field list, e.g. after retargeting dependents' show_if
-  // / require_if to an option's freshly-renamed slug (bd polyglot-pdf-432u).
-  // Separate from onUpdateField, which can only patch the SINGLE field being
-  // edited -- a rename can touch OTHER fields' conditions too. Optional so the
-  // editor still renders without it (falls back to leaving dependents
-  // unretargeted, same as before this fix).
-  onUpdateFields?: (fields: FormField[]) => void;
+  // Commit a schema-wide field list (and optionally sections), e.g. after
+  // retargeting dependents' show_if / require_if to an option's
+  // freshly-renamed slug (bd polyglot-pdf-432u, extended to sections by bd
+  // polyglot-pdf-6b7z -- a section's show_if can equally reference a renamed
+  // option slug). Separate from onUpdateField, which can only patch the
+  // SINGLE field being edited -- a rename can touch OTHER fields'/sections'
+  // conditions too. Optional so the editor still renders without it (falls
+  // back to leaving dependents unretargeted, same as before this fix).
+  onUpdateFields?: (fields: FormField[], sections?: FormSection[]) => void;
   // Update form-level metadata (version/edition/OMB/expiration -- bd
   // polyglot-pdf-s4dp.2). Optional; when absent the metadata panel is read-only.
   onUpdateMetadata?: (patch: Partial<FormSchema['form_metadata']>) => void;
@@ -689,9 +692,9 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                               f.id === field.id ? updatedField : f,
                             );
                             const retargeted = retargetOptionValueReferences(
-                              withRename, field.id, String(oldValue), value,
+                              withRename, field.id, String(oldValue), value, schema.sections,
                             );
-                            onUpdateFields(retargeted);
+                            onUpdateFields(retargeted.fields, retargeted.sections);
                           } else {
                             updateField({ options: newOptions });
                           }

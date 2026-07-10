@@ -35,6 +35,7 @@
 import type {
   FormField,
   FormSchema,
+  FormSection,
   FieldOption,
   CompositeConditionalDisplay,
   ConditionalDisplay,
@@ -135,6 +136,17 @@ interface UngroupStash {
     had_show_if: boolean;
     had_require_if: boolean;
     had_copy_to: boolean;
+  }>;
+  // Sections whose show_if this merge rewrote (a section can carry a legacy
+  // single-atom show_if that references a merged-away field id, same as a
+  // dependent field's show_if -- bd polyglot-pdf-6b7z), with their pre-merge
+  // values, so un-merge can restore them verbatim. Mirrors `rewrites` above;
+  // a section has no require_if/copy_to so this only needs show_if.
+  sections: Array<{
+    sectionId: string;
+    show_if?: FieldCondition;
+    // sentinel distinguishing "had no key" from "key not rewritten" on restore.
+    had_show_if: boolean;
   }>;
 }
 
@@ -346,16 +358,25 @@ function retargetCondition(
 // rename -- keeping the schema ref-clean without freezing the label. Mirrors
 // optionValueReferencedBy's scan (show_if + require_if only, matching the
 // delete guard's scope) but retargets instead of merely detecting. Returns the
-// SAME array (identity-stable) when no field referenced the old slug, so
-// callers can skip a no-op schema commit; otherwise a new array with only the
-// retargeted fields replaced (untouched fields keep their original identity).
+// SAME fields array (identity-stable) when no field referenced the old slug,
+// so callers can skip a no-op schema commit; otherwise a new array with only
+// the retargeted fields replaced (untouched fields keep their original
+// identity).
+//
+// `sections` is optional (bd polyglot-pdf-6b7z): a section's show_if is
+// validated by the same operator/trigger matrix as a field's, so it can
+// equally reference an option slug that just got renamed. When omitted (or
+// empty), the returned `sections` is the same reference passed in (or `[]`)
+// -- existing callers that only care about fields can destructure `.fields`
+// and ignore `.sections`.
 export function retargetOptionValueReferences(
   fields: FormField[],
   triggerFieldId: string,
   oldSlug: string,
   newSlug: string,
-): FormField[] {
-  if (oldSlug === newSlug) return fields;
+  sections: FormSection[] = [],
+): { fields: FormField[]; sections: FormSection[] } {
+  if (oldSlug === newSlug) return { fields, sections };
   let anyChanged = false;
   const next = fields.map(f => {
     if (f.id === triggerFieldId) return f;
@@ -376,7 +397,24 @@ export function retargetOptionValueReferences(
     if (changed) anyChanged = true;
     return changed ? updated : f;
   });
-  return anyChanged ? next : fields;
+
+  // Sections can equally reference the renamed slug (bd polyglot-pdf-6b7z) --
+  // same atom scan, but only show_if (a section has no require_if).
+  let anySectionChanged = false;
+  const nextSections = sections.map(s => {
+    if (!s.show_if || !conditionAtomsOf(s.show_if).some(
+      a => a.field === triggerFieldId && String(a.value) === oldSlug,
+    )) {
+      return s;
+    }
+    anySectionChanged = true;
+    return { ...s, show_if: retargetCondition(s.show_if, triggerFieldId, oldSlug, newSlug) };
+  });
+
+  return {
+    fields: anyChanged ? next : fields,
+    sections: anySectionChanged ? nextSections : sections,
+  };
 }
 
 // Rewrite every dependent field's show_if / require_if / copy_to that referenced
@@ -439,6 +477,34 @@ function rewriteReferences(
   });
 
   return { fields: newFields, rewrites };
+}
+
+// Rewrite every section's show_if that referenced a merged-away field, the
+// same way rewriteReferences rewrites a dependent field's show_if (bd
+// polyglot-pdf-6b7z) -- a section's show_if is validated by the identical
+// operator/trigger matrix (form_models.py FormSection.show_if, ~line 627), so
+// a section gated on a merged-away widget must move to the consolidated
+// group exactly like a field-level dependent. Returns the rewritten sections
+// AND a record of what changed (so un-merge can restore the originals).
+function rewriteSectionReferences(
+  sections: FormSection[],
+  mergedAwayToValue: Map<string, string>,
+  primaryId: string,
+  membership: boolean,
+): { sections: FormSection[]; rewrites: UngroupStash['sections'] } {
+  const rewrites: UngroupStash['sections'] = [];
+  const mergedAway = new Set(mergedAwayToValue.keys());
+
+  const newSections = sections.map(s => {
+    if (!s.show_if || !conditionReferencesAny(s.show_if, mergedAway)) return s;
+    rewrites.push({ sectionId: s.id, show_if: s.show_if, had_show_if: true });
+    return {
+      ...s,
+      show_if: rewriteCondition(s.show_if, mergedAwayToValue, primaryId, membership),
+    };
+  });
+
+  return { sections: newSections, rewrites };
 }
 
 // Merge the given fields (by id, in selection order) into one consolidated
@@ -538,12 +604,21 @@ export function mergeFields(
     primaryCopyTo = out;
   }
 
+  // Sections gated on a merged-away widget (e.g. `{field: reason_b, operator:
+  // is_checked}`) must move to the consolidated group exactly like a
+  // dependent field's show_if -- the backend validates a section's show_if
+  // with the SAME operator/trigger matrix (bd polyglot-pdf-6b7z). Stash the
+  // originals alongside the field-level rewrites so ungroup is lossless.
+  const { sections: rewrittenSections, rewrites: sectionRewrites } = rewriteSectionReferences(
+    schema.sections, mergedAwayToValue, primary.id, membership,
+  );
+
   // The merged field carries the primary's identity + the stash for un-merge.
   // show_if / copy_to are set EXPLICITLY (not via a conditional spread) so a
   // dropped/rewritten value OVERRIDES the one inherited from {...primary} -- a
   // conditional spread would silently keep the stale inherited value (e.g. a
   // dropped self-referential show_if would survive). Round 2 fix.
-  const stash: UngroupStash = { sources: distinct, rewrites };
+  const stash: UngroupStash = { sources: distinct, rewrites, sections: sectionRewrites };
   const mergedField = {
     ...primary,
     type: kind,
@@ -577,8 +652,10 @@ export function mergeFields(
     // merged-away (non-primary) fields are dropped
   }
 
-  // Remove merged-away ids from the (single) section's field list.
-  const newSections = schema.sections.map(section => {
+  // Remove merged-away ids from the (single) section's field list. Applied on
+  // top of rewrittenSections so a section's show_if rewrite (above) and its
+  // membership splice both land in the result.
+  const newSections = rewrittenSections.map(section => {
     const fields = section.fields.filter(id => id === primary.id || !mergedIds.has(id));
     return fields.length === section.fields.length ? section : { ...section, fields };
   });
@@ -648,8 +725,21 @@ function hasUnflippableListMembership(
     // Top-level legacy: block only when not losslessly expandable (shape (b)).
     return topLevelNotLossless(cond);
   };
-  return schema.fields.some(
-    f => f.id !== groupId && (blocks(f.show_if) || blocks(f.require_if)),
+  // A SECTION's show_if can never hold a composite -- the backend types it as
+  // the legacy single atom only (form_models.py FormSection.show_if) -- so a
+  // section's in/not_in on this group has NO expandable form at all: ANY
+  // list-membership atom blocks, even the fully-live top-level list a FIELD
+  // could expand to any_of (bd polyglot-pdf-6b7z, Opus outer-review finding).
+  const sectionBlocks = (cond: FieldCondition | undefined): boolean => {
+    if (!cond) return false;
+    return conditionAtomsOf(cond).some(
+      atom => atom.field === groupId && LIST_MEMBERSHIP_OPERATORS.has(atom.operator),
+    );
+  };
+  return (
+    schema.fields.some(
+      f => f.id !== groupId && (blocks(f.show_if) || blocks(f.require_if)),
+    ) || schema.sections.some(s => sectionBlocks(s.show_if))
   );
 }
 
@@ -690,8 +780,11 @@ export function canChangeGroupKind(
 //   'same-kind'     -- already the requested kind
 //   'pdf-widgets'   -- radio -> checkbox_group but the group has no per-option
 //                      widget shape (shared-name radio); re-plumb widgets
-//   'nested-list-membership' -- a dependent has an in/not_in atom nested in a
-//                      composite that one-level v2 cannot expand; retarget it
+//   'nested-list-membership' -- a dependent (field OR section) has an in/not_in
+//                      atom that cannot be expanded: nested in a composite
+//                      (one-level v2 has nowhere to expand), or ON A SECTION
+//                      (a section's show_if cannot hold the composite an
+//                      expansion mints at all); retarget it
 export type ChangeGroupKindBlockReason =
   | 'not-a-group'
   | 'same-kind'
@@ -853,7 +946,16 @@ export function changeGroupKind(
     return changed ? next : f;
   });
 
-  return { ...schema, fields: newFields };
+  // A section's show_if is validated by the SAME operator/trigger matrix as a
+  // field's (form_models.py FormSection.show_if, ~line 627), so it must move
+  // across the membership boundary too, exactly like a dependent field's
+  // show_if above (bd polyglot-pdf-6b7z).
+  const newSections = schema.sections.map(s => {
+    if (!s.show_if || !conditionReferencesAny(s.show_if, new Set([fieldId]))) return s;
+    return { ...s, show_if: flipCondition(s.show_if) };
+  });
+
+  return { ...schema, fields: newFields, sections: newSections };
 }
 
 // Un-merge a consolidated field back into its separate per-widget fields. When a
@@ -905,12 +1007,24 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
       }
     }
 
+    // `?? []`: the stash is session-only (stripEditorState removes it on
+    // save), but readStash is an unvalidated cast -- guard against a stash
+    // written before the sections entry existed reaching this path anyway.
+    const sectionRestoreById = new Map((stash.sections ?? []).map(r => [r.sectionId, r]));
+
     const newSections = schema.sections.map(section => {
       const pos = section.fields.indexOf(fieldId);
-      if (pos === -1) return section;
+      const r = sectionRestoreById.get(section.id);
+      if (pos === -1 && !r) return section;
       const fields = [...section.fields];
-      fields.splice(pos, 1, ...rebuiltIds);
-      return { ...section, fields };
+      if (pos !== -1) fields.splice(pos, 1, ...rebuiltIds);
+      if (!r) return { ...section, fields };
+      // Restore the section's show_if the merge rewrote (same had_* sentinel
+      // convention as the field-level restore above -- bd polyglot-pdf-6b7z).
+      const restored: FormSection = { ...section, fields };
+      if (r.show_if !== undefined) restored.show_if = r.show_if;
+      else if (!r.had_show_if) delete restored.show_if;
+      return restored;
     });
 
     return { ...schema, fields: newFields, sections: newSections };
@@ -975,10 +1089,11 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
 
   const newSections = schema.sections.map(section => {
     const pos = section.fields.indexOf(fieldId);
-    if (pos === -1) return section;
-    const fields = [...section.fields];
+    const remapped = remapFallbackSection(section, fieldId, valueToReconstructedId, primaryReconstructedId);
+    if (pos === -1) return remapped;
+    const fields = [...remapped.fields];
     fields.splice(pos, 1, ...rebuiltIds);
-    return { ...section, fields };
+    return { ...remapped, fields };
   });
 
   return { ...schema, fields: newFields, sections: newSections };
@@ -1105,6 +1220,53 @@ function remapFallbackAtom(
     : { ...cond, field: primaryReconstructedId, operator: normalizedOp };
 }
 
+// Remap a show_if/require_if that referenced the now-split consolidated
+// field, atom-wise, preserving the stored shape (legacy or v2 composite --
+// bd h76m.8). Shared by remapFallbackDependent (fields) and
+// remapFallbackSection (bd polyglot-pdf-6b7z) so the composite-vs-legacy
+// dispatch is not duplicated per container type.
+function remapFallbackCondition(
+  cond: FieldCondition,
+  fieldId: string,
+  valueToReconstructedId: Map<string, string>,
+  primaryReconstructedId: string,
+): FieldCondition {
+  if (isCompositeCondition(cond)) {
+    const out: CompositeConditionalDisplay = {};
+    for (const bucket of CONDITION_BUCKETS) {
+      const members = cond[bucket];
+      if (members) {
+        out[bucket] = members.map(atom =>
+          atom.field === fieldId
+            ? remapFallbackAtom(atom, valueToReconstructedId, primaryReconstructedId)
+            : atom,
+        );
+      }
+    }
+    return out;
+  }
+  return remapFallbackAtom(cond, valueToReconstructedId, primaryReconstructedId);
+}
+
+// Remap a section's show_if that referenced the now-split consolidated field
+// (fallback ungroup, bd polyglot-pdf-6b7z) -- the section analogue of
+// remapFallbackDependent. Returns the same object reference when the
+// section's show_if did not reference fieldId (no-op).
+function remapFallbackSection(
+  section: FormSection,
+  fieldId: string,
+  valueToReconstructedId: Map<string, string>,
+  primaryReconstructedId: string,
+): FormSection {
+  if (!section.show_if || !conditionReferencesAny(section.show_if, new Set([fieldId]))) {
+    return section;
+  }
+  return {
+    ...section,
+    show_if: remapFallbackCondition(section.show_if, fieldId, valueToReconstructedId, primaryReconstructedId),
+  };
+}
+
 function remapFallbackDependent(
   f: FormField,
   fieldId: string,
@@ -1115,34 +1277,12 @@ function remapFallbackDependent(
   let changed = false;
   const next: FormField = { ...f };
 
-  // Remap a show_if/require_if that referenced the now-split consolidated
-  // field, atom-wise, preserving the stored shape (legacy or v2 composite --
-  // bd h76m.8). show_if AND require_if get the SAME treatment (Codex PR #310
-  // round 2: require_if was previously left dangling).
-  const remapCond = (cond: FieldCondition): FieldCondition => {
-    if (isCompositeCondition(cond)) {
-      const out: CompositeConditionalDisplay = {};
-      for (const bucket of CONDITION_BUCKETS) {
-        const members = cond[bucket];
-        if (members) {
-          out[bucket] = members.map(atom =>
-            atom.field === fieldId
-              ? remapFallbackAtom(atom, valueToReconstructedId, primaryReconstructedId)
-              : atom,
-          );
-        }
-      }
-      return out;
-    }
-    return remapFallbackAtom(cond, valueToReconstructedId, primaryReconstructedId);
-  };
-
   if (f.show_if && conditionReferencesAny(f.show_if, new Set([fieldId]))) {
-    next.show_if = remapCond(f.show_if);
+    next.show_if = remapFallbackCondition(f.show_if, fieldId, valueToReconstructedId, primaryReconstructedId);
     changed = true;
   }
   if (f.require_if && conditionReferencesAny(f.require_if, new Set([fieldId]))) {
-    next.require_if = remapCond(f.require_if);
+    next.require_if = remapFallbackCondition(f.require_if, fieldId, valueToReconstructedId, primaryReconstructedId);
     changed = true;
   }
 

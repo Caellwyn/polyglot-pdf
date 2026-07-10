@@ -964,7 +964,7 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
 
   it('retargets a legacy show_if AND require_if from the old slug to the new one', () => {
     const s = groupSchema();
-    const next = retargetOptionValueReferences(s.fields, 'grp', 'b', 'whyte');
+    const { fields: next } = retargetOptionValueReferences(s.fields, 'grp', 'b', 'whyte');
     const dep = next.find(f => f.id === 'dep')!;
     const dep2 = next.find(f => f.id === 'dep2')!;
     expect(asAtom(dep.show_if).value).toBe('whyte');
@@ -976,7 +976,7 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
 
   it('retargets a reference inside a composite condition', () => {
     const s = groupSchema();
-    const next = retargetOptionValueReferences(s.fields, 'grp', 'a', 'alpha');
+    const { fields: next } = retargetOptionValueReferences(s.fields, 'grp', 'a', 'alpha');
     const combo = next.find(f => f.id === 'combo')!;
     expect((combo.show_if as { all_of: ConditionalDisplay[] }).all_of[0].value).toBe('alpha');
     expect(optionValueReferencedBy({ ...s, fields: next }, 'grp', 'a')).toEqual([]);
@@ -985,7 +985,7 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
 
   it('leaves fields with no reference to the old slug untouched (same object identity)', () => {
     const s = groupSchema();
-    const next = retargetOptionValueReferences(s.fields, 'grp', 'b', 'whyte');
+    const { fields: next } = retargetOptionValueReferences(s.fields, 'grp', 'b', 'whyte');
     const combo = next.find(f => f.id === 'combo')!;
     // 'combo' references grp.a, not grp.b -> retargeting b leaves it untouched.
     expect(combo).toBe(s.fields.find(f => f.id === 'combo'));
@@ -996,7 +996,7 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
     s.fields.push({ id: 'other', name: 'Other', type: 'checkbox_group', section_id: 's1',
       read_only: false, required: false,
       options: [{ value: 'b', label: 'B', pdf_field_name: 'ob[0]' }] } as unknown as FormField);
-    const next = retargetOptionValueReferences(s.fields, 'other', 'b', 'whyte');
+    const { fields: next } = retargetOptionValueReferences(s.fields, 'other', 'b', 'whyte');
     // 'dep' references grp.b, not other.b -> unaffected by retargeting other's slug.
     const dep = next.find(f => f.id === 'dep')!;
     expect(asAtom(dep.show_if).value).toBe('b');
@@ -1004,12 +1004,36 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
 
   it('is a no-op (same array identity) when the slug is unchanged', () => {
     const s = groupSchema();
-    expect(retargetOptionValueReferences(s.fields, 'grp', 'b', 'b')).toBe(s.fields);
+    expect(retargetOptionValueReferences(s.fields, 'grp', 'b', 'b').fields).toBe(s.fields);
   });
 
   it('is a no-op (same array identity) when no dependent references the old slug', () => {
     const s = groupSchema();
-    expect(retargetOptionValueReferences(s.fields, 'grp', 'no_such_slug', 'whatever')).toBe(s.fields);
+    expect(retargetOptionValueReferences(s.fields, 'grp', 'no_such_slug', 'whatever').fields).toBe(s.fields);
+  });
+
+  it('also retargets a SECTION show_if referencing the renamed slug (bd polyglot-pdf-6b7z)', () => {
+    const s = groupSchema();
+    s.sections[0] = { ...s.sections[0], show_if: { field: 'grp', operator: 'includes', value: 'b' } };
+    const { sections: nextSections } = retargetOptionValueReferences(
+      s.fields, 'grp', 'b', 'whyte', s.sections,
+    );
+    expect(asAtom(nextSections[0].show_if).value).toBe('whyte');
+  });
+
+  it('leaves sections without a reference to the old slug untouched (same identity)', () => {
+    const s = groupSchema();
+    s.sections[0] = { ...s.sections[0], show_if: { field: 'grp', operator: 'includes', value: 'a' } };
+    const { sections: nextSections } = retargetOptionValueReferences(
+      s.fields, 'grp', 'b', 'whyte', s.sections,
+    );
+    expect(nextSections).toBe(s.sections);
+  });
+
+  it('sections default to [] (same reference) when the param is omitted', () => {
+    const s = groupSchema();
+    const { sections: nextSections } = retargetOptionValueReferences(s.fields, 'grp', 'b', 'whyte');
+    expect(nextSections).toEqual([]);
   });
 });
 
@@ -1173,6 +1197,27 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
     expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'dep')!, 'checkbox_group')).toBe(false);
   });
 
+  it('REFUSES a radio -> checkbox_group flip when a SECTION show_if holds in/not_in on the group', () => {
+    // A section's show_if is the legacy single atom only (backend
+    // FormSection.show_if) -- it can NEVER hold the any_of composite that
+    // expanding a fully-live `in [a,b]` mints, so the flip must be blocked
+    // even though a FIELD carrying the same condition could expand (bd
+    // polyglot-pdf-6b7z, Opus outer-review finding).
+    const s = grpKindSchema('radio');
+    // Sanity: without the section condition the flip is allowed (pins that
+    // the block below comes from the section, not the fixture).
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(true);
+
+    s.sections[0] = {
+      ...s.sections[0],
+      show_if: { field: 'grp', operator: 'in' as const, value: ['a', 'b'] },
+    };
+    expect(canChangeGroupKind(s, s.fields.find(f => f.id === 'grp')!, 'checkbox_group')).toBe(false);
+    // And changeGroupKind is a no-op (same reference) rather than minting a
+    // composite into the section's show_if.
+    expect(changeGroupKind(s, 'grp', 'checkbox_group')).toBe(s);
+  });
+
   // A radio trigger can carry a list-valued in/not_in dependent (a value that is
   // an array of option slugs -- ConditionBuilder offers in/not_in on a radio).
   // A checkbox_group trigger cannot (in/not_in are scalar-trigger-only), so a
@@ -1274,5 +1319,200 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
         { field: 'grp', operator: 'includes', value: 'c' },
       ],
     });
+  });
+});
+
+// Section-level show_if rewriting (bd polyglot-pdf-6b7z). The backend
+// validates a section's show_if with the SAME operator/trigger matrix as a
+// field's (form_models.py FormSection.show_if, ~line 627), so a section gated
+// on a group must be rewritten across group-kind flip / merge / ungroup
+// exactly like a dependent field's show_if -- otherwise a loaded kit's
+// section show_if strands a stale operator and the backend rejects the kit at
+// promotion.
+describe('section show_if rewriting across group mutations (bd polyglot-pdf-6b7z)', () => {
+  it('changeGroupKind flips a section-level condition the same as a field-level one', () => {
+    const schema: FormSchema = {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 2, total_fields: 2, version: '1', language: 'en' },
+      parts: [],
+      sections: [
+        { id: 's1', label: 'S1', order: 0, fields: ['grp'] },
+        {
+          id: 's2', label: 'S2', order: 1, fields: ['other'],
+          show_if: { field: 'grp', operator: 'includes', value: 'a' },
+        },
+      ],
+      fields: [
+        {
+          id: 'grp', name: 'Group', type: 'checkbox_group', section_id: 's1',
+          pdf_field_name: '', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
+          ],
+        } as unknown as FormField,
+        {
+          id: 'other', name: 'Other', type: 'text', section_id: 's2',
+          pdf_field_name: 'other[0]', read_only: false, required: false,
+        },
+      ],
+    };
+
+    const next = changeGroupKind(schema, 'grp', 'radio');
+    const s2 = next.sections.find(s => s.id === 's2')!;
+    // checkbox_group `includes` on the trigger becomes radio `equals` -- the
+    // exact rewrite a field-level dependent gets (see the flip tests above).
+    expect(asAtom(s2.show_if)).toEqual({ field: 'grp', operator: 'equals', value: 'a' });
+
+    // And the reverse direction.
+    const back = changeGroupKind(next, 'grp', 'checkbox_group');
+    const s2Back = back.sections.find(s => s.id === 's2')!;
+    expect(asAtom(s2Back.show_if)).toEqual({ field: 'grp', operator: 'includes', value: 'a' });
+  });
+
+  it('mergeFields rewrites a section show_if referencing a merged-away field, and lossless ungroup restores it byte-for-byte', () => {
+    const schema = w7Schema();
+    // Section 'reason' is shown only when reason_b is checked -- reason_b is
+    // about to be merged away into the consolidated group.
+    const originalShowIf = { field: 'reason_b', operator: 'is_checked' as const };
+    schema.sections[0] = { ...schema.sections[0], show_if: originalShowIf };
+
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    const mergedSection = merged.sections.find(s => s.id === 'reason')!;
+    // The whole-group is_checked selection op on a merged-away widget becomes
+    // a membership (includes <slug>) reference on the consolidated group --
+    // the same rewrite rewriteReferences applies to a dependent field.
+    expect(asAtom(mergedSection.show_if)).toEqual({
+      field: 'reason_a', operator: 'includes', value: 'reason_b',
+    });
+
+    // Lossless ungroup (stash present) restores the section's original show_if
+    // verbatim -- AND the field membership in the same pass (the two section
+    // rewrites land together; pin their interaction, fresh-eyes nit).
+    const unmerged = ungroupField(merged, 'reason_a');
+    const restoredSection = unmerged.sections.find(s => s.id === 'reason')!;
+    expect(restoredSection.show_if).toEqual(originalShowIf);
+    expect(restoredSection.fields).toEqual(schema.sections[0].fields);
+  });
+
+  it('ungroupField fallback path (no stash) remaps a section atom the same way it remaps a dependent field atom', () => {
+    const schema = w7Schema();
+    const originalShowIf = { field: 'reason_b', operator: 'is_checked' as const };
+    schema.sections[0] = { ...schema.sections[0], show_if: originalShowIf };
+    // Add a field-level dependent with the SAME condition, so the section and
+    // field remaps can be compared directly.
+    schema.fields.push({
+      id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
+      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      show_if: { field: 'reason_b', operator: 'is_checked' },
+    } as FormField);
+    schema.sections[0].fields.push('detail');
+
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    // Strip the stash (simulating save -> reload) to force the fallback path.
+    const saved = stripEditorState(merged);
+    const unmerged = ungroupField(saved, 'reason_a');
+
+    const detail = unmerged.fields.find(f => f.id === 'detail')!;
+    const section = unmerged.sections.find(s => s.id === 'reason')!;
+
+    // Both the field-level and section-level whole-group `includes` remap to
+    // `is_checked` on the reconstructed reason_b field -- identical treatment.
+    expect(asAtom(detail.show_if).operator).toBe('is_checked');
+    expect(asAtom(section.show_if!).operator).toBe('is_checked');
+    expect(asAtom(section.show_if!).field).toBe(asAtom(detail.show_if).field);
+    expect(unmerged.fields.some(f => f.id === asAtom(section.show_if!).field && f.type === 'checkbox')).toBe(true);
+  });
+
+  it('retargetOptionValueReferences retargets a section condition (App.tsx call-site shape: fields + sections in, {fields, sections} out)', () => {
+    const schema: FormSchema = {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', total_widgets: 1, total_fields: 1, version: '1', language: 'en' },
+      parts: [],
+      sections: [
+        { id: 's1', label: 'S1', order: 0, fields: ['grp'] },
+        {
+          id: 's2', label: 'S2', order: 1, fields: [],
+          show_if: { field: 'grp', operator: 'includes', value: 'b' },
+        },
+      ],
+      fields: [
+        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', pdf_field_name: '', read_only: false, required: false,
+          options: [
+            { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
+            { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
+          ] },
+      ],
+    };
+    const { sections } = retargetOptionValueReferences(schema.fields, 'grp', 'b', 'whyte', schema.sections);
+    const s2 = sections.find(s => s.id === 's2')!;
+    expect(asAtom(s2.show_if)).toEqual({ field: 'grp', operator: 'includes', value: 'whyte' });
+  });
+
+  it('a section WITHOUT show_if round-trips through every mutation without gaining the key', () => {
+    const schema = w7Schema(); // section 'reason' has no show_if
+    expect('show_if' in schema.sections[0]).toBe(false);
+
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    expect('show_if' in merged.sections[0]).toBe(false);
+
+    const flipped = changeGroupKind(merged, 'reason_a', 'radio');
+    expect('show_if' in flipped.sections[0]).toBe(false);
+
+    const unmerged = ungroupField(flipped, 'reason_a');
+    expect('show_if' in unmerged.sections[0]).toBe(false);
+
+    // Also verify the retarget path leaves an unreferenced section untouched
+    // (same identity, no key added).
+    const { sections: retargetedSections } = retargetOptionValueReferences(
+      unmerged.fields, 'reason_a', 'x', 'y', unmerged.sections,
+    );
+    expect(retargetedSections).toBe(unmerged.sections);
+    expect('show_if' in retargetedSections[0]).toBe(false);
+  });
+
+  it('a composite section show_if (invalid per backend but representable) is rewritten atom-wise without crashing', () => {
+    const schema = w7Schema();
+    // Not backend-valid (sections are legacy-only per form_models.py), but the
+    // editor type allows it (bd polyglot-pdf-6b7z) and the rewrite must not
+    // crash on a hand-edited kit carrying one.
+    schema.sections[0] = {
+      ...schema.sections[0],
+      show_if: {
+        all_of: [
+          { field: 'reason_b', operator: 'is_checked' },
+          { field: 'reason_c', operator: 'is_checked' },
+        ],
+      } as unknown as FormField['show_if'],
+    };
+
+    const { schema: merged } = mergeFields(
+      schema, ['reason_a', 'reason_b', 'reason_c'], 'checkbox_group',
+    );
+    const mergedSection = merged.sections.find(s => s.id === 'reason')!;
+    const composite = mergedSection.show_if as { all_of: ConditionalDisplay[] };
+    // Both atoms referenced merged-away widgets -> both rewrite to membership
+    // on the consolidated group, preserving the composite shape.
+    expect(composite.all_of).toEqual([
+      { field: 'reason_a', operator: 'includes', value: 'reason_b' },
+      { field: 'reason_a', operator: 'includes', value: 'reason_c' },
+    ]);
+
+    // changeGroupKind must also handle a composite section condition without
+    // crashing.
+    const flipped = changeGroupKind(merged, 'reason_a', 'radio');
+    const flippedComposite = flipped.sections.find(s => s.id === 'reason')!.show_if as {
+      all_of: ConditionalDisplay[];
+    };
+    expect(flippedComposite.all_of).toEqual([
+      { field: 'reason_a', operator: 'equals', value: 'reason_b' },
+      { field: 'reason_a', operator: 'equals', value: 'reason_c' },
+    ]);
   });
 });
