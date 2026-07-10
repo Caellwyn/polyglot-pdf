@@ -134,6 +134,40 @@ describe('FieldEditor group-kind flip', () => {
     expect(screen.getByText(/can only be a radio/i)).toBeInTheDocument();
   });
 
+  it('shows the RETARGET hint (not the PDF-widget one) when a nested in/not_in dependent blocks the flip', () => {
+    // A per-option-PDF radio (so PDF widgets are fine) with a dependent whose
+    // show_if nests an `in` atom in a composite -> the checkbox_group flip is
+    // refused for the in/not_in reason, and the hint must say so.
+    const grp = {
+      id: 'grp', name: 'Group', type: 'radio', section_id: 's1',
+      pdf_field_name: '', read_only: false, required: false,
+      options: [
+        { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
+        { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
+      ],
+    } as unknown as FormField;
+    const dep = {
+      id: 'dep', name: 'Dep', type: 'text', section_id: 's1',
+      pdf_field_name: 'dep[0]', read_only: false, required: false,
+      show_if: { all_of: [{ field: 'grp', operator: 'in', value: ['a', 'b'] }] },
+    } as unknown as FormField;
+    const schema = {
+      source: 'pdf',
+      form_metadata: { title: 'T', form_number: 'T', version: '1', language: 'en', total_widgets: 2, total_fields: 2 },
+      parts: [],
+      sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep'] }],
+      fields: [grp, dep],
+    } as unknown as FormSchema;
+    render(
+      <FieldEditor field={grp} schema={schema} onUpdateField={vi.fn()} onChangeGroupKind={vi.fn()} />,
+    );
+    const cbOption = screen.getByRole('option', { name: /Checkbox group/i }) as HTMLOptionElement;
+    expect(cbOption).toBeDisabled();
+    // The retarget hint, NOT the PDF-widget hint.
+    expect(screen.getByText(/in \/ not-in/i)).toBeInTheDocument();
+    expect(screen.queryByText(/shares one PDF widget/i)).not.toBeInTheDocument();
+  });
+
   it('does NOT render the flip control for a non-group field (plain checkbox)', () => {
     const field = {
       id: 'agree', name: 'Agree', type: 'checkbox', section_id: 's1',

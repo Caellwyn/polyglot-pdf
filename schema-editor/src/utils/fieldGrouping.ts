@@ -647,19 +647,44 @@ export function canChangeGroupKind(
   field: FormField,
   kind: MergeKind,
 ): boolean {
+  return changeGroupKindBlockReason(schema, field, kind) === null;
+}
+
+// Why a group-kind flip is refused, or null if it is allowed. The UI uses the
+// reason to show the RIGHT explanation (a PDF-widget shape the author must
+// re-plumb vs. a dependent condition the author must retarget) -- naming the
+// wrong cause sends the author to fix the wrong thing (bd polyglot-pdf-8qfj,
+// fresh-eyes round 3).
+//   'not-a-group'   -- the field is not a flippable consolidated group
+//   'same-kind'     -- already the requested kind
+//   'pdf-widgets'   -- radio -> checkbox_group but the group has no per-option
+//                      widget shape (shared-name radio); re-plumb widgets
+//   'nested-list-membership' -- a dependent has an in/not_in atom nested in a
+//                      composite that one-level v2 cannot expand; retarget it
+export type ChangeGroupKindBlockReason =
+  | 'not-a-group'
+  | 'same-kind'
+  | 'pdf-widgets'
+  | 'nested-list-membership';
+
+export function changeGroupKindBlockReason(
+  schema: FormSchema,
+  field: FormField,
+  kind: MergeKind,
+): ChangeGroupKindBlockReason | null {
   const isGroup = !!field.options && field.options.length > 0;
-  if (!isGroup) return false;
-  if (field.type !== 'checkbox_group' && field.type !== 'radio') return false;
-  if (field.type === kind) return false; // already that kind -- nothing to flip
-  if (kind === 'radio') return true; // any existing group is a valid radio
+  if (!isGroup) return 'not-a-group';
+  if (field.type !== 'checkbox_group' && field.type !== 'radio') return 'not-a-group';
+  if (field.type === kind) return 'same-kind';
+  if (kind === 'radio') return null; // any existing group is a valid radio
   // kind === 'checkbox_group': forbid a field-level pdf_field_name, and require
   // every option to carry its own pdf_field_name (pdf_on_value is NOT enough).
-  if (field.pdf_field_name) return false;
-  if (!(field.options || []).every(o => !!o.pdf_field_name)) return false;
+  if (field.pdf_field_name) return 'pdf-widgets';
+  if (!(field.options || []).every(o => !!o.pdf_field_name)) return 'pdf-widgets';
   // ...and refuse if a dependent has an un-expandable in-composite in/not_in atom
   // on this group (it would strand a checkbox_group-invalid list operator).
-  if (hasUnflippableListMembership(schema, field.id)) return false;
-  return true;
+  if (hasUnflippableListMembership(schema, field.id)) return 'nested-list-membership';
+  return null;
 }
 
 // Flip an EXISTING consolidated group between its two kinds -- checkbox_group

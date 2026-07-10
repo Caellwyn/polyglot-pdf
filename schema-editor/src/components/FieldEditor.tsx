@@ -5,7 +5,7 @@ import type {
   FormSchema,
 } from '../types/schema';
 import {
-  canChangeGroupKind,
+  changeGroupKindBlockReason,
   canUngroup,
   mintOptionSlug,
   mintUniqueSlugs,
@@ -356,17 +356,29 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   </p>
                 )}
                 {canFlipKind && (() => {
-                  // The two kinds are NOT symmetric: a shared-name radio
-                  // (field-level pdf_field_name + option pdf_on_value, no
-                  // per-option pdf_field_name) has no VALID checkbox_group form
-                  // (a checkbox_group forbids a field-level pdf_field_name and
-                  // needs each option to carry its own). So disable the
-                  // checkbox_group choice when the flip would mint a schema the
-                  // backend rejects, and explain why (bd polyglot-pdf-8qfj,
-                  // fresh-eyes gap). Flipping TO radio is always valid.
-                  const canBecomeCheckboxGroup =
-                    field.type === 'checkbox_group' ||
-                    canChangeGroupKind(schema, field, 'checkbox_group');
+                  // The two kinds are NOT symmetric, so flipping TO
+                  // checkbox_group can be refused for two DIFFERENT reasons, each
+                  // needing its own fix (bd polyglot-pdf-8qfj, fresh-eyes):
+                  //   'pdf-widgets' -- a shared-name radio (one PDF widget across
+                  //     its options) has no valid checkbox_group form; re-plumb
+                  //     widgets. 'nested-list-membership' -- a dependent has an
+                  //     in/not_in condition nested in a composite that can't be
+                  //     rewritten for a multi-select trigger; retarget it. Naming
+                  //     the wrong cause sends the author to fix the wrong thing.
+                  // Flipping TO radio is always valid. A field ALREADY of the
+                  // target kind is trivially "allowed" (same-kind), so treat only
+                  // a genuine block reason as a disable.
+                  const cbBlock = field.type === 'checkbox_group'
+                    ? null
+                    : changeGroupKindBlockReason(schema, field, 'checkbox_group');
+                  const canBecomeCheckboxGroup = cbBlock === null;
+                  const cbBlockHint = cbBlock === 'nested-list-membership'
+                    ? 'A field shown/required by an "is one of" (in / not-in) condition '
+                      + 'on this group blocks the switch to multi-select. Retarget that '
+                      + 'condition first, then switch.'
+                    : 'This group shares one PDF widget across its options, so it '
+                      + 'can only be a radio (choose one). A checkbox group needs a '
+                      + 'separate PDF widget per option.';
                   return (
                     <div className="mt-2">
                       <label className="label" htmlFor="group-kind-select">
@@ -390,7 +402,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           disabled={!canBecomeCheckboxGroup}
                         >
                           Checkbox group (choose several)
-                          {!canBecomeCheckboxGroup ? ' -- needs per-option PDF widgets' : ''}
+                          {!canBecomeCheckboxGroup ? ' -- unavailable' : ''}
                         </option>
                       </select>
                       <p className="text-xs text-gray-500 mt-1">
@@ -399,11 +411,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         into separate fields, use Ungroup.
                       </p>
                       {!canBecomeCheckboxGroup && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          This group shares one PDF widget across its options, so
-                          it can only be a radio (choose one). A checkbox group
-                          needs a separate PDF widget per option.
-                        </p>
+                        <p className="text-xs text-gray-500 mt-1">{cbBlockHint}</p>
                       )}
                     </div>
                   );
