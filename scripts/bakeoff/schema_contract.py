@@ -57,6 +57,12 @@ except Exception:  # pragma: no cover - exercised only in a backend-less checkou
 #     each option carrying its own pdf_field_name;
 #   - a dependent field using the v2 membership operator `includes` against an
 #     option slug (the retired equals-means-membership hack is gone).
+# DIVISIONS (bd polyglot-pdf-6cfu.2): the model is told NOT to emit parts/
+# sections/section_id -- boundaries are derived deterministically from the PDF
+# after extraction (scripts/authoring/derive_sections.py). The object below
+# KEEPS them because FormSchema requires them to validate (the sync test's
+# guarantee); render_example() strips them from the PROMPT rendering so the
+# example matches the instruction the model is given.
 # ---------------------------------------------------------------------------
 CANONICAL_EXAMPLE: Dict = {
     "source": "pdf",
@@ -177,10 +183,23 @@ def allowed_operator_names() -> List[str]:
     return [ln.strip().split()[0] for ln in _STATIC_OPERATOR_LINES]
 
 
-def render_example(indent: int = 2) -> str:
-    """The canonical v2 example, pretty-printed JSON (ASCII-safe)."""
+def render_example(indent: int = 2, include_divisions: bool = False) -> str:
+    """The canonical v2 example, pretty-printed JSON (ASCII-safe).
+
+    By default the PROMPT rendering strips parts/sections/section_id (the
+    model is instructed not to emit them -- divisions are derived post-
+    extraction, bd 6cfu.2); CANONICAL_EXAMPLE itself keeps them so it still
+    FormSchema-validates (the sync test's guarantee)."""
+    import copy
     import json
-    return json.dumps(CANONICAL_EXAMPLE, ensure_ascii=True, indent=indent)
+    ex = CANONICAL_EXAMPLE
+    if not include_divisions:
+        ex = copy.deepcopy(CANONICAL_EXAMPLE)
+        ex.pop("parts", None)
+        ex.pop("sections", None)
+        for f in ex.get("fields", []):
+            f.pop("section_id", None)
+    return json.dumps(ex, ensure_ascii=True, indent=indent)
 
 
 def render_contract() -> str:
@@ -207,15 +226,16 @@ TOP-LEVEL SHAPE:
   "schema_version": "2",
   "form_metadata": {{"title": str, "version": str, "form_number": str,
                     "page_count": int, "edition_date": str}},
-  "parts":    [ {{"id": str, "label": str, "order": int, "section_ids": [str]}} ],
-  "sections": [ {{"id": str, "label": str, "order": int, "fields": [str(field id)],
-                 "page_numbers": [int], "show_if": {{...optional...}}}} ],
   "fields":   [ FIELD, ... ],
   "supplements": [ {{"id": str, "name": str, "purpose": str,
                     "fields": [str(field id), ...may be empty]}} ]
                              // only if the form overflows. ALL FOUR keys are
                              // required -- {{id, label}} alone is rejected.
 }}
+// Do NOT emit "parts" or "sections" arrays, and do NOT set "section_id" on
+// fields: form divisions are derived DETERMINISTICALLY from the PDF after
+// extraction; anything you emit for them is discarded. Spend your effort on
+// the fields themselves.
 
 FIELD SHAPE (the unit the scorer grades hardest):
 {{
@@ -225,7 +245,6 @@ FIELD SHAPE (the unit the scorer grades hardest):
   "type": one of: "text","textarea","date","number","tel","email","radio",
                   "checkbox","checkbox_group","select","signature",
                   "address_group","table",
-  "section_id": str,         // which section.id this field is in
   "pdf_field_name": str,     // EXACT AcroForm widget name -- copy it verbatim
   "pdf_position": {{"page": int, "x": num, "y": num, "width": num, "height": num}},
   "validation": {{"required": bool, "pattern": str(optional regex)}},
@@ -267,6 +286,9 @@ none of those"); atoms never nest inside atoms (depth 1).
 RULES:
 - Use the EXACT pdf_field_name from the provided AcroForm field list when given;
   never invent or normalize it. It is the only reliable cross-reference.
+- Do NOT emit parts, sections, or field section_id -- form divisions are
+  derived deterministically from the PDF after extraction (bd 6cfu.2), so any
+  boundaries you produce are overwritten.
 - Recover conditional logic from the PRINTED instructions on the page, not
   guesses. Express a "show / require this field when X" dependency as show_if /
   require_if ON THE DEPENDENT FIELD. For a read-only field a choice unlocks, put
@@ -294,9 +316,9 @@ CHOICE-FIELD RULES (radio / select / checkbox_group -- these MUST round-trip):
   not_includes) for a checkbox_group trigger, or equals / in for a radio/select
   trigger.
 
-CANONICAL v2 EXAMPLE (this object validates against the FormSchema contract --
-imitate its conventions: slug option values, per-box pdf_field_name, and an
-`includes` membership show_if referencing an option slug):
+CANONICAL v2 EXAMPLE (imitate its conventions: slug option values, per-box
+pdf_field_name, and an `includes` membership show_if referencing an option
+slug; divisions are absent on purpose -- they are derived after extraction):
 {example}
 """
 

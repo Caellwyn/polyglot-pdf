@@ -338,7 +338,9 @@ def _write_logical_dump(tmp_path, name_to_logical):
 
 def test_backfill_adds_a_field_for_an_unclaimed_widget(tmp_path):
     """The core coverage fix: a fillable dump widget NO field claims is added
-    back as a basic field, filed into the section covering its page."""
+    back as a basic field with its dump rect. Section filing is NOT done here
+    (bd 6cfu.2): the field carries a placeholder section_id='' and the derived-
+    division pass (pipeline step 3e) re-files every field right after."""
     dump = _write_logical_dump(tmp_path, {
         "claimed[0]": "text", "orphan[0]": "text"})
     schema = {
@@ -349,9 +351,11 @@ def test_backfill_adds_a_field_for_an_unclaimed_widget(tmp_path):
     added = [f for f in schema["fields"] if f["pdf_field_name"] == "orphan[0]"]
     assert len(added) == 1
     assert added[0]["type"] == "text"
-    assert added[0]["section_id"] == "sec1"
-    # The section's fields[] list learns about the recovered field too.
-    assert added[0]["id"] in schema["sections"][0]["fields"]
+    assert added[0]["section_id"] == ""  # step 3e (derivation) re-files it
+    assert added[0]["pdf_position"]["page"] == 1  # the rect derivation needs
+    # Pre-existing sections are left alone -- derivation owns them now.
+    assert schema["sections"] == [
+        {"id": "sec1", "page_numbers": [1], "fields": ["a"]}]
 
 
 def test_backfill_types_a_checkbox_widget_as_v2_boolean_no_options(tmp_path):
@@ -446,18 +450,18 @@ def test_backfill_excludes_machine_barcodes(tmp_path):
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
 
 
-def test_backfill_creates_a_bucket_section_when_none_exist(tmp_path):
-    """No sections at backfill time: a recovered field must NOT be orphaned with
-    section_id='' (validates + lints clean but is unreachable). A 'recovered_fields'
-    bucket section is created so the field stays navigable."""
+def test_backfill_never_touches_sections(tmp_path):
+    """The derived world (bd 6cfu.2): backfill neither creates nor edits
+    sections -- no 'recovered_fields' bucket, no page_numbers bookkeeping.
+    The recovered field carries section_id='' and derive_and_apply (step 3e)
+    files it into a derived section (or the 'To review (unplaced)' bucket if
+    it somehow has no position), so nothing is orphaned."""
     dump = _write_logical_dump(tmp_path, {"orphan[0]": "text"})
     schema = {"fields": []}  # no 'sections' key at all
     assert ef._backfill_unclaimed_widgets(schema, dump) == 1
     f = schema["fields"][0]
-    assert f["section_id"] == "recovered_fields"
-    buckets = [s for s in schema["sections"] if s["id"] == "recovered_fields"]
-    assert len(buckets) == 1
-    assert f["id"] in buckets[0]["fields"]
+    assert f["section_id"] == ""
+    assert "sections" not in schema  # untouched -- derivation owns sections
 
 
 def test_backfilled_fields_always_validate_as_v2(tmp_path):
@@ -487,9 +491,9 @@ def test_backfilled_fields_always_validate_as_v2(tmp_path):
         FormSchema.model_validate(schema)  # raises if any field is v2-invalid
 
 
-def test_backfill_bucket_accumulates_pages_across_orphans(tmp_path):
-    """Two orphans on different pages, no sections: one recovered_fields bucket
-    whose page_numbers covers BOTH pages (round-2 nit fix)."""
+def test_backfill_positions_recovered_fields_one_based(tmp_path):
+    """Recovered fields carry 1-based pdf_position pages from the 0-based dump
+    rects -- the join key the derived-division pass files them by (bd 6cfu.2)."""
     dump = {"fields": [
         {"name": "a[0]", "logical_type": "text",
          "widgets": [{"rect": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}}]},
@@ -499,9 +503,8 @@ def test_backfill_bucket_accumulates_pages_across_orphans(tmp_path):
     p = tmp_path / "d.json"; p.write_text(json.dumps(dump), encoding="utf-8")
     schema = {"fields": []}
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 2
-    buckets = [s for s in schema["sections"] if s["id"] == "recovered_fields"]
-    assert len(buckets) == 1
-    assert sorted(buckets[0]["page_numbers"]) == [1, 3]  # pages 0+1 -> 1-based 1,3
+    assert sorted(f["pdf_position"]["page"] for f in schema["fields"]) == [1, 3]
+    assert "sections" not in schema
 
 
 def test_backfill_degenerate_leaf_falls_back_to_id_for_labels(tmp_path):

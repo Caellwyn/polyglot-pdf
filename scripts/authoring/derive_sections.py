@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Deterministic form-division derivation -- prototype (bd polyglot-pdf-6cfu.1).
+"""Deterministic form-division derivation (bd polyglot-pdf-6cfu.1 + 6cfu.2).
 
-Derives parts/sections for a form kit from the PDF itself, with NO LLM in the
+Derives parts/sections for a form from the PDF itself, with NO LLM in the
 loop. Strategy ladder (auto-selected, recorded in the output):
 
   1. name-convention (USCIS): widget names like P1_Line3a_FamilyName[0] carry
@@ -14,18 +14,31 @@ loop. Strategy ladder (auto-selected, recorded in the output):
 
 Rules common to every strategy: a section never spans pages ("(continued)");
 sections over --cap fillable fields sub-split at line-item family boundaries
-("X (1 of 3)"); labels come from the form's own printed text; derived
-sections carry 1-based page numbers matching field pdf_position.page.
+into BALANCED chunks ("X (1 of 3)"; 22 fields -> 11+11, never 20+2); labels
+come from the form's own printed text; derived sections carry 1-based page
+numbers matching field pdf_position.page. The cap is a display-sanity guard
+(default 40, tunable), NOT a validator constraint -- sections follow the
+form's printed structure at natural size (maintainer, 2026-07-10).
+
+Fields that do not clearly fit a division -- widget names that match no
+convention, or fields with no pdf_position -- gather into per-page 'To
+review' sections (well-known id prefix `sec_to_review`) for a HUMAN reviewer
+to re-file in the editor; their ids ride in the output's `to_review` block so
+extraction metadata can record them (bd 6cfu.2).
 
 Deterministic by construction: same PDF + same schema.json -> byte-identical
 output (verify with --check, which runs the derivation twice and diffs).
 
-Usage:
+CLI usage:
     python scripts/authoring/derive_sections.py --kit form-kits/i-90 \
-        [--cap 20] [--out derived.json] [--report report.md] [--check]
+        [--cap 40] [--out derived.json] [--report report.md] [--check]
 
 If the kit has no schema.json (e.g. form-kits/w9-heldout), fields are taken
 straight from the deterministic AcroForm dump instead.
+
+Pipeline usage (extract_form.py step 3e): derive_and_apply(schema, pdf_path)
+derives from an in-memory draft schema + its PDF and OVERWRITES the schema's
+parts/sections/field section_id with the derivation output.
 
 ASCII-only (cp1252 safe).
 """
@@ -44,6 +57,18 @@ import fitz  # PyMuPDF
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_REPO, "scripts", "bakeoff"))
 import acroform_dump  # noqa: E402
+
+# Display-sanity cap on fields per section (maintainer, 2026-07-10): generous
+# by design -- it mainly guards heading-less pages (f1040's naive page 1 is 105
+# fields), NOT the validator's chunk-size band (the validator is being
+# decoupled from display sections). Tunable via --cap / division_cap.
+DEFAULT_CAP = 40
+
+# The part_key bucket for fields that fit no division (name-pattern strays);
+# sorts after every real part on its page. Positionless fields get their own
+# pageless review section in build_output.
+_REVIEW_PART_KEY = 10 ** 6
+_REVIEW_PART_LABEL = "To review"
 
 
 # --------------------------------------------------------------------------
@@ -81,40 +106,76 @@ class FieldRec:
         self.label = label
 
 
+def _widget_leaf(name: Optional[str]) -> Optional[str]:
+    """The dot-leaf of a widget name: the name-convention regexes anchor on
+    'P{N}_...' leaves, but option-level pdf_field_names (and PDF-only dump
+    names) are often fully-qualified XFA paths like
+    'form1[0].#subform[2].P3_checkbox7_White[0]'."""
+    return name.split(".")[-1] if name else name
+
+
+def _field_widget_name(f: dict) -> Optional[str]:
+    """The PDF widget name backing a field: its own pdf_field_name, else the
+    FIRST option's (a consolidated options[] field -- checkbox_group/radio --
+    carries the name per option; same convention as extract_form's
+    _field_pdf_name). Without this fallback every consolidated field looks
+    like a nameless stray and lands in 'To review' (fresh-eyes, 6cfu.2)."""
+    pfn = f.get("pdf_field_name")
+    if pfn:
+        return pfn
+    for o in (f.get("options") or []):
+        if isinstance(o, dict) and o.get("pdf_field_name"):
+            return o["pdf_field_name"]
+    return None
+
+
+def fields_from_schema(schema: dict) -> list[FieldRec]:
+    """FieldRecs from an in-memory schema dict (kit schema or draft).
+
+    A field without an id is skipped: it cannot be referenced from a
+    section's fields[] list (and fails FormSchema validation regardless)."""
+    fields = []
+    for f in schema.get("fields", []):
+        if not isinstance(f, dict) or not f.get("id"):
+            continue
+        pos = f.get("pdf_position") or {}
+        fields.append(FieldRec(
+            fid=f["id"],
+            name=_widget_leaf(_field_widget_name(f)),
+            page=pos.get("page"),
+            x=float(pos.get("x", 0.0)),
+            y=float(pos.get("y", 0.0)),
+            current_section=f.get("section_id"),
+            label=f.get("label") or f.get("name") or f["id"],
+        ))
+    return fields
+
+
 def load_fields(kit_dir: str, pdf_path: str) -> tuple[list[FieldRec], dict]:
     """Load fields from the kit schema.json, or from the AcroForm dump."""
     schema_path = os.path.join(kit_dir, "schema.json")
     if os.path.exists(schema_path):
         with open(schema_path, "r", encoding="utf-8") as fh:
             schema = json.load(fh)
-        fields = []
-        for f in schema.get("fields", []):
-            pos = f.get("pdf_position") or {}
-            fields.append(FieldRec(
-                fid=f["id"],
-                name=f.get("pdf_field_name"),
-                page=pos.get("page"),
-                x=float(pos.get("x", 0.0)),
-                y=float(pos.get("y", 0.0)),
-                current_section=f.get("section_id"),
-                label=f.get("label") or f.get("name") or f["id"],
-            ))
-        return fields, schema
+        return fields_from_schema(schema), schema
     # PDF-only mode: deterministic dump; dump rect pages are 0-based.
     dump = acroform_dump.dump_pdf(pdf_path)
     fields = []
     for f in dump["fields"]:
         if f["logical_type"] in ("button", "signature"):
             continue
-        w0 = f["widgets"][0]["rect"]
+        widgets = f.get("widgets") or []
+        if not widgets:
+            continue  # a widget-less dump field has nothing to place
+        w0 = widgets[0]["rect"]
         fields.append(FieldRec(
             fid=f["name"],
-            name=f["name"],
+            name=_widget_leaf(f["name"]),
             page=w0["page"] + 1,
             x=w0["x"],
             y=w0["y"],
             current_section=None,
-            label=f["widgets"][0].get("tu") or f["name"],
+            label=widgets[0].get("tu") or f["name"],
         ))
     return fields, {}
 
@@ -333,13 +394,43 @@ def _slug(text: str) -> str:
 
 
 class DerivedSection:
-    def __init__(self, label: str, page: int, part_key: Any,
-                 fields: list[FieldRec]) -> None:
+    def __init__(self, label: str, page: Optional[int], part_key: Any,
+                 fields: list[FieldRec], review: bool = False) -> None:
         self.label = label
         self.page = page
         self.part_key = part_key  # groups sections into parts
         self.part_label = ""
         self.fields = fields
+        self.review = review  # a 'To review' bucket for human re-filing
+
+
+def _balanced_chunks(runs: list[list[FieldRec]], cap: int
+                     ) -> list[list[FieldRec]]:
+    """Partition ordered family runs into BALANCED chunks of <= cap fields.
+
+    Greedy fill-to-cap produces lopsided tails (22 fields at cap 20 ->
+    20+2); the maintainer wants balanced chunks (11+11). Deterministic:
+    target the minimum chunk count ceil(total/cap), recompute each chunk's
+    ideal size from what remains, and close a chunk at the run boundary
+    nearest its ideal (never splitting a run, never exceeding the cap).
+    A single run longer than the cap stays whole (its own oversize chunk)."""
+    total = sum(len(r) for r in runs)
+    n = -(-total // cap)  # ceil
+    chunks: list[list[FieldRec]] = [[]]
+    consumed_before = 0  # fields in already-closed chunks
+    for run in runs:
+        cur = chunks[-1]
+        chunks_left = max(n - (len(chunks) - 1), 1)
+        ideal = (total - consumed_before) / chunks_left
+        over_cap = len(cur) + len(run) > cap
+        past_ideal = (len(chunks) < n
+                      and abs(len(cur) + len(run) - ideal) > abs(len(cur) - ideal))
+        if cur and (over_cap or past_ideal):
+            consumed_before += len(cur)
+            chunks.append([])
+            cur = chunks[-1]
+        cur.extend(run)
+    return [c for c in chunks if c]
 
 
 def _cap_split(sections: list[DerivedSection], fields_family, cap: int
@@ -359,24 +450,21 @@ def _cap_split(sections: list[DerivedSection], fields_family, cap: int
                 runs[-1].append(f)
             else:
                 runs.append([f])
-        chunks: list[list[FieldRec]] = [[]]
         for run in runs:
-            if chunks[-1] and len(chunks[-1]) + len(run) > cap:
-                chunks.append([])
-            chunks[-1].extend(run)
             if len(run) > cap:
                 notes.append(
                     f"family run of {len(run)} fields exceeds cap {cap} in "
                     f"'{sec.label}' (kept whole)")
+        chunks = _balanced_chunks(runs, cap)
         n = len(chunks)
         if n == 1:
             out.append(sec)
             continue
         notes.append(f"'{sec.label}' ({len(sec.fields)} fields) cap-split "
-                     f"into {n}")
+                     f"into {n} ({'+'.join(str(len(c)) for c in chunks)})")
         for i, chunk in enumerate(chunks, start=1):
             part = DerivedSection(f"{sec.label} ({i} of {n})", sec.page,
-                                  sec.part_key, chunk)
+                                  sec.part_key, chunk, review=sec.review)
             part.part_label = sec.part_label
             out.append(part)
     return out, notes
@@ -391,7 +479,7 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
     unassigned = [f for f in fields if f.page is None]
     if unassigned:
         notes.append(f"{len(unassigned)} fields have no pdf_position "
-                     f"(listed in the report)")
+                     f"(filed under 'To review (unplaced)' for human review)")
 
     if strategy == "name-convention":
         part_labels: dict[int, str] = {}
@@ -444,11 +532,11 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
         if strays:
             unnamed = sum(1 for f in strays if not f.name)
             notes.append(
-                f"{len(strays)} fields filed per page under 'Other items' "
+                f"{len(strays)} fields filed per page under 'To review' "
                 f"({unnamed} have no pdf_field_name in the kit, "
                 f"{len(strays) - unnamed} do not match the USCIS pattern)")
             for f in strays:
-                buckets.setdefault((10 ** 6, f.page, None), []).append(f)
+                buckets.setdefault((_REVIEW_PART_KEY, f.page, None), []).append(f)
 
         for key, flds in buckets.items():
             flds.sort(key=lambda f: (parsed[f.fid]["order_key"], f.y, f.x, f.fid)
@@ -465,16 +553,17 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
         sections: list[DerivedSection] = []
         part_first_page: dict[int, int] = {}
         for (part, page, sub), flds in sorted(buckets.items(), key=bucket_order):
-            plabel = part_labels.get(part, f"Part {part}") if part < 10 ** 6 \
-                else "Other items"
+            review = part >= _REVIEW_PART_KEY
+            plabel = _REVIEW_PART_LABEL if review \
+                else part_labels.get(part, f"Part {part}")
             first_page = part_first_page.setdefault(part, page)
             if sub:
                 label = sub
-            elif part >= 10 ** 6:
+            elif review:
                 label = f"{plabel} (page {page})"
             else:
                 label = plabel if page == first_page else f"{plabel} (continued)"
-            sec = DerivedSection(label, page, part, flds)
+            sec = DerivedSection(label, page, part, flds, review=review)
             sec.part_label = plabel
             sections.append(sec)
 
@@ -534,11 +623,32 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
 def build_output(form_id: str, strategy: str, sections: list[DerivedSection],
                  unassigned: list[FieldRec], notes: list[str], cap: int
                  ) -> dict:
+    # Positionless fields are never silently dropped: they get a pageless
+    # 'To review (unplaced)' section for a HUMAN reviewer to re-file
+    # (maintainer feedback at the 6cfu.1 checkpoint, 2026-07-10).
+    sections = list(sections)
+    if unassigned:
+        sec = DerivedSection("To review (unplaced)", None, _REVIEW_PART_KEY,
+                             list(unassigned), review=True)
+        sec.part_label = _REVIEW_PART_LABEL
+        sections.append(sec)
+
     used_ids: set = set()
     parts: "OrderedDict[Any, dict]" = OrderedDict()
     out_sections = []
+    to_review_section_ids: list[str] = []
+    to_review_field_ids: list[str] = []
     for order, sec in enumerate(sections, start=1):
-        base = f"sec_{_slug(sec.label)}_p{sec.page}"
+        if sec.review:
+            # Well-known id prefix the editor's review gate keys on (6cfu.3).
+            base = (f"sec_to_review_p{sec.page}" if sec.page is not None
+                    else "sec_to_review_unplaced")
+        else:
+            base = f"sec_{_slug(sec.label)}_p{sec.page}"
+            if base.startswith("sec_to_review"):
+                # A printed heading that literally slugs to 'to_review' must
+                # not squat on the review-gate prefix (fresh-eyes r2).
+                base = f"sec_x_{_slug(sec.label)}_p{sec.page}"
         sid = base
         n = 2
         while sid in used_ids:
@@ -552,20 +662,27 @@ def build_output(form_id: str, strategy: str, sections: list[DerivedSection],
                 "order": len(parts) + 1, "section_ids": [],
             }
         parts[sec.part_key]["section_ids"].append(sid)
-        out_sections.append({
+        entry = {
             "id": sid,
             "label": sec.label,
             "order": order,
-            "page_number": sec.page,
-            "page_numbers": [sec.page],
             "fields": [f.fid for f in sec.fields],
-        })
+        }
+        if sec.page is not None:
+            entry["page_number"] = sec.page
+            entry["page_numbers"] = [sec.page]
+        out_sections.append(entry)
+        if sec.review:
+            to_review_section_ids.append(sid)
+            to_review_field_ids.extend(f.fid for f in sec.fields)
     return {
         "form_id": form_id,
         "division_strategy": strategy,
         "cap": cap,
         "parts": list(parts.values()),
         "sections": out_sections,
+        "to_review": {"section_ids": to_review_section_ids,
+                      "field_ids": to_review_field_ids},
         "unassigned_fields": [f.fid for f in unassigned],
         "notes": notes,
     }
@@ -603,14 +720,97 @@ def compare_report(form_id: str, out: dict, fields: list[FieldRec],
         src_txt = ", ".join(
             f"{cur_labels.get(sid, sid)} ({n})"
             for sid, n in sorted(srcs.items(), key=lambda kv: (-kv[1], kv[0])))
-        lines.append(f"| {sec['order']} | {sec['label']} | {sec['page_number']}"
+        lines.append(f"| {sec['order']} | {sec['label']} | "
+                     f"{sec.get('page_number', '-')}"
                      f" | {len(sec['fields'])} | {src_txt} |")
     if out["unassigned_fields"]:
         lines.append("")
-        lines.append(f"Unassigned (no pdf_position): "
-                     + ", ".join(out["unassigned_fields"]))
+        lines.append(f"Unassigned (no pdf_position; filed under 'To review "
+                     f"(unplaced)'): " + ", ".join(out["unassigned_fields"]))
     lines.append("")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# Derivation entry points (CLI + extraction pipeline)
+# --------------------------------------------------------------------------
+
+def _derive_with_doc(fields: list[FieldRec], doc: "fitz.Document", cap: int,
+                     form_id: str) -> tuple[dict, list[Heading]]:
+    """The strategy ladder over already-loaded fields + an OPEN document."""
+    if cap < 1:
+        raise ValueError(f"cap must be >= 1 (got {cap})")
+    if doc.page_count == 0:
+        raise ValueError("PDF has no pages -- nothing to derive divisions from")
+    headings = detect_headings(doc)
+    strategy = pick_strategy(fields, headings)
+    sections, unassigned, notes = derive(
+        fields, headings, strategy, cap,
+        doc.page_count, float(doc[0].rect.width))
+    return build_output(form_id, strategy, sections, unassigned, notes, cap), headings
+
+
+def derive_for_pdf(fields: list[FieldRec], pdf_path: str,
+                   cap: int = DEFAULT_CAP, form_id: str = "") -> dict:
+    """Derive divisions for loaded fields from their PDF. The doc handle is
+    closed even on error; a 0-page/corrupt PDF raises ValueError (friendly,
+    never a raw fitz crash -- 6cfu.1 outer-review hardening)."""
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as exc:
+        raise ValueError(f"cannot open PDF {pdf_path!r}: {exc}") from None
+    try:
+        out, _headings = _derive_with_doc(fields, doc, cap, form_id)
+    finally:
+        doc.close()
+    return out
+
+
+def apply_to_schema(schema: dict, derived: dict) -> dict:
+    """OVERWRITE the schema's parts/sections with the derived divisions and
+    re-file every field's section_id (the 6cfu.2 integration contract:
+    stored divisions are 100% derivation output, never LLM-decided).
+
+    Returns the summary dict extract_form records in extraction metadata
+    (_bakeoff.authoring.division): strategy, cap, section/part counts, the
+    'To review' section + field ids (the editor's review gate, 6cfu.3), and
+    the derivation notes."""
+    section_of: dict[str, str] = {}
+    sections_out: list[dict] = []
+    for s in derived["sections"]:
+        entry = {"id": s["id"], "label": s["label"], "order": s["order"],
+                 "fields": list(s["fields"])}
+        if s.get("page_number") is not None:
+            entry["page_number"] = s["page_number"]
+            entry["page_numbers"] = list(s.get("page_numbers")
+                                         or [s["page_number"]])
+        sections_out.append(entry)
+        for fid in s["fields"]:
+            section_of[fid] = s["id"]
+    schema["sections"] = sections_out
+    schema["parts"] = [dict(p) for p in derived["parts"]]
+    for f in schema.get("fields", []):
+        if isinstance(f, dict) and f.get("id") in section_of:
+            f["section_id"] = section_of[f["id"]]
+    return {
+        "strategy": derived["division_strategy"],
+        "cap": derived["cap"],
+        "parts": len(derived["parts"]),
+        "sections": len(derived["sections"]),
+        "to_review_section_ids": list(derived["to_review"]["section_ids"]),
+        "to_review_field_ids": list(derived["to_review"]["field_ids"]),
+        "notes": list(derived["notes"]),
+    }
+
+
+def derive_and_apply(schema: dict, pdf_path: str,
+                     cap: int = DEFAULT_CAP) -> dict:
+    """One-call pipeline entry (extract_form step 3e): derive divisions from
+    the schema's fields + the PDF, overwrite the schema's parts/sections/
+    section_id, and return the extraction-metadata summary."""
+    fields = fields_from_schema(schema)
+    derived = derive_for_pdf(fields, pdf_path, cap=cap)
+    return apply_to_schema(schema, derived)
 
 
 # --------------------------------------------------------------------------
@@ -623,14 +823,16 @@ def run(kit_dir: str, cap: int) -> tuple[dict, str]:
         raise SystemExit(f"no form.pdf in {kit_dir}")
     form_id = os.path.basename(os.path.normpath(kit_dir))
     fields, schema = load_fields(kit_dir, pdf_path)
-    doc = fitz.open(pdf_path)
-    headings = detect_headings(doc)
-    strategy = pick_strategy(fields, headings)
-    sections, unassigned, notes = derive(
-        fields, headings, strategy, cap,
-        doc.page_count, float(doc[0].rect.width))
-    doc.close()
-    out = build_output(form_id, strategy, sections, unassigned, notes, cap)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as exc:
+        raise SystemExit(f"cannot open PDF {pdf_path!r}: {exc}")
+    try:
+        out, headings = _derive_with_doc(fields, doc, cap, form_id)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+    finally:
+        doc.close()
     report = compare_report(form_id, out, fields, schema, headings)
     return out, report
 
@@ -639,8 +841,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         description="Deterministic form-division derivation (prototype).")
     ap.add_argument("--kit", required=True, help="form-kit directory")
-    ap.add_argument("--cap", type=int, default=20,
-                    help="max fillable fields per section (default 20)")
+    ap.add_argument("--cap", type=int, default=DEFAULT_CAP,
+                    help="display-sanity cap on fillable fields per section "
+                         f"(default {DEFAULT_CAP}; splits are balanced)")
     ap.add_argument("--out", default=None, help="write derived JSON here")
     ap.add_argument("--report", default=None, help="write markdown report here")
     ap.add_argument("--check", action="store_true",
