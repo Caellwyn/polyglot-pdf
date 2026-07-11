@@ -171,11 +171,13 @@ class Settings(BaseModel):
 	# The thin-principal SI mode (bd polyglot-pdf-jnjj.22): the system instruction
 	# carries ONLY the static behavioral backbone plus the CURRENT field's guidance;
 	# each next field's guidance rides the confirm_field tool response. No whole-form
-	# field dump and no manifest. Env-gated, default off; when off, the legacy
-	# full-SI path (SYSTEM_INSTRUCTION) is used. DTI reuses the manifest-first
-	# handshake transport (handshake_jit / jit_mode) -- that transport survives the
-	# JIT-mode purge (bd polyglot-pdf-en2j); only the JIT *SI mode* was removed.
-	USE_DTI: bool = os.getenv("USE_DTI", "false").lower() == "true"
+	# field dump and no manifest. Env-gated, default ON (the production law of the
+	# land, bd polyglot-pdf-7872); set USE_DTI=false for the legacy full-SI path
+	# (SYSTEM_INSTRUCTION), kept for the measurement-harness baseline. DTI reuses
+	# the manifest-first handshake transport (handshake_jit / jit_mode) -- that
+	# transport survives the JIT-mode purge (bd polyglot-pdf-en2j); only the JIT
+	# *SI mode* was removed.
+	USE_DTI: bool = os.getenv("USE_DTI", "true").lower() == "true"
 
 	# === Continuous-session mode (bd polyglot-pdf-x8rt) ===
 	# When on, the whole form runs as ONE Gemini session bounded by the compression
@@ -185,9 +187,10 @@ class Settings(BaseModel):
 	# sections; the backend drops the switch_section tool and the "Section N of M"
 	# metadata so the model never tries to navigate sections. Implies DTI (the SI
 	# that carries no section guidance) + CONTEXT_COMPRESSION_ENABLED (the window
-	# that bounds the now-unbroken context). Env-gated, default off; the
-	# section-reset path is unchanged when off.
-	CONTINUOUS_SESSION: bool = os.getenv("CONTINUOUS_SESSION", "false").lower() == "true"
+	# that bounds the now-unbroken context). Env-gated, default ON (the production
+	# law of the land, bd polyglot-pdf-7872); set CONTINUOUS_SESSION=false for the
+	# legacy section-reset flow (measurement-harness baseline).
+	CONTINUOUS_SESSION: bool = os.getenv("CONTINUOUS_SESSION", "true").lower() == "true"
 
 	# Disable model "thinking" tokens on the live session (default ON = thinking
 	# off). We do not need chain-of-thought for the form-fill turn loop, and
@@ -224,11 +227,12 @@ class Settings(BaseModel):
 	# cost) and audio sessions can run past the 15-min cap. Design + cost model:
 	# docs/components/context-compression.md (epic polyglot-pdf-l3a, bead -45o).
 	# All three are tuning knobs, not load-bearing constants: ENABLED gates the whole
-	# feature (default off until validated). TRIGGER = tokens before a turn that fire
+	# feature (default ON -- validated by the jnjj.25 cost gate + the G3 correctness
+	# gate, bd polyglot-pdf-7872). TRIGGER = tokens before a turn that fire
 	# compression; WINDOW = target_tokens to retain (must be < trigger). Our sessions
 	# peak near ~9k tokens, so the trigger must be low (~5k) to ever fire -- the docs'
 	# 25k example would be inert here.
-	CONTEXT_COMPRESSION_ENABLED: bool = os.getenv("CONTEXT_COMPRESSION_ENABLED", "false").lower() == "true"
+	CONTEXT_COMPRESSION_ENABLED: bool = os.getenv("CONTEXT_COMPRESSION_ENABLED", "true").lower() == "true"
 	# `... or "default"` guards an EMPTY-STRING env value: os.getenv(key, default)
 	# only returns the default when the var is UNSET; if it is set-but-empty (e.g.
 	# CONTEXT_COMPRESSION_TRIGGER_TOKENS= in a deploy env file) it returns "", and
@@ -261,11 +265,19 @@ class Settings(BaseModel):
 	# a ~377-tok undershoot, because Gemini's tokenizer + conversation framing bill
 	# more than chars/4 of the raw text. So the headroom must clear the REAL billed
 	# floor, not the estimate: 599 lifts the ~1601 estimate to the validated ~2200
-	# window (which sits just above the ~1978 real floor). Margin 600 -> ~2800
-	# trigger. (Anchored to the one form with measured eviction data; the estimator's
-	# undershoot scales loosely with content, so re-measure the headroom when a
-	# second form's eviction floor is known. Strictly safer than the old 222, which
-	# derived a 1823 window -- BELOW the 1978 real floor -> turn-1 eviction.)
+	# window (which sits just above the ~1978 real floor). (Anchored to the one
+	# form with measured eviction data; the estimator's undershoot scales loosely
+	# with content, so re-measure the headroom when a second form's eviction floor
+	# is known. Strictly safer than the old 222, which derived a 1823 window --
+	# BELOW the 1978 real floor -> turn-1 eviction.)
+	#
+	# MARGIN default 1500 (the ctu8-validated production value, bd polyglot-pdf-7872):
+	# on Vertex the derived trigger (~window + margin) sits under the API minimum
+	# 5000 and gets clamped UP; the adapter then re-tunes the window to
+	# trigger - margin, so the margin IS the window selector post-clamp. 1500 lands
+	# the validated 3500 window (5000 - 1500); the old 600 default derived an
+	# UNTESTED 4400 window (measured 2026-07-05: 5000/3500 stayed coherent across
+	# 7 evictions; see the retune comment in live_ai_gemini.py).
 	CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR: bool = (
 		os.getenv("CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR", "true").lower() == "true"
 	)
@@ -273,7 +285,7 @@ class Settings(BaseModel):
 		os.getenv("CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS") or "599"
 	)
 	CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS: int = int(
-		os.getenv("CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS") or "600"
+		os.getenv("CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS") or "1500"
 	)
 
 	@model_validator(mode="after")

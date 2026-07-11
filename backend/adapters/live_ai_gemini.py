@@ -205,9 +205,13 @@ def derive_compression_window(
         window  = floor  + window_headroom_tokens   (room for a couple fields)
         trigger = window + trigger_margin_tokens    (pile-up before eviction)
 
-    Returns a dict ready to drop into the adapter's compression config. The
-    headroom/margin defaults (config.py) reproduce the validated I-90 calibration
-    (~1978 floor -> ~2200 window -> ~2800 trigger). bd jnjj.35 / A6.
+    Returns a dict ready to drop into the adapter's compression config. With the
+    config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872) the I-90
+    derives a ~1601 ESTIMATED floor (chars/4 undershoots the ~1978 real billed
+    floor -- see the config.py headroom comment) -> ~2200 raw window -> ~3700 raw
+    trigger; on Vertex the trigger then clamps UP to the API minimum 5000 and the
+    retune in _build_live_config lands the ctu8-validated 3500 window
+    (5000 - margin). bd jnjj.35 / A6.
     """
     floor = estimate_si_floor_tokens(system_instruction, function_declarations)
     window = floor + max(1, window_headroom_tokens)
@@ -1624,8 +1628,9 @@ class LiveAIGemini(ILiveAI):
         # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
         # sliding window bounds the live context so per-turn re-billing stops compounding
         # (quadratic -> linear cumulative cost) and audio sessions can run past the 15-min
-        # cap. Gated behind CONTEXT_COMPRESSION_ENABLED (default off) so it's one env var
-        # from reverting. Syntax verified against the installed google-genai; the SDK
+        # cap. Gated behind CONTEXT_COMPRESSION_ENABLED (default on, bd polyglot-pdf-7872)
+        # so it's one env var from reverting. Syntax verified against the installed
+        # google-genai; the SDK
         # accepts these snake_case keys and aliases them to triggerTokens / slidingWindow /
         # targetTokens. See docs/components/context-compression.md.
         if settings.CONTEXT_COMPRESSION_ENABLED:

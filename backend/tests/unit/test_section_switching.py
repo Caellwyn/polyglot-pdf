@@ -116,9 +116,22 @@ async def test_handle_switch_section_returns_failure_on_missing_section_info():
 
 
 @pytest.mark.asyncio
-async def test_switch_to_section_closes_and_recreates_gemini():
-    """switch_to_section should close old Gemini session and create new one."""
-    service = FormFillingService()
+async def test_switch_to_section_closes_and_recreates_gemini(monkeypatch):
+    """switch_to_section should close old Gemini session and create new one.
+
+    Explicit legacy-mode Settings: this test asserts the SECTION-numbered legacy
+    SI, which the continuous-DTI defaults (bd polyglot-pdf-7872) no longer
+    render -- the section-reset path survives only as the measurement-harness
+    baseline and must be requested explicitly. The SI builder reads the
+    ai_context module's own (lru_cached) get_settings, so patch it there in
+    addition to injecting the service's settings."""
+    from backend.config import Settings
+
+    legacy = Settings(USE_DTI=False, CONTINUOUS_SESSION=False)
+    monkeypatch.setattr(
+        "backend.services.ai_context.get_settings", lambda: legacy
+    )
+    service = FormFillingService(settings=legacy)
     
     # Mock LiveAI
     live_ai = AsyncMock()

@@ -837,9 +837,20 @@ class _LogTap:
 # ------------------------------------------------------------------- driver
 
 def _make_settings(arm: str, trigger: int, window: int, compression: bool = False):
-    overrides = {}
+    # The production code defaults are continuous-DTI (bd polyglot-pdf-7872:
+    # USE_DTI / CONTINUOUS_SESSION / CONTEXT_COMPRESSION_ENABLED all default ON),
+    # so every arm PINS its full mode explicitly -- a future default flip must
+    # never silently relabel an arm's measured configuration (the el92 /
+    # section-reset-jit failure class). The harness's per-section driver emulates
+    # continuity itself for --continuous runs, so CONTINUOUS_SESSION stays off
+    # for ALL arms, exactly as every accepted historical run measured it.
+    overrides = {
+        "USE_DTI": False,
+        "CONTINUOUS_SESSION": False,
+        "CONTEXT_COMPRESSION_ENABLED": False,
+    }
     if arm == "sliding-window":
-        overrides = {
+        overrides.update({
             "CONTEXT_COMPRESSION_ENABLED": True,
             "CONTEXT_COMPRESSION_TRIGGER_TOKENS": trigger,
             "CONTEXT_COMPRESSION_WINDOW_TOKENS": window,
@@ -848,7 +859,7 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
             # adapter honors the fixed values instead of silently auto-sizing while
             # the run metadata still records the requested fixed numbers.
             "CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR": False,
-        }
+        })
     elif arm == "section-reset-jit":
         # The JIT SI mode was REMOVED (bd polyglot-pdf-en2j): USE_JIT_SCHEMA no
         # longer exists, so this arm can no longer render a distinct JIT manifest
@@ -870,7 +881,7 @@ def _make_settings(arm: str, trigger: int, window: int, compression: bool = Fals
         # confirm_field tool response (client-supplied; the FakeClient sends the
         # next field's schema on next_field_hint_response). This is the production
         # DTI principal path -- jnjj.22.
-        overrides = {"USE_DTI": True}
+        overrides["USE_DTI"] = True
 
     # --compression layers calibrated context-window eviction onto the arm (the
     # jnjj.25-folded eviction experiment, formerly jnjj.34). jnjj.25 found DTI's
