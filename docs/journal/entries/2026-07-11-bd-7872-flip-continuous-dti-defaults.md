@@ -42,6 +42,18 @@ deployment (or local dev) silently ran the retired flow.
   ai_context module get_settings patch -- the SI builder reads the module's
   lru_cached get_settings, not the injected service settings).
 
+Review record: fresh-eyes Sonnet r1 found 1 gap (stale derive_compression_window
+worked-example docstring; fixed), Opus clearing round NO-GAPS (1 low-confidence
+comment nit, fixed). Opus outer review: pass 1 NO-GAPS; independent pass 2
+GAPS-FOUND(1) in-scope (the compression-gate "default off" comment at
+live_ai_gemini.py:1631; fixed) + 1 genuine out-of-scope regression it filed
+itself (bd polyglot-pdf-s7gq: cost_matrix_lib si_scenarios_chars relies on the
+old defaults for its legacy-SI length model -- same el92 class this PR hardened
+the main harness against); both passes re-cleared on the final diff. Also filed
+this session: bd polyglot-pdf-4nll (the deploy-gate pytest wrapper fails
+instead of skipping on the local WSL HCS boot-failure shape -- pre-existing,
+reproduced on untouched main).
+
 ## Section-reset residue inventory (exit criterion 3 -- the C7/55jg deletion checklist)
 
 RETIREMENT CANDIDATES (production-facing, delete in bd polyglot-pdf-55jg):
