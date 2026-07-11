@@ -417,8 +417,12 @@ def _assert_expected_canon_matches_schema(schema_fields: dict, expected: dict) -
             # vocabulary (fresh-eyes on this bead).
             problems.append(f"{fid}: keyed in expected but absent from the schema")
             continue
-        opts = [o.get("value") for o in (f.get("options") or [])
-                if isinstance(o, dict)]
+        # Mirror _hint_for's vocabulary read (options OR allowed_values) so a
+        # field expressing its choices via allowed_values is guarded too
+        # (outer review on this bead).
+        raw_opts = f.get("options") or f.get("allowed_values") or []
+        opts = [o.get("value") if isinstance(o, dict) else o for o in raw_opts]
+        opts = [o for o in opts if o is not None]
         if not opts:
             continue
         vals = exp if isinstance(exp, (list, tuple)) else [exp]

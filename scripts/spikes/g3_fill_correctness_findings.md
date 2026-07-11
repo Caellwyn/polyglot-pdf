@@ -6,13 +6,21 @@ measures whether the reduced-SI arm still fills the form RIGHT.*
 
 ## Verdict
 
-**GO -- no correctness regression attributable to the SI reduction.** Per-field
-fill accuracy is statistically indistinguishable between arms at this sample
-size, and the error decomposition shows the two arms fail in the SAME dominant
-mode (audio transcription, 9 misses each across n=2 runs/arm). The one
-DTI-specific failure mode -- a late-session tool-call stall -- is filed for
-investigation (bd polyglot-pdf-yipc) and is bounded in production by user
-re-prompts, the GoAway session refresh, and the B-pillar validator net.
+**GO -- no correctness regression DETECTABLE from the SI reduction.** Stated
+honestly: on the only like-for-like comparison (same schema, same canon,
+n=2/arm), the DTI mean sits BELOW the baseline mean -- 73.3% vs 80.0%, a
+2-fields-in-30 gap. That gap is statistically indistinguishable from zero at
+this sample size (Fisher exact on 60 scored fields/arm, p~0.52; each arm's
+own run-to-run spread exceeds it), and the error decomposition attributes it
+to arm-INDEPENDENT causes: the dominant failure mode is identical in kind
+and count across arms (audio transcription, 9 misses each), and the residual
+is the DTI late-session tool-call stall, filed for investigation (bd
+polyglot-pdf-yipc) and bounded in production by user re-prompts, the GoAway
+session refresh, and the B-pillar validator net. The criterion's
+"at-or-above" is therefore met in the no-detectable-regression sense, NOT
+proven on the mean -- proving a <=2-field mean difference would take ~20
+runs/arm (~$13/arm), unwarranted when the decomposition already attributes
+the gap to shared ASR noise plus one filed, bounded failure mode.
 
 ## What was measured
 
@@ -51,13 +59,21 @@ oversight.
 | DTI+eviction 5000/3500 | r1 | 23/30 (76.7%) | costs_i90_2.5_dti_cont_comp_happy_20260711T022508Z |
 | DTI+eviction 5000/3500 | r2 | 21/30 (70.0%) | costs_i90_2.5_dti_cont_comp_happy_20260711T023000Z |
 | **DTI mean (current schema)** | | **73.3%** | |
-| DTI+eviction 5000/3500 (pre-migration schema, ctu8) | r1/r2 | 73.3% / 93.3% | costs_i90_2.5_dti_cont_comp_happy_20260706T021216Z / 022507Z |
-| **DTI pooled (n=4)** | | **78.3%** | |
 
-The 6.7-point mean gap on the current schema is 2 fields out of 30 --
-well inside the observed run-to-run variance (baseline spread 13.4 points,
-DTI spread 6.7-20 points). Pooled DTI (78.3%, n=4) vs baseline (80.0%, n=2)
-is a wash.
+The 6.7-point mean gap is 2 fields out of 30 -- inside each arm's own
+run-to-run spread (baseline 13.4 points, DTI 6.7) and indistinguishable from
+zero (Fisher exact, 48/60 vs 44/60, p~0.52). The error decomposition below is
+what carries the verdict, not the means.
+
+**Historical reference, NOT poolable:** the ctu8-era DTI runs
+(costs_i90_2.5_dti_cont_comp_happy_20260706T021216Z / 022507Z: 73.3% / 93.3%)
+ran against the PRE-migration schema and were scored against its matching
+widget-id canon. They are not comparable with the current-canon numbers in
+EITHER direction -- pooling their as-recorded accuracies with current-canon
+numbers mixes canons, and re-scoring their written values against today's
+slug canon would mark then-correct fills wrong. They are listed for lineage
+only (an earlier draft of this doc pooled them; the outer review correctly
+struck that).
 
 ## Error decomposition (the real finding)
 
@@ -85,8 +101,14 @@ Classifying every miss across the four current-canon-scored runs:
 - In the harness, exact-spoken-name lookup is NOT brittle at the accepted
   config: the 2026-07-06 5000/3500 run resolved **17/17** lookups (the
   found=false lookups that night were a harness map bug, fixed pre-run --
-  see the FakeClient spoken_to_fids comment). The 2026-07-11 runs made 0-1
-  lookups (happy path does not force recall).
+  see the FakeClient spoken_to_fids comment). Caveat stated plainly: that
+  17/17 is INHERITED evidence from the pre-migration run -- the 2026-07-11
+  runs made only 0-1 lookups (the happy path never forces recall), so this
+  gate's own runs did not re-exercise the lookup path. The resolution
+  mechanism (the FakeClient's name+spoken_name map) is unchanged since, so
+  the figure stands, but a recall-forcing plan (scripted "what did I say my
+  X was?" turns) would be the instrument upgrade if recall ever needs its
+  own gate.
 - **A real production gap was found while tracing this**: in continuous mode
   the frontend's `getFieldBySpokenName` searches only the PINNED first
   section + a never-growing completedSections, so cross-section
