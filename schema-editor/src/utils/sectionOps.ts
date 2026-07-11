@@ -110,7 +110,21 @@ export function removeSection(
 ): DivisionsPatch {
   const source = sections.find(s => s.id === sectionId);
   if (!source || destinationId === sectionId) return { fields, sections, parts };
-  const moved = source.fields;
+  // The moved set is the fields that POINT AT the section (field.section_id
+  // is authoritative), not the section's fields[] listing: a loaded kit can
+  // carry drift between the two (the pre-existing FieldEditor section
+  // dropdown rewrites only section_id -- bd polyglot-pdf-w7rg), and trusting
+  // the listing would double-list a drifted-away field or strand a
+  // drifted-in one. Order: the listing's order first for ids that point
+  // back, then any pointing-but-unlisted fields in schema order -- so the
+  // op also HEALS the drift it touches.
+  const pointing = new Set(
+    fields.filter(f => f.section_id === sectionId).map(f => f.id));
+  const moved = [
+    ...source.fields.filter(id => pointing.has(id)),
+    ...fields.filter(f => pointing.has(f.id) && !source.fields.includes(f.id))
+      .map(f => f.id),
+  ];
   const nextFields = moved.length === 0 ? fields : fields.map(f => {
     if (f.section_id !== sectionId) return f;
     return { ...f, section_id: destinationId ?? '' };
@@ -123,6 +137,11 @@ export function removeSection(
         : s)),
   );
   return { fields: nextFields, sections: nextSections, parts: pruneParts(parts, sectionId) };
+}
+
+/** The count a remove/merge will actually move (matches removeSection). */
+export function movedFieldCount(fields: FormField[], sectionId: string): number {
+  return fields.reduce((n, f) => n + (f.section_id === sectionId ? 1 : 0), 0);
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   isToReviewSection,
   mergeSections,
   mintSectionId,
+  movedFieldCount,
   removeSection,
   renameSection,
   toReviewFieldIds,
@@ -161,5 +162,34 @@ describe('mergeSections', () => {
       .toBe(sections);
     expect(mergeSections(fields, sections, parts, 'sec_a', 'nope').sections)
       .toBe(sections);
+  });
+});
+
+describe('drift healing (bd polyglot-pdf-w7rg interplay)', () => {
+  it('removeSection moves by section_id, not the stale fields[] listing', () => {
+    // Drifted kit: f9 POINTS at sec_a but is not listed; f1 is LISTED by
+    // sec_a but was re-pointed to sec_b via the FieldEditor dropdown.
+    const fields = [
+      field('f1', 'sec_b'), field('f9', 'sec_a'), field('f3', 'sec_b'),
+    ];
+    const sections = [
+      section('sec_a', 'Alpha', 1, ['f1']),      // stale listing
+      section('sec_b', 'Beta', 2, ['f3']),
+    ];
+    const next = removeSection(fields, sections, undefined, 'sec_a', 'sec_b');
+    const dest = next.sections[0];
+    // f9 (pointing) moved; f1 (drifted away) neither doubled nor moved.
+    expect(dest.fields).toEqual(['f3', 'f9']);
+    const byId = new Map(next.fields.map(f => [f.id, f]));
+    expect(byId.get('f9')!.section_id).toBe('sec_b');
+    expect(byId.get('f1')!.section_id).toBe('sec_b'); // untouched
+    // No field id appears in two sections or in none.
+    const listed = next.sections.flatMap(s => s.fields);
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it('movedFieldCount counts by section_id (matches removeSection)', () => {
+    const fields = [field('f1', 'sec_b'), field('f9', 'sec_a')];
+    expect(movedFieldCount(fields, 'sec_a')).toBe(1);
   });
 });

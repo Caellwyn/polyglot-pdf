@@ -13,12 +13,13 @@
 import React from 'react';
 import type { FormField, FormPart, FormSection } from '../types/schema';
 import {
-  DivisionsPatch,
   addSection,
   isToReviewSection,
   mergeSections,
+  movedFieldCount,
   removeSection,
   renameSection,
+  type DivisionsPatch,
 } from '../utils/sectionOps';
 
 interface SectionManagerProps {
@@ -56,8 +57,12 @@ export const SectionManager: React.FC<SectionManagerProps> = ({
     const source = sections.find(s => s.id === sourceId);
     const target = sections.find(s => s.id === targetId);
     if (!source || !target) return;
+    // Count what removeSection will ACTUALLY move (field.section_id is
+    // authoritative), so the confirm text matches the row badge even on a
+    // kit carrying fields[]-vs-section_id drift (bd polyglot-pdf-w7rg).
+    const n = movedFieldCount(fields, sourceId);
     const ok = window.confirm(
-      `Merge "${source.label}" into "${target.label}"? Its ${source.fields.length} ` +
+      `Merge "${source.label}" into "${target.label}"? Its ${n} ` +
       `field(s) move to "${target.label}" and the section is removed.`
     );
     if (ok) onApply(mergeSections(fields, sections, parts, sourceId, targetId));
@@ -66,7 +71,7 @@ export const SectionManager: React.FC<SectionManagerProps> = ({
   const handleRemove = (sectionId: string) => {
     const section = sections.find(s => s.id === sectionId);
     if (!section) return;
-    const n = section.fields.length;
+    const n = movedFieldCount(fields, sectionId);
     const ok = window.confirm(
       n > 0
         ? `Remove "${section.label}"? Its ${n} field(s) become Uncategorized ` +

@@ -490,8 +490,12 @@ export const FieldList: React.FC<FieldListProps> = ({
           // derivation could not confidently place these fields; a human must
           // re-file each before the form can be marked complete (the
           // to-review-pending lint rule blocks the publish gate). Highlight
-          // it amber while it still holds fields.
-          const needsReview = isToReviewSection(section.id) && totalFieldCount > 0;
+          // it amber while it still holds fields -- by its fields[] listing
+          // OR by fields pointing at it via section_id (the lint gate keys
+          // on the latter; a drifted kit must never block invisibly).
+          const needsReview = isToReviewSection(section.id)
+            && (totalFieldCount > 0
+                || schema.fields.some(f => f.section_id === section.id));
 
           return (
             <div
