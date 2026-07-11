@@ -86,14 +86,13 @@ if [ "$DEPLOY_GCP" = true ]; then
     # serve a Vertex revision under the wrong identity or strand the demo if it
     # failed (bd polyglot-pdf-ignt). deploy-all.sh adds --service-account only when
     # this is non-empty, so other channels/bare runs are unchanged.
-    # Continuous DTI + compression cutover (bd polyglot-pdf-x8rt / ctu8): run the
-    # whole form as ONE session bounded by the compression window instead of
-    # per-section resets. USE_DTI + CONTINUOUS_SESSION + CONTEXT_COMPRESSION_ENABLED
-    # turn it on; TRIGGER_MARGIN_TOKENS=1500 lands the window at the ctu8-VALIDATED
-    # 3500 tokens (5000 Vertex-clamped trigger - 1500 margin). The default margin
-    # (600) would derive an UNTESTED 4400 window, so this override is load-bearing.
-    # Reversible: drop these 4 vars to fall back to the section-reset flow.
-    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,EXTRACTOR_MODEL=gemini-2.5-pro,USE_DTI=true,CONTINUOUS_SESSION=true,CONTEXT_COMPRESSION_ENABLED=true,CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS=1500,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
+    # Continuous DTI + compression is the CODE DEFAULT (bd polyglot-pdf-7872):
+    # USE_DTI, CONTINUOUS_SESSION, CONTEXT_COMPRESSION_ENABLED and the
+    # ctu8-validated CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS=1500 all default
+    # on/1500 in backend/config.py now, so this deploy no longer sets them.
+    # Emergency fallback to the legacy section-reset flow: add USE_DTI=false,
+    # CONTINUOUS_SESSION=false,CONTEXT_COMPRESSION_ENABLED=false here.
+    BACKEND_EXTRA_ENV="VERTEXAI=true,USE_PREMIUM_MODEL=false,EXTRACTOR_MODEL=gemini-2.5-pro,CORS_EXTRA_ORIGINS=https://polyglot-editor-demo.web.app;https://polyglot-editor-demo.firebaseapp.com" \
         BACKEND_SERVICE_ACCOUNT="$SA_EMAIL" \
         ./deploy-all.sh "${GCP_ARGS[@]}"
 fi

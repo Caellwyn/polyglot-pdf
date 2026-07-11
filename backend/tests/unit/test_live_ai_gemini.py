@@ -1438,6 +1438,10 @@ def _compression_settings(**overrides):
         CONTEXT_COMPRESSION_TRIGGER_TOKENS=5000,
         CONTEXT_COMPRESSION_WINDOW_TOKENS=3000,
         USE_DTI=True,
+        # USE_DTI is this fixture's explicit knob; CONTINUOUS_SESSION (default
+        # on since bd polyglot-pdf-7872) would force a USE_DTI=False override
+        # back on at construction, so pin it off here.
+        CONTINUOUS_SESSION=False,
     )
     base.update(overrides)
     return Settings(**base)

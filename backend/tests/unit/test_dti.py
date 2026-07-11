@@ -302,9 +302,13 @@ def _service_with_settings(use_dti: bool):
     from backend.config import Settings
 
     settings = Settings()
-    # Force the flag deterministically (env-independent) on a FRESH Settings, so
-    # the cached get_settings() instance is never mutated.
+    # Force the flags deterministically (env-independent) on a FRESH Settings, so
+    # the cached get_settings() instance is never mutated. CONTINUOUS_SESSION is
+    # forced OFF: these initiating-message tests model the SECTION-mode shape
+    # (section metadata etc.), which the continuous default (bd polyglot-pdf-7872)
+    # would suppress.
     settings.USE_DTI = use_dti
+    settings.CONTINUOUS_SESSION = False
     svc = FormFillingService(live_ai=AsyncMock(), settings=settings)
 
     captured = []
@@ -320,18 +324,32 @@ def test_continuous_session_forces_use_dti():
     """bd polyglot-pdf-x8rt: CONTINUOUS_SESSION implies USE_DTI (the whole-form
     handshake + section suppression only cohere with the DTI SI). Setting
     CONTINUOUS_SESSION without USE_DTI is a broken hybrid, so the validator forces
-    USE_DTI on. Neither flag defaults on."""
+    USE_DTI on."""
     from backend.config import Settings
 
     forced = Settings(CONTINUOUS_SESSION=True, USE_DTI=False)
     assert forced.USE_DTI is True, "CONTINUOUS_SESSION must force USE_DTI on"
-    # Defaults untouched: neither flag is on unless asked for.
-    default = Settings()
-    assert default.CONTINUOUS_SESSION is False
-    assert default.USE_DTI is False
-    # DTI without continuous is left as-is (no reverse coupling).
+    # DTI without continuous is left as-is (no reverse coupling) -- the
+    # measurement harness's non-continuous DTI arm depends on this.
     dti_only = Settings(USE_DTI=True, CONTINUOUS_SESSION=False)
     assert dti_only.USE_DTI is True and dti_only.CONTINUOUS_SESSION is False
+
+
+def test_continuous_dti_is_the_default_configuration():
+    """bd polyglot-pdf-7872 (sprint-11 epic fc7t, exit criterion 1): a no-env-var
+    backend boots into continuous-DTI. The code states the production law of the
+    land -- the three mode flags default ON and the eviction margin defaults to
+    the ctu8-validated production value. Env vars remain the escape hatch (the
+    legacy section-reset flow is reachable by setting them false)."""
+    from backend.config import Settings
+
+    default = Settings()
+    assert default.USE_DTI is True
+    assert default.CONTINUOUS_SESSION is True
+    assert default.CONTEXT_COMPRESSION_ENABLED is True
+    # The margin selects the post-clamp window (trigger 5000 - margin = window);
+    # 1500 lands the validated 3500 window. See the config.py MARGIN comment.
+    assert default.CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS == 1500
 
 
 def test_continuous_session_drops_switch_section_tool():

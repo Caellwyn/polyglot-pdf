@@ -1,6 +1,21 @@
 import json
 
+import pytest
+
+from backend.config import Settings
 from backend.services.ai_context import build_form_context
+
+
+@pytest.fixture(autouse=True)
+def _legacy_si_settings(monkeypatch):
+    """Every test in this module exercises the LEGACY full-SI renderer (the
+    section-reset path), which survives the continuous-DTI defaults flip
+    (bd polyglot-pdf-7872) only as the measurement-harness baseline. Request it
+    explicitly: patch the consuming module's get_settings (the global one is
+    lru_cached) with a fresh legacy-mode Settings. CONTINUOUS_SESSION must be
+    off too -- on its own it forces USE_DTI back on."""
+    legacy = Settings(USE_DTI=False, CONTINUOUS_SESSION=False)
+    monkeypatch.setattr("backend.services.ai_context.get_settings", lambda: legacy)
 
 
 def test_nested_help_block_rendered_in_si():
