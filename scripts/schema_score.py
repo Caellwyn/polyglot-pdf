@@ -632,6 +632,31 @@ def derive_divisions_for_grouping(draft: dict[str, Any], pdf_path: str
     return draft_copy, "derived", None
 
 
+def _overlay_derived_section_ids(pairs: list[tuple[dict, dict]],
+                                 orig_fields: list,
+                                 derived_fields: list) -> list[tuple[dict, dict]]:
+    """Rewrite each matched pair's DRAFT side with the derived section_id.
+
+    derive_and_apply mutates fields in place (never adds/removes/reorders), so
+    the derived deep copy's fields correspond to the original's by POSITION;
+    map each original field object (the exact dicts match.pairs reference) to
+    its derived section_id and return pairs whose draft side carries it. The
+    pair SET is unchanged by construction -- see the caller's comment for why
+    a re-match would not guarantee that (bd polyglot-pdf-mhyt).
+    """
+    sid_by_obj = {}
+    for i, f in enumerate(orig_fields):
+        if isinstance(f, dict) and i < len(derived_fields) and isinstance(derived_fields[i], dict):
+            sid_by_obj[id(f)] = derived_fields[i].get("section_id")
+    out = []
+    for t, d in pairs:
+        overlay = dict(d)
+        if id(d) in sid_by_obj:
+            overlay["section_id"] = sid_by_obj[id(d)]
+        out.append((t, overlay))
+    return out
+
+
 def score(draft_path: str, truth_path: str, label: Optional[str] = None,
          derive_pdf_path: Optional[str] = None) -> dict:
     """Score a draft against ground truth.
@@ -658,12 +683,18 @@ def score(draft_path: str, truth_path: str, label: Optional[str] = None,
     match = match_fields(truth.get("fields", []), draft.get("fields", []))
     a = score_fields(match)
     if draft_for_grouping is not draft:
-        # Re-match against the derived copy SOLELY to get derived section_ids
-        # into the pairs the grouping metric reads -- detection/attrs/relations
-        # above are graded on the untouched original draft.
-        grouping_match = match_fields(truth.get("fields", []),
-                                      draft_for_grouping.get("fields", []))
-        sg = _section_grouping_agreement(grouping_match.pairs)
+        # Overlay the DERIVED section_ids onto the ORIGINAL match's pairs.
+        # Deliberately NOT a re-match against the derived copy: match_fields'
+        # Pass-2 fuzzy key bakes section_id into the match, so re-matching
+        # could pair a DIFFERENT field set once derivation stamps section_ids
+        # (e.g. a derived slug that string-collides with a gold section_id can
+        # rescue a borderline fuzzy match) -- grouping would then be graded
+        # over a different population than detection/attrs/relations. The
+        # overlay keeps the pair set identical by construction.
+        grouping_pairs = _overlay_derived_section_ids(
+            match.pairs, draft.get("fields", []),
+            draft_for_grouping.get("fields", []))
+        sg = _section_grouping_agreement(grouping_pairs)
         sg_gradable = sg["true_pairs"] + sg["predicted_pairs"] - sg["agree_pairs"]
         a["attributes"]["section_grouping"] = {
             "correct": sg["agree_pairs"],

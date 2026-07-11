@@ -244,3 +244,42 @@ def test_derive_divisions_for_grouping_helper_success(tmp_path):
     assert ids["f1"] != ids["f3"]
     # The original draft handed in is untouched.
     assert all(not f.get("section_id") for f in draft["fields"])
+
+
+# --------------------------------------------------------------------------- #
+# 4. The derived section_ids are OVERLAID on the original match's pairs --
+#    never obtained via a re-match (whose Pass-2 fuzzy key bakes in section_id
+#    and could pair a DIFFERENT field set once derivation stamps ids).
+# --------------------------------------------------------------------------- #
+def test_overlay_keeps_the_exact_pair_set_and_swaps_only_section_id():
+    orig = _fields_no_section_id()
+    derived = [dict(f) for f in orig]
+    for f, sid in zip(derived, ["s1", "s1", "s2", "s2"]):
+        f["section_id"] = sid
+    truth = _canon_matching_page_partition()["fields"]
+    # Pairs reference the ORIGINAL field dict objects, as match_fields does.
+    pairs = list(zip(truth, orig))
+
+    out = schema_score._overlay_derived_section_ids(pairs, orig, derived)
+
+    # Same pair COUNT and same truth sides, by construction.
+    assert len(out) == len(pairs)
+    assert [t for t, _ in out] == [t for t, _ in pairs]
+    # Draft sides carry the derived section_id...
+    assert [d["section_id"] for _, d in out] == ["s1", "s1", "s2", "s2"]
+    # ...and the original draft dicts were NOT mutated.
+    assert all("section_id" not in f for f in orig)
+
+
+def test_overlay_leaves_unknown_draft_dicts_untouched():
+    orig = _fields_no_section_id()
+    derived = [dict(f, section_id="s1") for f in orig]
+    truth = _canon_matching_page_partition()["fields"]
+    stranger = {"id": "zz", "name": "Z", "section_id": "keep_me"}
+    pairs = [(truth[0], orig[0]), (truth[1], stranger)]
+
+    out = schema_score._overlay_derived_section_ids(pairs, orig, derived)
+
+    assert out[0][1]["section_id"] == "s1"
+    # A draft dict not in orig_fields (no positional counterpart) keeps its own.
+    assert out[1][1]["section_id"] == "keep_me"
