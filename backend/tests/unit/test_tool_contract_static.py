@@ -31,7 +31,7 @@ from backend.config import Settings
 from backend.services.callback_handler import CallbackHandler
 
 
-# The 5 tools the backend declares to Gemini. Kept as a literal here so a rename
+# The tools the backend declares to Gemini. Kept as a literal here so a rename
 # or removal in config.py that this contract does not expect shows up as a diff
 # in BOTH places (the test is the second witness).
 EXPECTED_TOOL_NAMES = {
@@ -42,6 +42,7 @@ EXPECTED_TOOL_NAMES = {
     "confirm_field",
     "ask_secretary",
     "skip_field",
+    "switch_to_field",
 }
 
 # A representative valid argument set per declared tool -- the REQUIRED params from
@@ -55,6 +56,7 @@ SAMPLE_ARGS = {
     "confirm_field": {"field_id": "p1_first_name", "confirmation_method": "verbal"},
     "ask_secretary": {"query": "what is their first name?"},
     "skip_field": {"field_id": "p1_first_name"},
+    "switch_to_field": {"field": "p1_first_name"},
 }
 
 
@@ -70,7 +72,7 @@ def _decl_by_name() -> dict[str, dict]:
 # Part A -- the declarations are internally well-formed
 # --------------------------------------------------------------------------
 def test_declared_tool_names_match_expected_set():
-    """The declared tool names are exactly the 7 the backend supports -- a tool
+    """The declared tool names are exactly the set the backend supports -- a tool
     added/removed in config.py without updating this contract fails here."""
     names = {d["name"] for d in _declarations()}
     assert names == EXPECTED_TOOL_NAMES
@@ -117,6 +119,11 @@ def _make_handler() -> CallbackHandler:
     # skip_field path (bd polyglot-pdf-7yra): request_skip_field records the skip,
     # then the shared advance logic fetches the next hint.
     coordinator.request_skip_field = AsyncMock(return_value={"recorded": True})
+    # switch_to_field path (bd polyglot-pdf-jnjj.36): request_switch_field pins
+    # the target on the client and acks with its hint.
+    coordinator.request_switch_field = AsyncMock(return_value={
+        "found": True, "field_id": "p1_first_name",
+        "spoken_name": "first name", "next_field_hint": "hint"})
     handler = CallbackHandler(
         websocket=MagicMock(),
         session_id="test_session",
@@ -166,6 +173,8 @@ async def test_every_declared_tool_is_dispatched_not_dropped(name):
         handler._request_coordinator.request_confirm_field.assert_awaited_once()
     elif name == "skip_field":
         handler._request_coordinator.request_skip_field.assert_awaited_once()
+    elif name == "switch_to_field":
+        handler._request_coordinator.request_switch_field.assert_awaited_once()
     elif name == "ask_secretary":
         handler._handle_ask_secretary.assert_awaited_once()
 

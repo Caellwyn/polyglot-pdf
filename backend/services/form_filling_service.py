@@ -1721,6 +1721,22 @@ class FormFillingService:
         self._request_coordinator.handle_skip_field_response(
             request_id, recorded, reason, section_complete)
 
+    def handle_switch_field_response(
+        self, request_id: str, payload: Dict[str, Any]
+    ) -> None:
+        """
+        Handle switch_field_response from the frontend (bd polyglot-pdf-jnjj.36).
+
+        Delegates to RequestCoordinator -- completes the synchronous
+        switch_field (field-level navigation) round-trip with the frontend's
+        whole ack payload.
+        """
+        if not self._request_coordinator:
+            _log.warning("handle_switch_field_response_no_coordinator", session_id=self._session_id)
+            return
+
+        self._request_coordinator.handle_switch_field_response(request_id, payload)
+
     def _clear_current_field_id(self) -> None:
         """Invalidate the current-field coercion pointer (bd polyglot-pdf-h1bn).
 

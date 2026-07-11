@@ -23,6 +23,7 @@
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
 import type { FormSchema, FormField } from './schema-forms/types/schema';
 import { shouldShowField } from './schema-forms/utils/validation';
+import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue';
 
 // Navigation operates on the canonical schema FormField (it iterates
 // state.schema.fields and returns those objects). Re-export it under the same
@@ -65,8 +66,39 @@ export interface ProgressMetrics {
 }
 
 /**
+ * Resolve the field-level navigation pin to a LIVE target, or null
+ * (bd polyglot-pdf-jnjj.36). A pin is live while its field exists, is
+ * visible, and is unconfirmed; anything else is stale and ignored (the
+ * state writers -- confirm/skip/section-switch -- clear stale pins; the
+ * readers here are pure). Shared by computeNextField (the pin is the next
+ * field) AND isFormComplete (a live pin means the form is NOT done: the
+ * user jumped somewhere to answer or correct it, so completion-gated
+ * consumers -- the post-confirm hint, reconnect hints, manual-edit hints,
+ * the form-complete event -- must not abandon the jump; fresh-eyes on this
+ * bead).
+ */
+function resolveLivePin(state: SchemaFormState): FormField | null {
+  if (!state.pinnedFieldId || !state.schema?.fields) {
+    return null;
+  }
+  const pinned = state.schema.fields.find(f => f.id === state.pinnedFieldId);
+  if (
+    pinned &&
+    !pinned.hidden &&
+    shouldShowField(pinned, state.fieldValues, state.schema.fields) &&
+    // `[]`-alias-aware confirmed read (bd 5k52 class): a checkbox-group's
+    // entry may sit under the bracket key variant; a bare read would treat a
+    // confirmed pin as live and hold the form open (outer review, jnjj.36).
+    !readFieldEntryWithAlias(state.fieldValues, pinned.id)?.confirmed
+  ) {
+    return pinned;
+  }
+  return null;
+}
+
+/**
  * Compute the next field that should be filled
- * 
+ *
  * Implements linear navigation: iterates through schema fields in order,
  * skipping fields that are already confirmed (unless options specify otherwise).
  * 
@@ -102,6 +134,20 @@ export function computeNextField(
   // Handle empty schema
   if (!state.schema || !state.schema.fields || state.schema.fields.length === 0) {
     return null;
+  }
+
+  // Field-level navigation pin (bd polyglot-pdf-jnjj.36): the AI's
+  // switch_to_field tool pins a target field; it is the next field for EVERY
+  // consumer (hint, DTI schema drip, UI focus) until confirmed or skipped
+  // (confirmField/markFieldSkipped release the pin). A pin that no longer
+  // resolves, is hidden by a condition, or is already confirmed is treated as
+  // stale and IGNORED (lazy fallback to the normal order) -- this function is
+  // pure, so stale pins are cleared by the state writers, not here.
+  if (skipConfirmed) {
+    const pinned = resolveLivePin(state);
+    if (pinned) {
+      return pinned;
+    }
   }
 
   // Get current section to limit field search
@@ -300,6 +346,16 @@ export function isFormComplete(state: SchemaFormState): boolean {
   // Handle empty schema - consider empty form as "complete"
   if (!state.schema || !state.schema.fields || state.schema.fields.length === 0) {
     return true;
+  }
+
+  // A LIVE navigation pin means the form is NOT complete (bd jnjj.36): the
+  // AI jumped to a specific field (often an unconfirmed OPTIONAL one, e.g.
+  // "let me add my middle name" after every required field confirmed).
+  // Without this, the completion-gated consumers (post-confirm hint,
+  // reconnect/manual-edit hints, the form-complete event) would report
+  // "complete" and silently abandon the jump (fresh-eyes on this bead).
+  if (resolveLivePin(state)) {
+    return false;
   }
 
   // Check if form has any required fields

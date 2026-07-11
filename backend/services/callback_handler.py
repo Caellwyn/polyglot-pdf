@@ -420,6 +420,9 @@ class CallbackHandler:
         if normalized == "skip_field":
             return await self._handle_skip_field_tool(arguments)
 
+        if normalized == "switch_to_field":
+            return await self._handle_switch_to_field_tool(arguments)
+
         if normalized == "ask_secretary":
             return await self._handle_ask_secretary_tool(arguments)
 
@@ -1077,6 +1080,130 @@ class CallbackHandler:
         _log.info("GEMINI TOOL RESPONSE", tool="skip_field", field_id=field_id)
         _dev_log.log_tool_response("skip_field", response, session_id=self._session_id)
 
+        return response
+
+    async def _handle_switch_to_field_tool(
+        self,
+        arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Handle switch_to_field tool call from Gemini (bd polyglot-pdf-jnjj.36).
+
+        Field-level navigation: jump the form's focus to ONE specific field --
+        the principal's half of the secretary architecture (ask_secretary names
+        a field; this navigates to it) and the "change my earlier answer"
+        correction path. The frontend owns all field state, so it resolves the
+        identifier (field_id or exact spoken name), pins the field for its
+        next-field computation (UI focus follows), and acks with the target's
+        hint + (DTI) schema over a synchronous round-trip -- mirroring
+        skip_field. Unlike switch_section, the Gemini session is NOT restarted:
+        the jump only changes which field is current.
+
+        The model-supplied identifier may be a spoken name; it is passed to the
+        client but NEVER logged (no-PII policy). Only the schema-validated
+        field_id the client resolves is logged.
+        """
+        if isinstance(arguments, dict):
+            identifier = str(arguments.get("field") or "").strip()
+        else:
+            identifier = str(arguments or "").strip()
+        if not identifier:
+            return {
+                "success": False,
+                "message": (
+                    "switch_to_field needs the target field: pass its exact "
+                    "field_id (preferred) or its exact spoken name."
+                ),
+            }
+
+        ack = CONFIRM_REQUEST_TIMEOUT
+        if self._request_coordinator is not None:
+            ack = await self._request_coordinator.request_switch_field(identifier)
+
+        if ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(ack, dict):
+            return {
+                "success": False,
+                "message": (
+                    "Could not switch fields right now (the form did not "
+                    "respond). Do NOT assume the jump happened -- continue "
+                    "with the current field, or try again."
+                ),
+            }
+
+        if not ack.get("found"):
+            reason = ack.get("reason")
+            if reason == "other_section":
+                label = ack.get("section_label") or "another section"
+                order = ack.get("section_order")
+                where = (f"section {order} ('{label}')" if order
+                         else f"'{label}'")
+                message = (
+                    f"That field is in {where}, not the current section. "
+                    f"Call switch_section to go there first, then "
+                    f"switch_to_field."
+                )
+            elif reason == "hidden":
+                message = (
+                    "That field is currently hidden by the form's conditional "
+                    "logic (an earlier answer keeps it inactive), so it cannot "
+                    "be navigated to. If the user disagrees, revisit the "
+                    "controlling answer instead."
+                )
+            else:
+                message = (
+                    "No form field matches that name. Use the exact field_id "
+                    "from the guidance, or the field's exact spoken name -- or "
+                    "ask_secretary to identify the right field first."
+                )
+            _log.info("switch_to_field_not_navigable",
+                     reason=reason or "unknown_field",
+                     session_id=self._session_id)
+            return {"success": False, "message": message}
+
+        field_id = ack.get("field_id")
+        spoken_name = ack.get("spoken_name") or field_id
+
+        # DTI: the ack carries the target's full schema -- record it for
+        # validation AND re-point the current-field coercion pointer at the
+        # target (merge_field_schema does both), then render its guidance so
+        # the model asks about THIS field next.
+        field_guidance = None
+        field_schema = ack.get("next_field_schema")
+        if field_schema:
+            if self._merge_field_schema:
+                self._merge_field_schema(field_schema)
+            fill_language = self._get_fill_language() if self._get_fill_language else None
+            field_guidance = render_field_guidance(
+                field_schema, fill_language=fill_language
+            )
+
+        # Tell the model where it landed and what state the field is in. The
+        # current value (when any) rides the tool response so the model can
+        # read it back -- same Gemini trust boundary as get_field_value; it is
+        # never logged.
+        if ack.get("already_confirmed"):
+            state_note = (
+                "It already has a confirmed answer -- read the current value "
+                "back and ask what the user wants to change it to."
+            )
+        elif ack.get("has_value"):
+            state_note = (
+                "It already holds an unconfirmed value -- read it back and "
+                "verify it with the user."
+            )
+        else:
+            state_note = "It is currently unanswered -- ask the user for it."
+        message = f"Now on field '{spoken_name}'. {state_note}"
+
+        response: Dict[str, Any] = {"success": True, "message": message}
+        if "value" in ack:
+            response["current_value"] = ack.get("value")
+        if field_guidance:
+            response["field_guidance"] = field_guidance
+
+        _log.info("GEMINI TOOL RESPONSE", tool="switch_to_field",
+                 field_id=field_id)
+        _dev_log.log_tool_response("switch_to_field", response,
+                                   session_id=self._session_id)
         return response
 
     def _confirm_failure_response(self, field_id: str, message: str,

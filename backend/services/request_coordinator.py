@@ -424,6 +424,70 @@ class RequestCoordinator:
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
+    async def request_switch_field(self, identifier: str) -> Any:
+        """
+        Ask the frontend to make a SPECIFIC field current (bd polyglot-pdf-
+        jnjj.36 -- the switch_to_field tool). The frontend owns schema + field
+        state, so it resolves the identifier (field_id or exact spoken name),
+        pins the field for its next-field computation, moves UI focus, and
+        acks with the target's hint + (DTI) schema. Synchronous round-trip
+        like request_skip_field. The identifier is model-supplied and may name
+        a field; it is sent to the client but never logged (no-PII policy).
+
+        Returns:
+            - The frontend's ack dict: ``{"found": bool, ...}`` where the
+              extra keys vary by outcome -- success carries field_id /
+              spoken_name / next_field_hint / already_confirmed / has_value
+              (+ next_field_schema in DTI mode); failure carries a fixed
+              ``reason`` token (unknown_field / hidden / other_section, the
+              latter with section_label + section_order).
+            - CONFIRM_REQUEST_TIMEOUT (the module sentinel) when the frontend
+              did NOT answer in time / the request could not be sent.
+        """
+        if not self._websocket:
+            _log.warning("request_switch_field_no_websocket", session_id=self._session_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        request_id, future = self._register("switch_field")
+
+        try:
+            await self._websocket.send_json({
+                "type": "switch_field",
+                "request_id": request_id,
+                "field": identifier,
+            })
+        except Exception as exc:
+            _log.error("failed_to_send_switch_field_request",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
+        _t_coord_swf = time.monotonic()
+        try:
+            result = await asyncio.wait_for(future, timeout=2.0)
+            _coord_swf_ms = round((time.monotonic() - _t_coord_swf) * 1000)
+            _log.info(
+                "timing_coordinator_roundtrip",
+                request_type="switch_field",
+                request_id=request_id,
+                roundtrip_ms=_coord_swf_ms,
+                session_id=self._session_id,
+            )
+            return result
+        except asyncio.TimeoutError:
+            _log.error("switch_field_request_timeout",
+                      session_id=self._session_id,
+                      request_id=request_id)
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+        except Exception as exc:
+            _log.error("switch_field_request_error",
+                      session_id=self._session_id,
+                      error=str(exc))
+            self._discard(request_id)
+            return CONFIRM_REQUEST_TIMEOUT
+
     async def request_field_value(self, spoken_name: str) -> Dict[str, Any]:
         """
         Request field value from frontend using spoken name.
@@ -680,6 +744,18 @@ class RequestCoordinator:
         self._resolve(request_id, "skip_field",
                       {"recorded": bool(recorded), "reason": reason,
                        "section_complete": bool(section_complete)})
+
+    def handle_switch_field_response(
+        self, request_id: str, payload: Dict[str, Any]
+    ) -> None:
+        """
+        Handle switch_field_response from the frontend (bd polyglot-pdf-jnjj.36).
+
+        Completes the synchronous switch_field round-trip with the frontend's
+        whole ack payload (found + the outcome-specific keys -- see
+        request_switch_field's docstring).
+        """
+        self._resolve(request_id, "switch_field", dict(payload or {}))
 
     def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
         """

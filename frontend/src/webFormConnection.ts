@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -623,6 +623,10 @@ export class WebFormConnection {
 
         case "skip_field":
           this.handleSkipFieldRequest(message);
+          break;
+
+        case "switch_field":
+          this.handleSwitchFieldRequest(message);
           break;
 
         case "error":
@@ -1966,6 +1970,116 @@ export class WebFormConnection {
         }
       }
     }
+  }
+
+  /**
+   * Field-level navigation (bd polyglot-pdf-jnjj.36): the AI's switch_to_field
+   * tool asks the client to make a SPECIFIC field current -- e.g. to correct an
+   * earlier answer, or to act on an ask_secretary answer that named a field.
+   * The client owns all field state, so it resolves the identifier (field_id
+   * or spoken name, whole schema -- deliberately NOT the section-scoped lookup,
+   * bd polyglot-pdf-lt9z), pins the field so every next-field consumer follows
+   * (computeNextField pin priority), moves UI focus, and acks with the target's
+   * hint + (DTI) schema so the backend can render its guidance. Synchronous
+   * round-trip like skip_field: no request_id means no ack path, so bail.
+   */
+  private handleSwitchFieldRequest(message: any): void {
+    const { field: identifier, request_id } = message;
+
+    if (!request_id) {
+      console.warn('[WebFormConnection] switch_field with no request_id -- ignoring (cannot ack).');
+      return;
+    }
+
+    // Refresh from the persisted snapshot first (same staleness rule as
+    // sendManualFieldUpdate, bd polyglot-pdf-ezg2).
+    const persisted = SchemaFormStateManager.load();
+    if (persisted) this.state = persisted;
+
+    const fieldId = SchemaFormStateManager.resolveFieldForNavigation(this.state, identifier || '');
+    if (!fieldId) {
+      console.warn('[WebFormConnection] switch_field: no field matches the identifier.');
+      this.sendSwitchFieldResponse(request_id, false, { reason: 'unknown_field' });
+      return;
+    }
+
+    const field = this.state.schema.fields.find(f => f.id === fieldId)!;
+
+    // A conditionally-hidden field is not askable -- navigating to it would
+    // strand the conversation on a question the form does not show.
+    if (field.hidden || !shouldShowField(field, this.state.fieldValues, this.state.schema.fields)) {
+      this.sendSwitchFieldResponse(request_id, false, { reason: 'hidden', field_id: fieldId });
+      return;
+    }
+
+    // Section-scoped modes (non-continuous): the Gemini session only carries
+    // the current section, so an out-of-section target is unreachable without
+    // a section switch. Tell the backend which section holds it so the model
+    // can switch_section first (sections and fields stay distinct units,
+    // CLAUDE.md scar #5).
+    if (!this.continuousSessionEnabled) {
+      const owningSection = this.state.schema.sections?.find(s => s.fields?.includes(fieldId));
+      if (owningSection && owningSection.id !== this.state.currentSectionId) {
+        this.sendSwitchFieldResponse(request_id, false, {
+          reason: 'other_section',
+          field_id: fieldId,
+          section_label: owningSection.label,
+          section_order: owningSection.order,
+        });
+        return;
+      }
+    }
+
+    // Pin the field: computeNextField now returns it first (until confirmed/
+    // skipped), so the hint, the DTI drip, and any stall-recovery all point at
+    // it. A pin on an already-CONFIRMED field is dormant until the model
+    // updates the value (which resets confirmed) -- the correction flow.
+    this.state = SchemaFormStateManager.pinField(this.state, fieldId);
+
+    // Move UI focus immediately (the same callback the next-field flow uses).
+    if (this.callbacks.onNextField) {
+      this.callbacks.onNextField(fieldId);
+    }
+
+    // Ack with the TARGET's hint + (DTI) schema -- not computeNextField's pick,
+    // which would skip a confirmed target the model is navigating back to
+    // correct. Keep the recovery-prompt hint current, same as the other
+    // next-field producers.
+    const hint = formatNextFieldHint(field, getFieldOrder(this.state, fieldId) || undefined);
+    sessionStorage.setItem('vff_last_field_hint', hint);
+    // Read via the `[]`-alias fallback (bd 5k52 class): a checkbox-group's
+    // entry may sit under the bracket variant; a bare read would misreport a
+    // filled/confirmed field as unanswered and degrade the correction flow to
+    // a fresh fill (outer review on this bead).
+    const entry = readFieldEntryWithAlias(this.state.fieldValues, fieldId);
+    const currentValue = entry?.value;
+    const hasValue = currentValue !== null && currentValue !== undefined && currentValue !== '';
+    this.sendSwitchFieldResponse(request_id, true, {
+      field_id: fieldId,
+      spoken_name: field.spoken_name || field.name,
+      next_field_hint: hint,
+      already_confirmed: !!entry?.confirmed,
+      has_value: hasValue,
+      // The current value rides the ack so the model can read it back to the
+      // user (same Gemini trust boundary as get_field_value; never logged).
+      ...(hasValue ? { value: currentValue } : {}),
+      ...(this.dtiModeEnabled
+        ? { next_field_schema: getFieldSchema(fieldId, this.state.schema) }
+        : {}),
+    });
+  }
+
+  private sendSwitchFieldResponse(
+    request_id: string,
+    found: boolean,
+    extra: Record<string, unknown> = {}
+  ): void {
+    this.send({
+      type: 'switch_field_response',
+      request_id,
+      found,
+      ...extra,
+    });
   }
 
   /**
