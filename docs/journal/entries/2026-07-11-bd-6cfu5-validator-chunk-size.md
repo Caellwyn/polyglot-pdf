@@ -34,7 +34,8 @@ flash only 0.500. The `duration_years` class is caught by NEITHER model
 Versus the June baseline (AI Studio, merged multi-run): lite PRECISION
 improved sharply at every size (0.73/0.66/0.66 -> 0.89/0.94/0.955) while
 PAGE-SIZE recall regressed (1.00 -> 0.81 at 40); section-size recall is 1.00
-in both datasets; whole-form recall 0.778 in both. Reading: the serving
+in both datasets; whole-form recall slipped slightly (0.840 -> 0.778, June
+scored under the probe's transport-error-excluding rule). Reading: the serving
 path/model refresh shifted lite toward conservatism -- fewer false flags,
 more misses in bigger payloads. (Caveats: today = one run per cell vs the
 baseline's pooled repeats; June = AI Studio vs today = Vertex.)
