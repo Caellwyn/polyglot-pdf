@@ -556,36 +556,6 @@
       "spoken_name": "Treaty country",
       "type": "text",
       "section_id": "sec_additional_treaty",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_04[0]",
-      "pdf_position": {
-        "page": 1,
-        "x": 151.2,
-        "y": 252.0,
-        "width": 424.8,
-        "height": 12.0
-      },
-      "validation": {
-        "required": false
-      },
-      "require_if": {
-        "any_of": [
-          {
-            "field": "reason_a",
-            "operator": "is_checked"
-          },
-          {
-            "field": "reason_f",
-            "operator": "is_checked"
-          }
-        ]
-      }
-    },
-    {
-      "id": "treaty_article",
-      "name": "Additional information for a and f: Enter treaty article number",
-      "spoken_name": "Treaty article number",
-      "type": "text",
-      "section_id": "sec_additional_treaty",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_05[0]",
       "pdf_position": {
         "page": 1,
@@ -611,11 +581,11 @@
       }
     },
     {
-      "id": "name_first",
-      "name": "1a. First name",
-      "spoken_name": "First name",
+      "id": "treaty_article",
+      "name": "Additional information for a and f: Enter treaty article number",
+      "spoken_name": "Treaty article number",
       "type": "text",
-      "section_id": "sec_name",
+      "section_id": "sec_additional_treaty",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_06[0]",
       "pdf_position": {
         "page": 1,
@@ -623,6 +593,36 @@
         "y": 264.0,
         "width": 127.2,
         "height": 10.0
+      },
+      "validation": {
+        "required": false
+      },
+      "require_if": {
+        "any_of": [
+          {
+            "field": "reason_a",
+            "operator": "is_checked"
+          },
+          {
+            "field": "reason_f",
+            "operator": "is_checked"
+          }
+        ]
+      }
+    },
+    {
+      "id": "name_first",
+      "name": "1a. First name",
+      "spoken_name": "First name",
+      "type": "text",
+      "section_id": "sec_name",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_07[0]",
+      "pdf_position": {
+        "page": 1,
+        "x": 109.0,
+        "y": 286.0,
+        "width": 163.9,
+        "height": 14.0
       },
       "validation": {
         "required": true
@@ -634,12 +634,12 @@
       "spoken_name": "Middle name",
       "type": "text",
       "section_id": "sec_name",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_07[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_08[0]",
       "pdf_position": {
         "page": 1,
-        "x": 109.0,
+        "x": 274.6,
         "y": 286.0,
-        "width": 163.85,
+        "width": 142.2,
         "height": 14.0
       },
       "validation": {
@@ -652,12 +652,12 @@
       "spoken_name": "Last name",
       "type": "text",
       "section_id": "sec_name",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_08[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_09[0]",
       "pdf_position": {
         "page": 1,
-        "x": 274.6,
+        "x": 418.6,
         "y": 286.0,
-        "width": 142.25,
+        "width": 157.4,
         "height": 14.0
       },
       "validation": {
@@ -670,12 +670,12 @@
       "spoken_name": "Birth first name",
       "type": "text",
       "section_id": "sec_name",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_09[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_10[0]",
       "pdf_position": {
         "page": 1,
-        "x": 418.6,
-        "y": 286.0,
-        "width": 157.4,
+        "x": 109.0,
+        "y": 310.0,
+        "width": 163.9,
         "height": 14.0
       },
       "validation": {
@@ -688,12 +688,12 @@
       "spoken_name": "Birth middle name",
       "type": "text",
       "section_id": "sec_name",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_10[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_11[0]",
       "pdf_position": {
         "page": 1,
-        "x": 109.0,
+        "x": 274.6,
         "y": 310.0,
-        "width": 163.85,
+        "width": 142.2,
         "height": 14.0
       },
       "validation": {
@@ -706,12 +706,12 @@
       "spoken_name": "Birth last name",
       "type": "text",
       "section_id": "sec_name",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_11[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_12[0]",
       "pdf_position": {
         "page": 1,
-        "x": 274.6,
+        "x": 418.6,
         "y": 310.0,
-        "width": 142.25,
+        "width": 157.4,
         "height": 14.0
       },
       "validation": {
@@ -722,24 +722,6 @@
       "id": "mailing_street",
       "name": "2. Street address, apartment number, or rural route number",
       "spoken_name": "Mailing street address",
-      "type": "text",
-      "section_id": "sec_mailing_address",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_12[0]",
-      "pdf_position": {
-        "page": 1,
-        "x": 418.6,
-        "y": 310.0,
-        "width": 157.4,
-        "height": 14.0
-      },
-      "validation": {
-        "required": true
-      }
-    },
-    {
-      "id": "mailing_city_state_country",
-      "name": "City or town, state or province, and country. Include ZIP code or postal code where appropriate.",
-      "spoken_name": "Mailing city, state, and country",
       "type": "text",
       "section_id": "sec_mailing_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_13[0]",
@@ -755,11 +737,11 @@
       }
     },
     {
-      "id": "foreign_street",
-      "name": "3. Street address, apartment number, or rural route number. Don't use a P.O. box number.",
-      "spoken_name": "Foreign street address",
+      "id": "mailing_city_state_country",
+      "name": "City or town, state or province, and country. Include ZIP code or postal code where appropriate.",
+      "spoken_name": "Mailing city, state, and country",
       "type": "text",
-      "section_id": "sec_foreign_address",
+      "section_id": "sec_mailing_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_14[0]",
       "pdf_position": {
         "page": 1,
@@ -769,13 +751,13 @@
         "height": 14.0
       },
       "validation": {
-        "required": false
+        "required": true
       }
     },
     {
-      "id": "foreign_city_state_country",
-      "name": "City or town, state or province, and country. Include postal code where appropriate.",
-      "spoken_name": "Foreign city, state, and country",
+      "id": "foreign_street",
+      "name": "3. Street address, apartment number, or rural route number. Don't use a P.O. box number.",
+      "spoken_name": "Foreign street address",
       "type": "text",
       "section_id": "sec_foreign_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_15[0]",
@@ -791,11 +773,11 @@
       }
     },
     {
-      "id": "birth_date",
-      "name": "4. Date of birth (month / day / year)",
-      "spoken_name": "Date of birth",
-      "type": "date",
-      "section_id": "sec_birth",
+      "id": "foreign_city_state_country",
+      "name": "City or town, state or province, and country. Include postal code where appropriate.",
+      "spoken_name": "Foreign city, state, and country",
+      "type": "text",
+      "section_id": "sec_foreign_address",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_16[0]",
       "pdf_position": {
         "page": 1,
@@ -803,6 +785,24 @@
         "y": 406.0,
         "width": 467.0,
         "height": 14.0
+      },
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "id": "birth_date",
+      "name": "4. Date of birth (month / day / year)",
+      "spoken_name": "Date of birth",
+      "type": "date",
+      "section_id": "sec_birth",
+      "pdf_field_name": "topmostSubform[0].Page1[0].Line4_ReadOrder[0].f1_17[0]",
+      "pdf_position": {
+        "page": 1,
+        "x": 129.6,
+        "y": 432.0,
+        "width": 100.8,
+        "height": 12.0
       },
       "validation": {
         "required": true
@@ -814,12 +814,12 @@
       "spoken_name": "Country of birth",
       "type": "text",
       "section_id": "sec_birth",
-      "pdf_field_name": "topmostSubform[0].Page1[0].Line4_ReadOrder[0].f1_17[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_18[0]",
       "pdf_position": {
         "page": 1,
-        "x": 129.6,
+        "x": 253.0,
         "y": 432.0,
-        "width": 100.8,
+        "width": 120.6,
         "height": 12.0
       },
       "validation": {
@@ -833,12 +833,12 @@
       "spoken_name": "Birth city and state or province",
       "type": "text",
       "section_id": "sec_birth",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_18[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_19[0]",
       "pdf_position": {
         "page": 1,
-        "x": 253.0,
+        "x": 375.4,
         "y": 432.0,
-        "width": 120.65,
+        "width": 135.1,
         "height": 12.0
       },
       "validation": {
@@ -895,13 +895,13 @@
       "spoken_name": "Country of citizenship",
       "type": "text",
       "section_id": "sec_other_info",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_19[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_20[0]",
       "pdf_position": {
         "page": 1,
-        "x": 375.4,
-        "y": 432.0,
-        "width": 135.05,
-        "height": 12.0
+        "x": 109.0,
+        "y": 454.0,
+        "width": 127.9,
+        "height": 14.0
       },
       "validation": {
         "required": true
@@ -913,12 +913,12 @@
       "spoken_name": "Foreign tax ID number",
       "type": "text",
       "section_id": "sec_other_info",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_20[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_21[0]",
       "pdf_position": {
         "page": 1,
-        "x": 109.0,
+        "x": 237.6,
         "y": 454.0,
-        "width": 127.85,
+        "width": 129.6,
         "height": 14.0
       },
       "validation": {
@@ -931,12 +931,12 @@
       "spoken_name": "Type of U.S. visa, number, and expiration",
       "type": "text",
       "section_id": "sec_other_info",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_21[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_22[0]",
       "pdf_position": {
         "page": 1,
-        "x": 237.6,
+        "x": 368.2,
         "y": 454.0,
-        "width": 129.6,
+        "width": 207.8,
         "height": 14.0
       },
       "validation": {
@@ -1016,42 +1016,6 @@
       "spoken_name": "Document issued by",
       "type": "text",
       "section_id": "sec_id_documents",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_22[0]",
-      "pdf_position": {
-        "page": 1,
-        "x": 368.2,
-        "y": 454.0,
-        "width": 207.8,
-        "height": 14.0
-      },
-      "validation": {
-        "required": false
-      }
-    },
-    {
-      "id": "id_number",
-      "name": "6d. Number",
-      "spoken_name": "Document number",
-      "type": "text",
-      "section_id": "sec_id_documents",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_23[0]",
-      "pdf_position": {
-        "page": 1,
-        "x": 468.0,
-        "y": 480.0,
-        "width": 108.0,
-        "height": 12.0
-      },
-      "validation": {
-        "required": false
-      }
-    },
-    {
-      "id": "id_exp_date",
-      "name": "6d. Exp. date (month / day / year)",
-      "spoken_name": "Document expiration date",
-      "type": "date",
-      "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_24[0]",
       "pdf_position": {
         "page": 1,
@@ -1065,10 +1029,10 @@
       }
     },
     {
-      "id": "date_of_entry",
-      "name": "Date of entry into the United States (MM/DD/YYYY)",
-      "spoken_name": "Date of entry into the United States",
-      "type": "date",
+      "id": "id_number",
+      "name": "6d. Number",
+      "spoken_name": "Document number",
+      "type": "text",
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_25[0]",
       "pdf_position": {
@@ -1083,10 +1047,10 @@
       }
     },
     {
-      "id": "id_exp_date_yyyy",
-      "name": "6d. Exp. date - year portion",
-      "spoken_name": "Document expiration year",
-      "type": "text",
+      "id": "id_exp_date",
+      "name": "6d. Exp. date (month / day / year)",
+      "spoken_name": "Document expiration date",
+      "type": "date",
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_26[0]",
       "pdf_position": {
@@ -1098,14 +1062,13 @@
       },
       "validation": {
         "required": false
-      },
-      "max_length": 8
+      }
     },
     {
-      "id": "date_of_entry_yyyy",
-      "name": "Date of entry into the United States - year portion",
-      "spoken_name": "Date of entry year",
-      "type": "text",
+      "id": "date_of_entry",
+      "name": "Date of entry into the United States (MM/DD/YYYY)",
+      "spoken_name": "Date of entry into the United States",
+      "type": "date",
       "section_id": "sec_id_documents",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_27[0]",
       "pdf_position": {
@@ -1117,8 +1080,7 @@
       },
       "validation": {
         "required": false
-      },
-      "max_length": 8
+      }
     },
     {
       "id": "prior_itin_irsn",
