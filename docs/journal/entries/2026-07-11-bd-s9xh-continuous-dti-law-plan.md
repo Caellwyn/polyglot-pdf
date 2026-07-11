@@ -66,7 +66,10 @@ the review record per the Step-5.6 gate).
 New: docs/sprint_11_continuous-dti-law_plan.md; docs/INDEX.md active-sprints
 row added. Tier-2 docs deliberately NOT bumped here -- their continuous-DTI
 staleness is the epic's own C8 bead (ft47), which lands after the deletion so
-docs state post-deletion truth.
+docs state post-deletion truth. closeout_prep's stale-doc warnings
+(si-reduction, stateless-architecture, terminology, testing,
+validation-delegation, voice-and-vad, technical_guide) all track source files
+this docs-only branch did not touch -- pre-existing, reviewed and left.
 
 ## Files touched
 
