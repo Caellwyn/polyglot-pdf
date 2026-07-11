@@ -349,3 +349,91 @@ describe('isFormComplete honors a live pin (bd jnjj.36)', () => {
     expect(isFormComplete(pinState('ghost'))).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Checkbox-group []-alias reads (outer review, bd jnjj.36 / bd 5k52 class):
+// a group's fieldValues entry may sit under the bracket key variant. The
+// switch ack and the pin's confirmed-check must both read via the alias
+// fallback, or a filled+confirmed group is misreported as unanswered (the
+// correction flow degrades to a fresh fill) / a confirmed pin holds the form
+// open.
+// ---------------------------------------------------------------------------
+
+describe('switch_to_field []-alias reads (bd jnjj.36)', () => {
+  let storageMock: { [key: string]: string }
+
+  beforeEach(() => {
+    storageMock = {}
+    global.sessionStorage = {
+      getItem: vi.fn((k: string) => storageMock[k] || null),
+      setItem: vi.fn((k: string, v: string) => { storageMock[k] = v }),
+      removeItem: vi.fn((k: string) => { delete storageMock[k] }),
+      clear: vi.fn(() => { storageMock = {} }),
+      length: 0,
+      key: vi.fn(() => null)
+    } as any
+  })
+
+  const groupSchema: any = {
+    source: 'pdf',
+    form_metadata: {
+      title: 'Alias Form', version: '1', language: 'en',
+      form_number: 'AL-1', edition_date: '01/01/25', page_count: 1,
+    },
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['race[]', 'req'] }],
+    fields: [
+      {
+        id: 'race[]', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
+        section_id: 's1',
+        options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }],
+      },
+      { id: 'req', name: 'Required', spoken_name: 'required', type: 'text', section_id: 's1', validation: { required: true } },
+    ],
+  }
+
+  it('the switch ack reports value/confirmed for a group stored under the alias key', async () => {
+    const conn: any = new WebFormConnection(groupSchema, {})
+    conn.continuousSessionEnabled = true
+    conn.state.continuousSessionEnabled = true
+    conn.dtiModeEnabled = false
+    // The value landed under the UNbracketed alias (Gemini dropped the bracket).
+    conn.state.fieldValues['race'] = { value: ['x'], confirmed: true }
+    SchemaFormStateManager.save(conn.state)
+    const sent: any[] = []
+    conn.send = vi.fn((m: any) => sent.push(m))
+    await conn.handleMessage({ data: JSON.stringify({ type: 'switch_field', request_id: 'ra', field: 'race' }) } as MessageEvent)
+    const ack = sent.find(m => m.type === 'switch_field_response')
+    expect(ack.found).toBe(true)
+    expect(ack.field_id).toBe('race[]')
+    expect(ack.already_confirmed).toBe(true)   // alias-aware read
+    expect(ack.has_value).toBe(true)
+    expect(ack.value).toEqual(['x'])
+  })
+
+  it('a pin on a group confirmed under the alias key is stale (does not hold the form open)', () => {
+    const state: any = {
+      schema: groupSchema,
+      fieldValues: {
+        req: { value: 'v', confirmed: true },
+        race: { value: ['x'], confirmed: true },  // alias key
+      },
+      currentSectionId: 's1',
+      completedSections: new Set<string>(),
+      validationErrors: {},
+      lastUpdated: Date.now(),
+      formSessionId: 'fss_alias',
+      loadedFieldIds: new Set<string>(),
+      jitModeEnabled: false,
+      continuousSessionEnabled: true,
+      disclaimerAccepted: true,
+      pinnedFieldId: 'race[]',
+    }
+    expect(isFormComplete(state)).toBe(true)
+    // NOTE deliberately NOT asserting computeNextField here: its MAIN loop's
+    // bare fieldValues reads have a PRE-EXISTING alias blindness (it offers an
+    // alias-keyed group as unconfirmed with or without a pin) -- out of this
+    // bead's scope. This test pins only that the PIN path (resolveLivePin)
+    // reads alias-aware, so a confirmed-under-alias pin cannot hold
+    // isFormComplete open.
+  })
+})

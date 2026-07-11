@@ -23,6 +23,7 @@
 import type { SchemaFormState } from './schema-forms/state/schemaFormState';
 import type { FormSchema, FormField } from './schema-forms/types/schema';
 import { shouldShowField } from './schema-forms/utils/validation';
+import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue';
 
 // Navigation operates on the canonical schema FormField (it iterates
 // state.schema.fields and returns those objects). Re-export it under the same
@@ -85,7 +86,10 @@ function resolveLivePin(state: SchemaFormState): FormField | null {
     pinned &&
     !pinned.hidden &&
     shouldShowField(pinned, state.fieldValues, state.schema.fields) &&
-    !state.fieldValues[pinned.id]?.confirmed
+    // `[]`-alias-aware confirmed read (bd 5k52 class): a checkbox-group's
+    // entry may sit under the bracket key variant; a bare read would treat a
+    // confirmed pin as live and hold the form open (outer review, jnjj.36).
+    !readFieldEntryWithAlias(state.fieldValues, pinned.id)?.confirmed
   ) {
     return pinned;
   }

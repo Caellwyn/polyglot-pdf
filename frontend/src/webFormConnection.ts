@@ -18,7 +18,7 @@ import {
 } from "./navigation";
 import { getFieldSchema } from "./schema-forms/utils/manifestUtils";
 import { shouldShowField, validateField, isFieldReadOnly } from "./schema-forms/utils/validation";
-import { unwrapFieldValue } from "./schema-forms/utils/fieldValue";
+import { unwrapFieldValue, readFieldEntryWithAlias } from "./schema-forms/utils/fieldValue";
 import { evaluateFieldAvailability } from "./schema-forms/utils/conditionalFieldCheck";
 import { FIELD_HIGHLIGHT_DURATION_MS } from "./schema-forms/utils/fieldHighlight";
 
@@ -2047,13 +2047,18 @@ export class WebFormConnection {
     // next-field producers.
     const hint = formatNextFieldHint(field, getFieldOrder(this.state, fieldId) || undefined);
     sessionStorage.setItem('vff_last_field_hint', hint);
-    const currentValue = this.state.fieldValues[fieldId]?.value;
+    // Read via the `[]`-alias fallback (bd 5k52 class): a checkbox-group's
+    // entry may sit under the bracket variant; a bare read would misreport a
+    // filled/confirmed field as unanswered and degrade the correction flow to
+    // a fresh fill (outer review on this bead).
+    const entry = readFieldEntryWithAlias(this.state.fieldValues, fieldId);
+    const currentValue = entry?.value;
     const hasValue = currentValue !== null && currentValue !== undefined && currentValue !== '';
     this.sendSwitchFieldResponse(request_id, true, {
       field_id: fieldId,
       spoken_name: field.spoken_name || field.name,
       next_field_hint: hint,
-      already_confirmed: !!this.state.fieldValues[fieldId]?.confirmed,
+      already_confirmed: !!entry?.confirmed,
       has_value: hasValue,
       // The current value rides the ack so the model can read it back to the
       // user (same Gemini trust boundary as get_field_value; never logged).
