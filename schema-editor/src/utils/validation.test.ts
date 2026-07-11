@@ -101,3 +101,37 @@ describe('validateSchema conditional-reference checks (bd polyglot-pdf-y61i)', (
     expect(errors.some(e => e.message === 'Duplicate field ID' && e.field_id === 'dup')).toBe(true);
   });
 });
+
+describe("validateSchema 'To review' gate mirror (bd polyglot-pdf-6cfu.3)", () => {
+  it("errors on a field still filed in a sec_to_review section", () => {
+    const schema = {
+      form_metadata: { title: 'T', version: '1' },
+      sections: [
+        { id: 'sec_real', label: 'Real', order: 1, fields: [] },
+        { id: 'sec_to_review_p1', label: 'To review', order: 2, fields: ['f1'] },
+      ],
+      fields: [
+        { id: 'f1', name: 'F1', type: 'text', section_id: 'sec_to_review_p1' },
+      ],
+    } as unknown as FormSchema;
+    const errs = validateSchema(schema).filter(e =>
+      e.message.includes("'To review'"));
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toMatchObject({ field_id: 'f1', type: 'error' });
+  });
+
+  it('stays quiet once the field is re-filed', () => {
+    const schema = {
+      form_metadata: { title: 'T', version: '1' },
+      sections: [
+        { id: 'sec_real', label: 'Real', order: 1, fields: ['f1'] },
+        { id: 'sec_to_review_p1', label: 'To review', order: 2, fields: [] },
+      ],
+      fields: [
+        { id: 'f1', name: 'F1', type: 'text', section_id: 'sec_real' },
+      ],
+    } as unknown as FormSchema;
+    expect(validateSchema(schema).filter(e =>
+      e.message.includes("'To review'"))).toHaveLength(0);
+  });
+});

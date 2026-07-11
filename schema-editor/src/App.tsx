@@ -26,6 +26,7 @@ import {
   loadRemotePdfBlobUrl,
   loadRemoteSchema,
   loadUnclaimedWidgets,
+  regenerateDivisions,
   repairKit,
   saveRemoteSchema,
   type EditorRole,
@@ -33,6 +34,8 @@ import {
 } from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
+import { SectionManager } from './components/SectionManager';
+import type { DivisionsPatch } from './utils/sectionOps';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
 import type { FormField, FormConfig, FormSchema, FormSection } from './types/schema';
 
@@ -80,6 +83,8 @@ export const App: React.FC = () => {
   // TEST the form's logic (radio exclusivity, checkbox multi-select, show_if
   // visibility). PDF + field list stay visible in both modes.
   const [viewMode, setViewMode] = React.useState<'edit' | 'preview'>('edit');
+  // Section-management modal (bd polyglot-pdf-6cfu.3).
+  const [showSectionManager, setShowSectionManager] = React.useState(false);
   // Multi-selection for the merge/group operation (bd polyglot-pdf-s4dp.1). This
   // is the set of fields ticked for a merge; insertion order is preserved (the
   // first ticked field is the merge primary). Separate from selectedFieldId,
@@ -609,6 +614,58 @@ export const App: React.FC = () => {
     }
   }, [hosted, selectedKitId, hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
 
+  // Section management (bd polyglot-pdf-6cfu.3): one atomic commit for the
+  // {fields, sections, parts} triple a section add/rename/merge/remove
+  // produces (sectionOps keeps the three consistent) -- one undo step.
+  const handleUpdateDivisions = React.useCallback((patch: DivisionsPatch) => {
+    if (!schema) return;
+    commitSchema({
+      ...schema,
+      fields: patch.fields,
+      sections: patch.sections,
+      ...(patch.parts !== undefined ? { parts: patch.parts } : {}),
+    });
+  }, [schema, commitSchema]);
+
+  // Regenerate divisions (bd 6cfu.3): re-runs the deterministic derivation on
+  // the kit's STORED schema server-side, so it mirrors Repair-all exactly --
+  // unsaved-edits confirm, its own destructive confirm, the openSeqRef
+  // stale-open guard, reload as a fresh baseline (history cleared).
+  const handleRegenerateDivisions = React.useCallback(async () => {
+    if (!hosted || !selectedKitId) return;
+    if (hasUnsavedChanges) {
+      const ok = window.confirm(
+        'Regenerate works on the saved version. Save your changes first, or ' +
+        'click OK to discard unsaved edits and regenerate from the last-saved '
+        + 'schema.'
+      );
+      if (!ok) return;
+    }
+    const ok = window.confirm(
+      'Recompute all sections and parts from the PDF? This overwrites every '
+      + 'manual division edit (sections, ordering, field filing). Field '
+      + 'content is untouched.'
+    );
+    if (!ok) return;
+    const seq = ++openSeqRef.current;
+    try {
+      await regenerateDivisions(selectedKitId);
+      if (seq !== openSeqRef.current) return; // superseded while deriving
+      const derived = await loadRemoteSchema(selectedKitId);
+      if (seq !== openSeqRef.current) return; // superseded while reloading
+      if (derived) loadSchemaState(derived); // fresh baseline -> history cleared
+      setSaveError(null);
+    } catch (err) {
+      if (seq !== openSeqRef.current) return;
+      if (err instanceof AuthError) {
+        handleAuthExpired();
+        return;
+      }
+      setSaveError(err instanceof Error ? err.message : 'Failed to regenerate divisions');
+      console.error('Failed to regenerate divisions:', err);
+    }
+  }, [hosted, selectedKitId, hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
+
   // Fetch the open kit's unclaimed PDF button widgets for the FieldEditor's
   // "Add from PDF widgets" picker (bd polyglot-pdf-nivy, P5.3c). Hosted + an open
   // kit only; passed to the editor solely in author mode (see below), so a
@@ -862,6 +919,19 @@ export const App: React.FC = () => {
 
       {guideOpen && <HostedGuide role={role} onClose={() => setGuideOpen(false)} />}
 
+      {/* Section management (bd polyglot-pdf-6cfu.3) */}
+      {showSectionManager && schema && (
+        <SectionManager
+          fields={schema.fields}
+          sections={schema.sections}
+          parts={schema.parts}
+          canRegenerate={hosted && role === 'author' && !!selectedKitId}
+          onApply={handleUpdateDivisions}
+          onRegenerate={handleRegenerateDivisions}
+          onClose={() => setShowSectionManager(false)}
+        />
+      )}
+
       {/* Main Content */}
       {loading && (
         <div className="flex-1 flex items-center justify-center">
@@ -968,11 +1038,20 @@ export const App: React.FC = () => {
 
           {/* Middle: Field List */}
           <div className="w-1/5 border-r border-gray-200 flex flex-col">
-            <div className="p-3 bg-white border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900">Fields</h3>
-              <p className="text-xs text-gray-500">
-                {schema.fields.length} total
-              </p>
+            <div className="p-3 bg-white border-b border-gray-200 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-semibold text-gray-900">Fields</h3>
+                <p className="text-xs text-gray-500">
+                  {schema.fields.length} total
+                </p>
+              </div>
+              <button
+                className="shrink-0 text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                onClick={() => setShowSectionManager(true)}
+                title="Add, rename, merge or remove sections"
+              >
+                Sections
+              </button>
             </div>
             <div className="flex-1 overflow-hidden">
               <FieldList

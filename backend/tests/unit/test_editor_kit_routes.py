@@ -1854,3 +1854,171 @@ def test_status_rejects_unknown_values(client):
         json={"status": "published"},
     )
     assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# POST /kits/{id}/derive-divisions -- regenerate divisions (bd 6cfu.3)
+# ---------------------------------------------------------------------------
+
+# A draft whose divisions the derivation will overwrite: two placed fields on
+# page 1 (no widget names, blank page -> page-fallback strategy) plus one
+# positionless field that must land in 'To review (unplaced)'.
+_DERIVABLE_DRAFT = {
+    "source": "pdf",
+    "schema_version": "2",
+    "form_metadata": {"title": "T", "version": "u"},
+    "parts": [{"id": "part_old", "label": "Old part", "order": 1,
+               "section_ids": ["sec_llm"]}],
+    "sections": [{"id": "sec_llm", "label": "LLM section", "order": 1,
+                  "fields": ["f1", "f2", "f3"]}],
+    "fields": [
+        {"id": "f1", "name": "F1", "spoken_name": "f one", "type": "text",
+         "section_id": "sec_llm",
+         "pdf_position": {"page": 1, "x": 50.0, "y": 100.0,
+                          "width": 80.0, "height": 12.0}},
+        {"id": "f2", "name": "F2", "spoken_name": "f two", "type": "text",
+         "section_id": "sec_llm",
+         "pdf_position": {"page": 1, "x": 50.0, "y": 140.0,
+                          "width": 80.0, "height": 12.0}},
+        {"id": "f3", "name": "F3", "spoken_name": "f three", "type": "text",
+         "section_id": "sec_llm"},
+    ],
+    "_bakeoff": {"authoring": {"division": {"strategy": "stale"}}},
+}
+
+
+def _real_pdf_bytes() -> bytes:
+    import fitz
+    doc = fitz.open()
+    doc.new_page(width=612, height=792)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _make_derivable_kit(root, kit_id, **kwargs):
+    kit_dir = _make_kit(root, kit_id, schema=json.loads(json.dumps(_DERIVABLE_DRAFT)),
+                        **kwargs)
+    (kit_dir / "form.pdf").write_bytes(_real_pdf_bytes())
+    return kit_dir
+
+
+def test_derive_divisions_rewrites_stores_and_reports(client):
+    c, store, root = client
+    _make_derivable_kit(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/derive-divisions",
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["strategy"] == "page-fallback"
+    assert body["toReviewFieldIds"] == ["f3"]
+    assert body["errorCount"] >= 1  # the to-review-pending lint gate fires
+    stored = _run(store.load_schema("fresh"))
+    sec_ids = [s["id"] for s in stored["sections"]]
+    assert "sec_llm" not in sec_ids  # LLM divisions overwritten
+    assert any(sid.startswith("sec_to_review") for sid in sec_ids)
+    by_id = {f["id"]: f for f in stored["fields"]}
+    assert by_id["f1"]["section_id"] == by_id["f2"]["section_id"]
+    assert by_id["f3"]["section_id"].startswith("sec_to_review")
+    # Old parts replaced; extraction metadata record superseded.
+    assert all(p["id"] != "part_old" for p in stored["parts"])
+    assert stored["_bakeoff"]["authoring"]["division"]["strategy"] == "page-fallback"
+
+
+def test_derive_divisions_equals_direct_derivation(client):
+    # The route's stored output EQUALS derive_and_apply called directly on the
+    # same schema + PDF (the route adds nothing of its own).
+    c, store, root = client
+    _make_derivable_kit(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/derive-divisions",
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 200, r.text
+    ds = ekr._load_derive_sections()
+    expected = json.loads(json.dumps(_DERIVABLE_DRAFT))
+    summary = ds.derive_and_apply(expected, str(root / "fresh" / "form.pdf"))
+    expected["_bakeoff"]["authoring"]["division"] = summary
+    assert _run(store.load_schema("fresh")) == expected
+
+
+def test_derive_divisions_requires_author_role(client):
+    c, _store, root = client
+    _make_derivable_kit(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/derive-divisions",
+               headers={"X-Editor-Token": "edit-tok"})
+    assert r.status_code == 403
+
+
+def test_derive_divisions_published_kit_is_409(client):
+    c, _store, root = client
+    _make_derivable_kit(root, "done", status="complete")
+    r = c.post("/api/editor/kits/done/derive-divisions",
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 409
+    assert "draft" in r.json()["detail"].lower()
+
+
+def test_derive_divisions_corrupt_pdf_is_422(client):
+    # _make_kit writes junk PDF bytes; the derivation's friendly ValueError
+    # must surface as a 422 data defect, never a 500 -- and the schema must
+    # not have been overwritten.
+    c, store, root = client
+    schema = json.loads(json.dumps(_DERIVABLE_DRAFT))
+    _make_kit(root, "fresh", schema=schema)
+    r = c.post("/api/editor/kits/fresh/derive-divisions",
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 422, r.text
+    assert _run(store.load_schema("fresh")) == schema
+
+
+def test_derive_divisions_missing_pdf_is_409(client):
+    c, _store, root = client
+    kit_dir = _make_kit(root, "fresh",
+                        schema=json.loads(json.dumps(_DERIVABLE_DRAFT)))
+    (kit_dir / "form.pdf").unlink()
+    r = c.post("/api/editor/kits/fresh/derive-divisions",
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 409
+    assert "pdf" in r.json()["detail"].lower()
+
+
+def test_mark_complete_publish_gate_refuses_to_review_fields(client):
+    """bd 6cfu.3: a form with fields still in a 'To review' section (the
+    deterministic division pass's sec_to_review* buckets) cannot be marked
+    complete -- the to-review-pending lint ERROR blocks the publish gate.
+    Re-filing the field (and emptying the section) unblocks it."""
+    c, _store, root = client
+    pending = json.loads(json.dumps(VALID_SCHEMA))  # deep copy
+    pending["sections"].append(
+        {"id": "sec_to_review_p1", "label": "To review", "order": 2,
+         "fields": ["stray"]})
+    pending["fields"].append(
+        {"id": "stray", "name": "Stray", "spoken_name": "stray",
+         "type": "text", "section_id": "sec_to_review_p1"})
+    _make_kit(root, "pending", schema=pending)
+    r = c.post(
+        "/api/editor/kits/pending/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 409, r.text
+    detail = r.json()["detail"]
+    assert "to-review-pending" in detail
+    assert "lint error" in detail
+
+    # Re-file the stray into the real section -> the same flip succeeds.
+    fixed = json.loads(json.dumps(pending))
+    fixed["sections"][1]["fields"] = []
+    fixed["sections"][0]["fields"].append("stray")
+    fixed["fields"][1]["section_id"] = "s1"
+    put = c.put(
+        "/api/editor/kits/pending/schema",
+        headers={"X-Editor-Token": "edit-tok"},
+        json=fixed,
+    )
+    assert put.status_code == 200, put.text
+    r2 = c.post(
+        "/api/editor/kits/pending/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r2.status_code == 200, r2.text

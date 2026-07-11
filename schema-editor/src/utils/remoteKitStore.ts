@@ -224,6 +224,33 @@ export async function repairKit(kitId: string): Promise<RepairReport> {
   return (await res.json()) as RepairReport;
 }
 
+/** Regenerate-divisions result (bd polyglot-pdf-6cfu.3). The kit's parts/
+ * sections were recomputed deterministically from its PDF server-side and
+ * STORED, so the caller must RELOAD the kit's schema after this resolves. */
+export interface DeriveDivisionsReport {
+  strategy: string;
+  parts: number;
+  sections: number;
+  toReviewSectionIds: string[];
+  toReviewFieldIds: string[];
+  notes: string[];
+  errorCount: number;
+  warningCount: number;
+}
+
+/** Re-run the deterministic division derivation on a kit's STORED draft (the
+ * same pass extraction runs, bd 6cfu.2). Author tier. DESTRUCTIVE to manual
+ * division edits -- the caller fronts this with a confirm dialog. A 422
+ * (unreadable/0-page PDF) surfaces its detail for the human to fix. */
+export async function regenerateDivisions(kitId: string): Promise<DeriveDivisionsReport> {
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/derive-divisions`,
+    { method: 'POST' },
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not regenerate divisions'));
+  return (await res.json()) as DeriveDivisionsReport;
+}
+
 /** One PDF button widget the schema does not yet claim (bd polyglot-pdf-nivy,
  * P5.3c) -- a candidate the "Add from PDF widgets" picker offers. */
 export interface UnclaimedWidget {

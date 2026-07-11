@@ -1,5 +1,6 @@
 import type { FormSchema, FormField, FieldStatus, ValidationError } from '../types/schema';
 import { normalizeToComposite } from './normalizeToComposite';
+import { isToReviewSection } from './sectionOps';
 
 // Flatten a legacy-or-composite condition to its atomic conditions (bd
 // h76m.8) for reference checking. [] for absent/malformed shapes.
@@ -87,6 +88,20 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
         errors.push({
           field_id: field.id,
           message: `References non-existent section: ${field.section_id}`,
+          type: 'error',
+        });
+      }
+      // 'To review' gate (bd polyglot-pdf-6cfu.3): the deterministic
+      // derivation filed this field for a human to re-file; the backend's
+      // to-review-pending lint rule blocks publishing until it moves. Mirror
+      // it client-side so the panel explains the block before the author
+      // hits the publish gate.
+      if (isToReviewSection(field.section_id)) {
+        errors.push({
+          field_id: field.id,
+          message: "Field is in a 'To review' section -- re-file it into a "
+            + 'real section (Sections panel) before the form can be marked '
+            + 'complete',
           type: 'error',
         });
       }

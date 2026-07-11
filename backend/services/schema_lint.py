@@ -65,6 +65,12 @@ from backend.models import conditional_vocabulary as vocab
 SEVERITY_ERROR = "ERROR"
 SEVERITY_WARNING = "WARNING"
 
+# Well-known id prefix the deterministic division pass gives sections holding
+# fields a human must re-file (scripts/authoring/derive_sections.py, bd
+# 6cfu.2/.3). The 'to-review-pending' lint rule -- and through it the publish
+# gate -- keys on this prefix; the schema editor highlights it.
+TO_REVIEW_PREFIX = "sec_to_review"
+
 _ATOM_KEYS = frozenset({"field", "operator"})
 
 # Every field-anchored finding path embeds its field id as "(id=X)" (see the
@@ -679,6 +685,51 @@ def lint_schema(
                     ))
 
     _check_cycles(show_if_graph, out)
+
+    # 'To review' review gate (bd polyglot-pdf-6cfu.3). The deterministic
+    # division pass (scripts/authoring/derive_sections.py, bd 6cfu.2) files
+    # fields it cannot confidently place into sections whose id carries the
+    # well-known `sec_to_review` prefix, for a HUMAN reviewer to re-file in
+    # the editor. A field still sitting in one is un-reviewed by definition,
+    # so it lints as an ERROR -- which the publish gate (editor status ->
+    # complete) already blocks on. One finding per un-reviewed field (keyed
+    # on the field's own section_id, so a dangling pointer is caught even if
+    # the section entry vanished), plus one per to-review section whose
+    # fields[] list is one-sidedly stale (lists ids no field points back
+    # from) -- never both for the same state.
+    flagged_review_fields: set = set()
+    for i, f in enumerate(fields):
+        sid = f.get("section_id")
+        if isinstance(sid, str) and sid.startswith(TO_REVIEW_PREFIX):
+            if isinstance(f.get("id"), str):
+                flagged_review_fields.add(f["id"])
+            out.append(LintFinding(
+                SEVERITY_ERROR, "to-review-pending",
+                f"fields[{i}] (id={f.get('id')})",
+                f"field is still filed in 'To review' section {sid!r} -- "
+                f"re-file it into a real section (schema editor) before the "
+                f"form can be marked complete",
+            ))
+    raw_sections = schema.get("sections")
+    sections = [s for s in raw_sections if isinstance(s, dict)] \
+        if isinstance(raw_sections, list) else []
+    for i, s in enumerate(sections):
+        sid = s.get("id")
+        if not (isinstance(sid, str) and sid.startswith(TO_REVIEW_PREFIX)):
+            continue
+        listed = s.get("fields")
+        listed = [x for x in listed if isinstance(x, str)] \
+            if isinstance(listed, list) else []
+        stale = [x for x in listed if x not in flagged_review_fields]
+        if stale:
+            out.append(LintFinding(
+                SEVERITY_ERROR, "to-review-pending",
+                f"sections[{i}] (id={sid})",
+                f"'To review' section {sid!r} still lists {len(stale)} field "
+                f"id(s) ({', '.join(stale[:5])}{', ...' if len(stale) > 5 else ''}) "
+                f"-- empty it (re-file or remove the stale ids) before the "
+                f"form can be marked complete",
+            ))
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)
