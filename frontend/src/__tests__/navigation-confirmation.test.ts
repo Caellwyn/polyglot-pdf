@@ -303,3 +303,66 @@ describe('computeNextField with confirmation prioritization', () => {
     expect(nextField?.id).toBe('lastName');
   });
 });
+
+describe('checkbox-group []-alias awareness (bd polyglot-pdf-ipw7)', () => {
+  // A checkbox group's entry can sit under the bracket key VARIANT (legacy
+  // persisted sessions predate the write-path normalization, bd 5k52 class).
+  // The main loops, progress, and completion must read through the alias or a
+  // confirmed group is re-offered forever / holds the form open.
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('does NOT offer a group confirmed under the unbracketed alias as next', async () => {
+    const { isFormComplete } = await import('../navigation');
+    const schema = createTestSchema([
+      { id: 'race[]', name: 'Race', type: 'checkbox_group' },
+      { id: 'email', name: 'Email' },
+    ]);
+    const state = SchemaFormStateManager.init(schema);
+    // Entry lands under the ALIAS key 'race', not the schema id 'race[]'.
+    const updatedState = SchemaFormStateManager.updateField(state, 'race', ['x'], {
+      confirmed: true,
+      confirmationMethod: 'ai_voice',
+    });
+
+    const nextField = computeNextField(updatedState);
+    // The confirmed-under-alias group is NOT re-offered; the empty field is next.
+    expect(nextField?.id).toBe('email');
+    expect(isFormComplete(updatedState)).toBe(false);
+  });
+
+  it('completes the form and counts progress when a required group is confirmed under the alias', async () => {
+    const { isFormComplete, getFormProgress } = await import('../navigation');
+    const schema = createTestSchema([
+      { id: 'race[]', name: 'Race', type: 'checkbox_group', validation: { required: true } },
+    ]);
+    const state = SchemaFormStateManager.init(schema);
+    const updatedState = SchemaFormStateManager.updateField(state, 'race', ['x'], {
+      confirmed: true,
+      confirmationMethod: 'ai_voice',
+    });
+
+    expect(computeNextField(updatedState)).toBeNull();
+    expect(isFormComplete(updatedState)).toBe(true);
+    const progress = getFormProgress(updatedState);
+    expect(progress.confirmed).toBe(1);
+    expect(progress.requiredConfirmed).toBe(1);
+  });
+
+  it('handles the reverse split: schema id unbracketed, entry under the bracketed key', async () => {
+    const { isFormComplete } = await import('../navigation');
+    const schema = createTestSchema([
+      { id: 'race', name: 'Race', type: 'checkbox_group' },
+      { id: 'email', name: 'Email' },
+    ]);
+    const state = SchemaFormStateManager.init(schema);
+    const updatedState = SchemaFormStateManager.updateField(state, 'race[]', ['x'], {
+      confirmed: true,
+      confirmationMethod: 'ai_voice',
+    });
+
+    expect(computeNextField(updatedState)?.id).toBe('email');
+    expect(isFormComplete(updatedState)).toBe(false);
+  });
+});

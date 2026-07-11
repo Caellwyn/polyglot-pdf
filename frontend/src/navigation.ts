@@ -198,7 +198,11 @@ export function computeNextField(
       continue;
     }
 
-    const currentValue = state.fieldValues[field.id];
+    // `[]`-alias-aware read (bd polyglot-pdf-ipw7, 5k52 class): a checkbox
+    // group's entry can sit under the bracket key variant (legacy persisted
+    // sessions predate the write-path normalization), and a bare read would
+    // re-offer a confirmed group forever. Same convention as resolveLivePin.
+    const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
     const isConfirmed = currentValue?.confirmed === true;
     // Mirrors webFormConnection.ts handleConfirmFieldRequest's hasUsableValue
     // predicate exactly (bd polyglot-pdf-6oe6): '' on an OPTIONAL field is a
@@ -235,7 +239,8 @@ export function computeNextField(
       continue;
     }
 
-    const currentValue = state.fieldValues[field.id];
+    // `[]`-alias-aware read (bd polyglot-pdf-ipw7) -- see the PRIORITY 1 note.
+    const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
     const isConfirmed = currentValue?.confirmed === true;
 
     // Skip confirmed fields (skipConfirmed=true at this point)
@@ -293,7 +298,9 @@ export function getFormProgress(state: SchemaFormState): ProgressMetrics {
   let requiredConfirmed = 0;
 
   for (const field of state.schema.fields) {
-    const currentValue = state.fieldValues[field.id];
+    // `[]`-alias-aware read (bd polyglot-pdf-ipw7) -- a confirmed group under
+    // the bracket variant must count as confirmed, or progress under-reports.
+    const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
     const isConfirmed = currentValue?.confirmed === true;
 
     // Count confirmed fields
@@ -365,7 +372,9 @@ export function isFormComplete(state: SchemaFormState): boolean {
     // If form has required fields, ALL required fields must be confirmed
     for (const field of state.schema.fields) {
       if (field.validation?.required) {
-        const currentValue = state.fieldValues[field.id];
+        // `[]`-alias-aware read (bd polyglot-pdf-ipw7): a required group
+        // confirmed under the bracket variant must not hold the form open.
+        const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
         const isConfirmed = currentValue?.confirmed === true;
 
         if (!isConfirmed) {
@@ -378,7 +387,8 @@ export function isFormComplete(state: SchemaFormState): boolean {
   } else {
     // If form has no required fields, ALL fields must be confirmed
     for (const field of state.schema.fields) {
-      const currentValue = state.fieldValues[field.id];
+      // `[]`-alias-aware read (bd polyglot-pdf-ipw7) -- see above.
+      const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
       const isConfirmed = currentValue?.confirmed === true;
 
       if (!isConfirmed) {
