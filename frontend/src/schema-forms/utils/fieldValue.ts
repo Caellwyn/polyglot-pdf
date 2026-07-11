@@ -9,21 +9,44 @@
 import type { FieldValue } from '../types/schema';
 
 /**
+ * Whether a FieldValue entry actually carries an answer (not a hollow
+ * placeholder). Empty string, null/undefined value, and an empty array all count
+ * as "no answer".
+ */
+function entryHasValue(entry: FieldValue | undefined): boolean {
+  if (!entry) return false;
+  const v = entry.value as unknown;
+  if (v === null || v === undefined || v === '') return false;
+  if (Array.isArray(v) && v.length === 0) return false;
+  return true;
+}
+
+/**
  * Read a field's FieldValue entry with the checkbox-group `[]`-alias
  * fallback: a group's value may sit under the bracketed OR unbracketed key
  * variant (Gemini drops/adds the bracket, bd polyglot-pdf-5k52), so an
  * exact-key-only read silently misses a real entry. Same convention as the
  * confirm/update/skip/validator paths; use this instead of a bare
  * `fieldValues[fieldId]` wherever a miss would change behavior.
+ *
+ * Precedence (bd polyglot-pdf-luju nit 2): a MEANINGFUL exact-key entry wins;
+ * otherwise a meaningful alias-key entry wins. A plain `??` would stop at a
+ * HOLLOW exact-key entry (e.g. `{value: null, confirmed: false}`) and shadow a
+ * real confirmed answer sitting under the alias key -- so hollow exact-key
+ * entries fall through to the alias. Only when neither key has a real answer do
+ * we return the exact-key entry (else the alias) so a caller inspecting flags on
+ * an unanswered field still gets a stable entry.
  */
 export function readFieldEntryWithAlias(
   fieldValues: Record<string, FieldValue>,
   fieldId: string
 ): FieldValue | undefined {
-  return (
-    fieldValues[fieldId] ??
-    fieldValues[fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]']
-  );
+  const aliasKey = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
+  const exact = fieldValues[fieldId];
+  const alias = fieldValues[aliasKey];
+  if (entryHasValue(exact)) return exact;
+  if (entryHasValue(alias)) return alias;
+  return exact ?? alias;
 }
 
 /**

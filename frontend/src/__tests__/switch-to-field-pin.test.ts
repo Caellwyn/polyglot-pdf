@@ -293,6 +293,39 @@ describe('switch_field end-to-end probe (WebFormConnection)', () => {
     await dispatch(conn, { type: 'switch_field', field: 'field gamma' })
     expect(sent.find(m => m.type === 'switch_field_response')).toBeUndefined()
   })
+
+  // bd polyglot-pdf-luju nit 1: an EMPTY checkbox group ([]) must ack
+  // has_value:false and ride NO value -- otherwise the model is told the field
+  // "already holds an unconfirmed value" and reads back nothing. Mirrors the skip
+  // path's empty-array guard.
+  it('acks has_value:false (and no value) for an unconfirmed EMPTY checkbox group', async () => {
+    const groupSchema: any = {
+      ...probeSchema,
+      sections: [{ id: 'sec1', label: 'One', order: 1, fields: ['grp'] }],
+      fields: [
+        { id: 'grp', name: 'Group G', spoken_name: 'group gee',
+          type: 'checkbox_group', section_id: 'sec1' },
+      ],
+    }
+    const onNextField = vi.fn()
+    const conn = new WebFormConnection(groupSchema, { onNextField }) as any
+    conn.continuousSessionEnabled = true
+    conn.state.continuousSessionEnabled = true
+    conn.dtiModeEnabled = true
+    // Seed an empty-array group value (unconfirmed).
+    conn.state.fieldValues = { grp: { value: [], confirmed: false } }
+    SchemaFormStateManager.save(conn.state)
+    const sent: any[] = []
+    conn.send = vi.fn((m: any) => sent.push(m))
+
+    await dispatch(conn, { type: 'switch_field', request_id: 'rg', field: 'group gee' })
+
+    const ack = sent.find(m => m.type === 'switch_field_response')
+    expect(ack.found).toBe(true)
+    expect(ack.field_id).toBe('grp')
+    expect(ack.has_value).toBe(false)
+    expect('value' in ack).toBe(false)
+  })
 })
 
 // ---------------------------------------------------------------------------
