@@ -375,7 +375,7 @@ def score_fields(match: MatchResult, grouping_basis: str = "draft") -> dict[str,
     `grouping_basis` records how the draft's section_id values were obtained
     for the section_grouping metric ("draft" = the extractor's own emitted
     section_id; "derived" = scripts/authoring/derive_sections.py ran on a COPY
-    of the draft first -- see score_with_derivation, bd polyglot-pdf-mhyt). It
+    of the draft first -- see score(derive_pdf_path=...), bd polyglot-pdf-mhyt). It
     is a pass-through marker, not a scoring input: match.pairs already carries
     whichever section_id the caller decided to grade.
     """

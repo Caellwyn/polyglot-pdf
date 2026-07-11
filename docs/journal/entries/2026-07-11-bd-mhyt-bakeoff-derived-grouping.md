@@ -29,7 +29,7 @@ silent 0; _attr_avg already drops NaN/inapplicable entries so the headline
 mean is not poisoned). run_bakeoff.py passes the manifest's existing (unused)
 per-form "pdf" key through and the table/JSON carry a basis marker
 ("*" derived, "!" derivation-error). Pinned by
-tests/test_schema_score_derivation.py (8 unit tests, no live model). Smoke:
+tests/test_schema_score_derivation.py (7 unit tests, no live model). Smoke:
 real I-90 fields with section_id stripped now score 63.6 F1 grouping instead
 of ~0.
 
