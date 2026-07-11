@@ -794,6 +794,21 @@ export class SchemaFormStateManager {
   }
 
   /**
+   * Whether the persisted state represents an already-in-progress form session
+   * -- the user has accepted the disclaimer and filled at least one field.
+   *
+   * Used to decide resume:true on the FIRST handshake after a soft page refresh
+   * (bd polyglot-pdf-hc4b). The instance-scoped hasConnectedOnce flag is false on
+   * a brand-new post-reload WebFormConnection, so without this a genuine
+   * mid-form refresh would send resume:false and the backend would re-greet /
+   * re-introduce the section. Derived purely from persisted state, so it
+   * survives the reload that resets hasConnectedOnce.
+   */
+  static hasInProgressSession(state: SchemaFormState): boolean {
+    return state.disclaimerAccepted && Object.keys(state.fieldValues).length > 0;
+  }
+
+  /**
    * Get field ID by spoken name (for WebSocket field lookups)
    *
    * Section mode: searches the current section + completed sections (the fields

@@ -764,6 +764,49 @@ describe('SchemaFormStateManager', () => {
   })
 
   // ============================================================================
+  // hasInProgressSession() -- soft-refresh resume signal (bd polyglot-pdf-hc4b)
+  // ============================================================================
+
+  describe('hasInProgressSession()', () => {
+    it('is false on a fresh session (no disclaimer, no values)', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(false)
+    })
+
+    it('is false when the disclaimer is accepted but no field is filled yet', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = { ...state, disclaimerAccepted: true }
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(false)
+    })
+
+    it('is false when a field is filled but the disclaimer was not accepted', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'Doe')
+      expect(state.disclaimerAccepted).toBe(false)
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(false)
+    })
+
+    it('is true mid-form (disclaimer accepted + at least one filled field)', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = { ...state, disclaimerAccepted: true }
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'Doe')
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(true)
+    })
+
+    it('drives resume:true on the first post-reload handshake', () => {
+      // A soft refresh builds a fresh connection (hasConnectedOnce=false), so the
+      // handshake resume flag must come from persisted in-progress state.
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = { ...state, disclaimerAccepted: true }
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'Doe')
+
+      const resume = SchemaFormStateManager.hasInProgressSession(state)
+      const payload = SchemaFormStateManager.getHandshakePayload(state, 'English', resume)
+      expect((payload as any).resume).toBe(true)
+    })
+  })
+
+  // ============================================================================
   // switchToSection()
   // ============================================================================
 

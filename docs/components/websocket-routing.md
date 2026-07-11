@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-07-10 (bd polyglot-pdf-fn1m: added the "Soft page refresh (reload rehydration)" section -- the disclaimer step is gated on persisted `disclaimerAccepted` and `handleOpen` re-reads sessionStorage before the handshake. See [../journal/entries/2026-07-10-bd-fn1m-soft-refresh-rehydration.md](../journal/entries/2026-07-10-bd-fn1m-soft-refresh-rehydration.md).)*
+*Last updated: 2026-07-11 (bd polyglot-pdf-hc4b: the handshake `resume` flag is now `true` on the first post-soft-refresh open when persisted state is in-progress, so a mid-form reload does not re-greet. See [../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md](../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md).)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -40,10 +40,14 @@ and turn-taking in [../standards/voice-and-vad.md](../standards/voice-and-vad.md
    reconnect — **not stored**, see stateless-architecture), `fill_language`, the
    persistent `form_session_id`, section metadata (`section_id`/`section_number`/
    `section_label`, `total_sections`, `previous_spoken_names`),
-   `initial_field_hint`, and `resume` (bd polyglot-pdf-vmxx: `true` on any
-   reconnect after the connection's first successful open — the backend then
-   sends the RESUME initiating message and appends a no-greeting override to the
-   system instruction, so a mid-section reconnect does not re-greet or
+   `initial_field_hint`, and `resume` (`true` on any reconnect after the
+   connection's first successful open (bd polyglot-pdf-vmxx), AND on the FIRST
+   handshake after a soft page refresh when the persisted state shows an
+   in-progress session — disclaimer accepted plus at least one filled field
+   (bd polyglot-pdf-hc4b), since a post-reload `WebFormConnection` has a fresh
+   instance-scoped once-flag and would otherwise send `resume:false` mid-form.
+   The backend then sends the RESUME initiating message and appends a no-greeting
+   override to the system instruction, so a resumed session does not re-greet or
    re-introduce the section). The legacy payload now also carries
    `type: "handshake"` explicitly (bd wq9y) — the backend always defaulted a
    missing `type` to that, so the wire routing is unchanged.
