@@ -175,9 +175,20 @@ def _payload_json(fields: list) -> str:
 
 
 def _client() -> genai.Client:
+    # Vertex path (bd polyglot-pdf-6cfu.5): AI Studio credits are depleted, so
+    # re-measures run on Vertex via ADC -- same construction as the production
+    # TextAIGemini adapter. Opt in with VERTEXAI=true (+ GOOGLE_CLOUD_PROJECT /
+    # GOOGLE_CLOUD_LOCATION); the default stays the AI Studio key path.
+    if os.environ.get("VERTEXAI", "").lower() == "true":
+        return genai.Client(
+            vertexai=True,
+            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+        )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("NO KEY in env GEMINI_API_KEY", flush=True)
+        print("NO KEY in env GEMINI_API_KEY (or set VERTEXAI=true for ADC)",
+              flush=True)
         sys.exit(2)
     return genai.Client(api_key=key)
 
