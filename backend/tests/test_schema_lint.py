@@ -688,3 +688,75 @@ def test_archived_broken_w7_draft_findings_all_carry_field_focus():
     for d in dicts:
         assert d["field_id"] is not None, f"unfocusable finding: {d['path']}"
         assert d["field_id"] in ids, f"finding points at a missing field: {d}"
+
+
+# ---------------------------------------------------------------------------
+# 'To review' review gate (bd polyglot-pdf-6cfu.3): to-review-pending
+# ---------------------------------------------------------------------------
+
+
+def test_to_review_field_trips_once_per_field():
+    # A field still filed in a sec_to_review* section is an ERROR (the publish
+    # gate blocks on it); the section entry listing the same field does NOT
+    # double-report.
+    s = _schema([
+        {"id": "f1", "type": "text", "section_id": "sec_to_review_p1"},
+        {"id": "f2", "type": "text", "section_id": "sec_real"},
+    ])
+    s["sections"] = [
+        {"id": "sec_to_review_p1", "label": "To review", "order": 1,
+         "fields": ["f1"]},
+        {"id": "sec_real", "label": "Real", "order": 2, "fields": ["f2"]},
+    ]
+    findings = [f for f in lint_schema(s) if f.rule == "to-review-pending"]
+    assert len(findings) == 1
+    assert findings[0].severity == SEVERITY_ERROR
+    assert "f1" in findings[0].path
+
+
+def test_to_review_unplaced_section_id_also_trips():
+    s = _schema([
+        {"id": "f1", "type": "text", "section_id": "sec_to_review_unplaced"},
+    ])
+    findings = [f for f in lint_schema(s) if f.rule == "to-review-pending"]
+    assert len(findings) == 1
+
+
+def test_to_review_stale_section_list_trips_section_level():
+    # The field was re-pointed to a real section but the to-review section's
+    # fields[] list still names it: one section-level finding.
+    s = _schema([
+        {"id": "f1", "type": "text", "section_id": "sec_real"},
+    ])
+    s["sections"] = [
+        {"id": "sec_to_review_p1", "label": "To review", "order": 1,
+         "fields": ["f1"]},
+        {"id": "sec_real", "label": "Real", "order": 2, "fields": ["f1"]},
+    ]
+    findings = [f for f in lint_schema(s) if f.rule == "to-review-pending"]
+    assert len(findings) == 1
+    assert "sec_to_review_p1" in findings[0].path
+
+
+def test_emptied_to_review_section_is_clean():
+    # An emptied to-review section (fields re-filed, list emptied) no longer
+    # blocks -- the reviewer may delete it or leave the empty husk.
+    s = _schema([
+        {"id": "f1", "type": "text", "section_id": "sec_real"},
+    ])
+    s["sections"] = [
+        {"id": "sec_to_review_p1", "label": "To review", "order": 1,
+         "fields": []},
+        {"id": "sec_real", "label": "Real", "order": 2, "fields": ["f1"]},
+    ]
+    assert [f for f in lint_schema(s) if f.rule == "to-review-pending"] == []
+
+
+def test_ordinary_sections_never_trip_to_review():
+    s = _schema([
+        {"id": "f1", "type": "text", "section_id": "sec_normal"},
+    ])
+    s["sections"] = [
+        {"id": "sec_normal", "label": "Normal", "order": 1, "fields": ["f1"]},
+    ]
+    assert [f for f in lint_schema(s) if f.rule == "to-review-pending"] == []

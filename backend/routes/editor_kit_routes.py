@@ -210,6 +210,25 @@ class RepairResponse(BaseModel):
     warningCount: int     # lint WARNINGs remaining after repair
 
 
+class DeriveDivisionsResponse(BaseModel):
+    """Regenerate-divisions result (bd polyglot-pdf-6cfu.3).
+
+    The kit's parts/sections were recomputed deterministically from its PDF
+    (scripts/authoring/derive_sections.py -- the same pass extraction runs at
+    step 3e) and stored; every field's section_id was re-filed. This reports
+    the derivation summary plus the post-derivation lint counts the editor
+    re-renders (the to-review-pending rule keys the review gate)."""
+
+    strategy: str                     # name-convention | printed-heading | page-fallback
+    parts: int                        # derived part count
+    sections: int                     # derived section count
+    toReviewSectionIds: list[str]     # sec_to_review* sections holding strays
+    toReviewFieldIds: list[str]       # the fields a human must re-file
+    notes: list[str]                  # derivation notes (cap splits, strays)
+    errorCount: int                   # lint ERRORs after derivation
+    warningCount: int                 # lint WARNINGs after derivation
+
+
 class UnclaimedWidget(BaseModel):
     """One PDF button widget the schema does not yet claim (bd nivy, P5.3c)."""
 
@@ -561,6 +580,124 @@ async def repair_editor_kit(
     return RepairResponse(
         applied=applied, dropped=dropped, aliasHits=alias_hit_count(repairs),
         repairs=repairs, errorCount=error_count, warningCount=warning_count,
+    )
+
+
+def _load_derive_sections():
+    """Import scripts/authoring/derive_sections.py (bd 6cfu.3).
+
+    The derivation lives with the authoring scripts, not the backend package
+    (extraction runs it in-process at step 3e via the same sys.path shape).
+    Pure Python + PyMuPDF -- both already backend runtime deps -- so unlike
+    the LLM extractor there is no subprocess to manage."""
+    root = _repo_root()
+    for sub in (("scripts", "authoring"), ("scripts", "bakeoff")):
+        p = str(root.joinpath(*sub))
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import derive_sections  # noqa: PLC0415 (repo-layout import by design)
+    return derive_sections
+
+
+@router.post("/kits/{kit_id}/derive-divisions",
+             response_model=DeriveDivisionsResponse)
+async def derive_editor_kit_divisions(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+) -> DeriveDivisionsResponse:
+    """Regenerate the kit's form divisions deterministically (bd 6cfu.3).
+
+    Re-runs the SAME derivation extraction runs at step 3e
+    (derive_sections.derive_and_apply) on the kit's STORED schema + its PDF:
+    parts/sections are recomputed from the PDF (widget-name conventions ->
+    printed headings -> page fallback) and every field's section_id is
+    re-filed. DESTRUCTIVE to manual division edits by design -- the editor
+    fronts this with a confirm dialog; field content is untouched.
+
+    Author tier (it rewrites the stored schema, like extract/repair). A
+    complete (published) kit is refused (409) -- revert to draft first, same
+    as save/repair. A kit without its PDF cannot derive (409). A PDF the
+    derivation cannot read (0 pages / corrupt) is a 422 data defect, not a
+    500.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    store = get_form_kit_store()
+    meta, files = await _load_meta_or_404(store, kit_id)
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is published (status complete). Revert it to "
+                   "draft before regenerating divisions -- they rewrite the "
+                   "schema.",
+        )
+    schema_file, pdf_file = _resolve_meta_names(meta)
+    if pdf_file not in files:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Kit has no {pdf_file} -- divisions are derived from the "
+                   "form PDF",
+        )
+    try:
+        schema = await store.load_schema(kit_id, schema_file)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Kit {kit_id} has no schema"
+        ) from exc
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to load schema") from exc
+    try:
+        pdf_bytes = await store.load_pdf_bytes(kit_id, pdf_file)
+    except (FormKitNotFound, FormKitStoreError) as exc:
+        raise HTTPException(status_code=502, detail="Unable to load the kit PDF") from exc
+
+    derive_sections = _load_derive_sections()
+
+    def _run() -> dict:
+        # fitz needs a real path; the PDF lives in the store, not on disk.
+        with tempfile.TemporaryDirectory() as td:
+            pdf_path = os.path.join(td, "form.pdf")
+            with open(pdf_path, "wb") as fh:
+                fh.write(pdf_bytes)
+            return derive_sections.derive_and_apply(schema, pdf_path)
+
+    try:
+        summary = await anyio.to_thread.run_sync(_run)
+    except ValueError as exc:
+        # 0-page/corrupt PDF (derive_for_pdf's friendly error): a fixable data
+        # defect the author must resolve, not a server bug.
+        raise HTTPException(status_code=422, detail=str(exc)[:400]) from exc
+
+    # Keep the extraction-metadata division record truthful when present (the
+    # CLI writes _bakeoff.authoring.division; a regenerate supersedes it).
+    bakeoff = schema.get("_bakeoff")
+    if isinstance(bakeoff, dict):
+        authoring = bakeoff.get("authoring")
+        if isinstance(authoring, dict):
+            authoring["division"] = summary
+
+    try:
+        await store.put_schema(kit_id, schema, schema_file)
+    except FormKitStoreError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Divisions derived but the schema could not be stored",
+        ) from exc
+
+    dump_data = await _load_kit_dump(store, kit_id)
+    findings = lint_schema(schema, dump_data)
+    error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+    warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+    _log.info("editor_divisions_derived", kit_id=kit_id, role=role,
+              strategy=summary["strategy"], sections=summary["sections"],
+              to_review=len(summary["to_review_field_ids"]),
+              errors_after=error_count, warnings_after=warning_count)
+    return DeriveDivisionsResponse(
+        strategy=summary["strategy"], parts=summary["parts"],
+        sections=summary["sections"],
+        toReviewSectionIds=summary["to_review_section_ids"],
+        toReviewFieldIds=summary["to_review_field_ids"],
+        notes=summary["notes"],
+        errorCount=error_count, warningCount=warning_count,
     )
 
 

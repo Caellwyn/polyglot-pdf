@@ -25,6 +25,7 @@ Renaming a tag means editing every entry that uses it (avoid).
 - harness
 - doctrine
 - extractor
+- schema-editor
 
 ## Usage example
 

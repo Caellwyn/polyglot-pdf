@@ -2,6 +2,7 @@ import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
 import { checkFieldComplete } from '../utils/validation';
 import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
+import { isToReviewSection } from '../utils/sectionOps';
 
 interface FieldListProps {
   schema: FormSchema;
@@ -485,12 +486,29 @@ export const FieldList: React.FC<FieldListProps> = ({
           // (matches the non-filtered count badge so it does not jump on clear).
           const totalFieldCount = section.fields.filter(id => fieldsById.has(id)).length;
 
+          // A 'To review' section (bd polyglot-pdf-6cfu.3): the deterministic
+          // derivation could not confidently place these fields; a human must
+          // re-file each before the form can be marked complete (the
+          // to-review-pending lint rule blocks the publish gate). Highlight
+          // it amber while it still holds fields -- by its fields[] listing
+          // OR by fields pointing at it via section_id (the lint gate keys
+          // on the latter; a drifted kit must never block invisibly).
+          const needsReview = isToReviewSection(section.id)
+            && (totalFieldCount > 0
+                || schema.fields.some(f => f.section_id === section.id));
+
           return (
-            <div key={section.id} className="bg-white rounded-md shadow-sm">
+            <div
+              key={section.id}
+              className={`rounded-md shadow-sm ${
+                needsReview ? 'bg-amber-50 border border-amber-400' : 'bg-white'
+              }`}
+            >
               {/* Section Header */}
               <button
                 className={`w-full flex items-center gap-2 p-2 text-left transition-colors ${
-                  isFiltering ? 'cursor-default' : 'hover:bg-gray-50'
+                  isFiltering ? 'cursor-default'
+                    : needsReview ? 'hover:bg-amber-100' : 'hover:bg-gray-50'
                 }`}
                 onClick={() => toggleSection(section.id)}
               >
@@ -507,9 +525,16 @@ export const FieldList: React.FC<FieldListProps> = ({
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className="text-sm font-medium text-gray-700 flex-1">
+                <span className={`text-sm font-medium flex-1 ${
+                  needsReview ? 'text-amber-900' : 'text-gray-700'
+                }`}>
                   {section.label}
                 </span>
+                {needsReview && (
+                  <span className="text-xs font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5">
+                    re-file required
+                  </span>
+                )}
                 <span className="text-xs text-gray-500">
                   {isFiltering ? `(${fields.length}/${totalFieldCount})` : `(${totalFieldCount})`}
                 </span>
