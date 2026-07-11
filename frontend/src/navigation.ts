@@ -65,8 +65,36 @@ export interface ProgressMetrics {
 }
 
 /**
+ * Resolve the field-level navigation pin to a LIVE target, or null
+ * (bd polyglot-pdf-jnjj.36). A pin is live while its field exists, is
+ * visible, and is unconfirmed; anything else is stale and ignored (the
+ * state writers -- confirm/skip/section-switch -- clear stale pins; the
+ * readers here are pure). Shared by computeNextField (the pin is the next
+ * field) AND isFormComplete (a live pin means the form is NOT done: the
+ * user jumped somewhere to answer or correct it, so completion-gated
+ * consumers -- the post-confirm hint, reconnect hints, manual-edit hints,
+ * the form-complete event -- must not abandon the jump; fresh-eyes on this
+ * bead).
+ */
+function resolveLivePin(state: SchemaFormState): FormField | null {
+  if (!state.pinnedFieldId || !state.schema?.fields) {
+    return null;
+  }
+  const pinned = state.schema.fields.find(f => f.id === state.pinnedFieldId);
+  if (
+    pinned &&
+    !pinned.hidden &&
+    shouldShowField(pinned, state.fieldValues, state.schema.fields) &&
+    !state.fieldValues[pinned.id]?.confirmed
+  ) {
+    return pinned;
+  }
+  return null;
+}
+
+/**
  * Compute the next field that should be filled
- * 
+ *
  * Implements linear navigation: iterates through schema fields in order,
  * skipping fields that are already confirmed (unless options specify otherwise).
  * 
@@ -111,14 +139,9 @@ export function computeNextField(
   // resolves, is hidden by a condition, or is already confirmed is treated as
   // stale and IGNORED (lazy fallback to the normal order) -- this function is
   // pure, so stale pins are cleared by the state writers, not here.
-  if (skipConfirmed && state.pinnedFieldId) {
-    const pinned = state.schema.fields.find(f => f.id === state.pinnedFieldId);
-    if (
-      pinned &&
-      !pinned.hidden &&
-      shouldShowField(pinned, state.fieldValues, state.schema.fields) &&
-      !state.fieldValues[pinned.id]?.confirmed
-    ) {
+  if (skipConfirmed) {
+    const pinned = resolveLivePin(state);
+    if (pinned) {
       return pinned;
     }
   }
@@ -319,6 +342,16 @@ export function isFormComplete(state: SchemaFormState): boolean {
   // Handle empty schema - consider empty form as "complete"
   if (!state.schema || !state.schema.fields || state.schema.fields.length === 0) {
     return true;
+  }
+
+  // A LIVE navigation pin means the form is NOT complete (bd jnjj.36): the
+  // AI jumped to a specific field (often an unconfirmed OPTIONAL one, e.g.
+  // "let me add my middle name" after every required field confirmed).
+  // Without this, the completion-gated consumers (post-confirm hint,
+  // reconnect/manual-edit hints, the form-complete event) would report
+  // "complete" and silently abandon the jump (fresh-eyes on this bead).
+  if (resolveLivePin(state)) {
+    return false;
   }
 
   // Check if form has any required fields

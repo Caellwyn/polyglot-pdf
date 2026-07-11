@@ -32,7 +32,15 @@ answer. A code audit this session confirmed the tool existed only in docs.
   The pin releases on confirm/skip, is abandoned by a section switch, and a
   pin on an already-confirmed field stays dormant until the model updates
   the value (the correction flow: update resets confirmed, the pin snaps
-  in).
+  in). **Fresh-eyes round 1 caught the one consumer the pin missed**:
+  `isFormComplete` ignored it, so once every REQUIRED field confirmed, the
+  completion-gated consumers (post-confirm hint, reconnect/manual-edit
+  hints, the form-complete event) reported "complete" and silently
+  abandoned a jump to an unconfirmed optional field -- exactly the
+  "let me add my middle name at the end" case. Fixed at the source: a
+  shared `resolveLivePin` staleness check now feeds BOTH computeNextField
+  (pin = next field) and isFormComplete (live pin = not complete), with
+  regression tests for the required-confirmed + optional-pin scenario.
 - **Backend response semantics**: on success the ack carries the target's
   hint + (DTI) schema; the handler merges the schema (validation + the
   current-field coercion pointer) and returns rendered guidance + the

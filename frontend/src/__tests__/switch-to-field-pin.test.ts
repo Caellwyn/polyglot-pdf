@@ -288,3 +288,64 @@ describe('switch_field end-to-end probe (WebFormConnection)', () => {
     expect(sent.find(m => m.type === 'switch_field_response')).toBeUndefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+// isFormComplete pin integration (fresh-eyes gap, bd jnjj.36): with every
+// REQUIRED field confirmed, a live pin on an unconfirmed OPTIONAL field must
+// keep the form incomplete -- otherwise the completion-gated consumers (the
+// post-confirm hint round-trip, reconnect hints, manual-edit hints, the
+// form-complete event) report "complete" and silently abandon the jump.
+// ---------------------------------------------------------------------------
+
+import { isFormComplete } from '../navigation'
+
+describe('isFormComplete honors a live pin (bd jnjj.36)', () => {
+  const pinSchema: any = {
+    source: 'pdf',
+    form_metadata: {
+      title: 'Pin Form', version: '1', language: 'en',
+      form_number: 'PN-1', edition_date: '01/01/25', page_count: 1,
+    },
+    sections: [{ id: 's1', label: 'S1', order: 1, fields: ['req', 'opt'] }],
+    fields: [
+      { id: 'req', name: 'Required', spoken_name: 'required', type: 'text', section_id: 's1', validation: { required: true } },
+      { id: 'opt', name: 'Optional', spoken_name: 'optional', type: 'text', section_id: 's1' },
+    ],
+  }
+
+  const pinState = (pin: string | null): any => ({
+    schema: pinSchema,
+    fieldValues: { req: { value: 'x', confirmed: true } },
+    currentSectionId: 's1',
+    completedSections: new Set<string>(),
+    validationErrors: {},
+    lastUpdated: Date.now(),
+    formSessionId: 'fss_pin',
+    loadedFieldIds: new Set<string>(),
+    jitModeEnabled: false,
+    continuousSessionEnabled: true,
+    disclaimerAccepted: true,
+    pinnedFieldId: pin,
+  })
+
+  it('all required confirmed + NO pin -> complete (baseline behavior unchanged)', () => {
+    expect(isFormComplete(pinState(null))).toBe(true)
+  })
+
+  it('all required confirmed + live pin on an unconfirmed optional field -> NOT complete', () => {
+    const s = pinState('opt')
+    expect(isFormComplete(s)).toBe(false)
+    // ...and the pin IS what the next-field consumers get.
+    expect(computeNextField(s, { skipConfirmed: true })?.id).toBe('opt')
+  })
+
+  it('a stale pin (confirmed target) does not hold the form open', () => {
+    const s = pinState('opt')
+    s.fieldValues.opt = { value: 'y', confirmed: true }
+    expect(isFormComplete(s)).toBe(true)
+  })
+
+  it('a stale pin (unknown field) does not hold the form open', () => {
+    expect(isFormComplete(pinState('ghost'))).toBe(true)
+  })
+})
