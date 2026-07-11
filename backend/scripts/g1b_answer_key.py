@@ -45,14 +45,13 @@ PERSONA (coherent life history)
   - She is NOT fluent in written English, so an INTERPRETER (Maria Garcia,
     Vietnamese) read the form to her: p5_checkbox1a = the interpreter-read-to-me
     slug, which makes the Part 6 interpreter block coherent.
-  - BOTH Part-5 dependents (p5_line1b_language, p5_line2_nameofrepresentative) are
-    NA. p5_checkbox1a is a checkbox GROUP whose renderer value is a string ARRAY;
-    shouldShowField's `equals` does a strict scalar compare (array vs a single
-    option token -> always false), so neither dependent is EVER visible regardless
-    of selection -- the SAME "a real client cannot send a hidden field" condition
-    that makes p2_checkbox2[5] NA (fresh-eyes review on PR #253; the frontend bug is
-    bd polyglot-pdf-vq4m). The corpus reflects what a real client sends, so both
-    are NA.
+  - The two Part-5 dependents are gated on the p5_checkbox1a checkbox GROUP via
+    `includes` (array membership). bd polyglot-pdf-vq4m fixed the renderer so an
+    array trigger matches, so these are now graded on PERSONA grounds (bd
+    polyglot-pdf-b7ln): p5_line1b_language show_if `includes` the interpreter-read
+    slug the persona selects -> SHOWN, carries "Vietnamese"; whereas
+    p5_line2_nameofrepresentative show_if `includes` the PREPARER slug the
+    interpreter-path persona does not select -> hidden -> NA.
   - She did NOT use a separate preparer, so the ENTIRE Part 7 preparer block is NA
     (no preparer name, address, signature, etc.) -- the preparer-statement option is
     not selected, so there is no "Part 7 populated but not certified" contradiction.
@@ -339,20 +338,28 @@ ANSWER_KEY: dict = {
     # slug, which makes the Part 6 interpreter block coherent. NOT the "I can read
     # and understand English" slug -- that would contradict having an interpreter.
     #
-    # Both Part-5 DEPENDENTS are NA. p5_checkbox1a is a checkbox GROUP, so the
-    # renderer stores its value as a string ARRAY; shouldShowField's `equals`
-    # operator does a strict scalar compare (array vs a single slug -> always
-    # false), so p5_line1b_language and p5_line2_nameofrepresentative are NEVER
-    # visible regardless of selection -- the SAME "a real client cannot send a hidden
-    # field" condition that makes p2_checkbox2[5] NA (fresh-eyes review on PR #253;
-    # the underlying frontend bug -- `equals` not handling an array trigger -- is
-    # filed as bd polyglot-pdf-vq4m). The corpus reflects what a real client sends,
-    # so both dependents are NA. (Selecting BOTH statements would not help: the gate
-    # fails for an array regardless of contents.) The entire Part 7 preparer block is
-    # likewise NA -- the persona used an interpreter, not a separate preparer, and the
-    # preparer-statement option is not selected.
+    # The two Part-5 dependents are gated on the p5_checkbox1a checkbox GROUP via
+    # the `includes` operator (array membership). bd polyglot-pdf-vq4m fixed the
+    # renderer so an array trigger matches, so these are now graded on PERSONA
+    # grounds, not "always hidden" (bd polyglot-pdf-b7ln):
+    #   - p5_line1b_language: show_if includes the INTERPRETER-read slug, which the
+    #     persona DOES select, so it is shown -> the interpreter's language,
+    #     Vietnamese (set above).
+    #   - p5_line2_nameofrepresentative: show_if includes the PREPARER-statement
+    #     slug, which the interpreter-path persona does NOT select, so it stays
+    #     hidden -> NA on persona grounds (not the old array bug).
+    # The entire Part 7 preparer block is likewise NA -- the persona used an
+    # interpreter, not a separate preparer, and the preparer-statement option is
+    # not selected.
     "p5_checkbox1a": "the_interpreter_named_in_part_6_has_read_to_me_every_question_and_instruction_on_this_application_and_my_answer_to_every_question_in_a_language_in_which_i_am_fluent_and_i_understood_everything",
-    "p5_line1b_language": None,
+    # p5_line1b_language is show_if `includes` the interpreter-read slug the
+    # persona selects, so post-bd-vq4m (which fixed the renderer's array-trigger
+    # match) it IS shown and must carry the interpreter's language (bd
+    # polyglot-pdf-b7ln). Maria Garcia read the form to Linh in Vietnamese.
+    "p5_line1b_language": "Vietnamese",
+    # p5_line2_nameofrepresentative stays NA on PERSONA grounds: its show_if
+    # `includes` the PREPARER-statement slug, which the interpreter-path persona
+    # does not select (see NA_REASONS).
     "p5_line2_nameofrepresentative": None,
     "p5_line3_daytimephonenumber": "713-555-0142",
     "p5_line4_mobilephonenumber": "713-555-0199",
@@ -455,13 +462,15 @@ NA_REASON: dict = {
     "p2_checkbox2[5]": "reason-for-new-card field is show_if-gated to commuter (option [1]); production hides it for a plain LPR, so a real client cannot send it (see bd zi2s)",
     "p2_checkbox3": "issued-but-never-received gate p2_checkbox1 = Conditional PR (not selected)",
     "p4_checkbox1a": "accommodation gate p4_checkbox1 = No",
-    "p4_line1a_accomodationrequested": "accommodation gate p4_checkbox1 = No (and gated on the p4_checkbox1a checkbox-group trigger, the same never-matching array `equals` as bd vq4m)",
+    "p4_line1a_accomodationrequested": "accommodation gate p4_checkbox1 = No (not selected)",
     "p4_checkbox1b": "accommodation gate p4_checkbox1 = No",
-    "p4_line1b_accomodationrequested": "accommodation gate p4_checkbox1 = No (and gated on the p4_checkbox1b checkbox-group trigger, the same never-matching array `equals` as bd vq4m)",
+    "p4_line1b_accomodationrequested": "accommodation gate p4_checkbox1 = No (not selected)",
     "p4_checkbox1c": "accommodation gate p4_checkbox1 = No",
-    "p4_line1c_accomodationrequested": "accommodation gate p4_checkbox1 = No (and gated on the p4_checkbox1c checkbox-group trigger, the same never-matching array `equals` as bd vq4m)",
-    "p5_line1b_language": "show_if equals on the p5_checkbox1a checkbox GROUP (array trigger) never matches in the renderer, so the field is always hidden -- a real client cannot send it (see bd vq4m)",
-    "p5_line2_nameofrepresentative": "preparer-statement option not selected (interpreter path); also gated by the same never-matching array `equals` (bd vq4m)",
+    "p4_line1c_accomodationrequested": "accommodation gate p4_checkbox1 = No (not selected)",
+    # p5_line1b_language is NO LONGER NA (bd polyglot-pdf-b7ln): the persona selects
+    # the interpreter-read statement its show_if `includes`, so it is shown and
+    # carries "Vietnamese" (set in ANSWER_KEY above).
+    "p5_line2_nameofrepresentative": "show_if includes the preparer-statement slug; the interpreter-path persona does not select it, so the field is hidden",
     "p6_line3f_province": "US interpreter address, no foreign province",
     "p6_line3g_postalcode": "US interpreter address, no foreign postal code",
     # Entire Part 7 preparer block NA: persona used an interpreter, not a separate
