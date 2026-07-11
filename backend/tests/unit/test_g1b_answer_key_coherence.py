@@ -197,22 +197,25 @@ def test_option_values_are_resolved_to_human_labels():
 
 def test_p5_certification_matches_who_filled_the_form():
     """Part 5 must match the form's REAL conditional logic. p5_checkbox1a is a
-    checkbox GROUP (array trigger); shouldShowField's `equals` does a strict scalar
-    compare, so it never matches an array -- BOTH Part-5 dependents
-    (p5_line1b_language, p5_line2_nameofrepresentative) are unreachable in the
-    production renderer and must be NA, the same "a real client cannot send a hidden
-    field" rule that makes p2_checkbox2[5] NA (fresh-eyes review, PR #253; frontend
-    bug bd vq4m). The interpreter STATEMENT is still selected (that IS sendable), and
-    the entire Part 7 preparer block is NA (no separate preparer)."""
+    checkbox GROUP; its dependents are gated by the `includes` operator (array
+    membership), which bd vq4m fixed to actually match. So the two dependents are
+    graded on PERSONA grounds (bd polyglot-pdf-b7ln), not "always hidden":
+      - p5_line1b_language show_if `includes` the INTERPRETER-read slug the persona
+        selects -> SHOWN -> carries the interpreter's language (Vietnamese).
+      - p5_line2_nameofrepresentative show_if `includes` the PREPARER slug the
+        interpreter-path persona does NOT select -> hidden -> NA.
+    The interpreter STATEMENT is selected; the entire Part 7 preparer block is NA
+    (no separate preparer)."""
     interp = "interpreter named in Part 6"
     eng = "I can read and understand English"
     d = {f["field_id"]: f["value"] for f in build_corpus(132)[-1].fields}
     assert interp in d["p5_checkbox1a"]
     assert eng not in d["p5_checkbox1a"]
-    # both Part-5 dependents are NA (never visible -> a real client can't send them)
-    assert ANSWER_KEY["p5_line1b_language"] is None
+    # p5_line1b_language is now SHOWN (interpreter slug selected) -> the language.
+    assert ANSWER_KEY["p5_line1b_language"] == "Vietnamese"
+    assert d.get("p5_line1b_language") == "Vietnamese"
+    # p5_line2_nameofrepresentative stays NA: the PREPARER statement is not selected.
     assert ANSWER_KEY["p5_line2_nameofrepresentative"] is None
-    assert "p5_line1b_language" not in d
     assert "p5_line2_nameofrepresentative" not in d
     # no separate preparer -> entire Part 7 NA
     for fid in ("p7_line1a_familyname", "p7_line3d_state", "p7_checkbox7",
