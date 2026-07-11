@@ -61,6 +61,7 @@ def run(manifest: dict) -> dict:
     results: dict[str, Any] = {"forms": {}}
     for form_id, form in manifest["forms"].items():
         truth = form["truth"]
+        pdf_path = form.get("pdf")
         per_arm = {}
         for arm_name, draft_path in form["arms"].items():
             if not draft_path or not os.path.exists(draft_path):
@@ -68,7 +69,15 @@ def run(manifest: dict) -> dict:
                                      "reason": "draft file missing"}
                 continue
             try:
-                sc = schema_score.score(draft_path, truth, label=f"{form_id}:{arm_name}")
+                # derive_pdf_path (bd polyglot-pdf-mhyt): a draft with NO
+                # section_id anywhere (every LLM-native arm, per the
+                # schema_contract instruction) gets section_grouping scored
+                # against divisions DERIVED from the form's own PDF -- the same
+                # pass production runs post-extraction -- instead of a spurious
+                # ~0 (every field a singleton). Arms that already carry
+                # section_id keep grading their own; see schema_score.score.
+                sc = schema_score.score(draft_path, truth, label=f"{form_id}:{arm_name}",
+                                        derive_pdf_path=pdf_path)
             except Exception as e:  # a bad/empty draft must not sink the table
                 per_arm[arm_name] = {"status": "error",
                                      "reason": f"{type(e).__name__}: {e}"}
@@ -80,6 +89,11 @@ def run(manifest: dict) -> dict:
                 "a_attr_avg": _attr_avg(a),
                 "b_conditional_recall": _rel_recall(b),
                 "b_structure_recall": _struct_recall(b),
+                # Marker (bd polyglot-pdf-mhyt) so a reader of the JSON/table
+                # knows whether section_grouping graded the arm's OWN section_id
+                # ("draft") or divisions derived post-hoc from the PDF
+                # ("derived") -- see schema_score.score's derive_pdf_path.
+                "section_grouping_basis": a["attributes"]["section_grouping"].get("basis", "draft"),
                 "full": sc,
             }
         results["forms"][form_id] = {"truth": truth, "arms": per_arm}
@@ -94,6 +108,8 @@ def render_table(results: dict) -> str:
     L.append("Scores are percentages. (a) = field extraction, (b) = relationships.")
     L.append("  a.F1   = field detection F1 (precision/recall of finding fields)")
     L.append("  a.attr = mean per-attribute accuracy over matched fields")
+    L.append("           (incl. section_grouping; '*' = graded on DERIVED")
+    L.append("           divisions, not the arm's own section_id -- bd mhyt)")
     L.append("  b.cond = conditional-relationship recall (show_if/controls/...)")
     L.append("  b.strc = structural recall (parts/sections/supplements/tables)")
     L.append("")
@@ -106,8 +122,11 @@ def render_table(results: dict) -> str:
             if r["status"] != "scored":
                 L.append(f"  {arm:28s}   [{r['status']}: {r.get('reason','')}]")
                 continue
+            basis = r.get("section_grouping_basis", "draft")
+            mark = "*" if basis == "derived" else (
+                "!" if basis == "derivation-error" else " ")
             L.append(f"  {arm:28s} {_hdr(r['a_detection_f1']):>6s} "
-                     f"{_hdr(r['a_attr_avg']):>7s} "
+                     f"{_hdr(r['a_attr_avg']):>6s}{mark} "
                      f"{_hdr(r['b_conditional_recall']):>7s} "
                      f"{_hdr(r['b_structure_recall']):>7s}")
         L.append("")

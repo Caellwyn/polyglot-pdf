@@ -369,8 +369,16 @@ def _section_grouping_agreement(pairs: list[tuple[dict, dict]]) -> dict[str, Any
     }
 
 
-def score_fields(match: MatchResult) -> dict[str, Any]:
-    """(a) half: detection P/R/F1 + per-attribute accuracy over matched pairs."""
+def score_fields(match: MatchResult, grouping_basis: str = "draft") -> dict[str, Any]:
+    """(a) half: detection P/R/F1 + per-attribute accuracy over matched pairs.
+
+    `grouping_basis` records how the draft's section_id values were obtained
+    for the section_grouping metric ("draft" = the extractor's own emitted
+    section_id; "derived" = scripts/authoring/derive_sections.py ran on a COPY
+    of the draft first -- see score_with_derivation, bd polyglot-pdf-mhyt). It
+    is a pass-through marker, not a scoring input: match.pairs already carries
+    whichever section_id the caller decided to grade.
+    """
     tp = len(match.pairs)
     fn = len(match.unmatched_truth)
     fp = len(match.unmatched_draft)
@@ -443,6 +451,7 @@ def score_fields(match: MatchResult) -> dict[str, Any]:
         "f1": sg["f1"],
         "true_pairs": sg["true_pairs"],
         "predicted_pairs": sg["predicted_pairs"],
+        "basis": grouping_basis,
     }
 
     return {
@@ -577,11 +586,107 @@ def render_report(name: str, a: dict, b: dict) -> str:
     return "\n".join(L)
 
 
-def score(draft_path: str, truth_path: str, label: Optional[str] = None) -> dict:
+def _draft_has_any_section_id(draft: dict[str, Any]) -> bool:
+    return any(f.get("section_id") for f in draft.get("fields", []) if isinstance(f, dict))
+
+
+def derive_divisions_for_grouping(draft: dict[str, Any], pdf_path: str
+                                  ) -> tuple[dict[str, Any], str, Optional[str]]:
+    """Grouping-scoring input for a draft with NO section_id anywhere (bd
+    polyglot-pdf-mhyt).
+
+    The extractor contract (scripts/bakeoff/schema_contract.py) tells LLM-native
+    arms NOT to emit parts/sections/section_id -- production derives divisions
+    deterministically AFTER extraction instead (scripts/authoring/
+    derive_sections.py, bd polyglot-pdf-6cfu.2, wired at scripts/authoring/
+    extract_form.py's step 3e via derive_and_apply). Scoring the raw arm output
+    as-is makes every field a section_grouping SINGLETON (draft section_id ""),
+    so recall/F1 come out ~0 regardless of extraction quality -- a scorer
+    artifact, not a real quality signal.
+
+    This mirrors that SAME production entry point on a DEEP COPY of the draft
+    (the caller's on-disk arm output is never mutated), so grouping is graded on
+    the divisions production would actually derive for this arm's fields.
+
+    Returns (schema_for_grouping, basis, error_reason):
+      - basis is "derived" on success.
+      - on failure (bad/unreadable PDF, derivation exception, etc.) the ORIGINAL
+        draft is returned unchanged, basis is "derivation-error", and
+        error_reason names what went wrong -- the caller must surface this as
+        n/a, never silently score a 0.
+    """
+    import copy as _copy
+
+    _here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(_here, "authoring"))
+    try:
+        import derive_sections  # noqa: E402 (sibling scripts/ dir)
+    except Exception as exc:  # pragma: no cover - exercised only if fitz is absent
+        return draft, "derivation-error", f"cannot import derive_sections: {exc}"
+
+    draft_copy = _copy.deepcopy(draft)
+    try:
+        derive_sections.derive_and_apply(draft_copy, pdf_path)
+    except Exception as exc:
+        return draft, "derivation-error", f"{type(exc).__name__}: {exc}"
+    return draft_copy, "derived", None
+
+
+def score(draft_path: str, truth_path: str, label: Optional[str] = None,
+         derive_pdf_path: Optional[str] = None) -> dict:
+    """Score a draft against ground truth.
+
+    `derive_pdf_path` (bd polyglot-pdf-mhyt): when given AND the draft carries
+    NO section_id on any field (the LLM-native contract's output shape), the
+    section_grouping metric is scored against divisions DERIVED from this PDF
+    via the same deterministic pass production runs post-extraction, instead of
+    silently scoring every field as an ungrouped singleton. A draft that DOES
+    carry section_id keeps grading its own (unchanged behavior). If derivation
+    itself errors, section_grouping is marked n/a with a reason -- never scored
+    as a false 0 (see derive_divisions_for_grouping).
+    """
     draft = load_schema(draft_path)
     truth = load_schema(truth_path)
+
+    grouping_basis = "draft"
+    grouping_error: Optional[str] = None
+    draft_for_grouping = draft
+    if derive_pdf_path and not _draft_has_any_section_id(draft):
+        draft_for_grouping, grouping_basis, grouping_error = \
+            derive_divisions_for_grouping(draft, derive_pdf_path)
+
     match = match_fields(truth.get("fields", []), draft.get("fields", []))
     a = score_fields(match)
+    if draft_for_grouping is not draft:
+        # Re-match against the derived copy SOLELY to get derived section_ids
+        # into the pairs the grouping metric reads -- detection/attrs/relations
+        # above are graded on the untouched original draft.
+        grouping_match = match_fields(truth.get("fields", []),
+                                      draft_for_grouping.get("fields", []))
+        sg = _section_grouping_agreement(grouping_match.pairs)
+        sg_gradable = sg["true_pairs"] + sg["predicted_pairs"] - sg["agree_pairs"]
+        a["attributes"]["section_grouping"] = {
+            "correct": sg["agree_pairs"],
+            "applicable": sg_gradable,
+            "pct": (sg["f1"] * 100.0 if sg["f1"] == sg["f1"] else float("nan")),
+            "precision": sg["precision"],
+            "recall": sg["recall"],
+            "f1": sg["f1"],
+            "true_pairs": sg["true_pairs"],
+            "predicted_pairs": sg["predicted_pairs"],
+            "basis": grouping_basis,
+        }
+    elif grouping_error is not None:
+        # Derivation was attempted (no section_id + a pdf_path given) and FAILED:
+        # mark n/a with a reason, never leave the singleton-vs-nothing 0 in place.
+        a["attributes"]["section_grouping"] = {
+            "correct": 0, "applicable": 0, "pct": float("nan"),
+            "precision": float("nan"), "recall": float("nan"), "f1": float("nan"),
+            "true_pairs": 0, "predicted_pairs": 0,
+            "basis": grouping_basis, "error": grouping_error,
+        }
+    else:
+        a["attributes"]["section_grouping"]["basis"] = grouping_basis
     b = score_relationships(truth, draft, match)
     return {
         "label": label or truth_path,
