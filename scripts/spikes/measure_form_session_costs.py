@@ -279,32 +279,39 @@ I90_EXPECTED = {
     "p1_line3a_familyname": "Vasquez",
     "p1_line3b_givenname": "Maria",
     "p1_line3c_middlename": "Elena",
-    # Radio/select fields store the CANONICAL option VALUE (the bracketed widget id
-    # or the 2-letter state code), NOT the spoken label -- that is what the frontend
-    # writes and what get_form_state returns. Scoring against the spoken label would
-    # mark a CORRECT structured fill as wrong (the first-draft fixture bug).
-    "p1_checkbox4": "P1_checkbox4[1]",            # "No, name has not changed"
+    # Radio/select fields store the CANONICAL option VALUE -- that is what the
+    # frontend writes and what get_form_state returns. Scoring against the spoken
+    # label would mark a CORRECT structured fill as wrong (the first-draft fixture
+    # bug). NOTE the option-value VOCABULARY migrated once already: pre-v2 kits
+    # stored widget ids / state codes ("P1_checkbox4[1]", "TX"); the v2 slug
+    # migration (PR #333) re-minted them to semantic slugs ("apartment", "texas").
+    # Runs recorded BEFORE that migration were correctly scored against the old
+    # canon; this table now holds the CURRENT kit's slugs, and
+    # _assert_expected_canon_matches_schema (called at startup) fails loudly if
+    # the kit's option vocabulary drifts again (bd jnjj.7 -- the stale canon
+    # silently under-scored the 2026-07-11 baseline arm by ~5 fields).
+    "p1_checkbox4": "no_proceed_to_item_numbers_6_a_6_c",  # "No, name has not changed"
     "p1_line6a_incareofname": "Daniel Vasquez",
     "p1_line6b_streetnumbername": "1234 Maple Street",
-    "p1_unit_type6c_unit": "P1_checkbox6c_Unit[0]",   # Apartment
+    "p1_unit_type6c_unit": "apartment",
     "p1_line6c_aptsteflrnumber": "12B",
     "p1_line6d_cityortown": "Austin",
-    "p1_line6e_state": "TX",                       # Texas (select stores the code)
+    "p1_line6e_state": "texas",                    # select stores the option slug
     "p1_line6f_zipcode": "73701",
     "p1_line6g_province": "",
     "p1_line6h_postalcode": "",
     "p1_line6i_country": ["United States", "USA"],
     "p1_line7a_streetnumbername": "1234 Maple Street",
-    "p1_unit_type7b_unit": "P1_checkbox7b_Unit[0]",   # Apartment
+    "p1_unit_type7b_unit": "apartment",
     "p1_line7b_aptsteflrnumber": "12B",
     "p1_line7c_cityortown": "Austin",
-    "p1_line7d_state": "TX",                       # Texas (select stores the code)
+    "p1_line7d_state": "texas",                    # select stores the option slug
     "p1_line7e_zipcode": "73701",
     "p1_line7f_province": "",
     "p1_line7g_postalcode": "",
     "p1_line7h_country": ["United States", "USA"],
     # Section 4 (Part 1.4 Additional Information, bd polyglot-pdf-ctu8).
-    "p1_line8_male": "P1_Line8_female[0]",         # radio stores the option VALUE
+    "p1_line8_male": "female",                     # radio stores the option slug
     "p1_line9_dateofbirth": "03/05/1990",          # MM/DD/YYYY (validation.hint)
     "p1_line10_citytownofbirth": "Guadalajara",
     "p1_line11_countryofbirth": "Mexico",
@@ -391,6 +398,42 @@ def _attribute_records_by_window(tool_io, q_windows):
                 q = w["q"]  # after this window's end, before the next starts
         out.setdefault(str(q), []).append(rec)
     return out
+
+
+def _assert_expected_canon_matches_schema(schema_fields: dict, expected: dict) -> None:
+    """Fail LOUDLY at startup if the expected canon drifted from the kit.
+
+    The i-90 option-value vocabulary migrated once already (widget ids ->
+    semantic slugs, PR #333) and the stale I90_EXPECTED silently under-scored
+    a whole arm (bd jnjj.7). For every expected value on an option-bearing
+    field, require it to be one of the field's CURRENT option values, so the
+    next vocabulary migration aborts the run instead of corrupting the data."""
+    problems = []
+    for fid, exp in expected.items():
+        f = schema_fields.get(fid)
+        if not f:
+            # A canon entry keyed on a field the kit no longer HAS is drift
+            # too (a deleted/renamed field), not just a re-mapped option
+            # vocabulary (fresh-eyes on this bead).
+            problems.append(f"{fid}: keyed in expected but absent from the schema")
+            continue
+        # Mirror _hint_for's vocabulary read (options OR allowed_values) so a
+        # field expressing its choices via allowed_values is guarded too
+        # (outer review on this bead).
+        raw_opts = f.get("options") or f.get("allowed_values") or []
+        opts = [o.get("value") if isinstance(o, dict) else o for o in raw_opts]
+        opts = [o for o in opts if o is not None]
+        if not opts:
+            continue
+        vals = exp if isinstance(exp, (list, tuple)) else [exp]
+        for v in vals:
+            if v != "" and v not in opts:
+                problems.append(f"{fid}: expected {v!r} not in options {opts}")
+    if problems:
+        raise SystemExit(
+            "I90_EXPECTED canon has drifted from the kit schema (option-value "
+            "vocabulary changed?). Fix the table before running -- a stale "
+            "canon silently mis-scores fill accuracy:\n  " + "\n  ".join(problems))
 
 
 def score_fill_accuracy(client, plan, expected) -> dict:
@@ -925,6 +968,11 @@ async def run(args) -> int:
               "no Vertex id (AI-Studio-only as of 2026-06). Use --model 2.5.")
         return 1
     schema = load_schema(args.schema)
+    # Drift guard (bd jnjj.7): abort BEFORE spending live-Gemini money if the
+    # expected-canon table no longer matches the kit's option vocabulary.
+    _assert_expected_canon_matches_schema(
+        {f["id"]: f for f in schema.get("fields", [])},
+        SCHEMAS[args.schema].get("expected") or {})
     # Default (args.questions is None) runs the WHOLE plan for the chosen schema, so
     # a default --schema i90 run exercises all 3 sections completely (a fixed default
     # of 20 silently truncated the 25-question I-90 plan mid-section-3; fresh-eyes

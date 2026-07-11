@@ -1,0 +1,928 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90",
+  "arm": "dti",
+  "path": "happy",
+  "questions": 30,
+  "compression": true,
+  "trigger": 5000,
+  "window": 3500,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260711T023000Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.39
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.578
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 9,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 10,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 11,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.235
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.235
+    },
+    {
+      "q": 12,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.282
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 13,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.329
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 14,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.453
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 15,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 16,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 17,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 19,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 19,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.454
+    },
+    {
+      "q": 20,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 20,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 21,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 21,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.36
+    },
+    {
+      "q": 22,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 22,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 23,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.641
+    },
+    {
+      "q": 23,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.75
+    },
+    {
+      "q": 24,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.141
+    },
+    {
+      "q": 24,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.172
+    },
+    {
+      "q": 25,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 25,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.282
+    },
+    {
+      "q": 26,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 26,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 27,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.531
+    },
+    {
+      "q": 27,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.875
+    },
+    {
+      "q": 28,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 29,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 29,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 30,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 30,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "3": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "4": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "6": [
+      "update_form_fields",
+      "confirm_field",
+      "confirm_field"
+    ],
+    "7": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "8": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "9": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "10": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "11": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "12": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "13": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "14": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "15": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "16": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "17": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "18": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "19": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "20": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "21": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "22": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "23": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "24": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "25": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "26": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "27": [
+      "update_form_fields"
+    ],
+    "28": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "29": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "30": [
+      "update_form_fields",
+      "confirm_field"
+    ]
+  },
+  "prompt_curve": [
+    1210,
+    1545,
+    1602,
+    1771,
+    1964,
+    2270,
+    2335,
+    2433,
+    2564,
+    2689,
+    2742,
+    2849,
+    2978,
+    3091,
+    3143,
+    3268,
+    3405,
+    3511,
+    3565,
+    3688,
+    3973,
+    4088,
+    4148,
+    4269,
+    4316,
+    4437,
+    4559,
+    4617,
+    4724,
+    4857,
+    3354,
+    3413,
+    3509,
+    3673,
+    3759,
+    3813,
+    3911,
+    4052,
+    4150,
+    4209,
+    4313,
+    4445,
+    4555,
+    4609,
+    4720,
+    3394,
+    3467,
+    3517,
+    3606,
+    3746,
+    3891,
+    3945,
+    4063,
+    4188,
+    4352,
+    4401,
+    4509,
+    4662,
+    4832,
+    4883,
+    3376,
+    3491,
+    3583,
+    3634,
+    3731,
+    3868,
+    4037,
+    4096,
+    4172,
+    4337,
+    4412,
+    4466,
+    4559,
+    4699,
+    4802,
+    4861,
+    3314,
+    3446,
+    3546,
+    3600,
+    3690,
+    4337,
+    4393,
+    4443,
+    4531,
+    4671,
+    4807,
+    4861,
+    3219,
+    3344,
+    3503,
+    3552,
+    3705,
+    3809,
+    3860,
+    3975,
+    4117,
+    4168,
+    4266,
+    4402,
+    4514,
+    4562,
+    4651,
+    4813,
+    4884,
+    3316,
+    3406,
+    3568,
+    3702,
+    3867,
+    4011,
+    4163,
+    4224,
+    4357,
+    4446,
+    4616,
+    4673,
+    4772,
+    4898,
+    3393,
+    3447,
+    3540,
+    3670
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "system_instruction_chars": 4457,
+  "greeting_tokens": 1378,
+  "eviction_drops": [
+    [
+      31,
+      4857,
+      3354
+    ],
+    [
+      46,
+      4720,
+      3394
+    ],
+    [
+      61,
+      4883,
+      3376
+    ],
+    [
+      77,
+      4861,
+      3314
+    ],
+    [
+      89,
+      4861,
+      3219
+    ],
+    [
+      106,
+      4884,
+      3316
+    ],
+    [
+      120,
+      4898,
+      3393
+    ]
+  ],
+  "client_confirmed_fields": [
+    "p1_line1_aliennumber",
+    "p1_line2_acctidentifier",
+    "p1_line3a_familyname",
+    "p1_line3b_givenname",
+    "p1_line3c_middlename",
+    "p1_checkbox4",
+    "p1_line6a_incareofname",
+    "p1_line6b_streetnumbername",
+    "p1_unit_type6c_unit",
+    "p1_line6c_aptsteflrnumber",
+    "p1_line6d_cityortown",
+    "p1_line6e_state",
+    "p1_line6f_zipcode",
+    "p1_line6g_province",
+    "p1_line6h_postalcode",
+    "p1_line6i_country",
+    "p1_line7a_streetnumbername",
+    "p1_unit_type7b_unit",
+    "p1_line7b_aptsteflrnumber",
+    "p1_line7c_cityortown",
+    "p1_line7d_state",
+    "p1_line7e_zipcode",
+    "p1_line7f_province",
+    "p1_line7g_postalcode",
+    "p1_line7h_country",
+    "p1_line8_male",
+    "p1_line9_dateofbirth",
+    "p1_line10_citytownofbirth",
+    "p1_line11_countryofbirth"
+  ],
+  "fill_accuracy": {
+    "matched": 21,
+    "total": 30,
+    "accuracy": 0.7,
+    "detail": [
+      {
+        "field_id": "p1_line1_aliennumber",
+        "expected": "12345678",
+        "written": "12345678",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line2_acctidentifier",
+        "expected": "123456789012",
+        "written": "123456789012",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3a_familyname",
+        "expected": "Vasquez",
+        "written": "Vazquez",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3b_givenname",
+        "expected": "Maria",
+        "written": "America",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3c_middlename",
+        "expected": "Elena",
+        "written": "Elena",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_checkbox4",
+        "expected": "no_proceed_to_item_numbers_6_a_6_c",
+        "written": "no_proceed_to_item_numbers_6_a_6_c",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6a_incareofname",
+        "expected": "Daniel Vasquez",
+        "written": "Daniel Vazquez",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6b_streetnumbername",
+        "expected": "1234 Maple Street",
+        "written": "1234 Maple Street",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_unit_type6c_unit",
+        "expected": "apartment",
+        "written": "apartment",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6c_aptsteflrnumber",
+        "expected": "12B",
+        "written": "14",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6d_cityortown",
+        "expected": "Austin",
+        "written": "Austin",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6e_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6f_zipcode",
+        "expected": "73701",
+        "written": "73701",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6g_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6h_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6i_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line7a_streetnumbername",
+        "expected": "1234 Maple Street",
+        "written": "1234 Maple St",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_unit_type7b_unit",
+        "expected": "apartment",
+        "written": "apartment",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7b_aptsteflrnumber",
+        "expected": "12B",
+        "written": "2B",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7c_cityortown",
+        "expected": "Austin",
+        "written": "Boston",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7d_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7e_zipcode",
+        "expected": "73701",
+        "written": "73701",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7h_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line8_male",
+        "expected": "female",
+        "written": "female",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line9_dateofbirth",
+        "expected": "03/05/1990",
+        "written": "1990-03-05",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line10_citytownofbirth",
+        "expected": "Guadalajara",
+        "written": "Guadalajara",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line11_countryofbirth",
+        "expected": "Mexico",
+        "written": "Mexico",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line12_mothergivenname",
+        "expected": "Rosa",
+        "written": null,
+        "ok": false,
+        "scored": "exact"
+      }
+    ]
+  },
+  "field_value_lookups": []
+}
