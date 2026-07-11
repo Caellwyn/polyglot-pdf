@@ -21,21 +21,34 @@ surface-blocked by parallel PRs (#403 + the luju/944q branch).
 Option (a) from the bead -- grade grouping on the DERIVED divisions, the same
 thing production ships: schema_score.score() gained derive_pdf_path; when the
 draft carries NO section_id anywhere, derive_sections.derive_and_apply (the
-exact entry point extract_form.py step 3e uses) runs on a DEEP COPY and the
-grouping metric re-matches against that copy. Detection/attrs/relationships
-still grade the untouched original. Drafts with their own section_id are
-unchanged. A derivation failure marks the metric n/a with a reason (never a
-silent 0; _attr_avg already drops NaN/inapplicable entries so the headline
-mean is not poisoned). run_bakeoff.py passes the manifest's existing (unused)
-per-form "pdf" key through and the table/JSON carry a basis marker
-("*" derived, "!" derivation-error). Pinned by
-tests/test_schema_score_derivation.py (7 unit tests, no live model). Smoke:
-real I-90 fields with section_id stripped now score 63.6 F1 grouping instead
-of ~0.
+exact entry point extract_form.py step 3e uses) runs on a DEEP COPY, and the
+derived section_ids are then OVERLAID onto the ORIGINAL match's pairs by field
+position (_overlay_derived_section_ids) -- deliberately NOT a re-match: the
+matcher's Pass-2 fuzzy key bakes in section_id, so re-matching the derived
+copy could pair a DIFFERENT field set (outer-review pass-B finding, fixed
+before merge; the overlay keeps the pair set identical by construction).
+Detection/attrs/relationships still grade the untouched original. Drafts with
+their own section_id are unchanged. A derivation failure marks the metric n/a
+with a reason (never a silent 0; _attr_avg already drops NaN/inapplicable
+entries so the headline mean is not poisoned). run_bakeoff.py passes the
+manifest's existing (unused) per-form "pdf" key through and the table/JSON
+carry a legend-documented basis marker ("*" derived, "!" derivation-error).
+Pinned by tests/test_schema_score_derivation.py (9 unit tests incl. two
+overlay-invariant pins, no live model). Smoke: real I-90 fields with
+section_id stripped now score a genuine non-zero grouping F1 (63.6-71.7
+across probes, canon-detail dependent) instead of ~0.
 
 Implementation delegated to a Sonnet subagent (decision fixed by the
 orchestrator); orchestrator-reviewed: verified the derived-branch dict mirrors
 score_fields' shape (union-formula applicable, F1-as-pct) and the NaN path.
+
+Review record: fresh-eyes Opus clearing round NO-GAPS (1 dangling docstring
+ref, fixed). Opus outer review round 1: pass A NO-GAPS (legend nit, fixed),
+pass B NO-GAPS with a medium-confidence interaction finding treated as a
+blocker (re-match vs overlay, above) -- fixed + two invariant tests added;
+round 2: both independent passes re-cleared NO-GAPS on the final code commit,
+pass A verifying end-to-end on the real I-90. Journal-only inaccuracies from
+pass B corrected post-clear (docs-only, outside the reviewed code diff).
 
 ## Lessons
 
