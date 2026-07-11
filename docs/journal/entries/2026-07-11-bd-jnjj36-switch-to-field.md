@@ -62,6 +62,15 @@ answer. A code audit this session confirmed the tool existed only in docs.
   coordinator round-trip in pytest -- pins both ends of the same wire
   contract. 11 backend + 17 frontend tests.
 
+- **Review loop outcome**: fresh-eyes (2 rounds, Sonnet find + Opus clear)
+  caught the isFormComplete pin integration; the Opus outer review's
+  alternating passes caught the checkbox-group `[]`-alias reads on the ack +
+  pin (fixed via the shared `readFieldEntryWithAlias`) and the
+  `navigateToSection` pin-clear -- four fix cycles to two independent
+  NO-GAPS. Deferred nits: bd polyglot-pdf-luju; out-of-scope pre-existing
+  findings filed: bd polyglot-pdf-ipw7 (computeNextField main-loop alias
+  blindness).
+
 ## Lessons
 
 - The repo's doc-as-contract gates work: the WS-protocol contract tests
