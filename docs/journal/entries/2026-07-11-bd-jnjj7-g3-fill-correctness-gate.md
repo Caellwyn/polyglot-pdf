@@ -23,7 +23,11 @@ fully merged (PR #244), deleted, and the bead re-claimed.
   happy-path runs on the real I-90 via `measure_form_session_costs.py` on
   Vertex -- full-SI section-reset baseline x2 (86.7% / 73.3% fill accuracy)
   vs DTI+eviction at the production 5000/3500 window x2 (76.7% / 70.0%),
-  ~$2.55 total. **Verdict: GO** -- the arms are indistinguishable at this
+  ~$2.55 total. (Criterion 1's "on the largest section" wording is from the
+  bead's stale JIT framing; the shipped arm is continuous whole-form, where
+  a single-section run would never trigger eviction -- the 4-section
+  30-question plan is the deliberate, harder substitution; defended in the
+  findings doc.) **Verdict: GO** -- the arms are indistinguishable at this
   sample size, and the error decomposition shows both fail in the SAME
   dominant mode (audio-transcription mishears, 9 vs 9); the SI reduction
   itself has no correctness signature. Full analysis:

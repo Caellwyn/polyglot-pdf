@@ -412,6 +412,10 @@ def _assert_expected_canon_matches_schema(schema_fields: dict, expected: dict) -
     for fid, exp in expected.items():
         f = schema_fields.get(fid)
         if not f:
+            # A canon entry keyed on a field the kit no longer HAS is drift
+            # too (a deleted/renamed field), not just a re-mapped option
+            # vocabulary (fresh-eyes on this bead).
+            problems.append(f"{fid}: keyed in expected but absent from the schema")
             continue
         opts = [o.get("value") for o in (f.get("options") or [])
                 if isinstance(o, dict)]

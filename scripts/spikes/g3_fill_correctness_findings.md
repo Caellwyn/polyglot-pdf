@@ -18,7 +18,20 @@ re-prompts, the GoAway session refresh, and the B-pillar validator net.
 
 `scripts/spikes/measure_form_session_costs.py` (the jnjj.38/.39-hardened
 instrument), real Gemini on Vertex (`gemini-live-2.5-flash-native-audio`),
-real I-90 schema, the 30-question happy-path plan, `--questions 30`:
+real I-90 schema, the 30-question happy-path plan, `--questions 30`.
+
+**Scope note (criterion 1 wording).** The bead's criterion says "on the
+largest section" -- wording from its original JIT-SI framing, where the
+arm-under-test was a per-section drip and a single big section was the
+stress case. The arm that actually shipped is CONTINUOUS whole-form DTI
+(the bead body itself flags the original framing as stale): a
+single-section run would never trigger the context-window eviction whose
+correctness effect this gate exists to measure (evictions start ~q14; the
+DTI runs here evicted 7 times). The 30-question plan spans Part 1's four
+sections including its largest -- a strictly harder, production-shaped
+test -- and matches the plan every accepted cost run (jnjj.25/ctu8) used,
+so the arms stay comparable across gates. Deliberate substitution, not an
+oversight.
 
 - **Baseline arm** (`--arm section-reset`): the full-SI per-section-reset flow
   the DTI replaced -- whole-section field dump in the SI, session restart at
