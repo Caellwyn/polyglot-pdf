@@ -104,6 +104,25 @@ export function computeNextField(
     return null;
   }
 
+  // Field-level navigation pin (bd polyglot-pdf-jnjj.36): the AI's
+  // switch_to_field tool pins a target field; it is the next field for EVERY
+  // consumer (hint, DTI schema drip, UI focus) until confirmed or skipped
+  // (confirmField/markFieldSkipped release the pin). A pin that no longer
+  // resolves, is hidden by a condition, or is already confirmed is treated as
+  // stale and IGNORED (lazy fallback to the normal order) -- this function is
+  // pure, so stale pins are cleared by the state writers, not here.
+  if (skipConfirmed && state.pinnedFieldId) {
+    const pinned = state.schema.fields.find(f => f.id === state.pinnedFieldId);
+    if (
+      pinned &&
+      !pinned.hidden &&
+      shouldShowField(pinned, state.fieldValues, state.schema.fields) &&
+      !state.fieldValues[pinned.id]?.confirmed
+    ) {
+      return pinned;
+    }
+  }
+
   // Get current section to limit field search
   const currentSection = state.schema.sections?.find(s => s.id === state.currentSectionId);
 

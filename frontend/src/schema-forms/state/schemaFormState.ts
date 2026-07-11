@@ -43,6 +43,14 @@ export interface SchemaFormState {
   disclaimerAccepted: boolean; // Whether user has accepted disclaimer
   disclaimerAcceptedAt?: number; // Timestamp of disclaimer acceptance
   selectedLanguage?: string; // User's selected spoken language
+
+  // Field-level navigation pin (bd polyglot-pdf-jnjj.36): set by the AI's
+  // switch_to_field tool. While set (and the field is visible + unconfirmed),
+  // computeNextField returns THIS field first, so every "what's next" consumer
+  // -- the next-field hint, the DTI schema drip, UI focus via onNextField --
+  // follows the jump with no extra plumbing. Cleared when the pinned field is
+  // confirmed or skipped (the form then resumes its normal fill order).
+  pinnedFieldId?: string | null;
 }
 
 export class SchemaFormStateManager {
@@ -101,6 +109,7 @@ export class SchemaFormStateManager {
       disclaimerAccepted: false,
       disclaimerAcceptedAt: undefined,
       selectedLanguage: undefined,
+      pinnedFieldId: null, // Field-level navigation pin (bd jnjj.36)
     };
 
     this.save(newState);
@@ -152,6 +161,11 @@ export class SchemaFormStateManager {
       // Initialize continuousSessionEnabled if missing (old state)
       if (parsed.continuousSessionEnabled === undefined) {
         parsed.continuousSessionEnabled = false;
+      }
+
+      // Initialize the navigation pin if missing (old state, bd jnjj.36)
+      if (parsed.pinnedFieldId === undefined) {
+        parsed.pinnedFieldId = null;
       }
 
       // Initialize disclaimer fields if missing (migration for existing sessions)
@@ -552,6 +566,10 @@ export class SchemaFormStateManager {
       currentSectionId: sectionId,
       completedSections,
       loadedFieldIds,
+      // A section switch abandons any field-level navigation pin -- a stale
+      // pin from another section must not hijack the new section's next-field
+      // order (bd polyglot-pdf-jnjj.36).
+      pinnedFieldId: null,
       lastUpdated: Date.now()
     };
     this.save(newState);
@@ -951,6 +969,9 @@ export class SchemaFormStateManager {
           confirmationMethod: method
         }
       },
+      // A confirmed pinned field releases the pin -- the form resumes its
+      // normal fill order (bd polyglot-pdf-jnjj.36).
+      pinnedFieldId: state.pinnedFieldId === fieldId ? null : state.pinnedFieldId,
       lastUpdated: Date.now()
     };
 
@@ -1001,6 +1022,67 @@ export class SchemaFormStateManager {
       newState.validationErrors = rest;
     }
 
+    // A skipped pinned field releases the pin, same as a confirm
+    // (bd polyglot-pdf-jnjj.36).
+    if (newState.pinnedFieldId === fieldId) {
+      newState.pinnedFieldId = null;
+    }
+
+    this.save(newState);
+    return newState;
+  }
+
+  // ============================================================================
+  // Field-level navigation (bd polyglot-pdf-jnjj.36)
+  // ============================================================================
+
+  /**
+   * Resolve a field identifier the AI passed to switch_to_field: an exact
+   * field_id first (verbatim from guidance -- the preferred form), then a
+   * case-insensitive match on spoken_name, display name, or spoken_aliases.
+   *
+   * Searches the WHOLE schema deliberately -- NOT the section-scoped
+   * getFieldBySpokenName above, whose {currentSection + completedSections}
+   * scope goes blind past section 1 in continuous mode (bd polyglot-pdf-lt9z).
+   * A navigation target may live anywhere in the form; the caller decides
+   * whether an out-of-section target is reachable in the current mode.
+   */
+  static resolveFieldForNavigation(
+    state: SchemaFormState,
+    identifier: string
+  ): string | null {
+    if (!identifier) return null;
+    const exact = state.schema.fields.find(f => f.id === identifier);
+    if (exact) return exact.id;
+    const needle = identifier.trim().toLowerCase();
+    if (!needle) return null;
+    for (const field of state.schema.fields) {
+      if (field.spoken_name?.toLowerCase() === needle) return field.id;
+      if (field.name?.toLowerCase() === needle) return field.id;
+      if (field.spoken_aliases?.some(a => a.toLowerCase() === needle)) {
+        return field.id;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Pin a field as the navigation target (see pinnedFieldId on the state
+   * interface). computeNextField returns the pinned field first while it is
+   * visible + unconfirmed; confirm/skip release the pin.
+   */
+  static pinField(state: SchemaFormState, fieldId: string): SchemaFormState {
+    const newState = { ...state, pinnedFieldId: fieldId, lastUpdated: Date.now() };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * Clear the navigation pin without confirming/skipping the field.
+   */
+  static clearPinnedField(state: SchemaFormState): SchemaFormState {
+    if (!state.pinnedFieldId) return state;
+    const newState = { ...state, pinnedFieldId: null, lastUpdated: Date.now() };
     this.save(newState);
     return newState;
   }

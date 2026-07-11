@@ -488,6 +488,39 @@ class Settings(BaseModel):
 				},
 				"required": ["field_id"]
 			}
+		},
+		{
+			# Field-level navigation (bd polyglot-pdf-jnjj.36): jump the form's
+			# focus to ONE SPECIFIC field -- the principal's half of the
+			# secretary architecture (ask_secretary names a field; this tool
+			# navigates to it) and the correction path ("actually, my zip code
+			# was wrong"). DISTINCT from switch_section, which navigates whole
+			# sections and (in section mode) restarts the session; this stays in
+			# the current session and just changes which field is current.
+			"name": "switch_to_field",
+			"description": (
+				"Jump to ONE SPECIFIC field so it becomes the current field -- "
+				"use it when the user wants to change or revisit an earlier "
+				"answer, or after ask_secretary names the field the user is "
+				"asking about. Pass the exact field_id when you have it "
+				"(preferred), else the field's exact spoken name. On success "
+				"the response carries that field's guidance -- ask the user "
+				"about THAT field next. This does NOT navigate sections; for a "
+				"whole different section use switch_section."
+			),
+			"parameters": {
+				"type": "object",
+				"properties": {
+					"field": {
+						"type": "string",
+						"description": (
+							"The target field: its exact field_id (verbatim, "
+							"preferred) or its exact spoken name."
+						)
+					}
+				},
+				"required": ["field"]
+			}
 		}
 	]
 

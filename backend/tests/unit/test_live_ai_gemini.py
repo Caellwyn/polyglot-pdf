@@ -1482,9 +1482,18 @@ def test_production_default_headroom_clears_measured_i90_floor():
         adapter._system_instruction, settings.TOOL_DECLARATIONS
     )
 
-    # The estimator undershoots the billed floor -- document that it does.
-    assert est_floor < _I90_MEASURED_FLOOR_TOKENS, (
-        "if the estimator no longer undershoots, the headroom can shrink -- recheck"
+    # NOTE on the old "estimator undershoots the measured floor" assertion: the
+    # ~1978 constant is a live measurement from the tool set AT THAT TIME; the
+    # declarations have since GROWN (ask_secretary, skip_field, switch_to_field
+    # -- bd jnjj.45/7yra/jnjj.36), so today's ESTIMATE can legitimately exceed
+    # the stale constant while still undershooting today's (larger, unmeasured)
+    # real floor. The measured constant remains a LOWER BOUND on the real floor
+    # (tools only grew), so the window guard below is still the Codex-P1
+    # regression net; additionally require the window to clear the CURRENT
+    # estimate, which tracks tool growth automatically.
+    assert window > est_floor, (
+        f"derived window {window} is at/below the current estimated floor "
+        f"{est_floor} -- compression would fire immediately"
     )
     # THE GUARD: the derived window must clear the REAL measured floor. Since the
     # trigger clamp (API min 5000) raised the derived trigger, the window is
