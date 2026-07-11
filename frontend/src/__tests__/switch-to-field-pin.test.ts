@@ -160,6 +160,12 @@ describe('switch_to_field pin (bd jnjj.36)', () => {
     expect(s.pinnedFieldId).toBeNull()
   })
 
+  it('navigateToSection (the manual section jump) also abandons any pin', () => {
+    let s = baseState({ pinnedFieldId: 'c' })
+    s = SchemaFormStateManager.navigateToSection(s, 'sec2')
+    expect(s.pinnedFieldId).toBeNull()
+  })
+
   it('load() migrates old persisted state without a pin field', () => {
     const legacy: any = { ...baseState() }
     delete legacy.pinnedFieldId

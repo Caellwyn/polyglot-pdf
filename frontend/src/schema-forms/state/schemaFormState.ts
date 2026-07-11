@@ -328,6 +328,11 @@ export class SchemaFormStateManager {
     const newState = {
       ...state,
       currentSectionId: sectionId,
+      // A section change abandons any field-level navigation pin, same as
+      // switchToSection -- a stale voice-set pin must not hijack next-field
+      // computation after a MANUAL section jump (bd polyglot-pdf-jnjj.36,
+      // outer review).
+      pinnedFieldId: null,
       lastUpdated: Date.now(),
     };
 
