@@ -795,35 +795,53 @@ export class SchemaFormStateManager {
 
   /**
    * Get field ID by spoken name (for WebSocket field lookups)
-   * Searches current section + completed sections for field with matching spoken_name or alias
+   *
+   * Section mode: searches the current section + completed sections (the fields
+   * the model has been walked through so far).
+   *
+   * Continuous mode: searches the WHOLE schema. Continuous sessions pin
+   * currentSectionId to the first section and never call switchToSection /
+   * markSectionComplete (bd polyglot-pdf-944q), so completedSections stays empty
+   * -- a section-scoped lookup would return not-found for every filled field
+   * outside section 1 (bd polyglot-pdf-lt9z). This mirrors buildContinuousManifest,
+   * which presents the whole form as one section.
    */
   static getFieldBySpokenName(state: SchemaFormState, spokenName: string): string | null {
     const lowerSpokenName = spokenName.toLowerCase();
 
-    // Get all sections to search (current + completed)
+    const matchesField = (field: FormField): boolean => {
+      if (field.spoken_name?.toLowerCase() === lowerSpokenName) {
+        return true;
+      }
+      if (field.spoken_aliases) {
+        for (const alias of field.spoken_aliases) {
+          if (alias.toLowerCase() === lowerSpokenName) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    if (state.continuousSessionEnabled) {
+      // Whole-form lookup: continuous mode has no per-section progression, so
+      // any filled field is a valid recall target.
+      const match = state.schema.fields.find(matchesField);
+      return match ? match.id : null;
+    }
+
+    // Section mode: current section + completed sections only.
     const sectionsToSearch = new Set([state.currentSectionId, ...state.completedSections]);
 
     for (const sectionId of sectionsToSearch) {
       const section = state.schema.sections.find(s => s.id === sectionId);
       if (!section) continue;
 
-      // Search fields in this section
       for (const fieldId of section.fields) {
         const field = state.schema.fields.find(f => f.id === fieldId);
         if (!field) continue;
-
-        // Check spoken_name
-        if (field.spoken_name?.toLowerCase() === lowerSpokenName) {
+        if (matchesField(field)) {
           return field.id;
-        }
-
-        // Check spoken_aliases
-        if (field.spoken_aliases) {
-          for (const alias of field.spoken_aliases) {
-            if (alias.toLowerCase() === lowerSpokenName) {
-              return field.id;
-            }
-          }
         }
       }
     }
