@@ -18,15 +18,25 @@ surface-blocked by parallel PRs (#403/#405).
 
 ## What shipped
 
-Investigation first (the bead's either/or): post-5k52 every CURRENT write path
-normalizes to the schema field id before writing (the AI-update handler
-resolves the field object -- including the bracket fallback -- then keys by
-field.id; manual UI edits key by field.id; confirm/skip write to the key the
-alias-resolved entry lives under). The split state is therefore NOT reachable
-through current writers, BUT it still arrives via legacy persisted
-sessionStorage (a session that spans a deploy predating the normalization),
-and the same file's resolveLivePin already treats the alias read as required.
-Decision: apply the fix rather than a findings-only note.
+Investigation first (the bead's either/or): post-5k52 the VALUE-writing paths
+normalize to the schema field id (the AI-update handler resolves the field
+object -- including the bracket fallback -- then keys by field.id via
+updateField; manual UI edits key by field.id), so new split entries are not
+created by fills. (Outer-review correction: confirmField reads its key BARE
+and markFieldSkipped keys by the raw field_id -- they do not re-key to an
+alias-resolved entry; the load-bearing normalization is the updateField path.)
+The split state still arrives via legacy persisted sessionStorage (a session
+that spans a deploy predating the normalization), and the same file's
+resolveLivePin already treats the alias read as required. Decision: apply the
+fix rather than a findings-only note.
+
+Adjacent interaction found by the outer review and filed as bd
+polyglot-pdf-una9 (its surface, webFormConnection.ts, is blocked by in-flight
+PRs #403/#405): the confirm path's usable-value read is still bare, so a
+LEGACY split filled-but-UNCONFIRMED group -- now correctly P1-offered by this
+fix -- would hit a bounded confirm-reject loop instead of the old silent P2
+refill. Bounded by UNCONFIRMABLE_SESSION_CAP; fix is making that read
+alias-aware in una9.
 
 readFieldEntryWithAlias now used at every field-entry read in
 frontend/src/navigation.ts: both computeNextField priority loops, plus
