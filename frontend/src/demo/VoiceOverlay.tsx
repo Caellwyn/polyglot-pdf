@@ -1533,6 +1533,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						<div className="vff-field-counter">
 							📊 {sectionFieldCount.filled} of {sectionFieldCount.total} fields completed
 						</div>
+						{/* DEPRECATED (bd polyglot-pdf-55jg): the manual section-jump
+						    dropdown is section-reset production UI; continuous-DTI is
+						    the live flow (this whole block is !continuousSession-gated,
+						    so it never renders in production). Kept as a fallback, not
+						    deleted. Do not extend. */}
 						{!continuousSession && showSectionDropdown && (
 							<div className="vff-section-dropdown">
 								{schema.sections?.map((section) => (

@@ -1,6 +1,6 @@
 # Section-reset deprecation (bd polyglot-pdf-55jg)
 
-**Tracks:** backend/config.py backend/services/callback_handler.py backend/services/form_filling_service.py backend/services/request_coordinator.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts
+**Tracks:** backend/config.py backend/services/callback_handler.py backend/services/form_filling_service.py backend/services/request_coordinator.py frontend/src/webFormConnection.ts frontend/src/schema-forms/state/schemaFormState.ts frontend/src/shared/connection.ts frontend/src/demo/VoiceOverlay.tsx
 
 *Last updated: 2026-07-12*
 
@@ -41,6 +41,8 @@ new work belongs in the continuous-DTI path.
 | `frontend/src/webFormConnection.ts` | `resolvePendingSectionSwitch` / `cancelPendingSectionSwitch` (the `pendingSectionSwitch` park/resume/cancel helpers) |
 | `frontend/src/schema-forms/state/schemaFormState.ts` | `markSectionComplete` |
 | `frontend/src/schema-forms/state/schemaFormState.ts` | `switchToSection` (the state-manager method) |
+| `frontend/src/shared/connection.ts` | `switchToSection` / `completeSection` (the connection-manager wrappers over the marked `webFormConnection` methods; distinct from `switchToFirstSection`, the LIVE session-start trigger, which stays unmarked) |
+| `frontend/src/demo/VoiceOverlay.tsx` | The manual section-jump dropdown (already `!continuousSession`-gated -- never renders in production) |
 
 ## The KEEP list (NOT deprecated -- shared or harness-consumed)
 

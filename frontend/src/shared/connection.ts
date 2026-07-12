@@ -1035,6 +1035,10 @@ export function createConnectionManager(
 			await rehydrateAudio('startSection')
 		},
 
+		// DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+		// continuous-DTI is the live flow. Kept as a fallback, not deleted.
+		// Do not extend. (Thin wrapper over the marked connection.switchToSection;
+		// distinct from switchToFirstSection, the LIVE session-start trigger.)
 		async switchToSection(sectionId: string) {
 			if (!connection) {
 				throw new Error('Connection not initialized')
@@ -1052,6 +1056,9 @@ export function createConnectionManager(
 			await rehydrateAudio('switchToSection')
 		},
 
+		// DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+		// continuous-DTI is the live flow. Kept as a fallback, not deleted.
+		// Do not extend. (Thin wrapper over the marked connection.completeSection.)
 		async completeSection() {
 			if (!connection) {
 				throw new Error('Connection not initialized')
