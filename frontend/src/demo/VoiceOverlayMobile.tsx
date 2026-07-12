@@ -49,9 +49,11 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	const [error, setError] = useState<string | null>(null)
 	const [isExpanded, setIsExpanded] = useState(false)
 	// FIX #2: Removed pendingVADStart state - consolidated VAD start logic into single useEffect
-	const [currentSectionId, setCurrentSectionId] = useState<string>('')
-	const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
-	const [sectionFieldCount, setSectionFieldCount] = useState({ filled: 0, total: 12 })
+	// NOTE (bd polyglot-pdf-4l7p): the section-session display state desktop
+	// carries (currentSectionId/completedSections/sectionFieldCount + its 1s
+	// poll) was declared here too but NEVER rendered on mobile -- the compact
+	// panel shows only the whole-form field/required counts. Deleted as dead
+	// code rather than gated for continuous mode.
 	// PTT default is true (HALLUCINATION_REDUCTION, Oct 30 2025), BUT when this
 	// overlay is remounted onto an ALREADY-LIVE session (a desktop<->mobile
 	// breakpoint cross) restore the user's actual choice from the connection rather
@@ -102,22 +104,6 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// PTT release delay timer (allows final audio to be sent before muting)
 	const pttReleaseTimeoutRef = useRef<number | null>(null)
 	const isHoldingPushToTalkRef = useRef<boolean>(isHoldingPushToTalk)
-
-	// Helper functions for section-based navigation (parts use string IDs, not numbers)
-	const getCurrentSectionOrder = (): number => {
-		const section = schema.sections?.find(p => p.id === currentSectionId)
-		return section?.order ?? 1
-	}
-
-	const getCurrentSectionLabel = (): string => {
-		const section = schema.sections?.find(p => p.id === currentSectionId)
-		return section?.label ?? 'Unknown Part'
-	}
-
-	const getSectionIdFromOrder = (order: number): string => {
-		const section = schema.sections?.find(p => p.order === order)
-		return section?.id ?? ''
-	}
 
 	// FIX #1: Update stream ref when prop changes (parent manages lifecycle)
 	useEffect(() => {
@@ -1080,57 +1066,15 @@ useEffect(() => {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 }, [pushToTalkMode])
 
-// Initialize schema-based state and update section UI (only once on mount)
+// Initialize schema-based client state once on mount. The init() side effect
+// (seeding sessionStorage state for a fresh session) is load-bearing; the
+// section-display state this effect used to hydrate was never rendered on
+// mobile and is deleted (bd polyglot-pdf-4l7p) -- the whole-form field/required
+// counts below are computed straight from the schema prop.
 useEffect(() => {
-	const state = SchemaFormStateManager.init(schema)
-	setCurrentSectionId(state.currentSectionId || schema.sections?.[0]?.id || '')
-	setCompletedSections(state.completedSections || new Set())
-	
-	// Update field counter
-	const totalFields = schema.fields.length
-	const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
-		const fieldValue = state.fieldValues[fieldId]
-		const actualValue = fieldValue?.value
-		return actualValue !== null && actualValue !== undefined && actualValue !== ""
-	}).length
-	setSectionFieldCount({ filled: filledFields, total: totalFields })
+	SchemaFormStateManager.init(schema)
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 }, []) // Only run once on mount, not when schema changes
-
-// Poll field count AND section state (updates as AI switches parts)
-useEffect(() => {
-	const interval = setInterval(() => {
-		const state = SchemaFormStateManager.load()
-		if (state) {
-			const totalFields = schema.fields.length
-			const filledFields = Object.keys(state.fieldValues).filter(fieldId => {
-				const fieldValue = state.fieldValues[fieldId]
-				const actualValue = fieldValue?.value
-				return actualValue !== null && actualValue !== undefined && actualValue !== ""
-			}).length
-			setSectionFieldCount({ filled: filledFields, total: totalFields })
-			
-			// Update section if changed (AI completed section and moved forward)
-			if (state.currentSectionId && state.currentSectionId !== currentSectionId) {
-				setCurrentSectionId(state.currentSectionId)
-			}
-			
-			// Update completed parts if changed
-			if (state.completedSections) {
-				const currentCompleted = new Set(Array.from(completedSections))
-				const newCompleted = new Set(Array.from(state.completedSections))
-				
-				// Check if sets are different
-				if (currentCompleted.size !== newCompleted.size || 
-				    ![...currentCompleted].every(p => newCompleted.has(p))) {
-					setCompletedSections(newCompleted)
-				}
-			}
-		}
-	}, 1000) // Update every second
-	
-	return () => clearInterval(interval)
-}, [currentSectionId, completedSections])
 
 // Session-alive gate for the status dot / FAB color / thinking indicator.
 // Includes the transient `switching_section` + `reconnecting` states (matching
