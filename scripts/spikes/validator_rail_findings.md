@@ -28,7 +28,9 @@ turn (the send_client_content shape), tool calls drained turn by turn.
 
 ## Result: 4/4 behavioral PASS (3+1 trials)
 
-Every trial: validator flagged exactly [p1_line6e_state, p1_line6f_zipcode];
+Every trial: the validator flagged the seeded [p1_line6e_state,
+p1_line6f_zipcode] pair (one run-1 trial additionally flagged a city/state
+conflict -- also genuine in the seeded data);
 the model called switch_to_field on a flagged field, voiced a correct read-back
 (e.g. "You previously selected West Virginia, but the ZIP code you provided
 50301 belongs to Iowa. Which one is correct?"), then on the user's correction
