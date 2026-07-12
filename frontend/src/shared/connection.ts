@@ -984,6 +984,15 @@ export function createConnectionManager(
 		// Section management methods (schema-based navigation)
 
 		async switchToFirstSection(language: string) {
+			// The SESSION-START trigger after disclaimer accept (both overlays
+			// call this). The "FirstSection" name is historical: it routes
+			// through startSection, whose continuous-session guard sends the
+			// WHOLE-FORM handshake (webFormConnection.startSection), so in
+			// continuous mode -- the production default -- this starts the
+			// single whole-form session, not a section-scoped one (bd
+			// polyglot-pdf-4l7p: verified correct; deliberately not renamed
+			// while the legacy section path still exists -- the deletion bead
+			// polyglot-pdf-55jg owns any rename).
 			// Get first section from schema (sorted by order)
 			const currentState = SchemaFormStateManager.load()
 			if (!currentState) {
