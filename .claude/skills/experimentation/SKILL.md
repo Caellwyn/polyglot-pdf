@@ -1,6 +1,6 @@
 ---
 name: experimentation
-description: Plan and run a measurement/probe experiment against the live app (cost, accuracy, latency, or behavior of a new method). Use before writing any new probe/spike script, before extending an existing one to a new sweep, or when asked to "measure", "A/B test", "bake off", or "get real numbers on" anything that calls a live Gemini model. Enforces two mandatory gates -- a prior-work audit and a pre-spend cost estimate -- before any API call is made. Wraps scripts/spikes/ and backend/scripts/probe_*.py. Not for web research -- see the deep-research skill for that.
+description: Plan and run a measurement/probe experiment against the live app (cost, accuracy, latency, or behavior of a new method). Use before writing any new probe/spike script, before extending an existing one to a new sweep, or when asked to "measure", "A/B test", "bake off", or "get real numbers on" anything that calls a live Gemini model. Enforces two mandatory gates -- a prior-work audit and a pre-spend cost estimate -- before any API call is made. Wraps scripts/spikes/ and backend/scripts/probe_*.py. Not for open-ended web research -- if a `deep-research` skill is available in this environment, use that instead for multi-source web research questions.
 ---
 
 # Running an experiment
