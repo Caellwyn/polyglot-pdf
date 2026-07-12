@@ -240,3 +240,53 @@ async def test_validator_timeout_fails_open(monkeypatch):
     returned = await svc.handle_validation_boundary(_FIELDS)
     assert returned == {"conflicts": []}
     live_ai.send_client_content.assert_not_awaited()
+
+
+# --------------------------------------------------------------------------- #
+# The correction RAIL (bd polyglot-pdf-oiok, sprint-11 D2): the steer routes the
+# model through switch_to_field (navigate + read-back) instead of re-asking cold.
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_steer_instructs_switch_to_field_with_the_flagged_field_ids():
+    verdict = {"conflicts": [
+        {"field_ids": ["addr_state", "addr_zip"],
+         "reason": "State is West Virginia but ZIP 50301 is in Iowa."},
+    ]}
+    svc, live_ai, _ = _service(verdict)
+
+    await svc.handle_validation_boundary(_FIELDS)
+
+    steer = live_ai.send_client_content.await_args.args[0]
+    # The rail: the model is told to NAVIGATE via switch_to_field...
+    assert "switch_to_field" in steer
+    # ...with the exact field_ids it needs for the call (the tool prefers ids;
+    # names alone would force a spoken-name resolution round-trip)...
+    assert "addr_state" in steer and "addr_zip" in steer
+    # ...and to read the field's current value back before asking.
+    assert "current value" in steer
+    assert "Read the value back" in steer
+
+
+@pytest.mark.asyncio
+async def test_steer_works_findings_one_at_a_time():
+    # Two independent findings: the steer must instruct sequential handling
+    # (switch to the first flagged field, resolve, then the next) -- a pile of
+    # simultaneous jumps would thrash focus and confuse the read-back.
+    fields = _FIELDS + [
+        {"field_id": "dob", "name": "Date of birth", "value": "01/01/2030", "steered": False},
+        {"field_id": "sig_date", "name": "Signature date", "value": "01/01/2020", "steered": False},
+    ]
+    verdict = {"conflicts": [
+        {"field_ids": ["addr_state", "addr_zip"], "reason": "geo mismatch"},
+        {"field_ids": ["dob", "sig_date"], "reason": "birth after signature"},
+    ]}
+    svc, live_ai, _ = _service(verdict)
+
+    await svc.handle_validation_boundary(fields)
+
+    steer = live_ai.send_client_content.await_args.args[0]
+    assert "one finding at a time" in steer
+    assert "next" in steer  # ...then move to the next flagged field
+    # Both findings ride the same single injection (one steer, not one per finding).
+    live_ai.send_client_content.assert_awaited_once()

@@ -143,10 +143,11 @@ estimated_cost = sum over each (model, arm) of:
    is a deliberate, explicitly-flagged exception only (e.g. a model not yet
    available on Vertex). If a script builds `genai.Client(api_key=...)`,
    convert it to the Vertex-default pattern in `backend/adapters/text_ai_gemini.py`
-   (`vertexai=True, project=os.getenv("GOOGLE_CLOUD_PROJECT")`) -- note that
-   `backend/scripts/probe_secretary_recall.py::_client` is itself still
-   AI-Studio-keyed as of this writing; do not copy it as a Vertex example.
-   (bd memory `all-live-model-work-runs-on-vertex`)
+   (`vertexai=True, project=os.getenv("GOOGLE_CLOUD_PROJECT")`) --
+   `backend/scripts/probe_secretary_recall.py::_client` is the reference
+   conversion (Vertex-default with an explicit VERTEXAI=false escape hatch,
+   bd polyglot-pdf-p5h2); the sweep of the remaining AI-Studio-keyed scripts
+   is bd polyglot-pdf-rve5. (bd memory `all-live-model-work-runs-on-vertex`)
 2. **Deploy-fidelity for anything touching the live/voice path.** A probe of
    the live Gemini session (tool declarations, system-instruction path,
    content shape) must represent what deploy actually sends -- production tool
