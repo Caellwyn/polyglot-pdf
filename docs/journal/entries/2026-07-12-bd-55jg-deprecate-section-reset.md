@@ -16,7 +16,7 @@ mark it clearly so a later deletion is mechanical.
 
 ## What shipped
 
-17 greppable `DEPRECATED (bd polyglot-pdf-55jg):` markers on the production-only
+20 greppable `DEPRECATED (bd polyglot-pdf-55jg):` markers on the production-only
 section-reset sites (inverted from the 7872 RETIREMENT-CANDIDATES inventory):
 switch_section tool decl + legacy-SI text (config.py), its dispatch +
 _handle_switch_section_tool (callback_handler.py), handle_switch_section +
