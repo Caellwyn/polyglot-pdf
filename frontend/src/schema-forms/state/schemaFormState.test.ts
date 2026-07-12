@@ -719,6 +719,94 @@ describe('SchemaFormStateManager', () => {
   })
 
   // ============================================================================
+  // getFieldBySpokenName()
+  // ============================================================================
+
+  describe('getFieldBySpokenName()', () => {
+    it('section mode: finds a field in the current section', () => {
+      const state = SchemaFormStateManager.init(createTestSchema()) // on section-1a
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'family name')).toBe('field-1')
+    })
+
+    it('section mode: matches a spoken alias', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'SURNAME')).toBe('field-1')
+    })
+
+    it('section mode: does NOT find a field in a not-yet-visited section', () => {
+      const state = SchemaFormStateManager.init(createTestSchema()) // on section-1a
+      // field-4 'street address' lives in section-2a (not current, not completed).
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'street address')).toBeNull()
+    })
+
+    it('continuous mode: finds a filled field OUTSIDE the pinned first section (bd polyglot-pdf-lt9z)', () => {
+      // Continuous mode pins currentSectionId to section-1a and never advances,
+      // so completedSections stays empty. The section-scoped path would return
+      // null for anything past section 1; the whole-form path must find it.
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = SchemaFormStateManager.setContinuousSession(state, true)
+      expect(state.currentSectionId).toBe('section-1a')
+      expect(state.completedSections.size).toBe(0)
+
+      // field-4 (section-2a), field-6 (section-3a) -- both outside section 1.
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'street address')).toBe('field-4')
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'notes')).toBe('field-6')
+      // aliases still work whole-form.
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'first name')).toBe('field-2')
+    })
+
+    it('returns null for an unknown spoken name in either mode', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'nonexistent')).toBeNull()
+      state = SchemaFormStateManager.setContinuousSession(state, true)
+      expect(SchemaFormStateManager.getFieldBySpokenName(state, 'nonexistent')).toBeNull()
+    })
+  })
+
+  // ============================================================================
+  // hasInProgressSession() -- soft-refresh resume signal (bd polyglot-pdf-hc4b)
+  // ============================================================================
+
+  describe('hasInProgressSession()', () => {
+    it('is false on a fresh session (no disclaimer, no values)', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(false)
+    })
+
+    it('is false when the disclaimer is accepted but no field is filled yet', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = { ...state, disclaimerAccepted: true }
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(false)
+    })
+
+    it('is false when a field is filled but the disclaimer was not accepted', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'Doe')
+      expect(state.disclaimerAccepted).toBe(false)
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(false)
+    })
+
+    it('is true mid-form (disclaimer accepted + at least one filled field)', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = { ...state, disclaimerAccepted: true }
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'Doe')
+      expect(SchemaFormStateManager.hasInProgressSession(state)).toBe(true)
+    })
+
+    it('drives resume:true on the first post-reload handshake', () => {
+      // A soft refresh builds a fresh connection (hasConnectedOnce=false), so the
+      // handshake resume flag must come from persisted in-progress state.
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = { ...state, disclaimerAccepted: true }
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'Doe')
+
+      const resume = SchemaFormStateManager.hasInProgressSession(state)
+      const payload = SchemaFormStateManager.getHandshakePayload(state, 'English', resume)
+      expect((payload as any).resume).toBe(true)
+    })
+  })
+
+  // ============================================================================
   // switchToSection()
   // ============================================================================
 

@@ -283,7 +283,12 @@ describe('WebFormConnection handshake reflects fresh sessionStorage on open (bd 
     expect(handshake.section_label).toBe('S2')
     expect(handshake.section_number).toBe(2)
     expect(handshake.current_values).toHaveProperty('name_changed')
-    expect(handshake.resume).toBe(false) // first connect of this instance
+    // resume:true even on the first connect of this instance -- the fresh state
+    // this soft refresh resumes from is in-progress (disclaimer accepted + a
+    // filled field), so the backend must use the resume template and not
+    // re-greet mid-form (bd polyglot-pdf-hc4b; this assertion previously
+    // encoded the pre-fix behavior).
+    expect(handshake.resume).toBe(true)
   })
 
   it('also refreshes the JIT handshake (loaded_field_ids + current_values) from fresh state', async () => {

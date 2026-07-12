@@ -557,7 +557,16 @@ export class WebFormConnection {
     // Send handshake with schema + current_values + fill_language.
     // Pass resume:true on reconnects so the backend skips the greeting
     // and section re-introduction (bd polyglot-pdf-vmxx).
-    const isResume = this.hasConnectedOnce;
+    //
+    // hasConnectedOnce covers in-memory reconnects, but it is instance-scoped
+    // and a brand-new WebFormConnection built on a SOFT PAGE REFRESH (F5) has it
+    // false -- so the first post-reload handshake would send resume:false and
+    // the backend would re-greet a user who is mid-form. reloadState() above has
+    // already pulled the freshest persisted state, so also treat an
+    // already-in-progress persisted session (disclaimer accepted + at least one
+    // filled field) as a resume (bd polyglot-pdf-hc4b).
+    const isResume = this.hasConnectedOnce
+      || SchemaFormStateManager.hasInProgressSession(this.state);
     this.hasConnectedOnce = true;
     const handshake = SchemaFormStateManager.getHandshakePayload(this.state, this.fillLanguage, isResume);
     this.send(handshake);

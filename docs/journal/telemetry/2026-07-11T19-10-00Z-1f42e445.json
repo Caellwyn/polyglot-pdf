@@ -1,0 +1,92 @@
+{
+  "recorded_at": "2026-07-11T19:10:00Z",
+  "session_id": "1f42e445-fd0a-405c-a484-edad0cbe0b55",
+  "beads": [
+    "polyglot-pdf-lt9z",
+    "polyglot-pdf-hc4b"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-07-11T17:13:02.047Z",
+    "last_ts": "2026-07-11T19:09:48.863Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 69299,
+      "output_tokens": 242397,
+      "cache_read_input_tokens": 82020479,
+      "cache_creation_input_tokens": 1195788
+    },
+    "subagent": {
+      "input_tokens": 72924,
+      "output_tokens": 98367,
+      "cache_read_input_tokens": 31157390,
+      "cache_creation_input_tokens": 1473253
+    },
+    "total": {
+      "input_tokens": 142223,
+      "output_tokens": 340764,
+      "cache_read_input_tokens": 113177869,
+      "cache_creation_input_tokens": 2669041
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 69299,
+        "output_tokens": 242397,
+        "cache_read_input_tokens": 82020479,
+        "cache_creation_input_tokens": 1195788
+      }
+    },
+    "subagent": {
+      "claude-opus-4-8": {
+        "input_tokens": 72578,
+        "output_tokens": 63586,
+        "cache_read_input_tokens": 16353998,
+        "cache_creation_input_tokens": 879318
+      },
+      "claude-sonnet-5": {
+        "input_tokens": 346,
+        "output_tokens": 34781,
+        "cache_read_input_tokens": 14803392,
+        "cache_creation_input_tokens": 593935
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-opus-4-8": 54.890335
+    },
+    "subagent": {
+      "claude-opus-4-8": 15.625277,
+      "claude-sonnet-5": 0.0
+    },
+    "by_model": {
+      "claude-opus-4-8": 70.515612,
+      "claude-sonnet-5": 0.0
+    },
+    "unpriced_models": [
+      "claude-sonnet-5"
+    ],
+    "orchestrator_total": 54.890335,
+    "subagent_total": 15.625277,
+    "total": 70.515611,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-opus-4-8",
+    "claude-sonnet-5"
+  ],
+  "assistant_turns": {
+    "orchestrator": 401,
+    "subagent": 450
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 0,
+  "maintainer_touchpoints": 0,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}
