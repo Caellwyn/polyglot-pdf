@@ -9,6 +9,7 @@ import {
   unwrapFieldValue,
   unwrapToString,
   unwrapToBoolean,
+  readFieldEntryWithAlias,
 } from './fieldValue';
 import type { FieldValue } from '../types/schema';
 
@@ -182,6 +183,68 @@ describe('fieldValue utilities - Bug 1 Fix', () => {
 
       const currentValue = unwrapToString(radioValue);
       expect(currentValue).toBe('option_b');
+    });
+  });
+
+  // bd polyglot-pdf-luju nit 2: the `[]`-alias read must prefer a MEANINGFUL
+  // entry over a hollow one, so a placeholder under the exact key does not shadow
+  // a real confirmed answer under the alias key.
+  describe('readFieldEntryWithAlias precedence', () => {
+    const bracket = 'p5_checkbox1a[]';
+    const bare = 'p5_checkbox1a';
+
+    it('returns the exact-key entry when it carries a value', () => {
+      const fv = {
+        [bracket]: { value: ['P5_Checkbox1b[0]'] as any, confirmed: true },
+      } as any;
+      expect(readFieldEntryWithAlias(fv, bracket)?.value).toEqual(['P5_Checkbox1b[0]']);
+    });
+
+    it('prefers the exact key when BOTH keys carry a value', () => {
+      const fv = {
+        [bracket]: { value: ['exact'] as any, confirmed: true },
+        [bare]: { value: ['alias'] as any, confirmed: true },
+      } as any;
+      expect(readFieldEntryWithAlias(fv, bracket)?.value).toEqual(['exact']);
+    });
+
+    it('falls back to the alias key when the exact key is absent', () => {
+      const fv = {
+        [bare]: { value: ['x'] as any, confirmed: true },
+      } as any;
+      // Query the bracket variant; the value lives under the bare key.
+      expect(readFieldEntryWithAlias(fv, bracket)?.value).toEqual(['x']);
+    });
+
+    it('does NOT let a hollow exact-key entry shadow a real confirmed alias entry', () => {
+      const fv = {
+        [bracket]: { value: null, confirmed: false } as any, // hollow placeholder
+        [bare]: { value: ['P5_Checkbox1b[0]'] as any, confirmed: true }, // real answer
+      } as any;
+      const entry = readFieldEntryWithAlias(fv, bracket);
+      expect(entry?.value).toEqual(['P5_Checkbox1b[0]']);
+      expect(entry?.confirmed).toBe(true);
+    });
+
+    it('treats an empty-array exact-key entry as hollow and falls through', () => {
+      const fv = {
+        [bracket]: { value: [] as any, confirmed: false },
+        [bare]: { value: ['real'] as any, confirmed: true },
+      } as any;
+      expect(readFieldEntryWithAlias(fv, bracket)?.value).toEqual(['real']);
+    });
+
+    it('returns the exact-key entry (even if hollow) when neither key has a real answer', () => {
+      const fv = {
+        [bracket]: { value: null, confirmed: false } as any,
+      } as any;
+      const entry = readFieldEntryWithAlias(fv, bracket);
+      expect(entry).toBeDefined();
+      expect(entry?.value).toBeNull();
+    });
+
+    it('returns undefined when neither key exists', () => {
+      expect(readFieldEntryWithAlias({} as any, bracket)).toBeUndefined();
     });
   });
 });

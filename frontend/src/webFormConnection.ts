@@ -2062,7 +2062,14 @@ export class WebFormConnection {
     // a fresh fill (outer review on this bead).
     const entry = readFieldEntryWithAlias(this.state.fieldValues, fieldId);
     const currentValue = entry?.value;
-    const hasValue = currentValue !== null && currentValue !== undefined && currentValue !== '';
+    // An EMPTY checkbox-group ([]) is not a value -- treat it as unanswered so the
+    // ack does not tell the model "it already holds an unconfirmed value" and ride
+    // value:[] (the model would read back nothing). Mirrors the skip path's guard
+    // (handleSkipFieldRequest, bd polyglot-pdf-7yra) so the two agree (bd
+    // polyglot-pdf-luju nit 1).
+    const hasValue =
+      currentValue !== null && currentValue !== undefined && currentValue !== '' &&
+      !(Array.isArray(currentValue) && currentValue.length === 0);
     this.sendSwitchFieldResponse(request_id, true, {
       field_id: fieldId,
       spoken_name: field.spoken_name || field.name,

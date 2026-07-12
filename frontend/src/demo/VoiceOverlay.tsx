@@ -115,6 +115,12 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	}
 
 	const getCurrentSectionLabel = (): string => {
+		// Continuous mode fills the WHOLE form as one session; currentSectionId is
+		// pinned to the first section (bd polyglot-pdf-944q), so a section label
+		// would misleadingly show only section 1. Show the form title instead.
+		if (continuousSession) {
+			return schema.form_metadata?.title || 'Full Form'
+		}
 		if (!schema.sections || !currentSectionId) return ''
 		const section = schema.sections.find(s => s.id === currentSectionId)
 		return section?.label ?? ''
