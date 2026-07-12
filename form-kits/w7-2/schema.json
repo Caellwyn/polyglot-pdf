@@ -10,117 +10,51 @@
   },
   "parts": [
     {
-      "id": "part_application",
-      "label": "Application Type and Reason",
+      "id": "part_page_1",
+      "label": "Page 1",
       "order": 1,
       "section_ids": [
-        "sec_application_type",
-        "sec_reason",
-        "sec_additional_treaty"
-      ]
-    },
-    {
-      "id": "part_name",
-      "label": "Name",
-      "order": 2,
-      "section_ids": [
-        "sec_name"
-      ]
-    },
-    {
-      "id": "part_address",
-      "label": "Address",
-      "order": 3,
-      "section_ids": [
-        "sec_mailing_address",
-        "sec_foreign_address"
-      ]
-    },
-    {
-      "id": "part_birth",
-      "label": "Birth Information",
-      "order": 4,
-      "section_ids": [
-        "sec_birth"
-      ]
-    },
-    {
-      "id": "part_other",
-      "label": "Other Information",
-      "order": 5,
-      "section_ids": [
-        "sec_other_info",
-        "sec_id_documents",
-        "sec_prior_itin",
-        "sec_college"
-      ]
-    },
-    {
-      "id": "part_sign",
-      "label": "Sign Here",
-      "order": 6,
-      "section_ids": [
-        "sec_signature"
-      ]
-    },
-    {
-      "id": "part_agent",
-      "label": "Acceptance Agent's Use ONLY",
-      "order": 7,
-      "section_ids": [
-        "sec_agent"
+        "sec_page_1_top_p1",
+        "sec_name_p1",
+        "sec_applicant_s_mailing_address_p1",
+        "sec_foreign_non_u_s_address_p1",
+        "sec_birth_information_p1",
+        "sec_other_information_p1",
+        "sec_sign_here_p1",
+        "sec_acceptance_agent_s_use_only_p1"
       ]
     }
   ],
   "sections": [
     {
-      "id": "sec_application_type",
-      "label": "Application type (check one box)",
+      "id": "sec_page_1_top_p1",
+      "label": "Page 1 (top)",
       "order": 1,
       "fields": [
-        "application_type"
-      ],
-      "page_numbers": [
-        0
-      ]
-    },
-    {
-      "id": "sec_reason",
-      "label": "Reason you're submitting Form W-7",
-      "order": 2,
-      "fields": [
+        "application_type",
         "reason_a",
         "reason_b",
         "reason_c",
-        "reason_d",
         "reason_d_relationship",
-        "reason_e",
+        "reason_d",
         "reason_de_name",
+        "reason_e",
         "reason_de_ssn_itin",
         "reason_f",
         "reason_g",
-        "reason_h"
-      ],
-      "page_numbers": [
-        0
-      ]
-    },
-    {
-      "id": "sec_additional_treaty",
-      "label": "Additional information for a and f",
-      "order": 3,
-      "fields": [
+        "reason_h",
         "treaty_country",
         "treaty_article"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     },
     {
-      "id": "sec_name",
+      "id": "sec_name_p1",
       "label": "Name",
-      "order": 4,
+      "order": 2,
       "fields": [
         "name_first",
         "name_middle",
@@ -129,81 +63,65 @@
         "birth_name_middle",
         "birth_name_last"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     },
     {
-      "id": "sec_mailing_address",
+      "id": "sec_applicant_s_mailing_address_p1",
       "label": "Applicant's Mailing Address",
-      "order": 5,
+      "order": 3,
       "fields": [
         "mailing_street",
         "mailing_city_state_country"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     },
     {
-      "id": "sec_foreign_address",
+      "id": "sec_foreign_non_u_s_address_p1",
       "label": "Foreign (non-U.S.) Address",
-      "order": 6,
+      "order": 4,
       "fields": [
         "foreign_street",
         "foreign_city_state_country"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     },
     {
-      "id": "sec_birth",
+      "id": "sec_birth_information_p1",
       "label": "Birth Information",
-      "order": 7,
+      "order": 5,
       "fields": [
+        "sex",
         "birth_date",
         "birth_country",
-        "birth_city_state",
-        "sex"
+        "birth_city_state"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     },
     {
-      "id": "sec_other_info",
+      "id": "sec_other_information_p1",
       "label": "Other Information",
-      "order": 8,
+      "order": 6,
       "fields": [
         "citizenship_country",
         "foreign_tax_id",
-        "us_visa_type"
-      ],
-      "page_numbers": [
-        0
-      ]
-    },
-    {
-      "id": "sec_id_documents",
-      "label": "Identification document(s) submitted",
-      "order": 9,
-      "fields": [
+        "us_visa_type",
         "id_document_type",
         "id_issued_by",
         "id_number",
         "id_exp_date",
-        "date_of_entry"
-      ],
-      "page_numbers": [
-        0
-      ]
-    },
-    {
-      "id": "sec_prior_itin",
-      "label": "Previously received ITIN or IRSN",
-      "order": 10,
-      "fields": [
+        "date_of_entry",
         "prior_itin_irsn",
         "itin_1",
         "itin_2",
@@ -213,53 +131,46 @@
         "irsn_3",
         "prior_name_first",
         "prior_name_middle",
-        "prior_name_last"
-      ],
-      "page_numbers": [
-        0
-      ]
-    },
-    {
-      "id": "sec_college",
-      "label": "College/university or company information",
-      "order": 11,
-      "fields": [
+        "prior_name_last",
         "college_name",
         "college_city_state",
         "college_length_of_stay"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     },
     {
-      "id": "sec_signature",
+      "id": "sec_sign_here_p1",
       "label": "Sign Here",
-      "order": 12,
+      "order": 7,
       "fields": [
         "applicant_signature",
         "applicant_sign_date",
-        "applicant_phone",
-        "delegate_name",
         "delegate_relationship"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     },
     {
-      "id": "sec_agent",
+      "id": "sec_acceptance_agent_s_use_only_p1",
       "label": "Acceptance Agent's Use ONLY",
-      "order": 13,
+      "order": 8,
       "fields": [
-        "agent_signature",
-        "agent_sign_date",
+        "applicant_phone",
+        "delegate_name",
         "agent_phone",
         "agent_fax",
+        "agent_signature",
+        "agent_sign_date",
         "agent_name_title"
       ],
+      "page_number": 1,
       "page_numbers": [
-        0
+        1
       ]
     }
   ],
@@ -269,7 +180,7 @@
       "name": "Application type (check one box)",
       "spoken_name": "Application type",
       "type": "radio",
-      "section_id": "sec_application_type",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": null,
       "pdf_position": {
         "page": 1,
@@ -313,7 +224,7 @@
       "name": "a. Nonresident alien required to get an ITIN to claim tax treaty benefit (you must also check and complete box h)",
       "spoken_name": "Reason a, tax treaty benefit",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_2[0]",
       "pdf_position": {
         "page": 1,
@@ -331,7 +242,7 @@
       "name": "b. Nonresident alien filing a U.S. federal tax return",
       "spoken_name": "Reason b, nonresident alien filing return",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_3[0]",
       "pdf_position": {
         "page": 1,
@@ -349,7 +260,7 @@
       "name": "c. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return",
       "spoken_name": "Reason c, resident alien filing return",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_4[0]",
       "pdf_position": {
         "page": 1,
@@ -367,7 +278,7 @@
       "name": "d. Dependent of U.S. citizen/resident alien",
       "spoken_name": "Reason d, dependent",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_5[0]",
       "pdf_position": {
         "page": 1,
@@ -385,7 +296,7 @@
       "name": "If d, enter relationship to U.S. citizen/resident alien",
       "spoken_name": "Relationship to U.S. citizen or resident alien",
       "type": "text",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_01[0]",
       "pdf_position": {
         "page": 1,
@@ -411,7 +322,7 @@
       "name": "e. Spouse of U.S. citizen/resident alien",
       "spoken_name": "Reason e, spouse",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_6[0]",
       "pdf_position": {
         "page": 1,
@@ -429,7 +340,7 @@
       "name": "If d or e, enter name of U.S. citizen/resident alien",
       "spoken_name": "Name of U.S. citizen or resident alien",
       "type": "text",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_02[0]",
       "pdf_position": {
         "page": 1,
@@ -459,7 +370,7 @@
       "name": "If d or e, enter SSN/ITIN of U.S. citizen/resident alien",
       "spoken_name": "SSN or ITIN of U.S. citizen or resident alien",
       "type": "text",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_03[0]",
       "pdf_position": {
         "page": 1,
@@ -489,7 +400,7 @@
       "name": "f. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception (if claiming an exception, you must also check and complete box h)",
       "spoken_name": "Reason f, student professor or researcher",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_7[0]",
       "pdf_position": {
         "page": 1,
@@ -507,7 +418,7 @@
       "name": "g. Dependent/spouse of a nonresident alien holding a U.S. visa",
       "spoken_name": "Reason g, dependent or spouse of nonresident alien with visa",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_8[0]",
       "pdf_position": {
         "page": 1,
@@ -525,7 +436,7 @@
       "name": "h. Other (see instructions)",
       "spoken_name": "Reason h, other",
       "type": "checkbox",
-      "section_id": "sec_reason",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].c1_9[0]",
       "pdf_position": {
         "page": 1,
@@ -555,7 +466,7 @@
       "name": "Additional information for a and f: Enter treaty country",
       "spoken_name": "Treaty country",
       "type": "text",
-      "section_id": "sec_additional_treaty",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_05[0]",
       "pdf_position": {
         "page": 1,
@@ -585,7 +496,7 @@
       "name": "Additional information for a and f: Enter treaty article number",
       "spoken_name": "Treaty article number",
       "type": "text",
-      "section_id": "sec_additional_treaty",
+      "section_id": "sec_page_1_top_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_06[0]",
       "pdf_position": {
         "page": 1,
@@ -615,7 +526,7 @@
       "name": "1a. First name",
       "spoken_name": "First name",
       "type": "text",
-      "section_id": "sec_name",
+      "section_id": "sec_name_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_07[0]",
       "pdf_position": {
         "page": 1,
@@ -633,7 +544,7 @@
       "name": "1a. Middle name",
       "spoken_name": "Middle name",
       "type": "text",
-      "section_id": "sec_name",
+      "section_id": "sec_name_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_08[0]",
       "pdf_position": {
         "page": 1,
@@ -651,7 +562,7 @@
       "name": "1a. Last name",
       "spoken_name": "Last name",
       "type": "text",
-      "section_id": "sec_name",
+      "section_id": "sec_name_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_09[0]",
       "pdf_position": {
         "page": 1,
@@ -669,7 +580,7 @@
       "name": "1b. Name at birth if different - First name",
       "spoken_name": "Birth first name",
       "type": "text",
-      "section_id": "sec_name",
+      "section_id": "sec_name_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_10[0]",
       "pdf_position": {
         "page": 1,
@@ -687,7 +598,7 @@
       "name": "1b. Name at birth if different - Middle name",
       "spoken_name": "Birth middle name",
       "type": "text",
-      "section_id": "sec_name",
+      "section_id": "sec_name_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_11[0]",
       "pdf_position": {
         "page": 1,
@@ -705,7 +616,7 @@
       "name": "1b. Name at birth if different - Last name",
       "spoken_name": "Birth last name",
       "type": "text",
-      "section_id": "sec_name",
+      "section_id": "sec_name_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_12[0]",
       "pdf_position": {
         "page": 1,
@@ -723,7 +634,7 @@
       "name": "2. Street address, apartment number, or rural route number",
       "spoken_name": "Mailing street address",
       "type": "text",
-      "section_id": "sec_mailing_address",
+      "section_id": "sec_applicant_s_mailing_address_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_13[0]",
       "pdf_position": {
         "page": 1,
@@ -741,7 +652,7 @@
       "name": "City or town, state or province, and country. Include ZIP code or postal code where appropriate.",
       "spoken_name": "Mailing city, state, and country",
       "type": "text",
-      "section_id": "sec_mailing_address",
+      "section_id": "sec_applicant_s_mailing_address_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_14[0]",
       "pdf_position": {
         "page": 1,
@@ -759,7 +670,7 @@
       "name": "3. Street address, apartment number, or rural route number. Don't use a P.O. box number.",
       "spoken_name": "Foreign street address",
       "type": "text",
-      "section_id": "sec_foreign_address",
+      "section_id": "sec_foreign_non_u_s_address_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_15[0]",
       "pdf_position": {
         "page": 1,
@@ -777,7 +688,7 @@
       "name": "City or town, state or province, and country. Include postal code where appropriate.",
       "spoken_name": "Foreign city, state, and country",
       "type": "text",
-      "section_id": "sec_foreign_address",
+      "section_id": "sec_foreign_non_u_s_address_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_16[0]",
       "pdf_position": {
         "page": 1,
@@ -795,7 +706,7 @@
       "name": "4. Date of birth (month / day / year)",
       "spoken_name": "Date of birth",
       "type": "date",
-      "section_id": "sec_birth",
+      "section_id": "sec_birth_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].Line4_ReadOrder[0].f1_17[0]",
       "pdf_position": {
         "page": 1,
@@ -813,7 +724,7 @@
       "name": "Country of birth",
       "spoken_name": "Country of birth",
       "type": "text",
-      "section_id": "sec_birth",
+      "section_id": "sec_birth_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_18[0]",
       "pdf_position": {
         "page": 1,
@@ -832,7 +743,7 @@
       "name": "City and state or province (optional)",
       "spoken_name": "Birth city and state or province",
       "type": "text",
-      "section_id": "sec_birth",
+      "section_id": "sec_birth_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_19[0]",
       "pdf_position": {
         "page": 1,
@@ -850,7 +761,7 @@
       "name": "5. Sex",
       "spoken_name": "Sex",
       "type": "radio",
-      "section_id": "sec_birth",
+      "section_id": "sec_birth_information_p1",
       "pdf_field_name": null,
       "pdf_position": {
         "page": 1,
@@ -894,7 +805,7 @@
       "name": "6a. Country(ies) of citizenship",
       "spoken_name": "Country of citizenship",
       "type": "text",
-      "section_id": "sec_other_info",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_20[0]",
       "pdf_position": {
         "page": 1,
@@ -912,7 +823,7 @@
       "name": "6b. Foreign tax I.D. number (if any)",
       "spoken_name": "Foreign tax ID number",
       "type": "text",
-      "section_id": "sec_other_info",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_21[0]",
       "pdf_position": {
         "page": 1,
@@ -930,7 +841,7 @@
       "name": "6c. Type of U.S. visa (if any), number, and expiration date",
       "spoken_name": "Type of U.S. visa, number, and expiration",
       "type": "text",
-      "section_id": "sec_other_info",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_22[0]",
       "pdf_position": {
         "page": 1,
@@ -948,7 +859,7 @@
       "name": "6d. Identification document(s) submitted",
       "spoken_name": "Identification document type",
       "type": "checkbox_group",
-      "section_id": "sec_id_documents",
+      "section_id": "sec_other_information_p1",
       "pdf_position": {
         "page": 1,
         "x": 129.6,
@@ -1015,7 +926,7 @@
       "name": "6d. Issued by",
       "spoken_name": "Document issued by",
       "type": "text",
-      "section_id": "sec_id_documents",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_24[0]",
       "pdf_position": {
         "page": 1,
@@ -1033,7 +944,7 @@
       "name": "6d. Number",
       "spoken_name": "Document number",
       "type": "text",
-      "section_id": "sec_id_documents",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_25[0]",
       "pdf_position": {
         "page": 1,
@@ -1051,7 +962,7 @@
       "name": "6d. Exp. date (month / day / year)",
       "spoken_name": "Document expiration date",
       "type": "date",
-      "section_id": "sec_id_documents",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].Issued_ReadOrder[0].f1_26[0]",
       "pdf_position": {
         "page": 1,
@@ -1069,7 +980,7 @@
       "name": "Date of entry into the United States (MM/DD/YYYY)",
       "spoken_name": "Date of entry into the United States",
       "type": "date",
-      "section_id": "sec_id_documents",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_27[0]",
       "pdf_position": {
         "page": 1,
@@ -1087,7 +998,7 @@
       "name": "6e. Have you previously received an ITIN or an Internal Revenue Service Number (IRSN)?",
       "spoken_name": "Previously received ITIN or IRSN",
       "type": "radio",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": null,
       "pdf_position": {
         "page": 1,
@@ -1131,7 +1042,7 @@
       "name": "6f. ITIN - first group",
       "spoken_name": "ITIN first three digits",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_28[0]",
       "pdf_position": {
         "page": 1,
@@ -1160,7 +1071,7 @@
       "name": "6f. ITIN - second group",
       "spoken_name": "ITIN middle two digits",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_29[0]",
       "pdf_position": {
         "page": 1,
@@ -1189,7 +1100,7 @@
       "name": "6f. ITIN - third group",
       "spoken_name": "ITIN last four digits",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].ITIN[0].f1_30[0]",
       "pdf_position": {
         "page": 1,
@@ -1218,7 +1129,7 @@
       "name": "6f. IRSN - first group",
       "spoken_name": "IRSN first three digits",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_31[0]",
       "pdf_position": {
         "page": 1,
@@ -1247,7 +1158,7 @@
       "name": "6f. IRSN - second group",
       "spoken_name": "IRSN middle two digits",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_32[0]",
       "pdf_position": {
         "page": 1,
@@ -1276,7 +1187,7 @@
       "name": "6f. IRSN - third group",
       "spoken_name": "IRSN last four digits",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].IRSN[0].f1_33[0]",
       "pdf_position": {
         "page": 1,
@@ -1305,7 +1216,7 @@
       "name": "6f. Name under which it was issued - First name",
       "spoken_name": "Prior ITIN first name",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_34[0]",
       "pdf_position": {
         "page": 1,
@@ -1333,7 +1244,7 @@
       "name": "6f. Name under which it was issued - Middle name",
       "spoken_name": "Prior ITIN middle name",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_35[0]",
       "pdf_position": {
         "page": 1,
@@ -1356,7 +1267,7 @@
       "name": "6f. Name under which it was issued - Last name",
       "spoken_name": "Prior ITIN last name",
       "type": "text",
-      "section_id": "sec_prior_itin",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_36[0]",
       "pdf_position": {
         "page": 1,
@@ -1384,7 +1295,7 @@
       "name": "6g. Name of college/university or company",
       "spoken_name": "Name of college, university, or company",
       "type": "text",
-      "section_id": "sec_college",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_37[0]",
       "pdf_position": {
         "page": 1,
@@ -1402,7 +1313,7 @@
       "name": "6g. City and state",
       "spoken_name": "College city and state",
       "type": "text",
-      "section_id": "sec_college",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_38[0]",
       "pdf_position": {
         "page": 1,
@@ -1420,7 +1331,7 @@
       "name": "6g. Length of stay",
       "spoken_name": "Length of stay",
       "type": "text",
-      "section_id": "sec_college",
+      "section_id": "sec_other_information_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_39[0]",
       "pdf_position": {
         "page": 1,
@@ -1438,7 +1349,7 @@
       "name": "Signature of applicant (if delegate, see instructions)",
       "spoken_name": "Applicant signature",
       "type": "signature",
-      "section_id": "sec_signature",
+      "section_id": "sec_sign_here_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_40[0]",
       "pdf_position": {
         "page": 1,
@@ -1456,7 +1367,7 @@
       "name": "Date (month / day / year)",
       "spoken_name": "Signature date",
       "type": "date",
-      "section_id": "sec_signature",
+      "section_id": "sec_sign_here_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_41[0]",
       "pdf_position": {
         "page": 1,
@@ -1474,7 +1385,7 @@
       "name": "Phone number",
       "spoken_name": "Applicant phone number",
       "type": "text",
-      "section_id": "sec_signature",
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_42[0]",
       "pdf_position": {
         "page": 1,
@@ -1492,7 +1403,7 @@
       "name": "Name of delegate, if applicable (type or print)",
       "spoken_name": "Name of delegate",
       "type": "text",
-      "section_id": "sec_signature",
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_43[0]",
       "pdf_position": {
         "page": 1,
@@ -1510,7 +1421,7 @@
       "name": "Delegate's relationship to applicant",
       "spoken_name": "Delegate's relationship to applicant",
       "type": "radio",
-      "section_id": "sec_signature",
+      "section_id": "sec_sign_here_p1",
       "pdf_field_name": null,
       "pdf_position": {
         "page": 1,
@@ -1566,7 +1477,7 @@
       "name": "Acceptance Agent Signature",
       "spoken_name": "Agent signature",
       "type": "signature",
-      "section_id": "sec_agent",
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_44[0]",
       "pdf_position": {
         "page": 1,
@@ -1584,7 +1495,7 @@
       "name": "Acceptance Agent Date (month / day / year)",
       "spoken_name": "Agent signature date",
       "type": "date",
-      "section_id": "sec_agent",
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_45[0]",
       "pdf_position": {
         "page": 1,
@@ -1602,7 +1513,7 @@
       "name": "Acceptance Agent Phone",
       "spoken_name": "Agent phone",
       "type": "text",
-      "section_id": "sec_agent",
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_46[0]",
       "pdf_position": {
         "page": 1,
@@ -1621,7 +1532,7 @@
       "name": "Acceptance Agent Fax",
       "spoken_name": "Agent fax",
       "type": "text",
-      "section_id": "sec_agent",
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
       "pdf_position": {
         "page": 1,
@@ -1640,7 +1551,7 @@
       "name": "Acceptance Agent Name and title (type or print)",
       "spoken_name": "Agent name and title",
       "type": "text",
-      "section_id": "sec_agent",
+      "section_id": "sec_acceptance_agent_s_use_only_p1",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_48[0]",
       "pdf_position": {
         "page": 1,
