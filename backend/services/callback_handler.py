@@ -402,6 +402,9 @@ class CallbackHandler:
         if normalized in {"get_form_status", "get_form_state"}:
             return await self._handle_get_form_status_tool(arguments)
         
+        # DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+        # continuous-DTI is the live flow. Kept as a fallback, not deleted.
+        # Do not extend.
         if normalized == "switch_section":
             return await self._handle_switch_section_tool(arguments)
 
@@ -551,7 +554,12 @@ class CallbackHandler:
         self,
         arguments: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Handle switch_section tool call."""
+        """Handle switch_section tool call.
+
+        DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+        continuous-DTI is the live flow. Kept as a fallback, not deleted.
+        Do not extend.
+        """
         section_identifier = arguments.get("section_identifier", "") if isinstance(arguments, dict) else str(arguments)
         response = await self._handle_switch_section(section_identifier)
         _log.info("-" * 80)

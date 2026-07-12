@@ -342,6 +342,10 @@ export class SchemaFormStateManager {
 
   /**
    * Mark section as completed
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   static markSectionComplete(state: SchemaFormState, sectionId: string): SchemaFormState {
     const newState = {
@@ -555,6 +559,10 @@ export class SchemaFormStateManager {
    * Used for section switching via WebSocket
    *
    * JIT Mode: Clears loadedFieldIds because Gemini context resets on section switch
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   static switchToSection(state: SchemaFormState, sectionId: string): SchemaFormState {
     // Only mark current section as completed if switching to a different section

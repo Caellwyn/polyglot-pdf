@@ -383,6 +383,9 @@ class Settings(BaseModel):
 			}
 		},
 		{
+			# DEPRECATED (bd polyglot-pdf-55jg):
+			# section-reset production path; continuous-DTI is the live flow. Kept as
+			# a fallback, not deleted. Do not extend.
 			"name": "switch_section",
 			"description": "Navigate to a different section/part. Use the section NUMBER only (e.g., '2' for Section 2).",
 			"parameters": {
@@ -568,6 +571,9 @@ class Settings(BaseModel):
     "Medical assistant: {form_title} | Section {section_number}/{total_sections}: {section_label}\n"
     "Progress: {filled_count}/{total_fields} | Previous: {previous_spoken_names}\n\n"
 
+    # DEPRECATED (bd polyglot-pdf-55jg):
+    # section-reset production path; continuous-DTI is the live flow. Kept as
+    # a fallback, not deleted. Do not extend. (AVAILABLE SECTIONS block below.)
     "AVAILABLE SECTIONS:\n{section_list}\n\n"
 
     "FIELDS:\n{fields_json}\n\n"
@@ -588,6 +594,9 @@ class Settings(BaseModel):
     "- update_form_fields: Fill ONE field. Returns success or validation error.\n"
     "- confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint.\n"
     "- get_form_status: Returns 'field_id:value:confirmed|field_id:value:unconfirmed'. Only filled fields included. Omitted = empty. Use when user asks 'what have I filled?'\n"
+    # DEPRECATED (bd polyglot-pdf-55jg):
+    # section-reset production path; continuous-DTI is the live flow. Kept as
+    # a fallback, not deleted. Do not extend.
     "- switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
     "- Current section only - for previous sections tell user to switch first\n\n"
 

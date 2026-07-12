@@ -494,6 +494,10 @@ class RequestCoordinator:
 
         Used during section switching to get new section schema and metadata.
 
+        DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+        continuous-DTI is the live flow. Kept as a fallback, not deleted.
+        Do not extend.
+
         Args:
             section_identifier: Section number ('3'), ID, or label
 

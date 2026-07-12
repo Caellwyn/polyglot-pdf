@@ -1820,7 +1820,11 @@ class FormFillingService:
     async def handle_switch_section(self, section_identifier: str) -> Dict[str, Any]:
         """
         Handle switch_section tool call from AI.
-        
+
+        DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+        continuous-DTI is the live flow. Kept as a fallback, not deleted.
+        Do not extend.
+
         Requests section info from frontend, then switches Gemini session to new section.
         This keeps WebSocket alive but properly flushes Gemini's context.
         
@@ -1886,6 +1890,10 @@ class FormFillingService:
         t_switch_start: Optional[float] = None,
     ) -> None:
         """Finish an AI-initiated section switch on a DETACHED task (bd 0c1).
+
+        DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+        continuous-DTI is the live flow. Kept as a fallback, not deleted.
+        Do not extend.
 
         Holds _switch_lock for the ENTIRE swap -- including the wait for the old
         loop to close -- so a concurrent MANUAL switch (websocket_routes ->
