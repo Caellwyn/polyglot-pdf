@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- the CI merge-gate wording already matches the auto-merge-vs-maintainer-merge policy in `.github/workflows/ci.yml`). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-12 (bd polyglot-pdf-w5fz: added a pointer to the new `experimentation` skill above the deploy-fidelity section).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -154,6 +154,13 @@ Manual debug runbooks exist for the PDF-fill path — `DEBUG_PDF_FILLING.md` /
 [pdf-filling.md](../components/pdf-filling.md#debugging).
 
 ## Live-endpoint probes and spikes: deploy fidelity is mandatory
+
+**Before planning any probe/spike run, see the
+[`experimentation`](../../.claude/skills/experimentation/SKILL.md) skill** --
+it gates all measurement work on a prior-work audit (don't re-run research
+that already exists) and a pre-spend cost estimate (don't surprise-bill the
+project). This section covers deploy-fidelity specifically; the skill covers
+the full run lifecycle.
 
 **A probe must represent what deploy will actually send** (maintainer directive,
 2026-06-12): the production tool declarations, the real system-instruction path
