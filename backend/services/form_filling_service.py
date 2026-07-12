@@ -1590,9 +1590,18 @@ class FormFillingService:
     @staticmethod
     def _compose_validator_steer(conflicts: list, fields: list) -> str:
         """Build the in-band steering instruction (contract 3). NAMES the fields
-        (criterion 1) and carries the user-override escape hatch verbatim from the
-        legacy in-SI ADDRESS CONSISTENCY prose (criterion 2) so B is never stricter
-        than the prose it supplements -- a possible conflict, not a block."""
+        with their field_ids (criterion 1) and carries the user-override escape
+        hatch verbatim from the legacy in-SI ADDRESS CONSISTENCY prose
+        (criterion 2) so B is never stricter than the prose it supplements -- a
+        possible conflict, not a block.
+
+        The correction RAIL (bd polyglot-pdf-oiok, sprint-11 D2): the steer
+        instructs the model to NAVIGATE via switch_to_field -- whose response
+        returns the field's current value for read-back and moves UI focus --
+        rather than re-asking cold. Prompt-level by design: the model stays the
+        actor; nothing client-side auto-navigates on a validation result. The
+        rail is orthogonal to WHEN steers fire (today: form_complete in
+        continuous mode; wt6w's page-end triggers reuse it unchanged)."""
         name_by_id = {
             f.get("field_id"): f.get("name")
             for f in fields
@@ -1605,14 +1614,21 @@ class FormFillingService:
         ]
         for c in conflicts:
             ids = c.get("field_ids", []) if isinstance(c, dict) else []
-            names = [str(name_by_id.get(i) or i) for i in ids]
+            labeled = [
+                f"{name_by_id.get(i) or i} (field_id: '{i}')" for i in ids
+            ]
             reason = str(c.get("reason", "")) if isinstance(c, dict) else ""
-            named = " and ".join(names) if names else "the fields involved"
+            named = " and ".join(labeled) if labeled else "the fields involved"
             lines.append(f"- Fields: {named}. {reason}")
         lines.append(
-            "Name the field(s) involved and ask the user to verify which is correct. "
-            "Accept the user's answer if they confirm both are intentional -- do not "
-            "insist or re-ask once they confirm."
+            "Handle one finding at a time: call switch_to_field with the first "
+            "flagged field's field_id -- its response includes that field's "
+            "current value. Read the value back to the user, explain the "
+            "possible conflict in one sentence, and ask which is correct. If "
+            "the user gives a correction, update the field and confirm it. "
+            "Accept the user's answer if they confirm both are intentional -- "
+            "do not insist or re-ask once they confirm. Then move to the next "
+            "flagged field, if any."
         )
         return "\n".join(lines)
 

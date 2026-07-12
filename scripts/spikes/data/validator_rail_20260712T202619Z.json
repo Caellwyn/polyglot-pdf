@@ -1,0 +1,108 @@
+{
+  "bead": "polyglot-pdf-oiok",
+  "stamp": "20260712T202619Z",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "vertexai": true,
+  "trials": [
+    {
+      "trial": 1,
+      "aborted": null,
+      "verdict": {
+        "conflicts": [
+          {
+            "field_ids": [
+              "p1_line6f_zipcode",
+              "p1_line6e_state"
+            ],
+            "reason": "The ZIP code 50301 belongs to Iowa, not West Virginia."
+          }
+        ]
+      },
+      "steer_message": "VALIDATOR FINDING (second-pass check): a possible conflict was found between fields the user already gave. This is NOT a block -- it is a prompt to double-check.\n- Fields: ZIP Code (field_id: 'p1_line6f_zipcode') and Select State from List of States (field_id: 'p1_line6e_state'). The ZIP code 50301 belongs to Iowa, not West Virginia.\nHandle one finding at a time: call switch_to_field with the first flagged field's field_id -- its response includes that field's current value. Read the value back to the user, explain the possible conflict in one sentence, and ask which is correct. If the user gives a correction, update the field and confirm it. Accept the user's answer if they confirm both are intentional -- do not insist or re-ask once they confirm. Then move to the next flagged field, if any.",
+      "assertions": {
+        "steer_delivered": true,
+        "switch_to_field_called": true,
+        "switch_to_field_id": "p1_line6f_zipcode",
+        "update_carried_correction": true,
+        "update_value": "IOWA",
+        "confirm_field_called": true
+      },
+      "turns": [
+        {
+          "label": "context",
+          "calls": [
+            {
+              "path": "event.tool_call",
+              "name": "get_form_status",
+              "id": "76127b8f-3a83-4144-b1c6-cf083efcf827",
+              "args": {
+                "field_ids": [
+                  "P1_checkbox1",
+                  "P1_checkbox2",
+                  "P1_checkbox3",
+                  "P1_checkbox4",
+                  "P1_checkbox5"
+                ]
+              }
+            }
+          ],
+          "timed_out": false,
+          "transcript": ""
+        },
+        {
+          "label": "post_steer",
+          "calls": [
+            {
+              "path": "event.tool_call",
+              "name": "switch_to_field",
+              "id": "0bd2c95b-1c32-4d6f-a947-50bd81021f84",
+              "args": {
+                "field": "p1_line6f_zipcode"
+              }
+            }
+          ],
+          "timed_out": false,
+          "transcript": ""
+        },
+        {
+          "label": "readback",
+          "calls": [],
+          "timed_out": false,
+          "transcript": "You previously said the ZIP code was 50301, but that ZIP code is in Iowa, not West Virginia. Which is correct?"
+        },
+        {
+          "label": "post_correction",
+          "calls": [
+            {
+              "path": "event.tool_call",
+              "name": "update_form_fields",
+              "id": "b4710107-93d2-4a95-af57-b30f3e785bd3",
+              "args": {
+                "field_id": "p1_line6e_state",
+                "value": "IOWA"
+              }
+            }
+          ],
+          "timed_out": false,
+          "transcript": ""
+        },
+        {
+          "label": "post_update",
+          "calls": [
+            {
+              "path": "event.tool_call",
+              "name": "confirm_field",
+              "id": "68a69a97-fcb0-4983-a74f-123d0dd02c25",
+              "args": {
+                "field_id": "p1_line6e_state",
+                "confirmation_method": "verbal"
+              }
+            }
+          ],
+          "timed_out": false,
+          "transcript": ""
+        }
+      ]
+    }
+  ]
+}
