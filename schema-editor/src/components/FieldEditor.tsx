@@ -14,6 +14,7 @@ import {
   retargetOptionValueReferences,
 } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
+import { moveFieldToSection } from '../utils/sectionOps';
 import type { UnclaimedWidget } from '../utils/remoteKitStore';
 
 interface FieldEditorProps {
@@ -443,8 +444,27 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             <label className="label">Section</label>
             <select
               className="input"
+              aria-label="Section"
               value={field.section_id || ''}
-              onChange={(e) => updateField({ section_id: e.target.value || undefined })}
+              onChange={(e) => {
+                // Reassigning a field's section must move it between the
+                // section.fields[] arrays too, not just patch field.section_id
+                // -- FieldList renders from section.fields[] and the section
+                // remove/merge ops trust it, so a section_id-only patch drifts
+                // the two apart (bd polyglot-pdf-w7rg). Commit the whole
+                // {fields, sections} atomically via onUpdateFields when it is
+                // available; fall back to the single-field patch otherwise.
+                const dest = e.target.value || null;
+                if (onUpdateFields) {
+                  const moved = moveFieldToSection(
+                    schema.fields, schema.sections, schema.parts,
+                    field.id, dest,
+                  );
+                  onUpdateFields(moved.fields, moved.sections);
+                } else {
+                  updateField({ section_id: dest ?? undefined });
+                }
+              }}
             >
               <option value="">No section</option>
               {schema.sections.map(section => (

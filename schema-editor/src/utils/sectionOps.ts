@@ -161,6 +161,53 @@ export function mergeSections(
   return removeSection(fields, sections, parts, sourceId, targetId);
 }
 
+/**
+ * Reassign a single field to `destinationId` (or, when null, to no section):
+ * set field.section_id AND move the field id between section.fields[] arrays,
+ * so the two representations stay in lockstep (bd polyglot-pdf-w7rg). The
+ * FieldEditor 'Section' dropdown routes through this instead of patching only
+ * field.section_id, which drifted the listing FieldList renders from and the
+ * section.fields[] the later remove/merge ops trust.
+ *
+ * Defensive against pre-existing drift: the field id is stripped from EVERY
+ * section's fields[] first (a drifted field can be double-listed), then
+ * appended once to the destination's -- so a move also heals any prior drift
+ * for the moved field. A no-op (already there) returns the inputs unchanged.
+ */
+export function moveFieldToSection(
+  fields: FormField[], sections: FormSection[], parts: FormPart[] | undefined,
+  fieldId: string, destinationId: string | null,
+): DivisionsPatch {
+  const field = fields.find(f => f.id === fieldId);
+  if (!field) return { fields, sections, parts };
+  const dest = destinationId || undefined; // '' -> undefined ("No section")
+  const listing = sections.filter(s => s.fields.includes(fieldId)).map(s => s.id);
+  const fullyConsistent = field.section_id === dest
+    && listing.length === (dest === undefined ? 0 : 1)
+    && (dest === undefined || listing[0] === dest);
+  if (fullyConsistent) {
+    // Already fully consistent (pointer at dest AND listed only there, or
+    // orphan AND listed nowhere): return the inputs by reference so a caller
+    // that ref-checks can skip the commit. A field that merely POINTS at dest
+    // but is still double-listed elsewhere is NOT consistent -- it falls
+    // through to the strip-then-append below, which heals it. (The dropdown
+    // can't reach a same-section move -- a <select> onChange fires only on a
+    // real value change -- but a programmatic caller might.)
+    return { fields, sections, parts };
+  }
+  const nextFields = field.section_id === dest
+    ? fields
+    : fields.map(f => (f.id === fieldId ? { ...f, section_id: dest } : f));
+  const nextSections = sections.map(s => {
+    const has = s.fields.includes(fieldId);
+    if (s.id === dest) {
+      return has ? s : { ...s, fields: [...s.fields, fieldId] };
+    }
+    return has ? { ...s, fields: s.fields.filter(id => id !== fieldId) } : s;
+  });
+  return { fields: nextFields, sections: nextSections, parts };
+}
+
 /** Field ids still sitting in 'To review' sections (the review-gate count). */
 export function toReviewFieldIds(fields: FormField[]): string[] {
   return fields.filter(f => isToReviewSection(f.section_id)).map(f => f.id);
