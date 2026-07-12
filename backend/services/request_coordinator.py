@@ -488,78 +488,6 @@ class RequestCoordinator:
             self._discard(request_id)
             return CONFIRM_REQUEST_TIMEOUT
 
-    async def request_field_value(self, spoken_name: str) -> Dict[str, Any]:
-        """
-        Request field value from frontend using spoken name.
-
-        Frontend will lookup in spokenNameToFieldId map and return value.
-
-        Args:
-            spoken_name: The spoken name of the field (e.g., 'phone number')
-
-        Returns:
-            Dictionary with 'value' and 'found' keys
-        """
-        if not self._websocket:
-            _log.warning("get_field_value_no_websocket", session_id=self._session_id)
-            return {"found": False, "value": None}
-
-        # spoken_name kept on the entry for error-message context (as before).
-        request_id, future = self._register("field_value", spoken_name=spoken_name)
-
-        # Send request to frontend
-        try:
-            await self._websocket.send_json({
-                "type": "get_field_value",
-                "request_id": request_id,
-                "spoken_name": spoken_name,
-            })
-        except Exception as exc:
-            _log.error("failed_to_send_get_field_value",
-                      session_id=self._session_id,
-                      spoken_name_length=len(spoken_name),
-                      error=str(exc))
-            self._discard(request_id)
-            return {"found": False, "value": None}
-
-        # Wait for response with timeout
-        # timing_coordinator_roundtrip checkpoint 7 (bd polyglot-pdf-cwsy).
-        _t_coord_fv = time.monotonic()
-        try:
-            result = await asyncio.wait_for(future, timeout=2.0)
-            _coord_fv_ms = round((time.monotonic() - _t_coord_fv) * 1000)
-            _log.info(
-                "timing_coordinator_roundtrip",
-                request_type="field_value",
-                request_id=request_id,
-                roundtrip_ms=_coord_fv_ms,
-                session_id=self._session_id,
-            )
-            return result
-        except asyncio.TimeoutError:
-            _coord_fv_ms = round((time.monotonic() - _t_coord_fv) * 1000)
-            _log.error("get_field_value_timeout",
-                      session_id=self._session_id,
-                      spoken_name_length=len(spoken_name),
-                      request_id=request_id)
-            _log.info(
-                "timing_coordinator_roundtrip",
-                request_type="field_value",
-                request_id=request_id,
-                roundtrip_ms=_coord_fv_ms,
-                timeout=True,
-                session_id=self._session_id,
-            )
-            self._discard(request_id)
-            return {"found": False, "value": None}
-        except Exception as exc:
-            _log.error("get_field_value_error",
-                      session_id=self._session_id,
-                      spoken_name_length=len(spoken_name),
-                      error=str(exc))
-            self._discard(request_id)
-            return {"found": False, "value": None}
-
     async def request_section_info(self, section_identifier: str) -> Optional[Dict[str, Any]]:
         """
         Request section information from frontend.
@@ -756,19 +684,6 @@ class RequestCoordinator:
         request_switch_field's docstring).
         """
         self._resolve(request_id, "switch_field", dict(payload or {}))
-
-    def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
-        """
-        Handle field_value_response message from frontend.
-
-        Completes the async request/response cycle for get_field_value.
-
-        Args:
-            request_id: ID matching the original request
-            value: The field value from client
-            found: Whether the field was found
-        """
-        self._resolve(request_id, "field_value", {"value": value, "found": found})
 
     def handle_section_info_response(self, request_id: str, section_info: Dict[str, Any]) -> None:
         """

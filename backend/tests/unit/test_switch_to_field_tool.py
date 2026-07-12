@@ -75,7 +75,7 @@ class TestSwitchToFieldTool:
         self, callback_handler, mock_coordinator
     ):
         """A jump onto a filled field returns the value so the model can read
-        it back (same Gemini trust boundary as get_field_value)."""
+        it back (same Gemini trust boundary as ask_secretary)."""
         mock_coordinator.request_switch_field.return_value = {
             "found": True, "field_id": "p1_line6f_zipcode",
             "spoken_name": "mailing zip code",
@@ -99,7 +99,6 @@ class TestSwitchToFieldTool:
         callback_handler.set_tool_handlers(
             handle_update_fields=MagicMock(),
             handle_switch_section=AsyncMock(),
-            handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(),
             merge_field_schema=merge,
         )

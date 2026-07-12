@@ -388,21 +388,6 @@ async def _handle_fill_session(
 						service.handle_form_state_response(request_id, field_values)
 						# No acknowledgment needed - this completes the async request cycle
 					continue
-				elif mtype == "field_value_response":
-					# Frontend responds to a previous get_field_value request from backend
-					request_id = obj.get("request_id")
-					value = obj.get("value")
-					found = obj.get("found", False)
-					if not request_id:
-						await websocket.send_json({"type": "error", "code": "invalid_response", "reason": "request_id_required"})
-					else:
-						# Synchronous handler will resolve the waiting future in the service
-						try:
-							service.handle_field_value_response(request_id, value, bool(found))
-						except Exception as e:
-							_log.error("field_value_response_handling_failed", error=str(e), request_id=request_id)
-					# No acknowledgment needed - completes async cycle
-					continue
 				elif mtype == "next_field_hint_response":
 					# Frontend responds to get_next_field_hint request from backend
 					request_id = obj.get("request_id")

@@ -38,7 +38,6 @@ EXPECTED_TOOL_NAMES = {
     "update_form_fields",
     "get_form_status",
     "switch_section",
-    "get_field_value",
     "confirm_field",
     "ask_secretary",
     "skip_field",
@@ -52,7 +51,6 @@ SAMPLE_ARGS = {
     "update_form_fields": {"field_id": "p1_first_name", "value": "Jane"},
     "get_form_status": {"field_ids": ["p1_first_name"]},
     "switch_section": {"section_identifier": "2"},
-    "get_field_value": {"spoken_name": "first name"},
     "confirm_field": {"field_id": "p1_first_name", "confirmation_method": "verbal"},
     "ask_secretary": {"query": "what is their first name?"},
     "skip_field": {"field_id": "p1_first_name"},
@@ -137,7 +135,6 @@ def _make_handler() -> CallbackHandler:
             "form_state": {},
         }),
         handle_switch_section=AsyncMock(return_value={"success": True}),
-        handle_get_field_value=AsyncMock(return_value={"found": True, "value": "x"}),
         request_form_state_from_client=AsyncMock(return_value={}),
         handle_ask_secretary=AsyncMock(return_value="a prose answer"),
     )
@@ -165,8 +162,6 @@ async def test_every_declared_tool_is_dispatched_not_dropped(name):
         handler._handle_update_fields.assert_called_once()
     elif name == "switch_section":
         handler._handle_switch_section.assert_awaited_once()
-    elif name == "get_field_value":
-        handler._handle_get_field_value.assert_awaited_once()
     elif name == "get_form_status":
         handler._request_form_state_from_client.assert_awaited_once()
     elif name == "confirm_field":
@@ -203,9 +198,6 @@ async def test_dispatcher_reads_the_declared_required_args():
 
     await handler.on_tool_call("switch_section", {"section_identifier": "3"})
     handler._handle_switch_section.assert_awaited_once_with("3")
-
-    await handler.on_tool_call("get_field_value", {"spoken_name": "last name"})
-    handler._handle_get_field_value.assert_awaited_once_with("last name")
 
     await handler.on_tool_call("get_form_status", {"field_ids": ["a", "b"]})
     handler._request_form_state_from_client.assert_awaited_once_with(["a", "b"])
@@ -253,3 +245,58 @@ async def test_unknown_tool_returns_empty_ack_not_error():
     assert result == {}
     handler._handle_update_fields.assert_not_called()
     handler._handle_switch_section.assert_not_awaited()
+
+
+# --------------------------------------------------------------------------
+# Part C -- get_field_value retirement (bd polyglot-pdf-p5h2, epic
+# polyglot-pdf-fc7t sprint-11 decision D1): in continuous mode (the only
+# production path) recall is ask_secretary's job; switch_to_field already
+# returns the current value on navigation. get_field_value must appear in
+# ZERO of: TOOL_DECLARATIONS, dispatch tables, SI text.
+# --------------------------------------------------------------------------
+def test_get_field_value_not_in_tool_declarations():
+    """No declared tool is named get_field_value -- covered structurally by
+    EXPECTED_TOOL_NAMES/test_declared_tool_names_match_expected_set above, but
+    pinned explicitly here as the bead's grep-checkable exit criterion."""
+    names = {d["name"] for d in Settings().TOOL_DECLARATIONS}
+    assert "get_field_value" not in names
+
+
+def test_dti_si_recall_guidance_names_ask_secretary_not_get_field_value():
+    """The DTI initiating-message recall guidance (render_section_metadata,
+    which carries the 'Available fields from completed sections' line into the
+    continuous-mode session/section-start injection) must steer the model to
+    ask_secretary and must never mention the retired get_field_value tool."""
+    from backend.services.ai_context import render_section_metadata
+
+    block = render_section_metadata(
+        form_title="I-90",
+        previous_spoken_names=["first name", "last name"],
+    )
+    assert "ask_secretary" in block
+    assert "get_field_value" not in block
+
+
+def test_legacy_si_recall_guidance_does_not_mention_get_field_value():
+    """The legacy full-SI template (harness-only baseline, Settings.SYSTEM_INSTRUCTION)
+    has no ask_secretary tool declared for it, so it must not steer the model to
+    a tool -- it must simply never name the retired get_field_value tool."""
+    from backend.services.ai_context import build_form_context
+
+    legacy_settings = Settings(USE_DTI=False, CONTINUOUS_SESSION=False)
+    schema = {
+        "form_metadata": {"title": "I-90"},
+        "fields": [{"id": "f1", "name": "First name", "type": "text"}],
+    }
+    # build_form_context reads get_settings() from its own module scope, so
+    # patch it the same way test_ai_context.py's legacy fixture does.
+    import backend.services.ai_context as ai_context_mod
+    original_get_settings = ai_context_mod.get_settings
+    try:
+        ai_context_mod.get_settings = lambda: legacy_settings
+        si = build_form_context(
+            schema, {}, "English", previous_spoken_names=["first name"]
+        )
+    finally:
+        ai_context_mod.get_settings = original_get_settings
+    assert "get_field_value" not in si

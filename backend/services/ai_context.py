@@ -121,7 +121,7 @@ def render_section_metadata(
 
     if previous_spoken_names:
         lines.append(
-            "Available fields from completed sections (use get_field_value with "
+            "Available fields from completed sections (use ask_secretary to recall "
             "these exact names): " + ", ".join(previous_spoken_names)
         )
 
@@ -409,13 +409,13 @@ def build_form_context(
     total_sections_text = total_sections if total_sections is not None else "1"
     section_label_text = section_label if section_label else form_title
     
-    # Format previous spoken names for field lookups
-    # These are ALL the spoken names from completed sections that can be queried via get_field_value
+    # Format previous spoken names for context (legacy per-section mode; no
+    # recall tool is declared here, this is informational only).
     # The frontend maintains a spokenNameToFieldId map, so we need to give Gemini all available names
     if previous_spoken_names and len(previous_spoken_names) > 0:
-        # Include ALL spoken names - user might want to look up any field from any previous section
+        # Include ALL spoken names - informational context on fields already filled
         previous_names_text = (
-            "Available fields from completed sections (use get_field_value with these exact names): " +
+            "Fields already filled in completed sections: " +
             ", ".join(previous_spoken_names)
         )
     else:

@@ -3,7 +3,7 @@
 bd polyglot-pdf-jnjj.26 (harness; reused by jnjj.37 for the context-format
 comparison). Renders the I-90 secretary context (secretary_context.py) from the
 shared fixture (secretary_recall_corpus.FIELD_VALUES / SHOWN_MAP), asks the cheap
-secretary model (MODEL_SECRETARY, default gemini-3.1-flash-lite -- see the constant
+secretary model (MODEL_SECRETARY, default gemini-2.5-flash-lite -- see the constant
 for why; override with --model) each prose query in the stratified battery
 (secretary_recall_corpus.build_corpus), and characterizes the answers:
 
@@ -25,12 +25,16 @@ acceptable measurement artifact (mirrors g1). The probe still logs model name /
 counts / scores to stdout, never frames real PHI. In production the rendered
 context + answers are PHI and must not be logged.
 
-Usage:
-    GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_secretary_recall.py
+Usage (Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model
+work runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. python backend/scripts/probe_secretary_recall.py
     # offline scoring check (perfect-oracle stub, no API calls, no judge):
-    GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_secretary_recall.py --dry-run
+    PYTHONPATH=. python backend/scripts/probe_secretary_recall.py --dry-run
     # skip the Sonnet judge (grounding scores only):
     ... python backend/scripts/probe_secretary_recall.py --no-judge
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_secretary_recall.py
 
 ASCII only (CLAUDE.md scar #6).
 """
@@ -64,15 +68,17 @@ from backend.scripts.secretary_recall_corpus import (  # noqa: E402
     SHOWN_MAP,
 )
 
-# Default to gemini-3.1-flash-lite: gemini-2.5-flash-lite has been in a sustained,
-# widely-reported flapping/503 degradation for days (2026-06), which makes it an
-# unreliable MEASUREMENT substrate -- runs abort or stall, and a per-call fallback
-# would mix models mid-battery and muddy the data (a comparison must hold the model
-# CONSTANT). 3.1-flash-lite is the same lite tier, stable + sub-second, ~2.5x the
-# price (negligible at research scale -- the whole trial has cost <$1). Override
-# with --model. Production resilience (the 2.5->3.1 fallback) lives in TextAIGemini
-# (jnjj.42), where mixing models across calls is correct; here we want consistency.
-MODEL_SECRETARY = "gemini-3.1-flash-lite"
+# Default to gemini-2.5-flash-lite: the PRODUCTION primary secretary model
+# (backend/adapters/text_ai_gemini.py) and available on Vertex, the default
+# client path since the 2026-07-12 billing directive (3.1-flash-lite is
+# AI-Studio-only and 404s on Vertex, so it cannot be the default here).
+# History: this constant was temporarily 3.1-flash-lite during the June 2026
+# 2.5-lite flapping/503 degradation (an unreliable measurement substrate);
+# that episode has passed and a Vertex-incompatible default is broken-by-
+# default now. Override with --model for a deliberate different-model run
+# (hold the model CONSTANT within a battery -- production's 2.5->3.1 fallback
+# mixing lives in TextAIGemini, jnjj.42, and is correct THERE, not here).
+MODEL_SECRETARY = "gemini-2.5-flash-lite"
 JUDGE_MODEL = "claude-sonnet-4-6"
 
 OUT_DIR = os.path.join(
@@ -114,9 +120,28 @@ SECRETARY_PROMPT = (
 
 
 def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("NO KEY in env GEMINI_API_KEY", flush=True)
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
     return genai.Client(api_key=key)
 

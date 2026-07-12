@@ -396,23 +396,6 @@ class Settings(BaseModel):
 				"required": ["section_identifier"]
 			}
 		},
-		{
-			"name": "get_field_value",
-			"description": (
-				"Look up field value by EXACT spoken name from schema or previous sections. "
-				"Match exact name shown in context - do not abbreviate."
-			),
-			"parameters": {
-				"type": "object",
-				"properties": {
-					"spoken_name": {
-						"type": "string",
-						"description": "Exact field name from context"
-					}
-				},
-				"required": ["spoken_name"]
-			}
-		},
 		# REMOVED: complete_section tool (optimization - frontend auto-detects completion)
 		# Section completion is now triggered automatically when all fields are confirmed
 		{
@@ -605,7 +588,6 @@ class Settings(BaseModel):
     "- update_form_fields: Fill ONE field. Returns success or validation error.\n"
     "- confirm_field: REQUIRED after filling field. Params: field_id, confirmation_method='verbal'. Returns next_field_hint.\n"
     "- get_form_status: Returns 'field_id:value:confirmed|field_id:value:unconfirmed'. Only filled fields included. Omitted = empty. Use when user asks 'what have I filled?'\n"
-    "- get_field_value: Retrieve value from previous section by EXACT spoken name\n"
     "- switch_section: Navigate to different section using ORDER number from AVAILABLE SECTIONS\n"
     "- Current section only - for previous sections tell user to switch first\n\n"
 

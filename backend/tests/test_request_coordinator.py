@@ -205,71 +205,6 @@ class TestRequestNextFieldHint:
         assert coordinator._pending == {}
 
 
-class TestRequestFieldValue:
-    """Tests for request_field_value method."""
-    
-    @pytest.mark.asyncio
-    async def test_request_field_value_no_websocket(self):
-        """Should return not found when no websocket."""
-        coordinator = RequestCoordinator()
-        
-        result = await coordinator.request_field_value("email")
-        
-        assert result == {"found": False, "value": None}
-    
-    @pytest.mark.asyncio
-    async def test_request_field_value_sends_message(self):
-        """Should send get_field_value message with spoken_name."""
-        mock_ws = AsyncMock()
-        coordinator = RequestCoordinator(websocket=mock_ws)
-        
-        async def send_response():
-            await asyncio.sleep(0.01)
-            call_args = mock_ws.send_json.call_args[0][0]
-            request_id = call_args["request_id"]
-            coordinator.handle_field_value_response(request_id, "test@example.com", True)
-        
-        asyncio.create_task(send_response())
-        
-        result = await coordinator.request_field_value("email")
-        
-        assert mock_ws.send_json.called
-        sent_message = mock_ws.send_json.call_args[0][0]
-        assert sent_message["type"] == "get_field_value"
-        assert sent_message["spoken_name"] == "email"
-        assert "request_id" in sent_message
-        assert result == {"value": "test@example.com", "found": True}
-    
-    @pytest.mark.asyncio
-    async def test_request_field_value_not_found(self):
-        """Should handle field not found response."""
-        mock_ws = AsyncMock()
-        coordinator = RequestCoordinator(websocket=mock_ws)
-        
-        async def send_response():
-            await asyncio.sleep(0.01)
-            call_args = mock_ws.send_json.call_args[0][0]
-            request_id = call_args["request_id"]
-            coordinator.handle_field_value_response(request_id, None, False)
-        
-        asyncio.create_task(send_response())
-        
-        result = await coordinator.request_field_value("nonexistent")
-        
-        assert result == {"value": None, "found": False}
-    
-    @pytest.mark.asyncio
-    async def test_request_field_value_timeout(self):
-        """Should return not found on timeout."""
-        mock_ws = AsyncMock()
-        coordinator = RequestCoordinator(websocket=mock_ws)
-        
-        result = await coordinator.request_field_value("email")
-        
-        assert result == {"found": False, "value": None}
-        assert coordinator._pending == {}
-
-
 class TestRequestSectionInfo:
     """Tests for request_section_info method."""
     
@@ -408,16 +343,6 @@ class TestResponseHandlers:
 
         assert future.done()
         assert future.result() == "Next: email"
-        assert coordinator._pending == {}
-
-    def test_handle_field_value_response_resolves_future(self):
-        coordinator = RequestCoordinator()
-        future = _seed(coordinator, "test-id", "field_value")
-
-        coordinator.handle_field_value_response("test-id", "test@example.com", True)
-
-        assert future.done()
-        assert future.result() == {"value": "test@example.com", "found": True}
         assert coordinator._pending == {}
 
     def test_handle_section_info_response_resolves_future(self):

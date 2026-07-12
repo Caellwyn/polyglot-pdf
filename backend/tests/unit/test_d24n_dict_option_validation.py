@@ -104,7 +104,6 @@ async def test_update_form_fields_dict_options_invalid_does_not_raise_typeerror(
     handler.set_tool_handlers(
         handle_update_fields=handle_update_fields,
         handle_switch_section=lambda *a, **k: None,
-        handle_get_field_value=lambda *a, **k: None,
         request_form_state_from_client=AsyncMock(return_value={}),
     )
 

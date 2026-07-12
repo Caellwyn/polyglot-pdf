@@ -3,7 +3,7 @@ Tests for CallbackHandler - Gemini Live AI callback routing.
 
 Tests cover:
 - Callback registration and delegation
-- Tool routing (update_form_fields, get_form_status, switch_section, get_field_value, confirm_field)
+- Tool routing (update_form_fields, get_form_status, switch_section, confirm_field)
 - Argument parsing and normalization
 - Error response building
 - Form update coordination
@@ -35,7 +35,6 @@ def mock_coordinator():
     coordinator = MagicMock(spec=RequestCoordinator)
     coordinator.request_form_state = AsyncMock()
     coordinator.request_next_field_hint = AsyncMock()
-    coordinator.request_field_value = AsyncMock()
     coordinator.request_section_info = AsyncMock()
     # confirm_field is a synchronous round-trip (bd polyglot-pdf-wpw.2): the FE acks
     # whether it recorded the confirmation. Default to recorded so the existing
@@ -58,7 +57,6 @@ def mock_handlers():
             "validation_errors": []
         }),
         "switch_section": AsyncMock(return_value={"success": True}),
-        "get_field_value": AsyncMock(return_value={"found": True, "value": "test"}),
         "request_form_state": AsyncMock(return_value={}),
     }
 
@@ -76,7 +74,6 @@ def callback_handler(mock_websocket, mock_coordinator, mock_handlers):
     handler.set_tool_handlers(
         handle_update_fields=mock_handlers["update_fields"],
         handle_switch_section=mock_handlers["switch_section"],
-        handle_get_field_value=mock_handlers["get_field_value"],
         request_form_state_from_client=mock_handlers["request_form_state"],
     )
     
@@ -102,19 +99,16 @@ class TestCallbackRegistration:
         
         update_handler = MagicMock()
         switch_handler = AsyncMock()
-        get_value_handler = AsyncMock()
         request_state_handler = AsyncMock()
 
         handler.set_tool_handlers(
             handle_update_fields=update_handler,
             handle_switch_section=switch_handler,
-            handle_get_field_value=get_value_handler,
             request_form_state_from_client=request_state_handler,
         )
 
         assert handler._handle_update_fields == update_handler
         assert handler._handle_switch_section == switch_handler
-        assert handler._handle_get_field_value == get_value_handler
         assert handler._request_form_state_from_client == request_state_handler
 
     # Note: on_form_update, on_transcript, on_audio, and send_form_update
@@ -158,17 +152,6 @@ class TestToolRouting:
         
         mock_handlers["switch_section"].assert_called_once_with("Personal Info")
         assert result["success"] is True
-
-    @pytest.mark.asyncio
-    async def test_get_field_value_uses_handler(self, callback_handler, mock_handlers):
-        """Test that get_field_value requests field value via handler."""
-        result = await callback_handler.on_tool_call(
-            tool_name="get_field_value",
-            arguments={"spoken_name": "name"}
-        )
-        
-        mock_handlers["get_field_value"].assert_called_once_with("name")
-        assert result["found"] is True
 
     # NOTE: the `complete_section` tool was removed (section completion is now
     # auto-detected by the frontend when all fields are confirmed). Its routing
@@ -411,7 +394,6 @@ class TestAskSecretaryRouting:
         handler.set_tool_handlers(
             handle_update_fields=MagicMock(),
             handle_switch_section=AsyncMock(),
-            handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
             handle_ask_secretary=ask,
         )
@@ -440,7 +422,6 @@ class TestAskSecretaryRouting:
         handler.set_tool_handlers(
             handle_update_fields=MagicMock(),
             handle_switch_section=AsyncMock(),
-            handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
             handle_ask_secretary=AsyncMock(return_value={"status": "pending", "answer": ""}),
         )
@@ -471,7 +452,6 @@ class TestAskSecretaryRouting:
         handler.set_tool_handlers(
             handle_update_fields=MagicMock(),
             handle_switch_section=AsyncMock(),
-            handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
             handle_ask_secretary=AsyncMock(return_value={"status": "failed", "answer": ""}),
         )
@@ -522,7 +502,6 @@ class TestAskSecretaryRouting:
         handler.set_tool_handlers(
             handle_update_fields=MagicMock(),
             handle_switch_section=AsyncMock(),
-            handle_get_field_value=AsyncMock(),
             request_form_state_from_client=AsyncMock(return_value={}),
             handle_ask_secretary=AsyncMock(side_effect=RuntimeError("boom")),
         )

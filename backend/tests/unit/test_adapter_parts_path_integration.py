@@ -50,7 +50,6 @@ def real_callback_handler():
             "validation_errors": [],
         }),
         handle_switch_section=AsyncMock(return_value={"success": True}),
-        handle_get_field_value=AsyncMock(return_value={"found": True, "value": "x"}),
         request_form_state_from_client=AsyncMock(return_value={}),
     )
     return handler
