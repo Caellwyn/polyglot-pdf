@@ -1,0 +1,80 @@
+{
+  "recorded_at": "2026-07-12T23:33:38Z",
+  "session_id": "4af936d1-e5f8-408e-972a-b63926311963",
+  "beads": [
+    "polyglot-pdf-8gk6"
+  ],
+  "arm": "A",
+  "cost_category": "audit",
+  "wall_clock": {
+    "first_ts": "2026-07-12T17:16:43.327Z",
+    "last_ts": "2026-07-12T23:33:31.874Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 62505,
+      "output_tokens": 283618,
+      "cache_read_input_tokens": 113896093,
+      "cache_creation_input_tokens": 1888856
+    },
+    "subagent": {
+      "input_tokens": 31309,
+      "output_tokens": 147234,
+      "cache_read_input_tokens": 27628825,
+      "cache_creation_input_tokens": 1458316
+    },
+    "total": {
+      "input_tokens": 93814,
+      "output_tokens": 430852,
+      "cache_read_input_tokens": 141524918,
+      "cache_creation_input_tokens": 3347172
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-opus-4-8": {
+        "input_tokens": 62505,
+        "output_tokens": 283618,
+        "cache_read_input_tokens": 113896093,
+        "cache_creation_input_tokens": 1888856
+      }
+    },
+    "subagent": {
+      "claude-opus-4-8": {
+        "input_tokens": 31309,
+        "output_tokens": 147234,
+        "cache_read_input_tokens": 27628825,
+        "cache_creation_input_tokens": 1458316
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-opus-4-8": 76.156372
+    },
+    "subagent": {
+      "claude-opus-4-8": 26.766283
+    },
+    "by_model": {
+      "claude-opus-4-8": 102.922655
+    },
+    "unpriced_models": [],
+    "orchestrator_total": 76.156372,
+    "subagent_total": 26.766283,
+    "total": 102.922654,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-opus-4-8"
+  ],
+  "assistant_turns": {
+    "orchestrator": 546,
+    "subagent": 555
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 0,
+  "maintainer_touchpoints": 0,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}
