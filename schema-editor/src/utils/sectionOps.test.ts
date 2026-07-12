@@ -6,6 +6,7 @@ import {
   isToReviewSection,
   mergeSections,
   mintSectionId,
+  moveFieldToSection,
   movedFieldCount,
   removeSection,
   renameSection,
@@ -162,6 +163,88 @@ describe('mergeSections', () => {
       .toBe(sections);
     expect(mergeSections(fields, sections, parts, 'sec_a', 'nope').sections)
       .toBe(sections);
+  });
+});
+
+describe('moveFieldToSection (bd polyglot-pdf-w7rg)', () => {
+  it('updates BOTH section.fields[] arrays and field.section_id', () => {
+    const { fields, sections, parts } = fixture();
+    const next = moveFieldToSection(fields, sections, parts, 'f1', 'sec_b');
+    const byId = new Map(next.fields.map(f => [f.id, f]));
+    expect(byId.get('f1')!.section_id).toBe('sec_b');
+    const secA = next.sections.find(s => s.id === 'sec_a')!;
+    const secB = next.sections.find(s => s.id === 'sec_b')!;
+    expect(secA.fields).toEqual(['f2']);          // dropped from old
+    expect(secB.fields).toEqual(['f3', 'f1']);    // appended to new
+    // No field listed twice or nowhere.
+    const listed = next.sections.flatMap(s => s.fields);
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it('reassigning to "No section" (null) clears section_id and all listings', () => {
+    const { fields, sections, parts } = fixture();
+    const next = moveFieldToSection(fields, sections, parts, 'f1', null);
+    const byId = new Map(next.fields.map(f => [f.id, f]));
+    expect(byId.get('f1')!.section_id).toBeUndefined();
+    expect(next.sections.find(s => s.id === 'sec_a')!.fields).toEqual(['f2']);
+    expect(next.sections.some(s => s.fields.includes('f1'))).toBe(false);
+  });
+
+  it('is a no-op when the field is already consistent in the destination', () => {
+    const { fields, sections, parts } = fixture();
+    const next = moveFieldToSection(fields, sections, parts, 'f1', 'sec_a');
+    expect(next.fields).toBe(fields);      // same references -> no undo step
+    expect(next.sections).toBe(sections);
+  });
+
+  it('heals pre-existing drift for the moved field (double-listed -> once)', () => {
+    // f1 points at sec_a but is stale-listed in BOTH sec_a and sec_b.
+    const fields = [field('f1', 'sec_a'), field('f2', 'sec_a')];
+    const sections = [
+      section('sec_a', 'Alpha', 1, ['f1', 'f2']),
+      section('sec_b', 'Beta', 2, ['f1']),        // drifted duplicate listing
+    ];
+    const next = moveFieldToSection(fields, sections, undefined, 'f1', 'sec_b');
+    const secA = next.sections.find(s => s.id === 'sec_a')!;
+    const secB = next.sections.find(s => s.id === 'sec_b')!;
+    expect(secA.fields).toEqual(['f2']);           // stripped from sec_a
+    expect(secB.fields).toEqual(['f1']);           // present exactly once
+    const listed = next.sections.flatMap(s => s.fields);
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it('heals a field double-listed AT its own destination (no-op guard is strict)',
+     () => {
+    // section_id already points at sec_a, but the field is stale-listed in
+    // BOTH sec_a and sec_b. "Moving" it to sec_a must still strip the sec_b
+    // duplicate, not early-return unchanged.
+    const fields = [field('f1', 'sec_a')];
+    const sections = [
+      section('sec_a', 'Alpha', 1, ['f1']),
+      section('sec_b', 'Beta', 2, ['f1']),   // stale duplicate at a NON-dest
+    ];
+    const next = moveFieldToSection(fields, sections, undefined, 'f1', 'sec_a');
+    expect(next.sections.find(s => s.id === 'sec_a')!.fields).toEqual(['f1']);
+    expect(next.sections.find(s => s.id === 'sec_b')!.fields).toEqual([]);
+    const listed = next.sections.flatMap(s => s.fields);
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it('a FieldEditor-style move then removeSection neither drops nor duplicates',
+     () => {
+    // Exit criterion 2: chain the dropdown reassignment into a remove/merge.
+    const { fields, sections, parts } = fixture();
+    const moved = moveFieldToSection(fields, sections, parts, 'f1', 'sec_b');
+    const after = removeSection(moved.fields, moved.sections, moved.parts,
+                                'sec_a', 'sec_b');
+    const secB = after.sections.find(s => s.id === 'sec_b')!;
+    // sec_a's only remaining field f2 re-files into sec_b; f1 already there.
+    expect(secB.fields).toEqual(['f3', 'f1', 'f2']);
+    const listed = after.sections.flatMap(s => s.fields);
+    expect(new Set(listed).size).toBe(listed.length);
+    const byId = new Map(after.fields.map(f => [f.id, f]));
+    expect(byId.get('f1')!.section_id).toBe('sec_b');
+    expect(byId.get('f2')!.section_id).toBe('sec_b');
   });
 });
 
