@@ -55,8 +55,12 @@ PERSONA (coherent life history)
   - She did NOT use a separate preparer, so the ENTIRE Part 7 preparer block is NA
     (no preparer name, address, signature, etc.) -- the preparer-statement option is
     not selected, so there is no "Part 7 populated but not certified" contradiction.
-  - No disability accommodation requested (p4_checkbox1 = "No"), so the
-    accommodation sub-fields are conditional-HIDDEN -> NA.
+  - No disability accommodation requested (p4_checkbox1 = "No"). The three
+    accommodation-TYPE checkboxes stay SHOWN (their show_if is is_not_empty on
+    p4_checkbox1[1], satisfied because the radio was answered at all), but the
+    persona leaves them unchecked -> NA as a value; the detail textareas below
+    them ARE hidden (gate is_checked on an unchecked checkbox) -> NA
+    (bd polyglot-pdf-8gk6).
   - No removal proceedings, no I-407 abandonment (Part 3 = "No"/"No").
   - Simple history -> NO Part 8 additional-information overflow entries are needed,
     so every p8_line[3-5]* page/part/item/additionalinfo entry is NA EXCEPT the
@@ -326,12 +330,12 @@ ANSWER_KEY: dict = {
 
     # ---- Part 4: Accommodations -- none requested ----
     "p4_checkbox1[1]": "select_no",   # requesting accommodation? No
-    "p4_checkbox1a": None,                   # NA: gate = No
-    "p4_line1a_accomodationrequested": None,  # NA
-    "p4_checkbox1b": None,                    # NA: gate = No
-    "p4_line1b_accomodationrequested": None,  # NA
-    "p4_checkbox1c": None,                    # NA: gate = No
-    "p4_line1c_accomodationrequested": None,  # NA
+    "p4_checkbox1a": None,                   # NA: shown but unchecked
+    "p4_line1a_accomodationrequested": None,  # NA: hidden (checkbox unchecked)
+    "p4_checkbox1b": None,                    # NA: shown but unchecked
+    "p4_line1b_accomodationrequested": None,  # NA: hidden (checkbox unchecked)
+    "p4_checkbox1c": None,                    # NA: shown but unchecked
+    "p4_line1c_accomodationrequested": None,  # NA: hidden (checkbox unchecked)
 
     # ---- Part 5: Applicant's statement, contact, signature ----
     # Interpreter statement selected -> the "interpreter named in Part 6 read to me"
@@ -461,12 +465,20 @@ NA_REASON: dict = {
     "p2_line2h1_cityandstate": "commuter port-of-entry; persona is a plain LPR",
     "p2_checkbox2[5]": "reason-for-new-card field is show_if-gated to commuter (option [1]); production hides it for a plain LPR, so a real client cannot send it (see bd zi2s)",
     "p2_checkbox3": "issued-but-never-received gate p2_checkbox1 = Conditional PR (not selected)",
-    "p4_checkbox1a": "accommodation gate p4_checkbox1 = No",
-    "p4_line1a_accomodationrequested": "accommodation gate p4_checkbox1 = No (not selected)",
-    "p4_checkbox1b": "accommodation gate p4_checkbox1 = No",
-    "p4_line1b_accomodationrequested": "accommodation gate p4_checkbox1 = No (not selected)",
-    "p4_checkbox1c": "accommodation gate p4_checkbox1 = No",
-    "p4_line1c_accomodationrequested": "accommodation gate p4_checkbox1 = No (not selected)",
+    # The three accommodation-type checkboxes are SHOWN (their show_if is
+    # is_not_empty on p4_checkbox1[1], which the persona answered -- "select_no"
+    # is non-empty, so the gate is satisfied whether the answer was Yes or No),
+    # but the persona requests no accommodation, so each is left unchecked -> NA
+    # as a VALUE, not a hidden field (bd polyglot-pdf-8gk6; same persona-grounds
+    # correction as the p5 fields under bd polyglot-pdf-b7ln).
+    "p4_checkbox1a": "shown (p4_checkbox1 answered), but persona requests no accommodation -> unchecked",
+    "p4_checkbox1b": "shown (p4_checkbox1 answered), but persona requests no accommodation -> unchecked",
+    "p4_checkbox1c": "shown (p4_checkbox1 answered), but persona requests no accommodation -> unchecked",
+    # The detail textareas ARE hidden: their gate is is_checked on the matching
+    # checkbox above, which is unchecked, so production hides them -> NA.
+    "p4_line1a_accomodationrequested": "hidden: gate p4_checkbox1a is_checked unsatisfied (checkbox unchecked)",
+    "p4_line1b_accomodationrequested": "hidden: gate p4_checkbox1b is_checked unsatisfied (checkbox unchecked)",
+    "p4_line1c_accomodationrequested": "hidden: gate p4_checkbox1c is_checked unsatisfied (checkbox unchecked)",
     # p5_line1b_language is NO LONGER NA (bd polyglot-pdf-b7ln): the persona selects
     # the interpreter-read statement its show_if `includes`, so it is shown and
     # carries "Vietnamese" (set in ANSWER_KEY above).
