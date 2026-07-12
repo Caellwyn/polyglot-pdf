@@ -124,6 +124,31 @@ def test_i90_uses_name_convention_with_no_spurious_to_review():
     assert not any(sid.startswith("sec_to_review") for sid in section_ids)
 
 
+def test_i90_part8_repeat_rows_not_filed_under_name_subheading():
+    """A sub-heading governs exactly one USCIS part (bd polyglot-pdf-h1eo).
+
+    i-90 page 7 prints the Part-1 name-reverification block under a "Your
+    Full Name" sub-heading, immediately followed by Part-8's Page/Part/Item-
+    Number continuation rows -- which have NO sub-heading of their own and no
+    intervening part heading, so the geometric barrier never fires. Before the
+    fix those Part-8 fields inherited the "Your Full Name" label; now they
+    fall through to their part label ("Part 8. ...")."""
+    schema = _load_kit(_I90)
+    ds.derive_and_apply(schema, str(_I90 / "form.pdf"))
+    by_section = {s["id"]: s for s in schema["sections"]}
+    p8_fields = ("p8_line3a_pagenumber", "p8_line3d_additionalinfo",
+                 "p8_line5d_additionalinfo[1]")
+    for fid in p8_fields:
+        sid = next(f["section_id"] for f in schema["fields"] if f["id"] == fid)
+        label = by_section[sid]["label"]
+        assert "Your Full Name" not in label, (fid, label)
+        assert label.startswith("Part 8"), (fid, label)
+    # The legitimate page-7 name-reverification fields keep the Name heading.
+    for fid in ("p1_line3a_familyname[1]", "p1_line3c_middlename[1]"):
+        sid = next(f["section_id"] for f in schema["fields"] if f["id"] == fid)
+        assert by_section[sid]["label"] == "Your Full Name", (fid, sid)
+
+
 def test_f1040_dependents_cap_split_is_balanced():
     """The motivating real-kit case for the balanced-split policy (maintainer
     feedback at the 6cfu.1 checkpoint): f1040's 'Dependents' block (42 fields

@@ -494,7 +494,10 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
         subheads = [h for h in headings if h.level == 2]
         partheads = [h for h in headings if h.level == 1]
 
-        def field_subhead(f: FieldRec) -> Optional[Heading]:
+        def nearest_subhead(f: FieldRec) -> Optional[Heading]:
+            """The level-2 sub-heading directly above f in the same column,
+            unless a level-1 part heading falls between them (which opens a
+            new part whose first items have no sub-heading of their own)."""
             col = 0 if f.x < page_width / 2 else 1
             best = None
             for h in subheads:
@@ -507,15 +510,52 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
                         best = h
             if best is None:
                 return None
-            # A part heading BETWEEN the sub-heading and the field (same
-            # column) invalidates it: the field opens a new part whose first
-            # items have no sub-heading of their own.
             for h in partheads:
                 hcol = 0 if h.x < page_width / 2 else 1
                 if (h.page == f.page and hcol == col
                         and best.y < h.y <= f.y + 0.6 * h.size):
                     return None
             return best
+
+        # A sub-heading governs exactly one USCIS part: the part of the
+        # TOPMOST field printed under it. A later field that geometrically
+        # falls under the same sub-heading but belongs to a DIFFERENT part is
+        # not governed by it (bd polyglot-pdf-h1eo): e.g. i-90 page 7's Part-8
+        # continuation rows (Page/Part/Item-Number) sit below the "Your Full
+        # Name" sub-heading that governs the Part-1 name-reverification block,
+        # with no sub-heading of their own and no intervening part heading, so
+        # the geometric barrier above never fires. Keyed by heading identity
+        # (page, x, y, text) so two same-text sub-headings on the page stay
+        # distinct.
+        def _subkey(h: Heading) -> tuple:
+            return (h.page, round(h.x, 1), round(h.y, 1), h.text)
+
+        # Governing part = the part of the TOPMOST field under the sub-heading
+        # (smallest y; deterministic tie-break on x then fid), independent of
+        # `placed` ordering.
+        subhead_top: dict[tuple, tuple] = {}  # key -> (y, x, fid, part)
+        for f in placed:
+            p = uscis_parse(f.name)
+            if p is None:
+                continue
+            sub = nearest_subhead(f)
+            if sub is None:
+                continue
+            k = _subkey(sub)
+            cand = (f.y, f.x, f.fid, p["part"])
+            if k not in subhead_top or cand[:3] < subhead_top[k][:3]:
+                subhead_top[k] = cand
+        subhead_part = {k: v[3] for k, v in subhead_top.items()}
+
+        def field_subhead(f: FieldRec, part: int) -> Optional[Heading]:
+            sub = nearest_subhead(f)
+            if sub is None:
+                return None
+            # Reject a sub-heading that governs a different part than this
+            # field's (bd polyglot-pdf-h1eo).
+            if subhead_part.get(_subkey(sub)) != part:
+                return None
+            return sub
 
         buckets: "OrderedDict[tuple, list[FieldRec]]" = OrderedDict()
         parsed: dict[str, dict] = {}
@@ -526,7 +566,7 @@ def derive(fields: list[FieldRec], headings: list[Heading], strategy: str,
                 strays.append(f)
                 continue
             parsed[f.fid] = p
-            sub = field_subhead(f)
+            sub = field_subhead(f, p["part"])
             key = (p["part"], f.page, sub.text if sub else None)
             buckets.setdefault(key, []).append(f)
         if strays:
