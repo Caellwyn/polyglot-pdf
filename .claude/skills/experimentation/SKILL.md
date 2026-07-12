@@ -142,10 +142,11 @@ estimated_cost = sum over each (model, arm) of:
    (`GEMINI_API_KEY`), so spend lands on the tracked billing project. AI Studio
    is a deliberate, explicitly-flagged exception only (e.g. a model not yet
    available on Vertex). If a script builds `genai.Client(api_key=...)`,
-   convert it to the Vertex-default pattern in
-   `backend/scripts/probe_secretary_recall.py::_client` (mirrors
-   `backend/adapters/text_ai_gemini.py`). (bd memory
-   `all-live-model-work-runs-on-vertex`)
+   convert it to the Vertex-default pattern in `backend/adapters/text_ai_gemini.py`
+   (`vertexai=True, project=os.getenv("GOOGLE_CLOUD_PROJECT")`) -- note that
+   `backend/scripts/probe_secretary_recall.py::_client` is itself still
+   AI-Studio-keyed as of this writing; do not copy it as a Vertex example.
+   (bd memory `all-live-model-work-runs-on-vertex`)
 2. **Deploy-fidelity for anything touching the live/voice path.** A probe of
    the live Gemini session (tool declarations, system-instruction path,
    content shape) must represent what deploy actually sends -- production tool
@@ -206,6 +207,10 @@ realistic traffic, not just call the API directly:
   the actual measured numbers, and the verdict -- this is what Gate 1 searches
   next time. State the model/SDK version and date so a future session can judge
   staleness (see the SDK-cutover rule above).
+- Commit the raw run data alongside the findings doc (existing convention:
+  `scripts/spikes/data/` for CSV/JSON run artifacts, or a `<topic>_runs.jsonl`
+  next to the script) so a later session can re-derive the findings doc's
+  numbers instead of taking them on faith.
 - If the finding changes a documented invariant (a component doc, a standards
   doc, CLAUDE.md scar tissue), update that doc in the same PR -- don't leave
   the correction only in the findings file.

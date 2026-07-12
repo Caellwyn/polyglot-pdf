@@ -1,7 +1,7 @@
 ---
 date: 2026-07-12
 bead: polyglot-pdf-w5fz
-title: "Research skill: mandatory lit-review of prior journals/spike findings + maintainer-approved cost estimate before experiments"
+title: "Experimentation skill: mandatory lit-review of prior journals/spike findings + maintainer-approved cost estimate before experiments"
 tags: [doctrine, harness, conventions]
 ---
 
