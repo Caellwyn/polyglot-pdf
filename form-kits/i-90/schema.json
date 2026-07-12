@@ -11,82 +11,109 @@
   },
   "parts": [
     {
-      "id": "part_1",
-      "label": "Part 1. Information About You",
+      "id": "part_part_1_information_about_you",
+      "label": "Part 1.  Information About You",
       "order": 1,
       "section_ids": [
-        "Part 1 - Information About You",
-        "part_1_2_addresses",
-        "part_1_2_1_physical_mailing_address",
-        "part_1_3_additional_information"
+        "sec_part_1_information_about_you_p1",
+        "sec_your_full_name_p1",
+        "sec_mailing_address_p1",
+        "sec_physical_address_p1",
+        "sec_additional_information_p2",
+        "sec_your_full_name_p7"
       ]
     },
     {
-      "id": "part_2",
-      "label": "Part 2. Application Type",
+      "id": "part_part_2_application_type",
+      "label": "Part 2.  Application Type",
       "order": 2,
       "section_ids": [
-        "Part 2 - Application Type"
+        "sec_part_2_application_type_p2",
+        "sec_reason_for_application_select_only_one_box_p2",
+        "sec_part_2_application_type_continued_p3"
       ]
     },
     {
-      "id": "part_3",
-      "label": "Part 3. Processing Information",
+      "id": "part_part_3_processing_information",
+      "label": "Part 3.  Processing Information",
       "order": 3,
       "section_ids": [
-        "Part 3 - Processing Information"
+        "sec_part_3_processing_information_p3",
+        "sec_biographic_information_p3"
       ]
     },
     {
-      "id": "part_4",
-      "label": "Part 4. Accommodations for Individuals with Disabilities and/or Impairments",
+      "id": "part_part_4_accommodations_for_individuals_with_disab",
+      "label": "Part 4.  Accommodations for Individuals with Disabilities and/or Impairments",
       "order": 4,
       "section_ids": [
-        "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments"
+        "sec_part_4_accommodations_for_individuals_with_disab_p3",
+        "sec_part_4_accommodations_for_individuals_with_disab_p4"
       ]
     },
     {
-      "id": "part_5",
-      "label": "Part 5. Applicant's Statement, Contact Information, Certification, and Signature",
+      "id": "part_part_5_applicant_s_statement_contact_information",
+      "label": "Part 5.  Applicant's Statement, Contact Information, Certification, and Signature",
       "order": 5,
       "section_ids": [
-        "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature"
+        "sec_applicant_s_statement_p4",
+        "sec_applicant_s_contact_information_p4",
+        "sec_applicant_s_signature_p4"
       ]
     },
     {
-      "id": "part_6",
-      "label": "Part 6. Interpreter's Contact Information, Certification, and Signature",
+      "id": "part_part_6_interpreter_s_contact_information_certifi",
+      "label": "Part 6.  Interpreter's Contact Information, Certification, and Signature",
       "order": 6,
       "section_ids": [
-        "part_6_1_interpreter_s_name_and_business",
-        "part_6_2_interpreter_s_address",
-        "interpreter_s_signature_and_language"
+        "sec_interpreter_s_full_name_p5",
+        "sec_interpreter_s_mailing_address_p5",
+        "sec_interpreter_s_contact_information_p5",
+        "sec_interpreter_s_signature_p5",
+        "sec_interpreter_s_certification_p5"
       ]
     },
     {
-      "id": "part_7",
-      "label": "Part 7. Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
+      "id": "part_part_7_contact_information_declaration_and_signa",
+      "label": "Part 7.  Contact Information, Declaration, and Signature of the Person Preparing this Application, if Other Than the Applicant",
       "order": 7,
-      "section_ids": []
+      "section_ids": [
+        "sec_preparer_s_full_name_p5",
+        "sec_preparer_s_mailing_address_p5",
+        "sec_preparer_s_contact_information_p5",
+        "sec_preparer_s_statement_p6",
+        "sec_preparer_s_signature_p6"
+      ]
     },
     {
-      "id": "part_8",
-      "label": "Part 8. Additional Information",
+      "id": "part_part_8_additional_information",
+      "label": "Part 8.  Additional Information",
       "order": 8,
       "section_ids": [
-        "Part 8 - Additional Information",
-        "part_8_2_additional_information_part_b"
+        "sec_your_full_name_p7_2",
+        "sec_part_8_additional_information_p7"
       ]
     }
   ],
   "sections": [
     {
-      "id": "Part 1 - Information About You",
-      "label": "Part 1.1 - Information About You: Numbers and Names",
+      "id": "sec_part_1_information_about_you_p1",
+      "label": "Part 1.  Information About You",
       "order": 1,
       "fields": [
         "p1_line1_aliennumber",
-        "p1_line2_acctidentifier",
+        "p1_line2_acctidentifier"
+      ],
+      "page_number": 1,
+      "page_numbers": [
+        1
+      ]
+    },
+    {
+      "id": "sec_your_full_name_p1",
+      "label": "Your Full Name",
+      "order": 2,
+      "fields": [
         "p1_line3a_familyname",
         "p1_line3b_givenname",
         "p1_line3c_middlename",
@@ -94,46 +121,57 @@
         "p1_line5a_familyname",
         "p1_line5b_givenname",
         "p1_line5c_middlename"
+      ],
+      "page_number": 1,
+      "page_numbers": [
+        1
       ]
     },
     {
-      "id": "part_1_2_addresses",
-      "label": "Part 1.2 Mailing Address",
-      "order": 2,
+      "id": "sec_mailing_address_p1",
+      "label": "Mailing Address",
+      "order": 3,
       "fields": [
         "p1_line6a_incareofname",
         "p1_line6b_streetnumbername",
-        "p1_unit_type6c_unit",
         "p1_line6c_aptsteflrnumber",
         "p1_line6d_cityortown",
         "p1_line6e_state",
         "p1_line6f_zipcode",
         "p1_line6g_province",
         "p1_line6h_postalcode",
-        "p1_line6i_country"
+        "p1_line6i_country",
+        "p1_unit_type6c_unit"
+      ],
+      "page_number": 1,
+      "page_numbers": [
+        1
       ]
     },
     {
-      "id": "part_1_2_1_physical_mailing_address",
-      "label": "Part 1.3 Physical Mailing Address",
-      "description": "Address where you physically live",
-      "order": 3,
+      "id": "sec_physical_address_p1",
+      "label": "Physical Address",
+      "order": 4,
       "fields": [
         "p1_line7a_streetnumbername",
-        "p1_unit_type7b_unit",
         "p1_line7b_aptsteflrnumber",
         "p1_line7c_cityortown",
         "p1_line7d_state",
         "p1_line7e_zipcode",
         "p1_line7f_province",
         "p1_line7g_postalcode",
-        "p1_line7h_country"
+        "p1_line7h_country",
+        "p1_unit_type7b_unit"
+      ],
+      "page_number": 1,
+      "page_numbers": [
+        1
       ]
     },
     {
-      "id": "part_1_3_additional_information",
-      "label": "Part 1.4 Additional Information",
-      "order": 4,
+      "id": "sec_additional_information_p2",
+      "label": "Additional Information",
+      "order": 5,
       "fields": [
         "p1_line8_male",
         "p1_line9_dateofbirth",
@@ -144,185 +182,358 @@
         "p1_line14_classofadmission",
         "p1_line15_dateofadmission",
         "p1_line16_ssn"
+      ],
+      "page_number": 2,
+      "page_numbers": [
+        2
       ]
     },
     {
-      "id": "Part 2 - Application Type",
-      "label": "Part 2 - Application Type",
-      "order": 5,
+      "id": "sec_part_2_application_type_p2",
+      "label": "Part 2.  Application Type",
+      "order": 6,
       "fields": [
-        "p2_checkbox1",
-        "p2_checkbox3",
+        "p2_checkbox1"
+      ],
+      "page_number": 2,
+      "page_numbers": [
+        2
+      ]
+    },
+    {
+      "id": "sec_reason_for_application_select_only_one_box_p2",
+      "label": "Reason for Application (Select only one box)",
+      "order": 7,
+      "fields": [
         "p2_checkbox2[5]",
         "p2_line2h1_cityandstate"
+      ],
+      "page_number": 2,
+      "page_numbers": [
+        2
       ]
     },
     {
-      "id": "Part 3 - Processing Information",
-      "label": "Part 3 - Processing Information",
-      "order": 6,
+      "id": "sec_part_2_application_type_continued_p3",
+      "label": "Part 2.  Application Type (continued)",
+      "order": 8,
+      "fields": [
+        "p2_checkbox3"
+      ],
+      "page_number": 3,
+      "page_numbers": [
+        3
+      ]
+    },
+    {
+      "id": "sec_part_3_processing_information_p3",
+      "label": "Part 3.  Processing Information",
+      "order": 9,
       "fields": [
         "p3_line1_locationappliedvisa",
         "p3_line2_locationissuedvisa",
-        "p3_checkbox5[1]",
+        "p3_line3a_destination",
+        "p3_line3a1_cityandstate",
+        "p3_checkbox4[1]",
+        "p3_checkbox5[1]"
+      ],
+      "page_number": 3,
+      "page_numbers": [
+        3
+      ]
+    },
+    {
+      "id": "sec_biographic_information_p3",
+      "label": "Biographic Information",
+      "order": 10,
+      "fields": [
+        "p3_ethnicity",
         "p3_line8_heightfeet",
         "p3_line8_heightinches",
         "p3_line9_heightinches1",
         "p3_line9_heightinches2",
         "p3_line9_heightinches3",
-        "p3_line3a_destination",
-        "p3_line3a1_cityandstate",
-        "p3_checkbox4[1]",
         "p3_eye_color",
         "p3_hair_color",
-        "p3_ethnicity",
         "p3_race"
+      ],
+      "page_number": 3,
+      "page_numbers": [
+        3
       ]
     },
     {
-      "id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
-      "label": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
-      "order": 7,
+      "id": "sec_part_4_accommodations_for_individuals_with_disab_p3",
+      "label": "Part 4.  Accommodations for Individuals with Disabilities and/or Impairments",
+      "order": 11,
       "fields": [
         "p4_checkbox1[1]",
         "p4_checkbox1a",
-        "p4_line1a_accomodationrequested",
+        "p4_line1a_accomodationrequested"
+      ],
+      "page_number": 3,
+      "page_numbers": [
+        3
+      ]
+    },
+    {
+      "id": "sec_part_4_accommodations_for_individuals_with_disab_p4",
+      "label": "Part 4.  Accommodations for Individuals with Disabilities and/or Impairments (continued)",
+      "order": 12,
+      "fields": [
         "p4_checkbox1b",
         "p4_line1b_accomodationrequested",
         "p4_checkbox1c",
         "p4_line1c_accomodationrequested"
+      ],
+      "page_number": 4,
+      "page_numbers": [
+        4
       ]
     },
     {
-      "id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "label": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
-      "order": 8,
+      "id": "sec_applicant_s_statement_p4",
+      "label": "Applicant's Statement",
+      "order": 13,
       "fields": [
         "p5_checkbox1a",
         "p5_line1b_language",
-        "p5_line2_nameofrepresentative",
-        "p5_line3_daytimephonenumber",
-        "p5_line4_mobilephonenumber",
-        "p5_line5_emailaddress",
-        "p5_line6a_signatureofapplicant",
-        "p5_line6b_dateofsignature"
+        "p5_line2_nameofrepresentative"
+      ],
+      "page_number": 4,
+      "page_numbers": [
+        4
       ]
     },
     {
-      "id": "part_6_1_interpreter_s_name_and_business",
-      "label": "Part 6.1 Interpreter's Name and Business",
-      "order": 9,
+      "id": "sec_applicant_s_contact_information_p4",
+      "label": "Applicant's Contact Information",
+      "order": 14,
+      "fields": [
+        "p5_line3_daytimephonenumber",
+        "p5_line4_mobilephonenumber",
+        "p5_line5_emailaddress"
+      ],
+      "page_number": 4,
+      "page_numbers": [
+        4
+      ]
+    },
+    {
+      "id": "sec_applicant_s_signature_p4",
+      "label": "Applicant's Signature",
+      "order": 15,
+      "fields": [
+        "p5_line6a_signatureofapplicant",
+        "p5_line6b_dateofsignature"
+      ],
+      "page_number": 4,
+      "page_numbers": [
+        4
+      ]
+    },
+    {
+      "id": "sec_interpreter_s_full_name_p5",
+      "label": "Interpreter's Full Name",
+      "order": 16,
       "fields": [
         "p6_line1a_interpretersfamilyname",
         "p6_line1b_interpretersgivenname",
         "p6_line2_nameofbusinessor"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
       ]
     },
     {
-      "id": "part_6_2_interpreter_s_address",
-      "label": "Part 6.2 Interpreter's Address",
-      "order": 10,
+      "id": "sec_interpreter_s_mailing_address_p5",
+      "label": "Interpreter's Mailing Address",
+      "order": 17,
       "fields": [
         "p6_line3a_streetnumbername",
-        "p6_unit_type3b_unit",
         "p6_line3b_aptsteflrnumber",
         "p6_line3c_citytown",
         "p6_line3d_state",
         "p6_line3e_zipcode",
         "p6_line3f_province",
         "p6_line3g_postalcode",
-        "p6_line3h_country"
+        "p6_line3h_country",
+        "p6_unit_type3b_unit"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
       ]
     },
     {
-      "id": "interpreter_s_signature_and_language",
-      "label": "Part 6.3 Interpreter's Phone Number, Signature and Language",
-      "order": 11,
+      "id": "sec_interpreter_s_contact_information_p5",
+      "label": "Interpreter's Contact Information",
+      "order": 18,
       "fields": [
         "p6_line4_interpretersdaytimephonenumber",
         "p6_line4_interpretersdaytimephonenumber[1]",
-        "p6_line5_interpretersemailaddress",
-        "p6_line6a_signature",
-        "p6_line6b_dateofsignature",
-        "p6_language"
+        "p6_line5_interpretersemailaddress"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
       ]
     },
     {
-      "id": "part_7_1_preparer_s_name_and_business",
-      "label": "Part 7.1 Preparer's Name and Business",
-      "order": 12,
+      "id": "sec_interpreter_s_signature_p5",
+      "label": "Interpreter's Signature",
+      "order": 19,
+      "fields": [
+        "p6_line6a_signature",
+        "p6_line6b_dateofsignature"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
+      ]
+    },
+    {
+      "id": "sec_interpreter_s_certification_p5",
+      "label": "Interpreter's Certification",
+      "order": 20,
+      "fields": [
+        "p6_language"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
+      ]
+    },
+    {
+      "id": "sec_preparer_s_full_name_p5",
+      "label": "Preparer's Full Name",
+      "order": 21,
       "fields": [
         "p7_line1a_familyname",
         "p7_line1b_preparersgivenname",
         "p7_line2_nameofbusinessor"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
       ]
     },
     {
-      "id": "part_7_2_preparer_s_address",
-      "label": "Part 7.2 Preparer's Address",
-      "order": 13,
+      "id": "sec_preparer_s_mailing_address_p5",
+      "label": "Preparer's Mailing Address",
+      "order": 22,
       "fields": [
         "p7_line3a_streetnumbername",
-        "p7_unit_type3b_unit",
         "p7_line3b_aptsteflrnumber",
         "p7_line3c_citytown",
         "p7_line3d_state",
         "p7_line3e_zipcode",
         "p7_line3f_province",
         "p7_line3g_postalcode",
-        "p7_line3h_country"
+        "p7_line3h_country",
+        "p7_unit_type3b_unit"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
       ]
     },
     {
-      "id": "7_3_preparer_s_phone_representation_and_signature",
-      "label": "Part 7.3 Preparer's Phone, Representation, and Signature",
-      "order": 14,
+      "id": "sec_preparer_s_contact_information_p5",
+      "label": "Preparer's Contact Information",
+      "order": 23,
       "fields": [
         "p7_line4_preparersdaytimephonenumber",
         "p7_line5_preparersfaxnumber",
-        "p7_line6_preparersemailaddress",
-        "p7_checkbox7",
-        "p7_checkbox7extend",
-        "p7_line8a_signatureofpreparer",
-        "p7_line8b_dateofsignature"
+        "p7_line6_preparersemailaddress"
+      ],
+      "page_number": 5,
+      "page_numbers": [
+        5
       ]
     },
     {
-      "id": "Part 8 - Additional Information",
-      "label": "Part 8.1 - Additional Information Part A",
-      "order": 15,
+      "id": "sec_preparer_s_statement_p6",
+      "label": "Preparer's Statement",
+      "order": 24,
+      "fields": [
+        "p7_checkbox7",
+        "p7_checkbox7extend"
+      ],
+      "page_number": 6,
+      "page_numbers": [
+        6
+      ]
+    },
+    {
+      "id": "sec_preparer_s_signature_p6",
+      "label": "Preparer's Signature",
+      "order": 25,
+      "fields": [
+        "p7_line8a_signatureofpreparer",
+        "p7_line8b_dateofsignature"
+      ],
+      "page_number": 6,
+      "page_numbers": [
+        6
+      ]
+    },
+    {
+      "id": "sec_your_full_name_p7",
+      "label": "Your Full Name",
+      "order": 26,
       "fields": [
         "p1_line1_aliennumber[1]",
         "p1_line3a_familyname[1]",
         "p1_line3b_givenname[1]",
-        "p1_line3c_middlename[1]",
+        "p1_line3c_middlename[1]"
+      ],
+      "page_number": 7,
+      "page_numbers": [
+        7
+      ]
+    },
+    {
+      "id": "sec_your_full_name_p7_2",
+      "label": "Your Full Name",
+      "order": 27,
+      "fields": [
         "p8_line3a_pagenumber",
         "p8_line3b_partnumber",
         "p8_line3c_itemnumber",
         "p8_line3d_additionalinfo",
-        "p8_line4a_pagenumber",
-        "p8_line4b_partnumber",
-        "p8_line4c_itemnumber",
-        "p8_line4d_additionalinfo"
+        "p8_line5a_pagenumber[1]",
+        "p8_line5b_partnumber[1]",
+        "p8_line5c_itemnumber[1]",
+        "p8_line5d_additionalinfo[1]"
+      ],
+      "page_number": 7,
+      "page_numbers": [
+        7
       ]
     },
     {
-      "id": "part_8_2_additional_information_part_b",
-      "label": "Part 8.2 Additional Information Part B",
-      "order": 16,
+      "id": "sec_part_8_additional_information_p7",
+      "label": "Part 8.  Additional Information",
+      "order": 28,
       "fields": [
+        "p8_line4a_pagenumber",
+        "p8_line4b_partnumber",
+        "p8_line4c_itemnumber",
+        "p8_line4d_additionalinfo",
         "p8_line5a_pagenumber",
         "p8_line5b_partnumber",
         "p8_line5c_itemnumber",
         "p8_line5d_additionalinfo",
-        "p8_line5a_pagenumber[1]",
-        "p8_line5b_partnumber[1]",
-        "p8_line5c_itemnumber[1]",
-        "p8_line5d_additionalinfo[1]",
         "p8_line5a_pagenumber[2]",
         "p8_line5b_partnumber[2]",
         "p8_line5c_itemnumber[2]",
         "p8_line5d_additionalinfo[2]"
+      ],
+      "page_number": 7,
+      "page_numbers": [
+        7
       ]
     }
   ],
@@ -331,7 +542,7 @@
       "id": "p1_line1_aliennumber",
       "name": "Alien Registration Number. (A. Number). ",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_part_1_information_about_you_p1",
       "pdf_field_name": "P1_Line1_AlienNumber[0]",
       "consolidated_widgets": [
         "P1_Line1_AlienNumber[0]"
@@ -368,7 +579,7 @@
       "id": "p1_line2_acctidentifier",
       "name": "U S C I S Online Account Number, if any",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_part_1_information_about_you_p1",
       "pdf_field_name": "P1_Line2_AcctIdentifier[0]",
       "consolidated_widgets": [
         "P1_Line2_AcctIdentifier[0]"
@@ -404,7 +615,7 @@
       "id": "p1_line3a_familyname",
       "name": "Family Name (Last Name)",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_your_full_name_p1",
       "pdf_field_name": "P1_Line3a_FamilyName[0]",
       "consolidated_widgets": [
         "P1_Line3a_FamilyName[0]"
@@ -435,7 +646,7 @@
       "id": "p1_line3b_givenname",
       "name": "Given Name (First Name). ",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_your_full_name_p1",
       "pdf_field_name": "P1_Line3b_GivenName[0]",
       "consolidated_widgets": [
         "P1_Line3b_GivenName[0]"
@@ -466,7 +677,7 @@
       "id": "p1_line3c_middlename",
       "name": "Middle Name",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_your_full_name_p1",
       "pdf_field_name": "P1_Line3c_MiddleName[0]",
       "consolidated_widgets": [
         "P1_Line3c_MiddleName[0]"
@@ -497,7 +708,7 @@
       "id": "p1_checkbox4",
       "name": "Has Your Name Legally Changed?",
       "type": "radio",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_your_full_name_p1",
       "consolidated_widgets": [
         "P1_checkbox4[0]",
         "P1_checkbox4[1]",
@@ -563,7 +774,7 @@
       "id": "p1_line5a_familyname",
       "name": "Family Name (Last Name). ",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_your_full_name_p1",
       "pdf_field_name": "P1_Line5a_FamilyName[0]",
       "consolidated_widgets": [
         "P1_Line5a_FamilyName[0]"
@@ -604,7 +815,7 @@
       "id": "p1_line5b_givenname",
       "name": "Given Name (First Name). ",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_your_full_name_p1",
       "pdf_field_name": "P1_Line5b_GivenName[0]",
       "consolidated_widgets": [
         "P1_Line5b_GivenName[0]"
@@ -645,7 +856,7 @@
       "id": "p1_line5c_middlename",
       "name": "Middle Name",
       "type": "text",
-      "section_id": "Part 1 - Information About You",
+      "section_id": "sec_your_full_name_p1",
       "pdf_field_name": "P1_Line5c_MiddleName[0]",
       "consolidated_widgets": [
         "P1_Line5c_MiddleName[0]"
@@ -686,7 +897,7 @@
       "id": "p1_line6a_incareofname",
       "name": "In Care Of Name",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6a_InCareofName[0]",
       "consolidated_widgets": [
         "P1_Line6a_InCareofName[0]"
@@ -715,7 +926,7 @@
       "id": "p1_line6b_streetnumbername",
       "name": "Street Number\rand Name",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6b_StreetNumberName[0]",
       "consolidated_widgets": [
         "P1_Line6b_StreetNumberName[0]"
@@ -744,7 +955,7 @@
       "id": "p1_unit_type6c_unit",
       "name": "Select Unit Type",
       "type": "radio",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "consolidated_widgets": [
         "P1_checkbox6c_Unit[0]",
         "P1_checkbox6c_Unit[1]",
@@ -808,7 +1019,7 @@
       "id": "p1_line6c_aptsteflrnumber",
       "name": "Apartment, Suite, or Floor Number",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6c_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P1_Line6c_AptSteFlrNumber[0]"
@@ -849,7 +1060,7 @@
       "id": "p1_line6d_cityortown",
       "name": "City or Town",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6d_CityOrTown[0]",
       "consolidated_widgets": [
         "P1_Line6d_CityOrTown[0]"
@@ -878,7 +1089,7 @@
       "id": "p1_line6e_state",
       "name": "Select State from List of States",
       "type": "select",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6e_State[0]",
       "consolidated_widgets": [
         "P1_Line6e_State[0]"
@@ -1109,7 +1320,7 @@
       "id": "p1_line6f_zipcode",
       "name": "ZIP Code",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6f_ZipCode[0]",
       "consolidated_widgets": [
         "P1_Line6f_ZipCode[0]"
@@ -1143,7 +1354,7 @@
       "id": "p1_line6g_province",
       "name": "Province",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6g_Province[0]",
       "consolidated_widgets": [
         "P1_Line6g_Province[0]"
@@ -1172,7 +1383,7 @@
       "id": "p1_line6h_postalcode",
       "name": "Postal Code",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6h_PostalCode[0]",
       "consolidated_widgets": [
         "P1_Line6h_PostalCode[0]"
@@ -1206,7 +1417,7 @@
       "id": "p1_line6i_country",
       "name": "Country",
       "type": "text",
-      "section_id": "part_1_2_addresses",
+      "section_id": "sec_mailing_address_p1",
       "pdf_field_name": "P1_Line6i_Country[0]",
       "consolidated_widgets": [
         "P1_Line6i_Country[0]"
@@ -1234,7 +1445,7 @@
       "id": "p1_line7a_streetnumbername",
       "name": "Street Number and Name",
       "type": "text",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7a_StreetNumberName[0]",
       "consolidated_widgets": [
         "P1_Line7a_StreetNumberName[0]"
@@ -1263,7 +1474,7 @@
       "id": "p1_unit_type7b_unit",
       "name": "Select Unit Type",
       "type": "radio",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "consolidated_widgets": [
         "P1_checkbox7b_Unit[2]",
         "P1_checkbox7b_Unit[0]",
@@ -1327,7 +1538,7 @@
       "id": "p1_line7b_aptsteflrnumber",
       "name": "Apartment, Suite or Floor Number",
       "type": "text",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7b_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P1_Line7b_AptSteFlrNumber[0]"
@@ -1368,7 +1579,7 @@
       "id": "p1_line7c_cityortown",
       "name": "City or Town",
       "type": "text",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7c_CityOrTown[0]",
       "consolidated_widgets": [
         "P1_Line7c_CityOrTown[0]"
@@ -1397,7 +1608,7 @@
       "id": "p1_line7d_state",
       "name": "Select State from List of States",
       "type": "select",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7d_State[0]",
       "consolidated_widgets": [
         "P1_Line7d_State[0]"
@@ -1628,7 +1839,7 @@
       "id": "p1_line7e_zipcode",
       "name": "ZIP Code",
       "type": "text",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7e_ZipCode[0]",
       "consolidated_widgets": [
         "P1_Line7e_ZipCode[0]"
@@ -1662,7 +1873,7 @@
       "id": "p1_line7f_province",
       "name": "Province",
       "type": "text",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7f_Province[0]",
       "consolidated_widgets": [
         "P1_Line7f_Province[0]"
@@ -1691,7 +1902,7 @@
       "id": "p1_line7g_postalcode",
       "name": "Postal Code",
       "type": "text",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7g_PostalCode[0]",
       "consolidated_widgets": [
         "P1_Line7g_PostalCode[0]"
@@ -1725,7 +1936,7 @@
       "id": "p1_line7h_country",
       "name": "Country",
       "type": "text",
-      "section_id": "part_1_2_1_physical_mailing_address",
+      "section_id": "sec_physical_address_p1",
       "pdf_field_name": "P1_Line7h_Country[0]",
       "consolidated_widgets": [
         "P1_Line7h_Country[0]"
@@ -1753,7 +1964,7 @@
       "id": "p1_line8_male",
       "name": "Select Sex",
       "type": "radio",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "consolidated_widgets": [
         "P1_Line8_male[0]",
         "P1_Line8_female[0]"
@@ -1806,7 +2017,7 @@
       "id": "p1_line9_dateofbirth",
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line9_DateOfBirth[0]",
       "consolidated_widgets": [
         "P1_Line9_DateOfBirth[0]"
@@ -1839,7 +2050,7 @@
       "id": "p1_line10_citytownofbirth",
       "name": "City / Town / Village of Birth",
       "type": "text",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line10_CityTownOfBirth[0]",
       "consolidated_widgets": [
         "P1_Line10_CityTownOfBirth[0]"
@@ -1868,7 +2079,7 @@
       "id": "p1_line11_countryofbirth",
       "name": "Country of Birth",
       "type": "text",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line11_CountryofBirth[0]",
       "consolidated_widgets": [
         "P1_Line11_CountryofBirth[0]"
@@ -1896,7 +2107,7 @@
       "id": "p1_line12_mothergivenname",
       "name": "Given Name (First Name)",
       "type": "text",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line12_MotherGivenName[0]",
       "consolidated_widgets": [
         "P1_Line12_MotherGivenName[0]"
@@ -1924,7 +2135,7 @@
       "id": "p1_line13_fathergivenname",
       "name": "Given Name (First Name)",
       "type": "text",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line13_FatherGivenName[0]",
       "consolidated_widgets": [
         "P1_Line13_FatherGivenName[0]"
@@ -1952,7 +2163,7 @@
       "id": "p1_line14_classofadmission",
       "name": "Class of Admission",
       "type": "text",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line14_ClassOfAdmission[0]",
       "consolidated_widgets": [
         "P1_Line14_ClassOfAdmission[0]"
@@ -1980,7 +2191,7 @@
       "id": "p1_line15_dateofadmission",
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line15_DateOfAdmission[0]",
       "consolidated_widgets": [
         "P1_Line15_DateOfAdmission[0]"
@@ -2013,7 +2224,7 @@
       "id": "p1_line16_ssn",
       "name": "U. S. Social Security Number, if any",
       "type": "text",
-      "section_id": "part_1_3_additional_information",
+      "section_id": "sec_additional_information_p2",
       "pdf_field_name": "P1_Line16_SSN[0]",
       "consolidated_widgets": [
         "P1_Line16_SSN[0]"
@@ -2047,7 +2258,7 @@
       "id": "p2_checkbox1",
       "name": "(Proceed to Section A",
       "type": "radio",
-      "section_id": "Part 2 - Application Type",
+      "section_id": "sec_part_2_application_type_p2",
       "consolidated_widgets": [
         "P2_checkbox1[0]",
         "P2_checkbox1[1]",
@@ -2113,7 +2324,7 @@
       "id": "p2_line2h1_cityandstate",
       "name": "Enter City or Town and State",
       "type": "text",
-      "section_id": "Part 2 - Application Type",
+      "section_id": "sec_reason_for_application_select_only_one_box_p2",
       "pdf_field_name": "P2_Line2h1_CityandState[0]",
       "consolidated_widgets": [
         "P2_Line2h1_CityandState[0]"
@@ -2160,7 +2371,7 @@
       "id": "p2_checkbox2[5]",
       "name": "Select My previous card has been lost, stolen, or destroyed",
       "type": "radio",
-      "section_id": "Part 2 - Application Type",
+      "section_id": "sec_reason_for_application_select_only_one_box_p2",
       "consolidated_widgets": [
         "P2_checkbox2[0]",
         "P2_checkbox2[1]",
@@ -2359,7 +2570,7 @@
       "id": "p2_checkbox3",
       "name": "Reason for replacement (conditional permanent resident)",
       "type": "radio",
-      "section_id": "Part 2 - Application Type",
+      "section_id": "sec_part_2_application_type_continued_p3",
       "consolidated_widgets": [
         "P2_checkbox3[4]",
         "P2_checkbox3[0]",
@@ -2465,7 +2676,7 @@
       "id": "p3_line1_locationappliedvisa",
       "name": "Location where you applied for an immigrant visa or adjustment of status",
       "type": "text",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_part_3_processing_information_p3",
       "pdf_field_name": "P3_Line1_LocationAppliedVisa[0]",
       "consolidated_widgets": [
         "P3_Line1_LocationAppliedVisa[0]"
@@ -2494,7 +2705,7 @@
       "id": "p3_line2_locationissuedvisa",
       "name": "Location where your immigrant visa was issued or U S C I S office where you were granted adjustment of status",
       "type": "text",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_part_3_processing_information_p3",
       "pdf_field_name": "P3_Line2_LocationIssuedVisa[0]",
       "consolidated_widgets": [
         "P3_Line2_LocationIssuedVisa[0]"
@@ -2523,7 +2734,7 @@
       "id": "p3_line3a_destination",
       "name": "Destination in the United States at time of admission",
       "type": "text",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_part_3_processing_information_p3",
       "pdf_field_name": "P3_Line3a_Destination[0]",
       "consolidated_widgets": [
         "P3_Line3a_Destination[0]"
@@ -2551,7 +2762,7 @@
       "id": "p3_line3a1_cityandstate",
       "name": "City or Town and State",
       "type": "text",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_part_3_processing_information_p3",
       "pdf_field_name": "P3_Line3a1_CityandState[0]",
       "consolidated_widgets": [
         "P3_Line3a1_CityandState[0]"
@@ -2580,7 +2791,7 @@
       "id": "p3_checkbox4[1]",
       "name": "Additional Information",
       "type": "radio",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_part_3_processing_information_p3",
       "consolidated_widgets": [
         "P3_checkbox4[0]",
         "P3_checkbox4[1]"
@@ -2633,7 +2844,7 @@
       "id": "p3_checkbox5[1]",
       "name": "Additional Information",
       "type": "radio",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_part_3_processing_information_p3",
       "consolidated_widgets": [
         "P3_checkbox5[0]",
         "P3_checkbox5[1]"
@@ -2687,7 +2898,7 @@
       "name": "Ethnicity",
       "spoken_name": "ethnicity",
       "type": "radio",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "sec_biographic_information_p3",
       "options": [
         {
           "value": "hispanic_or_latino",
@@ -2730,7 +2941,7 @@
       "name": "Race (Select all applicable)",
       "spoken_name": "race",
       "type": "checkbox_group",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "sec_biographic_information_p3",
       "options": [
         {
           "value": "white",
@@ -2808,7 +3019,7 @@
       "id": "p3_line8_heightfeet",
       "name": "Select Number of Feet from List",
       "type": "select",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_biographic_information_p3",
       "pdf_field_name": "P3_Line8_HeightFeet[0]",
       "consolidated_widgets": [
         "P3_Line8_HeightFeet[0]"
@@ -2873,7 +3084,7 @@
       "id": "p3_line8_heightinches",
       "name": "Select Number of Inches from List",
       "type": "select",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_biographic_information_p3",
       "pdf_field_name": "P3_Line8_HeightInches[0]",
       "consolidated_widgets": [
         "P3_Line8_HeightInches[0]"
@@ -2963,7 +3174,7 @@
       "id": "p3_line9_heightinches1",
       "name": "First Digit of Weight in Pounds",
       "type": "text",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_biographic_information_p3",
       "pdf_field_name": "P3_Line9_HeightInches1[0]",
       "consolidated_widgets": [
         "P3_Line9_HeightInches1[0]"
@@ -2992,7 +3203,7 @@
       "id": "p3_line9_heightinches2",
       "name": "Second Digit of Weight in Pounds",
       "type": "text",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_biographic_information_p3",
       "pdf_field_name": "P3_Line9_HeightInches2[0]",
       "consolidated_widgets": [
         "P3_Line9_HeightInches2[0]"
@@ -3021,7 +3232,7 @@
       "id": "p3_line9_heightinches3",
       "name": "Third Digit of Weight in Pounds",
       "type": "text",
-      "section_id": "Part 3 - Processing Information",
+      "section_id": "sec_biographic_information_p3",
       "pdf_field_name": "P3_Line9_HeightInches3[0]",
       "consolidated_widgets": [
         "P3_Line9_HeightInches3[0]"
@@ -3051,7 +3262,7 @@
       "name": "Eye Color",
       "spoken_name": "eye color",
       "type": "radio",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "sec_biographic_information_p3",
       "options": [
         {
           "value": "black",
@@ -3179,7 +3390,7 @@
       "name": "Hair Color",
       "spoken_name": "hair color",
       "type": "radio",
-      "section_id": "Part 3 - Biographic Information",
+      "section_id": "sec_biographic_information_p3",
       "options": [
         {
           "value": "bald",
@@ -3306,7 +3517,7 @@
       "id": "p4_checkbox1[1]",
       "name": "Are you requesting an accommodation because of your disabilities and/or impairments?",
       "type": "radio",
-      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "section_id": "sec_part_4_accommodations_for_individuals_with_disab_p3",
       "consolidated_widgets": [
         "P4_checkbox1[0]",
         "P4_checkbox1[1]"
@@ -3359,7 +3570,7 @@
       "id": "p4_checkbox1a",
       "name": "I am deaf or hard of hearing and request the following accommodation",
       "type": "checkbox",
-      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "section_id": "sec_part_4_accommodations_for_individuals_with_disab_p3",
       "pdf_field_name": "P4_checkbox1a[0]",
       "consolidated_widgets": [
         "P4_checkbox1a[0]"
@@ -3399,7 +3610,7 @@
       "id": "p4_line1a_accomodationrequested",
       "name": "Language",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "section_id": "sec_part_4_accommodations_for_individuals_with_disab_p3",
       "pdf_field_name": "P4_Line1a_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1a_AccomodationRequested[0]"
@@ -3440,7 +3651,7 @@
       "id": "p4_checkbox1b",
       "name": "Select I am blind or have low vision and request the following accommodation",
       "type": "checkbox",
-      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "section_id": "sec_part_4_accommodations_for_individuals_with_disab_p4",
       "pdf_field_name": "P4_checkbox1b[0]",
       "consolidated_widgets": [
         "P4_checkbox1b[0]"
@@ -3480,7 +3691,7 @@
       "id": "p4_line1b_accomodationrequested",
       "name": "Accommodation Requested",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "section_id": "sec_part_4_accommodations_for_individuals_with_disab_p4",
       "pdf_field_name": "P4_Line1b_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1b_AccomodationRequested[0]"
@@ -3521,7 +3732,7 @@
       "id": "p4_checkbox1c",
       "name": "Select I have another type of disability and/or impairment (describe the nature of your disability and/or impairment and the accommodation you are requesting)",
       "type": "checkbox",
-      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "section_id": "sec_part_4_accommodations_for_individuals_with_disab_p4",
       "pdf_field_name": "P4_checkbox1c[0]",
       "consolidated_widgets": [
         "P4_checkbox1c[0]"
@@ -3561,7 +3772,7 @@
       "id": "p4_line1c_accomodationrequested",
       "name": "Description of Disability and/or Impairment and the Accommodations Requested",
       "type": "textarea",
-      "section_id": "Part 4 - Accommodations for Individuals with Disabilities and/or Impairments",
+      "section_id": "sec_part_4_accommodations_for_individuals_with_disab_p4",
       "pdf_field_name": "P4_Line1c_AccomodationRequested[0]",
       "consolidated_widgets": [
         "P4_Line1c_AccomodationRequested[0]"
@@ -3602,7 +3813,7 @@
       "id": "p5_checkbox1a",
       "name": "Select I can read and understand English, and I have read and understand every question and instruction on this application, and my answer to every question",
       "type": "checkbox_group",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_statement_p4",
       "consolidated_widgets": [
         "P5_Checkbox1a[0]",
         "P5_Checkbox1b[0]",
@@ -3668,7 +3879,7 @@
       "id": "p5_line1b_language",
       "name": "Language",
       "type": "text",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_statement_p4",
       "pdf_field_name": "P5_Line1b_Language[0]",
       "consolidated_widgets": [
         "P5_Line1b_Language[0]"
@@ -3709,7 +3920,7 @@
       "id": "p5_line2_nameofrepresentative",
       "name": "Name of Preparer",
       "type": "text",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_statement_p4",
       "pdf_field_name": "P5_Line2_NameofRepresentative[0]",
       "consolidated_widgets": [
         "P5_Line2_NameofRepresentative[0]"
@@ -3750,7 +3961,7 @@
       "id": "p5_line3_daytimephonenumber",
       "name": "Applicant's Daytime Telephone Number",
       "type": "text",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_contact_information_p4",
       "pdf_field_name": "P5_Line3_DaytimePhoneNumber[0]",
       "consolidated_widgets": [
         "P5_Line3_DaytimePhoneNumber[0]"
@@ -3784,7 +3995,7 @@
       "id": "p5_line4_mobilephonenumber",
       "name": "Applicant's Mobile Telephone Number (if any)",
       "type": "text",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_contact_information_p4",
       "pdf_field_name": "P5_Line4_MobilePhoneNumber[0]",
       "consolidated_widgets": [
         "P5_Line4_MobilePhoneNumber[0]"
@@ -3818,7 +4029,7 @@
       "id": "p5_line5_emailaddress",
       "name": "Applicant's Email Address (if any)",
       "type": "text",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_contact_information_p4",
       "pdf_field_name": "P5_Line5_EmailAddress[0]",
       "consolidated_widgets": [
         "P5_Line5_EmailAddress[0]"
@@ -3847,7 +4058,7 @@
       "id": "p5_line6a_signatureofapplicant",
       "name": "Print and sign in ink",
       "type": "signature",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_signature_p4",
       "pdf_field_name": "P5_Line6a_SignatureofApplicant[0]",
       "consolidated_widgets": [
         "P5_Line6a_SignatureofApplicant[0]"
@@ -3875,7 +4086,7 @@
       "id": "p5_line6b_dateofsignature",
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "signature",
-      "section_id": "Part 5 - Applicant's Statement, Contact Information, Certification, and Signature",
+      "section_id": "sec_applicant_s_signature_p4",
       "pdf_field_name": "P5_Line6b_DateofSignature[0]",
       "consolidated_widgets": [
         "P5_Line6b_DateofSignature[0]"
@@ -3905,7 +4116,7 @@
       "id": "p6_line1a_interpretersfamilyname",
       "name": "Interpreter's Family Name (Last Name)",
       "type": "text",
-      "section_id": "part_6_1_interpreter_s_name_and_business",
+      "section_id": "sec_interpreter_s_full_name_p5",
       "pdf_field_name": "P6_Line1a_InterpretersFamilyName[0]",
       "consolidated_widgets": [
         "P6_Line1a_InterpretersFamilyName[0]"
@@ -3933,7 +4144,7 @@
       "id": "p6_line1b_interpretersgivenname",
       "name": "Interpreter's Given Name (First Name)",
       "type": "text",
-      "section_id": "part_6_1_interpreter_s_name_and_business",
+      "section_id": "sec_interpreter_s_full_name_p5",
       "pdf_field_name": "P6_Line1b_InterpretersGivenName[0]",
       "consolidated_widgets": [
         "P6_Line1b_InterpretersGivenName[0]"
@@ -3961,7 +4172,7 @@
       "id": "p6_line2_nameofbusinessor",
       "name": "Interpreter's Business or Organization Name (if any)",
       "type": "text",
-      "section_id": "part_6_1_interpreter_s_name_and_business",
+      "section_id": "sec_interpreter_s_full_name_p5",
       "pdf_field_name": "P6_Line2_NameofBusinessor[0]",
       "consolidated_widgets": [
         "P6_Line2_NameofBusinessor[0]"
@@ -3990,7 +4201,7 @@
       "id": "p6_line3a_streetnumbername",
       "name": "Street Number and Name",
       "type": "text",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3a_StreetNumberName[0]",
       "consolidated_widgets": [
         "P6_Line3a_StreetNumberName[0]"
@@ -4019,7 +4230,7 @@
       "id": "p6_unit_type3b_unit",
       "name": "Select Unit Type",
       "type": "radio",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "consolidated_widgets": [
         "P6_checkbox3b_Unit[0]",
         "P6_checkbox3b_Unit[1]",
@@ -4083,7 +4294,7 @@
       "id": "p6_line3b_aptsteflrnumber",
       "name": "Apartment, Suite, or Floor Number",
       "type": "text",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3b_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P6_Line3b_AptSteFlrNumber[0]"
@@ -4124,7 +4335,7 @@
       "id": "p6_line3c_citytown",
       "name": "City or Town",
       "type": "text",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3c_CityTown[0]",
       "consolidated_widgets": [
         "P6_Line3c_CityTown[0]"
@@ -4153,7 +4364,7 @@
       "id": "p6_line3d_state",
       "name": "Select State from List of States",
       "type": "select",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3d_State[0]",
       "consolidated_widgets": [
         "P6_Line3d_State[0]"
@@ -4383,7 +4594,7 @@
       "id": "p6_line3e_zipcode",
       "name": "ZIP Code",
       "type": "text",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3e_ZipCode[0]",
       "consolidated_widgets": [
         "P6_Line3e_ZipCode[0]"
@@ -4413,7 +4624,7 @@
       "id": "p6_line3f_province",
       "name": "Province",
       "type": "text",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3f_Province[0]",
       "consolidated_widgets": [
         "P6_Line3f_Province[0]"
@@ -4442,7 +4653,7 @@
       "id": "p6_line3g_postalcode",
       "name": "Postal Code",
       "type": "text",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3g_PostalCode[0]",
       "consolidated_widgets": [
         "P6_Line3g_PostalCode[0]"
@@ -4476,7 +4687,7 @@
       "id": "p6_line3h_country",
       "name": "Country",
       "type": "text",
-      "section_id": "part_6_2_interpreter_s_address",
+      "section_id": "sec_interpreter_s_mailing_address_p5",
       "pdf_field_name": "P6_Line3h_Country[0]",
       "consolidated_widgets": [
         "P6_Line3h_Country[0]"
@@ -4504,7 +4715,7 @@
       "id": "p6_line4_interpretersdaytimephonenumber",
       "name": "Interpreter's Daytime Telephone Number",
       "type": "text",
-      "section_id": "interpreter_s_signature_and_language",
+      "section_id": "sec_interpreter_s_contact_information_p5",
       "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[0]",
       "consolidated_widgets": [
         "P6_Line4_InterpretersDaytimePhoneNumber[0]"
@@ -4538,7 +4749,7 @@
       "id": "p6_line4_interpretersdaytimephonenumber[1]",
       "name": "Interpreter's Mobile Telephone Number (if any)",
       "type": "text",
-      "section_id": "interpreter_s_signature_and_language",
+      "section_id": "sec_interpreter_s_contact_information_p5",
       "pdf_field_name": "P6_Line4_InterpretersDaytimePhoneNumber[1]",
       "consolidated_widgets": [
         "P6_Line4_InterpretersDaytimePhoneNumber[1]"
@@ -4572,7 +4783,7 @@
       "id": "p6_line5_interpretersemailaddress",
       "name": "Interpreter's Email Address, (if any)",
       "type": "text",
-      "section_id": "interpreter_s_signature_and_language",
+      "section_id": "sec_interpreter_s_contact_information_p5",
       "pdf_field_name": "P6_Line5_InterpretersEmailAddress[0]",
       "consolidated_widgets": [
         "P6_Line5_InterpretersEmailAddress[0]"
@@ -4606,7 +4817,7 @@
       "id": "p6_language",
       "name": "Language",
       "type": "text",
-      "section_id": "interpreter_s_signature_and_language",
+      "section_id": "sec_interpreter_s_certification_p5",
       "pdf_field_name": "P6_Language[0]",
       "consolidated_widgets": [
         "P6_Language[0]"
@@ -4635,7 +4846,7 @@
       "id": "p6_line6a_signature",
       "name": "Print and sign in ink",
       "type": "signature",
-      "section_id": "interpreter_s_signature_and_language",
+      "section_id": "sec_interpreter_s_signature_p5",
       "pdf_field_name": "P6_Line6a_Signature[0]",
       "consolidated_widgets": [
         "P6_Line6a_Signature[0]"
@@ -4669,7 +4880,7 @@
       "id": "p6_line6b_dateofsignature",
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
-      "section_id": "interpreter_s_signature_and_language",
+      "section_id": "sec_interpreter_s_signature_p5",
       "pdf_field_name": "P6_Line6b_DateofSignature[0]",
       "consolidated_widgets": [
         "P6_Line6b_DateofSignature[0]"
@@ -4702,7 +4913,7 @@
       "id": "p7_line1b_preparersgivenname",
       "name": "Preparer's Given Name (First Name). ",
       "type": "text",
-      "section_id": "part_7_1_preparer_s_name_and_business",
+      "section_id": "sec_preparer_s_full_name_p5",
       "pdf_field_name": "P7_Line1b_PreparersGivenName[0]",
       "consolidated_widgets": [
         "P7_Line1b_PreparersGivenName[0]"
@@ -4730,7 +4941,7 @@
       "id": "p7_line1a_familyname",
       "name": "Preparer's Family Name (Last Name). ",
       "type": "text",
-      "section_id": "part_7_1_preparer_s_name_and_business",
+      "section_id": "sec_preparer_s_full_name_p5",
       "pdf_field_name": "P7_Line1a_FamilyName[0]",
       "consolidated_widgets": [
         "P7_Line1a_FamilyName[0]"
@@ -4758,7 +4969,7 @@
       "id": "p7_line2_nameofbusinessor",
       "name": "Preparer's Business or Organization Name (if any)",
       "type": "text",
-      "section_id": "part_7_1_preparer_s_name_and_business",
+      "section_id": "sec_preparer_s_full_name_p5",
       "pdf_field_name": "P7_Line2_NameofBusinessor[0]",
       "consolidated_widgets": [
         "P7_Line2_NameofBusinessor[0]"
@@ -4787,7 +4998,7 @@
       "id": "p7_line3a_streetnumbername",
       "name": "Street Number and Name",
       "type": "text",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3a_StreetNumberName[0]",
       "consolidated_widgets": [
         "P7_Line3a_StreetNumberName[0]"
@@ -4816,7 +5027,7 @@
       "id": "p7_unit_type3b_unit",
       "name": "Select Unit Type",
       "type": "radio",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "consolidated_widgets": [
         "P7_checkbox3b_Unit[0]",
         "P7_checkbox3b_Unit[1]",
@@ -4880,7 +5091,7 @@
       "id": "p7_line3b_aptsteflrnumber",
       "name": "Apartment, Suite, or Floor Number",
       "type": "text",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3b_AptSteFlrNumber[0]",
       "consolidated_widgets": [
         "P7_Line3b_AptSteFlrNumber[0]"
@@ -4921,7 +5132,7 @@
       "id": "p7_line3c_citytown",
       "name": "City or Town",
       "type": "text",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3c_CityTown[0]",
       "consolidated_widgets": [
         "P7_Line3c_CityTown[0]"
@@ -4950,7 +5161,7 @@
       "id": "p7_line3d_state",
       "name": "Select State from List of States",
       "type": "select",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3d_State[0]",
       "consolidated_widgets": [
         "P7_Line3d_State[0]"
@@ -5180,7 +5391,7 @@
       "id": "p7_line3e_zipcode",
       "name": "Zip Code",
       "type": "text",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3e_ZipCode[0]",
       "consolidated_widgets": [
         "P7_Line3e_ZipCode[0]"
@@ -5214,7 +5425,7 @@
       "id": "p7_line3f_province",
       "name": "Province. ",
       "type": "text",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3f_Province[0]",
       "consolidated_widgets": [
         "P7_Line3f_Province[0]"
@@ -5243,7 +5454,7 @@
       "id": "p7_line3g_postalcode",
       "name": "Postal Code",
       "type": "text",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3g_PostalCode[0]",
       "consolidated_widgets": [
         "P7_Line3g_PostalCode[0]"
@@ -5277,7 +5488,7 @@
       "id": "p7_line3h_country",
       "name": "Country",
       "type": "text",
-      "section_id": "part_7_2_preparer_s_address",
+      "section_id": "sec_preparer_s_mailing_address_p5",
       "pdf_field_name": "P7_Line3h_Country[0]",
       "consolidated_widgets": [
         "P7_Line3h_Country[0]"
@@ -5305,7 +5516,7 @@
       "id": "p7_line4_preparersdaytimephonenumber",
       "name": "Preparer's Daytime Telephone Number",
       "type": "text",
-      "section_id": "7_3_preparer_s_phone_representation_and_signature",
+      "section_id": "sec_preparer_s_contact_information_p5",
       "pdf_field_name": "P7_Line4_PreparersDaytimePhoneNumber[0]",
       "consolidated_widgets": [
         "P7_Line4_PreparersDaytimePhoneNumber[0]"
@@ -5339,7 +5550,7 @@
       "id": "p7_line5_preparersfaxnumber",
       "name": "Preparer's Mobile Telephone Number (if any)",
       "type": "text",
-      "section_id": "7_3_preparer_s_phone_representation_and_signature",
+      "section_id": "sec_preparer_s_contact_information_p5",
       "pdf_field_name": "P7_Line5_PreparersFaxNumber[0]",
       "consolidated_widgets": [
         "P7_Line5_PreparersFaxNumber[0]"
@@ -5373,7 +5584,7 @@
       "id": "p7_line6_preparersemailaddress",
       "name": "Preparer's Email Address (if any)",
       "type": "text",
-      "section_id": "7_3_preparer_s_phone_representation_and_signature",
+      "section_id": "sec_preparer_s_contact_information_p5",
       "pdf_field_name": "P7_Line6_PreparersEmailAddress[0]",
       "consolidated_widgets": [
         "P7_Line6_PreparersEmailAddress[0]"
@@ -5407,7 +5618,7 @@
       "id": "p7_checkbox7",
       "name": "Preparer's Statement - Select whether the preparer is an attorney or accredited representative, or not",
       "type": "radio",
-      "section_id": "7_3_preparer_s_phone_representation_and_signature",
+      "section_id": "sec_preparer_s_statement_p6",
       "consolidated_widgets": [
         "P7_checkbox7[0]",
         "P7_checkbox7[1]"
@@ -5460,7 +5671,7 @@
       "id": "p7_checkbox7extend",
       "name": "Select I am an attorney or accredited representative and my representation of the applicant in this case extends beyond the preparation of this application",
       "type": "radio",
-      "section_id": "7_3_preparer_s_phone_representation_and_signature",
+      "section_id": "sec_preparer_s_statement_p6",
       "pdf_field_name": "P7_checkbox7Extend[0]",
       "consolidated_widgets": [
         "P7_checkbox7Extend[0]",
@@ -5528,7 +5739,7 @@
       "id": "p7_line8a_signatureofpreparer",
       "name": "Print and sign in ink",
       "type": "signature",
-      "section_id": "7_3_preparer_s_phone_representation_and_signature",
+      "section_id": "sec_preparer_s_signature_p6",
       "pdf_field_name": "P7_Line8a_SignatureofPreparer[0]",
       "consolidated_widgets": [
         "P7_Line8a_SignatureofPreparer[0]"
@@ -5557,7 +5768,7 @@
       "id": "p7_line8b_dateofsignature",
       "name": "as 2-digit Month, 2-digit Day, and 4-digit Year. ",
       "type": "date",
-      "section_id": "7_3_preparer_s_phone_representation_and_signature",
+      "section_id": "sec_preparer_s_signature_p6",
       "pdf_field_name": "P7_Line8b_DateofSignature[0]",
       "consolidated_widgets": [
         "P7_Line8b_DateofSignature[0]"
@@ -5590,7 +5801,7 @@
       "id": "p1_line1_aliennumber[1]",
       "name": "Alien Registration Number. (A. Number). ",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7",
       "pdf_field_name": "P1_Line1_AlienNumber[1]",
       "consolidated_widgets": [
         "P1_Line1_AlienNumber[1]"
@@ -5625,7 +5836,7 @@
       "id": "p1_line3a_familyname[1]",
       "name": "This field pre-populates from page 1",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7",
       "pdf_field_name": "P1_Line3a_FamilyName[1]",
       "consolidated_widgets": [
         "P1_Line3a_FamilyName[1]"
@@ -5654,7 +5865,7 @@
       "id": "p1_line3b_givenname[1]",
       "name": "This field pre-populates from page 1",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7",
       "pdf_field_name": "P1_Line3b_GivenName[1]",
       "consolidated_widgets": [
         "P1_Line3b_GivenName[1]"
@@ -5683,7 +5894,7 @@
       "id": "p1_line3c_middlename[1]",
       "name": "This field pre-populates from page 1",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7",
       "pdf_field_name": "P1_Line3c_MiddleName[1]",
       "consolidated_widgets": [
         "P1_Line3c_MiddleName[1]"
@@ -5712,7 +5923,7 @@
       "id": "p8_line3a_pagenumber",
       "name": "Page Number",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line3a_PageNumber[0]",
       "consolidated_widgets": [
         "P8_Line3a_PageNumber[0]"
@@ -5741,7 +5952,7 @@
       "id": "p8_line3b_partnumber",
       "name": "Part Number",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line3b_PartNumber[0]",
       "consolidated_widgets": [
         "P8_Line3b_PartNumber[0]"
@@ -5770,7 +5981,7 @@
       "id": "p8_line3c_itemnumber",
       "name": "Item Number",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line3c_ItemNumber[0]",
       "consolidated_widgets": [
         "P8_Line3c_ItemNumber[0]"
@@ -5799,7 +6010,7 @@
       "id": "p8_line3d_additionalinfo",
       "name": "Additional Information",
       "type": "textarea",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line3d_AdditionalInfo[0]",
       "consolidated_widgets": [
         "P8_Line3d_AdditionalInfo[0]"
@@ -5827,7 +6038,7 @@
       "id": "p8_line5a_pagenumber[1]",
       "name": "Page Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line5a_PageNumber[1]",
       "consolidated_widgets": [
         "P8_Line5a_PageNumber[1]"
@@ -5856,7 +6067,7 @@
       "id": "p8_line5b_partnumber[1]",
       "name": "Part Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line5b_PartNumber[1]",
       "consolidated_widgets": [
         "P8_Line5b_PartNumber[1]"
@@ -5885,7 +6096,7 @@
       "id": "p8_line5c_itemnumber[1]",
       "name": "Item Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line5c_ItemNumber[1]",
       "consolidated_widgets": [
         "P8_Line5c_ItemNumber[1]"
@@ -5914,7 +6125,7 @@
       "id": "p8_line5d_additionalinfo[1]",
       "name": "Additional Information",
       "type": "textarea",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_your_full_name_p7_2",
       "pdf_field_name": "P8_Line5d_AdditionalInfo[1]",
       "consolidated_widgets": [
         "P8_Line5d_AdditionalInfo[1]"
@@ -5942,7 +6153,7 @@
       "id": "p8_line4a_pagenumber",
       "name": "Page Number",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line4a_PageNumber[0]",
       "consolidated_widgets": [
         "P8_Line4a_PageNumber[0]"
@@ -5971,7 +6182,7 @@
       "id": "p8_line4b_partnumber",
       "name": "Part Number",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line4b_PartNumber[0]",
       "consolidated_widgets": [
         "P8_Line4b_PartNumber[0]"
@@ -6000,7 +6211,7 @@
       "id": "p8_line4c_itemnumber",
       "name": "Item Number",
       "type": "text",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line4c_ItemNumber[0]",
       "consolidated_widgets": [
         "P8_Line4c_ItemNumber[0]"
@@ -6029,7 +6240,7 @@
       "id": "p8_line4d_additionalinfo",
       "name": "Additional Information",
       "type": "textarea",
-      "section_id": "Part 8 - Additional Information",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line4d_AdditionalInfo[0]",
       "consolidated_widgets": [
         "P8_Line4d_AdditionalInfo[0]"
@@ -6057,7 +6268,7 @@
       "id": "p8_line5a_pagenumber",
       "name": "Page Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5a_PageNumber[0]",
       "consolidated_widgets": [
         "P8_Line5a_PageNumber[0]"
@@ -6086,7 +6297,7 @@
       "id": "p8_line5b_partnumber",
       "name": "Part Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5b_PartNumber[0]",
       "consolidated_widgets": [
         "P8_Line5b_PartNumber[0]"
@@ -6115,7 +6326,7 @@
       "id": "p8_line5c_itemnumber",
       "name": "Item Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5c_ItemNumber[0]",
       "consolidated_widgets": [
         "P8_Line5c_ItemNumber[0]"
@@ -6144,7 +6355,7 @@
       "id": "p8_line5d_additionalinfo",
       "name": "Additional Information",
       "type": "textarea",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5d_AdditionalInfo[0]",
       "consolidated_widgets": [
         "P8_Line5d_AdditionalInfo[0]"
@@ -6172,7 +6383,7 @@
       "id": "p8_line5a_pagenumber[2]",
       "name": "Page Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5a_PageNumber[2]",
       "consolidated_widgets": [
         "P8_Line5a_PageNumber[2]"
@@ -6201,7 +6412,7 @@
       "id": "p8_line5b_partnumber[2]",
       "name": "Part Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5b_PartNumber[2]",
       "consolidated_widgets": [
         "P8_Line5b_PartNumber[2]"
@@ -6230,7 +6441,7 @@
       "id": "p8_line5c_itemnumber[2]",
       "name": "Item Number",
       "type": "text",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5c_ItemNumber[2]",
       "consolidated_widgets": [
         "P8_Line5c_ItemNumber[2]"
@@ -6259,7 +6470,7 @@
       "id": "p8_line5d_additionalinfo[2]",
       "name": "Additional Information",
       "type": "textarea",
-      "section_id": "part_8_2_additional_information_part_b",
+      "section_id": "sec_part_8_additional_information_p7",
       "pdf_field_name": "P8_Line5d_AdditionalInfo[2]",
       "consolidated_widgets": [
         "P8_Line5d_AdditionalInfo[2]"
