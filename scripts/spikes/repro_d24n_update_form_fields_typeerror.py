@@ -134,7 +134,6 @@ def build_handler():
     handler.set_tool_handlers(
         handle_update_fields=svc.handle_update_fields_tool_call,
         handle_switch_section=lambda *a, **k: None,
-        handle_get_field_value=lambda *a, **k: None,
         request_form_state_from_client=AsyncMock(return_value={}),
         get_next_field_schema_for_jit=lambda *a, **k: None,
     )

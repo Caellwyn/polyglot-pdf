@@ -42,9 +42,15 @@ get_field_value; the legacy SI mentions no dead tool.
 
 Live verification (exit criterion 2): backend/scripts/probe_secretary_recall.py
 run on VERTEX with the production-primary model (gemini-2.5-flash-lite),
-whole-form I-90 context -- 8/8 strict grounding across the easy + aliasing
-tiers, 0 hallucinations, 0 confident-wrong (artifacts:
-scripts/spikes/data/secretary_recall_grouped_20260712T102333.*).
+whole-form I-90 context. Smoke (--limit 8): 8/8 strict. Then the FULL 49-case
+battery (--no-judge, fresh-eyes round-1 upgrade): hit rate 1.000 on the
+DISTANT tier (fields far apart -- the cross-section stress case), 0/49
+hallucinations; confident-wrong 16 is the deterministic over-counting proxy
+(the G1 methodology's judge-verified count is the real harm metric; this run
+skipped the judge -- consistent with the G1-era characterization and the
+verify-back-through-the-principal net). Artifacts:
+scripts/spikes/data/secretary_recall_grouped_20260712T102333.* and
+...20260712T105210.*.
 
 Maintainer directive folded in (2026-07-12, direct ask): the probe now
 DEFAULTS to Vertex (ADC + GOOGLE_CLOUD_PROJECT, VERTEX_LOCATION knob; AI
