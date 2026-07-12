@@ -561,7 +561,11 @@ def _dump_kit(kit):
 # exists but can't be filled through the app":
 #   - dump-widget-unclaimed: a real fillable PDF widget with NO schema field
 #     (extraction dropped it) -- i-90's 4 were FIXED by bd 0nxh (now 0); f1040
-#     still has 12.
+#     still has 12; w7 / w7-2 each have 2 (the box-h "Other" reason text line
+#     f1_04 and the 6d "Other" ID-document text line f1_23 -- both surfaced as
+#     genuinely unmodeled once bd polyglot-pdf-ivh9 corrected the field-to-widget
+#     off-by-one that had been mis-parking treaty_country / id_number on them;
+#     modeling those two "Other" free-text lines is a follow-up bead).
 #   - readonly-conditional-no-unlock: a read_only field shown/required by a
 #     condition but with no unlock_method -- bd 3fz7 fixed i-90's 3 (p4_checkbox1a/
 #     b/c now carry flip_readonly_bit), so i-90 is now 0.
@@ -571,8 +575,8 @@ def _dump_kit(kit):
 # baseline update as the inventory shrinks toward zero.
 _UNFILLABLE_BASELINE = {
     "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
-    "w7": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
-    "w7-2": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
+    "w7": {"dump-widget-unclaimed": 2, "readonly-conditional-no-unlock": 0},
+    "w7-2": {"dump-widget-unclaimed": 2, "readonly-conditional-no-unlock": 0},
     "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
 }
 
