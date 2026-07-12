@@ -13,8 +13,6 @@ from backend.config import Settings, get_settings
 from backend.ports.live_ai_port import ILiveAI
 from .field_utils import (
     build_fields_from_schema,
-    get_available_spoken_names,
-    find_similar_field_names,
     strip_field_id_from_hint,
 )
 from .ai_context import render_field_guidance, render_section_metadata
@@ -295,7 +293,6 @@ class FormFillingService:
         self._callback_handler.set_tool_handlers(
             handle_update_fields=self.handle_update_fields_tool_call,
             handle_switch_section=self.handle_switch_section,
-            handle_get_field_value=self.handle_get_field_value,
             request_form_state_from_client=self.request_form_state_from_client,
             merge_field_schema=self.merge_field_schema,
             handle_ask_secretary=self.handle_ask_secretary,
@@ -1944,97 +1941,6 @@ class FormFillingService:
                     _log.error("section_switch_failed_notify_failed",
                               session_id=self._session_id)
 
-    async def handle_get_field_value(self, spoken_name: str) -> Dict[str, Any]:
-        """
-        Handle get_field_value tool call from AI.
-        
-        Requests field value from frontend using spoken name.
-        Frontend will lookup in spokenNameToFieldId map and return value.
-        
-        Args:
-            spoken_name: The spoken name of the field (e.g., 'phone number')
-            
-        Returns:
-            Dictionary with field value or not found message
-        """
-        if not self._request_coordinator:
-            _log.warning("get_field_value_no_coordinator", session_id=self._session_id)
-            return {"found": False, "message": "No connection to frontend."}
-        
-        # Request field value from frontend via coordinator
-        result = await self._request_coordinator.request_field_value(spoken_name)
-        
-        # Build user-friendly response based on result
-        if result.get("found"):
-            value = result.get("value")
-            
-            # Field exists - distinguish between filled and empty
-            if value is not None and str(value).strip() != '':
-                # Field has a value
-                return {
-                    "found": True,
-                    "value": str(value),
-                    "message": f"The field '{spoken_name}' is filled with: {value}",
-                }
-            else:
-                # Field exists but is empty/unfilled
-                return {
-                    "found": True,
-                    "value": None,
-                    "message": f"The field '{spoken_name}' exists but has not been filled yet. Ask the user if they would like to fill it now.",
-                }
-        else:
-            # Field not found in schema - provide helpful suggestions
-            # Build list of available spoken names from schema and previous sections
-            available_names = self._get_available_spoken_names()
-            
-            # Try fuzzy matching to suggest alternatives
-            suggestions = self._find_similar_field_names(spoken_name, available_names)
-            
-            if suggestions:
-                # Provide "did you mean?" suggestions
-                if len(suggestions) == 1:
-                    suggestion_text = f"Did you mean '{suggestions[0]}'? Try asking about that field instead."
-                else:
-                    suggestion_list = ', '.join(f"'{s}'" for s in suggestions[:3])
-                    suggestion_text = f"Did you mean one of these: {suggestion_list}? Try asking about one of those fields instead."
-                
-                return {
-                    "found": False,
-                    "message": f"Could not find a field called '{spoken_name}'. {suggestion_text}",
-                    "suggestions": suggestions[:3],  # Include for potential tool extensions
-                }
-            else:
-                # No close matches - list available fields
-                if len(available_names) <= 5:
-                    available_list = ', '.join(f"'{n}'" for n in available_names)
-                    available_text = f"Available fields are: {available_list}."
-                else:
-                    available_list = ', '.join(f"'{n}'" for n in available_names[:5])
-                    available_text = f"Available fields include: {available_list} (and {len(available_names) - 5} more)."
-                
-                return {
-                    "found": False,
-                    "message": f"Could not find a field called '{spoken_name}'. {available_text} Please ask about one of these fields by name.",
-                }
-
-    def handle_field_value_response(self, request_id: str, value: Any, found: bool) -> None:
-        """
-        Handle field_value_response message from frontend.
-        
-        Delegates to RequestCoordinator.
-        
-        Args:
-            request_id: ID matching the original request
-            value: The field value from client
-            found: Whether the field was found
-        """
-        if not self._request_coordinator:
-            _log.warning("handle_field_value_response_no_coordinator", session_id=self._session_id)
-            return
-        
-        self._request_coordinator.handle_field_value_response(request_id, value, found)
-
     def handle_section_info_response(self, request_id: str, section_info: Dict[str, Any]) -> None:
         """
         Handle section_info_response message from frontend.
@@ -2050,35 +1956,6 @@ class FormFillingService:
             return
         
         self._request_coordinator.handle_section_info_response(request_id, section_info)
-
-    def _get_available_spoken_names(self) -> List[str]:
-        """
-        Get list of all available spoken field names from current schema.
-        
-        Returns:
-            List of spoken names that can be queried via get_field_value
-            
-        Delegates to field_utils.get_available_spoken_names for the actual logic.
-        """
-        return get_available_spoken_names(self._schema)
-    
-    def _find_similar_field_names(self, query: str, available_names: List[str], max_suggestions: int = 3) -> List[str]:
-        """
-        Find similar field names using fuzzy matching.
-        
-        Uses rapidfuzz for high-quality fuzzy matching (same library used for PDF field normalization).
-        
-        Args:
-            query: User's query string (e.g., "phone")
-            available_names: List of valid field names
-            max_suggestions: Maximum number of suggestions to return
-            
-        Returns:
-            List of suggested field names, sorted by similarity
-            
-        Delegates to field_utils.find_similar_field_names for the actual logic.
-        """
-        return find_similar_field_names(query, available_names, max_suggestions)
 
     # NOTE: the complete_section tool/handler was removed. Section completion is
     # auto-detected by the frontend (handleConfirmFieldRequest) when all fields

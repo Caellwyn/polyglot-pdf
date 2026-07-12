@@ -64,7 +64,6 @@ class CallbackHandler:
         # Service methods will be injected
         self._handle_update_fields = None
         self._handle_switch_section = None
-        self._handle_get_field_value = None
         self._request_form_state_from_client = None
         self._merge_field_schema = None
         # Secretary (bd polyglot-pdf-jnjj.45c): async handler that runs the
@@ -105,7 +104,6 @@ class CallbackHandler:
         self,
         handle_update_fields,
         handle_switch_section,
-        handle_get_field_value,
         request_form_state_from_client,
         merge_field_schema=None,
         handle_ask_secretary=None,
@@ -118,7 +116,6 @@ class CallbackHandler:
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
         self._handle_switch_section = handle_switch_section
-        self._handle_get_field_value = handle_get_field_value
         self._request_form_state_from_client = request_form_state_from_client
         self._merge_field_schema = merge_field_schema
         self._handle_ask_secretary = handle_ask_secretary
@@ -407,9 +404,6 @@ class CallbackHandler:
         
         if normalized == "switch_section":
             return await self._handle_switch_section_tool(arguments)
-        
-        if normalized == "get_field_value":
-            return await self._handle_get_field_value_tool(arguments)
 
         # NOTE: no complete_section route -- that tool was removed; section
         # completion is auto-detected by the frontend when all fields confirm.
@@ -566,22 +560,6 @@ class CallbackHandler:
         _log.info("-" * 80)
         return response
     
-    async def _handle_get_field_value_tool(
-        self,
-        arguments: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Handle get_field_value tool call."""
-        spoken_name = arguments.get("spoken_name", "") if isinstance(arguments, dict) else str(arguments)
-        response = await self._handle_get_field_value(spoken_name)
-        _log.info("-" * 80)
-        # spoken_name is user-speech-derived (e.g. "first name"); per the PII
-        # policy (docs/standards/hipaa-pii-policy.md) we log its length, never the
-        # value, since it reaches stdout -> Cloud Run logs (bd polyglot-pdf-t1c).
-        _log.info("GEMINI TOOL RESPONSE", tool="get_field_value",
-                 spoken_name_length=len(spoken_name or ""), found=response.get("found"))
-        _log.info("-" * 80)
-        return response
-
     async def _handle_ask_secretary_tool(
         self,
         arguments: Dict[str, Any]
@@ -1178,7 +1156,7 @@ class CallbackHandler:
 
         # Tell the model where it landed and what state the field is in. The
         # current value (when any) rides the tool response so the model can
-        # read it back -- same Gemini trust boundary as get_field_value; it is
+        # read it back -- same Gemini trust boundary as ask_secretary; it is
         # never logged.
         if ack.get("already_confirmed"):
             state_note = (

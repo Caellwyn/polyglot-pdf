@@ -622,10 +622,6 @@ export class WebFormConnection {
           this.handleSectionSwitched(message);
           break;
 
-        case "get_field_value":
-          this.handleGetFieldValueRequest(message);
-          break;
-
         case "confirm_field":
           this.handleConfirmFieldRequest(message);
           break;
@@ -1539,58 +1535,6 @@ export class WebFormConnection {
   }
 
   /**
-   * Phase 3: Handle get_field_value request from backend (AI tool call)
-   */
-  private handleGetFieldValueRequest(message: any): void {
-    const requestId = message.request_id;
-    const spokenName = message.spoken_name;
-
-    try {
-      const currentState = SchemaFormStateManager.load();
-      if (!currentState) {
-        this.sendFieldValueResponse(requestId, null, false);
-        return;
-      }
-
-      // Lookup field ID by spoken name (searches current + completed parts)
-      const fieldId = SchemaFormStateManager.getFieldBySpokenName(currentState, spokenName);
-
-      if (!fieldId) {
-        // Field doesn't exist in schema
-        this.sendFieldValueResponse(requestId, null, false);
-        return;
-      }
-
-      // Field exists - get value from fieldValues
-      const fieldValue = currentState.fieldValues[fieldId];
-
-      if (fieldValue && fieldValue.value !== undefined && fieldValue.value !== null && String(fieldValue.value).trim() !== '') {
-        // Field has a value
-        this.sendFieldValueResponse(requestId, fieldValue.value, true);
-      } else {
-        // Field exists but is empty/unfilled - send found=true with null value
-        // This lets backend distinguish "field exists but empty" from "field doesn't exist"
-        this.sendFieldValueResponse(requestId, null, true);
-      }
-
-    } catch (error) {
-      this.sendFieldValueResponse(requestId, null, false);
-    }
-  }
-
-  /**
-   * Phase 3: Send field_value_response back to backend
-   */
-  private sendFieldValueResponse(requestId: string, value: any, found: boolean): void {
-    this.send({
-      type: "field_value_response",
-      request_id: requestId,
-      value: value,
-      found: found,
-    });
-  }
-
-  /**
    * Handle confirm_field request from backend (Gemini called confirm_field tool)
    */
   private async handleConfirmFieldRequest(message: any): Promise<void> {
@@ -2077,7 +2021,7 @@ export class WebFormConnection {
       already_confirmed: !!entry?.confirmed,
       has_value: hasValue,
       // The current value rides the ack so the model can read it back to the
-      // user (same Gemini trust boundary as get_field_value; never logged).
+      // user (same Gemini trust boundary as ask_secretary; never logged).
       ...(hasValue ? { value: currentValue } : {}),
       ...(this.dtiModeEnabled
         ? { next_field_schema: getFieldSchema(fieldId, this.state.schema) }

@@ -18,17 +18,18 @@ local-only (`.env.DEV`-gated) -- see [voice-ai.md](voice-ai.md) for the adapter
 overview and [../standards/hipaa-pii-policy.md](../standards/hipaa-pii-policy.md)
 for why full bodies never reach production logs.
 
-## The seven tools Gemini is given
+## The tools Gemini is given
 
 Declared in `Settings.TOOL_DECLARATIONS` (`backend/config.py`), sent to Gemini at
-session setup (`live_ai_gemini.py` "Sending tool declarations"):
+session setup (`live_ai_gemini.py` "Sending tool declarations"). `get_field_value`
+was retired (bd polyglot-pdf-p5h2, epic polyglot-pdf-fc7t): in continuous mode
+(the only production path) recall is `ask_secretary`'s job:
 
 | Tool | Purpose | Required args |
 |------|---------|---------------|
 | `update_form_fields` | Save ONE field's value | `field_id`, `value` |
 | `confirm_field` | Mark a filled field confirmed after the user verifies | `field_id`, `confirmation_method` |
 | `get_form_status` | Read which fields are filled | `field_ids` |
-| `get_field_value` | Look up one field by spoken name | `spoken_name` |
 | `switch_section` | Navigate to another section | `section_identifier` |
 | `ask_secretary` | Ask a cheap text-model helper a plain-language question about a past answer or another field (bd polyglot-pdf-jnjj.45) | `query` |
 | `skip_field` | Force-skip a required field the user cannot answer, distinct from N/A (bd polyglot-pdf-7yra) | `field_id` |

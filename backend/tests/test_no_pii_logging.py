@@ -64,10 +64,12 @@ _SENSITIVE_KWARGS = (
     "value", "values", "selected_value", "selected_values", "target_value",
     "original_value", "message", "text", "text_preview", "transcript",
     "sample", "available_options", "system_instruction",
-    # spoken_name is a user-speech-derived label (get_field_value); it is now
-    # logged as spoken_name_length=len(...) and must never carry the raw value
-    # again (bd polyglot-pdf-t1c). spoken_name_length matches the *_length
-    # safe-RHS, so the redacted form passes while spoken_name=spoken_name fails.
+    # spoken_name is a user-speech-derived label (formerly get_field_value,
+    # retired bd polyglot-pdf-p5h2; the pattern is a standing guard against
+    # any future spoken-name logging site); it is now logged as
+    # spoken_name_length=len(...) and must never carry the raw value again
+    # (bd polyglot-pdf-t1c). spoken_name_length matches the *_length safe-RHS,
+    # so the redacted form passes while spoken_name=spoken_name fails.
     "spoken_name",
 )
 # `fields` is a SPECIAL case: logging the field IDs (dict KEYS) is always-safe
@@ -161,7 +163,7 @@ def _scan_leaks(text: str):
 # like print(). `_log.*(...)` kwargs are covered by _scan_leaks above; this is
 # the OTHER class of leak (bd polyglot-pdf-oeq): `print(f"Arguments: {arguments}")`
 # dumps the whole tool-call args, and `print(f"Response: {resp.response}")` dumps a
-# tool response (get_field_value / get_form_status can carry field VALUES) -- both
+# tool response (ask_secretary / get_form_status can carry field VALUES) -- both
 # to stdout -> Cloud Run logs. We flag a sensitive base name interpolated into an
 # f-string, INCLUDING when it is the base of an attribute/index/call access
 # (`resp.response`, `args["k"]`, `x.value`). Safe-metadata names (tool_name,

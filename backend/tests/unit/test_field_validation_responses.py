@@ -41,7 +41,6 @@ def mock_coordinator():
     coordinator = MagicMock(spec=RequestCoordinator)
     coordinator.request_form_state = AsyncMock()
     coordinator.request_next_field_hint = AsyncMock()
-    coordinator.request_field_value = AsyncMock()
     coordinator.request_section_info = AsyncMock()
     return coordinator
 
@@ -104,7 +103,6 @@ def create_callback_handler(mock_websocket, mock_coordinator, update_handler):
     handler.set_tool_handlers(
         handle_update_fields=update_handler,
         handle_switch_section=AsyncMock(),
-        handle_get_field_value=AsyncMock(),
         request_form_state_from_client=AsyncMock(),
     )
 

@@ -88,7 +88,7 @@ export interface FieldAccessResult {
 }
 
 /**
- * Check if a field can be accessed (for get_field_value or update_form_fields)
+ * Check if a field can be accessed (for switch_to_field or update_form_fields)
  *
  * A field is NOT accessible if:
  * 1. It doesn't exist in the schema (field_not_found)

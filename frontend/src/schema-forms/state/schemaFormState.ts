@@ -809,62 +809,6 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Get field ID by spoken name (for WebSocket field lookups)
-   *
-   * Section mode: searches the current section + completed sections (the fields
-   * the model has been walked through so far).
-   *
-   * Continuous mode: searches the WHOLE schema. Continuous sessions pin
-   * currentSectionId to the first section and never call switchToSection /
-   * markSectionComplete (bd polyglot-pdf-944q), so completedSections stays empty
-   * -- a section-scoped lookup would return not-found for every filled field
-   * outside section 1 (bd polyglot-pdf-lt9z). This mirrors buildContinuousManifest,
-   * which presents the whole form as one section.
-   */
-  static getFieldBySpokenName(state: SchemaFormState, spokenName: string): string | null {
-    const lowerSpokenName = spokenName.toLowerCase();
-
-    const matchesField = (field: FormField): boolean => {
-      if (field.spoken_name?.toLowerCase() === lowerSpokenName) {
-        return true;
-      }
-      if (field.spoken_aliases) {
-        for (const alias of field.spoken_aliases) {
-          if (alias.toLowerCase() === lowerSpokenName) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    if (state.continuousSessionEnabled) {
-      // Whole-form lookup: continuous mode has no per-section progression, so
-      // any filled field is a valid recall target.
-      const match = state.schema.fields.find(matchesField);
-      return match ? match.id : null;
-    }
-
-    // Section mode: current section + completed sections only.
-    const sectionsToSearch = new Set([state.currentSectionId, ...state.completedSections]);
-
-    for (const sectionId of sectionsToSearch) {
-      const section = state.schema.sections.find(s => s.id === sectionId);
-      if (!section) continue;
-
-      for (const fieldId of section.fields) {
-        const field = state.schema.fields.find(f => f.id === fieldId);
-        if (!field) continue;
-        if (matchesField(field)) {
-          return field.id;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
    * Get section label by order number
    */
   static getSectionLabel(state: SchemaFormState, orderNumber: number): string {
@@ -889,7 +833,7 @@ export class SchemaFormStateManager {
    * Called when Gemini receives a field's complete schema:
    * - Initial handshake (first field)
    * - After update_form_fields (next field schema)
-   * - From get_field_value (if schema not already sent)
+   * - From switch_to_field (if schema not already sent)
    */
   static markFieldSchemaLoaded(state: SchemaFormState, fieldId: string): SchemaFormState {
     if (state.loadedFieldIds.has(fieldId)) {
@@ -1079,11 +1023,10 @@ export class SchemaFormStateManager {
    * field_id first (verbatim from guidance -- the preferred form), then a
    * case-insensitive match on spoken_name, display name, or spoken_aliases.
    *
-   * Searches the WHOLE schema deliberately -- NOT the section-scoped
-   * getFieldBySpokenName above, whose {currentSection + completedSections}
-   * scope goes blind past section 1 in continuous mode (bd polyglot-pdf-lt9z).
-   * A navigation target may live anywhere in the form; the caller decides
-   * whether an out-of-section target is reachable in the current mode.
+   * Searches the WHOLE schema deliberately -- a section-scoped search would go
+   * blind past section 1 in continuous mode (bd polyglot-pdf-lt9z). A navigation
+   * target may live anywhere in the form; the caller decides whether an
+   * out-of-section target is reachable in the current mode.
    */
   static resolveFieldForNavigation(
     state: SchemaFormState,

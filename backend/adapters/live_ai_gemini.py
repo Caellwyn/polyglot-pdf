@@ -2639,7 +2639,7 @@ class LiveAIGemini(ILiveAI):
                                             )
 
                                         # Log tool responses being sent to Gemini, for token analysis ONLY.
-                                        # NEVER print resp.response -- a tool response (e.g. get_field_value /
+                                        # NEVER print resp.response -- a tool response (e.g. ask_secretary /
                                         # get_form_status) can carry field VALUES = PII/PHI, and stdout ->
                                         # Cloud Run logs (bd polyglot-pdf-oeq). Log the tool name + response
                                         # SIZE (char/estimated-token count), never the body.

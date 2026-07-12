@@ -5,8 +5,9 @@
  * pin is live (field visible + unconfirmed), computeNextField returns it FIRST,
  * so every "what's next" consumer -- the hint, the DTI schema drip, UI focus --
  * follows the jump. Confirm/skip release the pin; a section switch abandons it.
- * The resolver searches the WHOLE schema deliberately (NOT the section-scoped
- * getFieldBySpokenName -- bd polyglot-pdf-lt9z).
+ * The resolver searches the WHOLE schema deliberately (NOT a section-scoped
+ * lookup, which would go blind past section 1 in continuous mode -- bd
+ * polyglot-pdf-lt9z).
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -87,8 +88,8 @@ describe('switch_to_field pin (bd jnjj.36)', () => {
   })
 
   it('resolves fields OUTSIDE the current section (whole schema, not the lt9z scope)', () => {
-    // currentSectionId is sec1 and completedSections is empty -- the
-    // section-scoped getFieldBySpokenName would go blind here.
+    // currentSectionId is sec1 and completedSections is empty -- a
+    // section-scoped lookup would go blind here.
     const s = baseState({ currentSectionId: 'sec1' })
     expect(SchemaFormStateManager.resolveFieldForNavigation(s, 'field gamma')).toBe('c')
   })

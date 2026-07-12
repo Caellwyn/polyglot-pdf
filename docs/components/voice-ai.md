@@ -123,19 +123,20 @@ instant the local VAD fires, for sub-perceptual latency (see
 ## Tool calling
 
 Tool calls are routed to `CallbackHandler.on_tool_call`
-(`backend/services/callback_handler.py`), which dispatches the seven tools declared
+(`backend/services/callback_handler.py`), which dispatches the tools declared
 in `backend/config.py`. The full call/response sequence (code expectation vs. the
 actual wire payload) is mapped in [tool-call-flow.md](tool-call-flow.md); when
 debugging tool reliability, the adapter captures FULL message bodies locally via
 `_dev_log_io` (`.env.DEV`-gated, never in production) to
-`backend/logs/gemini_<date>.jsonl`. The seven tools:
+`backend/logs/gemini_<date>.jsonl`. `get_field_value` was retired (bd
+polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
+`ask_secretary`'s job. The tools:
 
 - `update_form_fields` — single field per call (hallucination mitigation).
 - `confirm_field` — enum `verbal`/`manual`; see
   [../standards/confirmation-and-audit.md](../standards/confirmation-and-audit.md).
 - `get_form_status` (alias `get_form_state`) — compact field-state snapshot.
 - `switch_section` — advance by `section_identifier`.
-- `get_field_value` — look up a current value by `spoken_name`.
 - `ask_secretary` -- a plain-language question routed to a cheap text-model
   helper that holds the whole form catalog + current answers and replies in
   prose (bd polyglot-pdf-jnjj.45); the principal uses it instead of trying to
