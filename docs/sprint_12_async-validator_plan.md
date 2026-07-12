@@ -1,8 +1,8 @@
 # Sprint 12 -- Decoupled async validator (page-end queue)
 
-**Planning bead:** `polyglot-pdf-wt6w` (sprint-11 epic fc7t child C5; closes when
-this plan is approved and the implementation beads are filed) | **Build epic:**
-filed on approval | **Status: DRAFT -- awaiting maintainer approval**
+**Planning bead:** `polyglot-pdf-wt6w` (sprint-11 epic fc7t child C5, CLOSED on
+approval) | **Build epic:** `polyglot-pdf-09da` (6 children W1-W6 filed) |
+**Status: APPROVED 2026-07-12 -- implementation beads filed**
 
 ## Why
 
@@ -26,7 +26,7 @@ supports it.
 - In continuous mode NO page/section-advance event exists: currentSectionId
   stays pinned, the section display is frozen, Preview renders all pages
   stacked with no page-change event. The one observable boundary crossing is
-  the next-field path (`onNextField` / `handleNextField`, SchemaForm.tsx:249):
+  the next-field path (`onNextField` / `handleNextField`, frontend/src/schema-forms/components/SchemaForm.tsx:249):
   when the AI's next field's `pdf_position.page` differs from the previous
   field's, the fill has crossed a page.
 - The client owns all state (sessionStorage `SchemaFormState`); a findings

@@ -60,7 +60,13 @@ lifecycle change.
 
 New: docs/sprint_12_async-validator_plan.md; docs/INDEX.md active-sprints row
 added. No tier-2 doc bumped here (the plan is forward-looking; W1/W3/W4 will
-touch validation-delegation.md when they land).
+touch validation-delegation.md when they land). closeout_prep's stale-doc
+warnings (ws-protocol.md, technical_guide.md, voice-and-vad.md et al.) all
+track SOURCE files this docs-only branch did not touch -- pre-existing,
+reviewed and left. Fresh-eyes caught two nits on the new plan doc, both fixed
+pre-PR: a stale "DRAFT -- awaiting approval" status marker (the plan is
+approved + filed; current-state-only rule) and a SchemaForm.tsx pointer
+missing its components/ path segment.
 
 ## Files touched
 
