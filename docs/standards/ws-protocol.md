@@ -115,11 +115,11 @@ Sent via `send_json` in `backend/services/callback_handler.py`,
 | `section_switched` | form_filling_service.py:1031 | Same-socket section switch completed. |
 | `gemini_session_restarted` | websocket_routes.py:576 | Gemini session restarted successfully. |
 | `gemini_session_ended` | websocket_routes.py:563 | Gemini session ended. |
-| `get_form_state` | request_coordinator.py:151 | Backend asks the client for current form state. |
-| `get_next_field_hint` | request_coordinator.py:214 | Backend asks the client to compute the next-field hint. |
-| `confirm_field` | request_coordinator.py:279 | Backend asks the client to confirm a field. |
-| `skip_field` | request_coordinator.py:364 | Backend asks the client to force-skip a required field the user cannot answer (bd polyglot-pdf-7yra). The client records the skip (markFieldSkipped: empty value + skipped flag) and replies `skip_field_response`. |
-| `switch_field` | request_coordinator.py:427 | Backend asks the client to make ONE specific field current (the switch_to_field tool, bd polyglot-pdf-jnjj.36 -- field-level navigation for secretary-directed jumps + corrections). Carries `field` (a field_id or exact spoken name). The client resolves it WHOLE-schema (not the section-scoped lookup, bd lt9z), pins it so computeNextField returns it first (UI focus follows via onNextField), and replies `switch_field_response`. Unlike a section switch (the `switch_section` tool), the Gemini session is NOT restarted. |
+| `get_form_state` | request_coordinator.py:173 | Backend asks the client for current form state. |
+| `get_next_field_hint` | request_coordinator.py:238 | Backend asks the client to compute the next-field hint. |
+| `confirm_field` | request_coordinator.py:315 | Backend asks the client to confirm a field. |
+| `skip_field` | request_coordinator.py:391 | Backend asks the client to force-skip a required field the user cannot answer (bd polyglot-pdf-7yra). The client records the skip (markFieldSkipped: empty value + skipped flag) and replies `skip_field_response`. |
+| `switch_field` | request_coordinator.py:455 | Backend asks the client to make ONE specific field current (the switch_to_field tool, bd polyglot-pdf-jnjj.36 -- field-level navigation for secretary-directed jumps + corrections). Carries `field` (a field_id or exact spoken name). The client resolves it WHOLE-schema, pins it so computeNextField returns it first (UI focus follows via onNextField), and replies `switch_field_response`. Unlike a section switch (the `switch_section` tool), the Gemini session is NOT restarted. |
 | `prepare_section_switch` | request_coordinator.py:513 | Backend asks the client to pre-stage a section switch. |
 | `form_state_ack` | websocket_routes.py:366 | Ack of a client `form_state`; carries `applied_fields`. |
 | `hint_ack` | websocket_routes.py:379 | Ack of a client `next_field_hint`. |
