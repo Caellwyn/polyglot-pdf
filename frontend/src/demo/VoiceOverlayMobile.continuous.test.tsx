@@ -78,6 +78,14 @@ function makeManager() {
     resume: vi.fn(async () => {}),
     rearmAudioCapture: vi.fn(async () => {}),
     readDisclaimer: vi.fn(),
+    // Methods the mount/connect path calls -- without them handleConnect's
+    // try/catch swallows a TypeError and the flow silently no-ops
+    // (fresh-eyes mock-fidelity note on this bead).
+    isPaused: vi.fn(() => false),
+    startRecording: vi.fn(async () => {}),
+    getStatus: vi.fn(() => 'connected'),
+    changeSpokenLanguage: vi.fn(),
+    isSendingMicAudio: vi.fn(() => false),
   } as any
 }
 
