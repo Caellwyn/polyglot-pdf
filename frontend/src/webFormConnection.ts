@@ -2363,6 +2363,14 @@ export class WebFormConnection {
    * pdf_position.page, so source:"web" / pageless forms behave identically.
    */
   private maybeEmitValidateWindows(): void {
+    // Only run on an OPEN socket. This method MARKS windows sent (persists their
+    // indices) before send(), and send() silently no-ops on a closed socket -- so
+    // running it closed would permanently retire a window that never reached the
+    // wire, dropping that region's validation coverage (Opus outer-review finding).
+    // Bailing when closed leaves the indices unsent, so the next open seam
+    // (confirm / reconnect's handleSessionReady) re-evaluates + emits them.
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
     const ready = SchemaFormStateManager.computeReadyWindows(
       this.state,
       WebFormConnection.VALIDATOR_WINDOW_SIZE,

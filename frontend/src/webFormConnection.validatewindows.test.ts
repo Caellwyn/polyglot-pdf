@@ -178,4 +178,28 @@ describe('WebFormConnection validate_windows stride emit (bd polyglot-pdf-kxkw)'
       fireConfirm(ws, `f${i}`)
     }
   }
+
+  it('does not re-send an already-sent window after a disconnect + reconnect (persisted high-water)', async () => {
+    // Opus outer-review finding 2: prove the persistence guarantee END-TO-END (send
+    // -> save -> reconnect from the persisted state -> no re-emit), not just via the
+    // two unit mechanisms. The sessionStorage `store` survives across connections in
+    // one beforeEach, and a fresh WebFormConnection for the SAME schema within 1h
+    // reuses that persisted state (validatedWindowIndices included).
+    const schema = nFieldSchema(25)
+    const ws1 = await connected(schema)
+    fillFirst(ws1, 20)                 // window 0 [0,20) settled -> sent
+    expect(ofType(ws1, 'validate_windows')).toHaveLength(1)
+    conn!.disconnect()
+    conn = null
+
+    // Reconnect (new connection, same schema -> reuses persisted state).
+    const ws2 = await connected(schema)
+    // A confirm on the reconnected session must NOT re-send window 0 (its index is
+    // persisted in validatedWindowIndices). Confirm the rest to complete the form.
+    fillFirst2(ws2, 20, 25)
+    const reWindows = ofType(ws2, 'validate_windows').flatMap(e => e.windows)
+    for (const w of reWindows) {
+      expect(w[0].field_id).not.toBe('f0') // window 0 never rides again
+    }
+  })
 })

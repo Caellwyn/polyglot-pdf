@@ -51,11 +51,21 @@ end with no separate `isFormComplete` release. This is more correct AND simpler
 (dropped the `isFormComplete` dependency). Regression tests pin both the
 out-of-order-f5 and skipped-field cases.
 
-**Other fresh-eyes fixes (all adopted):** a CI-gating `tsc` error (test imported
-`FormSchema` from `./schemaFormState`, which only type-imports it -> import from
-`../types/schema`); the in-place `Set.add` mutation replaced with the codebase's
-immutable spread-replace pattern; a `stride > size` coverage-gap guard (clamp the
-enumeration step to `size` so windows always tile contiguously).
+**Other fresh-eyes (Sonnet) fixes (all adopted):** a CI-gating `tsc` error (test
+imported `FormSchema` from `./schemaFormState`, which only type-imports it ->
+import from `../types/schema`); the in-place `Set.add` mutation replaced with the
+codebase's immutable spread-replace pattern; a `stride > size` coverage-gap guard
+(clamp the enumeration step to `size` so windows always tile contiguously).
+
+**Opus outer-review (two independent NO-GAPS) follow-ups (adopted, defensive):**
+(1) `maybeEmitValidateWindows` now bails on a non-OPEN socket -- it marks windows
+sent before `send()`, and `send()` no-ops when closed, so a future closed-socket
+caller could permanently retire an un-sent window; bailing leaves the indices
+unsent for the next open seam. Not reachable via today's 4 seams (all socket-open),
+but closes the vector. (2) Added an end-to-end reconnect regression test
+(emit -> save -> reconnect from persisted state -> assert window 0 not re-sent),
+so the persistence guarantee is pinned by a dedicated test, not only
+compositionally.
 
 ## Lessons
 
