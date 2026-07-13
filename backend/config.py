@@ -165,6 +165,12 @@ class Settings(BaseModel):
 	# UNDER the frontend's VALIDATOR_GATE_TIMEOUT_MS (6s) so the backend frees the loop
 	# and returns clean before the client's gate gives up.
 	VALIDATOR_TIMEOUT_SEC: float = 4.0
+	# W1 (bd polyglot-pdf-xbl2): the async window validator runs one flash-lite call
+	# PER WINDOW concurrently off the receive loop. Bound the fan-out so a batch of
+	# many overlapping windows cannot open an unbounded number of simultaneous
+	# flash-lite calls. Windows beyond the cap queue and run as slots free; each
+	# still gets its own VALIDATOR_TIMEOUT_SEC. Per-window fail-open is unchanged.
+	VALIDATOR_MAX_CONCURRENT_WINDOWS: int = 8
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 
 	# === DTI (Dynamic Turn Injection) Settings ===

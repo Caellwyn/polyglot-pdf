@@ -237,6 +237,12 @@ DOC_INBOUND_TYPES_WITHOUT_FE_SENDER = {
     # column for this row already points at the backend handler, not an FE
     # line. Unlike section_completed, the doc does NOT flag the missing sender.
     "next_field_hint",
+    # W1 (bd polyglot-pdf-xbl2) landed the BACKEND dispatch arm for the async
+    # page-end validator trigger; the FRONTEND sender (page-end detection + the
+    # window builder that emit it) is W2 (bd polyglot-pdf-kxkw). The doc row for
+    # this type flags the missing sender ("FE sender lands in W2"). Remove this
+    # entry when W2 wires the emitter.
+    "validate_windows",
 }
 
 

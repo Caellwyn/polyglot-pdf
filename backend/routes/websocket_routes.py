@@ -313,7 +313,50 @@ async def _handle_fill_session(
 					break
 		
 		watchdog = asyncio.create_task(watchdog_task())
-		
+
+		# W1 (bd polyglot-pdf-xbl2): the validator now runs OFF the receive loop.
+		# A validation trigger acks the client immediately and spins the actual
+		# flash-lite pass into a tracked background task; the receive loop never
+		# awaits it, so a slow/hung validator adds ZERO voice-turn latency. Tasks
+		# are tracked so they can be cancelled on disconnect (a lingering task must
+		# not push to a closed socket).
+		validation_tasks: set[asyncio.Task] = set()
+
+		async def _run_validation_and_push(
+			windows: list, result_type: str
+		) -> None:
+			"""Background runner: validate the window batch, then push ONE
+			`validation_result` envelope. Fail-OPEN and CRASH-SAFE -- every
+			exception (incl. the validator's own) is caught + logged here so a
+			background-task failure can NEVER propagate into the receive loop
+			(exit criterion 3). A send to an already-closed socket is swallowed
+			(the client is gone; nothing to deliver)."""
+			try:
+				verdict = await service.handle_validation_windows(windows)
+				# Envelope shape is UNCHANGED from the shipped B5 contract
+				# ({type, conflicts}) -- W1 changed WHEN this is pushed (async, after
+				# the ack), not its shape. `result_type` is a LOG label only, never
+				# put on the wire (validation-delegation.md contract 1 is pinned).
+				await websocket.send_json({
+					"type": "validation_result",
+					"conflicts": verdict.get("conflicts", []),
+				})
+			except Exception as exc:  # noqa: BLE001 -- background task must never crash the loop
+				_log.warning(
+					"async_validation_task_failed",
+					result_type=result_type,
+					exc_type=type(exc).__name__,
+					session_id=session_id,
+				)
+
+		def _spawn_validation(windows: list, result_type: str) -> None:
+			"""Fire-and-forget the validation runner, tracked for disconnect
+			cleanup. The done-callback discards the task from the set so it does
+			not leak; exceptions are already handled inside the runner."""
+			task = asyncio.create_task(_run_validation_and_push(windows, result_type))
+			validation_tasks.add(task)
+			task.add_done_callback(validation_tasks.discard)
+
 		while True:
 			msg = await websocket.receive()
 
@@ -680,6 +723,14 @@ async def _handle_fill_session(
 					# envelope to the client for EVERY boundary (incl. clean) -- the
 					# deterministic clean->resume signal the FE switch-gate needs
 					# (contract 1). Distinct from the legacy reactive `section_completed`.
+					# W1 (bd polyglot-pdf-xbl2) moved the validator OFF the receive loop:
+					# ack IMMEDIATELY, spin the flash-lite pass into a tracked background
+					# task, and let it push the `validation_result` envelope when it lands.
+					# The receive loop no longer awaits the validator, so a slow/hung pass
+					# adds zero voice-turn latency. The FE gate (VALIDATOR_GATE_TIMEOUT_MS)
+					# already fails open if the async result is slow/absent; an arriving
+					# result still resolves the gate + sets the per-field steered markers
+					# exactly as before. The single field list is a one-window batch.
 					proactive_section_id = obj.get("section_id")
 					proactive_fields = obj.get("fields", [])
 					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
@@ -689,11 +740,7 @@ async def _handle_fill_session(
 						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
 						session_id=session_id,
 					)
-					verdict = await service.handle_validation_boundary(proactive_fields)
-					await websocket.send_json({
-						"type": "validation_result",
-						"conflicts": verdict.get("conflicts", []),
-					})
+					_spawn_validation([proactive_fields], "section_complete")
 					await websocket.send_json({"type": "section_complete_ack"})
 					continue
 				elif mtype == "form_complete":
@@ -703,6 +750,10 @@ async def _handle_fill_session(
 					# validator pass + pushes the `validation_result` envelope (there is
 					# no section switch to gate on the last boundary; the client still
 					# uses the result to set its per-field `steered` markers).
+					# W1 (bd polyglot-pdf-xbl2): ack immediately + run the full-form pass in
+					# the background; it pushes the `validation_result` envelope when done
+					# (the terminal boundary has no section switch to gate; the client still
+					# uses the result to set its per-field steered markers). One-window batch.
 					proactive_fields = obj.get("fields", [])
 					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
 					_log.info(
@@ -710,12 +761,32 @@ async def _handle_fill_session(
 						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
 						session_id=session_id,
 					)
-					verdict = await service.handle_validation_boundary(proactive_fields)
-					await websocket.send_json({
-						"type": "validation_result",
-						"conflicts": verdict.get("conflicts", []),
-					})
+					_spawn_validation([proactive_fields], "form_complete")
 					await websocket.send_json({"type": "form_complete_ack"})
+					continue
+				elif mtype == "validate_windows":
+					# W1 (bd polyglot-pdf-xbl2): the async page-end validator trigger. W2
+					# (page-end detection + window builder, bd polyglot-pdf-kxkw) emits this
+					# on a page-boundary crossing carrying the OVERLAPPING windows (size ~20,
+					# stride ~10) covering fields up to the crossed boundary. Ack
+					# immediately, then run every window's flash-lite pass concurrently in
+					# the background, dedupe conflicts across the batch by field-id set,
+					# suppress already-steered markers, inject one steer, and push the
+					# surviving conflicts as a `validation_result`. Nothing in the voice path
+					# waits on any of it.
+					windows = obj.get("windows", [])
+					safe_windows = windows if isinstance(windows, list) else []
+					# PII (contract 6): log COUNTS only -- never the windows/values.
+					_log.info(
+						"validate_windows_received",
+						window_count=len(safe_windows),
+						field_count=sum(
+							len(w) for w in safe_windows if isinstance(w, list)
+						),
+						session_id=session_id,
+					)
+					_spawn_validation(safe_windows, "validate_windows")
+					await websocket.send_json({"type": "validate_windows_ack"})
 					continue
 				else:
 					# Log unknown message type for debugging
@@ -732,6 +803,12 @@ async def _handle_fill_session(
 		pass
 	finally:
 		watchdog.cancel()
+		# W1 (bd polyglot-pdf-xbl2): cancel any in-flight async validation tasks so
+		# a lingering pass does not try to push to a closed socket after teardown.
+		# `validation_tasks` may be unbound if we failed before the receive loop set
+		# it up (e.g. an early handshake error) -- guard with locals().
+		for task in list(locals().get("validation_tasks", ())):
+			task.cancel()
 		await service.end_session()
 
 
