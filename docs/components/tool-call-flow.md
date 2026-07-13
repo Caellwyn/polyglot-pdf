@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool
+*Last updated: 2026-07-12 (continuous-DTI is the production law; switch_section is deprecated section-reset-fallback, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool
 `skip_field` to the tool table + count -- a voice skip of a required field the
 user cannot answer, distinct from N/A; it mirrors confirm_field's round-trip).
 Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth
@@ -30,7 +30,7 @@ was retired (bd polyglot-pdf-p5h2, epic polyglot-pdf-fc7t): in continuous mode
 | `update_form_fields` | Save ONE field's value | `field_id`, `value` |
 | `confirm_field` | Mark a filled field confirmed after the user verifies | `field_id`, `confirmation_method` |
 | `get_form_status` | Read which fields are filled | `field_ids` |
-| `switch_section` | Navigate to another section | `section_identifier` |
+| `switch_section` (DEPRECATED) | Navigate to another section -- section-reset fallback only; dropped from the tool set in production continuous mode (bd polyglot-pdf-55jg) | `section_identifier` |
 | `ask_secretary` | Ask a cheap text-model helper a plain-language question about a past answer or another field (bd polyglot-pdf-jnjj.45) | `query` |
 | `skip_field` | Force-skip a required field the user cannot answer, distinct from N/A (bd polyglot-pdf-7yra) | `field_id` |
 
@@ -69,7 +69,10 @@ are model-generated tokens not field values; never the response body) if it ever
 (bd polyglot-pdf-0ux) -- the model does send one (it is NOT matched by order); the
 id is omitted only for a rare genuinely-id-less call (the Vertex path tolerates
 that). **`switch_section` delivers its response on the OLD session before
-teardown** (bd polyglot-pdf-0c1, which closed y4a): its handler returns the
+teardown** -- this is DEPRECATED section-reset-fallback behavior (bd
+polyglot-pdf-55jg); production continuous mode drops the tool and never runs
+this swap, but the mechanic is documented for the fallback (bd
+polyglot-pdf-0c1, which closed y4a): its handler returns the
 success payload immediately -- that return value is the `FunctionResponse` the
 receive loop flushes via `send_tool_response` -- and only THEN does the loop break
 on a cooperative `_close_after_flush` flag. The actual session swap runs on a

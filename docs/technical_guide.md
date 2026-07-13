@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-07-06. See [journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md](journal/entries/2026-07-06-bd-9jv-31u1-dead-code-deletes.md) for closeout details. This guide lists the deploy flow + FORM_KITS_* env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-07-12. Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872; section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -34,7 +34,9 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |
-| `USE_DTI` | `false` | Feature flag: DTI (thin static SI + per-field guidance injection) vs. the legacy full-schema SI. DTI is the shipped reduced-SI mode. |
+| `USE_DTI` | `true` | Continuous-DTI is the production law of the land (bd polyglot-pdf-7872): the thin static SI + per-field guidance injection. Set `false` for the deprecated legacy full-schema SI (the section-reset fallback, bd polyglot-pdf-55jg). |
+| `CONTINUOUS_SESSION` | `true` | The whole form runs as ONE Gemini session bounded by context-window compression (production default). `false` -> the deprecated section-reset flow (fresh session per section). Implies `USE_DTI`. |
+| `CONTEXT_COMPRESSION_ENABLED` | `true` | Sliding-window context compression that bounds the continuous session (production default; validated by the jnjj.25 cost gate + G3 correctness gate). `false` disables it. See [components/context-compression.md](components/context-compression.md). |
 | `FORM_KITS_MODE` | `local` | Form-kit store backend (`local` FS vs. GCS/remote). |
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
 | `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`) -- a behavioral switch worth knowing when deploying. Env-overridable so demo/prod can flip without a code edit. |

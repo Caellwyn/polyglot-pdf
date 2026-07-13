@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-08. See [../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md](../journal/entries/2026-07-08-bd-ipin-jq17-fdz8-preview-polish.md) for the view-mode resize + overlay-invariant test; [../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md](../journal/entries/2026-07-08-bd-w146-checkbox-group-cast-cleanup.md) for the prior checkbox_group cleanup.*
+*Last updated: 2026-07-12. Production continuous-DTI runs the whole form as one session: section-navigation state (`currentSectionId`/`completedSections`) is inert and manual prev/next is suppressed; sections still page the UI. Section navigation is the deprecated section-reset fallback (bd polyglot-pdf-55jg). Prior: 2026-07-08 (bd ipin/jq17/fdz8 preview polish; bd w146 checkbox_group cleanup).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -20,7 +20,11 @@ instances) operating on a `SchemaFormState` value:
 
 - `fieldValues: Record<string, FieldValue>` — the answers (see FieldValue below).
 - `currentSectionId` + `completedSections: Set<string>` — **section**-based
-  navigation (not parts; see terminology).
+  navigation state (not parts; see terminology). In production continuous mode
+  these are inert: `currentSectionId` stays pinned to the first section and
+  `completedSections` never grows (the model never advances sections). They
+  drive real navigation only in the DEPRECATED section-reset fallback (bd
+  polyglot-pdf-55jg). Sections still page the UI either way.
 - `formSessionId` — persistent `fss_<base36-ts>_<random>`, survives reconnects
   (the durability boundary; see stateless-architecture).
 - `validationErrors`, `loadedFieldIds`/`jitModeEnabled` (JIT token-reduction),
@@ -79,8 +83,10 @@ as an array even though `FieldValue.value` itself is only `string | boolean | nu
 ## Rendering
 
 `SchemaForm.tsx` renders one section at a time (`getCurrentSectionFields`), with a
-progress bar (`getProgress`), prev/next nav (`getNextSection`/`getPreviousSection`,
-gated by `isSectionValid`), and a final Submit. It also mounts the voice overlay
+progress bar (`getProgress`) and a final Submit. Manual prev/next section nav
+(`getNextSection`/`getPreviousSection`, gated by `isSectionValid`) is suppressed
+in production continuous mode -- it belongs to the DEPRECATED section-reset
+fallback (bd polyglot-pdf-55jg); continuous sessions show only Submit. It also mounts the voice overlay
 (desktop `VoiceOverlay` / mobile `VoiceOverlayMobile`, `window.innerWidth <= 768`)
 and the PDF print/download buttons, and creates the shared mic `MediaStream` +
 `ConnectionManager` once the stream is ready. Behind the preview-UI flag

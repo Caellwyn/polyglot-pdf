@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -136,7 +136,9 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
 - `confirm_field` — enum `verbal`/`manual`; see
   [../standards/confirmation-and-audit.md](../standards/confirmation-and-audit.md).
 - `get_form_status` (alias `get_form_state`) — compact field-state snapshot.
-- `switch_section` — advance by `section_identifier`.
+- `switch_section` — advance by `section_identifier`. **DEPRECATED**: dropped
+  from the declared tool set in production continuous mode; belongs to the
+  section-reset fallback (bd polyglot-pdf-55jg).
 - `ask_secretary` -- a plain-language question routed to a cheap text-model
   helper that holds the whole form catalog + current answers and replies in
   prose (bd polyglot-pdf-jnjj.45); the principal uses it instead of trying to

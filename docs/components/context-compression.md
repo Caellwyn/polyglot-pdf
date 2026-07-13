@@ -2,28 +2,25 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/config.py backend/services/form_filling_service.py
 
-*Last updated: 2026-07-06 (bd polyglot-pdf-x8rt: the sliding-window "candidate" shipped as an opt-in continuous-session mode -- ctu8 validated window 3500; see the Verdict + SHIPPED note below. Prior 2026-07-05, bd polyglot-pdf-ctu8 prep: the Live API hard-bounds trigger_tokens to [5000, 128000] at connect -- Vertex 1007, wire-verified; `_build_live_config` clamps the derived/configured trigger into that range and re-asserts window < trigger after the clamp -- the derived I-90 DTI trigger ~2800 was below the minimum and killed every DTI+compression connect on Vertex).
+*Last updated: 2026-07-12 (continuous-DTI is the production law of the land: `CONTEXT_COMPRESSION_ENABLED` defaults TRUE alongside `CONTINUOUS_SESSION` + `USE_DTI`, bd polyglot-pdf-7872; the sliding window is the SHIPPED default, not a candidate, validated by the jnjj.25 cost gate + the G3 correctness gate). The section-reset comparison below is the DEPRECATED fallback (bd polyglot-pdf-55jg). Prior 2026-07-06, bd polyglot-pdf-x8rt: the sliding-window shipped as continuous-session mode -- ctu8 validated window 3500; the Live API hard-bounds trigger_tokens to [5000, 128000] at connect (Vertex 1007, wire-verified), so `_build_live_config` clamps the derived/configured trigger into range and re-asserts window < trigger after the clamp.
 See [../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md](../journal/entries/2026-07-06-bd-x8rt-continuous-session-mode.md).*
 
-> **STATUS (2026-06-12): WORKING on BOTH models -- eviction confirmed on SDK 2.8.0.**
-> Sliding-window eviction is real and reliable on `gemini-3.1-flash-live-preview`
-> (3/3 twenty-turn runs, 3-4 evictions each, ON sessions 54-74% below the unbounded
-> baseline at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) AND
-> on `gemini-2.5-flash-native-audio-preview-12-2025` (3/3 twenty-turn runs, 2-3
-> evictions each -- drops ~610-1,100 tokens, plus one incremental partial of
-> ~220 -- ON oscillating ~2,100-3,400 vs OFF compounding to ~6,500; the
-> `h04c` matrix). This overturns the 2026-06-04 dead-end verdict (bd `l3a.1`, SDK
-> 1.38.0; the journal keeps that story). **Probe trap:** 2.5 dies with `1011` after
-> turn 1 on any probe that passes `tool_declarations=None` -- identically with
-> compression off, so it was never compression-related; pass the production tool
-> declarations (`--tools real`) and 2.5 is stable (bd memory
-> `gemini-2p5-1011-needs-tool-declarations`). **`CONTEXT_COMPRESSION_ENABLED` stays
-> `False`** until epic `polyglot-pdf-hcsl` picks production parameters and regression-
-> tests coherence. Re-run the verdict:
+> **STATUS: SHIPPED as the production default (bd polyglot-pdf-7872).**
+> `CONTEXT_COMPRESSION_ENABLED` defaults TRUE; the continuous whole-form session
+> is bounded by the sliding window on every production connect. Sliding-window
+> eviction is real and reliable on both tiers -- `gemini-3.1-flash-live-preview`
+> (3/3 twenty-turn runs, 3-4 evictions each, 54-74% below the unbounded baseline
+> at turn 20 -- `scripts/spikes/eycd_compression_eviction_findings.md`) and
+> `gemini-2.5-flash-native-audio-preview-12-2025` (2-3 evictions each; ON
+> oscillating ~2,100-3,400 vs OFF compounding to ~6,500; the `h04c` matrix). This
+> overturned the 2026-06-04 dead-end verdict (bd `l3a.1`, SDK 1.38.0; the journal
+> keeps that story). **Probe trap** (still relevant when re-measuring): 2.5 dies
+> with `1011` after turn 1 on any probe that passes `tool_declarations=None` --
+> identically with compression off, so it was never compression-related; pass the
+> production tool declarations (`--tools real`) and 2.5 is stable (bd memory
+> `gemini-2p5-1011-needs-tool-declarations`). Re-measure with
 > `backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_matrix_sdk28.py --tools real`
-> -- `--tools real` is LOAD-BEARING (the no-tools default reproduces the 2.5 1011
-> probe trap), and 20 turns (the default) is the minimum for eviction detection;
-> see "How eviction actually behaves".
+> (`--tools real` is LOAD-BEARING; 20 turns is the minimum for eviction detection).
 
 The Gemini Live API can bound its own context window server-side via
 `ContextWindowCompressionConfig` (a compression *trigger* + a *sliding window*).
@@ -62,38 +59,31 @@ boundary. (The alternative seriously considered at the time was a new session af
 EACH question.) The same cost pressure drove the JIT-schema design: never feed the
 whole form schema, give the model exploration tools instead.
 
-So the honest framing is NOT "compression vs unbounded" -- it is **compression vs
-the section-reset machinery we already run**:
+The framing that decided this was NOT "compression vs unbounded" -- it was
+**compression (the continuous whole-form session) vs the section-reset machinery**.
+That comparison is now RESOLVED and shipped; the table records why continuous won.
+The "Section resets" column is the DEPRECATED fallback (bd polyglot-pdf-55jg).
 
-| | Section resets (current) | Sliding window (candidate) |
+| | Section resets (DEPRECATED fallback) | Sliding window (SHIPPED default) |
 |---|---|---|
-| Cost bound | Per-section: context dies at each boundary; ~3.4-3.6 KB system instruction re-sent per reset | Per-turn: conversation history capped at `target_tokens` -- but the system instruction is UNEVICTABLE and still re-bills every turn, which caps compression's leverage (the wyhh matrix: sliding-window vs unbounded on 2.5 differed by ~2% in EITHER direction -- a wash -- because the whole-form SI floor dominates) |
-| Session length | Bounded by the session-duration GoAway within a section (sections finish well inside it) | Context-size cap lifted -- but the session-duration GoAway STILL arrives (~13-15 min measured, bd wyhh, WITH compression evicting); a whole-form session additionally requires the GoAway -> reconnect -> resumption path (c5t / l3a.2 / wnt) |
+| Cost bound | Per-section: context dies at each boundary; ~3.4-3.6 KB system instruction re-sent per reset | Per-turn: conversation history capped at `target_tokens`. Under DTI the SI floor is ~one field, so the whole-form SI no longer dominates and the window is a real saving (not the ~2% wash the wyhh matrix saw under the full-form SI) |
+| Session length | Bounded by the session-duration GoAway within a section (sections finish well inside it) | Context-size cap lifted; the session-duration GoAway STILL arrives (~13-15 min, bd wyhh, WITH compression evicting), handled by the GoAway -> reconnect -> resumption path (c5t / l3a.2 / wnt) |
 | Conversational continuity | Lost at every boundary (re-greeting suppressed by `vmxx` resume, but context is gone) | Preserved (subject to eviction of old turns) |
 | Moving parts | Reset orchestration: `switch_to_section` finalize/restart, section chopping, carried-over `previous_spoken_names` | One server-side config; eviction timing is the server's |
 
-Which side wins on real workloads -- and whether artificial section chopping can be
-relaxed -- is exactly what epic `polyglot-pdf-hcsl` measures (three-arm comparison:
-unbounded / section-reset emulation / sliding window, per-question token CSVs, both
-models). Do not assume the answer in either direction; the maintainer's earlier cost
-digging also found **text-in tokens dominated total cost** in production traffic
-(the system-instruction + tool-context re-sends), so the per-reset text re-send cost
-is a first-class term in that comparison, not a footnote.
-
-**Verdict + SHIPPED (bd `polyglot-pdf-ctu8` + `polyglot-pdf-x8rt`):** under DTI the
-SI floor is ~one field, so the "SI dominates -> compression is a wash" ceiling
-above lifts and the sliding window becomes the winner. `ctu8` measured continuous
-DTI + a **3500-token window** on the real I-90 at ~$1.15/174q vs ~$2.32 for section
-resets, AND more coherent (83% fill vs 47% at a too-tight 3000, where aggressive
-eviction strips guidance). `x8rt` then shipped the "sliding window (candidate)"
-column as a real, opt-in **continuous-session mode** (`CONTINUOUS_SESSION`, default
-off; see [../standards/ws-protocol.md](../standards/ws-protocol.md) and
-[schema-forms.md](schema-forms.md)): the whole form runs as ONE session (frontend
-builds a single whole-form handshake, `switch_section` is dropped, section metadata
-suppressed) bounded by the window. It composes with the GoAway pre-emptive resume
-(`l3a.2`, shipped) so a continuous session survives the ~13-15 min duration cap.
-The section-reset machinery stays intact and is the default; retiring it is a
-separate call after the continuous flow is validated on the demo.
+**Verdict + SHIPPED (bd `polyglot-pdf-ctu8` -> `polyglot-pdf-x8rt` -> `polyglot-pdf-7872`):**
+under DTI the SI floor is ~one field, so the "SI dominates -> compression is a
+wash" ceiling lifts and the sliding window wins. `ctu8` measured continuous DTI +
+a **3500-token window** on the real I-90 at ~$1.15/174q vs ~$2.32 for section
+resets, AND more coherent (83% fill vs 47% at a too-tight 3000). `x8rt` shipped
+the continuous-session mode; `7872` flipped it to the **production default**
+(`CONTINUOUS_SESSION` + `CONTEXT_COMPRESSION_ENABLED` default TRUE): the whole
+form runs as ONE session (single whole-form handshake, `switch_section` dropped,
+section metadata suppressed) bounded by the window, composing with the GoAway
+pre-emptive resume (`l3a.2`) to survive the ~13-15 min duration cap. The
+section-reset machinery is now the DEPRECATED fallback (bd polyglot-pdf-55jg; see
+[../standards/section-reset-deprecation.md](../standards/section-reset-deprecation.md)),
+reachable only by setting the flags false.
 
 ## How eviction actually behaves (measured, SDK 2.8.0, 3.1)
 
@@ -159,7 +149,7 @@ per-form** (below); the static token values are the override:
 
 | Setting | Purpose | Current state |
 |---|---|---|
-| `CONTEXT_COMPRESSION_ENABLED` | Master flag | `False` until epic `hcsl`/`jnjj` completes parameter selection + coherence regression tests |
+| `CONTEXT_COMPRESSION_ENABLED` | Master flag | `True` (production default, bd polyglot-pdf-7872; set `False` only for the deprecated section-reset fallback) |
 | `CONTEXT_COMPRESSION_DERIVE_FROM_SI_FLOOR` | Size the window per-form from the rendered SI+tools floor (bd `jnjj.35`) | `True` -- on under DTI; off elsewhere |
 | `CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS` | Tokens added ABOVE the estimated floor for the derived window | `599` (lifts the I-90's ~1601 ESTIMATED floor to the validated ~2200 window, which clears the ~1978 MEASURED floor -- see below) |
 | `CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS` | Tokens added above the window for the derived trigger | `600` (window `~2200` -> trigger `~2800`) |
@@ -224,9 +214,9 @@ it when a second form's eviction floor is known. (`estimate_si_floor_tokens` /
 estimate, and the headroom/margin bands absorb its slop -- the window only has to
 land just above the floor.) The static `TRIGGER`/`WINDOW` constants are the
 explicit override for the non-DTI path (a non-DTI SI has no calibrated floor, so
-deriving would be guesswork). `CONTEXT_COMPRESSION_ENABLED` stays default-off; this
-only makes the window CORRECT once enabled (the default-flip is `jnjj.12`/A5, gated
-on G2+G3).
+deriving would be guesswork). `CONTEXT_COMPRESSION_ENABLED` defaults ON (the
+default-flip shipped in bd polyglot-pdf-7872, after the G2 cost + G3 correctness
+gates cleared); this derivation makes the window CORRECT for the enabled default.
 
 Two anchors for the eventual choice: the trigger must leave the async eviction
 enough runway below any hard limit it is protecting (it fires 1-3 turns late), and
@@ -305,15 +295,15 @@ connection. Both were resolved separately from compression:
   fresh start (no handle / vmxx fallback), since the user re-initiated and the handle
   is likely expired. Decided here; implementation is a separate bead (`l3a.3`).
 
-## What compression could replace -- and what it must not touch
+## What compression replaced -- and what it must not touch
 
-The cost-bounding machinery that exists today, and its fate if the epic's go/no-go
-lands on "go":
+The cost-bounding machinery, and what happened to it now that compression is the
+production default (bd polyglot-pdf-7872):
 
-| Mechanism | Location | Role | If compression goes live |
+| Mechanism | Location | Role | Outcome now that compression is live |
 |---|---|---|---|
-| Section-switch session restart | `backend/services/form_filling_service.py` `switch_to_section` | **Cost mitigation first** (kills compounding context at each boundary), context hygiene second (flushes old-section fields) | Candidate for RELAXATION: fewer/larger sections, or no per-section restart at all -- the epic's go/no-go decides; never remove before the three-arm data is in |
-| Artificial section chopping (sections smaller than the form's real pages) | form schemas (`frontend/public/*.json`) | Pure cost mitigation | Same -- candidate for consolidation if the window holds costs flat |
+| Section-switch session restart | `backend/services/form_filling_service.py` `switch_to_section` | **Cost mitigation first** (kills compounding context at each boundary), context hygiene second (flushes old-section fields) | REPLACED as the production cost bound by the sliding window. `switch_to_section` itself STAYS (it is the shared continuous-reconnect primitive); the section-reset flow that drove it per-boundary is DEPRECATED (bd polyglot-pdf-55jg) |
+| Artificial section chopping (sections smaller than the form's real pages) | form schemas (`frontend/public/*.json`) | Pure cost mitigation | No longer a cost mechanism -- continuous mode ignores section boundaries for the session; sections now page the UI only |
 | Idle/UX recovery prompts (levels 1-3) + idle-timeout watchdog + farewell finalize | `backend/services/form_filling_service.py`, `backend/routes/websocket_routes.py` | UX / connection-health | **Keep** -- not cost machinery |
 | `_intentional_shutdown` retry-guard | `backend/adapters/live_ai_gemini.py` | Lifecycle correctness | **Keep** |
 | Carried-over `previous_spoken_names` / section history in the SI | `backend/services/form_filling_service.py`, `backend/config.py` | Client-owned rehydration (stateless contract) | **Keep** |
@@ -361,17 +351,20 @@ conclusion was also partially a measurement artifact (verdict keyed on
 pre-cutover behavioral claim is treated as a stale hypothesis (bd memory
 `pre-sdk28-findings-stale-recheck-everything`).
 
-Success criteria for ENABLING in production (owned by epic `hcsl`):
+Enablement criteria (ALL met -- shipped as the production default, bd
+polyglot-pdf-7872):
 
 1. Production (trigger, window) chosen from measured realistic-workload curves
-   (beads `4loz`/`wyhh`/`6x1y`), not probe values.
+   (beads `4loz`/`wyhh`/`6x1y`), not probe values -- DONE (the derived
+   per-form window; ctu8-validated 3500 on the I-90).
 2. Behavioral integrity holds after eviction: tool-call compliance and dialog
-   coherence measured before/after eviction events (bead `wyhh`).
-3. A whole-form FLOW demonstrably survives past the session-duration limit --
-   which takes compression (context-size cap) PLUS GoAway-triggered reconnect
-   with session resumption (duration limit). Measured 2026-06-12 (bd wyhh): a
-   compression-on 3.1 session with 16 successful evictions was still
-   terminated by the duration GoAway at ~13-15 min; compression alone does not
-   deliver "whole form in one session".
-4. Maintainer go/no-go on relaxing the section-reset machinery, decided on the
-   three-arm cost data (bead `6x1y`).
+   coherence measured before/after eviction (bead `wyhh`) -- DONE, and the G3
+   correctness gate (bd polyglot-pdf-jnjj.7) confirmed no fill-accuracy
+   regression vs the full-SI baseline.
+3. A whole-form FLOW survives past the session-duration limit -- compression
+   (context-size cap) PLUS GoAway-triggered reconnect with session resumption
+   (duration limit): a compression-on session is still terminated by the
+   duration GoAway at ~13-15 min (bd wyhh), so the continuous flow COMPOSES
+   compression with the l3a.2 GoAway pre-emptive resume -- DONE.
+4. Maintainer go/no-go on the section-reset machinery -- DECIDED: section-reset
+   is deprecated in place as a fallback (bd polyglot-pdf-55jg), not deleted.
