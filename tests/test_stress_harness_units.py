@@ -80,19 +80,32 @@ def test_override_must_be_valid_option():
 # ------------------------------------------------------------- fake client
 
 class _StubService:
-    """Records the coordinator-response calls the FakeClient replies with."""
+    """Records the coordinator-response calls the FakeClient replies with.
+
+    The signatures MIRROR the REAL FormFillingService handlers exactly
+    (form_filling_service.py:1837/:1861) -- a stub shaped to the caller's own
+    convention instead of the real contract is what let the skip-args bug ship
+    to fresh-eyes round 1: skip takes DISCRETE args (recorded: bool, reason,
+    section_complete), switch takes the whole ack payload dict."""
 
     def __init__(self):
         self.calls = []
 
-    def handle_skip_field_response(self, rid, result):
-        self.calls.append(("skip", rid, result))
+    def handle_skip_field_response(self, request_id, recorded, reason=None,
+                                   section_complete=False):
+        assert isinstance(recorded, bool), (
+            "recorded must be a bool -- the real coordinator resolves the "
+            "future with exactly this flag")
+        self.calls.append(("skip", request_id,
+                           {"recorded": recorded, "reason": reason,
+                            "section_complete": section_complete}))
 
-    def handle_switch_field_response(self, rid, result):
-        self.calls.append(("switch", rid, result))
+    def handle_switch_field_response(self, request_id, payload):
+        assert isinstance(payload, dict)
+        self.calls.append(("switch", request_id, payload))
 
-    def handle_form_state_response(self, rid, snapshot):
-        self.calls.append(("form_state", rid, snapshot))
+    def handle_form_state_response(self, request_id, snapshot):
+        self.calls.append(("form_state", request_id, snapshot))
 
 
 def _client(plan_fields=None):

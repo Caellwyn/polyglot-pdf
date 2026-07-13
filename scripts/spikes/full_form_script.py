@@ -233,7 +233,6 @@ def _is_digit_field(field: dict) -> bool:
     preset = v.get("format_preset") or ""
     return bool(
         preset in ("a_number", "ssn", "uscis_account", "phone", "zip")
-        or re.fullmatch(r"\^?\[?0?-?9?\\?d?.*\{\d+(,\d+)?\}\$?", "")  # never matches; kept simple below
         or re.match(r"^\^\\d\{", pat)
         or re.match(r"^\^\[0-9\]\{", pat)
     )
@@ -336,7 +335,13 @@ def _wrong_for(field: dict, say: str, answer, lang: str) -> str:
             return f"Actually, {_option_label(field, others[0].get('value'))}."
     if answer and _is_date_field(field):
         d = datetime.strptime(str(answer), "%Y-%m-%d")
-        alt = d.replace(month=(d.month % 12) + 1)
+        # Shift one month LATER (December wraps to January of the NEXT year --
+        # never earlier, so a date-ordering plant stays a genuine wrongness)
+        # and clamp the day to 28 so Feb 31-class ValueErrors cannot occur
+        # (fresh-eyes round 1 on this bead).
+        month = (d.month % 12) + 1
+        year = d.year + (1 if d.month == 12 else 0)
+        alt = d.replace(year=year, month=month, day=min(d.day, 28))
         return f"It was {_date_spoken_en(alt.strftime('%Y-%m-%d'))}."
     digits = re.sub(r"\D", "", str(answer or ""))
     if digits and len(digits) >= 5:

@@ -871,20 +871,22 @@ class FakeClientWebSocket:
         fid = msg.get("field_id")
         rec = {"ts": time.monotonic(), "field_id": fid}
         field = self.schema_fields.get(fid)
+        # NB: unlike switch (whole ack dict), the skip response is DISCRETE
+        # args -- handle_skip_field_response(request_id, recorded: bool,
+        # reason, section_complete). Passing a dict here reads as truthy and
+        # reports every refusal as recorded (fresh-eyes round 1 on this bead).
         if field is None:
             rec["outcome"] = "unknown_field"
             self.skip_events.append(rec)
             self._reply(lambda: self.service.handle_skip_field_response(
-                rid, {"recorded": False, "reason": "unknown_field",
-                      "section_complete": False}))
+                rid, False, "unknown_field", False))
             return
         existing = self.state.get(fid, {}).get("value")
         if existing not in (None, ""):
             rec["outcome"] = "already_filled"
             self.skip_events.append(rec)
             self._reply(lambda: self.service.handle_skip_field_response(
-                rid, {"recorded": False, "reason": "already_filled",
-                      "section_complete": False}))
+                rid, False, "already_filled", False))
             return
         entry = self.state.setdefault(fid, {})
         entry.update({"value": "", "confirmed": True, "skipped": True})
@@ -893,7 +895,7 @@ class FakeClientWebSocket:
         rec["outcome"] = "recorded"
         self.skip_events.append(rec)
         self._reply(lambda: self.service.handle_skip_field_response(
-            rid, {"recorded": True, "reason": None, "section_complete": False}))
+            rid, True, None, False))
 
     def _handle_switch_field(self, msg: dict):
         """Mirror handleSwitchFieldRequest (continuous mode): resolve, check
