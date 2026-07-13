@@ -100,7 +100,7 @@ Headline cell:
 
 Per call (medians): input 2,936 tok @ $1.25/M; answer output 129 tok @ $10/M;
 **thinking output 427 tok @ $10/M**. Thinking is ~77% of the OUTPUT tokens and
-~40% of per-call cost -- non-trivial, but BOUNDED (282-514 tok observed; a few
+~46% of per-call cost -- non-trivial, but BOUNDED (282-514 tok observed; a few
 cases touched the 512 cap, most underflowed). Total measured sweep cost:
 **$0.3924 / 42 calls**. Had thinking been left at the default (dynamic), a prior
 incident showed it can 10-50x the answer tokens -- the bounded budget is what
@@ -165,13 +165,18 @@ precision before the pass is trusted as the sole end-of-form report.
 ## Verdict: **GO** (with a precision condition on W6)
 
 Wire the whole-form `gemini-2.5-pro` pass at `form_complete` (W6,
-polyglot-pdf-gbus). It is the only 2.5-tier model that delivers full far-pair /
-semantic-class recall at whole-form scale, at bounded, in-band cost
-(~$0.0093/call, ~$0.39/full-form-equivalent-sweep) and tolerable latency (p50 6s)
-once thinking is bounded to 512. **Condition:** W6 must include an anti-over-flag
-prompt for the Part 5/6 certification block and bracketed-repeat fields and
-re-measure precision -- the 0.750 uncorrected precision is the one number that
-would hurt if shipped naively. Recall is solved; precision is the W6 work.
+polyglot-pdf-gbus). The GO rests on pro's OWN measured far-pair recall (1.000,
+6/6) at whole-form scale -- a number that clears the bar outright, independent of
+any cross-model comparison. (Pro is the only 2.5-tier model *measured* to deliver
+full far-pair / semantic-class recall whole-form; that framing is NOT a controlled
+head-to-head -- the flash/lite baseline it beats ran under uncontrolled dynamic
+thinking, see Honesty/limits + bd polyglot-pdf-hy5k -- so the GO leans on pro's own
+absolute number, not the gap.) Cost is bounded and in-band (~$0.0093/call,
+~$0.39/full-form-equivalent-sweep) and latency tolerable (p50 6s) once thinking is
+bounded to 512. **Condition:** W6 must include an anti-over-flag prompt for the
+Part 5/6 certification block and bracketed-repeat fields and re-measure precision --
+the 0.750 uncorrected precision is the one number that would hurt if shipped
+naively. Recall is solved; precision is the W6 work.
 
 ## Files touched
 

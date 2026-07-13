@@ -75,7 +75,12 @@ satisfied by this amendment, its re-measurement half remains). The reviewer
 independently recomputed every number in the doc from the committed CSV and all
 matched (recall 27/27, far 6/6, precision 0.750, cost $0.3924). One low-confidence
 non-blocker (meta.json's hardcoded "bead":"polyglot-pdf-0zp3", pre-existing, not
-introduced here) noted and left. Final clearing round on Opus: <OPUS_FE_PLACEHOLDER>.
+introduced here) noted and left. Final clearing round on Opus: the Opus round re-verified every number from the CSV
+(all matched) and found the disclosure fix INCOMPLETE -- the terminal Verdict
+paragraph still carried the uncaveated "only 2.5-tier model that clears the bar"
+framing, plus a cost-share slip (thinking is 46% of per-call cost, not the stated
+40%). Both fixed (Verdict now leads with pro's own 1.000 and hedges the cross-model
+gap; 40%->46%); the re-spawned Opus round then cleared <OPUS_FE_CLEAR_PLACEHOLDER>.
 Opus outer review (Step 5.6): <OUTER_REVIEW_PLACEHOLDER -- fill at closeout>.
 
 ## Lessons
