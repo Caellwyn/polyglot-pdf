@@ -83,6 +83,16 @@ E2E was run for this bead's new drain wire path -- that is a per-instance
 live-spend decision (the maintainer's), and the rail itself is unchanged from what
 W1's probe validated; the drain round-trip is covered deterministically.
 
+**Opus outer-review fixes (both passes NO-GAPS after; adopted).** (1) The backend
+drain runner (_run_drain_and_push) now ALWAYS pushes a drain_findings_result --
+even if handle_drain_findings raises (delivered=[] then). The client's
+drainInFlight guard only clears on this result, so a missing result would have
+stalled the client queue until reconnect; now the client is always unblocked (an
+empty result keeps the finding queued to retry). Pinned by a new test. (2) The
+handleValidationResult method-level docstring still described the pre-W3 (B5)
+"steer already fired, mark steered here" behavior; rewritten to the report-only
+enqueue+drain flow.
+
 ## Lessons
 
 When a client-owned queue drives a backend side effect, gate the queue-consume +

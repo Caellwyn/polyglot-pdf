@@ -180,6 +180,27 @@ async def test_drain_findings_tolerates_bad_conflicts():
 
 
 @pytest.mark.asyncio
+async def test_drain_findings_pushes_empty_result_even_when_handler_raises():
+    """W3: handle_drain_findings raising must STILL push a drain_findings_result
+    (delivered=[]) so the client's drainInFlight guard clears -- a missing result
+    would stall the client's queue until reconnect (Opus outer-review finding). The
+    empty result means the client keeps the finding queued to retry but is unblocked.
+    """
+    svc = _mock_service()
+    svc.handle_drain_findings = AsyncMock(side_effect=RuntimeError("compose boom"))
+    _, _, sent = await _run([
+        {"text": json.dumps({"type": "drain_findings", "conflicts": [
+            {"field_ids": ["a"], "reason": "x", "field_names": {"a": "A"}}]})},
+        {"text": json.dumps({"type": "ping"})},
+    ], svc=svc, hold_open=0.05)
+    assert {"type": "drain_findings_ack"} in sent
+    # The result STILL went out, empty (the raise was swallowed).
+    assert {"type": "drain_findings_result", "conflicts": []} in sent
+    # The loop kept serving despite the raise.
+    assert any(m.get("type") == "pong" for m in sent)
+
+
+@pytest.mark.asyncio
 async def test_ack_does_not_wait_on_a_slow_validator():
     """Epic criterion 1: a deliberately SLOW validator does not delay the ack. The
     ack must be sent BEFORE the (slow) validation_result -- proving the receive loop

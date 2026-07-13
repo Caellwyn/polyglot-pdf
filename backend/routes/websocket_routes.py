@@ -365,16 +365,33 @@ async def _handle_fill_session(
 			Crash-safe + fail-OPEN like the validation runner: any exception is caught
 			+ logged so it can never propagate into the receive loop, and an
 			un-delivered steer (dead session) reports [] so the client keeps the
-			finding queued to retry."""
+			finding queued to retry.
+
+			ALWAYS pushes a drain_findings_result, even on an exception in
+			handle_drain_findings (delivered=[] then). The client's drainInFlight guard
+			only clears on this result, so a missing result would stall the client's
+			queue until reconnect (Opus outer-review finding). If handle_drain_findings
+			raised, the result is empty -> the client keeps the finding queued to retry
+			but is unblocked. The send itself failing (dead socket) is fine: the client
+			is gone and a reconnect re-arms the guard."""
+			delivered: list = []
 			try:
 				verdict = await service.handle_drain_findings(conflicts)
-				await websocket.send_json({
-					"type": "drain_findings_result",
-					"conflicts": verdict.get("conflicts", []),
-				})
+				delivered = verdict.get("conflicts", []) if isinstance(verdict, dict) else []
 			except Exception as exc:  # noqa: BLE001 -- background task must never crash the loop
 				_log.warning(
 					"async_drain_task_failed",
+					exc_type=type(exc).__name__,
+					session_id=session_id,
+				)
+			try:
+				await websocket.send_json({
+					"type": "drain_findings_result",
+					"conflicts": delivered,
+				})
+			except Exception as exc:  # noqa: BLE001 -- a dead-socket send must not crash the loop
+				_log.warning(
+					"async_drain_result_send_failed",
 					exc_type=type(exc).__name__,
 					session_id=session_id,
 				)

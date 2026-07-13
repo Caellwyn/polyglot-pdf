@@ -2201,17 +2201,23 @@ export class WebFormConnection {
   }
 
   /**
-   * B5 (bd polyglot-pdf-jnjj.17): handle the validator verdict pushed from the
-   * backend (validation_result envelope, contract 1). Sent for EVERY validated
-   * boundary -- clean ({conflicts: []}) or with conflicts:
-   *   - CLEAN  -> resolve the parked section-switch gate (resume the auto-advance).
-   *   - CONFLICT -> (a) persist steered:true on every field the conflicts name, so
-   *     the NEXT payload carries it and the backend suppresses re-steering
-   *     (max-resteer, contract 2/3); (b) CANCEL the parked switch (stay in-section so
-   *     the live model -- already handed the steer by the backend -- can voice it and
-   *     the user can resolve/override). The switch resumes on a later clean boundary.
-   * The form_complete boundary has no parked switch (last boundary); the handler then
-   * only updates the steered markers.
+   * B5 (bd polyglot-pdf-jnjj.17) + W3 (bd polyglot-pdf-pr3i): handle the validator
+   * verdict pushed from the backend (validation_result envelope, contract 1;
+   * REPORT-ONLY since W3). Sent for EVERY validated boundary -- clean ({conflicts:
+   * []}) or with conflicts:
+   *   - CLEAN  -> resolve the parked section-switch gate (resume the auto-advance);
+   *     enqueue nothing, drain nothing (no voice turn on an all-clear).
+   *   - CONFLICT -> (a) ENQUEUE the conflicts into the persisted
+   *     validatorFindingsQueue (dedup by field-id set) and, if the queue grew, DRAIN
+   *     immediately (drainFindings -> drain_findings); the steer is composed+injected
+   *     by the backend on the drain, NOT here, and the fields are marked steered +
+   *     consumed only on the drain_findings_result (handleDrainFindingsResult) -- so
+   *     an un-delivered steer keeps the finding queued to retry and a field is never
+   *     marked steered for a steer the model never heard. (b) CANCEL the parked switch
+   *     (stay in-section so the model can voice the correction). The switch resumes on
+   *     a later clean boundary.
+   * The form_complete boundary has no parked switch (last boundary); the same
+   * enqueue+drain path runs, just without a switch to cancel.
    */
   private handleValidationResult(message: any): void {
     const conflicts = Array.isArray(message?.conflicts) ? message.conflicts : [];
