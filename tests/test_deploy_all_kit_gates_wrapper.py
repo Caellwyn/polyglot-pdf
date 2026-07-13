@@ -36,19 +36,28 @@ def test_deploy_all_kit_gates_harness_passes():
     except OSError as exc:
         pytest.skip(f"bash present but could not launch: {exc}")
 
-    # Skip ONLY the specific local-Windows WSL-shim failure: `shutil.which` can
-    # resolve the WSL ``bash`` stub, which fails to exec the harness and prints a
-    # recognizable CreateProcessCommon/execvpe/WSL error to stderr. We must NOT skip
-    # on "any nonzero with no PASS/FAIL output" -- a real regression (a syntax error
-    # while sourcing deploy-all.sh, an early abort before the first assertion) has
-    # exactly that shape, and skipping it would defeat the CI coverage this wrapper
-    # exists to add (Codex review). On Linux CI bash execs natively, so this branch
-    # never fires there and a genuine no-output failure falls through to the assert.
-    _WSL_SHIM_MARKERS = ("execvpe", "CreateProcessCommon", "WSL (")
-    if result.returncode != 0 and any(m in result.stderr for m in _WSL_SHIM_MARKERS):
+    # Skip ONLY the specific local-Windows WSL-shim failures: `shutil.which` can
+    # resolve the WSL ``bash`` stub, which then fails one of two ways:
+    #   1. it cannot exec the harness (CreateProcessCommon/execvpe/WSL error), OR
+    #   2. the WSL VM itself cannot boot -- the System32 shim prints
+    #      "...CreateVm/ConfigureGpu/HCS/0x800701b1" ("a device which does not
+    #      exist was specified") to STDOUT (bd polyglot-pdf-4nll).
+    # We must NOT skip on "any nonzero with no PASS/FAIL output" -- a real
+    # regression (a syntax error while sourcing deploy-all.sh, an early abort
+    # before the first assertion) has exactly that shape, and skipping it would
+    # defeat the CI coverage this wrapper exists to add (Codex review). On Linux CI
+    # bash execs natively, so neither shape appears there and a genuine no-output
+    # failure falls through to the assert. Check BOTH streams: shape (1) lands on
+    # stderr, shape (2) on stdout.
+    _WSL_SHIM_MARKERS = (
+        "execvpe", "CreateProcessCommon", "WSL (",
+        "CreateVm", "ConfigureGpu", "HCS", "0x800701b1",
+    )
+    combined = f"{result.stdout}\n{result.stderr}"
+    if result.returncode != 0 and any(m in combined for m in _WSL_SHIM_MARKERS):
         pytest.skip(
-            "bash resolved to the WSL shim and could not exec the harness; "
-            f"stderr: {result.stderr.strip()}"
+            "bash resolved to the WSL shim and could not exec/boot the harness; "
+            f"stdout: {result.stdout.strip()} stderr: {result.stderr.strip()}"
         )
 
     # Surface the harness's own PASS/FAIL lines on failure for a readable report.
