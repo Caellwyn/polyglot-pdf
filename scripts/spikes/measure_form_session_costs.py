@@ -20,11 +20,11 @@ Outputs, per run:
     first audio byte), per-question tool-call record (compliance), the raw
     prompt-token curve + detected eviction drops, captured errors, and -- for the
     i90 schema -- the G3 fill-correctness score (meta["fill_accuracy"]: per-field
-    canon-compared right/wrong + accuracy) plus every get_field_value recall
-    lookup the model made (meta["field_value_lookups"]). G3 (bd polyglot-pdf-jnjj.7)
-    is the clean correctness instrument the noisy jnjj.25 confirm-counts could not
-    be -- it scores whether the reduced-SI (DTI+eviction) arm fills the form as
-    CORRECTLY as the full-SI baseline.
+    canon-compared right/wrong + accuracy). G3 (bd polyglot-pdf-jnjj.7) is the
+    clean correctness instrument the noisy jnjj.25 confirm-counts could not be --
+    it scores whether the reduced-SI (DTI+eviction) arm fills the form as
+    CORRECTLY as the full-SI baseline. (The get_field_value recall-lookup arm was
+    removed with that tool -- bd polyglot-pdf-p5h2/2wod.)
 
 Arms (--arm):
   unbounded      one session, no compression, no resets (raw growth curve)
@@ -622,36 +622,6 @@ class FakeClientWebSocket:
         self.service: FormFillingService | None = None
         self.first_audio_at: float | None = None
         self.sent_messages: list[str] = []
-        # G3 (bd polyglot-pdf-jnjj.7): spoken_name -> [field_ids], the harness analogue
-        # of the frontend's spokenNameToFieldId map, so the FakeClient can answer
-        # get_field_value recall lookups (the model retrieves a prior section's value
-        # by EXACT spoken name -- what the full SI did "for free" from context). Keyed
-        # on the field's spoken `name`, lowercased; that is the name production asks by
-        # (the next_hint / previous_spoken_names both read schema_fields[fid]["name"]).
-        # Scoped to the PLAN's fields (not the whole 132-field I-90): the I-90 reuses
-        # spoken names across parts (e.g. "City or Town" exists in Parts 1/6/7), so a
-        # whole-schema map collides and a never-filled out-of-plan field would shadow
-        # the one the run actually fills (fresh-eyes jnjj.38). Mapped to a LIST so the
-        # lookup can prefer a field that is actually filled in client.state.
-        _plan_fids = {q["field_id"] for q in plan}
-        self.spoken_to_fids: dict[str, list[str]] = {}
-        for fid, f in self.schema_fields.items():
-            if fid not in _plan_fids:
-                continue
-            # Key on BOTH the schema `name` and the `spoken_name`: the DTI
-            # guidance renders the SPOKEN name ("current family name"), and that
-            # is what the model passes to get_field_value -- a name-only map made
-            # every such recall miss (found=False) in the 30q continuous run.
-            for key_src in (f.get("name"), f.get("spoken_name")):
-                if not key_src:
-                    continue
-                key = str(key_src).strip().lower()
-                fids = self.spoken_to_fids.setdefault(key, [])
-                if fid not in fids:
-                    fids.append(fid)
-        # G3 recall instrumentation: each get_field_value call the model makes is
-        # recorded as (requested_spoken_name, found, returned_value) for scoring.
-        self.field_value_lookups: list[dict] = []
         # bd jnjj.39 debug mode: collect the model's OUTPUT transcript chunks (each
         # {"type":"transcript"} message) with a timestamp, joined per-question later
         # by time window. Populated only when start_session was called with
@@ -708,28 +678,6 @@ class FakeClientWebSocket:
                               "confirmed": self.state[fid].get("confirmed", False)}
                         for fid in want if fid in self.state}
             self._reply(lambda: self.service.handle_form_state_response(rid, snapshot))
-        elif mtype == "get_field_value":
-            # G3 recall path (bd polyglot-pdf-jnjj.7): the model is retrieving a
-            # prior field's value by EXACT spoken name -- the lookup the reduced-SI
-            # arms must do via a tool call instead of reading it from the SI dump.
-            # Mirror the frontend: spokenNameToFieldId -> stored value -> {found,value}.
-            rid = msg.get("request_id")
-            spoken = (msg.get("spoken_name") or "").strip().lower()
-            candidates = self.spoken_to_fids.get(spoken, [])
-            # Prefer a candidate that is actually FILLED (the value the model is
-            # recalling); else the first candidate (name known but unfilled); else
-            # None (name not in the plan). 'found' mirrors production: the field name
-            # is known -- distinct from whether it has a value (jnjj.38 fresh-eyes).
-            fid = next((c for c in candidates if self.state.get(c, {}).get("value")
-                        not in (None, "")), candidates[0] if candidates else None)
-            entry = self.state.get(fid) if fid else None
-            value = entry.get("value") if entry else None
-            found = fid is not None
-            self.field_value_lookups.append(
-                {"spoken_name": spoken, "field_id": fid, "found": found,
-                 "value": value})
-            self._reply(lambda: self.service.handle_field_value_response(
-                rid, value, found))
         elif mtype == "get_next_field_hint":
             rid = msg.get("request_id")
             hint = self.next_hint()
@@ -1212,7 +1160,7 @@ async def run(args) -> int:
         # section switch runs set_callbacks AND sends the new-section greeting INSIDE
         # the single switch_to_section call (start_session -> set_callbacks ->
         # send_initiating_message), so reinstalling only AFTER switch_to_section
-        # returns leaves the greeting response -- where a DTI recall/get_field_value
+        # returns leaves the greeting response -- where a DTI recall (ask_secretary)
         # tool call can occur -- running on the raw callback (Codex PR #246 round 2).
         # Wrapping set_callbacks re-applies the tap the instant callbacks are set,
         # BEFORE the greeting, closing that gap for every section.
@@ -1426,15 +1374,13 @@ async def run(args) -> int:
                                        if e.get("confirmed")]
     # G3 fill-correctness (bd polyglot-pdf-jnjj.7): the clean instrument the noisy
     # jnjj.25 confirm-counts could not be. Scores whether the model wrote the RIGHT
-    # value per field (canon-compared to the expected answer), plus the recall
-    # lookups it made via get_field_value. This is the correctness arm of A5's flip.
+    # value per field (canon-compared to the expected answer). The get_field_value
+    # recall-lookup arm was removed with that tool (bd polyglot-pdf-p5h2/2wod).
     expected = SCHEMAS[args.schema].get("expected") or {}
     meta["fill_accuracy"] = score_fill_accuracy(client, plan, expected)
-    meta["field_value_lookups"] = client.field_value_lookups
     _fa = meta["fill_accuracy"]
     print(f"fill accuracy: {_fa['matched']}/{_fa['total']} "
-          f"({_fa['accuracy']:.0%}); get_field_value lookups: "
-          f"{len(client.field_value_lookups)}")
+          f"({_fa['accuracy']:.0%})")
 
     csv_path = out_dir / f"{base_name}.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
