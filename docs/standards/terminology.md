@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-5f41-p2-1-option-pdf-position-model-backfill-tool-kit.md](../journal/entries/2026-07-09-bd-5f41-p2-1-option-pdf-position-model-backfill-tool-kit.md) for closeout details.*
+*Last updated: 2026-07-12. Section is now a DISPLAY division, not the conversation/navigation unit: production continuous-DTI runs the whole form as one session, and the section-navigation vocabulary is the deprecated section-reset fallback (bd polyglot-pdf-55jg).*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -17,13 +17,17 @@ The schema is a strict hierarchy -- **Form > Parts > Sections > Fields** (see
 | Term | What it is | In the model |
 |------|-----------|--------------|
 | **Field** | One fillable input (text, checkbox, date, signature, ...). | `FormField`; `id` like `p1_checkbox4[0]`. |
-| **Section** | The **user-facing navigation unit** -- what the user moves between, what "switch section" targets. Always present. | `FormSection { id, label, order, fields: [field_id] }` (`order` is required and drives navigation sequence); `FormSchema.sections` (required). |
+| **Section** | A **display division** of the form -- the pagination unit the UI shows. Always present. In the DEPRECATED section-reset fallback it was also the conversation/session unit ("switch section" targets it), but in production continuous-DTI the whole form is one session and the model never advances sections (bd polyglot-pdf-x8rt / 55jg). | `FormSection { id, label, order, fields: [field_id] }` (`order` is required and drives the display sequence); `FormSchema.sections` (required). |
 | **Part** | An **optional higher-level grouping of sections** (e.g. "Part A: Information About Applicant" on a USCIS form). Not every form has parts. | `FormPart { id: "part_a", label, ... }`; `FormSchema.parts` (Optional); `get_sections_in_part()`. |
 
 **Canon:**
-- "**Section**" is the primary unit for navigation and conversation. Tool calls,
-  state, and UI speak *sections* (`switch_section`, `currentSectionId`,
-  `completedSections`).
+- "**Section**" is the display-division unit -- the form's pagination. In
+  production continuous-DTI it is NOT a conversation/navigation unit: the whole
+  form runs as one session and section-advance is suppressed. The
+  section-navigation vocabulary (`switch_section`, `currentSectionId`,
+  `completedSections`) belongs to the DEPRECATED section-reset fallback (bd
+  polyglot-pdf-55jg; see [section-reset-deprecation.md](section-reset-deprecation.md))
+  -- do not build new work on it.
 - "**Part**" is reserved for the optional schema-level grouping above sections.
   Use it **only** when you mean that grouping -- never as a loose synonym for
   "section."

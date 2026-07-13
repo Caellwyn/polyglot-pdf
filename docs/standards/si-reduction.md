@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-07-09. The JIT manifest SI mode was removed (bd polyglot-pdf-en2j); the two surviving SI modes are DTI (shipped) and legacy full-SI (fallback). Both templates' CONSTRAINTS direct the model to briefly convey a field's Note / hint-carried context WHILE asking (bd polyglot-pdf-bo4m; the qualifying fine print was rendered but not voiced); the per-turn `{next_field_hint}` string built by the frontend (`formatNextFieldHint`) appends `help.instructions` as "Context to briefly convey when asking: ...". See [../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md). The legacy SI renders the canonical nested `help` block (`help.instructions`/`help.format_hint`) (bd polyglot-pdf-jnjj.23). Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2).*
+*Last updated: 2026-07-12. Continuous-DTI is the production default (`USE_DTI` defaults true, bd polyglot-pdf-7872); the legacy full-SI is the deprecated section-reset fallback (bd polyglot-pdf-55jg). The JIT manifest SI mode was removed (bd polyglot-pdf-en2j); the two surviving SI modes are DTI (shipped) and legacy full-SI (fallback). Both templates' CONSTRAINTS direct the model to briefly convey a field's Note / hint-carried context WHILE asking (bd polyglot-pdf-bo4m; the qualifying fine print was rendered but not voiced); the per-turn `{next_field_hint}` string built by the frontend (`formatNextFieldHint`) appends `help.instructions` as "Context to briefly convey when asking: ...". See [../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md). The legacy SI renders the canonical nested `help` block (`help.instructions`/`help.format_hint`) (bd polyglot-pdf-jnjj.23). Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2).*
 
 This is the interface the SI templates and their placeholder sets build against, so
 work touching the system instruction does not collide on the `config.py` templates.
@@ -17,19 +17,22 @@ the model-selection rule lives in [ai-models.md](ai-models.md); this doc owns th
 
 `backend/services/ai_context.py::build_form_context()` builds the SI on every
 (re)connect (the backend is stateless -- it rebuilds from the WS handshake each
-time) and branches on the `USE_DTI` flag (`backend/config.py`, default `false`;
-the demo deploy sets `USE_DTI=true`):
+time) and branches on the `USE_DTI` flag (`backend/config.py`, **default
+`true`** -- continuous-DTI is the production law of the land, bd
+polyglot-pdf-7872; set `USE_DTI=false` for the deprecated legacy fallback):
 
 | Mode | Template (`config.py`) | The cost driver |
 |------|------------------------|-----------------|
-| **DTI** (`USE_DTI=true`, shipped) | `DTI_SYSTEM_INSTRUCTION` | Nothing form-specific. The SI is a FULLY STATIC behavioral backbone with NO field data and NO form/session state (byte-identical across every form/section). The CURRENT field's guidance rides the initiating message; each next field's guidance rides the `confirm_field` tool response. See "DTI: guidance injection" below. |
-| **Legacy** (`USE_DTI=false`, fallback) | `SYSTEM_INSTRUCTION` | `{fields_json}` -- the CURRENT SECTION's fields dumped as text. The legacy handshake builder sends `extractSectionFields(currentSectionId)` as `schema`, so the dump is the active section, NOT the whole form. Each field's line carries its authored guidance: the canonical nested `help.instructions` -> `Note:` and `help.format_hint` -> `Format:` (flat `description`/`format` as fallback; bd polyglot-pdf-jnjj.23). |
+| **DTI** (`USE_DTI=true`, the default/shipped mode) | `DTI_SYSTEM_INSTRUCTION` | Nothing form-specific. The SI is a FULLY STATIC behavioral backbone with NO field data and NO form/session state (byte-identical across every form/section). The CURRENT field's guidance rides the initiating message; each next field's guidance rides the `confirm_field` tool response. See "DTI: guidance injection" below. |
+| **Legacy** (`USE_DTI=false`, deprecated fallback) | `SYSTEM_INSTRUCTION` | `{fields_json}` -- the CURRENT SECTION's fields dumped as text. The legacy handshake builder sends `extractSectionFields(currentSectionId)` as `schema`, so the dump is the active section, NOT the whole form. Each field's line carries its authored guidance: the canonical nested `help.instructions` -> `Note:` and `help.format_hint` -> `Format:` (flat `description`/`format` as fallback; bd polyglot-pdf-jnjj.23). |
 
-> **The legacy SI is per-section, not whole-form.** In the section-reset flow the
+> **The legacy SI is per-section, not whole-form** -- and it belongs to the
+> DEPRECATED section-reset fallback (bd polyglot-pdf-55jg; see
+> [section-reset-deprecation.md](section-reset-deprecation.md)). In that flow the
 > live model only ever sees the current section's fields, because each section switch
-> restarts the Live session with a fresh section SI. The cross-section recall the live
-> model needs comes from the exploration tools, not from carrying other sections in the
-> SI.
+> restarts the Live session with a fresh section SI. The DTI default carries the whole
+> form as one session; cross-section recall comes from the exploration tools
+> (`ask_secretary`), not from carrying other sections in the SI.
 
 `build_form_context()` selects exactly one template per build: `DTI_SYSTEM_INSTRUCTION`
 when `USE_DTI` is set (returned byte-identically, no `.format(...)` -- it carries no

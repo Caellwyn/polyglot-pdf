@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-07-11 (bd polyglot-pdf-hc4b: the handshake `resume` flag is now `true` on the first post-soft-refresh open when persisted state is in-progress, so a mid-form reload does not re-greet. See [../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md](../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md).)*
+*Last updated: 2026-07-12 (continuous-DTI is the production law: the whole form runs as one session and the section-switch flow below is the DEPRECATED section-reset fallback, bd polyglot-pdf-55jg). Prior: 2026-07-11 (bd polyglot-pdf-hc4b: the handshake `resume` flag is now `true` on the first post-soft-refresh open when persisted state is in-progress, so a mid-form reload does not re-greet. See [../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md](../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md).)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -119,7 +119,16 @@ Gemini Live text turn (NOT a client message). The section auto-switch is now
 **gated** on this result: clean → switch proceeds; conflict → switch held; no result
 within the fail-open window → switch proceeds unchecked.
 
-## Section-switch flow
+## Section-switch flow (DEPRECATED section-reset fallback)
+
+> **This whole flow is the DEPRECATED section-reset fallback** (bd
+> polyglot-pdf-55jg; see [../standards/section-reset-deprecation.md](../standards/section-reset-deprecation.md)).
+> In production continuous mode (`continuous_session_enabled=true` in the
+> handshake ack -- see [../standards/ws-protocol.md](../standards/ws-protocol.md))
+> the whole form runs as ONE session: the frontend builds a single whole-form
+> handshake and STOPS advancing sections, so `manual_section_switch` / the
+> `switch_section` tool / `section_switched` are never sent. The mechanics below
+> apply only when the flags route to the fallback.
 
 There is **no backend `complete_section` tool** — the **frontend drives** section
 progression. When the user switches sections, the frontend sends
