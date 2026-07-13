@@ -21,10 +21,13 @@ caught only **0.50** of far pairs (`2.5-flash-lite` 0.33). W5 measures whether
 
 **GO.** `gemini-2.5-pro` catches **6/6 far pairs (recall 1.000)** at whole-form
 (132-field) scale on the controlled I-90 instrument -- including all 3
-`duration_year` cases, the semantic far class that every cheap 2.5-tier model
-misses. It is the only 2.5-family model measured that catches the far/semantic
-classes at whole-form scale. Cost with bounded thinking is **~$0.39 for the full
-42-call sweep** (~$0.0093/call), inside the epic's approved $0.30-0.50 band.
+`duration_year` cases, the semantic far class the cheap 2.5-tier models miss (flash
+1/3, lite 0/3 at whole-form in 6cfu.5). The GO rests on pro's OWN absolute recall
+(1.000), which clears the bar outright. The cross-model FRAMING ("pro beats flash's
+0.500") is NOT a controlled head-to-head -- the flash baseline ran under Vertex's
+default DYNAMIC thinking budget while pro ran with a bounded one; see Honesty/limits
+and the follow-up bd polyglot-pdf-hy5k. Cost with bounded thinking is **~$0.39 for
+the full 42-call sweep** (~$0.0093/call), inside the epic's approved $0.30-0.50 band.
 
 **One material caveat for W6:** whole-form precision is **0.750** (9 of 15 clean
 cases false-flagged), driven by a systematic over-flag of the Part 5 / Part 6
@@ -73,9 +76,14 @@ Recall by contradiction DISTANCE (this is the W5 metric):
 
 | model | single/0 | near(1-5) | mid(6-20) | **far(21+)** |
 |-------|---------:|----------:|----------:|-------------:|
-| **gemini-2.5-pro** | 1.000 | 1.000 | 1.000 | **1.000 (6/6)** |
-| gemini-2.5-flash (6cfu.5) | -- | -- | -- | **0.500** |
+| **gemini-2.5-pro** (bounded thinking=512) | 1.000 | 1.000 | 1.000 | **1.000 (6/6)** |
+| gemini-2.5-flash (6cfu.5, DYNAMIC thinking) | -- | -- | -- | **0.500** |
 | gemini-2.5-flash-lite (6cfu.5) | -- | -- | -- | **0.333** |
+
+The flash/lite rows are the 6cfu.5 baseline and ran under Vertex's DEFAULT dynamic
+thinking budget, not a bounded one -- so the pro-vs-flash gap is not a controlled
+same-regime comparison (see Honesty/limits; bd polyglot-pdf-hy5k). Pro's own 1.000
+is the number the GO rests on.
 
 Recall by CLASS (all 1.000): admission_dob, city_state, cross_date,
 duration_year, future_dob, province_us, state_country, zip_state. **The
@@ -133,12 +141,26 @@ precision before the pass is trusted as the sole end-of-form report.
 - **Single run, one form.** One run per cell on the one validated instrument (the
   i-90 corpus; a naive second-form key manufactures contradictions -- wf3q). A
   second validated form is bd polyglot-pdf-z2l9. Consistent with 6cfu.5's own
-  single-run-per-cell basis, so the pro-vs-flash comparison is apples-to-apples.
+  single-run-per-cell basis.
 - **Synthetic corpus.** No real transcripts; recall is an upper bound.
 - **Baseline provenance.** The flash/lite far numbers this beats are the 6cfu.5
-  Vertex run (2026-07-11, same instrument, same clean corpus) -- the correct
-  apples-to-apples baseline. (The older 0zp3 g1b_bakeoff_findings far numbers are
-  pre-clean-corpus / AI-Studio and are not the comparison basis.)
+  Vertex run (2026-07-11, same instrument, same clean corpus). (The older 0zp3
+  g1b_bakeoff_findings far numbers are pre-clean-corpus / AI-Studio and are not the
+  comparison basis.)
+- **Thinking-regime mismatch in the pro-vs-flash comparison (do NOT call it
+  apples-to-apples).** The pro arm ran with an explicit BOUNDED thinking budget
+  (512); the 6cfu.5 flash baseline (far recall 0.500) ran under Vertex's
+  UNCONTROLLED default DYNAMIC thinking budget (6cfu.5's own note 4: flash there is
+  "default thinking budget," p50 10-30s, and it flagged that a bounded flash number
+  needs its own measurement). The 6cfu.5 CSV has no `think_tok` column, so the
+  thinking regime behind flash's 0.500 is unauditable. This does NOT change pro's
+  own measured 1.000 (6/6) -- pro clears the far-pair bar on its own absolute
+  number -- but the "pro is the only 2.5-family model that clears the bar" FRAMING
+  is not a controlled head-to-head: one side was bounded, the other dynamic. A
+  controlled flash re-measure (bounded thinking, size 132) to settle whether flash
+  would clear the bar under the SAME regime is filed as **bd polyglot-pdf-hy5k**;
+  it does not block the GO (which rests on pro's own recall), only sharpens the
+  comparison.
 
 ## Verdict: **GO** (with a precision condition on W6)
 

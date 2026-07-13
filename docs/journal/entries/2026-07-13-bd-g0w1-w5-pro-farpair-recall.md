@@ -62,7 +62,20 @@ whole-form answers the question completely at 42 calls, not 107.
 bead); a larger hard-case corpus and a second validated form (z2l9) are standing
 follow-ups from the 0zp3/6cfu.5 lineage, not newly surfaced here.
 
-Fresh-eyes (Step 5.5): <FRESH_EYES_PLACEHOLDER -- fill at closeout>.
+Fresh-eyes (Step 5.5): Sonnet round found 1 gap -- the GO's cross-model framing
+("pro is the only 2.5-family model that clears the bar") compared pro's
+bounded-thinking run against the 6cfu.5 flash baseline, which ran under Vertex's
+UNCONTROLLED default dynamic thinking, an uncontrolled-vs-controlled pairing the
+doc called "apples-to-apples." ADOPTED: amended the findings doc (headline,
+comparison table, Honesty/limits) to mark the flash/lite baseline as
+dynamic-thinking and state the GO rests on pro's OWN 1.000, not the cross-model
+gap. The reviewer's controlled-flash-re-measurement follow-up is filed as bd
+polyglot-pdf-hy5k (out of scope for W5's own criterion; its disclosure half is
+satisfied by this amendment, its re-measurement half remains). The reviewer
+independently recomputed every number in the doc from the committed CSV and all
+matched (recall 27/27, far 6/6, precision 0.750, cost $0.3924). One low-confidence
+non-blocker (meta.json's hardcoded "bead":"polyglot-pdf-0zp3", pre-existing, not
+introduced here) noted and left. Final clearing round on Opus: <OPUS_FE_PLACEHOLDER>.
 Opus outer review (Step 5.6): <OUTER_REVIEW_PLACEHOLDER -- fill at closeout>.
 
 ## Lessons
