@@ -77,6 +77,11 @@ function fireConfirm(ws: MockWebSocket, fieldId: string): void {
 function deliverValidationResult(ws: MockWebSocket, conflicts: any[]): void {
   ws.onmessage?.({ data: JSON.stringify({ type: 'validation_result', conflicts }) })
 }
+// W3 (bd polyglot-pdf-pr3i): the backend's drain result -- the conflicts whose steer
+// DELIVERED. The client marks these steered + consumes them from the queue.
+function deliverDrainResult(ws: MockWebSocket, conflicts: any[]): void {
+  ws.onmessage?.({ data: JSON.stringify({ type: 'drain_findings_result', conflicts }) })
+}
 
 // `flush` lets queued microtasks (the gated proceedSectionSwitch promise chain) run.
 const flush = () => new Promise<void>(r => setTimeout(r, 0))
@@ -141,22 +146,34 @@ describe('WebFormConnection validator steering + switch-gate (bd polyglot-pdf-jn
     expect(conn!.getStatus()).toBe('switching_section')
   })
 
-  it('a CONFLICT validation_result HOLDS the switch and marks the named fields steered', async () => {
+  it('a CONFLICT validation_result HOLDS the switch, enqueues + drains, and marks steered on the drain result (W3)', async () => {
     const ws = await connected(TWO_SECTION_SCHEMA)
     fireFieldUpdate(ws, 'firstname', 'Jane')
     fireConfirm(ws, 'f_s1')
     await flush()
 
     deliverValidationResult(ws, [
-      { field_ids: ['f_s1'], reason: 'looks off' },
+      { field_ids: ['f_s1'], reason: 'looks off', field_names: { f_s1: 'First Name' } },
     ])
     await flush()
 
     // The switch did NOT proceed (stay in-section for the steer).
     expect(conn!.getStatus()).not.toBe('switching_section')
-    // f_s1 is now marked steered in sessionStorage.
-    const state = SchemaFormStateManager.load()!
+    // W3: the conflict is REPORT-ONLY -- it was ENQUEUED and a drain_findings emitted;
+    // the field is NOT steered yet (that waits for the drain result).
+    const drains = ofType(ws, 'drain_findings')
+    expect(drains).toHaveLength(1)
+    expect(drains[0].conflicts[0].field_ids).toEqual(['f_s1'])
+    let state = SchemaFormStateManager.load()!
+    expect(state.validatorFindingsQueue).toHaveLength(1)
+    expect(state.fieldValues['f_s1'].steered).toBeFalsy()
+
+    // The backend confirms delivery -> NOW mark steered + consume the queue.
+    deliverDrainResult(ws, [{ field_ids: ['f_s1'] }])
+    await flush()
+    state = SchemaFormStateManager.load()!
     expect(state.fieldValues['f_s1'].steered).toBe(true)
+    expect(state.validatorFindingsQueue).toHaveLength(0)
   })
 
   it('keeps the mic LIVE on a conflict-hold, and stops it only when the switch proceeds', async () => {
@@ -190,7 +207,10 @@ describe('WebFormConnection validator steering + switch-gate (bd polyglot-pdf-jn
     fireFieldUpdate(ws, 'firstname', 'Jane')
     fireConfirm(ws, 'f_s1')
     await flush()
-    deliverValidationResult(ws, [{ field_ids: ['f_s1'], reason: 'x' }])
+    deliverValidationResult(ws, [{ field_ids: ['f_s1'], reason: 'x', field_names: { f_s1: 'First Name' } }])
+    await flush()
+    // W3: the steer marker lands on the DRAIN RESULT, not the report-only result.
+    deliverDrainResult(ws, [{ field_ids: ['f_s1'] }])
     await flush()
 
     // Re-confirm f_s1 -> section_complete re-emits; its payload now carries steered:true.

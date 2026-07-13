@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-07-13 (bd polyglot-pdf-kxkw (W2, async validator): the `validate_windows` FE emitter is LIVE and PAGE-AGNOSTIC -- a client-side STRIDE window builder (schema field order + settled flags, no pdf_position.page); the control-message row now describes a stride trigger. Prior: 2026-07-13 (bd polyglot-pdf-xbl2 (W1, async validator): the validator now runs OFF the WS receive loop -- `section_complete`/`form_complete` ack immediately + validate in a background task, and a new `validate_windows` async trigger runs overlapping windows concurrently with batch dedupe; `validation_result` is pushed asynchronously after the `*_ack` (envelope shape unchanged). See the control-message table + validator-results note.). Prior: 2026-07-12 (continuous-DTI is the production law: the whole form runs as one session and the section-switch flow below is the DEPRECATED section-reset fallback, bd polyglot-pdf-55jg). Prior: 2026-07-11 (bd polyglot-pdf-hc4b: the handshake `resume` flag is now `true` on the first post-soft-refresh open when persisted state is in-progress, so a mid-form reload does not re-greet. See [../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md](../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md).)*
+*Last updated: 2026-07-13 (bd polyglot-pdf-pr3i (W3, async validator): FINDING-DRIVEN drain. `validation_result` is now REPORT-ONLY (no steer injection); the client enqueues conflicts into a persisted validatorFindingsQueue and sends the new `drain_findings` (carries the queued conflicts + field_names), which the backend acks (`drain_findings_ack`), composes+injects one steer off the receive loop, and answers with `drain_findings_result` (delivered conflicts -> client marks steered + consumes). See the control-message table + validator-results note. Prior: 2026-07-13 (bd polyglot-pdf-kxkw (W2, async validator): the `validate_windows` FE emitter is LIVE and PAGE-AGNOSTIC -- a client-side STRIDE window builder (schema field order + settled flags, no pdf_position.page); the control-message row now describes a stride trigger. Prior: 2026-07-13 (bd polyglot-pdf-xbl2 (W1, async validator): the validator now runs OFF the WS receive loop -- `section_complete`/`form_complete` ack immediately + validate in a background task, and a new `validate_windows` async trigger runs overlapping windows concurrently with batch dedupe; `validation_result` is pushed asynchronously after the `*_ack` (envelope shape unchanged). See the control-message table + validator-results note.). Prior: 2026-07-12 (continuous-DTI is the production law: the whole form runs as one session and the section-switch flow below is the DEPRECATED section-reset fallback, bd polyglot-pdf-55jg). Prior: 2026-07-11 (bd polyglot-pdf-hc4b: the handshake `resume` flag is now `true` on the first post-soft-refresh open when persisted state is in-progress, so a mid-form reload does not re-greet. See [../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md](../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md).)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -105,23 +105,27 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `section_completed` | **legacy/backend-only** — handler exists (→ `section_completed_ack`) but no client currently sends it; completion is driven via `manual_section_switch` / `onFormComplete` (see below) |
 | `section_complete` | **proactive boundary event** (Pillar B, bd polyglot-pdf-jnjj.16) — sent when the last field of the current section is confirmed (a next section exists); carries `section_id` + the contract-2 field payload. Since W1 (bd polyglot-pdf-xbl2) the arm acks `section_complete_ack` IMMEDIATELY and spins the validator into a background task off the receive loop (a one-window batch), which pushes `validation_result` (below) when it lands. Distinct from the legacy `section_completed` above. |
 | `form_complete` | **proactive boundary event** (Pillar B, bd polyglot-pdf-jnjj.16) — sent once when the whole form is confirmed (re-emitted after a post-completion edit; client-side dirty guard); carries the whole-form contract-2 payload. Since W1: acks `form_complete_ack` immediately + runs the full-form pass in the background, which pushes `validation_result`. |
-| `validate_windows` | **async STRIDE validator trigger** (Pillar B / W2, bd polyglot-pdf-kxkw; backend arm W1/xbl2) — carries `windows`, a list of overlapping contract-2 field lists (size ~20, stride ~10 over SCHEMA FIELD ORDER). PAGE-AGNOSTIC (report-cadence revision 2026-07-13): the client (webFormConnection.maybeEmitValidateWindows) emits a window once every field it covers is SETTLED (confirmed/skipped/not-applicable), keyed on schema order + settled flags, never pdf_position.page — so a source:"web" / pageless form emits identically to a paginated one. Acks `validate_windows_ack` immediately, then runs every window's flash-lite pass concurrently off the receive loop, dedupes conflicts by field-id set, and pushes one `validation_result`. |
+| `validate_windows` | **async STRIDE validator trigger** (Pillar B / W2, bd polyglot-pdf-kxkw; backend arm W1/xbl2) — carries `windows`, a list of overlapping contract-2 field lists (size ~20, stride ~10 over SCHEMA FIELD ORDER). PAGE-AGNOSTIC (report-cadence revision 2026-07-13): the client (webFormConnection.maybeEmitValidateWindows) emits a window once every field it covers is SETTLED (confirmed/skipped/not-applicable), keyed on schema order + settled flags, never pdf_position.page — so a source:"web" / pageless form emits identically to a paginated one. Acks `validate_windows_ack` immediately, then runs every window's flash-lite pass concurrently off the receive loop, dedupes conflicts by field-id set, and pushes one `validation_result` (REPORT-ONLY since W3 — no steer injected). |
+| `drain_findings` | **finding-driven drain** (Pillar B / W3, bd polyglot-pdf-pr3i) — the client (webFormConnection.drainFindings) sends this the moment its `validatorFindingsQueue` is non-empty (a report-only `validation_result` enqueued a conflict), and on reconnect if a queue survived. Carries `conflicts`, each `{field_ids, reason, field_names}`. Acks `drain_findings_ack` immediately, then composes ONE steer (the oiok composer) + injects it OFF the receive loop, and pushes `drain_findings_result` with the DELIVERED conflicts. |
 
 Unknown types → `{"type":"error","code":"unknown_control"}` (logged).
 
 **Validator results (backend → client, Pillar B / bd polyglot-pdf-jnjj.17;
-async since W1 / bd polyglot-pdf-xbl2):** for each `section_complete` /
-`form_complete` / `validate_windows` boundary the backend pushes a
-**`validation_result`** (`{type, conflicts}`; clean = `conflicts:[]`; envelope
-shape unchanged by W1). W1 moved the validator OFF the receive
-loop: the boundary is acked FIRST and the pass runs in a background task, so this
-result is PUSHED asynchronously AFTER the `*_ack` (a slow/hung validator adds zero
-voice-turn latency). On a conflict the client marks the named fields `steered`
-(sessionStorage, so the next payload carries it for the max-resteer bound); the
-correction is voiced by the live model, which the backend steers via a Gemini Live
-text turn (NOT a client message). The DEPRECATED section-reset gate (below) still
-resolves on an arriving clean result and fails open on the timeout if the async
-result is slow/absent.
+async since W1 / bd polyglot-pdf-xbl2; REPORT-ONLY + finding-driven since W3 /
+bd polyglot-pdf-pr3i):** for each `section_complete` / `form_complete` /
+`validate_windows` boundary the backend pushes a **`validation_result`**
+(`{type, conflicts}`; clean = `conflicts:[]`), acked FIRST and PUSHED
+asynchronously AFTER the `*_ack` off the receive loop (a slow/hung validator adds
+zero voice-turn latency). **W3 made this REPORT-ONLY:** the backend NO LONGER
+injects a steer on the result. A conflict is a CANDIDATE the client ENQUEUES into
+its `validatorFindingsQueue` (client-owned + persisted; each conflict carries a
+`field_names` id→name rider) and then drains IMMEDIATELY via `drain_findings`
+(above) — the drain composes + injects the steer and replies `drain_findings_result`
+with the delivered conflicts, at which point the client marks those fields `steered`
+(max-resteer bound) and CONSUMES them from the queue. A CLEAN result enqueues
+nothing and drains nothing (no voice turn on an all-clear). An un-delivered steer
+keeps the finding queued to retry. The DEPRECATED section-reset gate (below) still
+resolves on an arriving clean result and fails open on the timeout.
 
 ## Section-switch flow (DEPRECATED section-reset fallback)
 

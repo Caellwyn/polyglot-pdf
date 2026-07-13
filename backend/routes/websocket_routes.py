@@ -357,6 +357,33 @@ async def _handle_fill_session(
 			validation_tasks.add(task)
 			task.add_done_callback(validation_tasks.discard)
 
+		async def _run_drain_and_push(conflicts: list) -> None:
+			"""W3 (bd polyglot-pdf-pr3i): background runner for the finding-driven
+			drain. Composes + injects ONE steer for the client's queued conflicts,
+			then pushes a `drain_findings_result` carrying the DELIVERED conflicts so
+			the client marks those fields steered + consumes them from its queue.
+			Crash-safe + fail-OPEN like the validation runner: any exception is caught
+			+ logged so it can never propagate into the receive loop, and an
+			un-delivered steer (dead session) reports [] so the client keeps the
+			finding queued to retry."""
+			try:
+				verdict = await service.handle_drain_findings(conflicts)
+				await websocket.send_json({
+					"type": "drain_findings_result",
+					"conflicts": verdict.get("conflicts", []),
+				})
+			except Exception as exc:  # noqa: BLE001 -- background task must never crash the loop
+				_log.warning(
+					"async_drain_task_failed",
+					exc_type=type(exc).__name__,
+					session_id=session_id,
+				)
+
+		def _spawn_drain(conflicts: list) -> None:
+			task = asyncio.create_task(_run_drain_and_push(conflicts))
+			validation_tasks.add(task)
+			task.add_done_callback(validation_tasks.discard)
+
 		while True:
 			msg = await websocket.receive()
 
@@ -774,9 +801,11 @@ async def _handle_fill_session(
 					# source:"web" / pageless form emits identically to a paginated one.
 					# Ack immediately, then run every window's flash-lite pass concurrently
 					# in the background, dedupe conflicts across the batch by field-id set,
-					# suppress already-steered markers, inject one steer, and push the
-					# surviving conflicts as a `validation_result`. Nothing in the voice path
-					# waits on any of it.
+					# suppress already-steered markers, and push the surviving conflicts as
+					# a `validation_result`. W3 (bd polyglot-pdf-pr3i): this is REPORT-ONLY
+					# -- it does NOT inject the steer. The client ENQUEUES the surviving
+					# conflicts and drains them via `drain_findings` (below), which composes
+					# + injects. Nothing in the voice path waits on any of it.
 					windows = obj.get("windows", [])
 					safe_windows = windows if isinstance(windows, list) else []
 					# PII (contract 6): log COUNTS only -- never the windows/values.
@@ -790,6 +819,26 @@ async def _handle_fill_session(
 					)
 					_spawn_validation(safe_windows, "validate_windows")
 					await websocket.send_json({"type": "validate_windows_ack"})
+					continue
+				elif mtype == "drain_findings":
+					# W3 (bd polyglot-pdf-pr3i): the FINDING-DRIVEN drain. The client sends
+					# this the moment its validatorFindingsQueue is non-empty, carrying the
+					# queued conflicts (each with field_ids, reason, field_names) it wants
+					# voiced. Ack immediately, then compose + inject ONE steer in the
+					# background and push a `drain_findings_result` with the DELIVERED
+					# conflicts so the client marks them steered + consumes them from the
+					# queue. An un-delivered steer (dead session) reports [] so the client
+					# keeps the finding queued to retry. Nothing in the voice path waits.
+					drain_conflicts = obj.get("conflicts", [])
+					safe_conflicts = drain_conflicts if isinstance(drain_conflicts, list) else []
+					# PII (contract 6): COUNT only -- never the conflicts/reasons/values.
+					_log.info(
+						"drain_findings_arm_received",
+						conflict_count=len(safe_conflicts),
+						session_id=session_id,
+					)
+					_spawn_drain(safe_conflicts)
+					await websocket.send_json({"type": "drain_findings_ack"})
 					continue
 				else:
 					# Log unknown message type for debugging

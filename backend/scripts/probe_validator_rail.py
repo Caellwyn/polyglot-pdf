@@ -48,6 +48,18 @@ probe ABORTS if the verdict reports no conflict (that would be a validator-recal
 failure, not a rail-wiring failure, and this probe is not the place to
 characterize recall; see probe_g1_contradiction_recall.py for that).
 
+W3 (bd polyglot-pdf-pr3i) note -- the FINDING-DRIVEN drain: production reaches this
+same rail via the client queue + drain_findings round-trip
+(handle_drain_findings), NOT inline in handle_validation_windows (which is
+report-only since W3). This probe still exercises the rail FAITHFULLY because the
+steer composer + inject path it drives (_compose_validator_steer ->
+send_client_content) is the SAME code handle_drain_findings runs -- W3 changed WHO
+composes the steer (the drain handler, off a client round-trip) and WHEN, not the
+composer or the rail behavior. So a green rail here proves the drain path's live
+behavior; the report-only enqueue + drain round-trip itself is covered
+deterministically by the FE tests (webFormConnection.drainfindings.test.ts) +
+the drain service tests (test_drain_findings.py).
+
 THE STEER is REAL (FormFillingService._compose_validator_steer), byte-identical
 to what production sends, and is injected into the Live session the same way
 LiveAIGemini.send_client_content -> _send_text_turn does for the 2.5 family:
