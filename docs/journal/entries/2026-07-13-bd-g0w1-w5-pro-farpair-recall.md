@@ -85,7 +85,14 @@ framing, plus a cost-share slip (thinking is 46% of per-call cost, not the state
 gap; 40%->46%); the re-spawned Opus round then returned NO-GAPS (rubric criterion
 PASS, all numbers re-verified from the CSV, cost share confirmed 46%). Total
 fresh-eyes rounds: 1 Sonnet + 2 Opus.
-Opus outer review (Step 5.6): <OUTER_REVIEW_PLACEHOLDER -- fill at closeout>.
+Opus outer review (Step 5.6): review-worthy (touches executable source -- the probe
+instrument). TWO independent Opus-4.8 passes on the identical final diff both
+returned NO-GAPS; each independently recomputed every findings-doc number from the
+committed CSV (all matched) and traced the new _cost signature + think_tok CSV
+column into their untouched consumers (g1b_analyze.py, g1b_merge.py,
+probe_g1c_tuning.py) -- none breaks. No blockers; the only unflagged items were a
+pre-existing meta.json bead-stamp (polyglot-pdf-0zp3 lineage, out of scope) and
+trivial characterization nuances.
 
 ## Lessons
 
