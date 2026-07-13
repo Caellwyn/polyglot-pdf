@@ -254,6 +254,16 @@ export class WebFormConnection {
   private static readonly UNCONFIRMABLE_REPROMPT_CAP = 3;
   private static readonly UNCONFIRMABLE_SESSION_CAP = 6;
 
+  // W2 (bd polyglot-pdf-kxkw): the async-validator STRIDE window builder knobs.
+  // Windows are size-VALIDATOR_WINDOW_SIZE ranges over the schema field order,
+  // starting every VALIDATOR_WINDOW_STRIDE fields (so window k covers indices
+  // [k*stride, k*stride + size)). Overlap (stride < size) means one contradiction
+  // can surface in multiple windows; the backend dedupes by field-id set (W1).
+  // Defaults 20 / 10 per the sprint-12 plan; kept as constants (no runtime knob
+  // needed today -- promote to config if a form ever needs different sizing).
+  private static readonly VALIDATOR_WINDOW_SIZE = 20;
+  private static readonly VALIDATOR_WINDOW_STRIDE = 10;
+
   // B4 (bd polyglot-pdf-jnjj.16): once-only guard for the proactive form_complete
   // event. Holds a serialization of the whole-form confirmed values at the last
   // form_complete emit. The guard is on the COMPLETED STATE + a dirty-since-last-
@@ -847,6 +857,9 @@ export class WebFormConnection {
     const persisted = SchemaFormStateManager.load();
     if (persisted) this.state = persisted;
     this.maybeEmitFormComplete();
+    // W2 (bd polyglot-pdf-kxkw): stride-window validator check on the same
+    // state-change seam (guarded: sends only newly-eligible, unsent windows).
+    this.maybeEmitValidateWindows();
 
     // No need to send initial hint - backend will request it as part of initial message
   }
@@ -1744,6 +1757,9 @@ export class WebFormConnection {
     // guarded (fires only when isFormComplete AND the snapshot changed), so calling
     // it here is a no-op for an incomplete form and idempotent vs. the branch below.
     this.maybeEmitFormComplete();
+    // W2 (bd polyglot-pdf-kxkw): stride-window validator check on the same
+    // state-change seam (guarded: sends only newly-eligible, unsent windows).
+    this.maybeEmitValidateWindows();
 
     // Confirm took -- clear pending unconfirmable tracking. A successful confirm of
     // the stuck field is genuine progress, so it restores the session-wide re-prompt
@@ -1908,6 +1924,9 @@ export class WebFormConnection {
     // Whole-form completeness check on every skip (idempotent / guarded), same as
     // the confirm path.
     this.maybeEmitFormComplete();
+    // W2 (bd polyglot-pdf-kxkw): stride-window validator check on the same
+    // state-change seam (guarded: sends only newly-eligible, unsent windows).
+    this.maybeEmitValidateWindows();
 
     // A skip of the tracked unconfirmable field is genuine progress -- restore the
     // re-prompt budget (mirrors the confirm path).
@@ -2324,6 +2343,55 @@ export class WebFormConnection {
       fields: this.buildValidatorFields(this.state.schema.fields),
     });
     this.formCompleteSnapshot = snapshot;
+  }
+
+  /**
+   * W2 (bd polyglot-pdf-kxkw): the async-validator STRIDE window builder. Runs on
+   * every confirm / manual edit (the same seams as maybeEmitFormComplete). As the
+   * fill advances, it sends any overlapping windows that have become eligible and
+   * were not already sent, as ONE `validate_windows` message; the backend (W1)
+   * validates each window concurrently off the receive loop and reports findings
+   * FINDING-DRIVEN (no page/boundary dependency -- report-cadence revision
+   * 2026-07-13). Fire-and-forget: nothing here blocks the user.
+   *
+   * "Eligible" = the fill has ADVANCED PAST the window's field range (a confirmed
+   * field exists at or beyond the window's end), mirroring "validate a region once
+   * you've moved past it" -- OR the form is complete (releases the tail windows,
+   * whose end runs past the last field). Already-sent windows are excluded via the
+   * persisted validatedWindowIndices high-water mark, so each fires exactly once
+   * across reloads. Page-agnostic: keys on schema field ORDER + the confirmed flag,
+   * never pdf_position.page, so source:"web" / pageless forms behave identically.
+   */
+  private maybeEmitValidateWindows(): void {
+    const ready = SchemaFormStateManager.computeReadyWindows(
+      this.state,
+      WebFormConnection.VALIDATOR_WINDOW_SIZE,
+      WebFormConnection.VALIDATOR_WINDOW_STRIDE
+    );
+    if (ready.length === 0) return;
+
+    const allFields = this.state.schema?.fields ?? [];
+    const windows: Array<Array<{ field_id: string; name: string; value: any; steered: boolean }>> = [];
+    const sentIndices: number[] = [];
+    for (const w of ready) {
+      const windowFields = allFields.slice(w.start, w.end);
+      const payload = this.buildValidatorFields(windowFields);
+      // buildValidatorFields drops hidden/empty fields; a window that renders to
+      // ZERO validatable fields carries nothing to check. Still MARK it sent (so it
+      // is not re-evaluated every confirm) but do not put an empty list on the wire.
+      if (payload.length > 0) windows.push(payload);
+      sentIndices.push(w.index);
+    }
+
+    // Mark every eligible window sent (persisted high-water mark) even if some
+    // rendered empty -- the eligibility only advances, so re-checking them is waste.
+    if (sentIndices.length > 0) {
+      for (const idx of sentIndices) this.state.validatedWindowIndices.add(idx);
+      SchemaFormStateManager.save(this.state);
+    }
+    if (windows.length > 0) {
+      this.send({ type: 'validate_windows', windows });
+    }
   }
 
   /**
@@ -3063,6 +3131,9 @@ export class WebFormConnection {
     // a manual edit that does not complete the form is a no-op here. this.state
     // was refreshed from the persisted snapshot above.
     this.maybeEmitFormComplete();
+    // W2 (bd polyglot-pdf-kxkw): stride-window validator check on the same
+    // state-change seam (guarded: sends only newly-eligible, unsent windows).
+    this.maybeEmitValidateWindows();
   }
 
 

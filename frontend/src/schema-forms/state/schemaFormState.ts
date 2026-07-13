@@ -15,10 +15,11 @@
 import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
+import { readFieldEntryWithAlias } from "../utils/fieldValue";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
 // navigation.ts back-references SchemaFormState as a TYPE-only import, so this
 // does not create a runtime import cycle (bd polyglot-pdf-jnjj.9).
-import { computeNextField, formatNextFieldHint, getFieldOrder } from "../../navigation";
+import { computeNextField, formatNextFieldHint, getFieldOrder, isFormComplete } from "../../navigation";
 
 export interface SchemaFormState {
   schema: FormSchema;
@@ -33,6 +34,16 @@ export interface SchemaFormState {
   // Phase 3: JIT (Just-In-Time) Schema Loading - Token Reduction
   loadedFieldIds: Set<string>; // Field IDs where Gemini has received full schema
   jitModeEnabled: boolean; // Whether JIT mode is active (from backend feature flag)
+
+  // W2 (bd polyglot-pdf-kxkw): the async-validator STRIDE window builder. As
+  // fields are confirmed, the client sends overlapping windows (size ~20, stride
+  // ~10 over schema field order) of confirmed values to the backend validator via
+  // the `validate_windows` message. This Set tracks which window INDICES have
+  // already been sent so a window is never re-validated (the persisted
+  // validated-window high-water mark; page-agnostic -- no pdf_position dependency,
+  // report-cadence revision 2026-07-13). Serialized to an array like the other
+  // Sets; defaults to empty for old sessions (no migration key needed -- brand new).
+  validatedWindowIndices: Set<number>;
   // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form runs as ONE
   // session (no section resets). When on, the handshake spans every field as a
   // single synthetic section and section advancement is suppressed. From the
@@ -104,6 +115,8 @@ export class SchemaFormStateManager {
       // JIT schema loading (Phase 3: Token Reduction)
       loadedFieldIds: new Set(),
       jitModeEnabled: false, // Will be set during handshake based on backend flag
+      // W2 (bd polyglot-pdf-kxkw): validated-window high-water mark (empty at start).
+      validatedWindowIndices: new Set(),
       continuousSessionEnabled: false, // Set during handshake from the backend CONTINUOUS_SESSION flag
       // Disclaimer acceptance
       disclaimerAccepted: false,
@@ -153,6 +166,16 @@ export class SchemaFormStateManager {
         parsed.loadedFieldIds = new Set();
       }
 
+      // W2 (bd polyglot-pdf-kxkw): restore the validated-window index Set. No
+      // legacy-key migration -- the key is brand new, so an old session simply
+      // starts with an empty set (every window re-eligible, which is correct: a
+      // pre-W2 session never sent any windows).
+      if (parsed.validatedWindowIndices) {
+        parsed.validatedWindowIndices = new Set(parsed.validatedWindowIndices);
+      } else {
+        parsed.validatedWindowIndices = new Set();
+      }
+
       // Initialize jitModeEnabled if missing (old state)
       if (parsed.jitModeEnabled === undefined) {
         parsed.jitModeEnabled = false;
@@ -196,6 +219,7 @@ export class SchemaFormStateManager {
         ...state,
         completedSections: Array.from(state.completedSections),
         loadedFieldIds: Array.from(state.loadedFieldIds), // Phase 3: JIT schema loading
+        validatedWindowIndices: Array.from(state.validatedWindowIndices), // W2 (bd kxkw)
         lastUpdated: Date.now(),
       };
 
@@ -1133,6 +1157,70 @@ export class SchemaFormStateManager {
    */
   static getConfirmedFieldCount(state: SchemaFormState): number {
     return Object.values(state.fieldValues).filter(fv => fv.confirmed === true).length;
+  }
+
+  /**
+   * W2 (bd polyglot-pdf-kxkw): compute the async-validator STRIDE windows that are
+   * ELIGIBLE to send and NOT already sent. PURE (no side effects) so it is unit-
+   * testable in isolation. Page-agnostic -- keys ONLY on schema field ORDER and the
+   * per-field confirmed flag, never pdf_position.page, so a source:"web" / pageless
+   * schema behaves identically to a paginated one (report-cadence revision
+   * 2026-07-13).
+   *
+   * Windows tile the schema field array: window k covers indices
+   * [k*stride, k*stride + size). A window is ELIGIBLE once the fill has ADVANCED
+   * PAST it -- i.e. the highest-indexed CONFIRMED field (the high-water fill
+   * position) reaches the window's END index -- OR the form is complete (which
+   * releases the tail windows whose end runs past the last field; without this a
+   * short final window never fires because nothing is confirmed beyond it).
+   * Already-sent windows (state.validatedWindowIndices) are excluded, so each fires
+   * exactly once across reloads.
+   *
+   * Returns the eligible-and-unsent windows as {index, start, end} (end exclusive,
+   * clamped to the field count), ascending by index. Empty when nothing new is
+   * ready. The caller renders each range through buildValidatorFields and persists
+   * the sent indices.
+   */
+  static computeReadyWindows(
+    state: SchemaFormState,
+    size: number,
+    stride: number
+  ): Array<{ index: number; start: number; end: number }> {
+    const fields = state.schema?.fields ?? [];
+    const total = fields.length;
+    if (total === 0 || size <= 0 || stride <= 0) return [];
+
+    // High-water fill position: the largest schema index whose field is confirmed
+    // (alias-safe read). -1 when nothing is confirmed yet.
+    let hwm = -1;
+    for (let i = 0; i < total; i++) {
+      if (readFieldEntryWithAlias(state.fieldValues, fields[i].id)?.confirmed === true) {
+        hwm = i;
+      }
+    }
+    if (hwm < 0) return [];
+
+    const formComplete = isFormComplete(state);
+    const sent = state.validatedWindowIndices;
+    const ready: Array<{ index: number; start: number; end: number }> = [];
+
+    // Enumerate window start positions across the field array. The last window
+    // whose start is < total is the final one (its end clamps to total).
+    for (let index = 0, start = 0; start < total; index++, start = index * stride) {
+      if (sent.has(index)) continue;
+      const rawEnd = start + size;
+      const end = Math.min(rawEnd, total);
+      // Eligible when the fill has moved to/through the window's end (hwm >= end-1
+      // means a confirmed field exists at or past the last field this window
+      // covers), OR the form is complete (release the tail windows whose rawEnd
+      // exceeds the field count and so can never be "passed").
+      const passed = hwm >= end - 1;
+      const isTail = rawEnd >= total;
+      if (passed || (isTail && formComplete)) {
+        ready.push({ index, start, end });
+      }
+    }
+    return ready;
   }
 
   /**
