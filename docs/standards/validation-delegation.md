@@ -166,8 +166,11 @@ carries a `field_names` id->name rider) and drains it FINDING-DRIVEN via a
 replies `drain_findings_result` with the delivered conflicts -- only THEN does the
 client mark the fields `steered` + consume them. A CLEAN result drains nothing (no
 voice turn on an all-clear). The "conflicts -> validation_result with a steer" line
-above is the LEGACY synchronous (deprecated section-reset) path; the async path
-routes the steer through the drain instead.
+above describes the original synchronous `handle_validation_boundary` shape, which
+is no longer on any live wire path (W1 rerouted section_complete/form_complete
+through the async report-only `handle_validation_windows`; `handle_validation_boundary`
+survives only as a test-covered single-window helper). The live async path routes
+the steer through the drain instead.
 
 ---
 

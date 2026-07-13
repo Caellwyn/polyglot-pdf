@@ -275,6 +275,15 @@ export class WebFormConnection {
   // re-validates once.
   private formCompleteSnapshot: string | null = null;
 
+  // W3 (bd polyglot-pdf-pr3i): a single drain_findings may be in flight at a time.
+  // Overlapping stride windows can each surface a DIFFERENT contradiction in quick
+  // succession; without this guard each validation_result would fire its own
+  // drain_findings carrying the FULL queue snapshot, so the earlier finding gets
+  // voiced twice (the fresh-eyes race). We drain ONE batch, wait for its
+  // drain_findings_result (which consumes the delivered findings), then re-drain if
+  // the queue still has anything. Reset on (re)connect so a drop mid-drain re-arms.
+  private drainInFlight: boolean = false;
+
   // B5 (bd polyglot-pdf-jnjj.17): the validator switch-gate. When the section-
   // complete boundary fires, proceedSectionSwitch PAUSES the auto-advance and parks
   // the pending switch here until a validation_result arrives (clean -> resume) or
@@ -536,6 +545,10 @@ export class WebFormConnection {
     // section-switch reconnect keeps the object, so resetting here is what makes the
     // post-reconnect re-validation deterministic (validation-delegation.md contract 4).
     this.formCompleteSnapshot = null;
+    // W3 (bd polyglot-pdf-pr3i): a drop mid-drain never got its drain_findings_result,
+    // so re-arm the guard on (re)connect -- the handleSessionReady re-drain below can
+    // then re-send a surviving queue.
+    this.drainInFlight = false;
 
     // Enable auto-reconnect after first successful connection
     this.enableAutoReconnect = true;
@@ -2247,8 +2260,13 @@ export class WebFormConnection {
    */
   private drainFindings(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    // One drain at a time: a second drain would re-send findings the in-flight drain
+    // is already voicing (double-steer). The drain_findings_result handler re-drains
+    // if the queue still has anything once the in-flight one resolves.
+    if (this.drainInFlight) return;
     const queue = this.state.validatorFindingsQueue;
     if (!queue || queue.length === 0) return;
+    this.drainInFlight = true;
     this.send({
       type: 'drain_findings',
       // Each finding carries field_ids + reason + field_names (the composer needs the
@@ -2269,8 +2287,16 @@ export class WebFormConnection {
    * to retry on the next drain.
    */
   private handleDrainFindingsResult(message: any): void {
+    // The in-flight drain resolved (delivered or not) -> clear the guard.
+    this.drainInFlight = false;
     const delivered = Array.isArray(message?.conflicts) ? message.conflicts : [];
-    if (delivered.length === 0) return; // nothing delivered -> keep the queue as-is
+    if (delivered.length === 0) {
+      // UNDELIVERED (dead live session). Do NOT immediately re-drain -- the WS is
+      // still open, so a re-drain would spin against the dead session. The findings
+      // stay queued and retry on the next natural seam (a confirm's drain, or the
+      // reconnect re-drain in handleSessionReady).
+      return;
+    }
     const steeredIds: string[] = [];
     for (const c of delivered) {
       const ids = c && Array.isArray(c.field_ids) ? c.field_ids : [];
@@ -2280,6 +2306,12 @@ export class WebFormConnection {
       this.state = SchemaFormStateManager.markFieldsSteered(this.state, steeredIds);
     }
     this.state = SchemaFormStateManager.consumeValidatorFindings(this.state, delivered);
+    // The delivered batch was consumed. If MORE findings accumulated while this drain
+    // was in flight (a distinct contradiction from a later window), drain them now --
+    // this only fires for genuinely new findings, never a re-steer of a voiced one.
+    if (this.state.validatorFindingsQueue.length > 0) {
+      this.drainFindings();
+    }
   }
 
   /**

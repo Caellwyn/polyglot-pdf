@@ -91,7 +91,12 @@ async def test_overlapping_windows_same_conflict_dedupes_to_one_steer():
     # NO LONGER injects a steer (the client enqueues + drains). The returned conflict
     # carries field_ids + reason + a field_names rider.
     assert len(returned["conflicts"]) == 1
-    assert set(returned["conflicts"][0]["field_ids"]) == {"f2", "f3"}
+    conflict_out = returned["conflicts"][0]
+    assert set(conflict_out["field_ids"]) == {"f2", "f3"}
+    # W3: the field_names id->name rider is populated from the union fields (the
+    # names _W1/_W2 carry), so the client's drain payload has the names the steer
+    # composer needs. This is a load-bearing wire contract -- pin its content.
+    assert conflict_out["field_names"] == {"f2": "West Virginia", "f3": "ZIP"}
     live_ai.send_client_content.assert_not_awaited()
     # The two validate calls (one per window) both ran.
     assert text_ai.validate.await_count == 2

@@ -68,6 +68,21 @@ persistence pattern); frontend/src/webFormConnection.ts (enqueue + `drainFinding
   round-trip is covered deterministically by the FE + drain service tests. No live
   spend incurred (dry-run wiring verified).
 
+**Fresh-eyes fixes (Sonnet, all adopted).** (1) A real RACE: two overlapping
+stride windows can each surface a DIFFERENT contradiction in quick succession;
+without a guard each validation_result fired its own drain_findings with the FULL
+queue snapshot, so the earlier finding got voiced twice. Added a `drainInFlight`
+guard -- one drain in flight, re-drain the remainder on its result (but NOT on an
+undelivered/dead-session result, which would spin). (2) The section_complete/
+form_complete comments still said "injects a steer" -- corrected to report-only.
+(3) Added a backend assertion pinning the `field_names` rider content (a
+load-bearing wire contract that had only a comment). (4) Tightened a
+validation-delegation.md line that called handle_validation_boundary "deprecated"
+when it is actually dead (test-only). Fresh-eyes also fairly noted no LIVE-Gemini
+E2E was run for this bead's new drain wire path -- that is a per-instance
+live-spend decision (the maintainer's), and the rail itself is unchanged from what
+W1's probe validated; the drain round-trip is covered deterministically.
+
 ## Lessons
 
 When a client-owned queue drives a backend side effect, gate the queue-consume +

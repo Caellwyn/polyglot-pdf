@@ -744,20 +744,18 @@ async def _handle_fill_session(
 				elif mtype == "section_complete":
 					# B4 (bd polyglot-pdf-jnjj.16) emits this when the last field of the
 					# current section is confirmed; it carries section_id + the contract-2
-					# `fields` payload (validation-delegation.md). B5 (jnjj.17) runs the
-					# cheap-model validator over `fields`, injects a steer into the Live
-					# session on a surviving conflict, and pushes a `validation_result`
-					# envelope to the client for EVERY boundary (incl. clean) -- the
-					# deterministic clean->resume signal the FE switch-gate needs
-					# (contract 1). Distinct from the legacy reactive `section_completed`.
-					# W1 (bd polyglot-pdf-xbl2) moved the validator OFF the receive loop:
-					# ack IMMEDIATELY, spin the flash-lite pass into a tracked background
-					# task, and let it push the `validation_result` envelope when it lands.
-					# The receive loop no longer awaits the validator, so a slow/hung pass
-					# adds zero voice-turn latency. The FE gate (VALIDATOR_GATE_TIMEOUT_MS)
-					# already fails open if the async result is slow/absent; an arriving
-					# result still resolves the gate + sets the per-field steered markers
-					# exactly as before. The single field list is a one-window batch.
+					# `fields` payload (validation-delegation.md). W1 (bd polyglot-pdf-xbl2)
+					# moved the validator OFF the receive loop: ack IMMEDIATELY, spin the
+					# flash-lite pass into a tracked background task, and let it push the
+					# `validation_result` envelope when it lands (a one-window batch). The
+					# receive loop no longer awaits the validator, so a slow/hung pass adds
+					# zero voice-turn latency. W3 (bd polyglot-pdf-pr3i) made that result
+					# REPORT-ONLY: it does NOT inject a steer and does NOT set the steered
+					# markers here -- the client ENQUEUES the surviving conflicts and drains
+					# them via `drain_findings` (which composes+injects). The FE gate
+					# (VALIDATOR_GATE_TIMEOUT_MS) still fails open if the async result is
+					# slow/absent and resolves on an arriving clean result. Distinct from
+					# the legacy reactive `section_completed`.
 					proactive_section_id = obj.get("section_id")
 					proactive_fields = obj.get("fields", [])
 					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
@@ -773,14 +771,13 @@ async def _handle_fill_session(
 				elif mtype == "form_complete":
 					# B4 (bd polyglot-pdf-jnjj.16) emits this once when the whole form is
 					# confirmed (re-emitted after a post-completion edit). Carries the
-					# WHOLE-form contract-2 payload. B5 (jnjj.17) runs the full-form
-					# validator pass + pushes the `validation_result` envelope (there is
-					# no section switch to gate on the last boundary; the client still
-					# uses the result to set its per-field `steered` markers).
-					# W1 (bd polyglot-pdf-xbl2): ack immediately + run the full-form pass in
-					# the background; it pushes the `validation_result` envelope when done
-					# (the terminal boundary has no section switch to gate; the client still
-					# uses the result to set its per-field steered markers). One-window batch.
+					# WHOLE-form contract-2 payload. W1 (bd polyglot-pdf-xbl2): ack
+					# immediately + run the full-form pass in the background; it pushes the
+					# `validation_result` envelope when done (one-window batch; the terminal
+					# boundary has no section switch to gate). W3 (bd polyglot-pdf-pr3i):
+					# that result is REPORT-ONLY -- no steer injected here and no steered
+					# markers set here; the client enqueues the conflicts and drains them
+					# via `drain_findings`.
 					proactive_fields = obj.get("fields", [])
 					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
 					_log.info(

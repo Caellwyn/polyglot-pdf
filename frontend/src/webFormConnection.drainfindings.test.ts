@@ -125,6 +125,39 @@ describe('WebFormConnection W3 finding queue + drain (bd polyglot-pdf-pr3i)', ()
     expect(SchemaFormStateManager.load()!.validatorFindingsQueue).toHaveLength(1)
   })
 
+  it('does NOT re-drain while a drain is in flight; re-drains the new finding after the result', async () => {
+    // Fresh-eyes race: two DISTINCT conflicts land before the first drain resolves.
+    // Without the in-flight guard, each would fire a drain_findings carrying the FULL
+    // queue, so the first finding is voiced twice. With the guard: ONE drain in
+    // flight, the second finding waits, then drains after the first result.
+    const CONFLICT_2 = { field_ids: ['f_c'], reason: 'c bad', field_names: { f_c: 'Field C' } }
+    const ws = await connected({
+      ...SCHEMA,
+      fields: [...(SCHEMA as any).fields, { id: 'f_c', name: 'fieldc', spoken_name: 'Field C', type: 'text' }],
+      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_a', 'f_b', 'f_c'] }],
+    } as unknown as FormSchema)
+    // First conflict -> one drain in flight.
+    deliverValidationResult(ws, [CONFLICT])
+    await flush()
+    // Second, DISTINCT conflict arrives BEFORE the first drain's result.
+    deliverValidationResult(ws, [CONFLICT_2])
+    await flush()
+    // Only ONE drain_findings has gone out (the guard held the second).
+    let drains = ofType(ws, 'drain_findings')
+    expect(drains).toHaveLength(1)
+    expect(drains[0].conflicts.map((c: any) => c.field_ids)).toEqual([['f_a', 'f_b']])
+    // Both findings are queued.
+    expect(SchemaFormStateManager.load()!.validatorFindingsQueue).toHaveLength(2)
+
+    // The first drain's result lands -> consume it -> the second finding drains now.
+    deliverDrainResult(ws, [{ field_ids: ['f_a', 'f_b'] }])
+    await flush()
+    drains = ofType(ws, 'drain_findings')
+    expect(drains).toHaveLength(2)
+    // The second drain carries ONLY the remaining (new) finding -- never re-voices f_a/f_b.
+    expect(drains[1].conflicts.map((c: any) => c.field_ids)).toEqual([['f_c']])
+  })
+
   it('the drain result marks the fields steered and CONSUMES them from the queue', async () => {
     const ws = await connected(SCHEMA)
     deliverValidationResult(ws, [CONFLICT])
