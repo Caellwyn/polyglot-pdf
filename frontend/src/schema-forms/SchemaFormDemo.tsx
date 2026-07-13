@@ -266,6 +266,7 @@ export function SchemaFormDemo() {
       {/* Onboarding modal - form + language selection */}
       {showOnboardingModal && (
         <LanguageSelectionModal
+          forms={forms}
           onSelection={handleOnboardingSelection}
         />
       )}

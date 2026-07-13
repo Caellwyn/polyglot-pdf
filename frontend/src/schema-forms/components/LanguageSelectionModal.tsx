@@ -9,66 +9,37 @@
  * Step 2: Form Selection (if multiple forms available)
  */
 
-import React, { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { SPOKEN_LANGUAGES } from '../../shared/languages'
-import { getBackendHttpUrl } from '../utils/pdfFiller'
+import type { FormKitDescriptor } from '../types/formKit'
 import './DisclaimerModal.css'
 
-interface FormKitInfo {
-	id: string
-	label: string
-	description?: string
-}
-
 interface LanguageSelectionModalProps {
+	/**
+	 * Available forms, already resolved by the parent (SchemaFormDemo). The parent
+	 * owns the backend/static-manifest fetch (with its local-dev fallback), so the
+	 * modal never fetches the form list itself -- it is only rendered once the
+	 * parent has a non-empty forms list. See bd polyglot-pdf-jzvs: the modal used
+	 * to fetch /api/form-kits directly with no static fallback, so it showed
+	 * "Unable to load available forms" in backend-less local dev even though the
+	 * parent's static /form-kits/index.json fetch succeeded.
+	 *
+	 * Optional because the VoiceOverlay callers always pass `preselectedFormId`, so
+	 * the form-selection step (the only consumer of this list) is unreachable there.
+	 */
+	forms?: FormKitDescriptor[]
 	onSelection: (formId: string, language: string) => void
 	/** Optional: Pre-selected form ID (skips form selection if provided) */
 	preselectedFormId?: string
 }
 
-type WizardStep = 'loading' | 'form-selection' | 'language-selection' | 'error'
+type WizardStep = 'form-selection' | 'language-selection'
 
-export function LanguageSelectionModal({ onSelection, preselectedFormId }: LanguageSelectionModalProps) {
-	const [forms, setForms] = useState<FormKitInfo[]>([])
+export function LanguageSelectionModal({ forms = [], onSelection, preselectedFormId }: LanguageSelectionModalProps) {
 	const [selectedFormId, setSelectedFormId] = useState(preselectedFormId || '')
 	const [selectedLanguage, setSelectedLanguage] = useState('')
-	const [step, setStep] = useState<WizardStep>('loading')
-	const [error, setError] = useState<string | null>(null)
-
-	// Load available forms from backend
-	useEffect(() => {
-		async function loadForms() {
-			try {
-				setStep('loading')
-				setError(null)
-				const backendUrl = getBackendHttpUrl()
-				const response = await fetch(`${backendUrl}/api/form-kits`)
-
-				if (!response.ok) {
-					throw new Error(`Failed to load forms: ${response.statusText}`)
-				}
-
-				const data = await response.json()
-				const loadedForms = data.forms || []
-				setForms(loadedForms)
-
-				// Initial step is ALWAYS language selection
-				setStep('language-selection')
-
-				// If preselected form, set it
-				if (preselectedFormId) {
-					setSelectedFormId(preselectedFormId)
-				}
-
-			} catch (err) {
-				console.error('[LanguageSelectionModal] Failed to load forms:', err)
-				setError('Unable to load available forms')
-				setStep('error')
-			}
-		}
-
-		loadForms()
-	}, [preselectedFormId])
+	// Initial step is ALWAYS language selection; forms arrive fully resolved as a prop.
+	const [step, setStep] = useState<WizardStep>('language-selection')
 
 	const handleLanguageSelect = (language: string) => {
 		setSelectedLanguage(language)
@@ -98,9 +69,6 @@ export function LanguageSelectionModal({ onSelection, preselectedFormId }: Langu
 		}
 	}
 
-	const canSubmit = selectedFormId && selectedLanguage
-	const showFormSelector = !preselectedFormId && forms.length >= 1
-
 	return (
 		<div
 			className="disclaimer-modal-overlay"
@@ -113,21 +81,6 @@ export function LanguageSelectionModal({ onSelection, preselectedFormId }: Langu
 				aria-labelledby="wizard-title"
 				style={{ maxWidth: '800px' }} // Wider for card grid
 			>
-				{step === 'loading' && (
-					<div style={{ textAlign: 'center', padding: '40px' }}>
-						<div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
-						<h2 style={{ fontSize: '24px', color: '#666' }}>Loading...</h2>
-					</div>
-				)}
-
-				{step === 'error' && (
-					<div style={{ textAlign: 'center', padding: '20px', color: '#dc2626' }}>
-						<div style={{ fontSize: '48px', marginBottom: '20px' }}>⚠️</div>
-						<h2 style={{ fontSize: '24px', marginBottom: '10px' }}>Error</h2>
-						<p>{error}</p>
-					</div>
-				)}
-
 				{step === 'language-selection' && (
 					<div className="wizard-step">
 						<h2 id="wizard-title" className="disclaimer-modal-title">
