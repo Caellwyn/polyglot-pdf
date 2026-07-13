@@ -27,11 +27,20 @@ MODELS:
 
 PII: synthetic fabricated values only (g1b_corpus.py persona). No real PHI.
 
-Usage:
-    GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_g1b_model_size_bakeoff.py
+Usage (Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model
+work runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. python backend/scripts/probe_g1b_model_size_bakeoff.py
     # --dry-run     validate scoring offline (perfect oracle, no API calls)
     # --sizes 20,40 limit which sizes to run
     # --models a,b  limit which models to run
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_g1b_model_size_bakeoff.py
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. This probe's LIVE bidi path
+(_run_live, gemini-2.5-flash-native-audio) may need the Vertex model-id variant
+per bd a079.
 """
 from __future__ import annotations
 
@@ -175,20 +184,28 @@ def _payload_json(fields: list) -> str:
 
 
 def _client() -> genai.Client:
-    # Vertex path (bd polyglot-pdf-6cfu.5): AI Studio credits are depleted, so
-    # re-measures run on Vertex via ADC -- same construction as the production
-    # TextAIGemini adapter. Opt in with VERTEXAI=true (+ GOOGLE_CLOUD_PROJECT /
-    # GOOGLE_CLOUD_LOCATION); the default stays the AI Studio key path.
-    if os.environ.get("VERTEXAI", "").lower() == "true":
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
         return genai.Client(
             vertexai=True,
-            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
         )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("NO KEY in env GEMINI_API_KEY (or set VERTEXAI=true for ADC)",
-              flush=True)
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
     return genai.Client(api_key=key)
 

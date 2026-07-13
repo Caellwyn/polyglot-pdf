@@ -12,8 +12,18 @@ turns per model, and counts: clean turns, mid-turn 1011s, and other close codes.
 that bills usage_metadata = clean; a ConnectionClosed with code 1011 during a turn = a hit.
 
 Native-audio -> AUDIO modality + manual activity signals (VAD disabled). No PII (fictional
-prompts). Run from repo root with GEMINI_API_KEY:
-    backend/.venv/Scripts/python.exe scripts/spikes/diag_native_audio_1011.py --turns 15
+prompts). Run from repo root (Vertex is the DEFAULT -- maintainer directive
+2026-07-12: all live-model work runs on Vertex so costs land on the tracked
+billing project; ADC + GOOGLE_CLOUD_PROJECT, e.g. via
+`gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... backend/.venv/Scripts/python.exe scripts/spikes/diag_native_audio_1011.py --turns 15
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... backend/.venv/Scripts/python.exe scripts/spikes/diag_native_audio_1011.py --turns 15
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. NOTE: this is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 
 from __future__ import annotations
@@ -99,8 +109,35 @@ def _chunks(pcm: bytes) -> list[bytes]:
     return [pcm[i:i + n] for i in range(0, len(pcm), n)]
 
 
+def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key)
+
+
 async def _measure(model: str, n_turns: int) -> dict:
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    client = _client()
     config = types.LiveConnectConfig(
         response_modalities=["AUDIO"],
         system_instruction="You are a form-filling assistant. Keep spoken replies very short.",
@@ -158,8 +195,8 @@ async def _measure(model: str, n_turns: int) -> dict:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set.")
+    if os.environ.get("VERTEXAI", "true").lower() != "true" and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
         return 1
     try:
         for p in PROMPTS[: min(args.turns, len(PROMPTS))]:

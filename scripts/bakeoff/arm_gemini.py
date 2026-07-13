@@ -61,6 +61,34 @@ def _extract_json(text: str) -> dict:
         raise
 
 
+def _client(http_options=None) -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). VERTEXAI=true
+    (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY
+    only for a deliberate AI Studio run. Threads http_options (per-request timeout)
+    through either path. (bd polyglot-pdf-rve5)
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            http_options=http_options,
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key, http_options=http_options)
+
+
 def run(pdf_path: str, mode: str, model: str,
         acroform_path: Optional[str] = None) -> dict:
     # Per-request HTTP timeout (ms) so a stalled call fails fast instead of
@@ -68,10 +96,7 @@ def run(pdf_path: str, mode: str, model: str,
     # list, 64K output budget) is heavy on Gemini 3.1 Pro and exceeded 8 min;
     # override via BAKEOFF_GEMINI_TIMEOUT_MS. Default 8 min bounds the common case.
     timeout_ms = int(os.getenv("BAKEOFF_GEMINI_TIMEOUT_MS", "480000"))
-    client = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"],
-        http_options=types.HttpOptions(timeout=timeout_ms),
-    )
+    client = _client(http_options=types.HttpOptions(timeout=timeout_ms))
 
     parts: list = [
         types.Part.from_bytes(

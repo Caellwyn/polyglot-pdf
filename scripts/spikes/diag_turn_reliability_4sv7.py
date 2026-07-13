@@ -23,10 +23,21 @@ Modes:
 Under native modes the client streams CONTINUOUS silence after each utterance
 (the bd 95uy finding: Gemini's VAD needs an unbroken stream to close a turn).
 
-No PII: fixtures are canned digits + "yes that's correct". Run from repo root:
-    GEMINI_API_KEY=... python scripts/spikes/diag_turn_reliability_4sv7.py \
+No PII: fixtures are canned digits + "yes that's correct". Run from repo root
+(Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model work
+runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... python scripts/spikes/diag_turn_reliability_4sv7.py \
+        --turns 6 --models both --modes manual,native-demo,native-hi
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... python scripts/spikes/diag_turn_reliability_4sv7.py \
         --turns 6 --models both --modes manual,native-demo,native-hi
 Writes a JSONL event record next to stdout summary via --out.
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. NOTE: this is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 
 from __future__ import annotations
@@ -219,9 +230,36 @@ async def _drive_turn(session, pcm: bytes, mode: str, events_out: list[dict]) ->
     return turn
 
 
+def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key)
+
+
 async def _run_combo(model_key: str, mode: str, n_turns: int) -> dict:
     model = MODELS[model_key]
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    client = _client()
     combo = {"model": model_key, "mode": mode, "turns": [], "connect_error": None}
     pcms = [_load_pcm(FIXTURES[i % len(FIXTURES)]) for i in range(n_turns)]
     try:
@@ -249,8 +287,8 @@ async def _run_combo(model_key: str, mode: str, n_turns: int) -> dict:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set.")
+    if os.environ.get("VERTEXAI", "true").lower() != "true" and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
         return 1
     model_keys = ["2.5", "3.1"] if args.models == "both" else [args.models]
     modes = args.modes.split(",")

@@ -6,9 +6,21 @@ V2 Features:
 - Batching: 50 fields per call to prevent response truncation
 - PDF upload caching: Upload once, reuse URI across all calls
 - Focused prompts for each enhancement type
+
+Usage (Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model
+work runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... python -m scripts.bakeoff.prior_extractor.test_gemini_extraction_v2
+    # deliberate AI Studio run (billing NOT on the tracked project), or an
+    # explicit api_key= constructor arg, both use the Developer API path:
+    VERTEXAI=false GEMINI_API_KEY=...
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion.
 """
 
 import os
+import sys
 import json
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -32,14 +44,43 @@ except ImportError:
 BATCH_SIZE = 50
 
 
+def _client(api_key: Optional[str] = None) -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run. An explicit
+    api_key= (constructor arg) also takes the AI Studio (Developer API) path,
+    same as before this conversion.
+    """
+    if api_key is not None:
+        return genai.Client(api_key=api_key)
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key)
+
+
 class GeminiEnhancerV2:
     """Enhances PDF form schemas using Google Gemini 2.0 Flash with batching."""
 
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the enhancer with API credentials."""
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        if not self.api_key:
-            raise ValueError("GEMINI_API_KEY environment variable not set")
+        self.api_key = api_key
 
         # Modernized for the bake-off (bd polyglot-pdf-7a9.4): the original used
         # gemini-2.0-flash-exp (now retired). Per the epic's REFINEMENT 1, the
@@ -52,7 +93,7 @@ class GeminiEnhancerV2:
         # rolled the v1beta REST Files API, which 404s with the current GCP-bound
         # API key format. Use the google-genai SDK with inline PDF bytes instead
         # (no separate upload step). _upload_pdf now just caches the bytes.
-        self.client = genai.Client(api_key=self.api_key)
+        self.client = _client(self.api_key)
         self._pdf_bytes: Optional[bytes] = None
         self._current_pdf_path: Optional[str] = None
 

@@ -97,6 +97,35 @@ def _docai_field_list(dump: dict) -> str:
     return header + "\n" + "\n".join(lines)
 
 
+def _client(http_options=None) -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). VERTEXAI=true
+    (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY
+    only for a deliberate AI Studio run. Threads http_options (per-request timeout)
+    through either path. (bd polyglot-pdf-rve5) NOTE: this is the GEMINI client for
+    the enhancement call; the DocAI client is separate (project/location args).
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        gproject = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not gproject:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=gproject,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            http_options=http_options,
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key, http_options=http_options)
+
+
 def run(pdf_path: str, project: str, location: str, processor_id: str,
         acroform_path: str, model: str, docai_dump: Optional[dict] = None) -> dict:
     # Accept a pre-computed DocAI dump so --dump-docai does not bill a second
@@ -106,10 +135,7 @@ def run(pdf_path: str, project: str, location: str, processor_id: str,
     with open(acroform_path, encoding="utf-8") as fh:
         acro = json.load(fh)
 
-    client = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"],
-        http_options=types.HttpOptions(timeout=480_000),
-    )
+    client = _client(http_options=types.HttpOptions(timeout=480_000))
     prompt = "\n".join([
         SCHEMA_CONTRACT, "",
         "Three inputs describe the SAME PDF (attached):",
