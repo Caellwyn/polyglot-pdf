@@ -2299,8 +2299,11 @@ export class WebFormConnection {
     if (delivered.length === 0) {
       // UNDELIVERED (dead live session). Do NOT immediately re-drain -- the WS is
       // still open, so a re-drain would spin against the dead session. The findings
-      // stay queued and retry on the next natural seam (a confirm's drain, or the
-      // reconnect re-drain in handleSessionReady).
+      // stay queued (persisted) and retry when the session recovers: a dead live
+      // session surfaces as gemini_session_dropped -> reconnect -> the
+      // handleSessionReady re-drain. (drainFindings is wired to the enqueue seam +
+      // reconnect + this post-consume re-drain -- NOT the confirm seam, which drives
+      // maybeEmitValidateWindows, not the drain.)
       return;
     }
     const steeredIds: string[] = [];
