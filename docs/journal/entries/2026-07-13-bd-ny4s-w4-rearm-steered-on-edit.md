@@ -24,9 +24,10 @@ RE-ARM the marker on a VALUE change, in the `updateField` write path
 change CLEARS it, so the corrected field re-enters the validator net.
 
 - New private `_sameFieldValue(a, b)` helper: value-equality for the re-arm
-  decision. Handles primitives (===), checkbox-group arrays (element-wise,
-  order-sensitive), and treats all empty-ish values (undefined / null / '' / [])
-  as "no value" so a clear-to-blank of a previously-filled field counts as a change.
+  decision. Handles primitives (===), checkbox-group arrays as SETS (order-
+  insensitive, blanks dropped -- see the fresh-eyes fix below), and treats all
+  empty-ish values (undefined / null / '' / all-blank []) as "no value" so a
+  clear-to-blank of a previously-filled field counts as a change.
 - `updateField` now computes the normalized incoming value up front, compares it to
   the alias-safe prior value, and only carries the marker when unchanged. An
   incoming FieldValue with an EXPLICIT `steered` still wins (the caller asserted
