@@ -1281,6 +1281,10 @@ export class WebFormConnection {
    */
   /**
    * Handle prepare_section_switch request from backend (new backend-side reconnect pattern)
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   private handlePrepareSectionSwitchRequest(message: any): void {
     const requestId = message.request_id;
@@ -2052,6 +2056,10 @@ export class WebFormConnection {
    * ordering rule, validation-delegation.md contract 4). Keep all switch side
    * effects (audio teardown above) at the call site; this method owns only the
    * switch itself, so the gate B5 adds wraps one call.
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   private async proceedSectionSwitch(sectionId: string): Promise<void> {
     // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form is one session,
@@ -2187,6 +2195,10 @@ export class WebFormConnection {
   /**
    * B5: resume a parked section switch (clean verdict / fail-OPEN). Clears the timer
    * and resolves the gate promise so proceedSectionSwitch runs doSectionSwitch.
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   private resolvePendingSectionSwitch(): void {
     if (!this.pendingSectionSwitch) return;
@@ -2202,6 +2214,10 @@ export class WebFormConnection {
    * `cancelled` flag tells proceedSectionSwitch to SKIP doSectionSwitch -- the client
    * stays in the current section so the live model can voice the steer the backend
    * just injected.
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   private cancelPendingSectionSwitch(): void {
     if (!this.pendingSectionSwitch) return;
@@ -3572,6 +3588,9 @@ export class WebFormConnection {
         );
         this.hasConnectedOnce = true;
       } else {
+        // DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+        // continuous-DTI is the live flow. Kept as a fallback, not deleted.
+        // Do not extend.
         // Compute initial field hint (first unfilled field in this section)
         const initialFieldHint = this.computeNextFieldHintString();
 
@@ -3621,6 +3640,10 @@ export class WebFormConnection {
    *
    * @param sectionId - Section ID (e.g., "part_1_2_addresses")
    * @param wsUrl - Backend WebSocket URL (kept for API compatibility but not used)
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   async switchToSection(sectionId: string, wsUrl: string): Promise<void> {
     // bd polyglot-pdf-0y7: clear the confirm-loop failure streak on a section
@@ -3748,6 +3771,10 @@ export class WebFormConnection {
    * Complete current section and move to next
    *
    * @param wsUrl - Backend WebSocket URL (REQUIRED - no default to prevent localhost fallback in production)
+   *
+   * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
+   * continuous-DTI is the live flow. Kept as a fallback, not deleted.
+   * Do not extend.
    */
   async completeSection(wsUrl: string): Promise<void> {
     // Continuous-session mode (bd polyglot-pdf-x8rt): no sections to complete or
