@@ -48,10 +48,20 @@ turn_complete here -- drained turns hit the wall-clock timeout; that is why
 _drain is deadline-bounded (an unbounded receive hangs) and closes its iterator.
 
 Run it a few times (model output is non-deterministic) and read the
-CONFIRM_FIELD_CALLED tallies, e.g.:
+CONFIRM_FIELD_CALLED tallies, e.g. (Vertex is the DEFAULT -- maintainer
+directive 2026-07-12: all live-model work runs on Vertex so costs land on the
+tracked billing project; ADC + GOOGLE_CLOUD_PROJECT, e.g. via
+`gcloud auth application-default login`):
 
-    GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_confirm_field.py
-    GEMINI_API_KEY=... PYTHONPATH=. PROBE_RUNS=3 python backend/scripts/probe_confirm_field.py
+    GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. python backend/scripts/probe_confirm_field.py
+    GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. PROBE_RUNS=3 python backend/scripts/probe_confirm_field.py
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_confirm_field.py
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. NOTE: this is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 from __future__ import annotations
 
@@ -72,9 +82,28 @@ FIELDS_TEXT = (
 
 
 def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("NO KEY in env GEMINI_API_KEY", flush=True)
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
     return genai.Client(api_key=key)
 

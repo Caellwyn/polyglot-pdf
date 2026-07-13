@@ -15,9 +15,16 @@ keeps compounding, the api_version is the cause -- and the fix is to set v1alpha
 production client.
 
 Native-audio model -> AUDIO modality, manual activity signals (VAD disabled).
-No PII: fictional prompts. Run from repo root with GEMINI_API_KEY:
-    backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_apiversion.py \
+No PII: fictional prompts. Vertex is the DEFAULT (maintainer directive
+2026-07-12: all live-model work runs on Vertex; ADC + GOOGLE_CLOUD_PROJECT):
+    GOOGLE_CLOUD_PROJECT=... backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_apiversion.py \
         --trigger 1500 --window 800 --turns 8
+    # deliberate AI Studio run: VERTEXAI=false GEMINI_API_KEY=... <same command>
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. This is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 
 from __future__ import annotations
@@ -92,12 +99,37 @@ def _pcm_chunks(pcm: bytes) -> list[bytes]:
     return [pcm[i:i + bpc] for i in range(0, len(pcm), bpc)]
 
 
+def _client(http_options=None) -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). VERTEXAI=true
+    (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY
+    only for a deliberate AI Studio run. Threads http_options (this diagnostic
+    varies api_version) through either path.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            http_options=http_options,
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key, http_options=http_options)
+
+
 async def _run(api_version: str, trigger: int, window: int, n_turns: int) -> list[int]:
     """Drive n_turns of audio with compression on; return prompt_token_count per turn."""
-    client = genai.Client(
-        api_key=os.getenv("GEMINI_API_KEY"),
-        http_options=types.HttpOptions(api_version=api_version),
-    )
+    client = _client(http_options=types.HttpOptions(api_version=api_version))
     config = types.LiveConnectConfig(
         response_modalities=["AUDIO"],
         system_instruction="You are a form-filling assistant. Keep spoken replies very short.",
@@ -145,8 +177,9 @@ async def _run(api_version: str, trigger: int, window: int, n_turns: int) -> lis
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set.")
+    if os.environ.get("VERTEXAI", "true").lower() != "true" \
+            and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
         return 1
     try:
         for p in PROMPTS[: min(args.turns, len(PROMPTS))]:

@@ -26,16 +26,25 @@ The variants form a ladder from the known-good SHORT control up to the known-bad
 FULL SI, plus ablations that remove one suspect block at a time. Run with enough
 PROBE_RUNS to see a RATE, not a single sample (the turn is non-deterministic).
 
-Usage:
-    GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_si_bisect_i9q8.py
+Usage (Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model
+work runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. python backend/scripts/probe_si_bisect_i9q8.py
     # one variant, more runs:
     PROBE_VARIANT=short PROBE_RUNS=5 PROBE_MODEL=gemini-3.1-flash-live-preview \
-        PYTHONPATH=. python backend/scripts/probe_si_bisect_i9q8.py
+        GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. python backend/scripts/probe_si_bisect_i9q8.py
     # list variants:
     PROBE_LIST=1 PYTHONPATH=. python backend/scripts/probe_si_bisect_i9q8.py
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_si_bisect_i9q8.py
 
 No PII: the only "value" sent is the synthetic A-Number A123456789; tool-call
 args are summarized (name + whether field_id/value present), never the value.
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. NOTE: this is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 from __future__ import annotations
 
@@ -166,9 +175,28 @@ DEFAULT_ORDER = [
 
 
 def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("NO KEY in env GEMINI_API_KEY", flush=True)
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
     return genai.Client(api_key=key)
 

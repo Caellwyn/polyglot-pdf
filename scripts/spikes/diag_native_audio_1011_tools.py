@@ -23,9 +23,20 @@ required; H2 mere presence of a non-empty entry suffices; H3 the tools key
 present (even empty on the wire) suffices; H4 crash is solicitation-dependent.
 
 No PII (fictional prompts / pirate chat). Model fixed to the 2.5 preview.
-Run from repo root with GEMINI_API_KEY:
-    backend/.venv/Scripts/python.exe scripts/spikes/diag_native_audio_1011_tools.py \
+Run from repo root (Vertex is the DEFAULT -- maintainer directive 2026-07-12:
+all live-model work runs on Vertex so costs land on the tracked billing
+project; ADC + GOOGLE_CLOUD_PROJECT, e.g. via
+`gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... backend/.venv/Scripts/python.exe scripts/spikes/diag_native_audio_1011_tools.py \
         --cells P1,P2,P3,C1 --json scripts/spikes/data/diag_1011_tools.json
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... backend/.venv/Scripts/python.exe scripts/spikes/diag_native_audio_1011_tools.py \
+        --cells P1,P2,P3,C1 --json scripts/spikes/data/diag_1011_tools.json
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. NOTE: this is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 
 from __future__ import annotations
@@ -263,6 +274,33 @@ class _WrappedConnect:
         return await self._inner_cm.__aexit__(*exc)
 
 
+def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key)
+
+
 def _install_ws_capture(state: _CaptureState):
     """Monkeypatch genai_live.ws_connect to return a class-level async-CM wrapper;
     returns a restore() callable."""
@@ -298,7 +336,7 @@ async def _drive_session(model: str, shape: str, persona: str,
     capture: dict = {}
     state = _CaptureState(_wire_tools_override(shape), capture)
     restore = _install_ws_capture(state)
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    client = _client()
     try:
         async with client.aio.live.connect(model=model, config=config) as session:
             _record_wire(rec, capture, shape)
@@ -408,8 +446,8 @@ def _verdict(runs: list[dict]) -> str:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set.")
+    if os.environ.get("VERTEXAI", "true").lower() != "true" and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
         return 1
     cells = (list(CELLS) if args.cells in (None, "all")
              else [c.strip() for c in args.cells.split(",") if c.strip()])

@@ -7,8 +7,20 @@ caller injects it from Secret Manager; the key is never printed).
 Run staged: each stage connects fresh with the adapter's exact connect-config,
 waits for setupComplete, then sends ONE thing and reports whether 1007 fires.
 
-Usage:
-    GEMINI_API_KEY=... python backend/scripts/probe_3p1_1007.py
+Usage (Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model
+work runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... python backend/scripts/probe_3p1_1007.py
+    # deliberate AI Studio run (billing NOT on the tracked project; this probe
+    # is specifically about the AI-Studio-only 1007, so this is likely the
+    # relevant escape-hatch run):
+    VERTEXAI=false GEMINI_API_KEY=... python backend/scripts/probe_3p1_1007.py
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. NOTE: this probe targets the
+AI-Studio-specific 1007 on a Live-API (bidiGenerateContent) model; the Vertex
+model-id variant may differ (bd a079) and Vertex may not reproduce this bug at
+all -- that is expected, this script's purpose was AI-Studio-only in origin.
 """
 from __future__ import annotations
 
@@ -23,11 +35,29 @@ MODEL = "gemini-3.1-flash-live-preview"
 
 
 def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("NO KEY in env GEMINI_API_KEY", flush=True)
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
-    # vertexai=False -> AI Studio (Developer API), exactly like the demo backend.
     return genai.Client(api_key=key)
 
 

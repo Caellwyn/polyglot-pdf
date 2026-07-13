@@ -30,9 +30,16 @@ no-PHI-logged discipline -- it logs case ids, classes, counts, and verdict field
 ids, never prints values to a persistent log sink (CSV/JSON output of fabricated
 values is the measurement artifact, acceptable per the synthetic corpus).
 
-Usage:
-    GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_g1_contradiction_recall.py
+Usage (Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model
+work runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... PYTHONPATH=. python backend/scripts/probe_g1_contradiction_recall.py
     # add --dry-run to validate scoring offline with a stub model (no API calls)
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... PYTHONPATH=. python backend/scripts/probe_g1_contradiction_recall.py
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion.
 """
 from __future__ import annotations
 
@@ -129,11 +136,30 @@ def _state_json(fields: list) -> str:
 
 
 def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("NO KEY in env GEMINI_API_KEY", flush=True)
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
         sys.exit(2)
-    return genai.Client(api_key=key)  # AI Studio path, like the demo backend.
+    return genai.Client(api_key=key)
 
 
 async def _run_arm(client, model: str, prompt_tmpl: str, fields: list) -> dict:

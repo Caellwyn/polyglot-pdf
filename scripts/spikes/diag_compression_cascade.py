@@ -15,9 +15,16 @@ native-audio. That makes it a model-capability gap, not our bug.
 If the cascade model won't connect on this key (the docs' string may be unavailable),
 the probe reports that too -- itself a useful datum.
 
-No PII: filler text only. Run from repo root with GEMINI_API_KEY:
-    backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_cascade.py \
+No PII: filler text only. Vertex is the DEFAULT (maintainer directive 2026-07-12:
+all live-model work runs on Vertex; ADC + GOOGLE_CLOUD_PROJECT):
+    GOOGLE_CLOUD_PROJECT=... backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_cascade.py \
         --model gemini-live-2.5-flash-preview --trigger 1200 --window 600 --turns 8
+    # deliberate AI Studio run: VERTEXAI=false GEMINI_API_KEY=... <same command>
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. This is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 
 from __future__ import annotations
@@ -47,12 +54,37 @@ from google.genai import types  # noqa: E402
 _PAD = ("Please retain this filler context for the current turn. " * 14).strip()
 
 
+def _client(http_options=None) -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). VERTEXAI=true
+    (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY
+    only for a deliberate AI Studio run. Threads http_options (this diagnostic
+    varies api_version) through either path.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+            http_options=http_options,
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key, http_options=http_options)
+
+
 async def _run(model: str, api_version: str, trigger: int, window: int,
                n_turns: int) -> tuple[list[int], str]:
-    client = genai.Client(
-        api_key=os.getenv("GEMINI_API_KEY"),
-        http_options=types.HttpOptions(api_version=api_version),
-    )
+    client = _client(http_options=types.HttpOptions(api_version=api_version))
     config = types.LiveConnectConfig(
         response_modalities=["TEXT"],
         system_instruction="You are a helpful assistant. Reply with just 'ok'.",
@@ -89,8 +121,9 @@ async def _run(model: str, api_version: str, trigger: int, window: int,
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set.")
+    if os.environ.get("VERTEXAI", "true").lower() != "true" \
+            and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
         return 1
     print(f"Model={args.model}, api_version={args.api_version}, "
           f"trigger={args.trigger}, window={args.window}, turns={args.turns}\n")

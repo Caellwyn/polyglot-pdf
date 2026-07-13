@@ -13,7 +13,17 @@ activity_end to provoke the server to validate + respond, and watches for either
 usage/serverContent event (ACCEPT) or a 1007 close (REJECT). Native-audio model, so
 AUDIO modality (TEXT is rejected with a DIFFERENT 1007 -- modality, not argument).
 
-Run: backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_connect_boundary.py
+Run (Vertex is the DEFAULT -- maintainer directive 2026-07-12: all live-model
+work runs on Vertex so costs land on the tracked billing project; ADC +
+GOOGLE_CLOUD_PROJECT, e.g. via `gcloud auth application-default login`):
+    GOOGLE_CLOUD_PROJECT=... backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_connect_boundary.py
+    # deliberate AI Studio run (billing NOT on the tracked project):
+    VERTEXAI=false GEMINI_API_KEY=... backend/.venv/Scripts/python.exe scripts/spikes/diag_compression_connect_boundary.py
+
+Converted to Vertex-default for bd polyglot-pdf-rve5; one-shot diagnostic, NOT
+re-verified against live Vertex post-conversion. NOTE: this is a Live-API
+(bidiGenerateContent) script -- the Vertex model-id variant may need adjustment
+per bd a079.
 """
 
 from __future__ import annotations
@@ -60,9 +70,35 @@ def _one_frame_pcm() -> bytes:
     return (np.zeros(n, dtype="<i2")).tobytes()
 
 
+def _client() -> genai.Client:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
+    runs on Vertex so costs land on the tracked billing project). Mirrors the
+    production adapter's construction (backend/adapters/text_ai_gemini.py):
+    VERTEXAI=true (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false
+    with GEMINI_API_KEY only for a deliberate AI Studio run.
+    """
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return genai.Client(
+            vertexai=True,
+            project=project,
+            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
+        )
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return genai.Client(api_key=key)
+
+
 async def _probe(trigger, window) -> str:
-    api_key = os.getenv("GEMINI_API_KEY")
-    client = genai.Client(api_key=api_key)
+    client = _client()
     cfg_kwargs = {
         "response_modalities": ["AUDIO"],
         # VAD off + only {disabled:True} to dodge the p1t 1007 (a DIFFERENT 1007).
@@ -102,8 +138,9 @@ async def _probe(trigger, window) -> str:
 
 
 async def main_async() -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set.")
+    if os.environ.get("VERTEXAI", "true").lower() != "true" \
+            and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
         return 1
     print(f"Model: {MODEL}")
     print(f"  {'trigger':>8} {'window':>8}   result")
