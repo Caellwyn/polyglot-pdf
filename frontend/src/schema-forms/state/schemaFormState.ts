@@ -19,7 +19,7 @@ import { readFieldEntryWithAlias } from "../utils/fieldValue";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
 // navigation.ts back-references SchemaFormState as a TYPE-only import, so this
 // does not create a runtime import cycle (bd polyglot-pdf-jnjj.9).
-import { computeNextField, formatNextFieldHint, getFieldOrder, isFormComplete } from "../../navigation";
+import { computeNextField, formatNextFieldHint, getFieldOrder } from "../../navigation";
 
 export interface SchemaFormState {
   schema: FormSchema;
@@ -1163,18 +1163,25 @@ export class SchemaFormStateManager {
    * W2 (bd polyglot-pdf-kxkw): compute the async-validator STRIDE windows that are
    * ELIGIBLE to send and NOT already sent. PURE (no side effects) so it is unit-
    * testable in isolation. Page-agnostic -- keys ONLY on schema field ORDER and the
-   * per-field confirmed flag, never pdf_position.page, so a source:"web" / pageless
-   * schema behaves identically to a paginated one (report-cadence revision
-   * 2026-07-13).
+   * per-field SETTLED state (confirmed / skipped / not-applicable), never
+   * pdf_position.page, so a source:"web" / pageless schema behaves identically to a
+   * paginated one (report-cadence revision 2026-07-13).
    *
    * Windows tile the schema field array: window k covers indices
-   * [k*stride, k*stride + size). A window is ELIGIBLE once the fill has ADVANCED
-   * PAST it -- i.e. the highest-indexed CONFIRMED field (the high-water fill
-   * position) reaches the window's END index -- OR the form is complete (which
-   * releases the tail windows whose end runs past the last field; without this a
-   * short final window never fires because nothing is confirmed beyond it).
+   * [k*stride, k*stride + size). A window is ELIGIBLE once EVERY field it covers is
+   * SETTLED -- confirmed, skipped, or hidden by conditional logic (shouldShowField
+   * false = not part of the active form). This is stricter than a high-water "fill
+   * has passed this window" mark: an out-of-order voice fill or a trailing OPTIONAL
+   * field left unanswered inside a window's range keeps that window PENDING, so a
+   * field is never permanently starved of validation (a fresh-eyes finding on the
+   * earlier high-water design -- confirming f0..f19 while f5 is still open would
+   * otherwise fire + retire window 0 and never re-check f5). The window fires the
+   * moment its region is genuinely done, which for the tail window is naturally at
+   * form end -- no separate isFormComplete release is needed.
+   *
    * Already-sent windows (state.validatedWindowIndices) are excluded, so each fires
-   * exactly once across reloads.
+   * exactly once across reloads. A field's later value EDIT does not re-open a sent
+   * window here (re-validation on edit is W4's re-arm concern, not W2's).
    *
    * Returns the eligible-and-unsent windows as {index, start, end} (end exclusive,
    * clamped to the field count), ascending by index. Empty when nothing new is
@@ -1190,35 +1197,33 @@ export class SchemaFormStateManager {
     const total = fields.length;
     if (total === 0 || size <= 0 || stride <= 0) return [];
 
-    // High-water fill position: the largest schema index whose field is confirmed
-    // (alias-safe read). -1 when nothing is confirmed yet.
-    let hwm = -1;
-    for (let i = 0; i < total; i++) {
-      if (readFieldEntryWithAlias(state.fieldValues, fields[i].id)?.confirmed === true) {
-        hwm = i;
-      }
-    }
-    if (hwm < 0) return [];
+    // A field is SETTLED (no longer awaiting an answer) when it is confirmed,
+    // explicitly skipped, or not shown by conditional logic (not part of the active
+    // form). An unsettled field inside a window holds that window pending.
+    const isSettled = (index: number): boolean => {
+      const field = fields[index];
+      if (!shouldShowField(field, state.fieldValues, fields)) return true; // N/A
+      const fv = readFieldEntryWithAlias(state.fieldValues, field.id);
+      return fv?.confirmed === true || fv?.skipped === true;
+    };
 
-    const formComplete = isFormComplete(state);
     const sent = state.validatedWindowIndices;
     const ready: Array<{ index: number; start: number; end: number }> = [];
 
-    // Enumerate window start positions across the field array. The last window
-    // whose start is < total is the final one (its end clamps to total).
-    for (let index = 0, start = 0; start < total; index++, start = index * stride) {
+    // Enumerate window start positions across the field array. Guard: stride > size
+    // would leave gaps (fields no window covers); clamp the enumeration stride to
+    // `size` so coverage is always contiguous regardless of the configured stride
+    // (production is 10/20, stride < size, so this is a latent-config backstop).
+    const step = Math.min(stride, size);
+    for (let index = 0, start = 0; start < total; index++, start = index * step) {
       if (sent.has(index)) continue;
-      const rawEnd = start + size;
-      const end = Math.min(rawEnd, total);
-      // Eligible when the fill has moved to/through the window's end (hwm >= end-1
-      // means a confirmed field exists at or past the last field this window
-      // covers), OR the form is complete (release the tail windows whose rawEnd
-      // exceeds the field count and so can never be "passed").
-      const passed = hwm >= end - 1;
-      const isTail = rawEnd >= total;
-      if (passed || (isTail && formComplete)) {
-        ready.push({ index, start, end });
+      const end = Math.min(start + size, total);
+      // Eligible only when EVERY field in [start, end) is settled.
+      let allSettled = true;
+      for (let i = start; i < end; i++) {
+        if (!isSettled(i)) { allSettled = false; break; }
       }
+      if (allSettled) ready.push({ index, start, end });
     }
     return ready;
   }

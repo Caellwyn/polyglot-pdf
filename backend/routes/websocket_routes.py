@@ -765,12 +765,15 @@ async def _handle_fill_session(
 					await websocket.send_json({"type": "form_complete_ack"})
 					continue
 				elif mtype == "validate_windows":
-					# W1 (bd polyglot-pdf-xbl2): the async page-end validator trigger. W2
-					# (page-end detection + window builder, bd polyglot-pdf-kxkw) emits this
-					# on a page-boundary crossing carrying the OVERLAPPING windows (size ~20,
-					# stride ~10) covering fields up to the crossed boundary. Ack
-					# immediately, then run every window's flash-lite pass concurrently in
-					# the background, dedupe conflicts across the batch by field-id set,
+					# W1 (bd polyglot-pdf-xbl2): the async STRIDE validator trigger. W2
+					# (bd polyglot-pdf-kxkw) emits this from the client on the confirm/skip/
+					# edit seam, carrying the OVERLAPPING windows (size ~20, stride ~10 over
+					# SCHEMA FIELD ORDER) whose fields have all SETTLED. PAGE-AGNOSTIC
+					# (report-cadence revision 2026-07-13): the client keys the trigger on
+					# schema order + the settled flags, NEVER pdf_position.page, so a
+					# source:"web" / pageless form emits identically to a paginated one.
+					# Ack immediately, then run every window's flash-lite pass concurrently
+					# in the background, dedupe conflicts across the batch by field-id set,
 					# suppress already-steered markers, inject one steer, and push the
 					# surviving conflicts as a `validation_result`. Nothing in the voice path
 					# waits on any of it.

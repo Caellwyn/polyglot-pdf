@@ -14,7 +14,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { SchemaFormStateManager } from './schemaFormState'
-import type { FormSchema, SchemaFormState } from './schemaFormState'
+import type { SchemaFormState } from './schemaFormState'
+import type { FormSchema } from '../types/schema'
 
 // N text fields f0..f(N-1) in one section, in schema order. `source` is a knob so
 // the same builder can prove PDF and pageless (web) forms behave identically.
@@ -56,30 +57,29 @@ describe('W2 computeReadyWindows (bd polyglot-pdf-kxkw)', () => {
     } as unknown as Storage
   })
 
-  it('returns nothing until the fill has passed a window boundary', () => {
+  it('returns nothing until a whole window is settled', () => {
     let state = SchemaFormStateManager.init(nFieldSchema(50))
-    // size 20 / stride 10: window 0 = [0,20). It is "passed" once a confirmed field
-    // exists at index 19 (i.e. 20 fields confirmed). With only 5 confirmed, nothing.
+    // size 20 / stride 10: window 0 = [0,20) is eligible only when ALL of f0..f19
+    // are settled. With only 5 confirmed, no window is fully settled.
     state = confirmFirst(state, 5)
     expect(SchemaFormStateManager.computeReadyWindows(state, 20, 10)).toEqual([])
   })
 
-  it('releases window 0 once the fill reaches its end (20 confirmed)', () => {
+  it('releases window 0 once ALL of its fields are settled (f0..f19 confirmed)', () => {
     let state = SchemaFormStateManager.init(nFieldSchema(50))
-    state = confirmFirst(state, 20) // hwm = index 19 = window 0 end-1
+    state = confirmFirst(state, 20) // f0..f19 confirmed -> window 0 fully settled
     const ready = SchemaFormStateManager.computeReadyWindows(state, 20, 10)
-    // Windows whose end-1 <= 19: window 0 [0,20) (end 20, end-1 19) and window 1
-    // [10,30)? end 30, end-1 29 > 19 -> NOT ready. So only window 0.
+    // window 0 [0,20) all settled -> ready; window 1 [10,30) has f20..f29 unsettled.
     expect(ready.map(w => w.index)).toEqual([0])
     expect(ready[0]).toEqual({ index: 0, start: 0, end: 20 })
   })
 
-  it('releases overlapping windows as the fill advances (stride < size)', () => {
+  it('releases overlapping windows as more fields settle (stride < size)', () => {
     let state = SchemaFormStateManager.init(nFieldSchema(50))
-    state = confirmFirst(state, 30) // hwm = index 29
+    state = confirmFirst(state, 30) // f0..f29 all settled
     const ready = SchemaFormStateManager.computeReadyWindows(state, 20, 10)
-    // window 0 [0,20) end-1 19 <= 29 ready; window 1 [10,30) end-1 29 <= 29 ready;
-    // window 2 [20,40) end-1 39 > 29 not ready.
+    // window 0 [0,20) settled; window 1 [10,30) settled; window 2 [20,40) has
+    // f30..f39 unsettled -> not ready.
     expect(ready.map(w => w.index)).toEqual([0, 1])
     expect(ready.map(w => [w.start, w.end])).toEqual([[0, 20], [10, 30]])
   })
@@ -92,16 +92,46 @@ describe('W2 computeReadyWindows (bd polyglot-pdf-kxkw)', () => {
     expect(ready.map(w => w.index)).toEqual([1]) // only the not-yet-sent one
   })
 
-  it('releases the tail (partial) window only when the form is complete', () => {
-    // 25 fields, size 20 / stride 10. Windows: 0 [0,20), 1 [10,30->25), 2 [20,25).
-    // Confirm all 25 -> form complete. The tail windows (end clamped to 25, rawEnd
-    // >= 25) release via the form-complete branch even though nothing is confirmed
-    // "beyond" them.
+  it('releases the tail (partial) window when its fields settle -- no isFormComplete needed', () => {
+    // 25 fields, size 20 / stride 10. Windows: 0 [0,20), 1 [10,25), 2 [20,25).
+    // Confirm all 25 -> every window fully settled, including the short tail.
     let state = SchemaFormStateManager.init(nFieldSchema(25))
     state = confirmFirst(state, 25)
     const ready = SchemaFormStateManager.computeReadyWindows(state, 20, 10)
     expect(ready.map(w => w.index)).toEqual([0, 1, 2])
     expect(ready[ready.length - 1]).toEqual({ index: 2, start: 20, end: 25 })
+  })
+
+  it('does NOT starve a mid-window unconfirmed field: window 0 stays pending until f5 settles', () => {
+    // Fresh-eyes regression (the high-water design fired + retired window 0 while f5
+    // was still open). Confirm f0..f19 EXCEPT f5.
+    let state = SchemaFormStateManager.init(nFieldSchema(50))
+    for (let i = 0; i < 20; i++) {
+      if (i === 5) continue
+      state = SchemaFormStateManager.updateField(state, `f${i}`, `v${i}`)
+      state = SchemaFormStateManager.confirmField(state, `f${i}`, 'ai_voice')
+    }
+    // window 0 [0,20) has f5 unsettled -> NOT ready.
+    expect(SchemaFormStateManager.computeReadyWindows(state, 20, 10).map(w => w.index)).toEqual([])
+    // Now settle f5 -> window 0 becomes ready (f5 is re-included, not starved).
+    state = SchemaFormStateManager.updateField(state, 'f5', 'v5')
+    state = SchemaFormStateManager.confirmField(state, 'f5', 'ai_voice')
+    expect(SchemaFormStateManager.computeReadyWindows(state, 20, 10).map(w => w.index)).toEqual([0])
+  })
+
+  it('treats a SKIPPED field as settled (a user-skipped optional does not block its window)', () => {
+    let state = SchemaFormStateManager.init(nFieldSchema(20))
+    for (let i = 0; i < 20; i++) {
+      if (i === 7) {
+        state = SchemaFormStateManager.markFieldSkipped(state, `f${i}`)
+      } else {
+        state = SchemaFormStateManager.updateField(state, `f${i}`, `v${i}`)
+        state = SchemaFormStateManager.confirmField(state, `f${i}`, 'ai_voice')
+      }
+    }
+    // f7 skipped counts as settled -> the whole 20-field form is settled, so both
+    // window 0 [0,20) and window 1 [10,20) are ready (a skip never blocks a window).
+    expect(SchemaFormStateManager.computeReadyWindows(state, 20, 10).map(w => w.index)).toEqual([0, 1])
   })
 
   it('is PAGE-AGNOSTIC: a pageless web schema and a paginated pdf schema yield identical windows', () => {
@@ -124,16 +154,16 @@ describe('W2 computeReadyWindows (bd polyglot-pdf-kxkw)', () => {
     expect(SchemaFormStateManager.computeReadyWindows(state, 20, 0)).toEqual([])
   })
 
-  it('respects confirmed-field ORDER, not just count (out-of-order fill)', () => {
-    // Confirm only a HIGH-index field (f24) and nothing else. hwm = 24, which passes
-    // windows 0 and 1 even though only ONE field is confirmed -- the high-water fill
-    // position, not the raw count, is what "passed a boundary" means.
-    let state = SchemaFormStateManager.init(nFieldSchema(50))
-    state = SchemaFormStateManager.updateField(state, 'f24', 'x')
-    state = SchemaFormStateManager.confirmField(state, 'f24', 'ai_voice')
-    const ready = SchemaFormStateManager.computeReadyWindows(state, 20, 10)
-    // window 0 [0,20) end-1 19 <= 24 ready; window 1 [10,30) end-1 29 > 24 NOT ready.
-    expect(ready.map(w => w.index)).toEqual([0])
+  it('guards against coverage gaps when stride > size (clamps step to size)', () => {
+    // stride 30 > size 10 would leave fields 10..29 in no window; the builder clamps
+    // the enumeration step to `size` so coverage stays contiguous. All 40 settled.
+    let state = SchemaFormStateManager.init(nFieldSchema(40))
+    state = confirmFirst(state, 40)
+    const ready = SchemaFormStateManager.computeReadyWindows(state, 10, 30)
+    // Every field index must be covered by at least one returned window.
+    const covered = new Set<number>()
+    for (const w of ready) for (let i = w.start; i < w.end; i++) covered.add(i)
+    for (let i = 0; i < 40; i++) expect(covered.has(i)).toBe(true)
   })
 })
 

@@ -2354,13 +2354,13 @@ export class WebFormConnection {
    * FINDING-DRIVEN (no page/boundary dependency -- report-cadence revision
    * 2026-07-13). Fire-and-forget: nothing here blocks the user.
    *
-   * "Eligible" = the fill has ADVANCED PAST the window's field range (a confirmed
-   * field exists at or beyond the window's end), mirroring "validate a region once
-   * you've moved past it" -- OR the form is complete (releases the tail windows,
-   * whose end runs past the last field). Already-sent windows are excluded via the
-   * persisted validatedWindowIndices high-water mark, so each fires exactly once
-   * across reloads. Page-agnostic: keys on schema field ORDER + the confirmed flag,
-   * never pdf_position.page, so source:"web" / pageless forms behave identically.
+   * "Eligible" = EVERY field the window covers is SETTLED (confirmed / skipped /
+   * not-applicable) -- see computeReadyWindows; an out-of-order fill or a trailing
+   * unanswered optional field keeps its window pending, so no field is starved of
+   * validation. Already-sent windows are excluded via the persisted
+   * validatedWindowIndices set, so each fires exactly once across reloads.
+   * Page-agnostic: keys on schema field ORDER + the settled flags, never
+   * pdf_position.page, so source:"web" / pageless forms behave identically.
    */
   private maybeEmitValidateWindows(): void {
     const ready = SchemaFormStateManager.computeReadyWindows(
@@ -2376,17 +2376,26 @@ export class WebFormConnection {
     for (const w of ready) {
       const windowFields = allFields.slice(w.start, w.end);
       const payload = this.buildValidatorFields(windowFields);
-      // buildValidatorFields drops hidden/empty fields; a window that renders to
-      // ZERO validatable fields carries nothing to check. Still MARK it sent (so it
-      // is not re-evaluated every confirm) but do not put an empty list on the wire.
+      // buildValidatorFields drops hidden/empty fields; a fully-settled window can
+      // still render to ZERO validatable fields (all skipped / hidden). It carries
+      // nothing to check, but is still MARKED sent (its region is done -- re-checking
+      // it every confirm is waste) -- just not put on the wire.
       if (payload.length > 0) windows.push(payload);
       sentIndices.push(w.index);
     }
 
-    // Mark every eligible window sent (persisted high-water mark) even if some
-    // rendered empty -- the eligibility only advances, so re-checking them is waste.
+    // Immutable-replace the state (the codebase treats SchemaFormState as a
+    // snapshot -- confirmField/markFieldSchemaLoaded etc. all spread-replace rather
+    // than mutate in place). A settled window's region cannot become unsettled, so
+    // once marked sent it stays sent.
     if (sentIndices.length > 0) {
-      for (const idx of sentIndices) this.state.validatedWindowIndices.add(idx);
+      this.state = {
+        ...this.state,
+        validatedWindowIndices: new Set([
+          ...this.state.validatedWindowIndices,
+          ...sentIndices,
+        ]),
+      };
       SchemaFormStateManager.save(this.state);
     }
     if (windows.length > 0) {
