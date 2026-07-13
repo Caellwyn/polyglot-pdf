@@ -1,0 +1,512 @@
+"""Full-form I-90 question-plan generator (bd polyglot-pdf-n86b, epic 00pt).
+
+Builds the --schema i90-full plan for measure_form_session_costs.py: a spoken
+question step for EVERY field the production frontend would show, derived from
+the hand-validated zero-contradiction persona in backend/scripts/g1b_answer_key.py
+(Linh Thi Nguyen, LPR replacing a lost card). The 34-question --schema i90 plan
+(Maria Vasquez, Parts 1.1-1.4) is untouched; this module only ADDS the full-form
+plan the stress-test series (E0-E6) runs on.
+
+What the generator does, per schema field in document order:
+  - evaluates the field's show_if gate against the persona's answers using the
+    SAME operator semantics as the frontend evaluator
+    (frontend/src/schema-forms/utils/validation.ts::evaluateAtomicCondition;
+    this kit's conditions are all legacy single atoms -- no composites);
+    hidden fields are never asked, exactly as production hides them;
+  - auto-applies copy_from page-header repeats and signature-type fields (the
+    frontend copies/collects those without the voice loop; the harness seeds
+    them confirmed at handshake) -- they are not spoken;
+  - renders a spoken "say" phrasing per field type (digits spelled out, dates
+    natural, option LABELS for radios/selects, decline phrasings for visible
+    fields the persona leaves empty), plus a mechanically-mutated "wrong"
+    phrasing for the unhappy path;
+  - emits the expected post-fill canon per field (option SLUG for option
+    fields, MM/DD/YYYY for dates, "" for declined optionals) for the driver's
+    fill-accuracy scorer and startup drift guard.
+
+Build-time guards (all abort before any live spend):
+  - g1b_answer_key.validate_answer_key() must return [];
+  - every override in ANSWER_OVERRIDES must be a valid schema option value
+    (option fields) and every spoken field's show_if gate must be satisfied by
+    answers given EARLIER in the plan (the ordering invariant the 34-q plan
+    maintains by hand);
+  - the driver's _assert_expected_canon_matches_schema runs over the generated
+    expected dict as it does for the hand-written plans.
+
+Language: phrase() takes lang ("en" now; "es" is the E6 Spanish arm, bd
+polyglot-pdf-0cyu -- the parameter exists so E6 is fixture-synthesis plus a
+translation table, not a rewrite).
+
+Stdlib-only (json/os/re/datetime) so --synth-only and the guards run without
+google-genai installed. ASCII only.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from datetime import datetime
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_BACKEND_SCRIPTS = os.path.join(_REPO_ROOT, "backend", "scripts")
+if _BACKEND_SCRIPTS not in sys.path:
+    sys.path.insert(0, _BACKEND_SCRIPTS)
+
+import g1b_answer_key  # noqa: E402  (backend/scripts, no package __init__)
+
+I90_SCHEMA_PATH = os.path.join(_REPO_ROOT, "form-kits", "i-90", "schema.json")
+
+MULTI_SEP = g1b_answer_key.MULTI_SEP
+
+
+# --------------------------------------------------------------------------
+# Persona overrides -- corrections of the g1b answer key where the CURRENT kit
+# schema contradicts it (the key predates two schema changes). Tracked in the
+# answer-key staleness bead; the overrides keep the harness plan valid against
+# today's kit without editing the g1b corpus module underneath its consumers.
+# --------------------------------------------------------------------------
+ANSWER_OVERRIDES: dict = {
+    # The kit's pattern is ^[0-9]{12}$ (min/max_length 12); the key's value is
+    # 13 digits and could never validate. 12-digit stand-in, same persona.
+    "p1_line2_acctidentifier": "123456789012",
+    # The key marks the reason-for-new-card radio NA citing a commuter-only
+    # show_if; the CURRENT kit gates it `in [lawful_permanent_resident,
+    # permanent_resident_in_commuter_status]` -- VISIBLE for the persona, and
+    # her documented reason is the lost card (the key's own docstring).
+    "p2_checkbox2[5]": "my_previous_card_has_been_lost_stolen_or_destroyed",
+}
+
+# The A-number: the key stores "A123456789"; the kit pattern is ^\d{7,9}$ and
+# the a_number normalizer strips the A prefix on write (validation.format_preset,
+# bd 0zr/jnjj.40). The model therefore WRITES bare digits; expect those.
+_ANUMBER_EXPECTED = "123456789"
+
+# Fields the frontend fills without the voice loop; the harness seeds them
+# confirmed at handshake and the plan never speaks them.
+AUTO_APPLY_TYPES = ("signature",)
+
+
+# --------------------------------------------------------------------------
+# show_if evaluation -- mirrors evaluateAtomicCondition/shouldShowField for the
+# operator set this kit uses (equals / not_equals / is_checked / is_not_empty /
+# in / includes; all legacy single atoms). Fail-open on unknown operators,
+# matching the frontend (falls back to the static hidden flag).
+# --------------------------------------------------------------------------
+_KNOWN_OPS = {"equals", "not_equals", "is_checked", "is_not_empty", "is_empty",
+              "in", "not_in", "includes", "not_includes", "contains"}
+
+
+def _trigger_value(field_by_id: dict, values: dict, fid: str):
+    """The evaluator-facing value of a trigger field: checkbox_group values are
+    the selected-slug LIST (the client stores an array), a single checkbox is a
+    boolean, everything else the stored scalar."""
+    v = values.get(fid)
+    f = field_by_id.get(fid) or {}
+    if f.get("type") == "checkbox_group" and v is not None:
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return [p.strip() for p in str(v).split(MULTI_SEP) if p.strip()]
+    if f.get("type") == "checkbox":
+        return True if v not in (None, "", False) else (v if v is None else False)
+    return v
+
+
+def evaluate_show_if(cond, field_by_id: dict, values: dict) -> bool:
+    """True when the (legacy atomic) condition holds over `values`."""
+    if not isinstance(cond, dict):
+        return True
+    op = cond.get("operator")
+    if op not in _KNOWN_OPS:
+        return True  # fail-open, like the frontend's unknown-operator fallback
+    tv = _trigger_value(field_by_id, values, cond.get("field"))
+    val = cond.get("value")
+    if op == "equals":
+        return tv == val
+    if op == "not_equals":
+        return tv != val
+    if op == "is_checked":
+        return len(tv) > 0 if isinstance(tv, list) else tv is True
+    if op == "is_not_empty":
+        return len(tv) > 0 if isinstance(tv, list) else tv not in (None, "")
+    if op == "is_empty":
+        return len(tv) == 0 if isinstance(tv, list) else tv in (None, "")
+    if op == "in":
+        return isinstance(val, list) and str(tv) in [str(x) for x in val]
+    if op == "not_in":
+        return not (isinstance(val, list) and str(tv) in [str(x) for x in val])
+    if op in ("includes", "not_includes"):
+        if isinstance(tv, list):
+            hit = str(val) in tv
+        elif tv in (None, ""):
+            hit = False
+        else:
+            hit = str(tv) == str(val)
+        return hit if op == "includes" else not hit
+    if op == "contains":
+        if isinstance(tv, list):
+            return str(val) in [str(x) for x in tv]
+        return str(val) in str(tv)
+    return True
+
+
+def field_visible(field: dict, field_by_id: dict, values: dict) -> bool:
+    if field.get("hidden"):
+        return False
+    cond = field.get("show_if")
+    if not cond:
+        return True
+    return evaluate_show_if(cond, field_by_id, values)
+
+
+# --------------------------------------------------------------------------
+# Spoken phrasing
+# --------------------------------------------------------------------------
+_DIGIT_WORDS = {
+    "en": ["zero", "one", "two", "three", "four", "five", "six", "seven",
+           "eight", "nine"],
+}
+_MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July",
+              "August", "September", "October", "November", "December"]
+_ORDINALS_EN = {
+    1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth", 6: "sixth",
+    7: "seventh", 8: "eighth", 9: "ninth", 10: "tenth", 11: "eleventh",
+    12: "twelfth", 13: "thirteenth", 14: "fourteenth", 15: "fifteenth",
+    16: "sixteenth", 17: "seventeenth", 18: "eighteenth", 19: "nineteenth",
+    20: "twentieth", 21: "twenty first", 22: "twenty second", 23: "twenty third",
+    24: "twenty fourth", 25: "twenty fifth", 26: "twenty sixth",
+    27: "twenty seventh", 28: "twenty eighth", 29: "twenty ninth",
+    30: "thirtieth", 31: "thirty first",
+}
+
+
+def _spell_digits(s: str, lang: str = "en") -> str:
+    words = _DIGIT_WORDS[lang]
+    return " ".join(words[int(c)] for c in s if c.isdigit())
+
+
+def _year_spoken_en(year: int) -> str:
+    """Natural spoken year: 1985 -> 'nineteen eighty five', 2015 -> 'twenty
+    fifteen', 2025 -> 'twenty twenty five'. Good enough for gTTS."""
+    if 2000 <= year <= 2009:
+        return "two thousand " + (_DIGIT_WORDS["en"][year - 2000] if year > 2000 else "")
+    hi, lo = divmod(year, 100)
+    tens = {19: "nineteen", 20: "twenty"}.get(hi, str(hi))
+    if lo == 0:
+        return f"{tens} hundred"
+    if lo < 10:
+        return f"{tens} oh {_DIGIT_WORDS['en'][lo]}"
+    lo_words = {
+        10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+        15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
+        19: "nineteen", 20: "twenty", 25: "twenty five", 27: "twenty seven",
+    }.get(lo)
+    if lo_words is None:
+        t, o = divmod(lo, 10)
+        tens_w = {2: "twenty", 3: "thirty", 4: "forty", 5: "fifty", 6: "sixty",
+                  7: "seventy", 8: "eighty", 9: "ninety"}[t]
+        lo_words = tens_w + ("" if o == 0 else " " + _DIGIT_WORDS["en"][o])
+    return f"{tens} {lo_words}"
+
+
+def _date_spoken_en(iso: str) -> str:
+    """ISO 'YYYY-MM-DD' -> 'April twelfth, nineteen eighty five'."""
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    return f"{_MONTHS_EN[d.month - 1]} {_ORDINALS_EN[d.day]}, {_year_spoken_en(d.year)}"
+
+
+def _iso_to_mdy(iso: str) -> str:
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    return d.strftime("%m/%d/%Y")
+
+
+def _option_label(field: dict, slug) -> str:
+    for o in field.get("options") or []:
+        if isinstance(o, dict) and str(o.get("value")) == str(slug):
+            return str(o.get("label") or slug)
+    return str(slug)
+
+
+def _is_digit_field(field: dict) -> bool:
+    v = field.get("validation") or {}
+    pat = v.get("pattern") or ""
+    preset = v.get("format_preset") or ""
+    return bool(
+        preset in ("a_number", "ssn", "uscis_account", "phone", "zip")
+        or re.fullmatch(r"\^?\[?0?-?9?\\?d?.*\{\d+(,\d+)?\}\$?", "")  # never matches; kept simple below
+        or re.match(r"^\^\\d\{", pat)
+        or re.match(r"^\^\[0-9\]\{", pat)
+    )
+
+
+def _is_date_field(field: dict) -> bool:
+    if field.get("type") == "date":
+        return True
+    v = field.get("validation") or {}
+    return (v.get("hint") == "MM/DD/YYYY") or (v.get("pattern") == "^\\d{2}/\\d{2}/\\d{4}$")
+
+
+# Per-field SAY overrides -- phrasings a generic template renders badly
+# (long statement options, per-digit comb boxes, street numbers, the A-number).
+# Values are (say, wrong) pairs; None wrong means "reuse the generic mutation".
+_SAY_OVERRIDES_EN: dict = {
+    "p1_line1_aliennumber": (
+        "My alien registration number is A one two three four five six seven eight nine.",
+        "My alien registration number is A nine eight seven six five four three two one.",
+    ),
+    "p1_line6b_streetnumbername": (
+        "My street address is four two zero zero Westheimer Road.",
+        "My street address is nine nine zero zero Richmond Avenue.",
+    ),
+    "p1_line7a_streetnumbername": (
+        "My physical street address is four two zero zero Westheimer Road.",
+        "My physical street address is one one zero zero Main Street.",
+    ),
+    "p6_line3a_streetnumbername": (
+        "The interpreter's street address is one zero zero zero Louisiana Street.",
+        "The interpreter's street address is two zero zero zero Texas Avenue.",
+    ),
+    "p1_line6c_aptsteflrnumber": ("Apartment number twelve.", "Apartment number fourteen."),
+    "p1_line7b_aptsteflrnumber": ("Apartment number twelve.", "Apartment number fifteen."),
+    "p6_line3b_aptsteflrnumber": ("Suite two three zero zero.", "Suite two five zero zero."),
+    "p1_line14_classofadmission": (
+        "My class of admission is I R one.", "My class of admission is C R one."),
+    "p5_checkbox1a": (
+        "An interpreter read the form to me in my language.",
+        "I can read and understand English myself.",
+    ),
+    "p2_checkbox2[5]": (
+        "I need a new card because my previous card was lost.",
+        "I need a new card because my existing card has been mutilated.",
+    ),
+    "p2_checkbox1": ("I am a lawful permanent resident.",
+                     "I am a conditional permanent resident."),
+    "p1_checkbox4": ("No, my name has not changed.",
+                     "Yes, my name has legally changed."),
+    "p3_checkbox4[1]": ("No, I have never been in removal proceedings.", None),
+    "p3_checkbox5[1]": ("No, I have never filed Form I-407 or abandoned my status.", None),
+    "p4_checkbox1[1]": ("No, I am not requesting any accommodation.", None),
+    "p3_ethnicity": ("I am not Hispanic or Latino.", "I am Hispanic or Latino."),
+    "p3_race": ("Asian.", "White."),
+    "p3_line8_heightfeet": ("Five feet.", "Six feet."),
+    "p3_line8_heightinches": ("Four inches.", "Seven inches."),
+    "p3_line9_heightinches1": ("The first digit of my weight is one.", None),
+    "p3_line9_heightinches2": ("The second digit is three.", None),
+    "p3_line9_heightinches3": ("The last digit is zero.", None),
+    "p5_line5_emailaddress": (
+        "My email address is linh dot nguyen at example dot com.",
+        "My email address is linh dot n at example dot org.",
+    ),
+    "p6_line5_interpretersemailaddress": (
+        "The interpreter's email is maria dot garcia at example dot com.",
+        "The interpreter's email is m dot garcia at example dot net.",
+    ),
+    "p3_line3a_destination": ("My destination in the United States is Houston Texas.", None),
+    "p3_line3a1_cityandstate": ("The city and state is Houston Texas.", None),
+}
+
+# Decline phrasings for visible fields the persona leaves EMPTY. Keyed by
+# field id where a generic decline reads badly; the generic fallback is
+# "I do not have a {spoken_name}." / "That does not apply to me."
+_DECLINE_OVERRIDES_EN: dict = {
+    "p1_line6a_incareofname": "There is no in care of name, my mail comes directly to me.",
+    "p4_checkbox1a": "No accommodation, I am not deaf or hard of hearing.",
+    "p4_checkbox1b": "No accommodation, I am not blind or low vision.",
+    "p4_checkbox1c": "No, I do not need any other accommodation.",
+    "p7_line1b_preparersgivenname": "I did not use a preparer, only the interpreter.",
+    "p7_checkbox7": "That does not apply, I have no preparer.",
+}
+_GENERIC_DECLINE_EN = "I do not have a {name}."
+_GENERIC_DECLINE_NA_EN = "That does not apply to me."
+
+# Visible-NA fields where "I do not have X" is wrong and "does not apply" is
+# right (statement-ish or block-level fields).
+_NA_STYLE_FIELDS = re.compile(r"^(p7_|p8_)")
+
+
+def _wrong_for(field: dict, say: str, answer, lang: str) -> str:
+    """Mechanical unhappy-path mutation. Option fields pick a DIFFERENT option
+    label; digit fields reverse the digits; dates shift a month; text swaps to a
+    generic alternate. Deterministic (no randomness -- resume-safe)."""
+    opts = field.get("options") or []
+    if opts and answer is not None:
+        others = [o for o in opts
+                  if isinstance(o, dict) and str(o.get("value")) != str(answer)]
+        if others:
+            return f"Actually, {_option_label(field, others[0].get('value'))}."
+    if answer and _is_date_field(field):
+        d = datetime.strptime(str(answer), "%Y-%m-%d")
+        alt = d.replace(month=(d.month % 12) + 1)
+        return f"It was {_date_spoken_en(alt.strftime('%Y-%m-%d'))}."
+    digits = re.sub(r"\D", "", str(answer or ""))
+    if digits and len(digits) >= 5:
+        return say.replace(_spell_digits(digits, lang),
+                           _spell_digits(digits[::-1], lang))
+    if isinstance(answer, str) and answer:
+        return f"It is {answer[::-1].title()}." if len(answer) < 12 else say
+    return say
+
+
+def phrase(field: dict, answer, lang: str = "en") -> tuple:
+    """(say, wrong) spoken phrasings for a field + its persona answer.
+    answer=None means a visible field the persona declines (expect-empty)."""
+    if lang != "en":
+        raise NotImplementedError(
+            "Only lang='en' is implemented; the Spanish arm (E6, bd "
+            "polyglot-pdf-0cyu) adds an 'es' template + override table here.")
+    fid = field.get("id", "")
+    name = field.get("spoken_name") or field.get("name") or fid
+
+    if answer is None:
+        say = _DECLINE_OVERRIDES_EN.get(fid)
+        if say is None:
+            if _NA_STYLE_FIELDS.match(fid):
+                say = _GENERIC_DECLINE_NA_EN
+            else:
+                say = _GENERIC_DECLINE_EN.format(name=name)
+        return say, say  # a decline has no distinct unhappy variant
+
+    if fid in _SAY_OVERRIDES_EN:
+        say, wrong = _SAY_OVERRIDES_EN[fid]
+        return say, (wrong if wrong is not None
+                     else _wrong_for(field, say, answer, lang))
+
+    if field.get("options"):
+        say = f"{_option_label(field, answer)}."
+        return say, _wrong_for(field, say, answer, lang)
+
+    if _is_date_field(field):
+        say = f"My {name} is {_date_spoken_en(str(answer))}."
+        return say, _wrong_for(field, say, answer, lang)
+
+    digits = re.sub(r"\D", "", str(answer))
+    if _is_digit_field(field) and digits:
+        say = f"My {name} is {_spell_digits(digits, lang)}."
+        return say, _wrong_for(field, say, answer, lang)
+
+    say = f"My {name} is {answer}."
+    return say, _wrong_for(field, say, answer, lang)
+
+
+# --------------------------------------------------------------------------
+# Expected canon
+# --------------------------------------------------------------------------
+def expected_canon(field: dict, answer):
+    """The post-fill value the driver's scorer should expect. Option fields
+    expect the SLUG (what the client stores); dates expect MM/DD/YYYY (the
+    kit's validation.hint format the model writes); declines expect ''."""
+    fid = field.get("id", "")
+    if answer is None:
+        return ""
+    if fid == "p1_line1_aliennumber":
+        return _ANUMBER_EXPECTED
+    if field.get("options"):
+        return str(answer)
+    if _is_date_field(field):
+        return _iso_to_mdy(str(answer))
+    if fid.endswith("_country") and str(answer) == "United States":
+        return ["United States", "USA"]
+    if fid.endswith("_streetnumbername"):
+        # The persona answer abbreviates ("Rd", "St"); the model writes what was
+        # SPOKEN ("Road", "Street"). Accept both renderings.
+        full = (str(answer).replace(" Rd", " Road").replace(" St", " Street")
+                .replace(" Ave", " Avenue"))
+        return [str(answer), full] if full != str(answer) else str(answer)
+    digits = re.sub(r"\D", "", str(answer))
+    if _is_digit_field(field) and digits:
+        return digits
+    return str(answer)
+
+
+# --------------------------------------------------------------------------
+# Plan builder
+# --------------------------------------------------------------------------
+def persona_answers() -> dict:
+    """The answer key with the current-kit overrides applied."""
+    merged = dict(g1b_answer_key.ANSWER_KEY)
+    merged.update(ANSWER_OVERRIDES)
+    return merged
+
+
+def load_schema() -> dict:
+    with open(I90_SCHEMA_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def build_full_form_plan(schema: dict, lang: str = "en") -> dict:
+    """Build the full-form plan. Returns:
+        {"questions": [ {field_id, say, wrong}, ... ],   # spoken steps
+         "expected":  {field_id: canon, ...},            # scorer table
+         "auto_apply": [ {field_id, value}, ... ],       # seeded confirmed
+         "hidden":    [field_id, ...]}                   # never asked
+    Raises SystemExit on any guard violation (abort before live spend)."""
+    problems = g1b_answer_key.validate_answer_key()
+    if problems:
+        raise SystemExit(
+            "g1b answer key failed validate_answer_key(); fix before running:\n  "
+            + "\n  ".join(str(p) for p in problems))
+
+    answers = persona_answers()
+    fields = schema["fields"]
+    field_by_id = {f["id"]: f for f in fields}
+
+    # Guard: every override on an option field must be a valid CURRENT option.
+    for fid, val in ANSWER_OVERRIDES.items():
+        f = field_by_id.get(fid)
+        if f is None:
+            raise SystemExit(f"ANSWER_OVERRIDES names unknown field {fid}")
+        opts = [str(o.get("value")) for o in (f.get("options") or [])
+                if isinstance(o, dict)]
+        if opts and str(val) not in opts:
+            raise SystemExit(
+                f"ANSWER_OVERRIDES[{fid}]={val!r} is not a schema option; "
+                f"options are {opts}")
+
+    questions: list = []
+    expected: dict = {}
+    auto_apply: list = []
+    hidden: list = []
+    answered_so_far: dict = {}  # progressive gate check (ordering invariant)
+
+    for f in fields:
+        fid = f["id"]
+        answer = answers.get(fid)
+        visible = field_visible(f, field_by_id, answers)
+        if not visible:
+            hidden.append(fid)
+            continue
+
+        # Ordering invariant: a visible field's gate must already be satisfied
+        # by answers scripted EARLIER (schema order == plan order), otherwise
+        # the model could be asked a not-yet-unlocked field mid-run.
+        cond = f.get("show_if")
+        if cond and not evaluate_show_if(cond, field_by_id, answered_so_far):
+            raise SystemExit(
+                f"plan ordering violation: {fid} is gated on "
+                f"{cond.get('field')} which is answered LATER in schema order")
+
+        if f.get("copy_from") or f.get("type") in AUTO_APPLY_TYPES:
+            auto_apply.append({"field_id": fid,
+                               "value": "" if answer is None else str(answer)})
+            answered_so_far[fid] = answers.get(fid)
+            continue
+
+        say, wrong = phrase(f, answer, lang)
+        questions.append({"field_id": fid, "say": say, "wrong": wrong})
+        expected[fid] = expected_canon(f, answer)
+        answered_so_far[fid] = answer
+
+    return {"questions": questions, "expected": expected,
+            "auto_apply": auto_apply, "hidden": hidden}
+
+
+if __name__ == "__main__":
+    plan = build_full_form_plan(load_schema())
+    print(f"spoken questions: {len(plan['questions'])}")
+    print(f"auto-applied (copy_from/signature): {len(plan['auto_apply'])}")
+    print(f"hidden (gate unsatisfied): {len(plan['hidden'])}")
+    declines = sum(1 for q in plan["questions"] if plan["expected"][q["field_id"]] == "")
+    print(f"  of spoken: {len(plan['questions']) - declines} answered, "
+          f"{declines} declines (expect-empty)")
+    for q in plan["questions"][:8]:
+        print(" ", q["field_id"], "->", q["say"])

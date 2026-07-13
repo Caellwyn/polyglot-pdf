@@ -89,7 +89,31 @@ from backend.config import (  # noqa: E402
 )
 from backend.services.form_filling_service import FormFillingService  # noqa: E402
 
+_SPIKES_DIR = str(Path(__file__).resolve().parent)
+if _SPIKES_DIR not in sys.path:
+    sys.path.insert(0, _SPIKES_DIR)
+import full_form_script as _ffs  # noqa: E402  (stdlib-only sibling module)
+import scenario_events as _se  # noqa: E402  (stdlib-only sibling module)
+
 MODELS = {"2.5": MODEL_NATIVE_STANDARD, "3.1": MODEL_NATIVE_PREMIUM}
+
+# gemini-2.5-flash-lite list rates, USD per token (2026-07: $0.10 in /
+# $0.01 cached-in / $0.40 out per 1M). The text sidecar (secretary +
+# validator) emits token counts but no USD (text_ai_usage); the harness
+# prices them here so the run's headline is a true all-in dollar figure.
+TEXT_RATES = {"input": 0.10e-6, "cached_input": 0.01e-6, "output": 0.40e-6}
+
+
+def price_text_usage(prompt_tokens: int, cached_tokens: int,
+                     output_tokens: int) -> float:
+    """USD for one text-sidecar call: cached prompt tokens bill at the cached
+    rate, the uncached remainder at the input rate, output at the output rate."""
+    prompt = max(0, int(prompt_tokens or 0))
+    cached = max(0, min(int(cached_tokens or 0), prompt))
+    out = max(0, int(output_tokens or 0))
+    return ((prompt - cached) * TEXT_RATES["input"]
+            + cached * TEXT_RATES["cached_input"]
+            + out * TEXT_RATES["output"])
 
 # Schema sources (bd polyglot-pdf-jnjj.24). The harness was hardcoded to the DEMO
 # schema, which is non-representative (flat 'description' on 2/174 fields, no nested
@@ -493,10 +517,16 @@ CSV_COLUMNS = [
 
 # ---------------------------------------------------------------- audio cache
 
-def synth_cached(text: str) -> bytes:
-    """gTTS -> mono PCM16 @ 16 kHz, disk-cached so committed runs are repeatable."""
+def synth_cached(text: str, lang: str = "en") -> bytes:
+    """gTTS -> mono PCM16 @ 16 kHz, disk-cached so committed runs are repeatable.
+
+    lang parameterizes the SPOKEN language (the E6 Spanish arm synthesizes the
+    persona's answers with lang='es'). English keeps the legacy text-only cache
+    key so the whole committed fixture cache stays valid; other languages key
+    on lang|text."""
     AUDIO_CACHE.mkdir(parents=True, exist_ok=True)
-    key = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
+    key_src = text if lang == "en" else f"{lang}|{text}"
+    key = hashlib.sha1(key_src.encode("utf-8")).hexdigest()[:16]
     cached = AUDIO_CACHE / f"{key}.pcm"
     if cached.exists():
         return cached.read_bytes()
@@ -504,7 +534,7 @@ def synth_cached(text: str) -> bytes:
     import soundfile as sf
 
     buf = io.BytesIO()
-    gTTS(text, lang="en").write_to_fp(buf)
+    gTTS(text, lang=lang).write_to_fp(buf)
     buf.seek(0)
     y, sr = sf.read(buf, dtype="float32")
     if y.ndim > 1:
@@ -616,11 +646,25 @@ class FakeClientWebSocket:
 
     def __init__(self, schema: dict, plan: list[dict], dti_mode: bool = False):
         self.schema_fields = {f["id"]: f for f in schema["fields"]}
+        self.schema_field_order = [f["id"] for f in schema["fields"]]
         self.plan = plan
         self.active_field_ids: list[str] = [q["field_id"] for q in plan]
         self.state: dict[str, dict] = {}
         self.service: FormFillingService | None = None
         self.first_audio_at: float | None = None
+        # Stress-test seams (bd polyglot-pdf-eh1h). pinned_field_id mirrors the
+        # frontend's pinField: switch_to_field pins the target so every
+        # next-field consumer returns it first until confirmed (a pin on an
+        # already-confirmed field is dormant until a value update resets
+        # confirmed -- the correction flow). validation_results records every
+        # validation_result envelope the harness pushed back to this client;
+        # steered markers live per-field in self.state (client-owned marker,
+        # mirroring markFieldsSteered). switch_events/skip_events record the
+        # coordinator round-trips for seam-latency scoring.
+        self.pinned_field_id: str | None = None
+        self.validation_results: list[dict] = []
+        self.switch_events: list[dict] = []
+        self.skip_events: list[dict] = []
         self.sent_messages: list[str] = []
         # bd jnjj.39 debug mode: collect the model's OUTPUT transcript chunks (each
         # {"type":"transcript"} message) with a timestamp, joined per-question later
@@ -669,15 +713,50 @@ class FakeClientWebSocket:
                 # model re-fills '' -> infinite loop; wedged the first 30q
                 # continuous run at the optional postal-code field).
                 if fid in self.schema_fields and value is not None:
-                    self.state.setdefault(fid, {})["value"] = value
-                    self.state[fid].setdefault("confirmed", False)
+                    entry = self.state.setdefault(fid, {})
+                    # A VALUE CHANGE resets confirmed (mirror the frontend's
+                    # updateField): the correction flow re-fills a confirmed
+                    # field, which must un-confirm it so the pin re-activates
+                    # and confirm_field can re-confirm the new value.
+                    # (W4/bd ny4s will also clear `steered` here -- mirror it
+                    # when it lands; RECONCILE-BEFORE-E1.)
+                    if entry.get("value") != value:
+                        entry["confirmed"] = False
+                    entry["value"] = value
+                    entry.setdefault("confirmed", False)
         elif mtype == "get_form_state":
             rid = msg.get("request_id")
-            want = msg.get("field_ids") or list(self.state.keys())
-            snapshot = {fid: {"value": self.state[fid].get("value"),
-                              "confirmed": self.state[fid].get("confirmed", False)}
-                        for fid in want if fid in self.state}
+            want = msg.get("field_ids")
+            if want:
+                snapshot = {fid: {"value": self.state[fid].get("value"),
+                                  "confirmed": self.state[fid].get("confirmed", False),
+                                  "shown": self.field_shown(fid)}
+                            for fid in want if fid in self.state}
+            else:
+                # A whole-form ask (the secretary's values tail, bd jnjj.45d):
+                # production sends EVERY schema field with its `shown` flag --
+                # including untouched conditional fields -- so the backend
+                # shown_map never defaults a hidden field to shown.
+                snapshot = {
+                    fid: {"value": self.state.get(fid, {}).get("value"),
+                          "confirmed": self.state.get(fid, {}).get("confirmed", False),
+                          "shown": self.field_shown(fid)}
+                    for fid in self.schema_field_order}
             self._reply(lambda: self.service.handle_form_state_response(rid, snapshot))
+        elif mtype == "skip_field":
+            self._handle_skip_field(msg)
+        elif mtype == "switch_field":
+            self._handle_switch_field(msg)
+        elif mtype == "validation_result":
+            # Mirror handleValidationResult: record the envelope and set the
+            # client-owned steered marker on every named field.
+            conflicts = msg.get("conflicts") or []
+            self.validation_results.append(
+                {"ts": time.monotonic(), "conflicts": conflicts})
+            for c in conflicts:
+                for fid in (c.get("field_ids") or []):
+                    if fid in self.schema_fields:
+                        self.state.setdefault(fid, {})["steered"] = True
         elif mtype == "get_next_field_hint":
             rid = msg.get("request_id")
             hint = self.next_hint()
@@ -724,7 +803,21 @@ class FakeClientWebSocket:
     def set_active_section(self, plan_slice: list[dict]):
         self.active_field_ids = [q["field_id"] for q in plan_slice]
 
+    def _pin_active(self) -> str | None:
+        """The pinned field, while it is pinned AND unconfirmed (mirror the
+        frontend's computeNextField pin priority: a pin on a confirmed field is
+        dormant until a value update resets confirmed)."""
+        fid = self.pinned_field_id
+        if fid and not self.state.get(fid, {}).get("confirmed"):
+            return fid
+        return None
+
     def next_hint(self) -> str | None:
+        pin = self._pin_active()
+        if pin:
+            order = (self.active_field_ids.index(pin) + 1
+                     if pin in self.active_field_ids else 1)
+            return _hint_for(self.schema_fields[pin], order)
         for order, fid in enumerate(self.active_field_ids, 1):
             entry = self.state.get(fid)
             if not entry or not entry.get("confirmed"):
@@ -736,11 +829,137 @@ class FakeClientWebSocket:
         owns the full schema, so this is the harness analogue of the frontend's
         getFieldSchema(nextField.id) -- the backend renders it into the confirm_field
         next_field_guidance."""
+        pin = self._pin_active()
+        if pin:
+            return self.schema_fields.get(pin)
         for fid in self.active_field_ids:
             entry = self.state.get(fid)
             if not entry or not entry.get("confirmed"):
                 return self.schema_fields.get(fid)
         return None
+
+    # -- stress-test seams (bd polyglot-pdf-eh1h)
+    def field_shown(self, fid: str) -> bool:
+        """shouldShowField over the CURRENT state values (the harness mirror of
+        the frontend evaluator; full_form_script.evaluate_show_if implements the
+        same operator semantics)."""
+        f = self.schema_fields.get(fid)
+        if f is None:
+            return False
+        values = {k: v.get("value") for k, v in self.state.items()}
+        return _ffs.field_visible(f, self.schema_fields, values)
+
+    def resolve_field(self, identifier: str) -> str | None:
+        """Resolve a model-supplied identifier: exact field_id, then exact
+        spoken_name (case-insensitive) -- the frontend's
+        resolveFieldForNavigation whole-schema lookup."""
+        ident = (identifier or "").strip()
+        if not ident:
+            return None
+        if ident in self.schema_fields:
+            return ident
+        low = ident.lower()
+        for fid, f in self.schema_fields.items():
+            if str(f.get("spoken_name") or f.get("name") or "").lower() == low:
+                return fid
+        return None
+
+    def _handle_skip_field(self, msg: dict):
+        """Mirror handleSkipFieldRequest: refuse unknown/already-filled, else
+        record the skip (empty value + skipped flag, counts as confirmed)."""
+        rid = msg.get("request_id")
+        fid = msg.get("field_id")
+        rec = {"ts": time.monotonic(), "field_id": fid}
+        field = self.schema_fields.get(fid)
+        if field is None:
+            rec["outcome"] = "unknown_field"
+            self.skip_events.append(rec)
+            self._reply(lambda: self.service.handle_skip_field_response(
+                rid, {"recorded": False, "reason": "unknown_field",
+                      "section_complete": False}))
+            return
+        existing = self.state.get(fid, {}).get("value")
+        if existing not in (None, ""):
+            rec["outcome"] = "already_filled"
+            self.skip_events.append(rec)
+            self._reply(lambda: self.service.handle_skip_field_response(
+                rid, {"recorded": False, "reason": "already_filled",
+                      "section_complete": False}))
+            return
+        entry = self.state.setdefault(fid, {})
+        entry.update({"value": "", "confirmed": True, "skipped": True})
+        if self.pinned_field_id == fid:
+            self.pinned_field_id = None
+        rec["outcome"] = "recorded"
+        self.skip_events.append(rec)
+        self._reply(lambda: self.service.handle_skip_field_response(
+            rid, {"recorded": True, "reason": None, "section_complete": False}))
+
+    def _handle_switch_field(self, msg: dict):
+        """Mirror handleSwitchFieldRequest (continuous mode): resolve, check
+        visibility, PIN, ack with the target's hint + value + (DTI) schema."""
+        rid = msg.get("request_id")
+        ident = msg.get("field")
+        rec = {"ts": time.monotonic(), "identifier": str(ident)}
+        fid = self.resolve_field(ident)
+        if fid is None:
+            rec["outcome"] = "unknown_field"
+            self.switch_events.append(rec)
+            self._reply(lambda: self.service.handle_switch_field_response(
+                rid, {"found": False, "reason": "unknown_field"}))
+            return
+        rec["field_id"] = fid
+        if not self.field_shown(fid):
+            rec["outcome"] = "hidden"
+            self.switch_events.append(rec)
+            self._reply(lambda: self.service.handle_switch_field_response(
+                rid, {"found": False, "reason": "hidden", "field_id": fid}))
+            return
+        self.pinned_field_id = fid
+        entry = self.state.get(fid) or {}
+        value = entry.get("value")
+        has_value = value not in (None, "")
+        field = self.schema_fields[fid]
+        order = (self.active_field_ids.index(fid) + 1
+                 if fid in self.active_field_ids else 1)
+        ack = {
+            "found": True,
+            "field_id": fid,
+            "spoken_name": field.get("spoken_name") or field.get("name") or fid,
+            "next_field_hint": _hint_for(field, order),
+            "already_confirmed": bool(entry.get("confirmed")),
+            "has_value": has_value,
+        }
+        if has_value:
+            ack["value"] = value
+        if self.dti_mode:
+            ack["next_field_schema"] = field
+        rec["outcome"] = "pinned"
+        self.switch_events.append(rec)
+        self._reply(lambda: self.service.handle_switch_field_response(rid, ack))
+
+    def validation_fields(self, up_to_fid: str | None = None) -> list[dict]:
+        """The contract-2 validator payload (mirror buildValidatorFields):
+        VISIBLE fields with a non-empty value, schema order, each
+        {field_id, name, value, steered}. up_to_fid bounds the list at that
+        field (inclusive) -- the page-boundary cut."""
+        out: list[dict] = []
+        for fid in self.schema_field_order:
+            entry = self.state.get(fid)
+            if entry is None:
+                continue
+            value = entry.get("value")
+            if value in (None, ""):
+                pass
+            elif self.field_shown(fid):
+                f = self.schema_fields[fid]
+                out.append({"field_id": fid,
+                            "name": f.get("spoken_name") or f.get("name") or fid,
+                            "value": value,
+                            "steered": bool(entry.get("steered"))})
+            if up_to_fid is not None and fid == up_to_fid:
+                break
+        return out
 
 
 # ------------------------------------------------------------------ log tap
@@ -754,16 +973,24 @@ _ERROR_EVENTS = {
 
 class _LogTap:
     """Record warning+ structlog events from the adapter without touching it
-    (same pattern as diag_compression_matrix_sdk28.py)."""
+    (same pattern as diag_compression_matrix_sdk28.py).
+
+    info_events (bd polyglot-pdf-eh1h): a WHITELIST of info-level event names
+    to additionally capture -- the pre-existing tap was warning+ ONLY, and the
+    stress-test signals (text_ai_usage, ask_secretary_*, validator_steer_*,
+    dti_confirm_coerced_*) are all logged at info. Whitelisted info events are
+    stamped with a monotonic ts and the current _TEXT_CALLER tag so concurrent
+    validator windows / secretary calls attribute correctly."""
 
     _CAPTURE = ("warning", "error", "exception", "critical")
 
-    def __init__(self, inner, sink: list):
+    def __init__(self, inner, sink: list, info_events: frozenset = frozenset()):
         object.__setattr__(self, "_inner", inner)
         object.__setattr__(self, "_sink", sink)
+        object.__setattr__(self, "_info_events", info_events)
 
     def bind(self, **kw):
-        return _LogTap(self._inner.bind(**kw), self._sink)
+        return _LogTap(self._inner.bind(**kw), self._sink, self._info_events)
 
     def __getattr__(self, name):
         orig = getattr(self._inner, name)
@@ -779,7 +1006,360 @@ class _LogTap:
                 return orig(event, *a, **kw)
 
             return _wrapped
+        if name == "info" and self._info_events and callable(orig):
+            sink = self._sink
+            wanted = self._info_events
+
+            def _wrapped_info(event, *a, **kw):
+                try:
+                    if str(event) in wanted:
+                        sink.append({"level": "info", "event": str(event),
+                                     "ts": time.monotonic(),
+                                     "caller": _TEXT_CALLER.get(),
+                                     "fields": {k: str(v) for k, v in kw.items()}})
+                except Exception:
+                    pass
+                return orig(event, *a, **kw)
+
+            return _wrapped_info
         return orig
+
+
+# The stress-test info-event whitelist. Names verified against the emitters:
+# text_ai_gemini._log_usage / ask()/validate(); form_filling_service's
+# ask_secretary_* + validator_* events; callback_handler's DTI coercion event.
+_INFO_EVENTS = frozenset({
+    "text_ai_usage", "text_ai_ask_complete", "text_ai_validate_complete",
+    "ask_secretary_complete", "ask_secretary_pending_async_deliver",
+    "ask_secretary_async_delivered", "ask_secretary_async_dropped_session_inactive",
+    "validator_steer_delivered", "validator_steer_not_delivered_fail_open",
+    "validator_steer_dropped_session_inactive", "validator_windows_complete",
+    "dti_confirm_coerced_to_current_field",
+    "dti_update_coerced_to_current_field",
+    "dti_skip_coerced_to_current_field",
+})
+# (ask_secretary_pending / ask_secretary_timeout / the *_fail_open family are
+# WARNING-level and already captured by the warning+ tap.)
+
+# Attribution tag for concurrent text-sidecar calls: the ask()/validate()
+# wrappers set it, the info tap stamps it onto every captured event emitted
+# inside that call's task context.
+import contextvars  # noqa: E402
+
+_TEXT_CALLER = contextvars.ContextVar("stress_text_caller", default="")
+
+
+def _tag_text_ai(text_ai, ledger_calls: list):
+    """Wrap text_ai.ask/.validate so (a) every whitelisted log event emitted
+    inside carries the caller tag, and (b) per-call wall latency is recorded."""
+    orig_ask, orig_validate = text_ai.ask, text_ai.validate
+
+    async def ask_tagged(*a, **kw):
+        tok = _TEXT_CALLER.set("secretary")
+        t0 = time.monotonic()
+        try:
+            return await orig_ask(*a, **kw)
+        finally:
+            ledger_calls.append({"caller": "secretary", "t_start": t0,
+                                 "dur_s": round(time.monotonic() - t0, 3)})
+            _TEXT_CALLER.reset(tok)
+
+    async def validate_tagged(*a, **kw):
+        tok = _TEXT_CALLER.set("validator")
+        t0 = time.monotonic()
+        try:
+            return await orig_validate(*a, **kw)
+        finally:
+            ledger_calls.append({"caller": "validator", "t_start": t0,
+                                 "dur_s": round(time.monotonic() - t0, 3)})
+            _TEXT_CALLER.reset(tok)
+
+    text_ai.ask = ask_tagged
+    text_ai.validate = validate_tagged
+
+
+class ValidationSeam:
+    """The harness stand-in for the W2/W3 CLIENT seam (page-boundary window
+    builder + async runner + result push).
+
+    RECONCILE-BEFORE-E1 (bd polyglot-pdf-0cyu): W2 (stride window builder +
+    validate_windows emit, bd kxkw) and W3 (findings queue/drain, bd pr3i) are
+    NOT yet on dev, and the cadence spec was revised page-agnostic /
+    finding-driven (bd c3uo, PR #428). This class is authored to the W1
+    backend contract (handle_validation_windows takes a list of contract-2
+    window lists) with the route comment's default geometry (size 20 /
+    stride 10); before any E-run, diff it against the LANDED
+    webFormConnection.ts window/queue behavior and fix mismatches -- the
+    harness mirrors the client, never invents.
+
+    The backend half it drives is the SHIPPED W1: one call per window
+    concurrently, batch dedupe, steered suppression, steer injection --
+    the harness only replicates websocket_routes._run_validation_and_push
+    (create_task + push the verdict back to the client)."""
+
+    def __init__(self, service, client, size: int = 20, stride: int = 10):
+        self.service = service
+        self.client = client
+        self.size = size
+        self.stride = stride
+        self.tasks: list = []
+        self.records: list[dict] = []      # {t_submit, t_verdict, windows, conflicts}
+        self._sent_window_starts: set = set()
+        self.high_water_page = 0
+
+    def _windows_for(self, payload: list[dict]) -> list[list[dict]]:
+        """Overlapping windows (size/stride) over the contract-2 payload,
+        excluding start offsets already validated (the W2 high-water idea)."""
+        n = len(payload)
+        if n == 0:
+            return []
+        wins = []
+        start = 0
+        while start < n:
+            if start + self.size >= n and start > 0 and n - start < self.stride:
+                break  # tail already covered by the previous overlapping window
+            if start not in self._sent_window_starts:
+                wins.append(payload[start:start + self.size])
+                self._sent_window_starts.add(start)
+            if start + self.size >= n:
+                break
+            start += self.stride
+        return [w for w in wins if w]
+
+    def submit(self, payload: list[dict], reason: str):
+        """Mirror _run_validation_and_push: fire the async validation and push
+        the verdict back to the client as a validation_result envelope."""
+        windows = self._windows_for(payload)
+        if not windows:
+            return
+        rec = {"t_submit": time.monotonic(), "t_verdict": None,
+               "reason": reason, "window_count": len(windows), "conflicts": []}
+        self.records.append(rec)
+
+        async def _run():
+            try:
+                verdict = await self.service.handle_validation_windows(windows)
+            except Exception as exc:  # fail-open, mirror the route's guard
+                verdict = {"conflicts": [], "_error": type(exc).__name__}
+            rec["t_verdict"] = time.monotonic()
+            rec["conflicts"] = verdict.get("conflicts", [])
+            await self.client.send_json(
+                {"type": "validation_result",
+                 "conflicts": verdict.get("conflicts", [])})
+
+        self.tasks.append(asyncio.create_task(_run()))
+
+    def maybe_page_boundary(self, prev_fid: str | None, next_fid: str | None,
+                            fields_by_id: dict) -> bool:
+        """First-time FORWARD page crossing between two plan fields -> submit
+        windows over everything filled up to the boundary."""
+        if prev_fid is None or next_fid is None:
+            return False
+
+        def page_of(fid):
+            f = fields_by_id.get(fid) or {}
+            return ((f.get("pdf_position") or {}).get("page")) or 0
+
+        p_prev, p_next = page_of(prev_fid), page_of(next_fid)
+        # First-time FORWARD crossing only (backward jumps / re-crossings of an
+        # already-validated page do not re-trigger -- the persisted high-water
+        # page in the sprint-12 design).
+        if p_next > p_prev and p_prev > self.high_water_page:
+            self.high_water_page = p_prev
+            self.submit(self.client.validation_fields(up_to_fid=prev_fid),
+                        reason=f"page-{p_prev}-end")
+            return True
+        return False
+
+    async def drain(self, timeout: float = 12.0) -> int:
+        """Await in-flight validation tasks (run end / pre-reconnect).
+        Returns the count that did NOT finish in time (dropped)."""
+        pending = [t for t in self.tasks if not t.done()]
+        if not pending:
+            return 0
+        done, still = await asyncio.wait(pending, timeout=timeout)
+        return len(still)
+
+    def latencies(self) -> list:
+        return [round(r["t_verdict"] - r["t_submit"], 3)
+                for r in self.records if r["t_verdict"] is not None]
+
+    def flagged_groups(self) -> list:
+        """Every distinct conflict field-id set seen across verdicts."""
+        seen = []
+        for r in self.records:
+            for c in r["conflicts"]:
+                ids = frozenset(str(x) for x in (c.get("field_ids") or []))
+                if ids and ids not in [frozenset(s) for s in seen]:
+                    seen.append(set(ids))
+        return seen
+
+
+# ------------------------------------------------------------------- summary
+
+def build_summary(meta: dict, rows: list, log_sink: list, client,
+                  planted_groups: list, plan_fids: set) -> dict:
+    """Assemble the per-run headline summary (bd polyglot-pdf-eh1h). Pure
+    function over the run's collected records so it is unit-testable without a
+    live session. All dollar figures include the text sidecar."""
+    voice_usd = round(sum(r.get("total cost", 0) for r in rows), 6)
+    voice_tokens = sum(r.get("total tokens", 0) for r in rows)
+
+    usage_events = [e for e in log_sink if e.get("event") == "text_ai_usage"]
+    text_rows = []
+    for e in usage_events:
+        f = e.get("fields") or {}
+
+        def _i(name):
+            try:
+                return int(float(f.get(name) or 0))
+            except (TypeError, ValueError):
+                return 0
+        text_rows.append({
+            "caller": e.get("caller") or "",
+            "prompt": _i("prompt_tokens"), "cached": _i("cached_tokens"),
+            "output": _i("output_tokens"),
+            "cache_hit": str(f.get("cache_hit")).lower() == "true",
+            "usd": round(price_text_usage(_i("prompt_tokens"),
+                                          _i("cached_tokens"),
+                                          _i("output_tokens")), 6)})
+    text_usd = round(sum(r["usd"] for r in text_rows), 6)
+    ledger_calls = meta.get("text_ledger_calls") or []
+
+    def _caller(rows_, name):
+        return [r for r in rows_ if r["caller"] == name]
+
+    sec_calls = _caller(ledger_calls, "secretary")
+    val_calls = _caller(ledger_calls, "validator")
+    sec_usage = _caller(text_rows, "secretary")
+
+    ev = meta.get("event_records") or []
+    recalls = [e for e in ev if e.get("type") == "recall"]
+    navs = [e for e in ev if e.get("type") == "navigate_back"]
+    skips = [e for e in ev if e.get("type") == "skip"]
+    steers = meta.get("steer_records") or []
+    vrecords = meta.get("validation_records") or []
+
+    # Distinct flagged conflict groups across all verdicts (+ duplicate count:
+    # the SAME group surfacing in more than one verdict is a duplicate steer
+    # the suppression layer should have prevented).
+    seen: dict = {}
+    for r in vrecords:
+        for c in r.get("conflicts") or []:
+            key = frozenset(str(x) for x in (c.get("field_ids") or []))
+            if key:
+                seen[key] = seen.get(key, 0) + 1
+    flagged_groups = [set(k) for k in seen]
+    duplicate_steers = sum(n - 1 for n in seen.values() if n > 1)
+
+    fa = meta.get("fill_accuracy") or {}
+    turns = meta.get("turns") or []
+    turn_lat = [t.get("latency_s") for t in turns if t.get("latency_s")]
+    reconnects = meta.get("continuous_reconnects") or []
+
+    coercions = [e for e in log_sink
+                 if str(e.get("event", "")).startswith("dti_")
+                 and "coerced" in str(e.get("event", ""))]
+    close_1011 = [e for e in log_sink
+                  if e.get("event") == "gemini_session_connection_closed"
+                  and "1011" in json.dumps(e.get("fields") or {})]
+    fail_open_val = [e for e in log_sink
+                     if e.get("event") == "validator_window_fail_open"]
+    fail_open_sec = [e for e in log_sink
+                     if str(e.get("event", "")).startswith("ask_secretary")
+                     and e.get("level") in ("warning", "error")]
+    scripted = plan_fids | {aa for aa in (meta.get("auto_apply_fids") or [])}
+    spurious = [fid for fid in client.state
+                if fid not in scripted
+                and client.state[fid].get("value") not in (None, "")]
+
+    pr = (_se.score_validator_pr(planted_groups, flagged_groups)
+          if (planted_groups or flagged_groups) else None)
+
+    return {
+        "run": {k: meta.get(k) for k in
+                ("model", "tier", "schema", "arm", "path", "questions",
+                 "compression", "trigger", "window", "continuous", "started",
+                 "events_mode", "reactivity", "lang", "text_ai_wired")},
+        "headline": {
+            "all_in_usd": round(voice_usd + text_usd, 6),
+            "voice_usd": voice_usd,
+            "text_usd": text_usd,
+            "voice_tokens": voice_tokens,
+            "wall_clock_s": meta.get("wall_clock_s"),
+            "steps": len(rows),
+            "fill_accuracy": {k: fa.get(k) for k in
+                              ("matched", "total", "accuracy")},
+            "fill_failure_modes": {
+                k: len(v) for k, v in (meta.get("fill_failure_modes") or {}).items()},
+            "usd_per_correct_field": (
+                round((voice_usd + text_usd) / fa["matched"], 4)
+                if fa.get("matched") else None),
+        },
+        "validator": {
+            "windows_submitted": sum(r.get("window_count", 0) for r in vrecords),
+            "boundaries": len(vrecords),
+            "calls": len(val_calls),
+            "window_latency_s": _se.latency_summary(
+                [r["dur_s"] for r in val_calls]),
+            "verdict_latency_s": _se.latency_summary(
+                [round(r["t_verdict"] - r["t_submit"], 3) for r in vrecords
+                 if r.get("t_verdict")]),
+            "pr": pr,
+            "duplicate_steers": duplicate_steers,
+            "steers": len(steers),
+            "steer_outcomes": {o: sum(1 for s in steers if s.get("outcome") == o)
+                               for o in {s.get("outcome") for s in steers}},
+            "steer_to_switch_s": _se.latency_summary(
+                [s.get("steer_to_switch_s") for s in steers]),
+            "fail_opens": len(fail_open_val),
+        },
+        "secretary": {
+            "calls": len(sec_calls),
+            "blocked_s": _se.latency_summary([r["dur_s"] for r in sec_calls]),
+            "pending_detached": sum(1 for e in recalls if e.get("pending_detached")),
+            "recall_events": len(recalls),
+            "tool_fired": sum(1 for e in recalls if e.get("tool_fired")),
+            "answers_correct": sum(1 for e in recalls
+                                   if e.get("answer_correct") is True),
+            "answers_wrong": sum(1 for e in recalls
+                                 if e.get("answer_correct") is False),
+            "cache_hit_rate": (round(sum(1 for r in sec_usage if r["cache_hit"])
+                                     / len(sec_usage), 3) if sec_usage else None),
+            "warnings": len(fail_open_sec),
+        },
+        "navigation": {
+            "attempts": len(navs),
+            "switched": sum(1 for e in navs if e.get("switched_to")),
+            "hit_target": sum(1 for e in navs if e.get("hit_target")),
+            "seam_latency_s": _se.latency_summary(
+                [e.get("seam_latency_s") for e in navs]),
+        },
+        "skips": {"requested": len(skips),
+                  "recorded": sum(1 for e in skips if e.get("recorded"))},
+        "latency": {"turn_s": _se.latency_summary(turn_lat)},
+        "errors": {
+            "close_1011": len(close_1011),
+            "go_away_announced": sum(1 for r in reconnects if r.get("announced")),
+            "reconnects": len(reconnects),
+            "reconnect_downtime_s": _se.latency_summary(
+                [r.get("downtime_s") for r in reconnects]),
+            "stalled_turns": sum(1 for t in turns if t.get("stalled")),
+            "tool_callback_exceptions": len(meta.get("tool_callback_exceptions") or []),
+            "dti_coercions": len(coercions),
+            "unknown_field_rejections": (
+                sum(1 for e in (client.switch_events or [])
+                    if e.get("outcome") == "unknown_field")
+                + sum(1 for e in (client.skip_events or [])
+                      if e.get("outcome") == "unknown_field")),
+            "spurious_fills": sorted(spurious),
+            "validation_dropped": (meta.get("validation_dropped_reconnect", 0)
+                                   + meta.get("validation_dropped_at_end", 0)),
+            "secretary_delivers_dropped": meta.get(
+                "secretary_delivers_dropped_reconnect", 0),
+            "captured_errors": len(meta.get("errors") or []),
+        },
+    }
 
 
 # ------------------------------------------------------------------- driver
@@ -926,6 +1506,24 @@ async def run(args) -> int:
         print("--vertex is not available for --model 3.1: the 3.1 Live model has "
               "no Vertex id (AI-Studio-only as of 2026-06). Use --model 2.5.")
         return 1
+    # --schema i90-full (bd polyglot-pdf-n86b): the full-form stress-test plan,
+    # generated from the g1b answer key at run time (build-time guards inside
+    # abort before any live spend). Requires the continuous-DTI production shape.
+    if args.schema == "i90-full":
+        if not (args.arm == "dti" and args.continuous):
+            print("--schema i90-full requires --arm dti --continuous "
+                  "(the production continuous-DTI shape it measures).")
+            return 1
+        _full = _ffs.build_full_form_plan(
+            _ffs.load_schema(), lang=getattr(args, "lang", "en"))
+        SCHEMAS["i90-full"] = {"path": I90_SCHEMA_PATH,
+                               "questions": _full["questions"],
+                               "expected": _full["expected"],
+                               "auto_apply": _full["auto_apply"]}
+    elif getattr(args, "events", "none") != "none" or getattr(args, "reactivity", None):
+        print("--events / --reactivity are only defined for --schema i90-full.")
+        return 1
+
     schema = load_schema(args.schema)
     # Drift guard (bd jnjj.7): abort BEFORE spending live-Gemini money if the
     # expected-canon table no longer matches the kit's option vocabulary.
@@ -938,16 +1536,52 @@ async def run(args) -> int:
     # bd jnjj.24). An explicit --questions N still caps the run.
     _all_questions = SCHEMAS[args.schema]["questions"]
     plan = _all_questions if args.questions is None else _all_questions[: args.questions]
+
+    # Scenario events (bd polyglot-pdf-eh1h): weave the event script into the
+    # plan. `steps` is what the driver walks; `plan` stays the QUESTION list
+    # (fill scoring + section mapping). Legacy schemas: steps == plan.
+    expected_tbl = dict(SCHEMAS[args.schema].get("expected") or {})
+    planted_groups: list = []
+    reactivity_event = None
+    if getattr(args, "reactivity", None):
+        suite = {r["name"]: r for r in _se.REACTIVITY_SUITE}
+        if args.reactivity not in suite:
+            print(f"--reactivity must be one of {sorted(suite)}")
+            return 1
+        r = suite[args.reactivity]
+        plan = plan[: r["questions"]]
+        reactivity_event = dict(r["event"])
+        steps = list(plan) + [reactivity_event]
+        if (reactivity_event.get("event") == "navigate_back"
+                and reactivity_event.get("expected_after") is not None):
+            expected_tbl[reactivity_event["target_field_id"]] = \
+                reactivity_event["expected_after"]
+    elif getattr(args, "events", "none") != "none":
+        ev_script = list(_se.STANDARD_EVENTS)
+        mix = args.mix_unhappy
+        if args.events == "unhappy":
+            ev_script += _se.UNHAPPY_EXTRA_PLANTS
+            mix = 0  # E3 runs --path unhappy globally; no per-step mix
+        steps, expected_tbl, planted_groups = _se.weave_events(
+            plan, ev_script, expected_tbl, mix_unhappy_every=mix)
+    else:
+        steps = list(plan)
+
     secs = sections_in_plan(schema, plan)
 
     # Pre-synth all audio (cache-aware).
     utterances = {CONFIRM_YES, REJECT}
-    for q in plan:
-        utterances.add(q["say"])
-        if args.path == "unhappy":
-            utterances.add(q["wrong"])
+    for q in steps:
+        for key in ("say", "wrong", "skip_say", "planted_say",
+                    "correction_say"):
+            u = q.get(key)
+            if u:
+                utterances.add(u)
+        p = q.get("plant") or {}
+        if p.get("correct_say"):
+            utterances.add(p["correct_say"])
     for u in sorted(utterances):
-        synth_cached(u)
+        synth_cached(u, lang=getattr(args, "lang", "en"))
     print(f"audio cache ready: {len(utterances)} utterances "
           f"({AUDIO_CACHE})")
     if args.synth_only:
@@ -1014,6 +1648,28 @@ async def run(args) -> int:
     current_q = {"n": 0}
     DEBUG = bool(getattr(args, "debug", False))
 
+    # Text sidecar wiring (bd polyglot-pdf-eh1h): default ON for the full-form
+    # stress schema (deploy fidelity: production always wires the secretary +
+    # validator), OFF for the legacy schemas so historical arms measure
+    # exactly what they always measured. --text-ai / --no-text-ai override.
+    if getattr(args, "no_text_ai", False):
+        use_text_ai = False
+    else:
+        use_text_ai = bool(getattr(args, "text_ai", False)) or args.schema == "i90-full"
+    text_ledger_calls: list[dict] = []   # per-call {caller, t_start, dur_s}
+    seam_tool_records: list[dict] = []   # ask_secretary/switch/skip tool I/O
+    _module_logs = {"ffs": _ffs_mod._log, "cb": _callback_mod._log}
+    meta["text_ai_wired"] = use_text_ai
+    meta["events_mode"] = getattr(args, "events", "none")
+    meta["reactivity"] = getattr(args, "reactivity", None)
+    meta["lang"] = getattr(args, "lang", "en")
+    meta["planted_groups"] = [sorted(g) for g in planted_groups]
+    meta["step_kinds"] = [
+        (s.get("event") or ("skip" if s.get("skip") else
+                            "plant" if s.get("plant") else
+                            "question")) for s in steps]
+    t_run_start = time.monotonic()
+
     try:
         if args.vertex:
             adapter = LiveAIGemini(
@@ -1025,10 +1681,30 @@ async def run(args) -> int:
         adapter.set_session_context(
             form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
             form_id=f"INTAKE-{args.schema.upper()}")
-        adapter._log = _LogTap(adapter._log, log_sink)
+        adapter._log = _LogTap(adapter._log, log_sink, _INFO_EVENTS)
         adapter._on_raw_usage = lambda u: usage_dumps.append({
             "prompt": getattr(u, "prompt_token_count", None),
             "total": getattr(u, "total_token_count", None)})
+
+        # Text sidecar (bd polyglot-pdf-eh1h): wire the REAL TextAIGemini so
+        # the secretary tool + validator run in-session, exactly as production
+        # wires them (backend/dependencies.py get_text_ai). Model is PINNED to
+        # flash-lite at construction (the config default MODEL_LABELING is
+        # 2.5-flash, whose Vertex thinking-on default is the #1 cost-estimate
+        # buster); the lite fallback chain mirrors TextAIGemini's default.
+        text_ai = None
+        if use_text_ai:
+            from backend.adapters.text_ai_gemini import TextAIGemini
+            if args.vertex:
+                text_ai = TextAIGemini(
+                    model="gemini-2.5-flash-lite", vertexai=True,
+                    project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                    location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"))
+            else:
+                text_ai = TextAIGemini(api_key=os.getenv("GEMINI_API_KEY"),
+                                       model="gemini-2.5-flash-lite")
+            text_ai._log = _LogTap(text_ai._log, log_sink, _INFO_EVENTS)
+            _tag_text_ai(text_ai, text_ledger_calls)
         if DEBUG:
             # bd jnjj.39: observe the INPUT transcript (what the model heard) so the
             # debug artifact can answer "did it parse the synthetic-audio digits?".
@@ -1036,7 +1712,15 @@ async def run(args) -> int:
             adapter._on_input_transcript = lambda text: input_transcript.append(
                 {"ts": time.monotonic(), "text": str(text)})
 
-        service = FormFillingService(live_ai=adapter, settings=settings)
+        service = FormFillingService(live_ai=adapter, settings=settings,
+                                     text_ai=text_ai)
+        if text_ai is not None:
+            # The service module's info events (ask_secretary_*,
+            # validator_steer_*, validator_windows_complete) go through the
+            # MODULE logger, not an instance attr -- tap it (restored in
+            # finally with the get_settings patches).
+            _ffs_mod._log = _LogTap(_module_logs["ffs"], log_sink, _INFO_EVENTS)
+            _callback_mod._log = _LogTap(_module_logs["cb"], log_sink, _INFO_EVENTS)
 
         # Arm-dependent schema scope: section-reset (full-SI baseline) and
         # section-reset-jit (JIT manifest SI) BOTH use the production per-section
@@ -1100,6 +1784,15 @@ async def run(args) -> int:
                  if (client.schema_fields[q["field_id"]].get("section_id")
                      or "section-1") == secs[0]["id"]])
 
+        # Auto-applied fields (i90-full: copy_from page headers + signature
+        # widgets): the frontend fills these without the voice loop, so the
+        # harness seeds them confirmed before the session starts. They are not
+        # in the plan manifest, so the model never asks them; they DO ride the
+        # validator payload, as production's buildValidatorFields includes them.
+        for aa in (SCHEMAS[args.schema].get("auto_apply") or []):
+            client.state[aa["field_id"]] = {
+                "value": aa["value"], "confirmed": True}
+
         si = service.build_form_context_message(arm_schema, {}, **si_kwargs)
         meta["system_instruction_chars"] = len(si)
         await service.start_session(
@@ -1108,10 +1801,18 @@ async def run(args) -> int:
             system_instruction=si,
             form_session_id=f"4loz-{args.arm}-{args.path}-{stamp}",
             current_section_id=current_section_id,
+            # Full-form catalog for the secretary (mirror websocket_routes'
+            # handshake pass-through, bd p68s) -- only when the sidecar is wired.
+            full_schema=(schema if use_text_ai else None),
             # bd jnjj.39: in --debug, request the model's OUTPUT transcript so the
             # FakeClient can capture what it SAID per turn. Off by default -- normal
             # runs neither request nor pay for transcription.
             send_transcript=DEBUG)
+
+        # The validation seam (W2/W3 stand-in; RECONCILE-BEFORE-E1). Only
+        # armed when the sidecar is wired AND we run the continuous full form.
+        seam = (ValidationSeam(service, client)
+                if (use_text_ai and continuous) else None)
 
         # Tap tool calls AFTER start_session wired the real chain. The tap wraps the
         # REAL callback; it must be RE-INSTALLED after every switch_to_section, which
@@ -1129,6 +1830,16 @@ async def run(args) -> int:
                 _ts = time.monotonic()
                 try:
                     resp = await orig_tool_cb(tool_name, arguments)
+                    if tool_name in ("ask_secretary", "switch_to_field",
+                                     "skip_field"):
+                        # Seam tools always recorded (event scoring needs the
+                        # response -- e.g. the secretary's sync answer vs
+                        # {"status": "pending"}). LOCAL-ONLY artifact data,
+                        # synthetic persona.
+                        seam_tool_records.append(
+                            {"ts": _ts, "step": current_q["n"],
+                             "tool": tool_name, "args": _jsonable(arguments),
+                             "response": _jsonable(resp)})
                     if DEBUG:
                         # bd jnjj.39: the exact args the model SENT and the response it
                         # GOT back -- the single most useful diagnosis signal (was
@@ -1202,7 +1913,7 @@ async def run(args) -> int:
 
         async def speak(text: str, label: str):
             nonlocal last_total
-            pcm = synth_cached(text)
+            pcm = synth_cached(text, lang=getattr(args, "lang", "en"))
             client.first_audio_at = None
             await service.send_activity_start()
             for chunk in _pcm_chunks(pcm):
@@ -1225,11 +1936,130 @@ async def run(args) -> int:
             if stalled:
                 print(f"    [warn] turn stalled: q{current_q['n']} {label}")
 
+        # ------- stress-test event machinery (bd polyglot-pdf-eh1h) -------
+        event_records: list[dict] = []   # recall / navigate_back / skip outcomes
+        steer_records: list[dict] = []   # validator steer -> switch compliance
+        _vr_handled = {"n": 0}
+
+        async def _drain_before_reconnect():
+            """Settle in-flight async work before tearing the session down
+            (mirror of what a production reconnect implies): validator window
+            tasks and detached secretary delivers. Whatever cannot finish is
+            COUNTED, not silently lost."""
+            if seam is not None:
+                dropped = await seam.drain(timeout=8.0)
+                if dropped:
+                    meta.setdefault("validation_dropped_reconnect", 0)
+                    meta["validation_dropped_reconnect"] += dropped
+            pend = [t for t in (getattr(service, "_secretary_deliver_tasks", None) or [])
+                    if not t.done()]
+            if pend:
+                _, still = await asyncio.wait(pend, timeout=5.0)
+                if still:
+                    meta.setdefault("secretary_delivers_dropped_reconnect", 0)
+                    meta["secretary_delivers_dropped_reconnect"] += len(still)
+
+        async def run_recall(ev):
+            """Mid-fill ask_secretary query: speak it, assert the tool fired,
+            score the sync answer (a detached 'pending' answer is counted, not
+            scored -- it arrives on a later turn)."""
+            n0 = len(seam_tool_records)
+            await speak(ev["say"], "recall")
+            recs = [r for r in seam_tool_records[n0:]
+                    if r["tool"] == "ask_secretary"]
+            rec = {"type": "recall", "step": current_q["n"],
+                   "tool_fired": bool(recs), "pending_detached": False,
+                   "answer_correct": None}
+            if recs:
+                resp = recs[0].get("response") or {}
+                if isinstance(resp, dict) and resp.get("status") == "pending":
+                    rec["pending_detached"] = True
+                else:
+                    answer = resp.get("answer") if isinstance(resp, dict) else None
+                    contains = ev.get("expect_contains")
+                    if contains is not None and answer:
+                        rec["answer_correct"] = (
+                            _se._canon(contains) in _se._canon(answer))
+            event_records.append(rec)
+
+        async def run_navigate_back(ev):
+            """'Go back to X': speak it, wait (bounded) for switch_to_field,
+            speak the correction, confirm. Seam latency = utterance
+            activity_end -> the client's switch_field round-trip receipt."""
+            n0 = len(client.switch_events)
+            await speak(ev["say"], "navigate-back")
+            t_end = _last_activity_end["ts"]
+            deadline = time.monotonic() + 20.0
+            while (len(client.switch_events) <= n0
+                   and time.monotonic() < deadline
+                   and not client.go_away_pending):
+                await asyncio.sleep(0.25)
+            rec = {"type": "navigate_back", "step": current_q["n"],
+                   "target": ev["target_field_id"], "switched_to": None,
+                   "hit_target": False, "seam_latency_s": None}
+            if len(client.switch_events) > n0:
+                sw = client.switch_events[-1]
+                rec["switched_to"] = sw.get("field_id")
+                rec["hit_target"] = sw.get("field_id") == ev["target_field_id"]
+                rec["seam_latency_s"] = round(sw["ts"] - t_end, 3)
+            await speak(ev["correction_say"], "navigate-correct")
+            await speak(CONFIRM_YES, "confirm")
+            event_records.append(rec)
+
+        async def check_steers():
+            """Drive the correction rail for any NEW conflict verdicts: wait
+            (bounded) for the model's switch_to_field, then speak the matching
+            plant's correction and confirm. On a timeout the correction is
+            spoken anyway -- the model has voiced the steer and is waiting on
+            the user; silence would desync the next scripted step."""
+            new = client.validation_results[_vr_handled["n"]:]
+            _vr_handled["n"] = len(client.validation_results)
+            for vr in new:
+                if not vr["conflicts"]:
+                    continue
+                rec = {"t_result": vr["ts"], "conflicts": len(vr["conflicts"]),
+                       "steer_to_switch_s": None, "outcome": None}
+                steer_records.append(rec)
+                n0 = len(client.switch_events)
+                deadline = time.monotonic() + 30.0
+                while (len(client.switch_events) <= n0
+                       and time.monotonic() < deadline
+                       and not client.go_away_pending):
+                    await asyncio.sleep(0.5)
+                target = None
+                if len(client.switch_events) > n0:
+                    sw = client.switch_events[-1]
+                    rec["steer_to_switch_s"] = round(sw["ts"] - vr["ts"], 3)
+                    target = sw.get("field_id")
+                plant = None
+                flagged_ids = {str(x) for c in vr["conflicts"]
+                               for x in (c.get("field_ids") or [])}
+                for s in steps:
+                    p = s.get("plant")
+                    if p and (target in p["conflict_group"]
+                              or (target is None
+                                  and flagged_ids & set(p["conflict_group"]))):
+                        plant = p
+                        break
+                if plant is not None:
+                    await speak(plant["correct_say"], "steer-correct")
+                    await speak(CONFIRM_YES, "steer-confirm")
+                    rec["outcome"] = ("corrected" if target is not None
+                                      else "corrected_no_switch")
+                else:
+                    # A conflict on un-planted fields (a genuine false positive
+                    # or a knock-on flag): acknowledge and keep both values.
+                    await speak("Both of those are correct as I gave them.",
+                                "steer-override")
+                    rec["outcome"] = "overridden_unplanted"
+
         sec_idx = 0
-        for i, q in enumerate(plan, 1):
+        for i, q in enumerate(steps, 1):
             current_q["n"] = i
-            fid = q["field_id"]
-            f_sec = (client.schema_fields[fid].get("section_id") or "section-1")
+            is_event = "event" in q
+            fid = q.get("field_id") if not is_event else None
+            f_sec = ((client.schema_fields[fid].get("section_id") or "section-1")
+                     if fid else None)
 
             # Continuous-arm GoAway reconnect (production-faithful, bd c5t/ctu8):
             # the Vertex Live CONNECTION caps at ~9-10 min and announces the close
@@ -1243,6 +2073,10 @@ async def run(args) -> int:
                                or not getattr(adapter, "_session_ready", False)):
                 was_announced = client.go_away_pending
                 client.go_away_pending = False
+                _t_reconnect0 = time.monotonic()
+                # Settle async validator/secretary work first; count drops
+                # instead of losing them silently (bd polyglot-pdf-eh1h).
+                await _drain_before_reconnect()
                 remaining = [client.schema_fields[p["field_id"]] for p in plan
                              if not client.state.get(p["field_id"], {}).get("confirmed")]
                 if remaining:
@@ -1264,7 +2098,8 @@ async def run(args) -> int:
                     last_total = await _wait_turn(adapter, last=0)  # re-greeting
                     _prev_q_end = time.monotonic()
                     meta.setdefault("continuous_reconnects", []).append(
-                        {"before_q": i, "announced": was_announced})
+                        {"before_q": i, "announced": was_announced,
+                         "downtime_s": round(time.monotonic() - _t_reconnect0, 3)})
                     print(f"    [reconnect] continuous session restarted before "
                           f"q{i} (go_away={'yes' if was_announced else 'no'})")
 
@@ -1272,7 +2107,7 @@ async def run(args) -> int:
             # production restart. The JIT-handshake arms (section-reset-jit, dti)
             # rebuild the handshake_jit schema for the new section so the restarted
             # SI is still the reduced JIT SI / tiny DTI SI (jnjj.6 / jnjj.25).
-            if is_section_reset and f_sec != secs[sec_idx]["id"]:
+            if is_section_reset and fid and f_sec != secs[sec_idx]["id"]:
                 sec_idx += 1
                 sec = secs[sec_idx]
                 spoken_prev = [client.schema_fields[p["field_id"]].get("name", p["field_id"])
@@ -1309,7 +2144,37 @@ async def run(args) -> int:
             # Window starts where the previous question ended (captures this field's
             # AI prompt, emitted at the tail of the prior turn). bd jnjj.39 / PR #246.
             _q_t_start = _prev_q_end
-            if args.path == "happy":
+            if is_event:
+                # Standalone scenario events (bd polyglot-pdf-eh1h).
+                if q["event"] == "recall":
+                    await run_recall(q)
+                elif q["event"] == "navigate_back":
+                    await run_navigate_back(q)
+                else:
+                    raise SystemExit(f"unknown event step: {q}")
+            elif q.get("skip"):
+                # Voice-skip event: the user cannot answer this field.
+                n_skips0 = len(client.skip_events)
+                await speak(q["skip_say"], "skip-request")
+                recorded = any(e.get("outcome") == "recorded"
+                               and e.get("field_id") == fid
+                               for e in client.skip_events[n_skips0:])
+                if not recorded:
+                    # The model may verify before skipping -- allow one yes turn
+                    # (mirrors probe_confirm_field's documented variance).
+                    await speak(CONFIRM_YES, "skip-confirm")
+                    recorded = any(e.get("outcome") == "recorded"
+                                   and e.get("field_id") == fid
+                                   for e in client.skip_events[n_skips0:])
+                event_records.append({"type": "skip", "step": i,
+                                      "field_id": fid, "recorded": recorded})
+            elif q.get("plant"):
+                # A planted contradiction: fill the wrong-but-plausible value
+                # and confirm; detection is the VALIDATOR's job at a later
+                # boundary (check_steers drives the correction rail then).
+                await speak(q["planted_say"], "plant-value")
+                await speak(CONFIRM_YES, "confirm")
+            elif (q.get("path") or args.path) == "happy":
                 await speak(q["say"], "value")
                 await speak(CONFIRM_YES, "confirm")
             else:
@@ -1330,8 +2195,20 @@ async def run(args) -> int:
             # (attribute tool calls vs transcript by SEPARATE rules) is jnjj.44.
             _prev_q_end = _last_activity_end["ts"]
             if DEBUG:
-                q_windows.append({"q": i, "fid": fid, "t_start": _q_t_start,
-                                  "t_end": _prev_q_end})
+                q_windows.append({"q": i, "fid": fid or q.get("event", "?"),
+                                  "t_start": _q_t_start, "t_end": _prev_q_end})
+
+            # Validation seam (W2/W3 stand-in; only armed on continuous full-form
+            # runs with the sidecar wired): submit windows on a first-time
+            # forward page crossing, then drive any steer the async verdicts
+            # produced. check_steers also runs when no boundary fired -- a
+            # verdict from an earlier boundary can land turns later.
+            if seam is not None:
+                next_fid = next((s.get("field_id") for s in steps[i:]
+                                 if "event" not in s), None)
+                if fid:
+                    seam.maybe_page_boundary(fid, next_fid, client.schema_fields)
+                await check_steers()
 
             d = tracker.delta_and_advance()
             ti, ai = d["_session_text_input_tokens"], d["_session_audio_input_tokens"]
@@ -1351,9 +2228,25 @@ async def run(args) -> int:
                                     + to * rates["text_output"] + ao * rates["audio_output"], 6),
             })
             meta["per_question_tools"][str(i)] = [t for (qq, t) in tool_log if qq == i]
-            print(f"[q{i:02d}] {fid}: {rows[-1]['total tokens']} tok "
+            print(f"[q{i:02d}] {fid or q.get('event')}: {rows[-1]['total tokens']} tok "
                   f"(${rows[-1]['total cost']:.4f}) tools={meta['per_question_tools'][str(i)]}",
                   flush=True)
+
+        # Terminal boundary (mirror form_complete, the terminal drain): submit
+        # whatever windows remain over the whole form, settle them, and drive
+        # any final steers -- a far-pair plant is typically caught HERE.
+        if seam is not None:
+            seam.submit(client.validation_fields(), reason="form-complete")
+            dropped = await seam.drain(timeout=20.0)
+            if dropped:
+                meta["validation_dropped_at_end"] = dropped
+            await check_steers()
+            meta["validation_records"] = [
+                {k: v for k, v in r.items()} for r in seam.records]
+            meta["steer_records"] = steer_records
+        meta["event_records"] = event_records
+        meta["seam_tool_records"] = seam_tool_records
+        meta["text_ledger_calls"] = text_ledger_calls
 
         try:
             await adapter.finalize()
@@ -1362,6 +2255,8 @@ async def run(args) -> int:
     finally:
         for _m, _orig in _orig_get_settings:
             _m.get_settings = _orig
+        _ffs_mod._log = _module_logs["ffs"]
+        _callback_mod._log = _module_logs["cb"]
 
     prompts = [d["prompt"] or 0 for d in usage_dumps]
     meta["prompt_curve"] = prompts
@@ -1376,21 +2271,37 @@ async def run(args) -> int:
     # jnjj.25 confirm-counts could not be. Scores whether the model wrote the RIGHT
     # value per field (canon-compared to the expected answer). The get_field_value
     # recall-lookup arm was removed with that tool (bd polyglot-pdf-p5h2/2wod).
-    expected = SCHEMAS[args.schema].get("expected") or {}
+    # expected_tbl carries the event-script overrides (plants corrected, skips
+    # expect-empty) on top of the schema's expected canon.
+    expected = expected_tbl or (SCHEMAS[args.schema].get("expected") or {})
     meta["fill_accuracy"] = score_fill_accuracy(client, plan, expected)
     _fa = meta["fill_accuracy"]
     print(f"fill accuracy: {_fa['matched']}/{_fa['total']} "
           f"({_fa['accuracy']:.0%})")
+    meta["fill_failure_modes"] = _se.classify_fill_failures(
+        _fa["detail"], expected)
+    meta["wall_clock_s"] = round(time.monotonic() - t_run_start, 1)
 
     csv_path = out_dir / f"{base_name}.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
         w.writeheader()
         w.writerows(rows)
+    meta["auto_apply_fids"] = [aa["field_id"]
+                               for aa in (SCHEMAS[args.schema].get("auto_apply") or [])]
     (out_dir / f"{base_name}.meta.json").write_text(
         json.dumps(meta, indent=2, default=str), encoding="utf-8")
+    summary = build_summary(meta, rows, log_sink, client, planted_groups,
+                            {q["field_id"] for q in plan})
+    (out_dir / f"{base_name}.summary.json").write_text(
+        json.dumps(summary, indent=2, default=str), encoding="utf-8")
     print(f"\nwrote {csv_path}")
     print(f"wrote {out_dir / (base_name + '.meta.json')}")
+    print(f"wrote {out_dir / (base_name + '.summary.json')}")
+    print(f"all-in: ${summary['headline']['all_in_usd']} "
+          f"(voice ${summary['headline']['voice_usd']} + "
+          f"text ${summary['headline']['text_usd']}); "
+          f"wall clock {summary['headline']['wall_clock_s']}s")
     total = sum(r["total cost"] for r in rows)
     print(f"run total: {sum(r['total tokens'] for r in rows)} tokens, ${total:.4f}; "
           f"evictions detected: {len(meta['eviction_drops'])}; "
@@ -1460,18 +2371,48 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-question token/cost CSV instrument (bd polyglot-pdf-4loz).")
     ap.add_argument("--model", choices=["2.5", "3.1"], default="2.5")
-    ap.add_argument("--schema", choices=["demo", "i90"], default="demo",
+    ap.add_argument("--schema", choices=["demo", "i90", "i90-full"], default="demo",
                     help="form schema + question plan: 'demo' (the legacy "
-                         "adult-intake demo, default for back-compat) or 'i90' "
-                         "(the REAL form-kits/i-90 first 3 sections -- the "
-                         "production-faithful set; bd polyglot-pdf-jnjj.24)")
+                         "adult-intake demo, default for back-compat), 'i90' "
+                         "(the REAL form-kits/i-90 first 4 sections, 34 "
+                         "questions; bd polyglot-pdf-jnjj.24), or 'i90-full' "
+                         "(the WHOLE I-90 stress-test plan generated from the "
+                         "g1b answer key -- ~113 questions; requires --arm dti "
+                         "--continuous; bd polyglot-pdf-n86b)")
     ap.add_argument("--arm",
                     choices=["unbounded", "section-reset", "section-reset-jit", "dti", "sliding-window"],
                     default="unbounded")
     ap.add_argument("--path", choices=["happy", "unhappy"], default="happy")
     ap.add_argument("--questions", type=int, default=None,
                     help="cap the run to the first N questions; default runs the "
-                         "WHOLE plan for the chosen --schema (demo=20, i90=25)")
+                         "WHOLE plan for the chosen --schema (demo=20, i90=34, "
+                         "i90-full=~113)")
+    ap.add_argument("--events", choices=["none", "standard", "unhappy"],
+                    default="none",
+                    help="i90-full only: weave the scenario-event script into "
+                         "the plan (bd polyglot-pdf-eh1h). 'standard' = the E2 "
+                         "realistic session (recalls, navigate-backs, a skip, "
+                         "2 planted contradictions); 'unhappy' adds the E3 "
+                         "extra plants (4 total, 1 far pair)")
+    ap.add_argument("--mix-unhappy", type=int, default=5,
+                    help="with --events standard: flag every Nth question as "
+                         "unhappy (the 80/20 realistic mix at 5). 0 disables.")
+    ap.add_argument("--reactivity", default=None,
+                    help="i90-full only: run ONE reactivity micro-scenario "
+                         "(E4) by name -- see scenario_events.REACTIVITY_SUITE")
+    ap.add_argument("--lang", default="en",
+                    help="spoken-answer language for fixture synthesis (E6 "
+                         "Spanish arm: 'es'; phrasing templates must exist in "
+                         "full_form_script for non-'en')")
+    ap.add_argument("--text-ai", action="store_true",
+                    help="wire the REAL TextAIGemini sidecar (secretary + "
+                         "validator) into the run. Default ON for --schema "
+                         "i90-full (deploy fidelity), OFF for legacy schemas "
+                         "so historical arms measure unchanged.")
+    ap.add_argument("--no-text-ai", action="store_true",
+                    help="force the text sidecar OFF (overrides the i90-full "
+                         "default; ask_secretary then fail-opens as production "
+                         "does without a wired text model)")
     ap.add_argument("--trigger", type=int, default=12_000,
                     help="sliding-window trigger_tokens; size it ABOVE the "
                          "unevictable SI+tools base (~8.2k on the full-form "
