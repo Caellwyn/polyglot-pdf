@@ -364,11 +364,21 @@ def recompute_si_scenarios() -> dict:
     the FROZEN historical literal for 'jit' so the notebook's drift-check does not
     silently report a false 0 from a legacy-vs-legacy comparison, and so the
     historical full/jit/drip analysis narrative still renders. 'full', 'drip', and
-    'sections' are still recomputed live (they use the surviving legacy full-SI)."""
+    'sections' are still recomputed live (they use the surviving legacy full-SI).
+
+    The legacy full-SI mode is pinned EXPLICITLY (bd polyglot-pdf-s7gq): USE_DTI
+    now defaults ON (bd polyglot-pdf-7872), and build_form_context branches to the
+    DTI thin SI whenever settings.USE_DTI -- so relying on the get_settings()
+    default silently measured the ~4.5k-char DTI SI and mislabeled it 'full' (the
+    real legacy full-SI is ~26.5k on the schema this probe uses). Construct a
+    legacy Settings and patch ai_context.get_settings for the
+    build (mirrors measure_form_session_costs and the test_ai_context autouse
+    fixture); CONTINUOUS_SESSION must also be off or config forces USE_DTI back on."""
     import sys
     root = str(Path(__file__).resolve().parent.parent.parent)
     if root not in sys.path:
         sys.path.insert(0, root)
+    from backend.config import Settings
     from backend.services import ai_context
 
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -377,20 +387,27 @@ def recompute_si_scenarios() -> dict:
     for f in schema["fields"]:
         secs.setdefault(f.get("section_id") or "section-1", []).append(f)
 
+    _legacy = Settings(USE_DTI=False, CONTINUOUS_SESSION=False)
+
     def _si_len(sch):
-        # Legacy full-SI (USE_DTI off, the default) -- the only SI mode these
-        # length probes can build now that JIT is gone.
+        # Legacy full-SI -- explicitly pinned (see the docstring; a USE_DTI default
+        # flip must not relabel these lengths).
         return len(ai_context.build_form_context(
             sch, {}, section_number=1, total_sections=15, section_label="X"))
 
-    return {
-        "full": _si_len(full),
-        # Frozen historical value -- JIT SI removed, no longer live-computable.
-        "jit": list(SI_SCENARIOS_CHARS.values())[1],
-        "drip": _si_len({"form_metadata": schema["form_metadata"], "fields": []}),
-        "sections": [_si_len({"form_metadata": schema["form_metadata"],
-                              "fields": fl}) for fl in secs.values()],
-    }
+    _orig_get_settings = ai_context.get_settings
+    ai_context.get_settings = lambda: _legacy
+    try:
+        return {
+            "full": _si_len(full),
+            # Frozen historical value -- JIT SI removed, no longer live-computable.
+            "jit": list(SI_SCENARIOS_CHARS.values())[1],
+            "drip": _si_len({"form_metadata": schema["form_metadata"], "fields": []}),
+            "sections": [_si_len({"form_metadata": schema["form_metadata"],
+                                  "fields": fl}) for fl in secs.values()],
+        }
+    finally:
+        ai_context.get_settings = _orig_get_settings
 
 
 # Billed usage events per question, measured from the matrix via
