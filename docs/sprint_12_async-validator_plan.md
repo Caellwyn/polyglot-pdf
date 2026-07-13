@@ -37,21 +37,47 @@ supports it.
 
 ## The design
 
-**Trigger (client).** A page-boundary crossing detected on the next-field
-path: previous field page P, next field page P' != P => "page P ended". Also
-fires on `form_complete` (the terminal boundary, existing emission kept).
-Skip-driven and manual-edit-driven crossings ride the same seam (all funnel
-through the next-field hint). Backward jumps (switch_to_field to an earlier
-page) do NOT re-trigger -- only first-time forward crossings, tracked by a
-persisted high-water page number.
+> **Report-cadence revision (maintainer, 2026-07-13).** The original design had
+> two clocks fused into the page boundary: it VALIDATED windows at page end AND
+> REPORTED (drained findings to the voice model) at page end. Reporting costs a
+> voice turn, so page-end reporting meant one turn per page whether or not
+> anything was wrong. The revised design SEPARATES the two clocks and makes
+> reporting FINDING-DRIVEN, for paginated AND non-paginated forms alike:
+> - **Validation runs on a page-agnostic field-count stride** (not page
+>   crossings). Windows are built + sent as fields get confirmed; this is cheap,
+>   async, and produces no voice turn. Decoupling from pages also removes the
+>   no-pagination gap entirely (`source: "web"` forms, unplaced PDF fields --
+>   which carry no `pdf_position.page` -- validate on the same stride as any
+>   other form; there is no page trigger to miss).
+> - **Reporting happens ONLY when a surviving finding exists.** A clean window
+>   produces NO steer and NO turn -- no "all is well" chatter. A window that
+>   surfaces a real contradiction (post-dedupe, post-steered-suppression) drains
+>   to the voice model right then (findings batch into one steer), so a mistake
+>   is corrected as soon as it is detected, not held to a boundary.
+> - **No `form_complete` drain.** The end-of-form report is redundant with the
+>   whole-form pro pass (W5/W6), which runs on a stronger model at
+>   form_complete. Instead of re-reporting, the mid-form findings already
+>   surfaced/adjudicated FEED FORWARD into the pro pass's context so it does not
+>   re-flag them and can reason with them.
+>
+> The paragraphs below are the ORIGINAL page-boundary design; the bead bodies
+> (W2 kxkw, W3 pr3i, W6 gbus) carry the revised finding-driven shape and are the
+> build contract. This block is the current-state summary of the change.
 
-**Windowing (client builds, backend validates).** On a page-end trigger the
-client forms the maintainer-specified overlapping windows -- size ~20, stride
-~10, over the schema field order -- covering fields up to the crossed
-boundary, EXCLUDING windows already sent (persisted validated-window
-high-water mark). Each window's contract-2 payload (field_id, name, value,
-steered) rides ONE `validate_windows` message. Values-only fields as today;
-window size/stride are config knobs (defaults 20/10).
+**Trigger (client).** ORIGINAL: a page-boundary crossing on the next-field
+path. REVISED: a page-agnostic field-count stride -- as fields are confirmed,
+the client builds + sends the windows that newly became coverable, EXCLUDING
+windows already sent (persisted validated-window high-water mark). No page
+comparison; `pdf_position.page` is not required. `form_complete` no longer
+drives a validator report (the pro pass owns end-of-form).
+
+**Windowing (client builds, backend validates).** The client forms the
+overlapping windows -- size ~20, stride ~10, over the schema field order --
+covering the confirmed fields not yet in a sent window (persisted
+validated-window high-water mark). Each window's contract-2 payload (field_id,
+name, value, steered) rides ONE `validate_windows` message. Values-only fields
+as today; window size/stride are config knobs (defaults 20/10). The stride is
+the VALIDATION clock only -- it produces no voice turn.
 
 **Async backend.** The WS handler acks immediately and runs the validation in
 a background task (`asyncio.create_task`), one flash-lite call per window
@@ -61,16 +87,19 @@ field-id set (overlap makes duplicates structural, not exceptional), then
 suppressed by the steered markers exactly as today, then pushed to the client
 as a `validation_result`. Nothing in the voice path waits on any of this.
 
-**Queue + surfacing (client).** Findings land in a new persisted
-`validatorFindingsQueue` on SchemaFormState. They surface at the NEXT
-page-end trigger (or form_complete, the terminal drain): the client sends a
-`drain_findings` message carrying the queued conflicts; the backend composes
-ONE steer via the SHIPPED oiok composer (`_compose_validator_steer` --
-navigate/read-back/correct, one finding at a time) and injects it. In
-practice a window's verdict (~1-4s) lands long before the next page ends, so
-findings for page P typically steer right when page P+1 ends -- one page of
-latency at most, versus end-of-form today. Fields steered from the queue get
-their `steered` markers on injection delivery, exactly as today.
+**Queue + surfacing (client) -- FINDING-DRIVEN.** Findings land in a new
+persisted `validatorFindingsQueue` on SchemaFormState. A `validation_result`
+carrying surviving conflicts drains IMMEDIATELY (not at a boundary): the client
+sends a `drain_findings` message with the queued conflicts and the backend
+composes ONE steer via the SHIPPED oiok composer (`_compose_validator_steer` --
+navigate/read-back/correct, one finding at a time) and injects it. A CLEAN
+`validation_result` enqueues nothing and triggers no drain -- no turn is spent
+on an all-clear. Fields steered from the queue get their `steered` markers on
+injection delivery, exactly as today. Latency: a window verdict (~1-4s) lands
+mid-fill and steers as soon as it arrives -- correction happens right after the
+conflicting field is entered, not one page later. The queue exists to BATCH
+concurrent findings into one steer and to survive a reconnect; it is not a
+boundary buffer.
 
 **Re-arm on value change (the maintainer's PR-#413 question, now designed
 in).** `steered` currently sets at steer delivery and never clears, so a
@@ -89,21 +118,29 @@ one whole-form pro-tier pass at form_complete -- but it is UNMEASURED (even
 first (extends the 6cfu.5 instrument to gemini-2.5-pro on the 132-field
 corpus, thinking budget BOUNDED, ~42 calls, estimated $0.30-0.50 -- spend
 approval is part of approving this plan). Wire the pass only on a GO; a NO-GO
-is recorded with the data and far-pair coverage explicitly deferred.
+is recorded with the data and far-pair coverage explicitly deferred. **The pro
+pass is now the SOLE end-of-form report** (there is no separate form_complete
+validator drain -- report-cadence revision above). To avoid re-flagging what
+the mid-form lite windows already surfaced, the pro pass is fed the
+already-surfaced/adjudicated findings (the `steered`-marked fields + their
+conflict reasons) as CONTEXT, so its whole-form pass reasons WITH them rather
+than re-reporting them.
 
 **What this deletes/replaces.** The inline receive-loop await goes; the
 section_complete trigger machinery (already dead in continuous mode) is C7's
-(55jg) deletion; the form_complete emission survives as the terminal
-drain + (if GO) the pro-pass trigger. The client 6s validator gate
-(VALIDATOR_GATE_TIMEOUT_MS) and pendingSectionSwitch parking lose their
-purpose once nothing blocks; removed with the legacy path.
+(55jg) deletion. The page-boundary REPORT trigger and the `form_complete`
+validator drain are replaced by finding-driven reporting (revision above) --
+`form_complete` now drives ONLY the pro pass (if GO), not a lite-findings
+drain. The client 6s validator gate (VALIDATOR_GATE_TIMEOUT_MS) and
+pendingSectionSwitch parking lose their purpose once nothing blocks; removed
+with the legacy path.
 
 ## Exit rubric (build epic)
 
 | # | Criterion | Verify |
 |---|-----------|--------|
 | 1 | During a continuous multi-page fill, validator windows run in the background and the voice flow is never blocked: no validation await in the WS receive loop, and a deliberately slow/hung validator does not delay any voice turn or ack | Code: websocket_routes has no inline validation await (grep). Behavior: a unit/integration test with a slow validator stub shows acks/turns proceed; harness run shows no added turn latency |
-| 2 | A contradiction planted on page P of a multi-page form is steered at a page boundary BEFORE form completion, and the live model corrects it via the rail (navigate -> read-back -> correct) | Extend probe_validator_rail (or the harness): plant a page-1 contradiction, fill past a page boundary, observe queued finding -> page-end steer -> switch_to_field -> corrected write, all pre-form-complete |
+| 2 | A contradiction surfaced by a mid-form lite window is steered AS SOON AS THE WINDOW VERDICT LANDS (finding-driven, not at a boundary) and BEFORE form completion, and the live model corrects it via the rail (navigate -> read-back -> correct). A CLEAN window produces no steer/turn. Applies to paginated AND non-paginated (`source: "web"`) forms (report-cadence revision 2026-07-13) | Extend probe_validator_rail (or the harness): plant an early contradiction, fill until its window's verdict lands, observe queued finding -> immediate steer -> switch_to_field -> corrected write, pre-form-complete; and a clean fill emits no steer |
 | 3 | Overlapping windows never yield duplicate steers for one conflict, and a user-CORRECTED value re-enters the net while a user-CONFIRMED-intentional pair is never re-flagged | Unit tests: dedupe by field-id set across windows; re-arm-on-value-change clears steered on edit; the existing max-resteer/override tests still pass |
 | 4 | The end-of-form pro pass is either wired with MEASURED far-pair recall recorded, or explicitly recorded NO-GO with the measurement data committed | Findings doc + committed run artifacts for the pro measurement; the wiring (or its absence) matches the verdict |
 
@@ -112,16 +149,16 @@ purpose once nothing blocks; removed with the legacy path.
 | Bead | Scope | Surfaces | Inherits |
 |------|-------|----------|----------|
 | W1 async backend | Move validation off the receive loop (create_task, immediate ack, result push); per-window fail-open/timeout; window-batch dedupe by field-id set | backend/routes/websocket_routes.py, backend/services/form_filling_service.py, backend/services/validator_service.py, backend/tests/ | #1, #3 (dedupe half) |
-| W2 page-end trigger + windows | Page-crossing detection on the next-field seam; persisted high-water marks (page + validated windows); window builder 20/10 (config knobs); `validate_windows` emission | frontend/src/webFormConnection.ts, frontend/src/schema-forms/state/schemaFormState.ts, frontend tests | #2 (trigger half) |
-| W3 queue + drain (after W1, W2) | Persisted validatorFindingsQueue; `drain_findings` at page-end/form-complete; backend drain handler -> the oiok steer composer; E2E with a planted page-1 contradiction | frontend/src/webFormConnection.ts, backend ws route + service, tests, probe extension | #2 |
+| W2 stride window builder + emit (REVISED 2026-07-13) | Page-AGNOSTIC field-count stride on the confirm/next-field seam (no `pdf_position.page` dependency); persisted validated-window high-water mark; window builder 20/10 (config knobs); `validate_windows` emission. (Was page-crossing detection; the report-cadence revision made validation stride-based.) | frontend/src/webFormConnection.ts, frontend/src/schema-forms/state/schemaFormState.ts, frontend tests | #2 (trigger half) |
+| W3 queue + FINDING-DRIVEN drain (after W1, W2; REVISED 2026-07-13) | Persisted validatorFindingsQueue; `drain_findings` fires IMMEDIATELY on a non-empty `validation_result` (not at a boundary; a clean result drains nothing); backend drain handler -> the oiok steer composer; E2E with a planted early contradiction + a clean-fill no-steer case | frontend/src/webFormConnection.ts, backend ws route + service, tests, probe extension | #2 |
 | W4 re-arm on value change (parallel) | Clear `steered` in the updateField write path on value change; pin the confirmed-intentional-never-re-flagged case | frontend/src/schema-forms/state/schemaFormState.ts, tests | #3 (re-arm half) |
 | W5 pro-pass measurement (parallel; gated spend ~$0.30-0.50) | Extend the 6cfu.5 instrument to 2.5-pro whole-form far-pair recall on the 132-field corpus, thinking bounded; findings doc + verdict | backend/scripts/ or scripts/spikes/, data artifacts | #4 |
-| W6 pro-pass wiring (after W5, only on GO) | form_complete runs the pro pass alongside the terminal drain; findings ride the same queue/steer path | backend service + tests | #4 |
+| W6 pro-pass wiring (after W5, only on GO; REVISED 2026-07-13) | form_complete runs the pro pass as the SOLE end-of-form report (no separate lite drain); the already-surfaced mid-form findings (steered fields + reasons) are FED to the pro pass as context so it does not re-flag them; its NEW conflicts ride the same finding-driven queue/steer path | backend service + tests | #4 |
 
 Out of scope: any mid-utterance interruption UX (steers surface between
-fields, at boundaries, as today); Preview-mode visual page tracking (no such
-event exists; the fill-order seam covers both views); the legacy
-section-machinery deletion (C7/55jg owns it, sequenced after this lands).
+fields, as today); Preview-mode visual page tracking (no such event exists;
+the fill-order seam covers both views); the legacy section-machinery deletion
+(C7/55jg owns it, sequenced after this lands).
 
 ## Open item folded into this approval
 
