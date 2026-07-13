@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/websocket_routes.py frontend/src/shared/connection.ts frontend/src/webFormConnection.ts
 
-*Last updated: 2026-07-12 (continuous-DTI is the production law: the whole form runs as one session and the section-switch flow below is the DEPRECATED section-reset fallback, bd polyglot-pdf-55jg). Prior: 2026-07-11 (bd polyglot-pdf-hc4b: the handshake `resume` flag is now `true` on the first post-soft-refresh open when persisted state is in-progress, so a mid-form reload does not re-greet. See [../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md](../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md).)*
+*Last updated: 2026-07-13 (bd polyglot-pdf-xbl2 (W1, async validator): the validator now runs OFF the WS receive loop -- `section_complete`/`form_complete` ack immediately + validate in a background task, and a new `validate_windows` async page-end trigger runs overlapping windows concurrently with batch dedupe; `validation_result` is pushed asynchronously after the `*_ack` (envelope shape unchanged). See the control-message table + validator-results note.). Prior: 2026-07-12 (continuous-DTI is the production law: the whole form runs as one session and the section-switch flow below is the DEPRECATED section-reset fallback, bd polyglot-pdf-55jg). Prior: 2026-07-11 (bd polyglot-pdf-hc4b: the handshake `resume` flag is now `true` on the first post-soft-refresh open when persisted state is in-progress, so a mid-form reload does not re-greet. See [../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md](../journal/entries/2026-07-11-bd-hc4b-soft-refresh-resume.md).)*
 
 The `/ws/fill` endpoint is the spine of the voice form-filler: one WebSocket
 carries the handshake, audio frames, and a JSON control channel between the browser
@@ -103,21 +103,25 @@ audio (`service.stream_audio`) and JSON text frames by `type`:
 | `restart_gemini_session` | restart Gemini with existing schema/values → `gemini_session_restarted` |
 | `manual_section_switch` | user switched section in the UI → backend restarts Gemini, then emits `section_switched` (see below) |
 | `section_completed` | **legacy/backend-only** — handler exists (→ `section_completed_ack`) but no client currently sends it; completion is driven via `manual_section_switch` / `onFormComplete` (see below) |
-| `section_complete` | **proactive boundary event** (Pillar B, bd polyglot-pdf-jnjj.16) — sent when the last field of the current section is confirmed (a next section exists); carries `section_id` + the contract-2 field payload. Since B5 (jnjj.17) the arm runs the validator (`service.handle_validation_boundary`), pushes a `validation_result` (below), then acks `section_complete_ack`. Distinct from the legacy `section_completed` above. |
-| `form_complete` | **proactive boundary event** (Pillar B, bd polyglot-pdf-jnjj.16) — sent once when the whole form is confirmed (re-emitted after a post-completion edit; client-side dirty guard); carries the whole-form contract-2 payload. Since B5: runs the full-form validator pass, pushes `validation_result`, then acks `form_complete_ack`. |
+| `section_complete` | **proactive boundary event** (Pillar B, bd polyglot-pdf-jnjj.16) — sent when the last field of the current section is confirmed (a next section exists); carries `section_id` + the contract-2 field payload. Since W1 (bd polyglot-pdf-xbl2) the arm acks `section_complete_ack` IMMEDIATELY and spins the validator into a background task off the receive loop (a one-window batch), which pushes `validation_result` (below) when it lands. Distinct from the legacy `section_completed` above. |
+| `form_complete` | **proactive boundary event** (Pillar B, bd polyglot-pdf-jnjj.16) — sent once when the whole form is confirmed (re-emitted after a post-completion edit; client-side dirty guard); carries the whole-form contract-2 payload. Since W1: acks `form_complete_ack` immediately + runs the full-form pass in the background, which pushes `validation_result`. |
+| `validate_windows` | **async page-end validator trigger** (Pillar B / W1, bd polyglot-pdf-xbl2) — carries `windows`, a list of overlapping contract-2 field lists (size ~20, stride ~10) covering fields up to a crossed page boundary. Acks `validate_windows_ack` immediately, then runs every window's flash-lite pass concurrently off the receive loop, dedupes conflicts across the batch by field-id set, and pushes one `validation_result`. The FE emitter (page-end detection + window builder) lands in W2 (bd polyglot-pdf-kxkw); the backend dispatch arm exists now. |
 
 Unknown types → `{"type":"error","code":"unknown_control"}` (logged).
 
-**Validator results (backend → client, Pillar B / bd polyglot-pdf-jnjj.17):** after
-each `section_complete` / `form_complete`, the backend pushes a
-**`validation_result`** (`{type, conflicts}`; clean = `conflicts:[]`) for EVERY
-boundary — the client's deterministic clean→resume signal for the gated section
-switch. On a conflict the client marks the named fields `steered` (sessionStorage,
-so the next payload carries it for the max-resteer bound) and **holds** in-section;
-the correction is voiced by the live model, which the backend steers via a
-Gemini Live text turn (NOT a client message). The section auto-switch is now
-**gated** on this result: clean → switch proceeds; conflict → switch held; no result
-within the fail-open window → switch proceeds unchecked.
+**Validator results (backend → client, Pillar B / bd polyglot-pdf-jnjj.17;
+async since W1 / bd polyglot-pdf-xbl2):** for each `section_complete` /
+`form_complete` / `validate_windows` boundary the backend pushes a
+**`validation_result`** (`{type, conflicts}`; clean = `conflicts:[]`; envelope
+shape unchanged by W1). W1 moved the validator OFF the receive
+loop: the boundary is acked FIRST and the pass runs in a background task, so this
+result is PUSHED asynchronously AFTER the `*_ack` (a slow/hung validator adds zero
+voice-turn latency). On a conflict the client marks the named fields `steered`
+(sessionStorage, so the next payload carries it for the max-resteer bound); the
+correction is voiced by the live model, which the backend steers via a Gemini Live
+text turn (NOT a client message). The DEPRECATED section-reset gate (below) still
+resolves on an arriving clean result and fails open on the timeout if the async
+result is slow/absent.
 
 ## Section-switch flow (DEPRECATED section-reset fallback)
 

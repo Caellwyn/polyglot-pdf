@@ -237,6 +237,12 @@ DOC_INBOUND_TYPES_WITHOUT_FE_SENDER = {
     # column for this row already points at the backend handler, not an FE
     # line. Unlike section_completed, the doc does NOT flag the missing sender.
     "next_field_hint",
+    # W1 (bd polyglot-pdf-xbl2) landed the BACKEND dispatch arm for the async
+    # page-end validator trigger; the FRONTEND sender (page-end detection + the
+    # window builder that emit it) is W2 (bd polyglot-pdf-kxkw). The doc row for
+    # this type flags the missing sender ("FE sender lands in W2"). Remove this
+    # entry when W2 wires the emitter.
+    "validate_windows",
 }
 
 
@@ -638,6 +644,12 @@ def _mock_service(verdict=None):
     svc.start_session = AsyncMock()
     svc.end_session = AsyncMock()
     svc.stream_audio = AsyncMock()
+    # W1 (bd polyglot-pdf-xbl2): the validation triggers now route through the async
+    # handle_validation_windows (spawned off the receive loop). Stub BOTH the async
+    # windows path (the live one) and the legacy single-window method so a future
+    # test in this class that sends a validation-trigger frame does not hit an
+    # un-configured MagicMock attribute inside the swallowed background task.
+    svc.handle_validation_windows = AsyncMock(return_value=verdict or {"conflicts": []})
     svc.handle_validation_boundary = AsyncMock(return_value=verdict or {"conflicts": []})
     return svc
 

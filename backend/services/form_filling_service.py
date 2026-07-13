@@ -1495,22 +1495,7 @@ class FormFillingService:
             return {"conflicts": []}
 
         safe_fields = fields if isinstance(fields, list) else []
-        try:
-            # Backend-side fail-OPEN timeout (Codex PR #275): the await below runs
-            # INLINE in the WS receive loop, so a validator that hangs would block the
-            # loop and prevent the client's own fail-OPEN manual_section_switch from
-            # being processed -- the FE timer alone cannot rescue the user. Bound the
-            # call here so a hang returns clean (no conflict, no steer) and the loop is
-            # freed well within the client's gate window.
-            verdict = await asyncio.wait_for(
-                ValidatorService(self._text_ai).validate(safe_fields),
-                timeout=self._settings.VALIDATOR_TIMEOUT_SEC,
-            )
-        except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001 -- fail-OPEN
-            _log.warning("validator_boundary_fail_open",
-                         exc_type=type(exc).__name__, session_id=self._session_id)
-            return {"conflicts": []}
-        conflicts = verdict.get("conflicts", []) if isinstance(verdict, dict) else []
+        conflicts = await self._validate_one_window(safe_fields)
 
         surviving = self._suppress_already_steered(conflicts, safe_fields)
         # Only return conflicts whose STEER ACTUALLY REACHED the Live session. If the
@@ -1522,6 +1507,145 @@ class FormFillingService:
         # adjudicated) are never in `surviving`, so they too read as clean.
         delivered = await self._inject_validator_steer(surviving, safe_fields) if surviving else []
         return {"conflicts": delivered}
+
+    async def _validate_one_window(self, window_fields: list) -> list:
+        """Run the cheap-model contradiction check over ONE window's contract-2
+        field list and return its raw conflicts (contract-1, PRE-suppression).
+
+        Fail-OPEN per window (contract 6): a timeout / error / bad shape yields an
+        EMPTY conflict list -- one dead window never blocks the others or the
+        boundary. The per-window hard bound is VALIDATOR_TIMEOUT_SEC. PII: logs
+        exc type only, never values.
+        """
+        safe_fields = window_fields if isinstance(window_fields, list) else []
+        try:
+            verdict = await asyncio.wait_for(
+                ValidatorService(self._text_ai).validate(safe_fields),
+                timeout=self._settings.VALIDATOR_TIMEOUT_SEC,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001 -- fail-OPEN
+            _log.warning("validator_window_fail_open",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+            return []
+        return verdict.get("conflicts", []) if isinstance(verdict, dict) else []
+
+    async def handle_validation_windows(self, windows: list) -> dict:
+        """W1 (bd polyglot-pdf-xbl2): the ASYNC, multi-window validator boundary.
+
+        Called from a BACKGROUND task (asyncio.create_task) spawned off the WS
+        receive loop -- NOTHING in the voice/tool path awaits it. Runs one
+        flash-lite call PER WINDOW concurrently (bounded by
+        VALIDATOR_MAX_CONCURRENT_WINDOWS, each with its own fail-open +
+        VALIDATOR_TIMEOUT_SEC), DEDUPES conflicts across the whole batch by their
+        field-id SET (overlapping windows -- size ~20, stride ~10 -- make the same
+        conflicting pair appear in multiple windows; the duplication is structural,
+        not exceptional), suppresses the already-steered markers exactly as the
+        single-window boundary does, injects ONE steer for the survivors, and
+        returns the delivered contract-1 verdict for the caller to push as the
+        `validation_result` envelope.
+
+        `windows` is a list of contract-2 field lists (each list is one window).
+        The steered-marker suppression + the returned conflicts operate over the
+        UNION of every window's fields (a field's `steered` flag rides its entry in
+        whatever window(s) contain it; the client owns the marker).
+
+        Fail-OPEN throughout (contract 6): a bad `windows` shape, a dead window, or
+        no text-ai wired all reduce to an empty verdict; the background task's own
+        exception guard lives at the call site so a raise here can never crash the
+        receive loop. PII: logs counts only, never values.
+        """
+        if self._text_ai is None:
+            return {"conflicts": []}
+
+        safe_windows = [w for w in windows if isinstance(w, list)] if isinstance(windows, list) else []
+        if not safe_windows:
+            return {"conflicts": []}
+
+        # Bound the concurrent flash-lite fan-out; windows past the cap queue.
+        sem = asyncio.Semaphore(
+            max(1, int(self._settings.VALIDATOR_MAX_CONCURRENT_WINDOWS))
+        )
+
+        async def _run(window_fields: list) -> list:
+            async with sem:
+                return await self._validate_one_window(window_fields)
+
+        per_window = await asyncio.gather(
+            *(_run(w) for w in safe_windows), return_exceptions=True
+        )
+
+        # Flatten, discarding any window that raised (gather with
+        # return_exceptions surfaces the raise as a value -- fail-open per window).
+        all_conflicts: list = []
+        for result in per_window:
+            if isinstance(result, list):
+                all_conflicts.extend(result)
+
+        deduped = self._dedupe_conflicts_by_field_set(all_conflicts)
+
+        # The union of every window's fields carries the steered markers + the
+        # id->name map for the steer. A field can appear in more than one window;
+        # last-wins on collision is fine (windows carry the same value for a field).
+        union_fields = self._union_window_fields(safe_windows)
+
+        surviving = self._suppress_already_steered(deduped, union_fields)
+        _log.info(
+            "validator_windows_complete",
+            window_count=len(safe_windows),
+            raw_conflict_count=len(all_conflicts),
+            deduped_conflict_count=len(deduped),
+            surviving_conflict_count=len(surviving),
+            session_id=self._session_id,
+        )
+        delivered = await self._inject_validator_steer(surviving, union_fields) if surviving else []
+        return {"conflicts": delivered}
+
+    @staticmethod
+    def _union_window_fields(windows: list) -> list:
+        """Union every window's contract-2 field entries into one de-duplicated list
+        (by field_id), preserving first-seen order. Overlapping windows repeat a
+        field; the suppression + steer-compose helpers want each field once. A field
+        marked steered in ANY window is treated as steered (the OR is the safe side:
+        it only suppresses re-steering an already-adjudicated field)."""
+        by_id: dict = {}
+        for window in windows:
+            if not isinstance(window, list):
+                continue
+            for f in window:
+                if not isinstance(f, dict):
+                    continue
+                fid = f.get("field_id")
+                if not fid:
+                    continue
+                existing = by_id.get(fid)
+                if existing is None:
+                    by_id[fid] = dict(f)
+                elif f.get("steered"):
+                    # Preserve a steered:true seen in any window (OR semantics).
+                    existing["steered"] = True
+        return list(by_id.values())
+
+    @staticmethod
+    def _dedupe_conflicts_by_field_set(conflicts: list) -> list:
+        """W1: collapse conflicts that name the SAME set of field_ids to a single
+        entry (overlapping windows make one real contradiction surface once per
+        window that spans it). Keys on the FROZENSET of field_ids so order does not
+        matter ('A,B' == 'B,A'). First occurrence wins (keeps its reason). Malformed
+        entries (no field_ids) are dropped -- they cannot be suppressed or steered."""
+        seen: set = set()
+        out: list = []
+        for c in conflicts:
+            if not isinstance(c, dict):
+                continue
+            ids = c.get("field_ids", [])
+            if not isinstance(ids, list) or not ids:
+                continue
+            key = frozenset(str(i) for i in ids)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(c)
+        return out
 
     @staticmethod
     def _suppress_already_steered(conflicts: list, fields: list) -> list:
