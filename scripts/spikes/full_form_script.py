@@ -66,6 +66,11 @@ MULTI_SEP = g1b_answer_key.MULTI_SEP
 # answer-key staleness bead; the overrides keep the harness plan valid against
 # today's kit without editing the g1b corpus module underneath its consumers.
 # --------------------------------------------------------------------------
+# The A-number: the key stores "A123456789"; the kit pattern is ^\d{7,9}$ and
+# the a_number normalizer strips the A prefix on write (validation.format_preset,
+# bd 0zr/jnjj.40). The model therefore WRITES bare digits; expect those.
+_ANUMBER_EXPECTED = "123456789"
+
 ANSWER_OVERRIDES: dict = {
     # The kit's pattern is ^[0-9]{12}$ (min/max_length 12); the key's value is
     # 13 digits and could never validate. 12-digit stand-in, same persona.
@@ -75,12 +80,14 @@ ANSWER_OVERRIDES: dict = {
     # permanent_resident_in_commuter_status]` -- VISIBLE for the persona, and
     # her documented reason is the lost card (the key's own docstring).
     "p2_checkbox2[5]": "my_previous_card_has_been_lost_stolen_or_destroyed",
+    # The Part-8 page-header copy of the A-number must hold what the CLIENT
+    # copies from the FILLED source field -- the A-stripped digits the model
+    # writes -- not the key's raw "A123456789". Seeding the raw form would put
+    # two renderings of one number in the validator payload and could
+    # manufacture a spurious conflict in the precision measurement
+    # (fresh-eyes round 2 on this bead).
+    "p1_line1_aliennumber[1]": _ANUMBER_EXPECTED,
 }
-
-# The A-number: the key stores "A123456789"; the kit pattern is ^\d{7,9}$ and
-# the a_number normalizer strips the A prefix on write (validation.format_preset,
-# bd 0zr/jnjj.40). The model therefore WRITES bare digits; expect those.
-_ANUMBER_EXPECTED = "123456789"
 
 # Fields the frontend fills without the voice loop; the harness seeds them
 # confirmed at handshake and the plan never speaks them.
