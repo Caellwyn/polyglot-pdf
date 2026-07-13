@@ -26,9 +26,11 @@ the GO verdict; run artifacts `scripts/spikes/data/g1b_bakeoff_20260713T141057.c
 
 **Result:** gemini-2.5-pro caught 6/6 far pairs (recall 1.000) at whole-form
 (132-field) scale, including all 3 `duration_year` semantic cases (flash-lite 0/3,
-flash 1/3) -- the only 2.5-tier model measured that catches the far/semantic
-classes whole-form. Overall recall 1.000 (27/27), latency p50 5.95s. Total sweep
-cost $0.3924 / 42 calls (~$0.0093/call), inside the epic's approved $0.30-0.50.
+flash 1/3). The GO rests on pro's OWN 1.000, not the cross-model gap: the flash/lite
+baseline it beats ran under uncontrolled dynamic thinking (not a controlled
+head-to-head -- see the findings doc's Honesty/limits + bd polyglot-pdf-hy5k).
+Overall recall 1.000 (27/27), latency p50 5.95s. Total sweep cost $0.3924 / 42
+calls (~$0.0093/call), inside the epic's approved $0.30-0.50.
 
 **Precision caveat carried to W6:** whole-form precision is 0.750 (9 of 15 clean
 cases false-flagged), concentrated on the Part 5/6 preparer-and-interpreter
@@ -80,7 +82,9 @@ introduced here) noted and left. Final clearing round on Opus: the Opus round re
 paragraph still carried the uncaveated "only 2.5-tier model that clears the bar"
 framing, plus a cost-share slip (thinking is 46% of per-call cost, not the stated
 40%). Both fixed (Verdict now leads with pro's own 1.000 and hedges the cross-model
-gap; 40%->46%); the re-spawned Opus round then cleared <OPUS_FE_CLEAR_PLACEHOLDER>.
+gap; 40%->46%); the re-spawned Opus round then returned NO-GAPS (rubric criterion
+PASS, all numbers re-verified from the CSV, cost share confirmed 46%). Total
+fresh-eyes rounds: 1 Sonnet + 2 Opus.
 Opus outer review (Step 5.6): <OUTER_REVIEW_PLACEHOLDER -- fill at closeout>.
 
 ## Lessons
