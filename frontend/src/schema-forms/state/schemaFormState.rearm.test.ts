@@ -21,8 +21,10 @@ function schema(): FormSchema {
       { id: 'text1', name: 'text1', spoken_name: 'Text 1', type: 'text', section_id: 'sec' },
       { id: 'box', name: 'box', spoken_name: 'Box', type: 'checkbox_group', section_id: 'sec',
         options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }, { value: 'c', label: 'C' }] },
+      { id: 'anum', name: 'anum', spoken_name: 'A Number', type: 'text', section_id: 'sec',
+        validation: { format_preset: 'a_number' } },
     ],
-    sections: [{ id: 'sec', label: 'Sec', order: 1, fields: ['text1', 'box'] }],
+    sections: [{ id: 'sec', label: 'Sec', order: 1, fields: ['text1', 'box', 'anum'] }],
   } as unknown as FormSchema
 }
 
@@ -85,6 +87,40 @@ describe('W4 re-arm steered on value change (bd polyglot-pdf-ny4s)', () => {
     expect((s.fieldValues['text1'] as FieldValue).steered).toBe(true)
   })
 
+  it('checkbox re-write of the SAME set in a DIFFERENT order KEEPS steered (fresh-eyes: append writer)', () => {
+    // The real CheckboxField.handleToggle APPENDS a re-checked value, so a set that
+    // is re-written as ['b','a'] instead of ['a','b'] (e.g. the AI re-sends the same
+    // selection reordered, or a toggle-off-then-on that nets to the same members) is
+    // the SAME set. Set-equality must treat it as no change so it does not re-arm
+    // (nag) the user. An order-sensitive compare would wrongly clear the marker.
+    let s = SchemaFormStateManager.init(schema())
+    s = SchemaFormStateManager.updateField(s, 'box', ['a', 'b'])
+    s = steer(s, 'box')
+    s = SchemaFormStateManager.updateField(s, 'box', ['b', 'a'])   // same set, reordered
+    expect((s.fieldValues['box'] as FieldValue).steered).toBe(true) // same SET -> keep
+  })
+
+  it('format_preset field: same answer across the []-alias variant KEEPS steered (fresh-eyes: normalize both sides)', () => {
+    // Write the A-Number under the bracket variant (stored via the alias-aware field
+    // lookup, so it IS normalized), steer it, then re-write the SAME answer under the
+    // canonical key with cosmetic formatting. Both sides normalize to 123456789, so
+    // it is not a change and the marker survives.
+    let s = SchemaFormStateManager.init(schema())
+    s = SchemaFormStateManager.updateField(s, 'anum[]', 'A 123-456-789')
+    s = steer(s, 'anum[]')
+    expect((s.fieldValues['anum[]'] as FieldValue).steered).toBe(true)
+    s = SchemaFormStateManager.updateField(s, 'anum', 'A123456789') // same number, other formatting
+    expect((s.fieldValues['anum'] as FieldValue).steered).toBe(true)
+  })
+
+  it('format_preset field: a genuinely different A-Number RE-ARMS', () => {
+    let s = SchemaFormStateManager.init(schema())
+    s = SchemaFormStateManager.updateField(s, 'anum', 'A123456789')
+    s = steer(s, 'anum')
+    s = SchemaFormStateManager.updateField(s, 'anum', 'A987654321')
+    expect((s.fieldValues['anum'] as FieldValue).steered).toBeFalsy()
+  })
+
   it('a never-steered field stays unsteered on edit (no spurious marker)', () => {
     let s = SchemaFormStateManager.init(schema())
     s = SchemaFormStateManager.updateField(s, 'text1', 'a')
@@ -117,9 +153,11 @@ describe('W4 _sameFieldValue (bd polyglot-pdf-ny4s)', () => {
     expect(same(true, true)).toBe(true)
     expect(same(true, false)).toBe(false)
   })
-  it('arrays compare element-wise, order-sensitive', () => {
+  it('arrays compare as SETS (order-insensitive, blanks dropped)', () => {
     expect(same(['a', 'b'], ['a', 'b'])).toBe(true)
-    expect(same(['a', 'b'], ['b', 'a'])).toBe(false)
+    expect(same(['a', 'b'], ['b', 'a'])).toBe(true)   // a checkbox group is a set
     expect(same(['a'], ['a', 'b'])).toBe(false)
+    expect(same(['a', ''], ['a'])).toBe(true)         // blank placeholder dropped
+    expect(same(['a', ''], ['', 'a'])).toBe(true)     // both (finding 3)
   })
 })

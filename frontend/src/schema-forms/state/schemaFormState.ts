@@ -245,10 +245,16 @@ export class SchemaFormStateManager {
   /**
    * W4 (bd polyglot-pdf-ny4s): value-equality for the re-arm decision. A field's
    * value is a string / boolean / null (single fields) or an array of strings
-   * (checkbox groups). Compare by NORMALIZED content: primitives by ===, arrays
-   * element-wise (order-sensitive -- the checkbox writer preserves order), and
-   * empty-ish values (undefined / null / '' / []) all as "no value" so a fill that
-   * clears a field to blank counts as a change only if it was previously non-empty.
+   * (checkbox groups). Compare by NORMALIZED content:
+   *   - empty-ish values (undefined / null / '' / all-blank []) all count as "no
+   *     value", so a fill that clears a previously-filled field is a change but a
+   *     blank->blank write is not;
+   *   - a checkbox group is a SET, so arrays compare ORDER-INSENSITIVELY after
+   *     dropping blank placeholders. (The real CheckboxField.handleToggle APPENDS a
+   *     re-checked value, so unchecking then re-checking a box yields the same set
+   *     in a different order -- an order-sensitive compare would wrongly re-arm the
+   *     marker, nagging the user for a no-op toggle: fresh-eyes finding.)
+   *   - primitives compare by ===.
    */
   private static _sameFieldValue(a: any, b: any): boolean {
     const isEmpty = (v: any): boolean =>
@@ -257,8 +263,14 @@ export class SchemaFormStateManager {
     if (isEmpty(a) && isEmpty(b)) return true;
     if (isEmpty(a) !== isEmpty(b)) return false;
     if (Array.isArray(a) || Array.isArray(b)) {
-      const aa = Array.isArray(a) ? a : [a];
-      const bb = Array.isArray(b) ? b : [b];
+      // Set-equality on the non-blank members (a checkbox group is an unordered set).
+      const clean = (v: any): string[] =>
+        (Array.isArray(v) ? v : [v])
+          .filter((x) => x !== undefined && x !== null && x !== '')
+          .map((x) => String(x))
+          .sort();
+      const aa = clean(a);
+      const bb = clean(b);
       if (aa.length !== bb.length) return false;
       return aa.every((x, i) => x === bb[i]);
     }
@@ -281,7 +293,17 @@ export class SchemaFormStateManager {
     // A-Number's "A" prefix/separators) so manual edits store the same canonical
     // value the backend stores for AI fills (bd polyglot-pdf-0zr). Idempotent for
     // already-canonical values (e.g. AI fills, which the backend pre-normalizes).
-    const field = state.schema.fields.find((f) => f.id === fieldId);
+    // Resolve the schema field via the same `[]`-alias fallback used for the prior
+    // entry below: a value written under the bracketed variant (fieldId[]) must
+    // still find its schema field so it is NORMALIZED consistently -- otherwise a
+    // bracket-variant write of a format_preset field (a_number etc.) stores the raw
+    // value, and a later same-answer canonical write normalizes and compares
+    // unequal, spuriously re-arming the marker (W4 fresh-eyes finding).
+    const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
+    const field =
+      state.schema.fields.find((f) => f.id === fieldId) ??
+      state.schema.fields.find((f) => f.id === baseId) ??
+      state.schema.fields.find((f) => f.id === baseId + '[]');
 
     // The B5 `steered` marker (bd polyglot-pdf-jnjj.17, Codex PR #275) rides the
     // FieldValue. The normal edit/fill path REPLACES the FieldValue object, which
@@ -313,7 +335,14 @@ export class SchemaFormStateManager {
     const normalizedNewValue = field
       ? normalizeFieldValue(field, incomingRawValue)
       : incomingRawValue;
-    const valueChanged = !this._sameFieldValue(priorEntry?.value, normalizedNewValue);
+    // Normalize the PRIOR value too before comparing -- a value written under the
+    // bracket-variant before this alias-aware lookup landed may be stored raw, so
+    // compare both sides in canonical form (normalizeFieldValue is idempotent on an
+    // already-canonical value) to avoid a spurious re-arm on a genuinely-same answer.
+    const normalizedPriorValue = field
+      ? normalizeFieldValue(field, priorEntry?.value)
+      : priorEntry?.value;
+    const valueChanged = !this._sameFieldValue(normalizedPriorValue, normalizedNewValue);
     // Carry the marker forward only if it was set AND the value is unchanged.
     const carrySteered = priorSteered !== undefined && !valueChanged;
 

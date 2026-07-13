@@ -44,6 +44,22 @@ the raw input -- otherwise a cosmetic re-format of the same answer (e.g. an
 A-Number's separators) would spuriously re-arm. Comparing normalized values makes
 "the answer actually changed" the trigger, matching the intent.
 
+**Fresh-eyes fixes (Sonnet) -- two REAL no-nagging violations, both adopted.**
+(1) The array comparison was ORDER-SENSITIVE, but the real
+`CheckboxField.handleToggle` APPENDS a re-checked value, so the same checkbox set
+re-written as `['b','a']` instead of `['a','b']` read as a change -> spurious
+re-arm (nagging on a no-op toggle). Fixed: a checkbox group is a SET, so the
+comparison is now order-INSENSITIVE (sorted, blanks dropped). (2) The schema-field
+lookup for normalization was exact-key-only, so a value written under the
+bracket-variant of a `format_preset` field (a_number) was stored UN-normalized; a
+later same-answer canonical write normalized and compared unequal -> spurious
+re-arm. Fixed: the field lookup is now alias-aware (mirrors the prior-entry
+fallback) AND the prior value is normalized before comparison, so both sides are
+canonical. Both pinned by new regression tests. (One of my initial regression
+tests was itself wrong -- it unchecked a box then re-checked it in two steps, and
+the intermediate shrunk-set state is a LEGITIMATE change; corrected to a
+single-write same-set-reordered case, which is the actual bug.)
+
 ## Lessons
 
 The four pre-W4 "PRESERVES the steered marker across a manual edit" tests all
