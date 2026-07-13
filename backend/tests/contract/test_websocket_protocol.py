@@ -644,6 +644,12 @@ def _mock_service(verdict=None):
     svc.start_session = AsyncMock()
     svc.end_session = AsyncMock()
     svc.stream_audio = AsyncMock()
+    # W1 (bd polyglot-pdf-xbl2): the validation triggers now route through the async
+    # handle_validation_windows (spawned off the receive loop). Stub BOTH the async
+    # windows path (the live one) and the legacy single-window method so a future
+    # test in this class that sends a validation-trigger frame does not hit an
+    # un-configured MagicMock attribute inside the swallowed background task.
+    svc.handle_validation_windows = AsyncMock(return_value=verdict or {"conflicts": []})
     svc.handle_validation_boundary = AsyncMock(return_value=verdict or {"conflicts": []})
     return svc
 

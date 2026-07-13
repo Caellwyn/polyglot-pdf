@@ -159,11 +159,14 @@ class Settings(BaseModel):
 	AUDIO_MAX_BUFFER_MS: int = int(os.getenv("AUDIO_MAX_BUFFER_MS", "200"))
 	WS_PING_INTERVAL_SEC: int = 15
 	WS_IDLE_TIMEOUT_SEC: int = 120  # Close WebSocket after 120s of no received message (audio/ping/control)
-	# B5 (bd polyglot-pdf-jnjj.17): backend-side fail-OPEN bound for the boundary
-	# validator. The validate() call runs INLINE in the WS receive loop, so a hang
-	# would block the loop and starve the client's own fail-OPEN. Kept comfortably
-	# UNDER the frontend's VALIDATOR_GATE_TIMEOUT_MS (6s) so the backend frees the loop
-	# and returns clean before the client's gate gives up.
+	# B5 (bd polyglot-pdf-jnjj.17): backend-side fail-OPEN per-window bound for the
+	# boundary validator. Since W1 (bd polyglot-pdf-xbl2) the validate() call runs in
+	# a BACKGROUND task off the WS receive loop (one per window), NOT inline -- so this
+	# no longer protects the receive loop from a hang (nothing awaits it there). It
+	# still bounds each window's flash-lite call so a hung window fails open (returns
+	# clean, no steer) instead of stalling its batch. Kept comfortably UNDER the
+	# frontend's VALIDATOR_GATE_TIMEOUT_MS (6s) so a boundary that still feeds the
+	# deprecated section-switch gate resolves before the client's gate gives up.
 	VALIDATOR_TIMEOUT_SEC: float = 4.0
 	# W1 (bd polyglot-pdf-xbl2): the async window validator runs one flash-lite call
 	# PER WINDOW concurrently off the receive loop. Bound the fan-out so a batch of

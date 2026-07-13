@@ -202,6 +202,42 @@ async def test_background_validation_exception_never_crashes_the_loop():
 
 
 @pytest.mark.asyncio
+async def test_inflight_validation_is_cancelled_on_disconnect():
+    """W1: a validation task still running when the socket disconnects is CANCELLED
+    in the teardown `finally` -- it must not survive to push `validation_result` to a
+    closed socket. The validator here blocks until cancelled; a small hold_open lets
+    the background task START (reach its blocking await) before the disconnect frame
+    triggers teardown, so the cancel actually interrupts a running task (cancelling a
+    task that never started would not run its except/finally)."""
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def _blocking(windows):
+        started.set()
+        try:
+            await asyncio.Event().wait()  # never resolves on its own
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return {"conflicts": []}
+
+    svc = _mock_service()
+    svc.handle_validation_windows = AsyncMock(side_effect=_blocking)
+    ws, _, sent = await _run([
+        {"text": json.dumps({"type": "form_complete", "fields": [
+            {"field_id": "f1", "name": "F1", "value": "a", "steered": False}]})},
+    ], svc=svc, hold_open=0.05)
+    # Give the just-cancelled task a tick to run its except/finally.
+    await asyncio.sleep(0)
+    assert started.is_set()                          # the task did start before teardown
+    types = [m.get("type") for m in sent]
+    assert "form_complete_ack" in types            # the ack still went out
+    assert "validation_result" not in types        # the cancelled task never pushed
+    assert cancelled.is_set()                        # the task was actually cancelled
+    assert svc.end_session.await_count == 1          # clean teardown
+
+
+@pytest.mark.asyncio
 async def test_section_complete_does_not_collide_with_legacy_section_completed():
     """The new proactive `section_complete` and the legacy reactive
     `section_completed` are DISTINCT: each produces its OWN ack, not the other's."""
