@@ -1508,6 +1508,17 @@ async def run(args) -> int:
         print("--vertex is not available for --model 3.1: the 3.1 Live model has "
               "no Vertex id (AI-Studio-only as of 2026-06). Use --model 2.5.")
         return 1
+    # --events unhappy is the E3 scenario and is meant to run on --path
+    # unhappy globally (see the mix=0 comment below: "E3 runs --path unhappy
+    # globally; no per-step mix"). Without this guard, a run invoked with
+    # --events unhappy but the --path default (happy) silently measures a
+    # mostly-happy session mislabeled as the unhappy arm (bd polyglot-pdf-3gt9).
+    if (getattr(args, "events", "none") == "unhappy" and args.path == "happy"
+            and not getattr(args, "allow_path_mismatch", False)):
+        raise SystemExit(
+            "--events unhappy combined with --path happy silently measures a "
+            "mostly-happy session mislabeled as the unhappy (E3) arm. Pass "
+            "--path unhappy to match, or --allow-path-mismatch to override.")
     # --schema i90-full (bd polyglot-pdf-n86b): the full-form stress-test plan,
     # generated from the g1b answer key at run time (build-time guards inside
     # abort before any live spend). Requires the continuous-DTI production shape.
@@ -2399,6 +2410,14 @@ def main() -> int:
     ap.add_argument("--mix-unhappy", type=int, default=5,
                     help="with --events standard: flag every Nth question as "
                          "unhappy (the 80/20 realistic mix at 5). 0 disables.")
+    ap.add_argument("--allow-path-mismatch", action="store_true",
+                    help="override the --events unhappy / --path happy guard "
+                         "(bd polyglot-pdf-3gt9). --events unhappy is the E3 "
+                         "scenario and is meant to run on --path unhappy "
+                         "globally; combining it with the --path default "
+                         "(happy) silently measures a mostly-happy session "
+                         "mislabeled as the unhappy arm. Pass this flag only "
+                         "if you deliberately want that combination.")
     ap.add_argument("--reactivity", default=None,
                     help="i90-full only: run ONE reactivity micro-scenario "
                          "(E4) by name -- see scenario_events.REACTIVITY_SUITE")

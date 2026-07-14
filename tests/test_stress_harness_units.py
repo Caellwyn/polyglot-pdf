@@ -65,6 +65,20 @@ def test_full_form_expected_passes_driver_drift_guard():
         {f["id"]: f for f in schema["fields"]}, plan["expected"])
 
 
+def test_no_degenerate_unhappy_wrong_utterances():
+    """Every answered (non-empty-expected) question must have a 'wrong'
+    utterance DISTINCT from 'say' -- a degenerate unhappy-path turn (REJECT
+    then re-hear the identical value) corrupts the unhappy-path measurement
+    (bd polyglot-pdf-3gt9). Declines are exempt (phrase() intentionally
+    returns the same text for both -- a decline has no distinct unhappy
+    variant)."""
+    plan = ffs.build_full_form_plan(ffs.load_schema())
+    qs, expected = plan["questions"], plan["expected"]
+    degenerate = [q["field_id"] for q in qs
+                  if expected[q["field_id"]] != "" and q["say"] == q["wrong"]]
+    assert degenerate == []
+
+
 def test_override_must_be_valid_option():
     schema = ffs.load_schema()
     orig = dict(ffs.ANSWER_OVERRIDES)
@@ -571,6 +585,77 @@ def test_dry_run_legacy_i90_arm_still_runs(monkeypatch, tmp_path):
     assert s["run"]["text_ai_wired"] is False
     assert s["headline"]["text_usd"] == 0
     assert s["headline"]["steps"] == 3
+
+
+def test_events_unhappy_path_happy_mismatch_exits_loudly(monkeypatch, tmp_path):
+    """--events unhappy combined with the --path default (happy) must FAIL
+    LOUDLY before any adapter is constructed (bd polyglot-pdf-3gt9), not
+    silently measure a mostly-happy session mislabeled as the E3 unhappy arm.
+    Monkeypatch LiveAIGemini to raise if constructed, so a guard that fires
+    too late (after adapter construction) fails this test instead of passing
+    it by accident."""
+    import argparse
+
+    def _boom(*a, **kw):
+        raise AssertionError(
+            "LiveAIGemini constructed -- the events/path guard did not fire "
+            "before adapter construction")
+
+    monkeypatch.setenv("GEMINI_API_KEY", "dry-run-dummy")
+    monkeypatch.setattr(mfc, "LiveAIGemini", _boom)
+
+    args = argparse.Namespace(
+        model="2.5", schema="i90-full", arm="dti", path="happy",
+        questions=4, trigger=5000, window=3500, vertex=False,
+        continuous=True, compression=True,
+        out_dir=str(tmp_path), synth_only=False, debug=False,
+        events="unhappy", mix_unhappy=0, reactivity=None, lang="en",
+        text_ai=False, no_text_ai=False)
+    # no allow_path_mismatch attribute at all -- getattr(..., False) default
+    with pytest.raises(SystemExit):
+        asyncio.run(mfc.run(args))
+
+
+def test_events_unhappy_path_unhappy_is_allowed(monkeypatch, tmp_path):
+    """The matched combination (--events unhappy --path unhappy) must NOT
+    trip the guard. synth_only=True: run() exits 0 right after plan build +
+    event weave + (stubbed) fixture synthesis -- past the guard, before any
+    adapter -- so the test stays fast (no 113-step dry-run driver loop)."""
+    import argparse
+
+    monkeypatch.setenv("GEMINI_API_KEY", "dry-run-dummy")
+    monkeypatch.setattr(mfc, "synth_cached",
+                        lambda text, lang="en": b"\x00" * 320)
+
+    args = argparse.Namespace(
+        model="2.5", schema="i90-full", arm="dti", path="unhappy",
+        questions=None, trigger=5000, window=3500, vertex=False,
+        continuous=True, compression=True,
+        out_dir=str(tmp_path), synth_only=True, debug=False,
+        events="unhappy", mix_unhappy=0, reactivity=None, lang="en",
+        text_ai=False, no_text_ai=False)
+    rc = asyncio.run(mfc.run(args))
+    assert rc == 0
+
+
+def test_events_unhappy_path_happy_allowed_with_override(monkeypatch, tmp_path):
+    """--allow-path-mismatch lets the mismatched combination proceed
+    (synth_only=True for speed, as above)."""
+    import argparse
+
+    monkeypatch.setenv("GEMINI_API_KEY", "dry-run-dummy")
+    monkeypatch.setattr(mfc, "synth_cached",
+                        lambda text, lang="en": b"\x00" * 320)
+
+    args = argparse.Namespace(
+        model="2.5", schema="i90-full", arm="dti", path="happy",
+        questions=None, trigger=5000, window=3500, vertex=False,
+        continuous=True, compression=True,
+        out_dir=str(tmp_path), synth_only=True, debug=False,
+        events="unhappy", mix_unhappy=0, reactivity=None, lang="en",
+        text_ai=False, no_text_ai=False, allow_path_mismatch=True)
+    rc = asyncio.run(mfc.run(args))
+    assert rc == 0
 
 
 # ------------------------------------------------------------- regression

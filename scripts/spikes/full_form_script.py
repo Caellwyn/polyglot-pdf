@@ -309,6 +309,33 @@ _SAY_OVERRIDES_EN: dict = {
     ),
     "p3_line3a_destination": ("My destination in the United States is Houston Texas.", None),
     "p3_line3a1_cityandstate": ("The city and state is Houston Texas.", None),
+    # These seven fall through the generic mutation branches in _wrong_for:
+    # the three "_country" fields answer "United States" (13 chars, hits the
+    # len>=12 text fallback with no digits to swap); the two visa-location
+    # fields and the interpreter business-name field are long free-text with
+    # no digits either; the interpreter zip code is a plain "text" field with
+    # no validation block, so it renders via the generic "{name} is {answer}"
+    # template with RAW digits (not spelled-out words), and the digit-replace
+    # branch in _wrong_for silently no-ops because it looks for spelled-out
+    # digit words that were never in the say string. Explicit wrong phrasings,
+    # same style as the other overrides above.
+    "p1_line6i_country": ("My mailing country is United States.",
+                          "My mailing country is Canada."),
+    "p1_line7h_country": ("My physical country is United States.",
+                          "My physical country is Mexico."),
+    "p6_line3h_country": ("My interpreter's country is United States.",
+                          "My interpreter's country is Canada."),
+    "p3_line1_locationappliedvisa": (
+        "My location where you applied for immigrant visa is Ho Chi Minh City, Vietnam.",
+        "My location where you applied for immigrant visa is Hanoi, Vietnam."),
+    "p3_line2_locationissuedvisa": (
+        "My location where immigrant visa was issued is Ho Chi Minh City, Vietnam.",
+        "My location where immigrant visa was issued is Bangkok, Thailand."),
+    "p6_line2_nameofbusinessor": (
+        "My interpreter's business or organization name is Bayou City Language Services.",
+        "My interpreter's business or organization name is Gulf Coast Translation Group."),
+    "p6_line3e_zipcode": ("My interpreter's zip code is 77002.",
+                         "My interpreter's zip code is 99001."),
 }
 
 # Decline phrasings for visible fields the persona leaves EMPTY. Keyed by
@@ -352,8 +379,16 @@ def _wrong_for(field: dict, say: str, answer, lang: str) -> str:
         return f"It was {_date_spoken_en(alt.strftime('%Y-%m-%d'))}."
     digits = re.sub(r"\D", "", str(answer or ""))
     if digits and len(digits) >= 5:
-        return say.replace(_spell_digits(digits, lang),
-                           _spell_digits(digits[::-1], lang))
+        spelled = _spell_digits(digits, lang)
+        reversed_spelled = _spell_digits(digits[::-1], lang)
+        if spelled in say:
+            return say.replace(spelled, reversed_spelled)
+        if digits in say:
+            # say rendered via the generic template with RAW digits (the
+            # field wasn't recognized as a digit field by _is_digit_field,
+            # e.g. a plain "text" field with no validation block) -- swap
+            # the raw digit substring instead of the (absent) spelled words.
+            return say.replace(digits, digits[::-1])
     if isinstance(answer, str) and answer:
         return f"It is {answer[::-1].title()}." if len(answer) < 12 else say
     return say
@@ -507,6 +542,20 @@ def build_full_form_plan(schema: dict, lang: str = "en") -> dict:
         questions.append({"field_id": fid, "say": say, "wrong": wrong})
         expected[fid] = expected_canon(f, answer)
         answered_so_far[fid] = answer
+
+    # Guard: every answered (non-empty-expected) question must have a wrong
+    # utterance DISTINCT from say -- a degenerate unhappy-path turn (REJECT
+    # then re-hear the identical value) corrupts the unhappy-path measurement
+    # (bd polyglot-pdf-3gt9). Declines are exempt: phrase() intentionally
+    # returns the same text for both (a decline has no distinct unhappy
+    # variant -- see phrase()'s answer=None branch).
+    degenerate = [q["field_id"] for q in questions
+                  if expected[q["field_id"]] != "" and q["say"] == q["wrong"]]
+    if degenerate:
+        raise SystemExit(
+            "degenerate unhappy-path utterance(s) -- 'wrong' equals 'say' for "
+            "answered field(s): " + ", ".join(degenerate)
+            + " (fix _wrong_for or add a _SAY_OVERRIDES_EN entry)")
 
     return {"questions": questions, "expected": expected,
             "auto_apply": auto_apply, "hidden": hidden}
