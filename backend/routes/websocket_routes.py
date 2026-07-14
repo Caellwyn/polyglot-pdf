@@ -357,6 +357,50 @@ async def _handle_fill_session(
 			validation_tasks.add(task)
 			task.add_done_callback(validation_tasks.discard)
 
+		async def _run_drain_and_push(conflicts: list) -> None:
+			"""W3 (bd polyglot-pdf-pr3i): background runner for the finding-driven
+			drain. Composes + injects ONE steer for the client's queued conflicts,
+			then pushes a `drain_findings_result` carrying the DELIVERED conflicts so
+			the client marks those fields steered + consumes them from its queue.
+			Crash-safe + fail-OPEN like the validation runner: any exception is caught
+			+ logged so it can never propagate into the receive loop, and an
+			un-delivered steer (dead session) reports [] so the client keeps the
+			finding queued to retry.
+
+			ALWAYS pushes a drain_findings_result, even on an exception in
+			handle_drain_findings (delivered=[] then). The client's drainInFlight guard
+			only clears on this result, so a missing result would stall the client's
+			queue until reconnect (Opus outer-review finding). If handle_drain_findings
+			raised, the result is empty -> the client keeps the finding queued to retry
+			but is unblocked. The send itself failing (dead socket) is fine: the client
+			is gone and a reconnect re-arms the guard."""
+			delivered: list = []
+			try:
+				verdict = await service.handle_drain_findings(conflicts)
+				delivered = verdict.get("conflicts", []) if isinstance(verdict, dict) else []
+			except Exception as exc:  # noqa: BLE001 -- background task must never crash the loop
+				_log.warning(
+					"async_drain_task_failed",
+					exc_type=type(exc).__name__,
+					session_id=session_id,
+				)
+			try:
+				await websocket.send_json({
+					"type": "drain_findings_result",
+					"conflicts": delivered,
+				})
+			except Exception as exc:  # noqa: BLE001 -- a dead-socket send must not crash the loop
+				_log.warning(
+					"async_drain_result_send_failed",
+					exc_type=type(exc).__name__,
+					session_id=session_id,
+				)
+
+		def _spawn_drain(conflicts: list) -> None:
+			task = asyncio.create_task(_run_drain_and_push(conflicts))
+			validation_tasks.add(task)
+			task.add_done_callback(validation_tasks.discard)
+
 		while True:
 			msg = await websocket.receive()
 
@@ -717,20 +761,18 @@ async def _handle_fill_session(
 				elif mtype == "section_complete":
 					# B4 (bd polyglot-pdf-jnjj.16) emits this when the last field of the
 					# current section is confirmed; it carries section_id + the contract-2
-					# `fields` payload (validation-delegation.md). B5 (jnjj.17) runs the
-					# cheap-model validator over `fields`, injects a steer into the Live
-					# session on a surviving conflict, and pushes a `validation_result`
-					# envelope to the client for EVERY boundary (incl. clean) -- the
-					# deterministic clean->resume signal the FE switch-gate needs
-					# (contract 1). Distinct from the legacy reactive `section_completed`.
-					# W1 (bd polyglot-pdf-xbl2) moved the validator OFF the receive loop:
-					# ack IMMEDIATELY, spin the flash-lite pass into a tracked background
-					# task, and let it push the `validation_result` envelope when it lands.
-					# The receive loop no longer awaits the validator, so a slow/hung pass
-					# adds zero voice-turn latency. The FE gate (VALIDATOR_GATE_TIMEOUT_MS)
-					# already fails open if the async result is slow/absent; an arriving
-					# result still resolves the gate + sets the per-field steered markers
-					# exactly as before. The single field list is a one-window batch.
+					# `fields` payload (validation-delegation.md). W1 (bd polyglot-pdf-xbl2)
+					# moved the validator OFF the receive loop: ack IMMEDIATELY, spin the
+					# flash-lite pass into a tracked background task, and let it push the
+					# `validation_result` envelope when it lands (a one-window batch). The
+					# receive loop no longer awaits the validator, so a slow/hung pass adds
+					# zero voice-turn latency. W3 (bd polyglot-pdf-pr3i) made that result
+					# REPORT-ONLY: it does NOT inject a steer and does NOT set the steered
+					# markers here -- the client ENQUEUES the surviving conflicts and drains
+					# them via `drain_findings` (which composes+injects). The FE gate
+					# (VALIDATOR_GATE_TIMEOUT_MS) still fails open if the async result is
+					# slow/absent and resolves on an arriving clean result. Distinct from
+					# the legacy reactive `section_completed`.
 					proactive_section_id = obj.get("section_id")
 					proactive_fields = obj.get("fields", [])
 					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
@@ -746,14 +788,13 @@ async def _handle_fill_session(
 				elif mtype == "form_complete":
 					# B4 (bd polyglot-pdf-jnjj.16) emits this once when the whole form is
 					# confirmed (re-emitted after a post-completion edit). Carries the
-					# WHOLE-form contract-2 payload. B5 (jnjj.17) runs the full-form
-					# validator pass + pushes the `validation_result` envelope (there is
-					# no section switch to gate on the last boundary; the client still
-					# uses the result to set its per-field `steered` markers).
-					# W1 (bd polyglot-pdf-xbl2): ack immediately + run the full-form pass in
-					# the background; it pushes the `validation_result` envelope when done
-					# (the terminal boundary has no section switch to gate; the client still
-					# uses the result to set its per-field steered markers). One-window batch.
+					# WHOLE-form contract-2 payload. W1 (bd polyglot-pdf-xbl2): ack
+					# immediately + run the full-form pass in the background; it pushes the
+					# `validation_result` envelope when done (one-window batch; the terminal
+					# boundary has no section switch to gate). W3 (bd polyglot-pdf-pr3i):
+					# that result is REPORT-ONLY -- no steer injected here and no steered
+					# markers set here; the client enqueues the conflicts and drains them
+					# via `drain_findings`.
 					proactive_fields = obj.get("fields", [])
 					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
 					_log.info(
@@ -774,9 +815,11 @@ async def _handle_fill_session(
 					# source:"web" / pageless form emits identically to a paginated one.
 					# Ack immediately, then run every window's flash-lite pass concurrently
 					# in the background, dedupe conflicts across the batch by field-id set,
-					# suppress already-steered markers, inject one steer, and push the
-					# surviving conflicts as a `validation_result`. Nothing in the voice path
-					# waits on any of it.
+					# suppress already-steered markers, and push the surviving conflicts as
+					# a `validation_result`. W3 (bd polyglot-pdf-pr3i): this is REPORT-ONLY
+					# -- it does NOT inject the steer. The client ENQUEUES the surviving
+					# conflicts and drains them via `drain_findings` (below), which composes
+					# + injects. Nothing in the voice path waits on any of it.
 					windows = obj.get("windows", [])
 					safe_windows = windows if isinstance(windows, list) else []
 					# PII (contract 6): log COUNTS only -- never the windows/values.
@@ -790,6 +833,26 @@ async def _handle_fill_session(
 					)
 					_spawn_validation(safe_windows, "validate_windows")
 					await websocket.send_json({"type": "validate_windows_ack"})
+					continue
+				elif mtype == "drain_findings":
+					# W3 (bd polyglot-pdf-pr3i): the FINDING-DRIVEN drain. The client sends
+					# this the moment its validatorFindingsQueue is non-empty, carrying the
+					# queued conflicts (each with field_ids, reason, field_names) it wants
+					# voiced. Ack immediately, then compose + inject ONE steer in the
+					# background and push a `drain_findings_result` with the DELIVERED
+					# conflicts so the client marks them steered + consumes them from the
+					# queue. An un-delivered steer (dead session) reports [] so the client
+					# keeps the finding queued to retry. Nothing in the voice path waits.
+					drain_conflicts = obj.get("conflicts", [])
+					safe_conflicts = drain_conflicts if isinstance(drain_conflicts, list) else []
+					# PII (contract 6): COUNT only -- never the conflicts/reasons/values.
+					_log.info(
+						"drain_findings_arm_received",
+						conflict_count=len(safe_conflicts),
+						session_id=session_id,
+					)
+					_spawn_drain(safe_conflicts)
+					await websocket.send_json({"type": "drain_findings_ack"})
 					continue
 				else:
 					# Log unknown message type for debugging

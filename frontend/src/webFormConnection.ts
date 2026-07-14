@@ -9,7 +9,7 @@ import {
   SchemaFormStateManager,
   type SchemaFormState
 } from "./schema-forms/state/schemaFormState";
-import type { FormSchema, FormField } from "./schema-forms/types/schema";
+import type { FormSchema, FormField, ValidatorFinding } from "./schema-forms/types/schema";
 import {
   computeNextField,
   formatNextFieldHint,
@@ -275,6 +275,15 @@ export class WebFormConnection {
   // re-validates once.
   private formCompleteSnapshot: string | null = null;
 
+  // W3 (bd polyglot-pdf-pr3i): a single drain_findings may be in flight at a time.
+  // Overlapping stride windows can each surface a DIFFERENT contradiction in quick
+  // succession; without this guard each validation_result would fire its own
+  // drain_findings carrying the FULL queue snapshot, so the earlier finding gets
+  // voiced twice (the fresh-eyes race). We drain ONE batch, wait for its
+  // drain_findings_result (which consumes the delivered findings), then re-drain if
+  // the queue still has anything. Reset on (re)connect so a drop mid-drain re-arms.
+  private drainInFlight: boolean = false;
+
   // B5 (bd polyglot-pdf-jnjj.17): the validator switch-gate. When the section-
   // complete boundary fires, proceedSectionSwitch PAUSES the auto-advance and parks
   // the pending switch here until a validation_result arrives (clean -> resume) or
@@ -536,6 +545,10 @@ export class WebFormConnection {
     // section-switch reconnect keeps the object, so resetting here is what makes the
     // post-reconnect re-validation deterministic (validation-delegation.md contract 4).
     this.formCompleteSnapshot = null;
+    // W3 (bd polyglot-pdf-pr3i): a drop mid-drain never got its drain_findings_result,
+    // so re-arm the guard on (re)connect -- the handleSessionReady re-drain below can
+    // then re-send a surviving queue.
+    this.drainInFlight = false;
 
     // Enable auto-reconnect after first successful connection
     this.enableAutoReconnect = true;
@@ -746,13 +759,21 @@ export class WebFormConnection {
           break;
 
         case "validation_result":
-          // B5 (bd polyglot-pdf-jnjj.17): the cheap-model validator's verdict for the
-          // just-emitted section/form boundary (validation-delegation.md contract 1).
-          // Sent for EVERY boundary: clean ({conflicts:[]}) resumes the paused section
-          // switch; a conflict marks the named fields steered (so the backend
-          // suppresses re-steering them) and holds in-section while the live model --
-          // already handed the steer by the backend -- voices the correction.
+          // B5 (bd polyglot-pdf-jnjj.17) + W3 (bd polyglot-pdf-pr3i): the validator's
+          // verdict (REPORT-ONLY since W3). A clean result ({conflicts:[]}) resumes any
+          // paused section switch and enqueues nothing (no voice turn). A result with
+          // surviving conflicts ENQUEUES them into validatorFindingsQueue and drains
+          // immediately (drain_findings) -- the backend composes+injects the steer on
+          // the drain, not here. See handleValidationResult.
           this.handleValidationResult(message);
+          break;
+
+        case "drain_findings_result":
+          // W3 (bd polyglot-pdf-pr3i): the backend delivered the steer for these
+          // conflicts. Mark their fields steered (max-resteer marker) + CONSUME them
+          // from the queue. Un-delivered conflicts (dead session -> not here) stay
+          // queued to retry on the next drain.
+          this.handleDrainFindingsResult(message);
           break;
 
         default:
@@ -860,6 +881,10 @@ export class WebFormConnection {
     // W2 (bd polyglot-pdf-kxkw): stride-window validator check on the same
     // state-change seam (guarded: sends only newly-eligible, unsent windows).
     this.maybeEmitValidateWindows();
+    // W3 (bd polyglot-pdf-pr3i): a validator finding queue can survive a reconnect
+    // (client-owned + persisted). Re-drain it now so a contradiction found just
+    // before a drop is still voiced after reconnect (guarded on an OPEN socket).
+    this.drainFindings();
 
     // No need to send initial hint - backend will request it as part of initial message
   }
@@ -2176,39 +2201,126 @@ export class WebFormConnection {
   }
 
   /**
-   * B5 (bd polyglot-pdf-jnjj.17): handle the validator verdict pushed from the
-   * backend (validation_result envelope, contract 1). Sent for EVERY validated
-   * boundary -- clean ({conflicts: []}) or with conflicts:
-   *   - CLEAN  -> resolve the parked section-switch gate (resume the auto-advance).
-   *   - CONFLICT -> (a) persist steered:true on every field the conflicts name, so
-   *     the NEXT payload carries it and the backend suppresses re-steering
-   *     (max-resteer, contract 2/3); (b) CANCEL the parked switch (stay in-section so
-   *     the live model -- already handed the steer by the backend -- can voice it and
-   *     the user can resolve/override). The switch resumes on a later clean boundary.
-   * The form_complete boundary has no parked switch (last boundary); the handler then
-   * only updates the steered markers.
+   * B5 (bd polyglot-pdf-jnjj.17) + W3 (bd polyglot-pdf-pr3i): handle the validator
+   * verdict pushed from the backend (validation_result envelope, contract 1;
+   * REPORT-ONLY since W3). Sent for EVERY validated boundary -- clean ({conflicts:
+   * []}) or with conflicts:
+   *   - CLEAN  -> resolve the parked section-switch gate (resume the auto-advance);
+   *     enqueue nothing, drain nothing (no voice turn on an all-clear).
+   *   - CONFLICT -> (a) ENQUEUE the conflicts into the persisted
+   *     validatorFindingsQueue (dedup by field-id set) and, if the queue grew, DRAIN
+   *     immediately (drainFindings -> drain_findings); the steer is composed+injected
+   *     by the backend on the drain, NOT here, and the fields are marked steered +
+   *     consumed only on the drain_findings_result (handleDrainFindingsResult) -- so
+   *     an un-delivered steer keeps the finding queued to retry and a field is never
+   *     marked steered for a steer the model never heard. (b) CANCEL the parked switch
+   *     (stay in-section so the model can voice the correction). The switch resumes on
+   *     a later clean boundary.
+   * The form_complete boundary has no parked switch (last boundary); the same
+   * enqueue+drain path runs, just without a switch to cancel.
    */
   private handleValidationResult(message: any): void {
     const conflicts = Array.isArray(message?.conflicts) ? message.conflicts : [];
     if (conflicts.length === 0) {
-      // Clean -> resume any parked section switch.
+      // Clean -> resume any parked section switch. ENQUEUE nothing, DRAIN nothing:
+      // no voice turn is spent on an all-clear (W3 finding-driven cadence).
       this.resolvePendingSectionSwitch();
       return;
     }
 
-    // Conflict -> mark every named field steered (client-owned marker), so the
-    // backend suppresses re-steering it next time (the loop bound).
-    const steeredIds: string[] = [];
+    // W3 (bd polyglot-pdf-pr3i): the result is REPORT-ONLY -- the backend did NOT
+    // inject a steer. ENQUEUE the surviving conflicts (dedup by field-id set) into the
+    // persisted queue, then DRAIN immediately: send drain_findings so the backend
+    // composes+injects one steer for the whole queue. The fields are marked steered +
+    // consumed only when the drain RESULT confirms delivery (handleDrainFindingsResult)
+    // -- so an un-delivered steer keeps the finding queued to retry, and a field is
+    // never marked steered for a steer the model never heard.
+    const findings: ValidatorFinding[] = [];
     for (const c of conflicts) {
+      const ids = c && Array.isArray(c.field_ids) ? c.field_ids.filter((i: any) => typeof i === 'string') : [];
+      if (ids.length === 0) continue;
+      findings.push({
+        field_ids: ids,
+        reason: typeof c.reason === 'string' ? c.reason : '',
+        field_names: (c.field_names && typeof c.field_names === 'object') ? c.field_names : {},
+      });
+    }
+    const before = this.state.validatorFindingsQueue.length;
+    this.state = SchemaFormStateManager.enqueueValidatorFindings(this.state, findings);
+    // Cancel the parked switch (if any): stay in-section to let the steer play out.
+    this.cancelPendingSectionSwitch();
+    // Only drain if the queue actually grew (a fully-duplicate result would otherwise
+    // re-send an in-flight drain). A non-empty queue is drained right away.
+    if (this.state.validatorFindingsQueue.length > before) {
+      this.drainFindings();
+    }
+  }
+
+  /**
+   * W3 (bd polyglot-pdf-pr3i): emit `drain_findings` carrying the CURRENT queued
+   * findings so the backend composes + injects one steer. Finding-driven: called
+   * the moment the queue grows (handleValidationResult) and on reconnect if a queue
+   * survived (handleSessionReady). Only on an OPEN socket -- otherwise the findings
+   * stay queued (persisted) and a later drain retries them. The findings are NOT
+   * consumed here; consumption waits for the drain RESULT (delivery confirmation).
+   */
+  private drainFindings(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    // One drain at a time: a second drain would re-send findings the in-flight drain
+    // is already voicing (double-steer). The drain_findings_result handler re-drains
+    // if the queue still has anything once the in-flight one resolves.
+    if (this.drainInFlight) return;
+    const queue = this.state.validatorFindingsQueue;
+    if (!queue || queue.length === 0) return;
+    this.drainInFlight = true;
+    this.send({
+      type: 'drain_findings',
+      // Each finding carries field_ids + reason + field_names (the composer needs the
+      // names); send the queue as-is.
+      conflicts: queue.map(f => ({
+        field_ids: f.field_ids,
+        reason: f.reason,
+        field_names: f.field_names,
+      })),
+    });
+  }
+
+  /**
+   * W3 (bd polyglot-pdf-pr3i): the backend's drain_findings_result -- the conflicts
+   * whose steer ACTUALLY DELIVERED into the live session. Mark their fields steered
+   * (max-resteer marker, so the backend suppresses re-steering them) and CONSUME them
+   * from the queue. Un-delivered conflicts (dead session -> absent here) stay queued
+   * to retry on the next drain.
+   */
+  private handleDrainFindingsResult(message: any): void {
+    // The in-flight drain resolved (delivered or not) -> clear the guard.
+    this.drainInFlight = false;
+    const delivered = Array.isArray(message?.conflicts) ? message.conflicts : [];
+    if (delivered.length === 0) {
+      // UNDELIVERED (dead live session). Do NOT immediately re-drain -- the WS is
+      // still open, so a re-drain would spin against the dead session. The findings
+      // stay queued (persisted) and retry when the session recovers: a dead live
+      // session surfaces as gemini_session_dropped -> reconnect -> the
+      // handleSessionReady re-drain. (drainFindings is wired to the enqueue seam +
+      // reconnect + this post-consume re-drain -- NOT the confirm seam, which drives
+      // maybeEmitValidateWindows, not the drain.)
+      return;
+    }
+    const steeredIds: string[] = [];
+    for (const c of delivered) {
       const ids = c && Array.isArray(c.field_ids) ? c.field_ids : [];
       for (const id of ids) if (typeof id === 'string') steeredIds.push(id);
     }
     if (steeredIds.length > 0) {
       this.state = SchemaFormStateManager.markFieldsSteered(this.state, steeredIds);
     }
-
-    // Cancel the parked switch (if any): stay in-section to let the steer play out.
-    this.cancelPendingSectionSwitch();
+    this.state = SchemaFormStateManager.consumeValidatorFindings(this.state, delivered);
+    // The delivered batch was consumed. If MORE findings accumulated while this drain
+    // was in flight (a distinct contradiction from a later window), drain them now --
+    // this only fires for genuinely new findings, never a re-steer of a voiced one.
+    if (this.state.validatorFindingsQueue.length > 0) {
+      this.drainFindings();
+    }
   }
 
   /**

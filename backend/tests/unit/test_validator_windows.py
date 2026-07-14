@@ -87,9 +87,17 @@ async def test_overlapping_windows_same_conflict_dedupes_to_one_steer():
 
     returned = await svc.handle_validation_windows([_W1, _W2])
 
-    # Exactly ONE conflict returned (deduped), one steer delivered.
-    assert returned["conflicts"] == [conflict]
-    live_ai.send_client_content.assert_awaited_once()
+    # Exactly ONE conflict returned (deduped). W3: REPORT-ONLY -- the windows path
+    # NO LONGER injects a steer (the client enqueues + drains). The returned conflict
+    # carries field_ids + reason + a field_names rider.
+    assert len(returned["conflicts"]) == 1
+    conflict_out = returned["conflicts"][0]
+    assert set(conflict_out["field_ids"]) == {"f2", "f3"}
+    # W3: the field_names id->name rider is populated from the union fields (the
+    # names _W1/_W2 carry), so the client's drain payload has the names the steer
+    # composer needs. This is a load-bearing wire contract -- pin its content.
+    assert conflict_out["field_names"] == {"f2": "West Virginia", "f3": "ZIP"}
+    live_ai.send_client_content.assert_not_awaited()
     # The two validate calls (one per window) both ran.
     assert text_ai.validate.await_count == 2
 
@@ -111,7 +119,7 @@ async def test_dedupe_is_order_insensitive_on_field_ids():
 
     returned = await svc.handle_validation_windows([_W1, _W2])
     assert len(returned["conflicts"]) == 1  # order-insensitive collapse
-    live_ai.send_client_content.assert_awaited_once()
+    live_ai.send_client_content.assert_not_awaited()  # W3: report-only, no steer here
 
 
 @pytest.mark.asyncio
@@ -132,7 +140,7 @@ async def test_distinct_conflicts_across_windows_both_survive():
     returned = await svc.handle_validation_windows([_W1, _W2])
     keys = {frozenset(c["field_ids"]) for c in returned["conflicts"]}
     assert keys == {frozenset({"f2", "f3"}), frozenset({"f4"})}
-    live_ai.send_client_content.assert_awaited_once()  # one combined steer
+    live_ai.send_client_content.assert_not_awaited()  # W3: report-only, drained later
 
 
 @pytest.mark.asyncio
@@ -151,7 +159,7 @@ async def test_one_window_failing_open_does_not_block_the_others():
 
     returned = await svc.handle_validation_windows([_W1, _W2])
     assert [c["field_ids"] for c in returned["conflicts"]] == [["f4"]]
-    live_ai.send_client_content.assert_awaited_once()
+    live_ai.send_client_content.assert_not_awaited()  # W3: report-only
 
 
 @pytest.mark.asyncio

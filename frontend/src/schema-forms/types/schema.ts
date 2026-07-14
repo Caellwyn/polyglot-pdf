@@ -393,3 +393,15 @@ export interface FieldValue {
   // real value later clears this flag. CLIENT-OWNED (stateless backend).
   skipped?: boolean;
 }
+
+// W3 (bd polyglot-pdf-pr3i): one queued cross-field contradiction awaiting a
+// finding-driven drain. A `validation_result` (report-only since W3) carries these
+// as CANDIDATES the client enqueues into SchemaFormState.validatorFindingsQueue;
+// the client drains them via a `drain_findings` round-trip that composes + injects
+// the steer, then consumes the delivered ones. CLIENT-OWNED (stateless backend):
+// the queue survives a reconnect and batches concurrent findings into one steer.
+export interface ValidatorFinding {
+  field_ids: string[];        // the fields the contradiction spans
+  reason: string;             // the validator's short explanation (rides the steer)
+  field_names: Record<string, string | null>; // id -> spoken name, for the composer
+}

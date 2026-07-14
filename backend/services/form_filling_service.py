@@ -1530,7 +1530,8 @@ class FormFillingService:
         return verdict.get("conflicts", []) if isinstance(verdict, dict) else []
 
     async def handle_validation_windows(self, windows: list) -> dict:
-        """W1 (bd polyglot-pdf-xbl2): the ASYNC, multi-window validator boundary.
+        """W1 (bd polyglot-pdf-xbl2) + W3 (bd polyglot-pdf-pr3i): the ASYNC,
+        multi-window validator boundary. REPORT-ONLY since W3.
 
         Called from a BACKGROUND task (asyncio.create_task) spawned off the WS
         receive loop -- NOTHING in the voice/tool path awaits it. Runs one
@@ -1539,10 +1540,18 @@ class FormFillingService:
         VALIDATOR_TIMEOUT_SEC), DEDUPES conflicts across the whole batch by their
         field-id SET (overlapping windows -- size ~20, stride ~10 -- make the same
         conflicting pair appear in multiple windows; the duplication is structural,
-        not exceptional), suppresses the already-steered markers exactly as the
-        single-window boundary does, injects ONE steer for the survivors, and
-        returns the delivered contract-1 verdict for the caller to push as the
+        not exceptional), suppresses the already-steered markers, and returns the
+        surviving contract-1 conflicts for the caller to push as the
         `validation_result` envelope.
+
+        W3 report-cadence revision: this method NO LONGER injects the steer. The
+        client OWNS the finding queue (stateless-backend invariant + it owns the
+        steered-marker + W4 re-arm lifecycle): a `validation_result` carrying
+        surviving conflicts is a CANDIDATE list the client enqueues, and the client
+        drains it via a `drain_findings` round-trip that composes+injects the steer
+        (handle_drain_findings). A CLEAN result (no surviving conflict) enqueues
+        nothing, so no voice turn is spent on an all-clear. See
+        docs/standards/validation-delegation.md + the sprint-12 plan.
 
         `windows` is a list of contract-2 field lists (each list is one window).
         The steered-marker suppression + the returned conflicts operate over the
@@ -1597,7 +1606,74 @@ class FormFillingService:
             surviving_conflict_count=len(surviving),
             session_id=self._session_id,
         )
-        delivered = await self._inject_validator_steer(surviving, union_fields) if surviving else []
+        # W3: REPORT-ONLY. Return the surviving conflicts for the client to ENQUEUE;
+        # the steer is injected later on the client-driven drain_findings round-trip
+        # (handle_drain_findings), never here. A field's `name` rides each conflict's
+        # entry so the client can compose the drain payload without re-deriving it;
+        # attach it from the union fields (id -> name).
+        name_by_id = {
+            f.get("field_id"): f.get("name")
+            for f in union_fields
+            if isinstance(f, dict) and f.get("field_id")
+        }
+        reported = []
+        for c in surviving:
+            if not isinstance(c, dict):
+                continue
+            ids = c.get("field_ids", [])
+            reported.append({
+                "field_ids": ids,
+                "reason": c.get("reason", ""),
+                # id -> name map for just this conflict's fields, so the client's
+                # drain_findings payload carries the names the steer composer needs.
+                "field_names": {i: name_by_id.get(i) for i in ids if isinstance(i, str)},
+            })
+        return {"conflicts": reported}
+
+    async def handle_drain_findings(self, conflicts: list) -> dict:
+        """W3 (bd polyglot-pdf-pr3i): the FINDING-DRIVEN drain. The client sends this
+        (drain_findings) the moment its `validatorFindingsQueue` is non-empty --
+        carrying the queued conflicts it wants voiced -- and this composes ONE steer
+        via the SHIPPED oiok composer (_compose_validator_steer -- navigate/
+        read-back/correct, one finding at a time) and injects it into the Live
+        session. Returns the DELIVERED conflicts (contract-1 shape) so the client
+        marks those fields `steered` and consumes them from the queue; an
+        un-delivered steer (dead session / send failed) returns [] so the client
+        keeps the finding queued to retry on a later drain (fail-OPEN, never blocks).
+
+        Each conflict carries `field_ids`, `reason`, and a `field_names` id->name map
+        (attached by handle_validation_windows so the client need not re-derive it);
+        the composer's `fields` arg is reconstructed from those maps. PII: logs counts
+        only; the reason/names ride the in-band steer, never a log sink (contract 6).
+        """
+        safe_conflicts = [c for c in conflicts if isinstance(c, dict)] if isinstance(conflicts, list) else []
+        # Reconstruct the composer's `fields` list (id -> name) from every conflict's
+        # field_names map. The composer only reads field_id + name, so this minimal
+        # projection is sufficient; a missing name falls back to the id in the steer.
+        fields: list = []
+        seen_ids: set = set()
+        for c in safe_conflicts:
+            names = c.get("field_names", {}) if isinstance(c.get("field_names"), dict) else {}
+            for fid in c.get("field_ids", []):
+                if not isinstance(fid, str) or fid in seen_ids:
+                    continue
+                seen_ids.add(fid)
+                fields.append({"field_id": fid, "name": names.get(fid) or fid})
+        # Normalize to the {field_ids, reason} shape the composer/inject path expects
+        # (drop the client-only field_names rider).
+        steer_conflicts = [
+            {"field_ids": c.get("field_ids", []), "reason": c.get("reason", "")}
+            for c in safe_conflicts
+            if c.get("field_ids")
+        ]
+        _log.info(
+            "drain_findings_received",
+            conflict_count=len(steer_conflicts),
+            session_id=self._session_id,
+        )
+        if not steer_conflicts:
+            return {"conflicts": []}
+        delivered = await self._inject_validator_steer(steer_conflicts, fields)
         return {"conflicts": delivered}
 
     @staticmethod
