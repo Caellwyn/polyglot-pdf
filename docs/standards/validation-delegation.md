@@ -156,7 +156,8 @@ signals.
 
 **W3 (bd polyglot-pdf-pr3i, report-cadence revision) -- the async-validator path
 (W1-W3) supersedes the inline steer.** For the async `validate_windows` trigger
-(and the async `section_complete`/`form_complete` arms since W1), the
+(and the async `section_complete` arm; `form_complete` since W6 runs the pro pass
+instead -- see the W6 note below -- but is report-only in the SAME way), the
 `validation_result` is now **REPORT-ONLY**: it carries the surviving conflicts but
 the backend does NOT inject a steer on it. The client OWNS the finding queue
 (stateless-backend invariant + it owns the `steered`-marker + W4 re-arm lifecycle):
@@ -167,8 +168,9 @@ replies `drain_findings_result` with the delivered conflicts -- only THEN does t
 client mark the fields `steered` + consume them. A CLEAN result drains nothing (no
 voice turn on an all-clear). The "conflicts -> validation_result with a steer" line
 above describes the original synchronous `handle_validation_boundary` shape, which
-is no longer on any live wire path (W1 rerouted section_complete/form_complete
-through the async report-only `handle_validation_windows`; `handle_validation_boundary`
+is no longer on any live wire path (W1 rerouted section_complete through the async
+report-only `handle_validation_windows`, and form_complete likewise until W6
+re-pointed it at the pro pass `handle_form_complete_pro`; `handle_validation_boundary`
 survives only as a test-covered single-window helper). The live async path routes
 the steer through the drain instead.
 

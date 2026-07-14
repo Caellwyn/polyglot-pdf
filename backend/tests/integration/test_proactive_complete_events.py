@@ -248,19 +248,27 @@ async def test_events_tolerate_missing_or_bad_fields():
 async def test_background_validation_exception_never_crashes_the_loop():
     """Exit criterion 3: a validator that RAISES in the background task is caught +
     logged, never propagated -- the receive loop keeps serving (the ping after it is
-    still answered) and the session tears down cleanly."""
+    still answered) and the session tears down cleanly. W6: form_complete now runs
+    the pro pass, so raise handle_form_complete_pro (the code path _run_pro_complete_
+    and_push's crash-safe try/except now guards); a validate_windows frame also
+    raises handle_validation_windows so BOTH background runners' guards are covered."""
     svc = _mock_service()
-    svc.handle_validation_windows = AsyncMock(side_effect=RuntimeError("boom"))
+    svc.handle_form_complete_pro = AsyncMock(side_effect=RuntimeError("pro boom"))
+    svc.handle_validation_windows = AsyncMock(side_effect=RuntimeError("windows boom"))
     _, _, sent = await _run([
         {"text": json.dumps({"type": "form_complete", "fields": [
             {"field_id": "f1", "name": "F1", "value": "a", "steered": False}]})},
+        {"text": json.dumps({"type": "validate_windows", "windows": [
+            [{"field_id": "f1", "name": "F1", "value": "a", "steered": False}]]})},
         {"text": json.dumps({"type": "ping"})},
     ], svc=svc, hold_open=0.05)
     types = [m.get("type") for m in sent]
-    # The ack still went out and the loop kept serving the ping despite the raise;
-    # no validation_result is pushed (the failed task swallowed its own error).
+    # Both acks went out and the loop kept serving the ping despite the raises;
+    # no validation_result is pushed (the failed tasks swallowed their own errors).
     assert "form_complete_ack" in types
-    assert "pong" in types or "ping" not in types  # loop kept processing after the raise
+    assert "validate_windows_ack" in types
+    assert "pong" in types  # loop kept processing after both raises
+    assert "validation_result" not in types
     assert svc.end_session.await_count == 1  # clean teardown
 
 
