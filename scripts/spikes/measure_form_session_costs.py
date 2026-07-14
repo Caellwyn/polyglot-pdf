@@ -97,23 +97,64 @@ import scenario_events as _se  # noqa: E402  (stdlib-only sibling module)
 
 MODELS = {"2.5": MODEL_NATIVE_STANDARD, "3.1": MODEL_NATIVE_PREMIUM}
 
-# gemini-2.5-flash-lite list rates, USD per token (2026-07: $0.10 in /
-# $0.01 cached-in / $0.40 out per 1M). The text sidecar (secretary +
-# validator) emits token counts but no USD (text_ai_usage); the harness
-# prices them here so the run's headline is a true all-in dollar figure.
-TEXT_RATES = {"input": 0.10e-6, "cached_input": 0.01e-6, "output": 0.40e-6}
+# Per-model text-sidecar rate table, USD per token (bd polyglot-pdf-0cyu: the
+# W6 whole-form gemini-2.5-pro pass, bd polyglot-pdf-gbus/#434, added a SECOND
+# text model to the sidecar -- flash-lite for the secretary + lite validator
+# windows, pro for the end-of-form pass -- so a single flat TEXT_RATES row
+# silently mispriced every pro call at the flash-lite rate. text_ai_usage
+# already carries a `model` field (text_ai_gemini._log_usage); key pricing off
+# it. Rates dated 2026-07:
+#   gemini-2.5-flash-lite: $0.10 in / $0.01 cached-in / $0.40 out per 1M
+#     (unchanged from the pre-existing TEXT_RATES row).
+#   gemini-2.5-pro (<=200k prompt tier, the only tier this harness's payloads
+#     hit): $1.25 in / $0.125 cached-in / $10.00 out per 1M -- the 2026-07
+#     Gemini API list price for gemini-2.5-pro (docs/standards/ai-models.md and
+#     backend/config.py record no text-model list price for pro; this table is
+#     the harness's own sourced record, dated so a future rate change is
+#     visible as a diff here rather than a silent drift).
+TEXT_RATES_BY_MODEL = {
+    "gemini-2.5-flash-lite": {
+        "input": 0.10e-6, "cached_input": 0.01e-6, "output": 0.40e-6},
+    "gemini-2.5-pro": {
+        "input": 1.25e-6, "cached_input": 0.125e-6, "output": 10.00e-6},
+}
+# Back-compat alias: the flash-lite row, for any caller that still wants a
+# single default rate (price_text_usage below; historical CLI/tests).
+TEXT_RATES = TEXT_RATES_BY_MODEL["gemini-2.5-flash-lite"]
+
+
+def _rates_for_model(model: str | None) -> tuple[dict, bool]:
+    """Resolve the rate row for a text-sidecar model name. Returns
+    (rates, unpriced) -- unpriced=True means the model name was not in the
+    table and the run priced it at the HIGHEST known rate (never silently
+    under-priced) so build_summary can surface an 'unpriced_model' warning
+    instead of a quietly-wrong dollar figure."""
+    row = TEXT_RATES_BY_MODEL.get(model or "")
+    if row is not None:
+        return row, False
+    # Unknown model (a future model swap, a typo, or a test double): price at
+    # the highest per-token rate across every known row, field by field, so
+    # the estimate is never an under-count.
+    worst = {
+        k: max(r[k] for r in TEXT_RATES_BY_MODEL.values())
+        for k in ("input", "cached_input", "output")
+    }
+    return worst, True
 
 
 def price_text_usage(prompt_tokens: int, cached_tokens: int,
-                     output_tokens: int) -> float:
+                     output_tokens: int, model: str | None = None) -> float:
     """USD for one text-sidecar call: cached prompt tokens bill at the cached
-    rate, the uncached remainder at the input rate, output at the output rate."""
+    rate, the uncached remainder at the input rate, output at the output rate.
+    `model` selects the rate row (TEXT_RATES_BY_MODEL); omitted/unknown falls
+    back to the flash-lite row for back-compat with pre-per-model callers."""
     prompt = max(0, int(prompt_tokens or 0))
     cached = max(0, min(int(cached_tokens or 0), prompt))
     out = max(0, int(output_tokens or 0))
-    return ((prompt - cached) * TEXT_RATES["input"]
-            + cached * TEXT_RATES["cached_input"]
-            + out * TEXT_RATES["output"])
+    rates = TEXT_RATES if model is None else _rates_for_model(model)[0]
+    return ((prompt - cached) * rates["input"]
+            + cached * rates["cached_input"]
+            + out * rates["output"])
 
 # Schema sources (bd polyglot-pdf-jnjj.24). The harness was hardcoded to the DEMO
 # schema, which is non-representative (flat 'description' on 2/174 fields, no nested
@@ -129,6 +170,13 @@ _CHUNK_MS = 40
 
 CONFIRM_YES = "Yes, that's correct."
 REJECT = "No, that's not right."
+
+# W2 window geometry (bd polyglot-pdf-kxkw), mirrored from the LANDED client
+# constants WebFormConnection.VALIDATOR_WINDOW_SIZE / _STRIDE
+# (webFormConnection.ts:264-265): window k covers schema-field-order indices
+# [k*stride, k*stride+size).
+WEBFORM_VALIDATOR_WINDOW_SIZE = 20
+WEBFORM_VALIDATOR_WINDOW_STRIDE = 10
 
 # The DEMO 20-question plan: 12 client-info + 5 reasons + 3 living-situation fields
 # from the demo schema, in schema order, with realistic FICTIONAL answers
@@ -666,6 +714,27 @@ class FakeClientWebSocket:
         self.switch_events: list[dict] = []
         self.skip_events: list[dict] = []
         self.sent_messages: list[str] = []
+        # W2 (bd polyglot-pdf-kxkw, mirrored bd polyglot-pdf-0cyu): settledness-
+        # window indices already sent as validate_windows (mirrors the client's
+        # persisted state.validatedWindowIndices). A window index, once sent,
+        # never re-fires.
+        self.validated_window_indices: set[int] = set()
+        # W3 (bd polyglot-pdf-pr3i, mirrored 0cyu): the report-only validator's
+        # findings queue (mirrors state.validatorFindingsQueue), deduped by
+        # field-id SET, plus the single-flight drain guard (mirrors
+        # WebFormConnection.drainInFlight). drain_results records every
+        # drain_findings_result this client received (t_enqueue/t_drain_submit/
+        # t_drain_result timestamps live on the matching entries below).
+        self.validator_findings_queue: list[dict] = []
+        self.drain_in_flight: bool = False
+        self.drain_results: list[dict] = []
+        self.drain_tasks: list = []
+        self._pending_drain_rec: dict | None = None
+        # validate_windows call records (mirrors ValidationSeam.records) +
+        # their async tasks (drained at run end / pre-reconnect, same as the
+        # drain_tasks above).
+        self.validation_records: list[dict] = []
+        self.window_tasks: list = []
         # bd jnjj.39 debug mode: collect the model's OUTPUT transcript chunks (each
         # {"type":"transcript"} message) with a timestamp, joined per-question later
         # by time window. Populated only when start_session was called with
@@ -698,6 +767,29 @@ class FakeClientWebSocket:
         if self.first_audio_at is None:
             self.first_audio_at = time.monotonic()
 
+    @staticmethod
+    def _same_field_value(a, b) -> bool:
+        """Mirror SchemaFormStateManager._sameFieldValue (W4, bd polyglot-pdf-
+        ny4s, schemaFormState.ts:277): value-equality for the steered re-arm
+        decision. Empty-ish (None/''/all-blank-list) both sides -> same; a
+        checkbox-group list compares as an order-INSENSITIVE set (the real
+        CheckboxField.handleToggle APPENDS a re-checked value, so a re-checked
+        box can land in a different order); everything else compares by ==."""
+        def _is_empty(v) -> bool:
+            return (v is None or v == ""
+                    or (isinstance(v, list) and all(x in (None, "") for x in v)))
+        a_empty, b_empty = _is_empty(a), _is_empty(b)
+        if a_empty and b_empty:
+            return True
+        if a_empty != b_empty:
+            return False
+        if isinstance(a, list) or isinstance(b, list):
+            def _clean(v):
+                items = v if isinstance(v, list) else [v]
+                return sorted(str(x) for x in items if x not in (None, ""))
+            return _clean(a) == _clean(b)
+        return a == b
+
     async def send_json(self, msg: dict):
         mtype = msg.get("type")
         self.sent_messages.append(mtype or "?")
@@ -714,14 +806,23 @@ class FakeClientWebSocket:
                 # continuous run at the optional postal-code field).
                 if fid in self.schema_fields and value is not None:
                     entry = self.state.setdefault(fid, {})
+                    prior_value = entry.get("value")
+                    value_changed = not self._same_field_value(prior_value, value)
                     # A VALUE CHANGE resets confirmed (mirror the frontend's
                     # updateField): the correction flow re-fills a confirmed
                     # field, which must un-confirm it so the pin re-activates
                     # and confirm_field can re-confirm the new value.
-                    # (W4/bd ny4s will also clear `steered` here -- mirror it
-                    # when it lands; RECONCILE-BEFORE-E1.)
-                    if entry.get("value") != value:
+                    if value_changed:
                         entry["confirmed"] = False
+                    # W4 (bd polyglot-pdf-ny4s): RE-ARM the steered marker on a
+                    # genuine value change; carry it forward unchanged on a
+                    # same-value re-write (confirm-without-change preserves it,
+                    # matching updateField's carrySteered rule -- schemaFormState.
+                    # ts:363-365). A same-value re-write is exactly the "both are
+                    # intentional" confirm path: no value moved, so the field must
+                    # NOT re-enter the validator net (no-nagging guarantee).
+                    if value_changed:
+                        entry["steered"] = False
                     entry["value"] = value
                     entry.setdefault("confirmed", False)
         elif mtype == "get_form_state":
@@ -748,15 +849,23 @@ class FakeClientWebSocket:
         elif mtype == "switch_field":
             self._handle_switch_field(msg)
         elif mtype == "validation_result":
-            # Mirror handleValidationResult: record the envelope and set the
-            # client-owned steered marker on every named field.
+            # W3 (bd polyglot-pdf-pr3i, mirrored 0cyu): REPORT-ONLY since W3 --
+            # mirror handleValidationResult (webFormConnection.ts:2222-2257).
+            # A clean result resolves nothing to enqueue. A result carrying
+            # conflicts ENQUEUES them (dedup by field-id set, mirroring
+            # enqueueValidatorFindings) and, if the queue GREW, triggers the
+            # drain seam -- the steered marker is set ONLY at
+            # drain_findings_result (handleDrainFindingsResult), never here.
             conflicts = msg.get("conflicts") or []
             self.validation_results.append(
                 {"ts": time.monotonic(), "conflicts": conflicts})
-            for c in conflicts:
-                for fid in (c.get("field_ids") or []):
-                    if fid in self.schema_fields:
-                        self.state.setdefault(fid, {})["steered"] = True
+            if conflicts:
+                self._enqueue_validator_findings(conflicts)
+        elif mtype == "drain_findings_result":
+            # W3 mirror (handleDrainFindingsResult, webFormConnection.ts:2295-
+            # 2324): the delivered conflicts get the steered marker + are
+            # consumed from the queue; undelivered conflicts stay queued.
+            self._handle_drain_findings_result(msg)
         elif mtype == "get_next_field_hint":
             rid = msg.get("request_id")
             hint = self.next_hint()
@@ -940,13 +1049,18 @@ class FakeClientWebSocket:
         self.switch_events.append(rec)
         self._reply(lambda: self.service.handle_switch_field_response(rid, ack))
 
-    def validation_fields(self, up_to_fid: str | None = None) -> list[dict]:
+    def validation_fields(self, up_to_fid: str | None = None,
+                         field_ids: list[str] | None = None) -> list[dict]:
         """The contract-2 validator payload (mirror buildValidatorFields):
         VISIBLE fields with a non-empty value, schema order, each
-        {field_id, name, value, steered}. up_to_fid bounds the list at that
-        field (inclusive) -- the page-boundary cut."""
+        {field_id, name, value, steered}. `field_ids`, when given, restricts
+        the scan to exactly that id list (in schema order) -- the window-range
+        cut used by maybe_emit_validate_windows. up_to_fid (legacy page-
+        boundary cut, kept for the terminal/whole-form callers) bounds the
+        list at that field (inclusive)."""
+        scan_ids = (field_ids if field_ids is not None else self.schema_field_order)
         out: list[dict] = []
-        for fid in self.schema_field_order:
+        for fid in scan_ids:
             entry = self.state.get(fid)
             if entry is None:
                 continue
@@ -962,6 +1076,217 @@ class FakeClientWebSocket:
             if up_to_fid is not None and fid == up_to_fid:
                 break
         return out
+
+    # -- W2 settledness windows (bd polyglot-pdf-kxkw, mirrored 0cyu) ----
+
+    def _field_settled(self, fid: str) -> bool:
+        """A field is SETTLED when it is no longer awaiting an answer:
+        confirmed, explicitly skipped, or hidden by conditional logic (not
+        part of the active form). Mirrors SchemaFormStateManager.
+        computeReadyWindows' isSettled (schemaFormState.ts:1362-1367)."""
+        if not self.field_shown(fid):
+            return True  # N/A
+        entry = self.state.get(fid)
+        return bool(entry and (entry.get("confirmed") or entry.get("skipped")))
+
+    def compute_ready_windows(self, size: int, stride: int) -> list[dict]:
+        """PURE mirror of SchemaFormStateManager.computeReadyWindows
+        (schemaFormState.ts:1350-1388): tile self.schema_field_order into
+        windows of `size` starting every `stride` fields; a window is ELIGIBLE
+        once EVERY field it covers is settled AND its index is not already in
+        self.validated_window_indices. Page-agnostic -- keys only on schema
+        field order + settledness, never pdf_position.page (report-cadence
+        revision 2026-07-13). Returns {index, start, end} dicts ascending by
+        index; does NOT mutate validated_window_indices (the caller marks sent
+        indices after rendering)."""
+        total = len(self.schema_field_order)
+        if total == 0 or size <= 0 or stride <= 0:
+            return []
+        step = min(stride, size)  # clamp: stride > size would leave gaps
+        ready: list[dict] = []
+        index = 0
+        start = 0
+        while start < total:
+            if index not in self.validated_window_indices:
+                end = min(start + size, total)
+                window_ids = self.schema_field_order[start:end]
+                if all(self._field_settled(fid) for fid in window_ids):
+                    ready.append({"index": index, "start": start, "end": end})
+            index += 1
+            start = index * step
+        return ready
+
+    def maybe_emit_validate_windows(self) -> None:
+        """Mirror WebFormConnection.maybeEmitValidateWindows
+        (webFormConnection.ts:2477-2524): compute newly-eligible windows, mark
+        their indices sent, and submit ONE validate_windows call (all new
+        windows at once) to the service. Called by the driver after every
+        question/event step (the confirm/skip/manual-edit seam) and on
+        reconnect (the handleSessionReady analogue)."""
+        ready = self.compute_ready_windows(
+            WEBFORM_VALIDATOR_WINDOW_SIZE, WEBFORM_VALIDATOR_WINDOW_STRIDE)
+        if not ready:
+            return
+        windows: list[list[dict]] = []
+        sent_indices: list[int] = []
+        for w in ready:
+            window_ids = self.schema_field_order[w["start"]:w["end"]]
+            payload = self.validation_fields(field_ids=window_ids)
+            if payload:
+                windows.append(payload)
+            sent_indices.append(w["index"])
+        self.validated_window_indices |= set(sent_indices)
+        if windows and self.service is not None:
+            self._submit_validate_windows(windows)
+
+    def _submit_validate_windows(self, windows: list[list[dict]]) -> None:
+        """Fire-and-forget the async validator call + push its verdict back
+        as a validation_result (mirror websocket_routes._run_validation_and_
+        push). Recorded on self.validation_records for the summary."""
+        rec = {"t_submit": time.monotonic(), "t_verdict": None,
+               "window_count": len(windows), "conflicts": []}
+        self.validation_records.append(rec)
+
+        async def _run():
+            try:
+                verdict = await self.service.handle_validation_windows(windows)
+            except Exception as exc:  # fail-open, mirror the route's guard
+                verdict = {"conflicts": [], "_error": type(exc).__name__}
+            rec["t_verdict"] = time.monotonic()
+            rec["conflicts"] = verdict.get("conflicts", [])
+            await self.send_json(
+                {"type": "validation_result",
+                 "conflicts": verdict.get("conflicts", [])})
+
+        self.window_tasks.append(asyncio.get_event_loop().create_task(_run()))
+
+    async def drain_pending_windows(self, timeout: float = 12.0) -> int:
+        """Await in-flight validate_windows tasks (run end / pre-reconnect).
+        Returns the count that did NOT finish in time (dropped)."""
+        pending = [t for t in self.window_tasks if not t.done()]
+        if not pending:
+            return 0
+        _, still = await asyncio.wait(pending, timeout=timeout)
+        return len(still)
+
+    # -- W3 findings queue + finding-driven drain (bd polyglot-pdf-pr3i,
+    # mirrored 0cyu) ------------------------------------------------------
+
+    @staticmethod
+    def _finding_key(field_ids) -> frozenset:
+        """Mirror SchemaFormStateManager.findingKey: a finding's identity is
+        its field-id SET (order-insensitive), matching the backend's frozenset
+        dedupe (schemaFormState.ts:1235-1238)."""
+        return frozenset(str(x) for x in (field_ids or []))
+
+    def _enqueue_validator_findings(self, conflicts: list[dict]) -> None:
+        """Mirror enqueueValidatorFindings + the enqueue-then-maybe-drain half
+        of handleValidationResult (webFormConnection.ts:2222-2257): append
+        only findings whose field-id SET is not already queued, stamping
+        t_enqueue on each. If the queue GREW, trigger the drain seam."""
+        existing = {self._finding_key(f.get("field_ids")) for f in self.validator_findings_queue}
+        grew = False
+        for c in conflicts:
+            ids = [str(x) for x in (c.get("field_ids") or []) if x]
+            if not ids:
+                continue
+            key = self._finding_key(ids)
+            if key in existing:
+                continue
+            existing.add(key)
+            self.validator_findings_queue.append({
+                "field_ids": ids, "reason": c.get("reason", ""),
+                "field_names": c.get("field_names") or {},
+                "t_enqueue": time.monotonic(),
+            })
+            grew = True
+        if grew:
+            self._drain_findings()
+
+    def _drain_findings(self) -> None:
+        """Mirror WebFormConnection.drainFindings (webFormConnection.ts:2267-
+        2286): single-flight (drain_in_flight), fire-and-forget the drain
+        round-trip carrying the CURRENT queue snapshot. Called on enqueue-
+        growth and on reconnect if a queue survived (driver's reconnect
+        block)."""
+        if self.drain_in_flight:
+            return
+        if not self.validator_findings_queue:
+            return
+        if self.service is None:
+            return
+        self.drain_in_flight = True
+        snapshot = list(self.validator_findings_queue)
+        t_submit = time.monotonic()
+        rec = {"t_submit": t_submit, "t_result": None,
+               "conflicts_sent": len(snapshot), "delivered": None}
+        self.drain_results.append(rec)
+
+        async def _run():
+            try:
+                verdict = await self.service.handle_drain_findings(
+                    [{"field_ids": f["field_ids"], "reason": f["reason"],
+                      "field_names": f["field_names"]} for f in snapshot])
+                delivered = (verdict.get("conflicts", [])
+                            if isinstance(verdict, dict) else [])
+            except Exception as exc:  # fail-open, mirror the route's guard
+                delivered = []
+                rec["_error"] = type(exc).__name__
+            await self.send_json(
+                {"type": "drain_findings_result", "conflicts": delivered})
+
+        task = asyncio.get_event_loop().create_task(_run())
+        self.drain_tasks.append(task)
+        self._pending_drain_rec = rec  # consumed by _handle_drain_findings_result
+
+    def _handle_drain_findings_result(self, msg: dict) -> None:
+        """Mirror WebFormConnection.handleDrainFindingsResult (webFormConn
+        ection.ts:2295-2324): clear drain_in_flight, mark delivered fields
+        steered, consume delivered findings from the queue (undelivered ones
+        stay queued to retry), and re-drain if the queue grew mid-flight."""
+        self.drain_in_flight = False
+        rec = getattr(self, "_pending_drain_rec", None)
+        delivered = msg.get("conflicts") or []
+        if rec is not None:
+            rec["t_result"] = time.monotonic()
+            rec["delivered"] = len(delivered)
+            # THIS drain's delivered field-id sets, kept on the record so a
+            # caller (check_steers) can scope its correction-rail matching to
+            # exactly what THIS drain steered -- not every field ever steered
+            # this run (client.state can carry an older steered marker whose
+            # correction was an "overridden_unplanted" ack, which never clears
+            # it; scanning all of client.state would wrongly re-match a stale
+            # plant on a later, unrelated drain).
+            rec["field_ids"] = [str(x) for c in delivered
+                                for x in (c.get("field_ids") or [])]
+            self._pending_drain_rec = None
+        if not delivered:
+            # Undelivered (dead live session): do NOT immediately re-drain
+            # (mirrors the client -- a re-drain would spin against the dead
+            # session). Findings stay queued to retry on the next enqueue-
+            # growth or reconnect.
+            return
+        delivered_keys = set()
+        for c in delivered:
+            for fid in (c.get("field_ids") or []):
+                if fid in self.schema_fields:
+                    self.state.setdefault(fid, {})["steered"] = True
+            delivered_keys.add(self._finding_key(c.get("field_ids")))
+        self.validator_findings_queue = [
+            f for f in self.validator_findings_queue
+            if self._finding_key(f["field_ids"]) not in delivered_keys]
+        if self.validator_findings_queue:
+            self._drain_findings()
+
+    async def drain_pending_drains(self, timeout: float = 12.0) -> int:
+        """Await in-flight drain_findings round-trips (run end / pre-
+        reconnect). Returns the count that did NOT finish in time (dropped --
+        the errors.dropped_drains summary key)."""
+        pending = [t for t in self.drain_tasks if not t.done()]
+        if not pending:
+            return 0
+        _, still = await asyncio.wait(pending, timeout=timeout)
+        return len(still)
 
 
 # ------------------------------------------------------------------ log tap
@@ -1051,9 +1376,14 @@ import contextvars  # noqa: E402
 _TEXT_CALLER = contextvars.ContextVar("stress_text_caller", default="")
 
 
-def _tag_text_ai(text_ai, ledger_calls: list):
+def _tag_text_ai(text_ai, ledger_calls: list, validate_caller: str = "validator"):
     """Wrap text_ai.ask/.validate so (a) every whitelisted log event emitted
-    inside carries the caller tag, and (b) per-call wall latency is recorded."""
+    inside carries the caller tag, and (b) per-call wall latency is recorded.
+    `validate_caller` labels .validate() calls made through THIS instance --
+    "validator" for the lite sidecar (the default, back-compat), "pro" for the
+    W6 whole-form gemini-2.5-pro instance (bd polyglot-pdf-gbus, mirrored
+    0cyu) -- so build_summary can separate the two in the pro_pass section
+    without guessing from the model name alone."""
     orig_ask, orig_validate = text_ai.ask, text_ai.validate
 
     async def ask_tagged(*a, **kw):
@@ -1067,12 +1397,12 @@ def _tag_text_ai(text_ai, ledger_calls: list):
             _TEXT_CALLER.reset(tok)
 
     async def validate_tagged(*a, **kw):
-        tok = _TEXT_CALLER.set("validator")
+        tok = _TEXT_CALLER.set(validate_caller)
         t0 = time.monotonic()
         try:
             return await orig_validate(*a, **kw)
         finally:
-            ledger_calls.append({"caller": "validator", "t_start": t0,
+            ledger_calls.append({"caller": validate_caller, "t_start": t0,
                                  "dur_s": round(time.monotonic() - t0, 3)})
             _TEXT_CALLER.reset(tok)
 
@@ -1080,121 +1410,13 @@ def _tag_text_ai(text_ai, ledger_calls: list):
     text_ai.validate = validate_tagged
 
 
-class ValidationSeam:
-    """The harness stand-in for the W2/W3 CLIENT seam (page-boundary window
-    builder + async runner + result push).
-
-    RECONCILE-BEFORE-E1 (bd polyglot-pdf-0cyu): W2 (stride window builder +
-    validate_windows emit, bd kxkw) and W3 (findings queue/drain, bd pr3i) are
-    NOT yet on dev, and the cadence spec was revised page-agnostic /
-    finding-driven (bd c3uo, PR #428). This class is authored to the W1
-    backend contract (handle_validation_windows takes a list of contract-2
-    window lists) with the route comment's default geometry (size 20 /
-    stride 10); before any E-run, diff it against the LANDED
-    webFormConnection.ts window/queue behavior and fix mismatches -- the
-    harness mirrors the client, never invents.
-
-    The backend half it drives is the SHIPPED W1: one call per window
-    concurrently, batch dedupe, steered suppression, steer injection --
-    the harness only replicates websocket_routes._run_validation_and_push
-    (create_task + push the verdict back to the client)."""
-
-    def __init__(self, service, client, size: int = 20, stride: int = 10):
-        self.service = service
-        self.client = client
-        self.size = size
-        self.stride = stride
-        self.tasks: list = []
-        self.records: list[dict] = []      # {t_submit, t_verdict, windows, conflicts}
-        self._sent_window_starts: set = set()
-        self.high_water_page = 0
-
-    def _windows_for(self, payload: list[dict]) -> list[list[dict]]:
-        """Overlapping windows (size/stride) over the contract-2 payload,
-        excluding start offsets already validated (the W2 high-water idea)."""
-        n = len(payload)
-        if n == 0:
-            return []
-        wins = []
-        start = 0
-        while start < n:
-            if start + self.size >= n and start > 0 and n - start < self.stride:
-                break  # tail already covered by the previous overlapping window
-            if start not in self._sent_window_starts:
-                wins.append(payload[start:start + self.size])
-                self._sent_window_starts.add(start)
-            if start + self.size >= n:
-                break
-            start += self.stride
-        return [w for w in wins if w]
-
-    def submit(self, payload: list[dict], reason: str):
-        """Mirror _run_validation_and_push: fire the async validation and push
-        the verdict back to the client as a validation_result envelope."""
-        windows = self._windows_for(payload)
-        if not windows:
-            return
-        rec = {"t_submit": time.monotonic(), "t_verdict": None,
-               "reason": reason, "window_count": len(windows), "conflicts": []}
-        self.records.append(rec)
-
-        async def _run():
-            try:
-                verdict = await self.service.handle_validation_windows(windows)
-            except Exception as exc:  # fail-open, mirror the route's guard
-                verdict = {"conflicts": [], "_error": type(exc).__name__}
-            rec["t_verdict"] = time.monotonic()
-            rec["conflicts"] = verdict.get("conflicts", [])
-            await self.client.send_json(
-                {"type": "validation_result",
-                 "conflicts": verdict.get("conflicts", [])})
-
-        self.tasks.append(asyncio.create_task(_run()))
-
-    def maybe_page_boundary(self, prev_fid: str | None, next_fid: str | None,
-                            fields_by_id: dict) -> bool:
-        """First-time FORWARD page crossing between two plan fields -> submit
-        windows over everything filled up to the boundary."""
-        if prev_fid is None or next_fid is None:
-            return False
-
-        def page_of(fid):
-            f = fields_by_id.get(fid) or {}
-            return ((f.get("pdf_position") or {}).get("page")) or 0
-
-        p_prev, p_next = page_of(prev_fid), page_of(next_fid)
-        # First-time FORWARD crossing only (backward jumps / re-crossings of an
-        # already-validated page do not re-trigger -- the persisted high-water
-        # page in the sprint-12 design).
-        if p_next > p_prev and p_prev > self.high_water_page:
-            self.high_water_page = p_prev
-            self.submit(self.client.validation_fields(up_to_fid=prev_fid),
-                        reason=f"page-{p_prev}-end")
-            return True
-        return False
-
-    async def drain(self, timeout: float = 12.0) -> int:
-        """Await in-flight validation tasks (run end / pre-reconnect).
-        Returns the count that did NOT finish in time (dropped)."""
-        pending = [t for t in self.tasks if not t.done()]
-        if not pending:
-            return 0
-        done, still = await asyncio.wait(pending, timeout=timeout)
-        return len(still)
-
-    def latencies(self) -> list:
-        return [round(r["t_verdict"] - r["t_submit"], 3)
-                for r in self.records if r["t_verdict"] is not None]
-
-    def flagged_groups(self) -> list:
-        """Every distinct conflict field-id set seen across verdicts."""
-        seen = []
-        for r in self.records:
-            for c in r["conflicts"]:
-                ids = frozenset(str(x) for x in (c.get("field_ids") or []))
-                if ids and ids not in [frozenset(s) for s in seen]:
-                    seen.append(set(ids))
-        return seen
+# NOTE (bd polyglot-pdf-0cyu): the earlier ValidationSeam class (page-boundary
+# window builder authored against the pre-W2/W3 spec) was REMOVED once W2
+# (stride windows, bd kxkw) and W3 (findings queue/drain, bd pr3i) landed on
+# dev -- its job is now FakeClientWebSocket.compute_ready_windows /
+# maybe_emit_validate_windows / _enqueue_validator_findings / _drain_findings,
+# which mirror the LANDED webFormConnection.ts behavior directly on the
+# client stand-in (the real client owns this state, not a separate object).
 
 
 # ------------------------------------------------------------------- summary
@@ -1209,6 +1431,7 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
 
     usage_events = [e for e in log_sink if e.get("event") == "text_ai_usage"]
     text_rows = []
+    unpriced_models: set = set()
     for e in usage_events:
         f = e.get("fields") or {}
 
@@ -1217,14 +1440,29 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
                 return int(float(f.get(name) or 0))
             except (TypeError, ValueError):
                 return 0
+        # Per-model pricing (bd polyglot-pdf-0cyu): text_ai_usage carries the
+        # model name (text_ai_gemini._log_usage); the lite sidecar and the W6
+        # pro pass bill at DIFFERENT rates, so a flat rate silently mispriced
+        # every pro call. A missing model field (older log shape / a test
+        # double) falls back to the flash-lite row for back-compat rather than
+        # raising unpriced -- only a NAMED-but-unknown model counts as
+        # unpriced (never silently under-priced: it bills at the highest
+        # known rate and is surfaced in errors.unpriced_model_calls).
+        model = f.get("model") or None
+        rates, unpriced = _rates_for_model(model) if model else (TEXT_RATES, False)
+        if unpriced:
+            unpriced_models.add(model)
+        prompt = _i("prompt_tokens")
+        cached = _i("cached_tokens")
+        output = _i("output_tokens")
+        cached_c = max(0, min(cached, prompt))
+        usd = ((prompt - cached_c) * rates["input"] + cached_c * rates["cached_input"]
+               + output * rates["output"])
         text_rows.append({
-            "caller": e.get("caller") or "",
-            "prompt": _i("prompt_tokens"), "cached": _i("cached_tokens"),
-            "output": _i("output_tokens"),
+            "caller": e.get("caller") or "", "model": model,
+            "prompt": prompt, "cached": cached, "output": output,
             "cache_hit": str(f.get("cache_hit")).lower() == "true",
-            "usd": round(price_text_usage(_i("prompt_tokens"),
-                                          _i("cached_tokens"),
-                                          _i("output_tokens")), 6)})
+            "usd": round(usd, 6)})
     text_usd = round(sum(r["usd"] for r in text_rows), 6)
     ledger_calls = meta.get("text_ledger_calls") or []
 
@@ -1233,7 +1471,9 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
 
     sec_calls = _caller(ledger_calls, "secretary")
     val_calls = _caller(ledger_calls, "validator")
+    pro_calls = _caller(ledger_calls, "pro")
     sec_usage = _caller(text_rows, "secretary")
+    pro_usage = _caller(text_rows, "pro")
 
     ev = meta.get("event_records") or []
     recalls = [e for e in ev if e.get("type") == "recall"]
@@ -1278,6 +1518,23 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
     pr = (_se.score_validator_pr(planted_groups, flagged_groups)
           if (planted_groups or flagged_groups) else None)
 
+    # W3 drain stats (bd polyglot-pdf-pr3i, mirrored 0cyu): every drain_
+    # findings round-trip this client ran, keyed off drain_records
+    # (client.drain_results), NOT validation_records -- a drain is a DISTINCT
+    # event from the report that enqueued it (a drain can carry several
+    # enqueued reports, or fire again on the same report if the first
+    # delivery failed).
+    drecords = meta.get("drain_records") or []
+    delivered_drains = [d for d in drecords if d.get("delivered")]
+    undelivered_drains = [d for d in drecords
+                          if d.get("delivered") is not None and not d.get("delivered")]
+    drain_latencies = [round(d["t_result"] - d["t_submit"], 3) for d in drecords
+                       if d.get("t_result") is not None]
+
+    pro_pass_meta = meta.get("pro_pass") or {"ran": False, "model": None,
+                                             "conflicts": 0}
+    pro_usd = round(sum(r["usd"] for r in pro_usage), 6)
+
     return {
         "run": {k: meta.get(k) for k in
                 ("model", "tier", "schema", "arm", "path", "questions",
@@ -1315,6 +1572,20 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
             "steer_to_switch_s": _se.latency_summary(
                 [s.get("steer_to_switch_s") for s in steers]),
             "fail_opens": len(fail_open_val),
+            "drains": {
+                "count": len(drecords),
+                "delivered": len(delivered_drains),
+                "undelivered_retries": len(undelivered_drains),
+            },
+            "drain_latency_s": _se.latency_summary(drain_latencies),
+        },
+        "pro_pass": {
+            "ran": bool(pro_pass_meta.get("ran")),
+            "model": pro_pass_meta.get("model"),
+            "usd": pro_usd,
+            "latency_s": pro_pass_meta.get("latency_s"),
+            "conflicts": pro_pass_meta.get("conflicts", 0),
+            "calls": len(pro_calls),
         },
         "secretary": {
             "calls": len(sec_calls),
@@ -1359,6 +1630,8 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
                                    + meta.get("validation_dropped_at_end", 0)),
             "secretary_delivers_dropped": meta.get(
                 "secretary_delivers_dropped_reconnect", 0),
+            "dropped_drains": meta.get("dropped_drains", 0),
+            "unpriced_model_calls": sorted(unpriced_models),
             "captured_errors": len(meta.get("errors") or []),
         },
     }
@@ -1706,8 +1979,9 @@ async def run(args) -> int:
         # 2.5-flash, whose Vertex thinking-on default is the #1 cost-estimate
         # buster); the lite fallback chain mirrors TextAIGemini's default.
         text_ai = None
-        if use_text_ai:
+        if use_text_ai or bool(getattr(args, "pro_pass", False)):
             from backend.adapters.text_ai_gemini import TextAIGemini
+        if use_text_ai:
             if args.vertex:
                 text_ai = TextAIGemini(
                     model="gemini-2.5-flash-lite", vertexai=True,
@@ -1718,6 +1992,35 @@ async def run(args) -> int:
                                        model="gemini-2.5-flash-lite")
             text_ai._log = _LogTap(text_ai._log, log_sink, _INFO_EVENTS)
             _tag_text_ai(text_ai, text_ledger_calls)
+
+        # W6 pro pass (bd polyglot-pdf-gbus, mirrored 0cyu): --pro-pass wires a
+        # SECOND text model -- gemini-2.5-pro, bounded thinking, EMPTY fallback
+        # chain -- mirroring backend/dependencies.py get_text_ai_pro exactly
+        # (same model/thinking-budget knobs off Settings, same "fail-open, never
+        # downgrade to lite" contract). Opt-in like use_text_ai's --text-ai:
+        # FORM_COMPLETE_PRO_VALIDATOR defaults OFF in production (a real
+        # operational-cost dependency), so a default harness run must not
+        # silently start paying for it. Only meaningful once use_text_ai is on
+        # (the pro pass rides the same drain/enqueue client machinery).
+        use_pro_pass = bool(getattr(args, "pro_pass", False)) and use_text_ai
+        text_ai_pro = None
+        if use_pro_pass:
+            if args.vertex:
+                text_ai_pro = TextAIGemini(
+                    model=settings.VALIDATOR_PRO_MODEL, vertexai=True,
+                    project=os.getenv("GOOGLE_CLOUD_PROJECT", "polyglot-demo-aa709"),
+                    location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+                    fallback_models=(),
+                    thinking_budget=settings.VALIDATOR_PRO_THINKING_BUDGET)
+            else:
+                text_ai_pro = TextAIGemini(
+                    api_key=os.getenv("GEMINI_API_KEY"),
+                    model=settings.VALIDATOR_PRO_MODEL,
+                    fallback_models=(),
+                    thinking_budget=settings.VALIDATOR_PRO_THINKING_BUDGET)
+            text_ai_pro._log = _LogTap(text_ai_pro._log, log_sink, _INFO_EVENTS)
+            _tag_text_ai(text_ai_pro, text_ledger_calls, validate_caller="pro")
+        meta["pro_pass_wired"] = use_pro_pass
         if DEBUG:
             # bd jnjj.39: observe the INPUT transcript (what the model heard) so the
             # debug artifact can answer "did it parse the synthetic-audio digits?".
@@ -1726,7 +2029,7 @@ async def run(args) -> int:
                 {"ts": time.monotonic(), "text": str(text)})
 
         service = FormFillingService(live_ai=adapter, settings=settings,
-                                     text_ai=text_ai)
+                                     text_ai=text_ai, text_ai_pro=text_ai_pro)
         if text_ai is not None:
             # The service module's info events (ask_secretary_*,
             # validator_steer_*, validator_windows_complete) go through the
@@ -1822,10 +2125,12 @@ async def run(args) -> int:
             # runs neither request nor pay for transcription.
             send_transcript=DEBUG)
 
-        # The validation seam (W2/W3 stand-in; RECONCILE-BEFORE-E1). Only
-        # armed when the sidecar is wired AND we run the continuous full form.
-        seam = (ValidationSeam(service, client)
-                if (use_text_ai and continuous) else None)
+        # The validation seam is now the CLIENT's own machinery (W2/W3 landed,
+        # bd polyglot-pdf-0cyu): client.maybe_emit_validate_windows() /
+        # client._drain_findings() mirror webFormConnection.ts directly. Only
+        # armed when the sidecar is wired AND we run the continuous full form
+        # (same gating the old seam used).
+        validator_armed = bool(use_text_ai and continuous)
 
         # Tap tool calls AFTER start_session wired the real chain. The tap wraps the
         # REAL callback; it must be RE-INSTALLED after every switch_to_section, which
@@ -1956,14 +2261,18 @@ async def run(args) -> int:
 
         async def _drain_before_reconnect():
             """Settle in-flight async work before tearing the session down
-            (mirror of what a production reconnect implies): validator window
-            tasks and detached secretary delivers. Whatever cannot finish is
-            COUNTED, not silently lost."""
-            if seam is not None:
-                dropped = await seam.drain(timeout=8.0)
+            (mirror of what a production reconnect implies): validate_windows
+            tasks, in-flight drain_findings round-trips, and detached secretary
+            delivers. Whatever cannot finish is COUNTED, not silently lost."""
+            if validator_armed:
+                dropped = await client.drain_pending_windows(timeout=8.0)
                 if dropped:
                     meta.setdefault("validation_dropped_reconnect", 0)
                     meta["validation_dropped_reconnect"] += dropped
+                dropped_drains = await client.drain_pending_drains(timeout=8.0)
+                if dropped_drains:
+                    meta.setdefault("dropped_drains", 0)
+                    meta["dropped_drains"] += dropped_drains
             pend = [t for t in (getattr(service, "_secretary_deliver_tasks", None) or [])
                     if not t.done()]
             if pend:
@@ -2020,17 +2329,29 @@ async def run(args) -> int:
             event_records.append(rec)
 
         async def check_steers():
-            """Drive the correction rail for any NEW conflict verdicts: wait
+            """Drive the correction rail for any NEWLY-DELIVERED drains: wait
             (bounded) for the model's switch_to_field, then speak the matching
             plant's correction and confirm. On a timeout the correction is
             spoken anyway -- the model has voiced the steer and is waiting on
-            the user; silence would desync the next scripted step."""
-            new = client.validation_results[_vr_handled["n"]:]
-            _vr_handled["n"] = len(client.validation_results)
-            for vr in new:
-                if not vr["conflicts"]:
+            the user; silence would desync the next scripted step.
+
+            KEYS OFF drain_findings_result (client.drain_results), NOT
+            validation_result (bd polyglot-pdf-0cyu): the W3 report/drain split
+            means a validation_result conflict is only a CANDIDATE the client
+            enqueues -- the steer is not actually voiced into the Live session
+            until handle_drain_findings composes+injects it, confirmed by a
+            drain_findings_result with non-empty `delivered`. Measuring
+            steer_to_switch_s from validation_result would time a promise, not
+            the delivery; an undelivered drain (empty `delivered`) is not a
+            steer at all and must not start this clock."""
+            new = client.drain_results[_vr_handled["n"]:]
+            _vr_handled["n"] = len(client.drain_results)
+            for dr in new:
+                delivered = dr.get("delivered")
+                if not delivered:  # None (still in flight) or 0 (undelivered)
                     continue
-                rec = {"t_result": vr["ts"], "conflicts": len(vr["conflicts"]),
+                t_delivered = dr["t_result"]
+                rec = {"t_result": t_delivered, "conflicts": delivered,
                        "steer_to_switch_s": None, "outcome": None}
                 steer_records.append(rec)
                 n0 = len(client.switch_events)
@@ -2042,11 +2363,16 @@ async def run(args) -> int:
                 target = None
                 if len(client.switch_events) > n0:
                     sw = client.switch_events[-1]
-                    rec["steer_to_switch_s"] = round(sw["ts"] - vr["ts"], 3)
+                    rec["steer_to_switch_s"] = round(sw["ts"] - t_delivered, 3)
                     target = sw.get("field_id")
                 plant = None
-                flagged_ids = {str(x) for c in vr["conflicts"]
-                               for x in (c.get("field_ids") or [])}
+                # THIS drain's delivered field ids (recorded on the drain_
+                # results entry by _handle_drain_findings_result) -- NOT every
+                # steered field in client.state, which can carry a stale
+                # marker from an earlier "overridden_unplanted" ack that never
+                # cleared (a genuine value change is the only thing that
+                # clears steered, W4).
+                flagged_ids = set(dr.get("field_ids") or [])
                 for s in steps:
                     p = s.get("plant")
                     if p and (target in p["conflict_group"]
@@ -2115,6 +2441,14 @@ async def run(args) -> int:
                          "downtime_s": round(time.monotonic() - _t_reconnect0, 3)})
                     print(f"    [reconnect] continuous session restarted before "
                           f"q{i} (go_away={'yes' if was_announced else 'no'})")
+                    # handleSessionReady parity (webFormConnection.ts:864-887,
+                    # mirrored 0cyu): a reconnect re-checks window eligibility
+                    # AND re-drains a findings queue that survived the drop --
+                    # a contradiction found just before the drop must still be
+                    # voiced after reconnect.
+                    if validator_armed:
+                        client.maybe_emit_validate_windows()
+                        client._drain_findings()
 
             # Section boundary (section-reset, section-reset-jit, dti arms):
             # production restart. The JIT-handshake arms (section-reset-jit, dti)
@@ -2211,16 +2545,16 @@ async def run(args) -> int:
                 q_windows.append({"q": i, "fid": fid or q.get("event", "?"),
                                   "t_start": _q_t_start, "t_end": _prev_q_end})
 
-            # Validation seam (W2/W3 stand-in; only armed on continuous full-form
-            # runs with the sidecar wired): submit windows on a first-time
-            # forward page crossing, then drive any steer the async verdicts
-            # produced. check_steers also runs when no boundary fired -- a
-            # verdict from an earlier boundary can land turns later.
-            if seam is not None:
-                next_fid = next((s.get("field_id") for s in steps[i:]
-                                 if "event" not in s), None)
-                if fid:
-                    seam.maybe_page_boundary(fid, next_fid, client.schema_fields)
+            # W2/W3 validator seam (landed client mirror, bd polyglot-pdf-0cyu;
+            # only armed on continuous full-form runs with the sidecar wired):
+            # re-check settledness-window eligibility on this confirm/skip/
+            # manual-edit seam (the harness analogue of every state-change
+            # trigger maybeEmitValidateWindows fires on), then drive any steer
+            # the async verdicts produced. check_steers also runs when no new
+            # window fired -- a verdict from an earlier window can land turns
+            # later (async).
+            if validator_armed:
+                client.maybe_emit_validate_windows()
                 await check_steers()
 
             d = tracker.delta_and_advance()
@@ -2245,17 +2579,58 @@ async def run(args) -> int:
                   f"(${rows[-1]['total cost']:.4f}) tools={meta['per_question_tools'][str(i)]}",
                   flush=True)
 
-        # Terminal boundary (mirror form_complete, the terminal drain): submit
-        # whatever windows remain over the whole form, settle them, and drive
-        # any final steers -- a far-pair plant is typically caught HERE.
-        if seam is not None:
-            seam.submit(client.validation_fields(), reason="form-complete")
-            dropped = await seam.drain(timeout=20.0)
+        # Terminal boundary (mirror form_complete, the terminal drain): a final
+        # window-eligibility check (the tail window settles once the LAST
+        # field confirms -- no separate isFormComplete release needed, mirror
+        # computeReadyWindows' own doc comment), settle any in-flight lite
+        # validator/drain work, THEN the W6 whole-form gemini-2.5-pro pass
+        # (bd polyglot-pdf-gbus, mirrored 0cyu) -- form_complete's SOLE
+        # end-of-form report, run at the SAME point production's form_complete
+        # handler spawns _run_pro_complete_and_push. Its conflicts ride the
+        # SAME validation_result -> enqueue -> drain path with zero new
+        # client-side machinery (that is the whole point of the shared
+        # envelope), so drive one more drain settle + check_steers after it.
+        if validator_armed:
+            client.maybe_emit_validate_windows()
+            dropped = await client.drain_pending_windows(timeout=20.0)
             if dropped:
                 meta["validation_dropped_at_end"] = dropped
+            dropped_drains = await client.drain_pending_drains(timeout=20.0)
+            if dropped_drains:
+                meta.setdefault("dropped_drains", 0)
+                meta["dropped_drains"] += dropped_drains
             await check_steers()
-            meta["validation_records"] = [
-                {k: v for k, v in r.items()} for r in seam.records]
+
+            pro_pass_meta = {"ran": False, "model": None, "conflicts": 0}
+            if use_pro_pass:
+                _pro_t0 = time.monotonic()
+                whole_form_fields = client.validation_fields()
+                try:
+                    pro_verdict = await service.handle_form_complete_pro(
+                        whole_form_fields)
+                except Exception as exc:  # fail-open, mirror the route's guard
+                    pro_verdict = {"conflicts": [], "_error": type(exc).__name__}
+                pro_conflicts = pro_verdict.get("conflicts", [])
+                pro_pass_meta = {
+                    "ran": True, "model": settings.VALIDATOR_PRO_MODEL,
+                    "latency_s": round(time.monotonic() - _pro_t0, 3),
+                    "conflicts": len(pro_conflicts),
+                }
+                if pro_conflicts:
+                    # Same envelope handle_form_complete_pro's caller pushes in
+                    # production (_run_pro_complete_and_push): a validation_
+                    # result, so it rides the existing enqueue -> drain path.
+                    await client.send_json(
+                        {"type": "validation_result", "conflicts": pro_conflicts})
+                    dropped_drains = await client.drain_pending_drains(timeout=20.0)
+                    if dropped_drains:
+                        meta.setdefault("dropped_drains", 0)
+                        meta["dropped_drains"] += dropped_drains
+                    await check_steers()
+            meta["pro_pass"] = pro_pass_meta
+
+            meta["validation_records"] = list(client.validation_records)
+            meta["drain_records"] = list(client.drain_results)
             meta["steer_records"] = steer_records
         meta["event_records"] = event_records
         meta["seam_tool_records"] = seam_tool_records
@@ -2434,6 +2809,16 @@ def main() -> int:
                     help="force the text sidecar OFF (overrides the i90-full "
                          "default; ask_secretary then fail-opens as production "
                          "does without a wired text model)")
+    ap.add_argument("--pro-pass", action="store_true",
+                    help="wire the W6 end-of-form gemini-2.5-pro whole-form "
+                         "validator pass (bd polyglot-pdf-gbus), mirroring "
+                         "backend/dependencies.py get_text_ai_pro (same model/"
+                         "thinking-budget Settings knobs, empty fallback chain). "
+                         "Opt-in: FORM_COMPLETE_PRO_VALIDATOR defaults OFF in "
+                         "production (a real operational-cost dependency), so a "
+                         "default harness run must not silently pay for it. "
+                         "Only takes effect when the text sidecar is wired "
+                         "(--text-ai / --schema i90-full).")
     ap.add_argument("--trigger", type=int, default=12_000,
                     help="sliding-window trigger_tokens; size it ABOVE the "
                          "unevictable SI+tools base (~8.2k on the full-form "

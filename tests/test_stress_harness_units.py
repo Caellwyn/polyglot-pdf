@@ -121,6 +121,14 @@ class _StubService:
     def handle_form_state_response(self, request_id, snapshot):
         self.calls.append(("form_state", request_id, snapshot))
 
+    async def handle_validation_windows(self, windows):
+        self.calls.append(("validation_windows", None, windows))
+        return {"conflicts": []}
+
+    async def handle_drain_findings(self, conflicts):
+        self.calls.append(("drain_findings", None, conflicts))
+        return {"conflicts": []}
+
 
 def _client(plan_fields=None):
     schema = ffs.load_schema()
@@ -203,16 +211,158 @@ def test_switch_field_pins_and_acks():
         assert ack["reason"] in ("unknown_field", "hidden")
 
 
-def test_validation_result_sets_steered_markers():
+def test_validation_result_enqueues_not_steers_directly():
+    """W3 report/drain split (bd polyglot-pdf-pr3i, mirrored 0cyu): a
+    validation_result with conflicts must NOT set steered directly -- it only
+    ENQUEUES the findings (mirror handleValidationResult). steered is set
+    ONLY at drain_findings_result (test_drain_findings_result_sets_steered_
+    and_consumes below)."""
     c = _client()
     c.state["p1_line6e_state"] = {"value": "texas", "confirmed": True}
+
+    async def _inner():
+        await c.send_json(
+            {"type": "validation_result",
+             "conflicts": [{"field_ids": ["p1_line6e_state", "p1_line6f_zipcode"],
+                            "reason": "zip/state mismatch"}]})
+        await asyncio.sleep(0)  # let the drain task run against the stub
+        await asyncio.sleep(0)
+    asyncio.run(_inner())
+
+    assert len(c.validation_results) == 1
+    # NOT steered yet -- the drain round-trip (against _StubService, which
+    # returns {"conflicts": []} i.e. UNDELIVERED) never marked it.
+    assert c.state["p1_line6e_state"].get("steered") is not True
+    # The finding stays queued (undelivered -> retry).
+    assert len(c.validator_findings_queue) == 1
+    assert c.drain_in_flight is False  # cleared once the drain result landed
+
+
+def test_drain_findings_result_sets_steered_and_consumes():
+    """The steered marker is set + the finding consumed from the queue ONLY
+    on drain_findings_result (mirror handleDrainFindingsResult)."""
+    c = _client()
+    c.state["p1_line6e_state"] = {"value": "texas", "confirmed": True}
+    c.state["p1_line6f_zipcode"] = {"value": "77027", "confirmed": True}
+    c.validator_findings_queue.append({
+        "field_ids": ["p1_line6e_state", "p1_line6f_zipcode"],
+        "reason": "r", "field_names": {}})
     _run(lambda: asyncio.ensure_future(c.send_json(
-        {"type": "validation_result",
+        {"type": "drain_findings_result",
          "conflicts": [{"field_ids": ["p1_line6e_state", "p1_line6f_zipcode"],
-                        "reason": "zip/state mismatch"}]})))
+                        "reason": "r"}]})))
     assert c.state["p1_line6e_state"]["steered"] is True
     assert c.state["p1_line6f_zipcode"]["steered"] is True
-    assert len(c.validation_results) == 1
+    assert c.validator_findings_queue == []  # consumed
+    assert c.drain_in_flight is False
+
+
+def test_drain_findings_result_undelivered_keeps_queued():
+    c = _client()
+    c.validator_findings_queue.append({
+        "field_ids": ["p1_line6e_state"], "reason": "r", "field_names": {}})
+    _run(lambda: asyncio.ensure_future(c.send_json(
+        {"type": "drain_findings_result", "conflicts": []})))
+    assert c.validator_findings_queue == [
+        {"field_ids": ["p1_line6e_state"], "reason": "r", "field_names": {}}]
+    assert c.drain_in_flight is False
+
+
+def test_enqueue_dedupes_by_field_id_set():
+    """Mirror enqueueValidatorFindings: a second finding naming the SAME
+    field-id set (order-insensitive) is not queued twice."""
+    c = _client()
+    c.service = None  # do not trigger a real drain task for this pure check
+    c._enqueue_validator_findings(
+        [{"field_ids": ["a", "b"], "reason": "r1"}])
+    c._enqueue_validator_findings(
+        [{"field_ids": ["b", "a"], "reason": "r2 (same set, reordered)"}])
+    assert len(c.validator_findings_queue) == 1
+    c._enqueue_validator_findings([{"field_ids": ["a", "c"], "reason": "r3"}])
+    assert len(c.validator_findings_queue) == 2
+
+
+def test_drain_single_flight_and_redrain_on_growth():
+    """Mirror drainFindings' single-flight guard + handleDrainFindingsResult's
+    re-drain-if-grew-mid-flight behavior."""
+    class _SlowStubService:
+        def __init__(self):
+            self.calls = 0
+
+        async def handle_drain_findings(self, conflicts):
+            self.calls += 1
+            return {"conflicts": []}  # undelivered every time (keeps queued)
+
+    async def _inner():
+        c = _client()
+        c.service = _SlowStubService()
+        c._enqueue_validator_findings([{"field_ids": ["a"], "reason": "r1"}])
+        assert c.drain_in_flight is True
+        # A second enqueue while the first drain is in flight must NOT start
+        # a second drain call (single-flight).
+        c._enqueue_validator_findings([{"field_ids": ["b"], "reason": "r2"}])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        # Exactly one drain call ran for BOTH findings (they were queued
+        # together before the single in-flight call snapshotted the queue).
+        assert c.service.calls == 1
+    asyncio.run(_inner())
+
+
+# --------------------------------------- W4 steered lifecycle (bd ny4s)
+
+def test_steered_cleared_on_genuine_value_change():
+    """Mirror W4 updateField's re-arm rule (schemaFormState.ts:339-365): a
+    steered field's marker CLEARS when its value actually changes."""
+    c = _client()
+    c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": True,
+                                       "steered": True}
+    _run(lambda: asyncio.ensure_future(c.send_json(
+        {"type": "form_updated",
+         "data": {"form_state": {"p1_line3a_familyname": {"value": "Vargas"}}}})))
+    assert c.state["p1_line3a_familyname"]["value"] == "Vargas"
+    assert c.state["p1_line3a_familyname"]["steered"] is False
+    assert c.state["p1_line3a_familyname"]["confirmed"] is False
+
+
+def test_steered_preserved_on_same_value_rewrite():
+    """A same-value re-write (the 'both are intentional' confirm path) must
+    NOT clear steered -- the no-nagging guarantee (W4 fresh-eyes)."""
+    c = _client()
+    c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": True,
+                                       "steered": True}
+    _run(lambda: asyncio.ensure_future(c.send_json(
+        {"type": "form_updated",
+         "data": {"form_state": {"p1_line3a_familyname": {"value": "Vasquez"}}}})))
+    assert c.state["p1_line3a_familyname"]["steered"] is True
+    # confirmed is NOT reset either -- no value moved.
+    assert c.state["p1_line3a_familyname"]["confirmed"] is True
+
+
+def test_steered_preserved_across_confirm_field():
+    """confirm_field (no value write) must never touch the steered marker."""
+    c = _client()
+    c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": False,
+                                       "steered": True}
+    _run(lambda: asyncio.ensure_future(c.send_json(
+        {"type": "confirm_field", "request_id": "cf1",
+         "field_id": "p1_line3a_familyname"})))
+    assert c.state["p1_line3a_familyname"]["confirmed"] is True
+    assert c.state["p1_line3a_familyname"]["steered"] is True
+
+
+def test_same_field_value_checkbox_group_order_insensitive():
+    """Mirror _sameFieldValue's set-equality on checkbox-group arrays (W4
+    fresh-eyes finding: CheckboxField.handleToggle re-appends, so a re-checked
+    box can land in a different order -- that must NOT read as a change)."""
+    same = mfc.FakeClientWebSocket._same_field_value
+    assert same(["a", "b"], ["b", "a"]) is True
+    assert same(["a", "b"], ["a", "c"]) is False
+    assert same(None, "") is True
+    assert same([], None) is True
+    assert same("", []) is True
+    assert same("x", "x") is True
+    assert same("x", "y") is False
 
 
 def test_validation_fields_contract2():
@@ -259,50 +409,138 @@ def test_price_text_usage():
     assert mfc.price_text_usage(-5, 0, -1) == 0
 
 
-class _StubValidatingService:
-    async def handle_validation_windows(self, windows):
-        self.windows = windows
-        return {"conflicts": [{"field_ids": ["a", "b"], "reason": "x"}]}
+def test_price_text_usage_per_model():
+    """bd polyglot-pdf-0cyu: per-model rate rows. flash-lite (explicit + the
+    None-model back-compat default) vs pro vs an unknown model (priced at the
+    highest known rate, never silently under-priced)."""
+    lite = mfc.price_text_usage(10_000, 8_000, 200, model="gemini-2.5-flash-lite")
+    default = mfc.price_text_usage(10_000, 8_000, 200)  # back-compat: no model
+    assert lite == pytest.approx(default)
+    pro = mfc.price_text_usage(10_000, 8_000, 200, model="gemini-2.5-pro")
+    assert pro > lite  # pro's per-token rates are strictly higher
+    rates, unpriced = mfc._rates_for_model("gemini-9000-mystery")
+    assert unpriced is True
+    for k in ("input", "cached_input", "output"):
+        assert rates[k] == max(r[k] for r in mfc.TEXT_RATES_BY_MODEL.values())
 
 
-def test_validation_seam_windows_and_flow():
+# ------------------------------------------------------- W2 windows (0cyu)
+
+def _window_client():
+    """A client whose active plan is EVERY real i-90 field visible for the
+    default (name-unchanged) persona -- so field settledness can be driven
+    directly through c.state without touching client-only plumbing."""
+    schema = ffs.load_schema()
+    field_ids = [f["id"] for f in schema["fields"]]
+    plan = [{"field_id": f, "say": "", "wrong": ""} for f in field_ids]
+    c = mfc.FakeClientWebSocket(schema, plan, dti_mode=True)
+    c.service = _StubService()
+    return c, field_ids
+
+
+def _confirm_all(c, field_ids, start, end):
+    for fid in field_ids[start:end]:
+        if c.field_shown(fid):
+            c.state[fid] = {"value": "v", "confirmed": True}
+
+
+def test_compute_ready_windows_requires_all_settled():
+    c, field_ids = _window_client()
+    # Window 0 covers indices [0, 5). Confirm only 4 of the 5 -> NOT eligible
+    # (the real 132-field schema can have OTHER windows made eligible purely
+    # by hidden fields, so assert on window 0 specifically, not the full
+    # return list).
+    _confirm_all(c, field_ids, 0, 4)
+    ready = {w["index"]: w for w in c.compute_ready_windows(size=5, stride=3)}
+    assert 0 not in ready
+    # Confirm the 5th -> now eligible.
+    _confirm_all(c, field_ids, 4, 5)
+    ready = {w["index"]: w for w in c.compute_ready_windows(size=5, stride=3)}
+    assert ready[0] == {"index": 0, "start": 0, "end": 5}
+
+
+def test_compute_ready_windows_hidden_counts_as_settled():
+    """p1_line5a/b/c (indices 6-8) are HIDDEN by default (name-change gate
+    unsatisfied) -- a window covering them must be eligible WITHOUT ever
+    confirming those fields, mirroring isSettled's shouldShowField branch."""
+    c, field_ids = _window_client()
+    assert field_ids[5:9] == ["p1_checkbox4", "p1_line5a_familyname",
+                              "p1_line5b_givenname", "p1_line5c_middlename"]
+    # Confirm p1_checkbox4 (index 5) -- its "no" answer is what HIDES the
+    # previous-name fields at indices 6-8. Use a stride-1 window starting
+    # exactly at index 5 so [5, 9) is the ONLY window under test.
+    c.state["p1_checkbox4"] = {"value": "no", "confirmed": True}
+    ready = {w["index"]: w for w in c.compute_ready_windows(size=4, stride=1)}
+    assert ready[5] == {"index": 5, "start": 5, "end": 9}
+
+
+def test_compute_ready_windows_index_dedup_across_calls():
+    c, field_ids = _window_client()
+    _confirm_all(c, field_ids, 0, 5)
+    first = {w["index"] for w in c.compute_ready_windows(size=5, stride=5)}
+    assert 0 in first
+    c.validated_window_indices |= first
+    # Calling again without further progress never re-returns an
+    # already-sent index.
+    again = {w["index"] for w in c.compute_ready_windows(size=5, stride=5)}
+    assert 0 not in again
+
+
+def test_maybe_emit_validate_windows_submits_and_marks_sent():
     async def _inner():
-        c = _client()
-        svc = _StubValidatingService()
-        seam = mfc.ValidationSeam(svc, c, size=4, stride=2)
-        payload = [{"field_id": f"f{i}", "name": f"f{i}", "value": "v",
-                    "steered": False} for i in range(7)]
-        seam.submit(payload, reason="test")
-        dropped = await seam.drain()
-        assert dropped == 0
-        # geometry: starts at 0, 2, 4 (start 6 leaves a tail < stride)
-        assert [len(w) for w in svc.windows] == [4, 4, 3]
-        # resubmitting the same payload sends NOTHING new (high-water starts)
-        seam.submit(payload, reason="again")
-        assert len(seam.records) == 1
-        # verdict recorded + pushed to the client as a validation_result
-        assert seam.records[0]["conflicts"]
-        assert len(c.validation_results) == 1
-        assert c.validation_results[0]["conflicts"][0]["field_ids"] == ["a", "b"]
-        assert seam.flagged_groups() == [{"a", "b"}]
-        assert seam.latencies() and seam.latencies()[0] >= 0
+        c, field_ids = _window_client()
+        svc = _StubService()
+        c.service = svc
+        _confirm_all(c, field_ids, 0, 5)
+        # Isolate to window geometry that makes ONLY window 0 eligible here
+        # (size covers exactly the confirmed prefix; stride == size avoids
+        # a same-index overlap window also going eligible off hidden fields
+        # elsewhere in the real 132-field schema).
+        mfc.WEBFORM_VALIDATOR_WINDOW_SIZE, orig_size = 5, mfc.WEBFORM_VALIDATOR_WINDOW_SIZE
+        mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE, orig_stride = 5, mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE
+        try:
+            c.maybe_emit_validate_windows()
+            await asyncio.sleep(0)
+            assert 0 in c.validated_window_indices
+            assert len(c.validation_records) == 1
+            assert c.validation_records[0]["window_count"] >= 1
+            # A second call with no new progress submits nothing further for
+            # the SAME index (it stays marked sent).
+            sent_before = set(c.validated_window_indices)
+            c.maybe_emit_validate_windows()
+            await asyncio.sleep(0)
+            assert 0 in c.validated_window_indices
+            assert sent_before <= c.validated_window_indices
+        finally:
+            mfc.WEBFORM_VALIDATOR_WINDOW_SIZE = orig_size
+            mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE = orig_stride
     asyncio.run(_inner())
 
 
-def test_validation_seam_page_boundary_first_forward_only():
+def test_reconnect_rechecks_windows_and_redrains():
+    """handleSessionReady parity: after a reconnect, re-checking windows finds
+    newly-eligible ones, and a survived findings queue re-drains."""
     async def _inner():
-        c = _client()
-        svc = _StubValidatingService()
-        seam = mfc.ValidationSeam(svc, c)
-        fbi = {"f1": {"pdf_position": {"page": 1}},
-               "f2": {"pdf_position": {"page": 2}}}
-        c.state["x"] = {"value": "v", "confirmed": True}
-        assert seam.maybe_page_boundary("f1", "f2", fbi) is False or True
-        fired_first = seam.high_water_page == 1
-        assert fired_first
-        # re-crossing the same boundary does not re-fire
-        assert seam.maybe_page_boundary("f1", "f2", fbi) is False
-        await seam.drain()
+        c, field_ids = _window_client()
+        _confirm_all(c, field_ids, 0, 5)
+        c.validator_findings_queue.append(
+            {"field_ids": ["p1_line1_aliennumber"], "reason": "r",
+             "field_names": {}})
+        orig_size = mfc.WEBFORM_VALIDATOR_WINDOW_SIZE
+        orig_stride = mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE
+        mfc.WEBFORM_VALIDATOR_WINDOW_SIZE = 5
+        mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE = 5
+        try:
+            # Mirror the driver's post-reconnect calls.
+            c.maybe_emit_validate_windows()
+            c._drain_findings()
+            await asyncio.sleep(0)
+            assert 0 in c.validated_window_indices
+            assert len(c.validation_records) == 1
+            assert len(c.drain_results) == 1
+        finally:
+            mfc.WEBFORM_VALIDATOR_WINDOW_SIZE = orig_size
+            mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE = orig_stride
     asyncio.run(_inner())
 
 
@@ -516,6 +754,25 @@ class _DryRunTextAI:
         return {"conflicts": []}
 
 
+class _DryRunTextAIOneConflict(_DryRunTextAI):
+    """bd polyglot-pdf-0cyu: like _DryRunTextAI, but .validate() returns ONE
+    conflict on its FIRST call, then clean thereafter -- exercises the full
+    offline enqueue -> drain -> drain_findings_result -> steered lifecycle
+    end-to-end without a live call (the audit's requested dry-run coverage)."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._calls = 0
+
+    async def validate(self, payload):
+        self._calls += 1
+        if self._calls == 1:
+            return {"conflicts": [{"field_ids": ["p1_line1_aliennumber",
+                                                  "p1_line2_acctidentifier"],
+                                   "reason": "dry-run planted conflict"}]}
+        return {"conflicts": []}
+
+
 def test_dry_run_i90_full_emits_summary(monkeypatch, tmp_path):
     import argparse
 
@@ -541,8 +798,8 @@ def test_dry_run_i90_full_emits_summary(monkeypatch, tmp_path):
     assert len(summaries) == 1
     import json as _json
     s = _json.loads(summaries[0].read_text(encoding="utf-8"))
-    # schema-complete: every headline section present
-    assert set(s) == {"run", "headline", "validator", "secretary",
+    # schema-complete: every headline section present (pro_pass added bd 0cyu)
+    assert set(s) == {"run", "headline", "validator", "pro_pass", "secretary",
                       "navigation", "skips", "latency", "errors"}
     h = s["headline"]
     for key in ("all_in_usd", "voice_usd", "text_usd", "voice_tokens",
@@ -558,6 +815,99 @@ def test_dry_run_i90_full_emits_summary(monkeypatch, tmp_path):
     assert len(csvs) == 1
     header = csvs[0].read_text(encoding="utf-8").splitlines()[0]
     assert header.split(",") == mfc.CSV_COLUMNS
+
+
+def test_dry_run_i90_full_drain_round_trip():
+    """bd polyglot-pdf-0cyu: end-to-end OFFLINE drain lifecycle, driven
+    directly against the FakeClient + the REAL FormFillingService (wired with
+    the stubbed _DryRunTextAIOneConflict sidecar -- no live call). The
+    dry-run VOICE driver never actually gets a field to `confirmed` (its
+    fake update_form_fields/confirm_field tool calls fail real-field
+    validation for the i-90 schema, a pre-existing property of
+    test_dry_run_i90_full_emits_summary's own baseline -- matched stays 0
+    there too), so this test isolates the seam machinery instead: settle two
+    real fields directly, drive one window-check + drain round, and assert
+    the queue/drain/steered lifecycle completes with the stub returning one
+    conflict once, then clean."""
+    class _ActiveLiveAI:
+        """Minimal fake: an ACTIVE live session that always accepts the
+        steer send, so _inject_validator_steer's delivery gate passes and the
+        drain_findings_result carries a real `delivered` conflict (mirrors a
+        healthy live session; a dead one is exercised by
+        test_drain_findings_result_undelivered_keeps_queued instead)."""
+
+        def is_session_active(self):
+            return True
+
+        async def send_client_content(self, message):
+            return True
+
+    async def _inner():
+        schema = ffs.load_schema()
+        field_ids = [f["id"] for f in schema["fields"]]
+        plan = [{"field_id": f, "say": "", "wrong": ""} for f in field_ids]
+        c = mfc.FakeClientWebSocket(schema, plan, dti_mode=True)
+
+        text_ai = _DryRunTextAIOneConflict()
+        service = mfc.FormFillingService(
+            live_ai=_ActiveLiveAI(), settings=mfc._config.Settings(),
+            text_ai=text_ai)
+        c.service = service
+
+        # Settle the first 2 fields (a real conflict-bearing pair) so window
+        # 0 becomes eligible.
+        c.state["p1_line1_aliennumber"] = {"value": "123456789", "confirmed": True}
+        c.state["p1_line2_acctidentifier"] = {"value": "123456789012",
+                                              "confirmed": True}
+        orig_size = mfc.WEBFORM_VALIDATOR_WINDOW_SIZE
+        orig_stride = mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE
+        mfc.WEBFORM_VALIDATOR_WINDOW_SIZE = 2
+        mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE = 2
+        try:
+            c.maybe_emit_validate_windows()
+            # Let the validate_windows task run, push validation_result,
+            # enqueue, and single-flight drain to completion.
+            for _ in range(5):
+                await asyncio.sleep(0)
+        finally:
+            mfc.WEBFORM_VALIDATOR_WINDOW_SIZE = orig_size
+            mfc.WEBFORM_VALIDATOR_WINDOW_STRIDE = orig_stride
+
+        # The planted conflict was reported, enqueued, drained, delivered,
+        # and consumed -- nothing left queued.
+        assert c.validator_findings_queue == []
+        assert c.drain_in_flight is False
+        assert c.state["p1_line1_aliennumber"]["steered"] is True
+        assert c.state["p1_line2_acctidentifier"]["steered"] is True
+        assert len(c.drain_results) == 1
+        assert c.drain_results[0]["delivered"] == 1
+        # The drain record retains ITS OWN delivered field ids (bd 0cyu fix --
+        # check_steers must scope to this drain's fields, not a scan of every
+        # steered field in client.state, which can carry stale markers from
+        # an earlier un-cleared "overridden_unplanted" ack).
+        assert set(c.drain_results[0]["field_ids"]) == {
+            "p1_line1_aliennumber", "p1_line2_acctidentifier"}
+
+        # A SECOND window check (the stub validator is clean on later calls)
+        # must not enqueue anything further.
+        c.state["p1_line3a_familyname"] = {"value": "Vasquez", "confirmed": True}
+        c.state["p1_line3b_givenname"] = {"value": "Maria", "confirmed": True}
+        c.maybe_emit_validate_windows()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert c.validator_findings_queue == []
+        assert len(c.drain_results) == 1  # no new drain triggered
+
+        summary = mfc.build_summary(
+            {"validation_records": list(c.validation_records),
+             "drain_records": list(c.drain_results), "pro_pass": None,
+             "text_ledger_calls": [], "wall_clock_s": 1.0},
+            [], [], c, [], set())
+        assert summary["validator"]["drains"] == {
+            "count": 1, "delivered": 1, "undelivered_retries": 0}
+        assert "drain_latency_s" in summary["validator"]
+        assert summary["pro_pass"]["ran"] is False
+    asyncio.run(_inner())
 
 
 def test_dry_run_legacy_i90_arm_still_runs(monkeypatch, tmp_path):
