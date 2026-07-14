@@ -4,6 +4,7 @@
 
 *Last updated: 2026-07-13 (bd polyglot-pdf-gbus (W6, async validator): `form_complete` now runs the whole-form gemini-2.5-pro pass (`handle_form_complete_pro`, thinking bounded 512) as the SOLE end-of-form report -- catching cross-page far pairs the lite windows miss (W5 recall 1.000), report-only through the same drain path, fed + deduped against already-steered fields, with an anti-over-flag prompt for the Part 5/6 cert block; gated by `FORM_COMPLETE_PRO_VALIDATOR` default-off. See the W6 note.). Prior: 2026-07-13 (bd polyglot-pdf-pr3i (W3, async validator): the async-validator path's `validation_result` is now REPORT-ONLY -- contract 1's "conflicts -> validation_result with a steer" is the legacy synchronous path; the async path enqueues the conflicts client-side and injects the steer via a finding-driven `drain_findings` round-trip. See the contract-1 note.). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
+
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
 form boundaries, reads the client's current form state and catches cross-field
@@ -229,6 +230,16 @@ NOT confirmation/section bookkeeping.
   fields of each conflict it steers. Without this client-sent flag the
   loop-prevention rule could not be honored without violating the stateless
   invariant.
+
+  **RE-ARM on value change (W4, bd polyglot-pdf-ny4s).** The marker is NOT
+  session-permanent: the client CLEARS a field's `steered` flag when that field's
+  normalized VALUE changes (in the `updateField` write path). So a CORRECTION to an
+  adjudicated field re-enters the validator net (a correction that introduces a
+  fresh contradiction is caught; a genuinely new conflict on the field is no longer
+  suppressed forever). The no-nagging guarantee still holds where it matters: a user
+  who confirms "both are intentional" changes NO value, so the marker stays and they
+  are never re-asked -- only a field whose value actually moved re-arms. An edit that
+  does not change the value (a re-confirm / no-op write) keeps the marker.
 
 The client already holds all of this in `sessionStorage`; the backend rebuilds
 nothing server-side (stateless invariant). The payload is assembled from the same

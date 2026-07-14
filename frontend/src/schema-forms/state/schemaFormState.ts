@@ -260,6 +260,41 @@ export class SchemaFormStateManager {
    * @param value Raw value OR FieldValue object
    * @param options Additional options (confirmed, etc.)
    */
+  /**
+   * W4 (bd polyglot-pdf-ny4s): value-equality for the re-arm decision. A field's
+   * value is a string / boolean / null (single fields) or an array of strings
+   * (checkbox groups). Compare by NORMALIZED content:
+   *   - empty-ish values (undefined / null / '' / all-blank []) all count as "no
+   *     value", so a fill that clears a previously-filled field is a change but a
+   *     blank->blank write is not;
+   *   - a checkbox group is a SET, so arrays compare ORDER-INSENSITIVELY after
+   *     dropping blank placeholders. (The real CheckboxField.handleToggle APPENDS a
+   *     re-checked value, so unchecking then re-checking a box yields the same set
+   *     in a different order -- an order-sensitive compare would wrongly re-arm the
+   *     marker, nagging the user for a no-op toggle: fresh-eyes finding.)
+   *   - primitives compare by ===.
+   */
+  private static _sameFieldValue(a: any, b: any): boolean {
+    const isEmpty = (v: any): boolean =>
+      v === undefined || v === null || v === '' ||
+      (Array.isArray(v) && v.every((x) => x === undefined || x === null || x === ''));
+    if (isEmpty(a) && isEmpty(b)) return true;
+    if (isEmpty(a) !== isEmpty(b)) return false;
+    if (Array.isArray(a) || Array.isArray(b)) {
+      // Set-equality on the non-blank members (a checkbox group is an unordered set).
+      const clean = (v: any): string[] =>
+        (Array.isArray(v) ? v : [v])
+          .filter((x) => x !== undefined && x !== null && x !== '')
+          .map((x) => String(x))
+          .sort();
+      const aa = clean(a);
+      const bb = clean(b);
+      if (aa.length !== bb.length) return false;
+      return aa.every((x, i) => x === bb[i]);
+    }
+    return a === b;
+  }
+
   static updateField(
     state: SchemaFormState,
     fieldId: string,
@@ -276,24 +311,58 @@ export class SchemaFormStateManager {
     // A-Number's "A" prefix/separators) so manual edits store the same canonical
     // value the backend stores for AI fills (bd polyglot-pdf-0zr). Idempotent for
     // already-canonical values (e.g. AI fills, which the backend pre-normalizes).
-    const field = state.schema.fields.find((f) => f.id === fieldId);
+    // Resolve the schema field via the same `[]`-alias fallback used for the prior
+    // entry below: a value written under the bracketed variant (fieldId[]) must
+    // still find its schema field so it is NORMALIZED consistently -- otherwise a
+    // bracket-variant write of a format_preset field (a_number etc.) stores the raw
+    // value, and a later same-answer canonical write normalizes and compares
+    // unequal, spuriously re-arming the marker (W4 fresh-eyes finding).
+    const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
+    const field =
+      state.schema.fields.find((f) => f.id === fieldId) ??
+      state.schema.fields.find((f) => f.id === baseId) ??
+      state.schema.fields.find((f) => f.id === baseId + '[]');
 
-    // Carry forward the B5 `steered` marker (bd polyglot-pdf-jnjj.17, Codex PR #275):
-    // the normal edit/fill path REPLACES the FieldValue object, which would silently
-    // drop `steered` -- so a user editing (or the model rewriting) an
-    // already-adjudicated field would emit steered:false on the next validator
-    // payload and the backend could re-steer it, breaking the max-resteer invariant.
-    // Preserve it unless the incoming FieldValue explicitly sets its own.
-    // Read via the same `[]`-alias fallback as markFieldsSteered: the marker may
-    // sit under the bracketed/unbracketed variant of this id (Gemini drops/adds
-    // the bracket), and an exact-key read would drop it when the value migrates
-    // between variants (bd polyglot-pdf-5k52).
-    const priorSteered = (
+    // The B5 `steered` marker (bd polyglot-pdf-jnjj.17, Codex PR #275) rides the
+    // FieldValue. The normal edit/fill path REPLACES the FieldValue object, which
+    // would silently drop it. Read the prior entry via the same `[]`-alias fallback
+    // as markFieldsSteered: the marker may sit under the bracketed/unbracketed
+    // variant of this id (Gemini drops/adds the bracket), and an exact-key read
+    // would drop it when the value migrates between variants (bd polyglot-pdf-5k52).
+    const priorEntry =
       state.fieldValues[fieldId] ??
       state.fieldValues[
         fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]'
-      ]
-    )?.steered;
+      ];
+    const priorSteered = priorEntry?.steered;
+
+    // W4 (bd polyglot-pdf-ny4s): RE-ARM the marker on a VALUE change. The prior
+    // rule carried `steered` forward unconditionally, so a CORRECTION to an
+    // already-adjudicated field was never re-validated (a correction that introduces
+    // a fresh contradiction slipped the net) and a genuinely new conflict on a
+    // steered field was suppressed forever. New rule: carry `steered` forward ONLY
+    // when the field's normalized VALUE did not change; a value change CLEARS it, so
+    // the corrected field re-enters the validator net. The no-nagging guarantee
+    // (jnjj.17 criterion 3) is preserved where it matters: a user who confirms "both
+    // are intentional" changes NO value, so the marker stays and they are never
+    // re-asked -- only a field whose value actually moved re-arms.
+    const incomingRawValue =
+      value && typeof value === 'object' && 'value' in value
+        ? (value as FieldValue).value
+        : value;
+    const normalizedNewValue = field
+      ? normalizeFieldValue(field, incomingRawValue)
+      : incomingRawValue;
+    // Normalize the PRIOR value too before comparing -- a value written under the
+    // bracket-variant before this alias-aware lookup landed may be stored raw, so
+    // compare both sides in canonical form (normalizeFieldValue is idempotent on an
+    // already-canonical value) to avoid a spurious re-arm on a genuinely-same answer.
+    const normalizedPriorValue = field
+      ? normalizeFieldValue(field, priorEntry?.value)
+      : priorEntry?.value;
+    const valueChanged = !this._sameFieldValue(normalizedPriorValue, normalizedNewValue);
+    // Carry the marker forward only if it was set AND the value is unchanged.
+    const carrySteered = priorSteered !== undefined && !valueChanged;
 
     // If value is already a FieldValue, use it directly (normalize its .value)
     // Otherwise, wrap it
@@ -302,17 +371,21 @@ export class SchemaFormStateManager {
       // Already a FieldValue object
       const fv = value as FieldValue;
       const merged = field ? { ...fv, value: normalizeFieldValue(field, fv.value) } : { ...fv };
-      if (merged.steered === undefined && priorSteered !== undefined) merged.steered = priorSteered;
+      // An explicit `steered` on the incoming FieldValue wins; otherwise re-arm rule.
+      if (merged.steered === undefined) {
+        if (carrySteered) merged.steered = priorSteered;
+        else delete merged.steered;
+      }
       fieldValue = merged;
     } else {
       // Wrap raw value in FieldValue
       fieldValue = {
-        value: field ? normalizeFieldValue(field, value) : value,
+        value: normalizedNewValue,
         confirmed: options?.confirmed,
         confirmedAt: options?.confirmed ? new Date().toISOString() : undefined,
         confirmationMethod: options?.confirmationMethod,
         lastModified: Date.now(),
-        ...(priorSteered !== undefined ? { steered: priorSteered } : {}),
+        ...(carrySteered ? { steered: priorSteered } : {}),
       };
     }
 
