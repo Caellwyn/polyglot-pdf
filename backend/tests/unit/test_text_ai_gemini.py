@@ -354,3 +354,43 @@ async def test_ask_fail_open_on_no_client():
     adapter._client = None
     out = await adapter.ask("q", {"schema": _ASK_SCHEMA})
     assert out == ""
+
+
+# --------------------------------------------------------------------------- #
+# W6 (bd polyglot-pdf-gbus): the optional bounded thinking_config for the
+# 2.5-pro whole-form validator. Wired only when thinking_budget is set; the lite
+# path (budget None) sends NO thinking_config (byte-stable prefix preserved).
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.asyncio
+async def test_thinking_budget_wires_thinking_config():
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    response = _make_response(text='{"conflicts":[]}')
+    mock_client = _make_mock_client(response)
+    with patch("backend.adapters.text_ai_gemini.genai") as mock_genai:
+        mock_genai.Client.return_value = mock_client
+        adapter = TextAIGemini(api_key="k", vertexai=False,
+                               model="gemini-2.5-pro", thinking_budget=512)
+    adapter._client = mock_client
+    await adapter.validate({"stable_prefix": ["si"], "fresh_tail": ["state"]})
+    # The config passed to generate_content carries a thinking_config with budget 512.
+    call = mock_client.aio.models.generate_content.await_args
+    config = call.kwargs["config"]
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_budget == 512
+
+
+@pytest.mark.asyncio
+async def test_no_thinking_budget_sends_no_thinking_config():
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    response = _make_response(text='{"conflicts":[]}')
+    mock_client = _make_mock_client(response)
+    with patch("backend.adapters.text_ai_gemini.genai") as mock_genai:
+        mock_genai.Client.return_value = mock_client
+        adapter = TextAIGemini(api_key="k", vertexai=False)  # lite default, no budget
+    adapter._client = mock_client
+    await adapter.validate({"stable_prefix": ["si"], "fresh_tail": ["state"]})
+    call = mock_client.aio.models.generate_content.await_args
+    config = call.kwargs["config"]
+    # No thinking_config on the lite path (attribute is None / unset).
+    assert getattr(config, "thinking_config", None) is None

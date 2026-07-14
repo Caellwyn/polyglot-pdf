@@ -36,10 +36,32 @@ def get_text_ai(settings: Settings = Depends(get_settings)) -> ITextAI:
     )
 
 
+def get_text_ai_pro(settings: Settings = Depends(get_settings)) -> ITextAI | None:
+    """W6 (bd polyglot-pdf-gbus): the gemini-2.5-pro whole-form validator for the
+    end-of-form pro pass. Returns None unless FORM_COMPLETE_PRO_VALIDATOR is on, so
+    the service's handle_form_complete_pro no-ops by default (the pro pass is a new
+    operational-cost dependency, wired dark until the precision re-measure passes).
+
+    Constructed with a BOUNDED thinking budget (W5 config) and an EMPTY fallback
+    chain -- falling back to the lite tier would silently defeat the far-pair recall
+    the pro pass exists for, so a pro outage must fail-open (clean), never downgrade.
+    """
+    if not settings.FORM_COMPLETE_PRO_VALIDATOR:
+        return None
+    return TextAIGemini(
+        api_key=settings.GEMINI_API_KEY,
+        model=settings.VALIDATOR_PRO_MODEL,
+        vertexai=settings.VERTEXAI,
+        fallback_models=(),  # no lite-tier fallback; fail-open instead of downgrade
+        thinking_budget=settings.VALIDATOR_PRO_THINKING_BUDGET,
+    )
+
+
 def get_form_filling_service(
     live_ai: ILiveAI = Depends(get_live_ai),
     settings: Settings = Depends(get_settings),
     text_ai: ITextAI = Depends(get_text_ai),
+    text_ai_pro: ITextAI | None = Depends(get_text_ai_pro),
 ) -> Any:
     # Lazy import to avoid circular import at module import time
     from backend.services.form_filling_service import FormFillingService
@@ -48,5 +70,6 @@ def get_form_filling_service(
         live_ai=live_ai,
         settings=settings,
         text_ai=text_ai,
+        text_ai_pro=text_ai_pro,
     )
 

@@ -52,6 +52,14 @@ def _mock_service(verdict=None, windows_delay=0.0):
     async def _drain(conflicts):
         return {"conflicts": conflicts if isinstance(conflicts, list) else []}
     svc.handle_drain_findings = AsyncMock(side_effect=_drain)
+    # W6 (bd polyglot-pdf-gbus): the form_complete arm now routes through
+    # handle_form_complete_pro (the pro pass). Stub it clean by default; the
+    # windows_delay knob also slows it so the slow-validator ack test still holds.
+    async def _pro(fields):
+        if windows_delay:
+            await asyncio.sleep(windows_delay)
+        return verdict or {"conflicts": []}
+    svc.handle_form_complete_pro = AsyncMock(side_effect=_pro)
     return svc
 
 
@@ -267,7 +275,7 @@ async def test_inflight_validation_is_cancelled_on_disconnect():
     started = asyncio.Event()
     cancelled = asyncio.Event()
 
-    async def _blocking(windows):
+    async def _blocking(fields):
         started.set()
         try:
             await asyncio.Event().wait()  # never resolves on its own
@@ -277,7 +285,8 @@ async def test_inflight_validation_is_cancelled_on_disconnect():
         return {"conflicts": []}
 
     svc = _mock_service()
-    svc.handle_validation_windows = AsyncMock(side_effect=_blocking)
+    # W6: form_complete now routes through handle_form_complete_pro; block THAT.
+    svc.handle_form_complete_pro = AsyncMock(side_effect=_blocking)
     ws, _, sent = await _run([
         {"text": json.dumps({"type": "form_complete", "fields": [
             {"field_id": "f1", "name": "F1", "value": "a", "steered": False}]})},

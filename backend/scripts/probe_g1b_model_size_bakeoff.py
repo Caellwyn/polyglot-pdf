@@ -468,7 +468,28 @@ async def main() -> None:
     ap.add_argument("--concurrency", type=int, default=8,
                     help="max in-flight calls; lower (3-4) for big 132-field "
                          "payloads to avoid the rate-limit -> timeout spiral")
+    ap.add_argument("--prod-prompt", action="store_true",
+                    help="W6 (bd polyglot-pdf-gbus): use the SHIPPED production "
+                         "WHOLE_FORM_PRO_SI (with its anti-over-flag block) instead "
+                         "of this probe's PROMPT, to re-measure whether the W6 "
+                         "precision prompt lifts the 0.750 whole-form precision W5 "
+                         "measured. Run pro at size 132 with this flag for the W6 "
+                         "precision re-measure (orchestrator-gated live spend).")
     args = ap.parse_args()
+
+    if args.prod_prompt:
+        # Swap the probe PROMPT for the production SI so the re-measure reflects
+        # exactly what ships. The production SI carries an {adjudicated} slot (blank
+        # here -- the probe corpus has no mid-form steered history) and a {today}
+        # substitution; render both, then reuse the probe's {state} tail convention.
+        import datetime as _dt
+        from backend.services.validator_service import WHOLE_FORM_PRO_SI as _PROD_SI
+        global PROMPT
+        PROMPT = (
+            _PROD_SI.format(today=_dt.date.today().isoformat(), adjudicated="")
+            + "\n\nFIELDS:\n{state}"
+        )
+        print("[--prod-prompt] using production WHOLE_FORM_PRO_SI", flush=True)
 
     sizes = [int(s) for s in args.sizes.split(",")] if args.sizes else SIZES
     models = [m.strip() for m in args.models.split(",")] if args.models else list(MODELS)

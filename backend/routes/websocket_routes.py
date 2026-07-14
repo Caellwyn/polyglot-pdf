@@ -401,6 +401,32 @@ async def _handle_fill_session(
 			validation_tasks.add(task)
 			task.add_done_callback(validation_tasks.discard)
 
+		async def _run_pro_complete_and_push(fields: list) -> None:
+			"""W6 (bd polyglot-pdf-gbus): background runner for the whole-form
+			gemini-2.5-pro pass at form_complete. Pushes the SAME report-only
+			`validation_result` envelope the client already consumes, so the pro
+			conflicts ride the existing validatorFindingsQueue -> drain_findings ->
+			steer path with ZERO client changes. Crash-safe + fail-open: no pro wired
+			(flag off) returns clean, and any exception is caught + logged so it can
+			never propagate into the receive loop."""
+			try:
+				verdict = await service.handle_form_complete_pro(fields)
+				await websocket.send_json({
+					"type": "validation_result",
+					"conflicts": verdict.get("conflicts", []),
+				})
+			except Exception as exc:  # noqa: BLE001 -- background task must never crash the loop
+				_log.warning(
+					"async_pro_complete_task_failed",
+					exc_type=type(exc).__name__,
+					session_id=session_id,
+				)
+
+		def _spawn_pro_complete(fields: list) -> None:
+			task = asyncio.create_task(_run_pro_complete_and_push(fields))
+			validation_tasks.add(task)
+			task.add_done_callback(validation_tasks.discard)
+
 		while True:
 			msg = await websocket.receive()
 
@@ -788,13 +814,16 @@ async def _handle_fill_session(
 				elif mtype == "form_complete":
 					# B4 (bd polyglot-pdf-jnjj.16) emits this once when the whole form is
 					# confirmed (re-emitted after a post-completion edit). Carries the
-					# WHOLE-form contract-2 payload. W1 (bd polyglot-pdf-xbl2): ack
-					# immediately + run the full-form pass in the background; it pushes the
-					# `validation_result` envelope when done (one-window batch; the terminal
-					# boundary has no section switch to gate). W3 (bd polyglot-pdf-pr3i):
-					# that result is REPORT-ONLY -- no steer injected here and no steered
-					# markers set here; the client enqueues the conflicts and drains them
-					# via `drain_findings`.
+					# WHOLE-form contract-2 payload. W6 (bd polyglot-pdf-gbus): form_complete
+					# is the SOLE end-of-form report -- it runs the whole-form gemini-2.5-pro
+					# pass (catching cross-page far pairs the lite windows miss), NOT the lite
+					# window pass. Ack immediately + run the pro pass in the background; it
+					# pushes the REPORT-ONLY `validation_result` envelope (W3 shape) so the
+					# conflicts ride the existing enqueue -> drain_findings -> steer path.
+					# The pro pass no-ops (clean) when FORM_COMPLETE_PRO_VALIDATOR is off (the
+					# default), so this is a safe fallback. COST: the client's
+					# maybeEmitFormComplete dirty-snapshot guard only re-emits on a real value
+					# change, so a static complete form never re-fires the pro spend.
 					proactive_fields = obj.get("fields", [])
 					# PII (contract 6): log the COUNT only -- NEVER `fields`/values.
 					_log.info(
@@ -802,7 +831,7 @@ async def _handle_fill_session(
 						field_count=len(proactive_fields) if isinstance(proactive_fields, list) else 0,
 						session_id=session_id,
 					)
-					_spawn_validation([proactive_fields], "form_complete")
+					_spawn_pro_complete(proactive_fields)
 					await websocket.send_json({"type": "form_complete_ack"})
 					continue
 				elif mtype == "validate_windows":

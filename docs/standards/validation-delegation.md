@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-07-13 (bd polyglot-pdf-pr3i (W3, async validator): the async-validator path's `validation_result` is now REPORT-ONLY -- contract 1's "conflicts -> validation_result with a steer" is the legacy synchronous path; the async path enqueues the conflicts client-side and injects the steer via a finding-driven `drain_findings` round-trip. See the contract-1 note.). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-13 (bd polyglot-pdf-gbus (W6, async validator): `form_complete` now runs the whole-form gemini-2.5-pro pass (`handle_form_complete_pro`, thinking bounded 512) as the SOLE end-of-form report -- catching cross-page far pairs the lite windows miss (W5 recall 1.000), report-only through the same drain path, fed + deduped against already-steered fields, with an anti-over-flag prompt for the Part 5/6 cert block; gated by `FORM_COMPLETE_PRO_VALIDATOR` default-off. See the W6 note.). Prior: 2026-07-13 (bd polyglot-pdf-pr3i (W3, async validator): the async-validator path's `validation_result` is now REPORT-ONLY -- contract 1's "conflicts -> validation_result with a steer" is the legacy synchronous path; the async path enqueues the conflicts client-side and injects the steer via a finding-driven `drain_findings` round-trip. See the contract-1 note.). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
@@ -171,6 +171,25 @@ is no longer on any live wire path (W1 rerouted section_complete/form_complete
 through the async report-only `handle_validation_windows`; `handle_validation_boundary`
 survives only as a test-covered single-window helper). The live async path routes
 the steer through the drain instead.
+
+**W6 (bd polyglot-pdf-gbus) -- the whole-form pro pass is the SOLE end-of-form
+report.** `form_complete` no longer runs the flash-lite window pass. It runs ONE
+whole-form **gemini-2.5-pro** contradiction pass (`handle_form_complete_pro`, thinking
+bounded to 512) -- the tier that catches the cross-page FAR-PAIR contradictions the
+~20-field lite windows structurally cannot see (W5 / bd polyglot-pdf-g0w1 measured
+pro far-pair recall = 1.000, GO). It is REPORT-ONLY exactly like the lite windows:
+its surviving conflicts ride the SAME `validation_result` -> `validatorFindingsQueue`
+-> `drain_findings` path (zero client change). Two behaviors are W6-specific:
+(1) the pass is FED the already-steered field ids as prompt context AND its conflicts
+are DEDUPED against those steered markers (`_suppress_already_steered`), so a
+contradiction the user already saw + adjudicated mid-form is NOT re-reported; (2) it
+carries an anti-over-flag prompt (`WHOLE_FORM_PRO_SI`) for the Part 5/6
+preparer-interpreter certification block + bracketed-repeat fields -- the W5 precision
+condition (uncorrected whole-form precision was 0.750). Gated by
+`FORM_COMPLETE_PRO_VALIDATOR` (**default-off**: a new operational-cost dependency,
+flipped on by env once the precision re-measure confirms the prompt; when off,
+`handle_form_complete_pro` no-ops clean and `form_complete` reports nothing). The lite
+window pass (`validate_windows`) + section_complete are unchanged.
 
 ---
 
