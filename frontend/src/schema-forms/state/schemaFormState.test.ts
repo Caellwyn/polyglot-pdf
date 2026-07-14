@@ -1244,6 +1244,46 @@ describe('SchemaFormStateManager', () => {
       state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v2')
       expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBeFalsy()
     })
+
+    it('got6: an []-alias migration leaves NO stale entry under the old key', () => {
+      // bd polyglot-pdf-got6: prior code wrote the new value under the incoming key
+      // but left the OLD entry (stale value + stale steered) under the other variant.
+      // A downstream reader that prefers the exact schema-id key (buildValidatorFields'
+      // valueFor) would then read the stale value/steered, defeating W4's re-arm.
+      // Now exactly ONE entry represents the field.
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      // Migrate the value to the bracket variant with a NEW value.
+      state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v2')
+      // The stale exact-key entry is gone; only the bracket variant remains.
+      expect(state.fieldValues['field-1']).toBeUndefined()
+      expect((state.fieldValues['field-1[]'] as FieldValue).value).toBe('v2')
+      expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBeFalsy()
+    })
+
+    it('got6: reverse migration (bracketed -> unbracketed) also leaves no stale entry', () => {
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1[]'])
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v2')
+      expect(state.fieldValues['field-1[]']).toBeUndefined()
+      expect((state.fieldValues['field-1'] as FieldValue).value).toBe('v2')
+      expect((state.fieldValues['field-1'] as FieldValue).steered).toBeFalsy()
+    })
+
+    it('got6: a SAME-key rewrite does not spuriously delete the entry', () => {
+      // The migration cleanup must only fire when the prior entry was under a
+      // DIFFERENT key -- a normal same-key edit must keep working.
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v2')
+      expect((state.fieldValues['field-1'] as FieldValue).value).toBe('v2')
+      expect(state.fieldValues['field-1[]']).toBeUndefined()
+    })
   })
 
   // ==========================================================================
