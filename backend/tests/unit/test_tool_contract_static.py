@@ -297,6 +297,19 @@ def test_dti_si_forbids_secretary_lookups_of_field_metadata():
     assert "answers" in lowered
 
 
+def test_dti_and_legacy_si_ask_names_by_spelling_and_verify_by_spelling():
+    """Person-name fields must be asked for by SPELLING first ('How do you spell
+    your <name>?') and verified by reading the spelling back, so an unspelled
+    non-Anglo name is not misheard into an Anglo default (bd polyglot-pdf-5roy;
+    maintainer directive: spelling is the primary ask, verify by spelling)."""
+    for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
+        lowered = si.lower()
+        assert "how do you spell" in lowered
+        # It must key on a person's name and verify by reading the spelling back.
+        assert "name" in lowered
+        assert "spelling back" in lowered
+
+
 def test_dti_and_legacy_si_forbid_checking_a_declined_optional_checkbox():
     """Declining an optional checkbox must map to value \"\" (unchecked), never
     \"true\"/\"false\" -- writing \"true\" wrongly checks a box the user declined, a

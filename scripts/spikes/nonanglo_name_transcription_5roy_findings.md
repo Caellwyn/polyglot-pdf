@@ -1,8 +1,33 @@
-# Non-Anglo name transcription -- scoping + probe plan (bd polyglot-pdf-5roy)
+# Non-Anglo name transcription -- mitigation shipped (bd polyglot-pdf-5roy)
 
-**Date:** 2026-07-14. **Status:** BLOCKED on a maintainer go-ahead -- this bead
-needs a live-model probe (a gated spend) AND a product decision on the mitigation.
-No API calls have been made. This doc is the Gate-1 audit + Gate-2 cost estimate.
+**Date:** 2026-07-14. **Status:** MITIGATION SHIPPED (SI spell-first). The
+maintainer chose the mitigation directly (2026-07-14), so no baseline probe was
+run -- the fix ships on the maintainer's product call, not on a measured rate.
+The Gate-1 audit + Gate-2 estimate below are retained as the record of what was
+considered. No live-model API calls were made for this bead.
+
+## Shipped mitigation (maintainer directive, 2026-07-14)
+
+For any PERSON'S NAME field the model now, per the DTI + legacy SIs:
+
+- **asks for the SPELLING as the PRIMARY ask** -- "How do you spell your <name>?"
+  instead of "What is your <name>?" (the maintainer's exact direction: spelling
+  is safer for uncommon spellings -- Johnson vs Johnsen vs Johanson);
+- fills the exact spelling letter for letter;
+- **verifies by reading the SPELLING back** ("N-G-U-Y-E-N, Nguyen -- did I get
+  that right?"), not just saying the name;
+- never fills a guessed spelling -- if the user only says the name, it asks them
+  to spell it first.
+
+Pinned by `test_dti_and_legacy_si_ask_names_by_spelling_and_verify_by_spelling`.
+
+A related open question -- what to fill when the name's native script differs
+from the form's fill language (e.g. a Latin name on a Mandarin form) -- is a
+separate product/legal decision, filed as **bd polyglot-pdf-cfm3**.
+
+---
+
+## (Original scoping, retained) Gate-1 audit + Gate-2 estimate
 
 ## The problem
 
