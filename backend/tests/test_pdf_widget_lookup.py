@@ -199,3 +199,59 @@ def test_missing_widget_does_not_block_a_sibling_fill(mock_store):
 
     assert resp.status_code == 200
     assert _widget_values(resp.body)["Present[0]"] == "FILLED"
+
+
+# --------------------------------------------------------------------------
+# 5. []-alias key resolution (bd polyglot-pdf-h3ac). Gemini inconsistently
+#    adds/drops the trailing [] on checkbox-group ids, so a value payload can be
+#    keyed under the OTHER bracket variant than the schema id. The lookup +
+#    pdf_field_name map now register both variants, so the field fills either way
+#    (previously the exact-key miss dropped the value and the widget filled BLANK,
+#    exposed once got6 stopped storing a duplicate schema-id-keyed entry).
+# --------------------------------------------------------------------------
+def test_value_keyed_without_brackets_fills_a_bracketed_schema_id(mock_store):
+    # schema id 'x[]', value payload keyed 'x' -> fills.
+    pdf = _make_pdf([["W_X[0]"]])
+    mock_store(pdf)
+    req = PDFFillRequest(
+        kit_id="synthetic", pdf_filename="f.pdf",
+        field_values={"x": "VAL"},
+        form_schema={"fields": [{"id": "x[]", "type": "text", "pdf_field_name": "W_X[0]"}]},
+    )
+    resp = asyncio.run(fill_pdf(req))
+    assert resp.status_code == 200
+    assert _widget_values(resp.body)["W_X[0]"] == "VAL"
+
+
+def test_value_keyed_with_brackets_fills_an_unbracketed_schema_id(mock_store):
+    # schema id 'x', value payload keyed 'x[]' -> fills (the reverse direction).
+    pdf = _make_pdf([["W_X[0]"]])
+    mock_store(pdf)
+    req = PDFFillRequest(
+        kit_id="synthetic", pdf_filename="f.pdf",
+        field_values={"x[]": "VAL"},
+        form_schema={"fields": [{"id": "x", "type": "text", "pdf_field_name": "W_X[0]"}]},
+    )
+    resp = asyncio.run(fill_pdf(req))
+    assert resp.status_code == 200
+    assert _widget_values(resp.body)["W_X[0]"] == "VAL"
+
+
+def test_exact_id_wins_when_both_variants_are_real_distinct_fields(mock_store):
+    # Both 'x' and 'x[]' are REAL distinct schema fields -> each resolves to its OWN
+    # widget by exact id; the alias registration never clobbers a real exact id.
+    pdf = _make_pdf([["W_PLAIN[0]", "W_BRACKET[0]"]])
+    mock_store(pdf)
+    req = PDFFillRequest(
+        kit_id="synthetic", pdf_filename="f.pdf",
+        field_values={"x": "PLAIN", "x[]": "BRACKET"},
+        form_schema={"fields": [
+            {"id": "x", "type": "text", "pdf_field_name": "W_PLAIN[0]"},
+            {"id": "x[]", "type": "text", "pdf_field_name": "W_BRACKET[0]"},
+        ]},
+    )
+    resp = asyncio.run(fill_pdf(req))
+    assert resp.status_code == 200
+    vals = _widget_values(resp.body)
+    assert vals["W_PLAIN[0]"] == "PLAIN"
+    assert vals["W_BRACKET[0]"] == "BRACKET"

@@ -46,6 +46,16 @@ disambiguate -- and one reader's exact-key-first preference picked the wrong one
 Removing the stale key at the write is simpler and more robust than making every
 reader migration-aware.
 
+## Bundled fix (bd polyglot-pdf-h3ac)
+
+The Opus outer review caught that this dedup EXPOSES a pre-existing backend gap: the
+PDF fill lookup (`pdf_fill_routes.py`) was exact-key only (no `[]`-alias fallback),
+so before got6 the duplicate schema-id-keyed entry masked it, and after got6 a value
+surviving under the non-schema-id variant would be dropped from the PDF (fill blank).
+Since got6 CAUSES the exposure, its fix (h3ac -- make the PDF lookup alias-aware)
+ships in the SAME PR so there is no window where the PDF regresses. See the h3ac
+journal entry.
+
 ## Doc freshness
 
 No doc change: this is an internal write-path invariant (one entry per field), not a
