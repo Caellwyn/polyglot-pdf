@@ -255,3 +255,48 @@ def test_exact_id_wins_when_both_variants_are_real_distinct_fields(mock_store):
     vals = _widget_values(resp.body)
     assert vals["W_PLAIN[0]"] == "PLAIN"
     assert vals["W_BRACKET[0]"] == "BRACKET"
+
+
+def test_mapping_less_exact_field_is_not_filled_by_a_siblings_alias(mock_store):
+    """bd polyglot-pdf-eb4z: the field_mappings alias asymmetry.
+
+    Two DISTINCT real fields 'x' (text, NO pdf_field_name) and 'x[]' (text,
+    pdf_field_name W_BRACKET). Because 'x' writes no field_mappings entry of its
+    own, a naive alias registration would let 'x[]'s alias write
+    field_mappings['x'] = W_BRACKET, so a value keyed 'x' would wrongly fill
+    x[]'s widget. The exact-wins invariant must hold: field_mappings.get('x')
+    stays absent (the alias write is skipped because 'x' is a real schema id), so
+    the 'x' value fills NOTHING and W_BRACKET is left untouched."""
+    pdf = _make_pdf([["W_BRACKET[0]"]])
+    mock_store(pdf)
+    req = PDFFillRequest(
+        kit_id="synthetic", pdf_filename="f.pdf",
+        field_values={"x": "WRONG_TARGET"},
+        form_schema={"fields": [
+            {"id": "x", "type": "text"},  # real field, NO pdf_field_name
+            {"id": "x[]", "type": "text", "pdf_field_name": "W_BRACKET[0]"},
+        ]},
+    )
+    resp = asyncio.run(fill_pdf(req))
+    assert resp.status_code == 200
+    # x[]'s widget must NOT have received x's value.
+    assert _widget_values(resp.body)["W_BRACKET[0]"] == ""
+
+
+def test_mapping_less_exact_field_reverse_bracket_direction(mock_store):
+    """The reverse of the case above: the mapping-less exact field is the
+    BRACKETED one ('x[]', no pdf_field_name) and its sibling 'x' carries the
+    pdf_field_name. A value keyed 'x[]' must not fill x's widget."""
+    pdf = _make_pdf([["W_PLAIN[0]"]])
+    mock_store(pdf)
+    req = PDFFillRequest(
+        kit_id="synthetic", pdf_filename="f.pdf",
+        field_values={"x[]": "WRONG_TARGET"},
+        form_schema={"fields": [
+            {"id": "x", "type": "text", "pdf_field_name": "W_PLAIN[0]"},
+            {"id": "x[]", "type": "text"},  # real field, NO pdf_field_name
+        ]},
+    )
+    resp = asyncio.run(fill_pdf(req))
+    assert resp.status_code == 200
+    assert _widget_values(resp.body)["W_PLAIN[0]"] == ""

@@ -73,33 +73,56 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 		doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 		_log.info("pdf_loaded", kit=request.kit_id, pages=doc.page_count)
 
+		# bd polyglot-pdf-h3ac: register each field under its []-alias variant TOO,
+		# so a value payload keyed under the other bracket variant still resolves.
+		# Gemini inconsistently adds/drops the trailing [] on checkbox-group ids
+		# (bd 5k52), so a value can arrive under 'race' while the schema id is
+		# 'race[]' (or vice-versa); every FRONTEND reader tries both variants, but
+		# this backend lookup was exact-key only -> the field filled BLANK. The
+		# frontend got6 dedup (bd polyglot-pdf-got6) exposed this by removing the
+		# duplicate schema-id-keyed entry that used to mask it.
+		#
+		# EXACT-WINS invariant (bd polyglot-pdf-eb4z): a real exact schema id must
+		# NEVER resolve to a sibling's alias. We enforce this by collecting the set
+		# of real schema ids first, then registering aliases in a SECOND pass that
+		# skips any alias key that is itself a real schema id. This is order-
+		# independent: if 'x' and 'x[]' are two DISTINCT real fields and 'x' has no
+		# pdf_field_name of its own, 'x[]'s alias write for key 'x' is skipped, so
+		# field_mappings.get('x') stays absent instead of pointing at x[]'s widget.
+		# (field_lookup already had this guarantee -- the real id is written
+		# unconditionally in the first pass and the second-pass alias skips it.)
+		schema_field_ids = {
+			field.get("id")
+			for field in request.form_schema.get("fields", [])
+			if field.get("id")
+		}
+
 		field_mappings: Dict[str, str] = {}
 		field_lookup: Dict[str, Dict[str, Any]] = {}
+		# Pass 1: every real exact id wins unconditionally.
 		for field in request.form_schema.get("fields", []):
 			field_id = field.get("id")
 			if not field_id:
 				continue
 			field_lookup[field_id] = field
-			# bd polyglot-pdf-h3ac: register the field under its []-alias variant TOO,
-			# so a value payload keyed under the other bracket variant still resolves.
-			# Gemini inconsistently adds/drops the trailing [] on checkbox-group ids
-			# (bd 5k52), so a value can arrive under 'race' while the schema id is
-			# 'race[]' (or vice-versa); every FRONTEND reader tries both variants, but
-			# this backend lookup was exact-key only -> the field filled BLANK. The
-			# frontend got6 dedup (bd polyglot-pdf-got6) exposed this by removing the
-			# duplicate schema-id-keyed entry that used to mask it. Exact id wins on a
-			# collision (added first); the alias only fills a gap.
-			alias_id = field_id[:-2] if field_id.endswith("[]") else field_id + "[]"
-			if alias_id not in field_lookup:
-				field_lookup[alias_id] = field
 			pdf_field_name = field.get("pdf_field_name")
 			if pdf_field_name:
 				field_mappings[field_id] = pdf_field_name
-				# h3ac: mirror the alias registration for the text-field pdf_field_name
-				# lookup (field_mappings.get(field_id) at the text path), so an
-				# alias-keyed text value resolves to its widget too. Exact wins.
-				if alias_id not in field_mappings:
-					field_mappings[alias_id] = pdf_field_name
+		# Pass 2: register []-alias variants, but only for keys that are NOT
+		# themselves real schema ids (so an alias never shadows a real field) and
+		# only when the key is still a gap (first alias writer wins the gap).
+		for field in request.form_schema.get("fields", []):
+			field_id = field.get("id")
+			if not field_id:
+				continue
+			alias_id = field_id[:-2] if field_id.endswith("[]") else field_id + "[]"
+			if alias_id in schema_field_ids:
+				continue
+			if alias_id not in field_lookup:
+				field_lookup[alias_id] = field
+			pdf_field_name = field.get("pdf_field_name")
+			if pdf_field_name and alias_id not in field_mappings:
+				field_mappings[alias_id] = pdf_field_name
 
 		_log.info("field_mappings_built", kit=request.kit_id, mapping_count=len(field_mappings))
 

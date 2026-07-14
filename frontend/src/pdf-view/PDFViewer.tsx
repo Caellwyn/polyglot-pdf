@@ -12,7 +12,7 @@
 import React from 'react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import type { FormField } from '../schema-forms/types/schema';
-import { unwrapFieldValue } from '../schema-forms/utils/fieldValue';
+import { readFieldEntryWithAlias, unwrapFieldValue } from '../schema-forms/utils/fieldValue';
 import { shouldShowField } from '../schema-forms/utils/validation';
 import { pdfToScreenCoords, hasValidCoordinates } from './pdfCoordinates';
 import { PDFPage } from './PDFPage';
@@ -102,7 +102,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
               />
               <div className="pdf-viewer__overlay-layer">
                 {pageFields.map((field) => {
-                  const wrapped = fieldValues[field.id];
+                  // []-alias-aware read (bd polyglot-pdf-7sdc): the overlay must
+                  // resolve a value stored under the OTHER bracket variant than
+                  // field.id, matching the validator projection and the backend
+                  // fill. A bare fieldValues[field.id] rendered BLANK for a
+                  // filled checkbox-group after the got6 dedup collapsed the
+                  // duplicate key to whichever bracket variant Gemini last wrote.
+                  const wrapped = readFieldEntryWithAlias(fieldValues, field.id);
                   const raw = unwrapFieldValue(wrapped);
                   return (
                     <FieldOverlay
