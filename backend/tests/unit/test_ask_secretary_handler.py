@@ -47,9 +47,13 @@ def _service(text_ai=None, *, schema=_SCHEMA, form_state=None, timeout_s=8.0,
 
 @pytest.mark.asyncio
 async def test_handle_ask_secretary_happy_path():
-    """The handler passes the assembled context to text_ai.ask and returns prose."""
+    """The handler passes the assembled context to text_ai.ask and returns prose
+    plus the resolved sources list (bd polyglot-pdf-2af7/3vby)."""
     text_ai = MagicMock()
-    text_ai.ask = AsyncMock(return_value="Their first name is Ada.")
+    text_ai.ask = AsyncMock(return_value=(
+        "Their first name is Ada.",
+        [{"field_id": "f_first", "spoken_name": "first name"}],
+    ))
     svc = _service(text_ai, form_state={
         "f_first": {"value": "Ada", "confirmed": True, "shown": True},
         "f_last": {"value": None, "confirmed": False, "shown": False},
@@ -57,7 +61,11 @@ async def test_handle_ask_secretary_happy_path():
 
     out = await svc.handle_ask_secretary("what is their first name?")
 
-    assert out == {"status": "ok", "answer": "Their first name is Ada."}
+    assert out == {
+        "status": "ok",
+        "answer": "Their first name is Ada.",
+        "sources": [{"field_id": "f_first", "spoken_name": "first name"}],
+    }
     # Context carries the schema + the client's form state + a derived shown_map.
     _, kwargs = text_ai.ask.call_args
     ctx = text_ai.ask.call_args.args[1] if len(text_ai.ask.call_args.args) > 1 else kwargs["context"]
@@ -73,7 +81,7 @@ async def test_handle_ask_secretary_timeout_fail_open():
     already done-with-timeout when the race resolves)."""
     async def _slow(query, context):
         await asyncio.sleep(10)
-        return "too late"
+        return "too late", []
 
     text_ai = MagicMock()
     text_ai.ask = _slow
@@ -81,7 +89,7 @@ async def test_handle_ask_secretary_timeout_fail_open():
     svc = _service(text_ai, timeout_s=0.05, deadline_s=0.2)
 
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "failed", "answer": ""}
+    assert out == {"status": "failed", "answer": "", "sources": []}
 
 
 @pytest.mark.asyncio
@@ -90,23 +98,26 @@ async def test_handle_ask_secretary_ask_error_fail_open():
     text_ai = MagicMock()
     text_ai.ask = AsyncMock(side_effect=RuntimeError("boom"))
     svc = _service(text_ai)
-    assert await svc.handle_ask_secretary("q") == {"status": "failed", "answer": ""}
+    assert await svc.handle_ask_secretary("q") == {
+        "status": "failed", "answer": "", "sources": []}
 
 
 @pytest.mark.asyncio
 async def test_handle_ask_secretary_no_text_ai_fail_open():
     """No secretary adapter wired -> status=failed."""
     svc = _service(text_ai=None)
-    assert await svc.handle_ask_secretary("q") == {"status": "failed", "answer": ""}
+    assert await svc.handle_ask_secretary("q") == {
+        "status": "failed", "answer": "", "sources": []}
 
 
 @pytest.mark.asyncio
 async def test_handle_ask_secretary_no_schema_fail_open():
     """No catalog (empty schema) -> status=failed (cannot retrieve)."""
     text_ai = MagicMock()
-    text_ai.ask = AsyncMock(return_value="should not be called")
+    text_ai.ask = AsyncMock(return_value=("should not be called", []))
     svc = _service(text_ai, schema={})
-    assert await svc.handle_ask_secretary("q") == {"status": "failed", "answer": ""}
+    assert await svc.handle_ask_secretary("q") == {
+        "status": "failed", "answer": "", "sources": []}
     text_ai.ask.assert_not_awaited()
 
 
@@ -116,12 +127,12 @@ async def test_handle_ask_secretary_shown_defaults_true_without_shown_key():
     renderers default shown=True), not crashing -- covers an older client that omits
     applicability (bd polyglot-pdf-p68s fallback)."""
     text_ai = MagicMock()
-    text_ai.ask = AsyncMock(return_value="ok")
+    text_ai.ask = AsyncMock(return_value=("ok", []))
     svc = _service(text_ai, form_state={
         "f_first": {"value": "Ada", "confirmed": True},  # no 'shown' key
     })
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "ok", "answer": "ok"}
+    assert out == {"status": "ok", "answer": "ok", "sources": []}
     ctx = text_ai.ask.call_args.args[1]
     assert ctx["shown_map"] == {}  # no explicit shown -> renderer defaults True
 
@@ -149,12 +160,12 @@ async def test_handle_ask_secretary_prefers_full_schema_over_section_schema():
     """When the client supplied the full-form catalog at handshake, the handler
     passes the WHOLE form to the secretary, not the current section's schema."""
     text_ai = MagicMock()
-    text_ai.ask = AsyncMock(return_value="ok")
+    text_ai.ask = AsyncMock(return_value=("ok", []))
     svc = _service(text_ai, schema=_SCHEMA)  # _schema = section-only (2 fields)
     svc._full_schema = _FULL_SCHEMA          # full catalog (3 fields, 2 sections)
 
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "ok", "answer": "ok"}
+    assert out == {"status": "ok", "answer": "ok", "sources": []}
     ctx = text_ai.ask.call_args.args[1]
     assert ctx["schema"] is _FULL_SCHEMA
 
@@ -226,7 +237,7 @@ async def test_handle_ask_secretary_deadline_returns_pending_then_delivers_async
     follow-up turn via send_client_content (jnjj.43)."""
     async def _slow(query, context):
         await asyncio.sleep(0.2)
-        return "Their previous last name was Smith."
+        return "Their previous last name was Smith.", []
 
     live = _live_ai_active()
     text_ai = MagicMock()
@@ -236,7 +247,7 @@ async def test_handle_ask_secretary_deadline_returns_pending_then_delivers_async
 
     out = await svc.handle_ask_secretary("what was their previous last name?")
     # Synchronous path: pending, no answer, principal's turn freed.
-    assert out == {"status": "pending", "answer": ""}
+    assert out == {"status": "pending", "answer": "", "sources": []}
     # A deliver task was detached.
     assert len(svc._secretary_deliver_tasks) == 1
 
@@ -256,7 +267,7 @@ async def test_async_deliver_drops_when_session_inactive():
     dropped (no push into a dead session)."""
     async def _slow(query, context):
         await asyncio.sleep(0.2)
-        return "too late, nobody home"
+        return "too late, nobody home", []
 
     live = _live_ai_active()
     live.is_session_active = MagicMock(return_value=False)  # session gone
@@ -265,7 +276,7 @@ async def test_async_deliver_drops_when_session_inactive():
     svc = _service(text_ai, deadline_s=0.05, timeout_s=5.0, live_ai=live)
 
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "pending", "answer": ""}
+    assert out == {"status": "pending", "answer": "", "sources": []}
     await asyncio.sleep(0.4)
     live.send_client_content.assert_not_awaited()
 
@@ -308,7 +319,7 @@ async def test_async_deliver_drops_empty_answer():
     nowhere -- the user has already moved on)."""
     async def _slow(query, context):
         await asyncio.sleep(0.2)
-        return ""
+        return "", []
 
     live = _live_ai_active()
     text_ai = MagicMock()
@@ -316,7 +327,7 @@ async def test_async_deliver_drops_empty_answer():
     svc = _service(text_ai, deadline_s=0.05, timeout_s=5.0, live_ai=live)
 
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "pending", "answer": ""}
+    assert out == {"status": "pending", "answer": "", "sources": []}
     await asyncio.sleep(0.4)
     live.send_client_content.assert_not_awaited()
 
@@ -330,7 +341,7 @@ async def test_end_session_cancels_inflight_secretary_deliver():
     async def _slow(query, context):
         started.set()
         await asyncio.sleep(5)  # still running when end_session fires
-        return "never delivered"
+        return "never delivered", []
 
     live = _live_ai_active()
     live.finalize = AsyncMock()
@@ -339,7 +350,7 @@ async def test_end_session_cancels_inflight_secretary_deliver():
     svc = _service(text_ai, deadline_s=0.05, timeout_s=10.0, live_ai=live)
 
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "pending", "answer": ""}
+    assert out == {"status": "pending", "answer": "", "sources": []}
     await started.wait()
     assert len(svc._secretary_deliver_tasks) == 1
     # Grab the actual task objects so we can prove end_session CANCELLED them
@@ -365,7 +376,7 @@ async def test_section_switch_cancels_inflight_secretary_deliver():
     async def _slow(query, context):
         started.set()
         await asyncio.sleep(5)  # still running when the switch fires
-        return "section-1 answer that must NOT leak into section 2"
+        return "section-1 answer that must NOT leak into section 2", []
 
     live = _live_ai_active()
     live.finalize = AsyncMock()
@@ -379,7 +390,7 @@ async def test_section_switch_cancels_inflight_secretary_deliver():
     svc._send_transcript = False
 
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "pending", "answer": ""}
+    assert out == {"status": "pending", "answer": "", "sources": []}
     await started.wait()
     deliver, lookup = next(iter(svc._secretary_deliver_tasks))
 

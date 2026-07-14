@@ -4,6 +4,19 @@
 **Status:** diagnosis complete (code-only, no live spend); the per-field
 metadata `ask_secretary` waste is fixed in the same bead by SI/guidance changes.
 
+> **IMPORTANT correction (2026-07-14, maintainer feedback).** The FIRST fix
+> attempt over-reached: it told the model "Do NOT use ask_secretary to look up a
+> field's spoken name or id" as a BLANKET ban. But the secretary is BY DESIGN the
+> voice model's "which field does the user mean" resolver for navigation -- the
+> model does not hold other fields' ids (tight compression window). The correct
+> distinction is: forbid asking for the CURRENT field's own metadata (redundant,
+> the real waste), but ALLOW asking "which field is X?" to IDENTIFY a DIFFERENT
+> field to navigate to. The refinement (a) reworded the SI + both tool
+> descriptions to make that distinction, and (b) WIRED the secretary's
+> `sourced_from` field ids through to the ask_secretary tool response as a
+> `fields` list of {field_id, spoken_name} -- which was previously DISCARDED, so
+> the intended nav flow had never actually worked. See "Refinement" below.
+
 ## The two observations (from stress-run costs_i90-full_..._20260714T055241Z)
 
 1. In a clean 10-question continuous-DTI run the model called `ask_secretary`
@@ -81,10 +94,34 @@ warmth-and-model-independent fix is EXPLICIT caching (`client.caches.create`,
 already scaffolded + measured as the probe's `explicit` arm) -- deferred, not in
 scope for 2af7.
 
+## Refinement: keep the nav-identification use, wire it end to end
+
+The corrected fix (maintainer feedback) separates the two uses and makes the
+navigation one actually work:
+
+- **Wording (SI + both tool descriptions).** The prohibition is now scoped to the
+  CURRENT field's own name/id ("that is always in your latest guidance block").
+  ask_secretary's description advertises TWO uses -- recall a past answer, AND
+  identify a field for navigation ("which field is X?") -- and states that when it
+  identifies fields the response carries a `fields` list. switch_to_field's
+  description tells the model that if it does not know the target's exact name, it
+  can ask_secretary first and use the returned `fields`.
+- **Plumbing.** `TextAIGemini.ask()` now returns `(answer, sources)` -- the
+  secretary's own `sourced_from` field ids resolved against the schema to
+  `{field_id, spoken_name}` (deduped, capped at 8, unknown ids dropped). This was
+  previously discarded at the adapter, so the "secretary names a field ->
+  switch_to_field navigates to it" flow (designed in bd jnjj.36) had never returned
+  a usable identifier. `handle_ask_secretary` carries `sources` on its "ok" status
+  dict; the callback dispatch surfaces them as `response["fields"]` (only when
+  non-empty and well-formed). The async-deliver (deadline-blown) path stays
+  prose-only by design. Pinned by adapter + handler + callback-dispatch tests.
+
 ## Verification still pending (a gated live-harness spend)
 
 Exit criterion 1 ("a clean >=10-field continuous run makes ZERO ask_secretary
 calls for field metadata, verified by seam_tool_records") requires re-running the
 live stress harness (`measure_form_session_costs.py`, real Gemini) with the new
 SI. That is a per-instance-approved live-model run and is NOT claimed here; the
-code fix + static SI pins are complete.
+code fix + static SI pins are complete. Note the criterion is now "zero
+CURRENT-FIELD metadata asks" -- a deliberate nav-identification ask for a DIFFERENT
+field is expected and correct.

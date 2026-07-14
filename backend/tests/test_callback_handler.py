@@ -408,6 +408,69 @@ class TestAskSecretaryRouting:
         assert result["available"] is True
 
     @pytest.mark.asyncio
+    async def test_ask_secretary_surfaces_resolved_fields_for_navigation(
+        self, mock_websocket, mock_coordinator
+    ):
+        """When the secretary identifies fields (its `sources`), the tool response
+        surfaces them as `fields` (exact field_id + spoken_name) so the model can
+        hand one straight to switch_to_field (bd polyglot-pdf-2af7/3vby)."""
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        ask = AsyncMock(return_value={
+            "status": "ok",
+            "answer": "That's the mailing city field.",
+            "sources": [
+                {"field_id": "p1_line6d_cityortown", "spoken_name": "mailing city"},
+                {"field_id": "bad", "spoken_name": ""},  # malformed -> filtered
+            ],
+        })
+        handler.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            request_form_state_from_client=AsyncMock(return_value={}),
+            handle_ask_secretary=ask,
+        )
+
+        result = await handler.on_tool_call(
+            tool_name="ask_secretary",
+            arguments={"query": "which field is the mailing city?"},
+        )
+
+        assert result["available"] is True
+        assert result["fields"] == [
+            {"field_id": "p1_line6d_cityortown", "spoken_name": "mailing city"}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_ask_secretary_omits_fields_when_no_sources(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A pure value-recall answer (no sources) carries NO `fields` key -- the
+        key appears only when the secretary actually identified fields."""
+        handler = CallbackHandler(
+            websocket=mock_websocket,
+            request_coordinator=mock_coordinator,
+            session_id="test-123",
+        )
+        ask = AsyncMock(return_value={
+            "status": "ok", "answer": "Their zip is 50021.", "sources": [],
+        })
+        handler.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            request_form_state_from_client=AsyncMock(return_value={}),
+            handle_ask_secretary=ask,
+        )
+        result = await handler.on_tool_call(
+            tool_name="ask_secretary",
+            arguments={"query": "what is their zip?"},
+        )
+        assert "fields" not in result
+
+    @pytest.mark.asyncio
     async def test_ask_secretary_pending_returns_wait_instruction(
         self, mock_websocket, mock_coordinator
     ):

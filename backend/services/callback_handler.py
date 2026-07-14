@@ -652,6 +652,19 @@ class CallbackHandler:
 
         if status == "ok" and answer:
             response = {"answer": answer, "available": True}
+            # Pass through the resolved field sources (bd polyglot-pdf-2af7/3vby) so
+            # the principal can hand an EXACT field id + spoken name to
+            # switch_to_field instead of guessing one from memory. Only included
+            # when non-empty and well-formed -- never on pending/failed.
+            sources = result.get("sources", [])
+            if isinstance(sources, list) and sources:
+                clean_sources = [
+                    {"field_id": str(s["field_id"]), "spoken_name": str(s["spoken_name"])}
+                    for s in sources
+                    if isinstance(s, dict) and s.get("field_id") and s.get("spoken_name")
+                ]
+                if clean_sources:
+                    response["fields"] = clean_sources
         elif status == "pending":
             # Not a failure -- the answer is coming asynchronously. available stays
             # True (the model is NOT told to apologize); INFO, not ERROR.
@@ -1075,9 +1088,10 @@ class CallbackHandler:
         """Handle switch_to_field tool call from Gemini (bd polyglot-pdf-jnjj.36).
 
         Field-level navigation: jump the form's focus to ONE specific field --
-        the principal's half of the secretary architecture (ask_secretary names
-        a field; this navigates to it) and the "change my earlier answer"
-        correction path. The frontend owns all field state, so it resolves the
+        the principal's half of the secretary architecture (ask_secretary
+        identifies a field via its `fields` list; this navigates to it -- bd
+        polyglot-pdf-3vby) and the "change my earlier answer" correction path.
+        The frontend owns all field state, so it resolves the
         identifier (field_id or exact spoken name), pins the field for its
         next-field computation (UI focus follows), and acks with the target's
         hint + (DTI) schema over a synchronous round-trip -- mirroring

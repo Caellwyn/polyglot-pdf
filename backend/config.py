@@ -457,22 +457,27 @@ class Settings(BaseModel):
 		{
 			# The secretary (bd polyglot-pdf-jnjj.45): a cheap text-model helper
 			# that holds the WHOLE form catalog + the applicant's current answers
-			# and answers prose questions about them. The principal asks in plain
-			# language and gets back a prose answer -- it does NOT need the field
-			# catalog in its own (expensive) context. Use this for the user's
-			# ANSWERS -- "what did they say for X?", "have we answered Y?" -- NOT to
-			# look up a field's spoken name or id (that metadata is already in the
-			# guidance block; bd polyglot-pdf-2af7).
+			# and answers prose questions about them -- the principal does NOT
+			# hold that catalog (tight compression window). Two uses (bd
+			# polyglot-pdf-2af7/3vby): (1) recall a PAST ANSWER/value; (2) IDENTIFY
+			# which field the user means when you need to navigate to a field you do
+			# not currently hold -- the response's `fields` list carries the exact
+			# field_id + spoken_name to pass to switch_to_field. The ONE thing it is
+			# NOT for: the CURRENT field's own name/id, which is always already in
+			# your latest guidance block.
 			"name": "ask_secretary",
 			"description": (
-				"Ask the secretary a plain-language question about the "
-				"applicant's ANSWERS -- a past answer, or whether something has "
-				"been filled yet (e.g. 'what previous name did they give?', "
-				"'have we got their date of birth yet?'). The secretary holds "
-				"the whole form and the applicant's current answers and replies "
-				"in prose. Do NOT use it to look up a field's spoken name or id -- "
-				"that metadata is already in your guidance block; ask_secretary is "
-				"for the user's values, not field metadata."
+				"Ask the secretary a plain-language question about the form. Two "
+				"uses: (1) recall a past ANSWER/value -- 'what previous name did "
+				"they give?', 'have we got their date of birth yet?'; (2) IDENTIFY "
+				"which field the user means when you need to jump to a field you do "
+				"NOT currently hold -- 'which field is the mailing city?'. The "
+				"secretary holds the whole form catalog + the applicant's answers "
+				"and replies in prose; when it identifies fields, the response also "
+				"carries a `fields` list of exact {field_id, spoken_name} you can "
+				"pass straight to switch_to_field. Do NOT ask it for the CURRENT "
+				"field's own name or id -- that is always in your latest guidance "
+				"block already."
 			),
 			"parameters": {
 				"type": "object",
@@ -480,8 +485,10 @@ class Settings(BaseModel):
 					"query": {
 						"type": "string",
 						"description": (
-							"The plain-language question about the form or a past "
-							"answer (e.g. 'what is their mailing zip code?')."
+							"The plain-language question: a past answer/value "
+							"('what is their mailing zip code?'), or which field the "
+							"user means for navigation ('which field is the apartment "
+							"number?')."
 						)
 					}
 				},
@@ -523,12 +530,13 @@ class Settings(BaseModel):
 			# Field-level navigation (bd polyglot-pdf-jnjj.36): jump the form's
 			# focus to ONE SPECIFIC field -- the correction/revisit path
 			# ("actually, my zip code was wrong"; "go back to my mailing city").
-			# The target comes from what the USER names verbally (or the
-			# candidate list this tool returns on a miss), NOT from ask_secretary
-			# (which is for the user's ANSWERS, not field metadata -- bd
-			# polyglot-pdf-2af7). DISTINCT from switch_section, which navigates
-			# whole sections and (in section mode) restarts the session; this
-			# stays in the current session and just changes which field is current.
+			# The target identifier comes from the user's own words, from a field
+			# this tool's candidate list named on a miss, or from ask_secretary's
+			# `fields` list when the model asked it "which field is X?" to identify
+			# a field it does not hold (bd polyglot-pdf-3vby). DISTINCT from
+			# switch_section, which navigates whole sections and (in section mode)
+			# restarts the session; this stays in the current session and just
+			# changes which field is current.
 			"name": "switch_to_field",
 			"description": (
 				"Jump to ONE SPECIFIC field so it becomes the current field -- "
@@ -537,7 +545,10 @@ class Settings(BaseModel):
 				"when you have it verbatim in "
 				"a recent guidance block; for an EARLIER field you are navigating "
 				"back to, pass its exact SPOKEN NAME instead -- never reconstruct "
-				"or guess a field_id from memory (a wrong id fails). If the target "
+				"or guess a field_id from memory (a wrong id fails). If you do not "
+				"know the target's exact name, ask_secretary 'which field is X?' "
+				"first -- its `fields` list gives you an exact field_id + spoken "
+				"name to pass here. If the target "
 				"is not found, the response lists the candidate fields; pick one of "
 				"THOSE exact names and retry. On success "
 				"the response carries that field's guidance -- ask the user "
@@ -709,8 +720,12 @@ class Settings(BaseModel):
     "guidance block -- character for character. NEVER invent, reconstruct, guess, abbreviate, or "
     "pattern-match a field_id from another field's id. If you have no current guidance block (e.g. "
     "after a reconnect), request the current form status or ask the user, rather than guessing.\n"
-    "Do NOT call ask_secretary to look up a field's spoken name or id -- that metadata is already in "
-    "the guidance block. ask_secretary is ONLY for recalling the user's past ANSWERS/values.\n\n"
+    "Do NOT call ask_secretary for the CURRENT field's own spoken name or id -- that is always in "
+    "this guidance block already. But you DO NOT hold other fields' ids: to jump to a DIFFERENT field "
+    "the user names ('go back to my mailing city'), you may ask_secretary 'which field is X?' -- its "
+    "response's `fields` list gives you the exact field_id + spoken name to pass to switch_to_field. "
+    "ask_secretary is for the user's past ANSWERS and for IDENTIFYING a field to navigate to, never "
+    "for the current field's metadata.\n\n"
 
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"

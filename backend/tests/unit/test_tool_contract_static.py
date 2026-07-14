@@ -283,30 +283,36 @@ def test_dti_si_recall_guidance_names_ask_secretary_not_get_field_value():
     assert "ANSWERS" in block
 
 
-def test_dti_si_forbids_secretary_lookups_of_field_metadata():
-    """The DTI SI must explicitly tell the model NOT to ask_secretary for a
-    field's spoken name / id (it is always in the guidance), scoping the secretary
-    to the user's past answers -- the per-field blocking-lookup waste in bd
-    polyglot-pdf-2af7."""
+def test_dti_si_forbids_current_field_metadata_but_allows_nav_identification():
+    """The DTI SI must forbid ask_secretary for the CURRENT field's own name/id
+    (always in guidance -- the 2af7 waste), while ALLOWING it to IDENTIFY a
+    DIFFERENT field to navigate to, since the model does not hold other fields'
+    ids (bd polyglot-pdf-2af7 + polyglot-pdf-3vby refinement)."""
     si = Settings().DTI_SYSTEM_INSTRUCTION
     assert "ask_secretary" in si
     lowered = si.lower()
-    assert "spoken name" in lowered
-    # The prohibition and the answers-only scoping both present.
-    assert "do not call ask_secretary" in lowered or "not for field metadata" in lowered
-    assert "answers" in lowered
+    # Forbids the CURRENT field's own metadata specifically (not a blanket ban).
+    assert "current field's own spoken name or id" in lowered
+    # But sanctions the navigation-identification use + the fields list it returns.
+    assert "which field is x" in lowered
+    assert "switch_to_field" in lowered
+    assert "`fields`" in si  # the response's fields list
 
 
-def test_ask_secretary_tool_description_does_not_invite_field_metadata_lookups():
-    """The ask_secretary tool DESCRIPTION (weighted heavily by the model) must not
-    contradict the SI prohibition: it must scope the secretary to the user's
-    answers and explicitly say NOT to use it for a field's spoken name/id (bd
-    polyglot-pdf-2af7; caught by the fresh-eyes tool-desc-vs-SI contradiction)."""
+def test_ask_secretary_tool_description_supports_nav_identification_not_current_field():
+    """The ask_secretary tool DESCRIPTION must agree with the SI: it advertises the
+    two legitimate uses (recall a past answer; identify a field for navigation, with
+    a `fields` list) and forbids ONLY the current field's own name/id (bd
+    polyglot-pdf-2af7 + polyglot-pdf-3vby)."""
     decls = {d["name"]: d for d in Settings().TOOL_DECLARATIONS}
-    desc = decls["ask_secretary"]["description"].lower()
-    assert "not" in desc and "spoken name" in desc  # forbids the metadata lookup
-    # It must NOT still advertise a generic "which field covers a topic" lookup.
-    assert "which field covers a topic" not in desc
+    desc = decls["ask_secretary"]["description"]
+    lowered = desc.lower()
+    # Navigation-identification use is advertised, with the fields list.
+    assert "identify" in lowered
+    assert "`fields`" in desc
+    assert "switch_to_field" in lowered
+    # Forbids ONLY the current field's own metadata, not a blanket ban.
+    assert "current" in lowered and "field's own name or id" in lowered
 
 
 def test_dti_and_legacy_si_ask_names_by_spelling_and_verify_by_spelling():
