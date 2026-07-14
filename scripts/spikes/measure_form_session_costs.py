@@ -2679,6 +2679,10 @@ async def run(args) -> int:
                     "ran": True, "model": settings.VALIDATOR_PRO_MODEL,
                     "latency_s": round(time.monotonic() - _pro_t0, 3),
                     "conflicts": len(pro_conflicts),
+                    # WHICH pairs the pro pass caught (E3 instrumentation gap:
+                    # the count alone cannot show a far-pair catch).
+                    "conflict_field_ids": [c.get("field_ids")
+                                           for c in pro_conflicts],
                 }
                 if pro_conflicts:
                     # Same envelope handle_form_complete_pro's caller pushes in

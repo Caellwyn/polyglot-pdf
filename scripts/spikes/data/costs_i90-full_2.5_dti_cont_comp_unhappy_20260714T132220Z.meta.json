@@ -1,0 +1,7090 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90-full",
+  "arm": "dti",
+  "path": "unhappy",
+  "questions": 113,
+  "compression": true,
+  "trigger": 5000,
+  "window": 3500,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260714T132220Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 1,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 1,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.546
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "skip-request",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "skip-confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 0.141
+    },
+    {
+      "q": 3,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.234
+    },
+    {
+      "q": 5,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 5,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.812
+    },
+    {
+      "q": 5,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.469
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.39
+    },
+    {
+      "q": 6,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 2.265
+    },
+    {
+      "q": 6,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.5
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.484
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.469
+    },
+    {
+      "q": 9,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.406
+    },
+    {
+      "q": 9,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.875
+    },
+    {
+      "q": 9,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.391
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 10,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 10,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.891
+    },
+    {
+      "q": 10,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.641
+    },
+    {
+      "q": 11,
+      "label": "plant-value",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.391
+    },
+    {
+      "q": 12,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 12,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.828
+    },
+    {
+      "q": 12,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.313
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.484
+    },
+    {
+      "q": 13,
+      "label": "plant-value",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 15,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 15,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 15,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.625
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.406
+    },
+    {
+      "q": 18,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 18,
+      "label": "steer-correct",
+      "stalled": false,
+      "latency_s": 1.187
+    },
+    {
+      "q": 18,
+      "label": "steer-confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 19,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.265
+    },
+    {
+      "q": 19,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.781
+    },
+    {
+      "q": 19,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.39
+    },
+    {
+      "q": 19,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 20,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.313
+    },
+    {
+      "q": 20,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.078
+    },
+    {
+      "q": 20,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.36
+    },
+    {
+      "q": 20,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 21,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 21,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.719
+    },
+    {
+      "q": 21,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.296
+    },
+    {
+      "q": 21,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.265
+    },
+    {
+      "q": 22,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.469
+    },
+    {
+      "q": 22,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.687
+    },
+    {
+      "q": 22,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 22,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.265
+    },
+    {
+      "q": 23,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.391
+    },
+    {
+      "q": 23,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.75
+    },
+    {
+      "q": 23,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.625
+    },
+    {
+      "q": 23,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 26,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 27,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 28,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 28,
+      "label": "steer-organic-correct",
+      "stalled": false,
+      "latency_s": 1.453
+    },
+    {
+      "q": 28,
+      "label": "steer-confirm",
+      "stalled": false,
+      "latency_s": 1.454
+    },
+    {
+      "q": 29,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.391
+    },
+    {
+      "q": 29,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.937
+    },
+    {
+      "q": 29,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 0.687
+    },
+    {
+      "q": 29,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.203
+    },
+    {
+      "q": 30,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.516
+    },
+    {
+      "q": 30,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 30,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 30,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 31,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 31,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.828
+    },
+    {
+      "q": 31,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.407
+    },
+    {
+      "q": 31,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 32,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 32,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 32,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.265
+    },
+    {
+      "q": 32,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.218
+    },
+    {
+      "q": 33,
+      "label": "plant-value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 33,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 34,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 0.797
+    },
+    {
+      "q": 34,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 34,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 34,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 35,
+      "label": "recall",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 36,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 0.765
+    },
+    {
+      "q": 36,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 36,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 36,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.766
+    },
+    {
+      "q": 37,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 37,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.156
+    },
+    {
+      "q": 37,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.906
+    },
+    {
+      "q": 37,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 38,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 38,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.718
+    },
+    {
+      "q": 38,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 38,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 39,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 0.703
+    },
+    {
+      "q": 39,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.672
+    },
+    {
+      "q": 39,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 39,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.266
+    },
+    {
+      "q": 40,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.406
+    },
+    {
+      "q": 40,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.828
+    },
+    {
+      "q": 40,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.406
+    },
+    {
+      "q": 40,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 41,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 41,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 41,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.188
+    },
+    {
+      "q": 41,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.296
+    },
+    {
+      "q": 42,
+      "label": "recall",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 43,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 43,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 43,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 43,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 44,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 44,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 44,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 44,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 45,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 45,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 45,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 45,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.313
+    },
+    {
+      "q": 46,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 46,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 46,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 46,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.156
+    },
+    {
+      "q": 47,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 47,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.812
+    },
+    {
+      "q": 47,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 47,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 48,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 48,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.843
+    },
+    {
+      "q": 48,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.282
+    },
+    {
+      "q": 48,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 49,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.203
+    },
+    {
+      "q": 49,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.812
+    },
+    {
+      "q": 49,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.296
+    },
+    {
+      "q": 49,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.218
+    },
+    {
+      "q": 50,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.141
+    },
+    {
+      "q": 50,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.813
+    },
+    {
+      "q": 50,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 50,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 51,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.14
+    },
+    {
+      "q": 51,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.781
+    },
+    {
+      "q": 51,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.187
+    },
+    {
+      "q": 51,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.141
+    },
+    {
+      "q": 52,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.234
+    },
+    {
+      "q": 52,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.829
+    },
+    {
+      "q": 52,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 52,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.672
+    },
+    {
+      "q": 53,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 53,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.813
+    },
+    {
+      "q": 53,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.265
+    },
+    {
+      "q": 53,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.172
+    },
+    {
+      "q": 54,
+      "label": "navigate-back",
+      "stalled": false,
+      "latency_s": 1.187
+    },
+    {
+      "q": 54,
+      "label": "navigate-correct",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 54,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 55,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 55,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.782
+    },
+    {
+      "q": 55,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.235
+    },
+    {
+      "q": 55,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.218
+    },
+    {
+      "q": 56,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.734
+    },
+    {
+      "q": 56,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 56,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 56,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.812
+    },
+    {
+      "q": 57,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 57,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 57,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.671
+    },
+    {
+      "q": 57,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.828
+    },
+    {
+      "q": 58,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 58,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.781
+    },
+    {
+      "q": 58,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.797
+    },
+    {
+      "q": 58,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.796
+    },
+    {
+      "q": 59,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 59,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.672
+    },
+    {
+      "q": 59,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 59,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 60,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 60,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 60,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 60,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 61,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 61,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 61,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 61,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 62,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 62,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 62,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 62,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 63,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 63,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 63,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 63,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 64,
+      "label": "navigate-back",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 64,
+      "label": "navigate-correct",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 64,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 65,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 65,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 65,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 65,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 66,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 66,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 66,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 66,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.391
+    },
+    {
+      "q": 67,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 67,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 67,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 67,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 68,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 68,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 68,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.234
+    },
+    {
+      "q": 68,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 69,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 69,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 2.297
+    },
+    {
+      "q": 69,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 69,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 70,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 70,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 70,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 70,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 71,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 71,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 71,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.407
+    },
+    {
+      "q": 71,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 72,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.36
+    },
+    {
+      "q": 72,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 72,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.5
+    },
+    {
+      "q": 72,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 73,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 73,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 2.031
+    },
+    {
+      "q": 73,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.156
+    },
+    {
+      "q": 73,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.062
+    },
+    {
+      "q": 74,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 74,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 2.219
+    },
+    {
+      "q": 74,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.204
+    },
+    {
+      "q": 74,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.984
+    },
+    {
+      "q": 75,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 75,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.969
+    },
+    {
+      "q": 75,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.156
+    },
+    {
+      "q": 75,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.11
+    },
+    {
+      "q": 76,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.172
+    },
+    {
+      "q": 76,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 2.094
+    },
+    {
+      "q": 76,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.218
+    },
+    {
+      "q": 76,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.156
+    },
+    {
+      "q": 77,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 77,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 2.125
+    },
+    {
+      "q": 77,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 77,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.172
+    },
+    {
+      "q": 78,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 78,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.906
+    },
+    {
+      "q": 78,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.187
+    },
+    {
+      "q": 78,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.031
+    },
+    {
+      "q": 79,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 79,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 2.078
+    },
+    {
+      "q": 79,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 79,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.093
+    },
+    {
+      "q": 80,
+      "label": "plant-value",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 80,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.578
+    },
+    {
+      "q": 81,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 81,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 81,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 81,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 82,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 82,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 82,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.985
+    },
+    {
+      "q": 82,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.704
+    },
+    {
+      "q": 83,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.828
+    },
+    {
+      "q": 83,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.875
+    },
+    {
+      "q": 83,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 83,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 84,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.782
+    },
+    {
+      "q": 84,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.828
+    },
+    {
+      "q": 84,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 84,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 85,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.734
+    },
+    {
+      "q": 85,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.984
+    },
+    {
+      "q": 85,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.828
+    },
+    {
+      "q": 85,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.437
+    },
+    {
+      "q": 86,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.594
+    },
+    {
+      "q": 86,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.313
+    },
+    {
+      "q": 86,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.641
+    },
+    {
+      "q": 86,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.391
+    },
+    {
+      "q": 87,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 87,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.891
+    },
+    {
+      "q": 87,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.656
+    },
+    {
+      "q": 87,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.687
+    },
+    {
+      "q": 88,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.922
+    },
+    {
+      "q": 88,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.75
+    },
+    {
+      "q": 88,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.781
+    },
+    {
+      "q": 88,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.89
+    },
+    {
+      "q": 89,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.906
+    },
+    {
+      "q": 89,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 89,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.782
+    },
+    {
+      "q": 89,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.75
+    },
+    {
+      "q": 90,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.797
+    },
+    {
+      "q": 90,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.782
+    },
+    {
+      "q": 90,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 2.047
+    },
+    {
+      "q": 90,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 91,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 91,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 91,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 91,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 92,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 92,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.735
+    },
+    {
+      "q": 92,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 92,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 93,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 93,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 93,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 93,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 94,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 94,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 94,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 94,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 95,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 95,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 95,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 95,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 96,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 96,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 96,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 96,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 97,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 97,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 97,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.266
+    },
+    {
+      "q": 97,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 98,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.406
+    },
+    {
+      "q": 98,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.797
+    },
+    {
+      "q": 98,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 98,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 99,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.407
+    },
+    {
+      "q": 99,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.734
+    },
+    {
+      "q": 99,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.282
+    },
+    {
+      "q": 99,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 100,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 100,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.781
+    },
+    {
+      "q": 100,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.36
+    },
+    {
+      "q": 100,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.266
+    },
+    {
+      "q": 101,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 101,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.797
+    },
+    {
+      "q": 101,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 101,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 102,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 102,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.766
+    },
+    {
+      "q": 102,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.703
+    },
+    {
+      "q": 102,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 103,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 103,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 103,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 103,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 104,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 104,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 104,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 104,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 105,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 105,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 105,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 105,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 106,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 106,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 106,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 106,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 107,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 107,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 107,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 107,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 108,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 108,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.672
+    },
+    {
+      "q": 108,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 108,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.329
+    },
+    {
+      "q": 109,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 109,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.813
+    },
+    {
+      "q": 109,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 109,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 110,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 110,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 1.047
+    },
+    {
+      "q": 110,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.234
+    },
+    {
+      "q": 110,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 111,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 111,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.922
+    },
+    {
+      "q": 111,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.188
+    },
+    {
+      "q": 111,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.36
+    },
+    {
+      "q": 112,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 112,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.797
+    },
+    {
+      "q": 112,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.172
+    },
+    {
+      "q": 112,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 113,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 113,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.782
+    },
+    {
+      "q": 113,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.234
+    },
+    {
+      "q": 113,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 114,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.39
+    },
+    {
+      "q": 114,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.813
+    },
+    {
+      "q": 114,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.516
+    },
+    {
+      "q": 114,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.313
+    },
+    {
+      "q": 115,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.282
+    },
+    {
+      "q": 115,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.938
+    },
+    {
+      "q": 115,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 115,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 116,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 116,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.906
+    },
+    {
+      "q": 116,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 116,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 117,
+      "label": "wrong-value",
+      "stalled": false,
+      "latency_s": 1.36
+    },
+    {
+      "q": 117,
+      "label": "reject",
+      "stalled": false,
+      "latency_s": 0.844
+    },
+    {
+      "q": 117,
+      "label": "corrected-value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 117,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.344
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "2": [
+      "skip_field",
+      "ask_secretary"
+    ],
+    "3": [
+      "ask_secretary",
+      "update_form_fields",
+      "ask_secretary",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "4": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "6": [
+      "update_form_fields",
+      "ask_secretary",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "7": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "8": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "9": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "10": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "11": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "12": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "13": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "14": [
+      "update_form_fields",
+      "skip_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "15": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "16": [
+      "update_form_fields",
+      "switch_to_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "17": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "18": [
+      "switch_to_field",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field",
+      "switch_to_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "19": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "20": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "21": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "22": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "23": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "24": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "25": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "26": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "27": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "28": [
+      "switch_to_field",
+      "switch_to_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "29": [
+      "update_form_fields",
+      "update_form_fields"
+    ],
+    "30": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "31": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "32": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "33": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "34": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "35": [
+      "ask_secretary"
+    ],
+    "36": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "37": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "38": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "39": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "40": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "41": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "42": [
+      "ask_secretary"
+    ],
+    "43": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "44": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "45": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "46": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "47": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "48": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "49": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "50": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "51": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "52": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "53": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "54": [
+      "switch_to_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "55": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "56": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "57": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field",
+      "skip_field"
+    ],
+    "58": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "59": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "60": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "61": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "62": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "63": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "64": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field"
+    ],
+    "65": [
+      "switch_to_field",
+      "ask_secretary",
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "66": [
+      "switch_to_field",
+      "ask_secretary",
+      "update_form_fields",
+      "switch_to_field",
+      "update_form_fields"
+    ],
+    "67": [
+      "confirm_field",
+      "update_form_fields",
+      "ask_secretary",
+      "update_form_fields",
+      "ask_secretary"
+    ],
+    "68": [
+      "update_form_fields",
+      "ask_secretary",
+      "update_form_fields",
+      "ask_secretary"
+    ],
+    "69": [
+      "switch_to_field",
+      "ask_secretary",
+      "update_form_fields",
+      "ask_secretary"
+    ],
+    "70": [
+      "update_form_fields",
+      "ask_secretary",
+      "update_form_fields",
+      "ask_secretary"
+    ],
+    "71": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "72": [
+      "switch_to_field",
+      "ask_secretary",
+      "update_form_fields",
+      "ask_secretary"
+    ],
+    "73": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "74": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "75": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "76": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "77": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "78": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "79": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "80": [
+      "switch_to_field",
+      "ask_secretary",
+      "update_form_fields"
+    ],
+    "81": [
+      "update_form_fields",
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "82": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "83": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "84": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "85": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "86": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "87": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "88": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "89": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "90": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "91": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "92": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "93": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "94": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "95": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "96": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "97": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "98": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "99": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "100": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "101": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "102": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "103": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "104": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "105": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "106": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "107": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "108": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "109": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "110": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "111": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "112": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "113": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "114": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "115": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "116": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "117": [
+      "update_form_fields",
+      "update_form_fields",
+      "confirm_field"
+    ]
+  },
+  "prompt_curve": [
+    1210,
+    1514,
+    1572,
+    1723,
+    1953,
+    2011,
+    2144,
+    2337,
+    2520,
+    2622,
+    2749,
+    2841,
+    2896,
+    2943,
+    3073,
+    3199,
+    3249,
+    3284,
+    3416,
+    3468,
+    3570,
+    3699,
+    3836,
+    3888,
+    4003,
+    4154,
+    4207,
+    4326,
+    4463,
+    4599,
+    4653,
+    4768,
+    4904,
+    3373,
+    3484,
+    3769,
+    3943,
+    4003,
+    4083,
+    4125,
+    4284,
+    4344,
+    4480,
+    4601,
+    4764,
+    4819,
+    3326,
+    3459,
+    3599,
+    3678,
+    3787,
+    3998,
+    4057,
+    4155,
+    4328,
+    4388,
+    4511,
+    4675,
+    4767,
+    4821,
+    3314,
+    3421,
+    3475,
+    3590,
+    3731,
+    3861,
+    3920,
+    4024,
+    4121,
+    4180,
+    4276,
+    4408,
+    4525,
+    4579,
+    4669,
+    3398,
+    3490,
+    3541,
+    3659,
+    3753,
+    3803,
+    3889,
+    4029,
+    4163,
+    4217,
+    4359,
+    4484,
+    4605,
+    4654,
+    4764,
+    3360,
+    3478,
+    3529,
+    3622,
+    3737,
+    3860,
+    3911,
+    4022,
+    4139,
+    4188,
+    4308,
+    4445,
+    4552,
+    4606,
+    4696,
+    4795,
+    3300,
+    3351,
+    3410,
+    3547,
+    3706,
+    3765,
+    3882,
+    4062,
+    4122,
+    4243,
+    4408,
+    4732,
+    4845,
+    4885,
+    3393,
+    3521,
+    3669,
+    3723,
+    3810,
+    3950,
+    4065,
+    4178,
+    4349,
+    4403,
+    4543,
+    4595,
+    4654,
+    4749,
+    4846,
+    4905,
+    3168,
+    3300,
+    3406,
+    3460,
+    3552,
+    3680,
+    3734,
+    3821,
+    4468,
+    4580,
+    4630,
+    4722,
+    4793,
+    4843,
+    3374,
+    3514,
+    3686,
+    3740,
+    3859,
+    4013,
+    4067,
+    4182,
+    4307,
+    4464,
+    4513,
+    4631,
+    4846,
+    4895,
+    3007,
+    3160,
+    3302,
+    3353,
+    3452,
+    3625,
+    3676,
+    3744,
+    3859,
+    3987,
+    4037,
+    4148,
+    4349,
+    4400,
+    4498,
+    4634,
+    4725,
+    4773,
+    4867,
+    3404,
+    3471,
+    3633,
+    3725,
+    3919,
+    4084,
+    4162,
+    4223,
+    4360,
+    4421,
+    4506,
+    4639,
+    3337,
+    3369,
+    3523,
+    3678,
+    3963,
+    4103,
+    4158,
+    4250,
+    4386,
+    4608,
+    4662,
+    4752,
+    4888,
+    1165,
+    1366,
+    1422,
+    1535,
+    1708,
+    1927,
+    1984,
+    2160,
+    2286,
+    2422,
+    2476,
+    2640,
+    2731,
+    2861,
+    3035,
+    3089,
+    3242,
+    3411,
+    3465,
+    3609,
+    3739,
+    3879,
+    3933,
+    4043,
+    4168,
+    4222,
+    4370,
+    4520,
+    4699,
+    4754,
+    4900,
+    3391,
+    3558,
+    3710,
+    3871,
+    4137,
+    4200,
+    4310,
+    4476,
+    4656,
+    4696,
+    4768,
+    3290,
+    3348,
+    3467,
+    3555,
+    3747,
+    3795,
+    3978,
+    4061,
+    4109,
+    4305,
+    3402,
+    3468,
+    3566,
+    3723,
+    3915,
+    4014,
+    4061,
+    4304,
+    4361,
+    4513,
+    4688,
+    4745,
+    4866,
+    3297,
+    3346,
+    3570,
+    3627,
+    3776,
+    3907,
+    4051,
+    4103,
+    4228,
+    4400,
+    4452,
+    4589,
+    4729,
+    4898,
+    3315,
+    3417,
+    3563,
+    3621,
+    3757,
+    3938,
+    4144,
+    4217,
+    4360,
+    4573,
+    4625,
+    4771,
+    4823,
+    3375,
+    3590,
+    3708,
+    3855,
+    3932,
+    4084,
+    4182,
+    4225,
+    4368,
+    4489,
+    4583,
+    4631,
+    4681,
+    4802,
+    4887,
+    3269,
+    3454,
+    3536,
+    3603,
+    3656,
+    3723,
+    3752,
+    3865,
+    3909,
+    4037,
+    4109,
+    4159,
+    4249,
+    4343,
+    4413,
+    4570,
+    4654,
+    4704,
+    4788,
+    4838,
+    3404,
+    3496,
+    3576,
+    3626,
+    3716,
+    3840,
+    3937,
+    3989,
+    4072,
+    4189,
+    4296,
+    4348,
+    4428,
+    4555,
+    4626,
+    4678,
+    4766,
+    4861,
+    3388,
+    3440,
+    3525,
+    3652,
+    3721,
+    3773,
+    3866,
+    3963,
+    4058,
+    4110,
+    4200,
+    4400,
+    4479,
+    4525,
+    4610,
+    4699,
+    4753,
+    3337,
+    3420,
+    3563,
+    3609,
+    3702,
+    3792,
+    3850,
+    3896,
+    3980,
+    4141,
+    4342,
+    4453,
+    4641,
+    4695,
+    4781,
+    3400,
+    3566,
+    3618,
+    3719,
+    3891,
+    3943,
+    4041,
+    4166,
+    4318,
+    4364,
+    4491,
+    4612,
+    4658,
+    4797,
+    3225,
+    3360,
+    3406,
+    3794,
+    3947,
+    4041,
+    4102,
+    4273,
+    4367,
+    4491,
+    4602,
+    4752,
+    4884,
+    3384,
+    3437,
+    3598,
+    3727,
+    3778,
+    3903,
+    3993,
+    4044,
+    4172,
+    4307,
+    4362,
+    4502,
+    4553,
+    4608,
+    4751,
+    4856,
+    3373,
+    3424,
+    3555,
+    3601,
+    3654,
+    3821,
+    3874,
+    3924,
+    4069,
+    4126,
+    4262,
+    4345,
+    4396,
+    3334,
+    3383,
+    3430,
+    3559,
+    3608,
+    3780,
+    3900,
+    3949,
+    4097,
+    4147,
+    4198,
+    4318,
+    4367,
+    4535,
+    4692,
+    4749,
+    4802,
+    3305,
+    1201,
+    1543,
+    1616,
+    1767,
+    1983,
+    2056,
+    2218,
+    2416,
+    2587,
+    2647,
+    2748,
+    2904,
+    2964,
+    3133,
+    3253,
+    3435,
+    3502,
+    3702,
+    3767,
+    3813,
+    3880,
+    3974,
+    4041,
+    4151,
+    4203,
+    4280,
+    4322,
+    4481,
+    4536,
+    4577,
+    4690,
+    4860,
+    3285,
+    3339,
+    3417,
+    3558,
+    3669,
+    3715,
+    3771,
+    3954,
+    4134,
+    4274,
+    4326,
+    4379,
+    4523,
+    4663,
+    4764,
+    4816,
+    3391,
+    3531,
+    3629,
+    3683,
+    3813,
+    3953,
+    4069,
+    4112,
+    4155,
+    4287,
+    4353,
+    4406,
+    4446,
+    4586,
+    4739,
+    4793,
+    4859,
+    3386,
+    3488,
+    3539,
+    3605,
+    3745,
+    3844,
+    3886,
+    3922,
+    4054,
+    4156,
+    4198,
+    4280,
+    4412,
+    4507,
+    4560,
+    4609,
+    4741,
+    4842,
+    4892,
+    3348,
+    3488,
+    3577,
+    3628,
+    3730,
+    3862,
+    3964,
+    4008,
+    4125,
+    4257,
+    4360,
+    4403,
+    4496,
+    4628,
+    4737,
+    4780,
+    4874,
+    3391,
+    3499,
+    3541,
+    3638,
+    3770,
+    3882,
+    3933,
+    4031,
+    4163,
+    4270,
+    4324,
+    4412,
+    4544,
+    4653,
+    4707,
+    4807,
+    3400,
+    3502,
+    3545,
+    3745,
+    3877,
+    3980,
+    4022,
+    4217,
+    4349,
+    4462,
+    4515,
+    4718,
+    4850,
+    3270,
+    3313,
+    3515,
+    3647,
+    3746,
+    3789,
+    3919,
+    4051,
+    4155,
+    4206,
+    4349,
+    4481,
+    4591,
+    4635,
+    4711,
+    4843,
+    3391,
+    3445,
+    3498,
+    3601,
+    3768,
+    3855,
+    3918,
+    4084,
+    4147,
+    4229,
+    4372,
+    4429,
+    4575,
+    4630,
+    4706,
+    4761,
+    4879,
+    3390,
+    3441,
+    3513,
+    3653,
+    3704,
+    3783,
+    3916,
+    3969,
+    4045,
+    4214,
+    4267,
+    4343,
+    4475,
+    4526,
+    4597,
+    3382,
+    3431,
+    3507,
+    3660,
+    3709,
+    3784,
+    3907,
+    3956,
+    4032,
+    4198,
+    4249,
+    4319,
+    4441,
+    4490,
+    4569,
+    4749,
+    4806,
+    4881,
+    3371,
+    3424,
+    3499,
+    3686,
+    3741,
+    3814,
+    4136,
+    4283,
+    4376,
+    4452,
+    4616,
+    4729,
+    4782,
+    4852,
+    3400,
+    3535,
+    3586,
+    3661,
+    3783,
+    3834,
+    3912,
+    4031,
+    4082,
+    4154,
+    4277,
+    4328,
+    4405,
+    4530,
+    4587,
+    4663,
+    4796,
+    4853,
+    3269,
+    3413,
+    3470,
+    3541,
+    3685,
+    3742,
+    3821,
+    3962,
+    4013,
+    4088,
+    4221,
+    4272,
+    4349,
+    4482,
+    4533,
+    4605,
+    4738,
+    4789,
+    4867,
+    3353,
+    3404,
+    3480,
+    3613,
+    3664,
+    3741,
+    3874,
+    3925,
+    3996,
+    4129,
+    4180,
+    4235,
+    4371,
+    4428,
+    4478,
+    4622,
+    4679,
+    4732,
+    4876,
+    3328,
+    3374,
+    3518,
+    3575,
+    1168,
+    1380,
+    1437,
+    1558,
+    1736,
+    1793,
+    1951,
+    2026,
+    2076,
+    2128,
+    2185,
+    2287,
+    2451,
+    2508,
+    2613,
+    2688,
+    2791,
+    2848,
+    2955,
+    3130,
+    3187,
+    3303,
+    3378,
+    3489,
+    3546,
+    3647,
+    3818,
+    3875,
+    3989,
+    4064,
+    4203,
+    4260,
+    4377,
+    4581,
+    4638,
+    4734,
+    4809,
+    3338,
+    3395,
+    3502,
+    3649,
+    3706,
+    3824,
+    3899,
+    4010,
+    4067,
+    4192,
+    4368,
+    4425,
+    4547,
+    4622,
+    4732,
+    4789,
+    3357,
+    3534,
+    3591,
+    3714,
+    3789,
+    3898,
+    3955,
+    4083,
+    4259,
+    4316,
+    4440,
+    4515,
+    4628,
+    4685,
+    4776,
+    3355,
+    3412,
+    3500,
+    3575,
+    3676,
+    3733,
+    3868,
+    4044,
+    4101,
+    4182,
+    4257,
+    4366,
+    4423,
+    4530,
+    4709,
+    4766,
+    4874,
+    3331,
+    3431,
+    3488,
+    3599,
+    3760,
+    3817,
+    3919,
+    3994,
+    4103,
+    4160,
+    4263,
+    4411,
+    4468,
+    4576,
+    4651,
+    4746,
+    4803,
+    3383,
+    3547,
+    3604,
+    3701,
+    3776,
+    3888,
+    3945,
+    4027,
+    4186,
+    4243,
+    4345,
+    4420,
+    4510,
+    4567,
+    4701,
+    4877,
+    3401,
+    3521,
+    3596,
+    3703,
+    3760,
+    3895,
+    4071,
+    4128,
+    4228,
+    4303,
+    4407,
+    4464,
+    4596,
+    4771,
+    4828,
+    3336,
+    3411,
+    3517,
+    3574,
+    3697,
+    3874,
+    3931,
+    4061,
+    4136,
+    4245,
+    4302,
+    4435,
+    4612,
+    4669,
+    4813,
+    4888,
+    3343,
+    3400,
+    3522,
+    3696,
+    3753,
+    3877,
+    3952,
+    4059,
+    4116,
+    4240,
+    4415,
+    4472,
+    4587,
+    4662,
+    4770,
+    4827,
+    3401,
+    3576,
+    3633,
+    3753,
+    3828,
+    3938,
+    3995,
+    4124,
+    4299,
+    4356,
+    4476,
+    4551,
+    4659,
+    4716,
+    4839,
+    3363,
+    3420,
+    3550,
+    3625
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": true,
+  "events_mode": "unhappy",
+  "reactivity": null,
+  "lang": "en",
+  "planted_groups": [
+    [
+      "p1_line6d_cityortown",
+      "p1_line6e_state"
+    ],
+    [
+      "p1_line6e_state",
+      "p1_line6f_zipcode"
+    ],
+    [
+      "p1_line15_dateofadmission",
+      "p1_line9_dateofbirth"
+    ],
+    [
+      "p5_line1b_language",
+      "p6_language"
+    ]
+  ],
+  "step_kinds": [
+    "question",
+    "skip",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "plant",
+    "question",
+    "plant",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "plant",
+    "question",
+    "recall",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "recall",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "navigate_back",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "navigate_back",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "plant",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": false,
+  "system_instruction_chars": 4457,
+  "greeting_tokens": 1332,
+  "continuous_reconnects": [
+    {
+      "before_q": 29,
+      "announced": true,
+      "downtime_s": 6.328
+    },
+    {
+      "before_q": 62,
+      "announced": true,
+      "downtime_s": 6.562
+    },
+    {
+      "before_q": 92,
+      "announced": true,
+      "downtime_s": 7.172
+    }
+  ],
+  "pro_pass": {
+    "ran": false,
+    "model": null,
+    "conflicts": 0
+  },
+  "validation_records": [
+    {
+      "t_submit": 124900.265,
+      "t_verdict": 124901.046,
+      "window_count": 1,
+      "conflicts": [
+        {
+          "field_ids": [
+            "p1_line6d_cityortown",
+            "p1_line6e_state",
+            "p1_line6f_zipcode"
+          ],
+          "reason": "The ZIP code 98101 belongs to Washington state, not Texas.",
+          "field_names": {
+            "p1_line6d_cityortown": "mailing city or town",
+            "p1_line6e_state": "mailing state",
+            "p1_line6f_zipcode": "mailing zip code"
+          }
+        }
+      ]
+    },
+    {
+      "t_submit": 125097.187,
+      "t_verdict": 125098.156,
+      "window_count": 1,
+      "conflicts": [
+        {
+          "field_ids": [
+            "p1_line7c_cityortown",
+            "p1_line7d_state",
+            "p1_line7e_zipcode"
+          ],
+          "reason": "The city and state combination is not valid for the given zip code.",
+          "field_names": {
+            "p1_line7c_cityortown": "physical city or town",
+            "p1_line7d_state": "physical state",
+            "p1_line7e_zipcode": "physical zip code"
+          }
+        }
+      ]
+    },
+    {
+      "t_submit": 125296.64,
+      "t_verdict": 125297.25,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 126064.093,
+      "t_verdict": 126064.625,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 126095.578,
+      "t_verdict": 126096.296,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 126127.281,
+      "t_verdict": 126127.812,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 126174.359,
+      "t_verdict": 126174.906,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 126203.39,
+      "t_verdict": 126204.109,
+      "window_count": 1,
+      "conflicts": []
+    }
+  ],
+  "drain_records": [
+    {
+      "t_submit": 124901.046,
+      "t_result": 124901.046,
+      "conflicts_sent": 1,
+      "delivered": 1,
+      "field_ids": [
+        "p1_line6d_cityortown",
+        "p1_line6e_state",
+        "p1_line6f_zipcode"
+      ]
+    },
+    {
+      "t_submit": 125098.156,
+      "t_result": 125098.156,
+      "conflicts_sent": 1,
+      "delivered": 1,
+      "field_ids": [
+        "p1_line7c_cityortown",
+        "p1_line7d_state",
+        "p1_line7e_zipcode"
+      ]
+    }
+  ],
+  "steer_records": [
+    {
+      "t_result": 124901.046,
+      "conflicts": 1,
+      "steer_to_switch_s": null,
+      "outcome": "corrected_no_switch"
+    },
+    {
+      "t_result": 125098.156,
+      "conflicts": 1,
+      "steer_to_switch_s": null,
+      "outcome": "corrected_organic",
+      "organic_field": "p1_line7c_cityortown"
+    }
+  ],
+  "event_records": [
+    {
+      "type": "skip",
+      "step": 2,
+      "field_id": "p1_line2_acctidentifier",
+      "recorded": true
+    },
+    {
+      "type": "recall",
+      "step": 35,
+      "tool_fired": true,
+      "pending_detached": false,
+      "answer_correct": true
+    },
+    {
+      "type": "recall",
+      "step": 42,
+      "tool_fired": false,
+      "pending_detached": false,
+      "answer_correct": null
+    },
+    {
+      "type": "navigate_back",
+      "step": 54,
+      "target": "p1_line12_mothergivenname",
+      "switched_to": "p1_line12_mothergivenname",
+      "hit_target": true,
+      "seam_latency_s": 0.531
+    },
+    {
+      "type": "navigate_back",
+      "step": 64,
+      "target": "p1_line6b_streetnumbername",
+      "switched_to": null,
+      "hit_target": false,
+      "seam_latency_s": 0.578
+    }
+  ],
+  "seam_tool_records": [
+    {
+      "ts": 124659.062,
+      "step": 2,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p1_line2_acctidentifier"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p1_line2_acctidentifier",
+        "next_field_hint": "Next field to fill is #3: 'Family Name (Last Name)'",
+        "message": "Field 'p1_line2_acctidentifier' skipped.",
+        "next_field_guidance": "ID: p1_line3a_familyname | Spoken: current family name | Type: text | Instructions: Enter your family name (last name) as it appears on your official documents. | Fill language: English"
+      }
+    },
+    {
+      "ts": 124659.531,
+      "step": 3,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the next field to fill?"
+      },
+      "response": {
+        "answer": "The secretary is still looking that up; the answer will arrive in a moment as a follow-up. Do NOT answer the question yet and do NOT repeat it back to the user. Either say nothing or give a brief natural acknowledgement (e.g. 'one sec'), then continue -- the answer will be delivered to you shortly.",
+        "available": true
+      }
+    },
+    {
+      "ts": 124663.078,
+      "step": 3,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the next field to fill after skipping the online account number?"
+      },
+      "response": {
+        "answer": "After the USCIS online account number, the next field is the family name.",
+        "available": true
+      }
+    },
+    {
+      "ts": 124668.343,
+      "step": 3,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the value currently in the family name field?"
+      },
+      "response": {
+        "answer": "The current family name is Tran.",
+        "available": true
+      }
+    },
+    {
+      "ts": 124723.546,
+      "step": 6,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the value currently in the field about whether their name has legally changed?"
+      },
+      "response": {
+        "answer": "The applicant's name has legally changed.",
+        "available": true
+      }
+    },
+    {
+      "ts": 124747.937,
+      "step": 7,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the street address field I need to ask for?"
+      },
+      "response": {
+        "answer": "You need to provide the street number and name for your mailing address and your physical address. For your mailing address, this is field \"mailing address street number and name\". For your physical address, this is field \"physical address street number and name\".",
+        "available": true
+      }
+    },
+    {
+      "ts": 124841.64,
+      "step": 14,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p1_line6g_province"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p1_line6g_province",
+        "next_field_hint": "Next field to fill is #15: 'Postal Code'",
+        "message": "Field 'p1_line6g_province' skipped.",
+        "next_field_guidance": "ID: p1_line6h_postalcode | Spoken: mailing postal code | Type: text | Instructions: Enter the postal code of your mailing address, if applicable. This is usually for addresses outside the United States. | Format: Alphanumeric postal code | pattern: ^[A-Z0-9]{3,10}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 124871.703,
+      "step": 16,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6i_country"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'mailing country'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "field_guidance": "ID: p1_line6i_country | Spoken: mailing country | Type: text | Instructions: Enter the country of your mailing address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 124901.546,
+      "step": 18,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6d_cityortown"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'mailing city or town'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "current_value": "Seattle",
+        "field_guidance": "ID: p1_line6d_cityortown | Spoken: mailing city or town | Type: text | Instructions: Enter the city or town of your mailing address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 124946.781,
+      "step": 18,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6d_cityortown"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'mailing city or town'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "current_value": "Seattle",
+        "field_guidance": "ID: p1_line6d_cityortown | Spoken: mailing city or town | Type: text | Instructions: Enter the city or town of your mailing address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 125098.625,
+      "step": 28,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line7c_cityortown"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'physical city or town'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "current_value": "Houston",
+        "field_guidance": "ID: p1_line7c_cityortown | Spoken: physical city or town | Type: text | Instructions: Enter the city or town of your physical address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 125098.968,
+      "step": 28,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line7c_cityortown"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'physical city or town'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "current_value": "Houston",
+        "field_guidance": "ID: p1_line7c_cityortown | Spoken: physical city or town | Type: text | Instructions: Enter the city or town of your physical address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 125261.015,
+      "step": 35,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the alien registration number?"
+      },
+      "response": {
+        "answer": "Your alien registration number is 123456789.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125378.031,
+      "step": 43,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is their mailing city?"
+      },
+      "response": {
+        "answer": "The mailing city is Houston.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125549.609,
+      "step": 54,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "Mother's Given Name"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'mother's given name'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "current_value": "Minh",
+        "field_guidance": "ID: p1_line12_mothergivenname | Spoken: mother's given name | Type: text | Instructions: Enter your mother's given name or first name. | Fill language: English"
+      }
+    },
+    {
+      "ts": 125611.734,
+      "step": 57,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p5_line1b_language"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p5_line1b_language",
+        "next_field_hint": "Next field to fill is #58: 'Applicant's Daytime Telephone Number'",
+        "message": "Field 'p5_line1b_language' skipped.",
+        "next_field_guidance": "ID: p5_line3_daytimephonenumber | Spoken: daytime telephone number | Type: text | Instructions: Enter your daytime telephone number where you can be reached. | Format: 10 digits (XXX-XXX-XXXX) | format_preset: phone | pattern: ^\\d{10}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125735.718,
+      "step": 64,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line2_address"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 125742.062,
+      "step": 64,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the field ID for the applicant's street address?"
+      },
+      "response": {
+        "answer": "The applicant's street address is '4200 Westheimer Rd' for the mailing address and '4200 Westheimer Road' for the physical address.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125745.406,
+      "step": 64,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line2_address"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 125748.234,
+      "step": 65,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line2_address"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 125751.562,
+      "step": 65,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the current value for the applicant's street address field?"
+      },
+      "response": {
+        "answer": "The applicant's street address is 4200 Westheimer Rd, apartment 12.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125759.437,
+      "step": 66,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the current value for the interpreter's family name?"
+      },
+      "response": {
+        "answer": "The interpreter's family name has not been entered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125763.078,
+      "step": 66,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line1_interpretersfamilyname[1]"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 125765.687,
+      "step": 66,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's family name?"
+      },
+      "response": {
+        "answer": "The field for the interpreter's family name is p6_line1a_interpretersfamilyname.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125770.75,
+      "step": 66,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line1a_interpretersfamilyname"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's family name'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "field_guidance": "ID: p6_line1a_interpretersfamilyname | Spoken: interpreter's family name | Type: text | Instructions: Enter the interpreter's last name. | Fill language: English"
+      }
+    },
+    {
+      "ts": 125783.562,
+      "step": 67,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125793.703,
+      "step": 67,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date field ID is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125803.359,
+      "step": 68,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field ID for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125813.156,
+      "step": 68,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet answered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125816.437,
+      "step": 69,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125819.89,
+      "step": 69,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125827.687,
+      "step": 69,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field ID for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125835.093,
+      "step": 70,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date field is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125842.593,
+      "step": 70,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not available.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125845.578,
+      "step": 71,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125848.937,
+      "step": 71,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not available.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125853.625,
+      "step": 71,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125856.906,
+      "step": 71,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125860.281,
+      "step": 72,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125863.781,
+      "step": 72,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125869.671,
+      "step": 72,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date field is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125874.625,
+      "step": 73,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125878.14,
+      "step": 73,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet filled in.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125884.25,
+      "step": 73,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125887.562,
+      "step": 73,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet entered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125892.984,
+      "step": 74,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125896.953,
+      "step": 74,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet answered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125902.671,
+      "step": 74,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125906.546,
+      "step": 74,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not available.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125912.156,
+      "step": 75,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125915.937,
+      "step": 75,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date field is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125921.421,
+      "step": 75,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125925.265,
+      "step": 75,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field ID for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125930.39,
+      "step": 76,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125934.421,
+      "step": 76,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field ID for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125939.937,
+      "step": 76,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125943.359,
+      "step": 76,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet entered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125952.921,
+      "step": 77,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125956.843,
+      "step": 77,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not available.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125965.968,
+      "step": 77,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125969.734,
+      "step": 77,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125979.468,
+      "step": 78,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125983.25,
+      "step": 78,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet answered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 125992.609,
+      "step": 78,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 125996.484,
+      "step": 78,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet entered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 126003.234,
+      "step": 79,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 126007.187,
+      "step": 79,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date field is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 126014.296,
+      "step": 79,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 126018.062,
+      "step": 79,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The interpreter's signature date is not yet filled in.",
+        "available": true
+      }
+    },
+    {
+      "ts": 126022.968,
+      "step": 80,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p6_line6b_dateofsignature"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'interpreter's signature date'. It is currently unanswered -- ask the user for it.",
+        "field_guidance": "ID: p6_line6b_dateofsignature | Spoken: interpreter's signature date | Type: date | Instructions: Enter the date the interpreter signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 126026.64,
+      "step": 80,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the interpreter's signature date?"
+      },
+      "response": {
+        "answer": "The field ID for the interpreter's signature date is p6_line6b_dateofsignature.",
+        "available": true
+      }
+    },
+    {
+      "ts": 126045.296,
+      "step": 82,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field_id for the preparer's given name?"
+      },
+      "response": {
+        "answer": "The field ID for the preparer's given name is p7_line1b_preparersgivenname.",
+        "available": true
+      }
+    }
+  ],
+  "text_ledger_calls": [
+    {
+      "caller": "secretary",
+      "t_start": 124659.531,
+      "dur_s": 3.031
+    },
+    {
+      "caller": "secretary",
+      "t_start": 124663.078,
+      "dur_s": 0.718
+    },
+    {
+      "caller": "secretary",
+      "t_start": 124668.343,
+      "dur_s": 0.75
+    },
+    {
+      "caller": "secretary",
+      "t_start": 124723.546,
+      "dur_s": 0.938
+    },
+    {
+      "caller": "secretary",
+      "t_start": 124747.937,
+      "dur_s": 1.078
+    },
+    {
+      "caller": "validator",
+      "t_start": 124900.265,
+      "dur_s": 0.781
+    },
+    {
+      "caller": "validator",
+      "t_start": 125097.203,
+      "dur_s": 0.953
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125261.015,
+      "dur_s": 0.969
+    },
+    {
+      "caller": "validator",
+      "t_start": 125296.64,
+      "dur_s": 0.61
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125378.031,
+      "dur_s": 1.078
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125742.062,
+      "dur_s": 0.984
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125751.562,
+      "dur_s": 1.063
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125759.437,
+      "dur_s": 1.109
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125765.687,
+      "dur_s": 0.938
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125783.562,
+      "dur_s": 0.969
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125793.703,
+      "dur_s": 0.984
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125803.359,
+      "dur_s": 0.75
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125813.156,
+      "dur_s": 0.875
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125819.89,
+      "dur_s": 1.016
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125827.687,
+      "dur_s": 0.875
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125835.093,
+      "dur_s": 0.797
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125842.593,
+      "dur_s": 0.828
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125848.953,
+      "dur_s": 1.015
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125856.921,
+      "dur_s": 0.891
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125863.781,
+      "dur_s": 0.812
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125869.671,
+      "dur_s": 0.907
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125878.156,
+      "dur_s": 0.781
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125887.562,
+      "dur_s": 0.875
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125896.953,
+      "dur_s": 0.859
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125906.546,
+      "dur_s": 0.75
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125915.937,
+      "dur_s": 0.781
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125925.265,
+      "dur_s": 0.86
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125934.421,
+      "dur_s": 0.797
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125943.359,
+      "dur_s": 0.844
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125956.843,
+      "dur_s": 0.86
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125969.734,
+      "dur_s": 0.906
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125983.25,
+      "dur_s": 0.765
+    },
+    {
+      "caller": "secretary",
+      "t_start": 125996.484,
+      "dur_s": 0.781
+    },
+    {
+      "caller": "secretary",
+      "t_start": 126007.187,
+      "dur_s": 0.813
+    },
+    {
+      "caller": "secretary",
+      "t_start": 126018.062,
+      "dur_s": 0.844
+    },
+    {
+      "caller": "secretary",
+      "t_start": 126026.64,
+      "dur_s": 0.906
+    },
+    {
+      "caller": "secretary",
+      "t_start": 126045.312,
+      "dur_s": 0.953
+    },
+    {
+      "caller": "validator",
+      "t_start": 126064.109,
+      "dur_s": 0.516
+    },
+    {
+      "caller": "validator",
+      "t_start": 126095.578,
+      "dur_s": 0.718
+    },
+    {
+      "caller": "validator",
+      "t_start": 126127.281,
+      "dur_s": 0.531
+    },
+    {
+      "caller": "validator",
+      "t_start": 126174.359,
+      "dur_s": 0.547
+    },
+    {
+      "caller": "validator",
+      "t_start": 126203.39,
+      "dur_s": 0.719
+    }
+  ],
+  "eviction_drops": [
+    [
+      34,
+      4904,
+      3373
+    ],
+    [
+      47,
+      4819,
+      3326
+    ],
+    [
+      61,
+      4821,
+      3314
+    ],
+    [
+      76,
+      4669,
+      3398
+    ],
+    [
+      91,
+      4764,
+      3360
+    ],
+    [
+      107,
+      4795,
+      3300
+    ],
+    [
+      121,
+      4885,
+      3393
+    ],
+    [
+      137,
+      4905,
+      3168
+    ],
+    [
+      151,
+      4843,
+      3374
+    ],
+    [
+      165,
+      4895,
+      3007
+    ],
+    [
+      184,
+      4867,
+      3404
+    ],
+    [
+      196,
+      4639,
+      3337
+    ],
+    [
+      209,
+      4888,
+      1165
+    ],
+    [
+      240,
+      4900,
+      3391
+    ],
+    [
+      251,
+      4768,
+      3290
+    ],
+    [
+      261,
+      4305,
+      3402
+    ],
+    [
+      274,
+      4866,
+      3297
+    ],
+    [
+      288,
+      4898,
+      3315
+    ],
+    [
+      301,
+      4823,
+      3375
+    ],
+    [
+      316,
+      4887,
+      3269
+    ],
+    [
+      336,
+      4838,
+      3404
+    ],
+    [
+      354,
+      4861,
+      3388
+    ],
+    [
+      371,
+      4753,
+      3337
+    ],
+    [
+      386,
+      4781,
+      3400
+    ],
+    [
+      400,
+      4797,
+      3225
+    ],
+    [
+      413,
+      4884,
+      3384
+    ],
+    [
+      429,
+      4856,
+      3373
+    ],
+    [
+      442,
+      4396,
+      3334
+    ],
+    [
+      459,
+      4802,
+      3305
+    ],
+    [
+      460,
+      3305,
+      1201
+    ],
+    [
+      492,
+      4860,
+      3285
+    ],
+    [
+      508,
+      4816,
+      3391
+    ],
+    [
+      525,
+      4859,
+      3386
+    ],
+    [
+      544,
+      4892,
+      3348
+    ],
+    [
+      561,
+      4874,
+      3391
+    ],
+    [
+      577,
+      4807,
+      3400
+    ],
+    [
+      590,
+      4850,
+      3270
+    ],
+    [
+      606,
+      4843,
+      3391
+    ],
+    [
+      623,
+      4879,
+      3390
+    ],
+    [
+      638,
+      4597,
+      3382
+    ],
+    [
+      656,
+      4881,
+      3371
+    ],
+    [
+      670,
+      4852,
+      3400
+    ],
+    [
+      688,
+      4853,
+      3269
+    ],
+    [
+      707,
+      4867,
+      3353
+    ],
+    [
+      726,
+      4876,
+      3328
+    ],
+    [
+      730,
+      3575,
+      1168
+    ],
+    [
+      767,
+      4809,
+      3338
+    ],
+    [
+      783,
+      4789,
+      3357
+    ],
+    [
+      798,
+      4776,
+      3355
+    ],
+    [
+      815,
+      4874,
+      3331
+    ],
+    [
+      832,
+      4803,
+      3383
+    ],
+    [
+      848,
+      4877,
+      3401
+    ],
+    [
+      863,
+      4828,
+      3336
+    ],
+    [
+      879,
+      4888,
+      3343
+    ],
+    [
+      895,
+      4827,
+      3401
+    ],
+    [
+      910,
+      4839,
+      3363
+    ]
+  ],
+  "client_confirmed_fields": [
+    "p5_line6a_signatureofapplicant",
+    "p5_line6b_dateofsignature",
+    "p6_line6a_signature",
+    "p7_line8a_signatureofpreparer",
+    "p1_line1_aliennumber[1]",
+    "p1_line3a_familyname[1]",
+    "p1_line3b_givenname[1]",
+    "p1_line3c_middlename[1]",
+    "p1_line1_aliennumber",
+    "p1_line2_acctidentifier",
+    "p1_line3a_familyname",
+    "p1_line3b_givenname",
+    "p1_line3c_middlename",
+    "p1_checkbox4",
+    "p1_line6a_incareofname",
+    "p1_line6b_streetnumbername",
+    "p1_unit_type6c_unit",
+    "p1_line6c_aptsteflrnumber",
+    "p1_line6d_cityortown",
+    "p1_line6e_state",
+    "p1_line6f_zipcode",
+    "p1_line6g_province",
+    "p1_line6h_postalcode",
+    "p1_line6i_country",
+    "p1_line7a_streetnumbername",
+    "p1_unit_type7b_unit",
+    "p1_line7b_aptsteflrnumber",
+    "p1_line7c_cityortown",
+    "p1_line7d_state",
+    "p1_line7e_zipcode",
+    "p1_line7f_province",
+    "p1_line7g_postalcode",
+    "p1_line7h_country",
+    "p1_line8_male",
+    "p1_line9_dateofbirth",
+    "p1_line10_citytownofbirth",
+    "p1_line11_countryofbirth",
+    "p1_line12_mothergivenname",
+    "p1_line13_fathergivenname",
+    "p1_line14_classofadmission",
+    "p1_line15_dateofadmission",
+    "p1_line16_ssn",
+    "p2_checkbox1",
+    "p2_checkbox2[5]",
+    "p3_line1_locationappliedvisa",
+    "p3_line2_locationissuedvisa",
+    "p3_line3a_destination",
+    "p3_line3a1_cityandstate",
+    "p3_checkbox4[1]",
+    "p3_checkbox5[1]",
+    "p3_ethnicity",
+    "p3_race",
+    "p3_line8_heightfeet",
+    "p3_line8_heightinches",
+    "p3_line9_heightinches1",
+    "p3_line9_heightinches2",
+    "p3_line9_heightinches3",
+    "p3_eye_color",
+    "p3_hair_color",
+    "p4_checkbox1[1]",
+    "p4_checkbox1a",
+    "p4_checkbox1b",
+    "p4_checkbox1c",
+    "p5_checkbox1a",
+    "p5_line1b_language",
+    "p5_line3_daytimephonenumber",
+    "p5_line4_mobilephonenumber",
+    "p5_line5_emailaddress",
+    "p6_line1a_interpretersfamilyname",
+    "p6_line1b_interpretersgivenname",
+    "p6_line2_nameofbusinessor",
+    "p6_line3a_streetnumbername",
+    "p6_unit_type3b_unit",
+    "p6_line3b_aptsteflrnumber",
+    "p6_line3c_citytown",
+    "p6_line3d_state",
+    "p6_line3e_zipcode",
+    "p6_line3f_province",
+    "p6_line3g_postalcode",
+    "p6_line3h_country",
+    "p6_line4_interpretersdaytimephonenumber",
+    "p6_line4_interpretersdaytimephonenumber[1]",
+    "p6_line5_interpretersemailaddress",
+    "p6_language",
+    "p6_line6b_dateofsignature",
+    "p7_line1b_preparersgivenname",
+    "p7_line1a_familyname",
+    "p7_line2_nameofbusinessor",
+    "p7_line3a_streetnumbername",
+    "p7_unit_type3b_unit",
+    "p7_line3c_citytown",
+    "p7_line3d_state",
+    "p7_line3e_zipcode",
+    "p7_line3f_province",
+    "p7_line3g_postalcode",
+    "p7_line3h_country",
+    "p7_line4_preparersdaytimephonenumber",
+    "p7_line5_preparersfaxnumber",
+    "p7_line6_preparersemailaddress",
+    "p7_checkbox7",
+    "p7_line8b_dateofsignature",
+    "p8_line3a_pagenumber",
+    "p8_line3b_partnumber",
+    "p8_line3c_itemnumber",
+    "p8_line3d_additionalinfo",
+    "p8_line5a_pagenumber[1]",
+    "p8_line5b_partnumber[1]",
+    "p8_line5c_itemnumber[1]",
+    "p8_line5d_additionalinfo[1]",
+    "p8_line4a_pagenumber",
+    "p8_line4b_partnumber",
+    "p8_line4c_itemnumber",
+    "p8_line4d_additionalinfo",
+    "p8_line5a_pagenumber",
+    "p8_line5b_partnumber",
+    "p8_line5c_itemnumber",
+    "p8_line5d_additionalinfo",
+    "p8_line5a_pagenumber[2]",
+    "p8_line5b_partnumber[2]",
+    "p8_line5c_itemnumber[2]",
+    "p8_line5d_additionalinfo[2]"
+  ],
+  "fill_accuracy": {
+    "matched": 85,
+    "total": 113,
+    "accuracy": 0.7522,
+    "detail": [
+      {
+        "field_id": "p1_line1_aliennumber",
+        "expected": "123456789",
+        "written": "123456789",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line2_acctidentifier",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line3a_familyname",
+        "expected": "Nguyen",
+        "written": "Nguyen",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3b_givenname",
+        "expected": "Linh",
+        "written": "Linh",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3c_middlename",
+        "expected": "Thi",
+        "written": "Thi",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_checkbox4",
+        "expected": "no_proceed_to_item_numbers_6_a_6_c",
+        "written": "no_proceed_to_item_numbers_6_a_6_c",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6a_incareofname",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6b_streetnumbername",
+        "expected": [
+          "4200 Westheimer Rd",
+          "4200 Westheimer Road"
+        ],
+        "written": "4200 Westheimer Rd",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_unit_type6c_unit",
+        "expected": "apartment",
+        "written": "apartment",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6c_aptsteflrnumber",
+        "expected": "12",
+        "written": "12",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6d_cityortown",
+        "expected": "Houston",
+        "written": "Houston",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6e_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6f_zipcode",
+        "expected": "77027",
+        "written": "98101",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6g_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6h_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6i_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line7a_streetnumbername",
+        "expected": [
+          "4200 Westheimer Rd",
+          "4200 Westheimer Road"
+        ],
+        "written": "4200 Westheimer Road",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_unit_type7b_unit",
+        "expected": "apartment",
+        "written": "apartment",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7b_aptsteflrnumber",
+        "expected": "12",
+        "written": "12",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7c_cityortown",
+        "expected": "Houston",
+        "written": "Houston",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7d_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7e_zipcode",
+        "expected": "77027",
+        "written": "77027",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7h_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line8_male",
+        "expected": "female",
+        "written": "female",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line9_dateofbirth",
+        "expected": "04/12/1985",
+        "written": "1985-04-12",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line10_citytownofbirth",
+        "expected": "Hanoi",
+        "written": "Hanoi",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line11_countryofbirth",
+        "expected": "Vietnam",
+        "written": "Vietnam",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line12_mothergivenname",
+        "expected": "Lan Anh",
+        "written": "Lan",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line13_fathergivenname",
+        "expected": "Minh",
+        "written": "Minh",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line14_classofadmission",
+        "expected": "IR1",
+        "written": "CR1",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line15_dateofadmission",
+        "expected": "06/20/2015",
+        "written": "1998-06-20",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line16_ssn",
+        "expected": "123456789",
+        "written": "123456789",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p2_checkbox1",
+        "expected": "lawful_permanent_resident",
+        "written": "conditional_permanent_resident",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p2_checkbox2[5]",
+        "expected": "my_previous_card_has_been_lost_stolen_or_destroyed",
+        "written": "my_previous_card_has_been_lost_stolen_or_destroyed",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line1_locationappliedvisa",
+        "expected": "Ho Chi Minh City, Vietnam",
+        "written": "Ho Chi Minh City, Vietnam",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line2_locationissuedvisa",
+        "expected": "Ho Chi Minh City, Vietnam",
+        "written": "Ho Chi Minh City, Vietnam",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line3a_destination",
+        "expected": "Houston, TX",
+        "written": "Houston, Texas",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line3a1_cityandstate",
+        "expected": "Houston, TX",
+        "written": "Houston, Texas",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_checkbox4[1]",
+        "expected": "select_no",
+        "written": "select_no",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_checkbox5[1]",
+        "expected": "select_no",
+        "written": "select_no",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_ethnicity",
+        "expected": "not_hispanic_or_latino",
+        "written": "not_hispanic_or_latino",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_race",
+        "expected": "asian",
+        "written": "asian",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line8_heightfeet",
+        "expected": "5",
+        "written": "5",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line8_heightinches",
+        "expected": "4",
+        "written": "4",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line9_heightinches1",
+        "expected": "1",
+        "written": "1",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line9_heightinches2",
+        "expected": "3",
+        "written": "3",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line9_heightinches3",
+        "expected": "0",
+        "written": "0",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_eye_color",
+        "expected": "brown",
+        "written": "brown",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_hair_color",
+        "expected": "black",
+        "written": "black",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p4_checkbox1[1]",
+        "expected": "select_no",
+        "written": "select_no",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p4_checkbox1a",
+        "expected": "",
+        "written": "false",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p4_checkbox1b",
+        "expected": "",
+        "written": "false",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p4_checkbox1c",
+        "expected": "",
+        "written": "false",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p5_checkbox1a",
+        "expected": "the_interpreter_named_in_part_6_has_read_to_me_every_question_and_instruction_on_this_application_and_my_answer_to_every_question_in_a_language_in_which_i_am_fluent_and_i_understood_everything",
+        "written": "i_can_read_and_understand_english_and_i_have_read_and_understand_every_question_and_instruction_on_this_application_and_my_answer_to_every_question",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line1b_language",
+        "expected": "Vietnamese",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line3_daytimephonenumber",
+        "expected": "7135550142",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line4_mobilephonenumber",
+        "expected": "7135550199",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line5_emailaddress",
+        "expected": "linh.nguyen@example.com",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line1a_interpretersfamilyname",
+        "expected": "Garcia",
+        "written": "Garcia",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line1b_interpretersgivenname",
+        "expected": "Maria",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line2_nameofbusinessor",
+        "expected": "Bayou City Language Services",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3a_streetnumbername",
+        "expected": [
+          "1000 Louisiana St",
+          "1000 Louisiana Street"
+        ],
+        "written": "",
+        "ok": false,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p6_unit_type3b_unit",
+        "expected": "suite",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3b_aptsteflrnumber",
+        "expected": "2300",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3c_citytown",
+        "expected": "Houston",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3d_state",
+        "expected": "texas",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3e_zipcode",
+        "expected": "77002",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p6_line3g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p6_line3h_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "",
+        "ok": false,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p6_line4_interpretersdaytimephonenumber",
+        "expected": "7135550188",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line4_interpretersdaytimephonenumber[1]",
+        "expected": "7135550177",
+        "written": "7135550199",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line5_interpretersemailaddress",
+        "expected": "maria.garcia@example.com",
+        "written": "lin.win@example.com",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_language",
+        "expected": "Vietnamese",
+        "written": "Hindi",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line6b_dateofsignature",
+        "expected": "06/01/2025",
+        "written": "2025-06-01",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p7_line1b_preparersgivenname",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line1a_familyname",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line2_nameofbusinessor",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3a_streetnumbername",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_unit_type3b_unit",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3c_citytown",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3d_state",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3e_zipcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3h_country",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line4_preparersdaytimephonenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line5_preparersfaxnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line6_preparersemailaddress",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_checkbox7",
+        "expected": "",
+        "written": "i_am_not_an_attorney_or_accredited_representative_but_have_prepared_this_application_on_behalf_of_the_applicant_and_with_the_applicant_s_consent",
+        "ok": false,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line8b_dateofsignature",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3a_pagenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3b_partnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3c_itemnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3d_additionalinfo",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5a_pagenumber[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5b_partnumber[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5c_itemnumber[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5d_additionalinfo[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4a_pagenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4b_partnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4c_itemnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4d_additionalinfo",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5a_pagenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5b_partnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5c_itemnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5d_additionalinfo",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5a_pagenumber[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5b_partnumber[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5c_itemnumber[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5d_additionalinfo[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [
+      "p5_line1b_language",
+      "p5_line3_daytimephonenumber",
+      "p5_line4_mobilephonenumber",
+      "p5_line5_emailaddress",
+      "p6_line1b_interpretersgivenname",
+      "p6_line2_nameofbusinessor",
+      "p6_line3a_streetnumbername",
+      "p6_unit_type3b_unit",
+      "p6_line3b_aptsteflrnumber",
+      "p6_line3c_citytown",
+      "p6_line3d_state",
+      "p6_line3e_zipcode",
+      "p6_line3h_country",
+      "p6_line4_interpretersdaytimephonenumber"
+    ],
+    "format": [
+      "p1_line9_dateofbirth",
+      "p6_line6b_dateofsignature"
+    ],
+    "transcription": [
+      "p1_line14_classofadmission",
+      "p6_line4_interpretersdaytimephonenumber[1]"
+    ],
+    "wrong-field": [],
+    "mismatch": [
+      "p1_line6f_zipcode",
+      "p1_line12_mothergivenname",
+      "p1_line15_dateofadmission",
+      "p2_checkbox1",
+      "p3_line3a_destination",
+      "p3_line3a1_cityandstate",
+      "p5_checkbox1a",
+      "p6_line5_interpretersemailaddress",
+      "p6_language"
+    ],
+    "spurious": [
+      "p7_checkbox7"
+    ]
+  },
+  "wall_clock_s": 2000.9,
+  "auto_apply_fids": [
+    "p5_line6a_signatureofapplicant",
+    "p5_line6b_dateofsignature",
+    "p6_line6a_signature",
+    "p7_line8a_signatureofpreparer",
+    "p1_line1_aliennumber[1]",
+    "p1_line3a_familyname[1]",
+    "p1_line3b_givenname[1]",
+    "p1_line3c_middlename[1]"
+  ]
+}
