@@ -1,0 +1,4709 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90-full",
+  "arm": "dti",
+  "path": "happy",
+  "questions": 113,
+  "compression": true,
+  "trigger": 5000,
+  "window": 3500,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260714T062904Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.312
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 9,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 11,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.438
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 12,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.453
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 13,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.672
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.5
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 15,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.718
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.703
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 18,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 19,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 19,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 20,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 20,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 21,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.469
+    },
+    {
+      "q": 21,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 22,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.453
+    },
+    {
+      "q": 22,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 23,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.672
+    },
+    {
+      "q": 23,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 24,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.657
+    },
+    {
+      "q": 24,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 25,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 26,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 26,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 27,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 28,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 29,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 29,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 30,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.672
+    },
+    {
+      "q": 30,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 31,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.625
+    },
+    {
+      "q": 31,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 32,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.531
+    },
+    {
+      "q": 32,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 33,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 33,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 34,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 34,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 35,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.578
+    },
+    {
+      "q": 35,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 36,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.687
+    },
+    {
+      "q": 36,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 37,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.516
+    },
+    {
+      "q": 37,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 38,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.578
+    },
+    {
+      "q": 38,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 39,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 39,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 40,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.453
+    },
+    {
+      "q": 40,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 41,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.406
+    },
+    {
+      "q": 41,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 42,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 42,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.781
+    },
+    {
+      "q": 43,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 43,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.703
+    },
+    {
+      "q": 44,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 44,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.61
+    },
+    {
+      "q": 45,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 45,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 46,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.391
+    },
+    {
+      "q": 46,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.844
+    },
+    {
+      "q": 47,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 47,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.765
+    },
+    {
+      "q": 48,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 48,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 49,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 49,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.672
+    },
+    {
+      "q": 50,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 50,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.782
+    },
+    {
+      "q": 51,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.562
+    },
+    {
+      "q": 51,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.813
+    },
+    {
+      "q": 52,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 52,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.828
+    },
+    {
+      "q": 53,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.406
+    },
+    {
+      "q": 53,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.656
+    },
+    {
+      "q": 54,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 54,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.797
+    },
+    {
+      "q": 55,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 55,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.922
+    },
+    {
+      "q": 56,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.875
+    },
+    {
+      "q": 56,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 57,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 57,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.907
+    },
+    {
+      "q": 58,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 58,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 59,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 59,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 60,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 60,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.687
+    },
+    {
+      "q": 61,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 61,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.859
+    },
+    {
+      "q": 62,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.469
+    },
+    {
+      "q": 62,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 63,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 63,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 64,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 64,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 65,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 65,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 66,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 66,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 67,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 67,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 68,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 68,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.313
+    },
+    {
+      "q": 69,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.438
+    },
+    {
+      "q": 69,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.36
+    },
+    {
+      "q": 70,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 70,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 71,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.422
+    },
+    {
+      "q": 71,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.328
+    },
+    {
+      "q": 72,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.484
+    },
+    {
+      "q": 72,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.39
+    },
+    {
+      "q": 73,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.594
+    },
+    {
+      "q": 73,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 74,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 74,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 75,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 75,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 76,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 76,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.359
+    },
+    {
+      "q": 77,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.313
+    },
+    {
+      "q": 77,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 78,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 78,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 79,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 79,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 2.703
+    },
+    {
+      "q": 80,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 80,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 81,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 81,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 82,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 82,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 83,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 83,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 84,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 84,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 85,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.703
+    },
+    {
+      "q": 85,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.875
+    },
+    {
+      "q": 86,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.922
+    },
+    {
+      "q": 86,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.765
+    },
+    {
+      "q": 87,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.672
+    },
+    {
+      "q": 87,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.734
+    },
+    {
+      "q": 88,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.766
+    },
+    {
+      "q": 88,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.781
+    },
+    {
+      "q": 89,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.812
+    },
+    {
+      "q": 89,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.828
+    },
+    {
+      "q": 90,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.015
+    },
+    {
+      "q": 90,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.875
+    },
+    {
+      "q": 91,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.891
+    },
+    {
+      "q": 91,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.89
+    },
+    {
+      "q": 92,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 0.891
+    },
+    {
+      "q": 92,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.203
+    },
+    {
+      "q": 93,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 93,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.781
+    },
+    {
+      "q": 94,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.0
+    },
+    {
+      "q": 94,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.344
+    },
+    {
+      "q": 95,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 95,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.188
+    },
+    {
+      "q": 96,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 96,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.265
+    },
+    {
+      "q": 97,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 97,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 98,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 98,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.438
+    },
+    {
+      "q": 99,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 99,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.25
+    },
+    {
+      "q": 100,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 100,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 101,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 101,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.235
+    },
+    {
+      "q": 102,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 102,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.203
+    },
+    {
+      "q": 103,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 103,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 104,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 104,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.266
+    },
+    {
+      "q": 105,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 105,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.343
+    },
+    {
+      "q": 106,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 106,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.484
+    },
+    {
+      "q": 107,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 107,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 108,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 108,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.234
+    },
+    {
+      "q": 109,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 109,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.219
+    },
+    {
+      "q": 110,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 110,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.109
+    },
+    {
+      "q": 111,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 111,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.063
+    },
+    {
+      "q": 112,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 112,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.188
+    },
+    {
+      "q": 113,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 113,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.281
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "3": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "4": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "5": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "6": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "7": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "8": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "9": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "10": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "11": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "12": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "13": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "14": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "15": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "16": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "17": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "18": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "19": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "20": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "21": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "22": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "23": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "24": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "25": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "26": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "27": [
+      "update_form_fields",
+      "update_form_fields"
+    ],
+    "28": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "29": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "30": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "31": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "32": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "33": [
+      "update_form_fields",
+      "update_form_fields"
+    ],
+    "34": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "35": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "36": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "37": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "38": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "39": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "40": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "41": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "42": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "43": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "44": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "45": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "46": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "47": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "48": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "49": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "50": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "51": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "52": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "53": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "54": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "55": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "56": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "57": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "58": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "59": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "60": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "61": [
+      "update_form_fields",
+      "confirm_field",
+      "get_form_status"
+    ],
+    "62": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "63": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "64": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "65": [
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "66": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "67": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "68": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "69": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "70": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "71": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "72": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "73": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "74": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "75": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "76": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "77": [
+      "update_form_fields"
+    ],
+    "78": [
+      "switch_to_field",
+      "ask_secretary"
+    ],
+    "79": [
+      "ask_secretary"
+    ],
+    "80": [
+      "skip_field",
+      "skip_field",
+      "skip_field"
+    ],
+    "81": [
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field"
+    ],
+    "82": [
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field"
+    ],
+    "83": [
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field",
+      "skip_field"
+    ],
+    "84": [],
+    "85": [],
+    "86": [],
+    "87": [],
+    "88": [],
+    "89": [],
+    "90": [],
+    "91": [],
+    "92": [
+      "skip_field"
+    ],
+    "93": [],
+    "94": [
+      "skip_field"
+    ],
+    "95": [
+      "skip_field"
+    ],
+    "96": [
+      "skip_field"
+    ],
+    "97": [
+      "skip_field"
+    ],
+    "98": [
+      "skip_field"
+    ],
+    "99": [
+      "skip_field"
+    ],
+    "100": [
+      "skip_field"
+    ],
+    "101": [
+      "skip_field"
+    ],
+    "102": [
+      "skip_field"
+    ],
+    "103": [
+      "skip_field"
+    ],
+    "104": [
+      "skip_field"
+    ],
+    "105": [
+      "skip_field"
+    ],
+    "106": [
+      "skip_field"
+    ],
+    "107": [
+      "skip_field"
+    ],
+    "108": [
+      "skip_field"
+    ],
+    "109": [
+      "skip_field"
+    ],
+    "110": [
+      "skip_field"
+    ],
+    "111": [
+      "skip_field"
+    ],
+    "112": [
+      "skip_field"
+    ],
+    "113": [
+      "skip_field"
+    ]
+  },
+  "prompt_curve": [
+    1210,
+    1604,
+    1663,
+    1825,
+    2018,
+    2055,
+    2279,
+    2344,
+    2420,
+    2551,
+    2587,
+    2721,
+    2773,
+    2872,
+    3001,
+    3037,
+    3156,
+    3209,
+    3305,
+    3442,
+    3479,
+    3579,
+    3633,
+    3747,
+    4032,
+    4064,
+    4143,
+    4203,
+    4293,
+    4414,
+    4452,
+    4570,
+    4625,
+    4746,
+    4879,
+    3335,
+    3448,
+    3508,
+    3601,
+    3765,
+    3802,
+    3838,
+    3892,
+    4008,
+    4149,
+    4188,
+    4240,
+    4299,
+    4397,
+    4529,
+    4566,
+    4640,
+    4694,
+    4778,
+    3403,
+    3438,
+    3465,
+    3515,
+    3585,
+    3725,
+    3760,
+    3865,
+    3919,
+    3980,
+    4105,
+    4140,
+    4205,
+    4254,
+    4329,
+    4482,
+    4518,
+    4588,
+    4639,
+    4737,
+    4852,
+    4887,
+    3313,
+    3364,
+    3462,
+    3599,
+    3636,
+    3762,
+    3823,
+    3876,
+    4041,
+    4078,
+    4106,
+    4160,
+    4218,
+    4358,
+    4397,
+    4442,
+    4501,
+    4555,
+    4687,
+    4724,
+    4799,
+    4853,
+    4905,
+    3322,
+    3357,
+    3387,
+    3437,
+    3521,
+    3661,
+    3696,
+    3801,
+    3855,
+    3938,
+    4063,
+    4098,
+    4169,
+    4218,
+    4276,
+    4429,
+    4465,
+    4540,
+    4591,
+    4705,
+    4820,
+    4855,
+    3332,
+    3383,
+    3441,
+    3577,
+    3611,
+    3634,
+    3682,
+    3769,
+    3931,
+    3967,
+    4071,
+    4236,
+    4286,
+    4347,
+    4431,
+    4564,
+    4621,
+    4667,
+    4793,
+    4830,
+    4898,
+    3355,
+    3406,
+    3536,
+    3573,
+    3671,
+    3725,
+    3791,
+    3921,
+    3958,
+    4072,
+    4126,
+    4190,
+    4340,
+    4377,
+    4453,
+    4508,
+    4588,
+    4771,
+    4808,
+    3401,
+    3568,
+    3619,
+    3682,
+    3850,
+    4016,
+    4074,
+    4120,
+    4312,
+    4344,
+    4413,
+    4461,
+    4521,
+    3393,
+    3428,
+    3522,
+    3588,
+    3643,
+    3800,
+    3836,
+    3990,
+    4047,
+    4117,
+    4292,
+    4328,
+    4475,
+    4532,
+    4595,
+    4726,
+    4761,
+    4869,
+    3332,
+    3415,
+    3555,
+    3593,
+    3669,
+    3727,
+    3819,
+    4000,
+    4035,
+    4123,
+    4175,
+    4264,
+    4479,
+    4514,
+    4655,
+    4707,
+    4796,
+    3381,
+    3412,
+    3493,
+    3543,
+    3664,
+    3849,
+    3880,
+    3918,
+    3960,
+    4050,
+    4178,
+    4213,
+    4258,
+    4308,
+    4398,
+    4555,
+    4590,
+    4641,
+    4691,
+    4778,
+    4902,
+    3340,
+    3426,
+    3478,
+    3566,
+    3693,
+    3729,
+    3798,
+    3850,
+    3937,
+    4064,
+    4100,
+    4173,
+    4225,
+    4314,
+    4514,
+    4547,
+    4585,
+    4631,
+    4718,
+    3300,
+    3333,
+    3368,
+    3414,
+    3503,
+    3664,
+    3699,
+    3804,
+    3856,
+    3942,
+    4067,
+    4100,
+    4215,
+    4261,
+    4349,
+    4476,
+    4509,
+    4621,
+    4667,
+    4754,
+    4893,
+    3330,
+    3431,
+    3477,
+    3565,
+    3953,
+    3986,
+    4093,
+    4207,
+    4343,
+    4454,
+    4489,
+    4579,
+    4629,
+    4716,
+    4870,
+    3378,
+    3597,
+    3660,
+    3750,
+    3911,
+    3947,
+    4117,
+    4178,
+    4270,
+    4395,
+    4431,
+    4542,
+    4600,
+    4693,
+    4821,
+    4859,
+    3332,
+    3388,
+    3477,
+    3617,
+    1167,
+    1407,
+    1463,
+    1576,
+    1719,
+    1972,
+    2027,
+    2116,
+    2247,
+    2283,
+    2479,
+    2538,
+    2620,
+    2787,
+    2842,
+    2896,
+    2999,
+    3144,
+    3202,
+    3268,
+    3328,
+    3417,
+    3553,
+    3692,
+    3744,
+    3857,
+    4497,
+    4569,
+    4619,
+    4707,
+    4836,
+    3351,
+    3405,
+    3517,
+    3637,
+    3785,
+    3834,
+    3922,
+    4070,
+    4221,
+    4272,
+    4352,
+    4472,
+    4614,
+    4665,
+    4786,
+    3045,
+    3284,
+    3351,
+    3485,
+    3662,
+    3879,
+    3952,
+    4033,
+    4231,
+    4395,
+    4456,
+    4531,
+    4651,
+    4792,
+    4835,
+    3286,
+    3445,
+    3640,
+    3807,
+    3956,
+    4145,
+    4214,
+    4277,
+    4424,
+    4585,
+    4697,
+    4794,
+    3325,
+    3452,
+    3587,
+    3722,
+    3855,
+    3909,
+    4035,
+    4196,
+    4320,
+    4367,
+    3386,
+    3533,
+    3650,
+    3704,
+    3864,
+    3979,
+    4153,
+    4338,
+    4517,
+    4830,
+    3385,
+    3502,
+    3551,
+    3709,
+    3864,
+    4023,
+    4183,
+    4306,
+    4440,
+    4574,
+    4705,
+    4758,
+    3355,
+    3525,
+    3694,
+    3861,
+    3987,
+    4113,
+    4239,
+    4311,
+    4466,
+    4641,
+    4818,
+    3358,
+    3464,
+    3600,
+    3736,
+    3814,
+    3916,
+    4018,
+    4168,
+    4274,
+    4403,
+    4505,
+    4629,
+    4715,
+    4819,
+    4893,
+    3369,
+    3462,
+    3557,
+    3688,
+    3779,
+    3881,
+    4040,
+    4159,
+    4264,
+    4376,
+    4478,
+    4626,
+    4752,
+    4854,
+    3279,
+    3375,
+    3477,
+    3643,
+    3739,
+    3841,
+    4007,
+    4102,
+    4204,
+    4349,
+    4468,
+    4570,
+    4719,
+    4836,
+    3341,
+    3503,
+    3598,
+    3700,
+    3857,
+    3953,
+    4055,
+    4217,
+    4334,
+    4436,
+    4611,
+    4696,
+    4798,
+    3251,
+    3341,
+    3443,
+    3607,
+    3697,
+    3799,
+    3943,
+    4066,
+    4168,
+    4333,
+    4451,
+    4553,
+    4716,
+    4804,
+    4906,
+    3221,
+    3335,
+    3437,
+    3568,
+    3713,
+    3815,
+    3954,
+    4086,
+    4188,
+    4365,
+    4479
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": true,
+  "events_mode": "none",
+  "reactivity": null,
+  "lang": "en",
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question"
+  ],
+  "pro_pass_wired": false,
+  "system_instruction_chars": 4457,
+  "greeting_tokens": 1408,
+  "continuous_reconnects": [
+    {
+      "before_q": 62,
+      "announced": true,
+      "downtime_s": 6.547
+    }
+  ],
+  "pro_pass": {
+    "ran": false,
+    "model": null,
+    "conflicts": 0
+  },
+  "validation_records": [
+    {
+      "t_submit": 99975.359,
+      "t_verdict": 99977.921,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 100055.953,
+      "t_verdict": 100056.703,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 100123.109,
+      "t_verdict": 100123.921,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 100201.14,
+      "t_verdict": 100201.968,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 100515.484,
+      "t_verdict": 100516.031,
+      "window_count": 1,
+      "conflicts": []
+    },
+    {
+      "t_submit": 100529.343,
+      "t_verdict": 100529.953,
+      "window_count": 2,
+      "conflicts": []
+    },
+    {
+      "t_submit": 100536.187,
+      "t_verdict": 100536.953,
+      "window_count": 2,
+      "conflicts": []
+    }
+  ],
+  "drain_records": [],
+  "steer_records": [],
+  "event_records": [],
+  "seam_tool_records": [
+    {
+      "ts": 100366.0,
+      "step": 64,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is the mailing address for the interpreter?"
+      },
+      "response": {
+        "answer": "The interpreter's mailing address is not provided.",
+        "available": true
+      }
+    },
+    {
+      "ts": 100495.328,
+      "step": 78,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p7_line1_preparerssignature"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 100495.859,
+      "step": 78,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "Since the user said they did not use a preparer, which field should I update or confirm?"
+      },
+      "response": {
+        "answer": "Since the applicant did not use a preparer, there is no information to update or confirm for the preparer's section.",
+        "available": true
+      }
+    },
+    {
+      "ts": 100506.031,
+      "step": 79,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "The user confirmed that something does not apply to them, but it's unclear what they mean. The last fields filled were about the interpreter. Does this relate to the preparer section or the interpreter section?"
+      },
+      "response": {
+        "answer": "This question relates to the interpreter section. Specifically, it asks if the interpreter's representation of the applicant extends beyond the preparation of this application, and the value for this is not provided.",
+        "available": true
+      }
+    },
+    {
+      "ts": 100514.234,
+      "step": 80,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p6_line6b_dateofsignature",
+        "next_field_hint": "Next field to fill is #78: 'Preparer's Given Name (First Name). '",
+        "message": "Field 'p6_line6b_dateofsignature' skipped.",
+        "next_field_guidance": "ID: p7_line1b_preparersgivenname | Spoken: preparer's given name | Type: text | Instructions: Enter the first name of the person preparing the application, if other than the applicant. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100514.718,
+      "step": 80,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line1b_preparersgivenname",
+        "next_field_hint": "Next field to fill is #79: 'Preparer's Family Name (Last Name). '",
+        "message": "Field 'p7_line1b_preparersgivenname' skipped.",
+        "next_field_guidance": "ID: p7_line1a_familyname | Spoken: preparer's family name | Type: text | Instructions: Enter the last name of the person preparing the application, if other than the applicant. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100515.187,
+      "step": 80,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line1a_familyname",
+        "next_field_hint": "Next field to fill is #80: 'Preparer's Business or Organization Name (if any)'",
+        "message": "Field 'p7_line1a_familyname' skipped.",
+        "next_field_guidance": "ID: p7_line2_nameofbusinessor | Spoken: preparer's business or organization name | Type: text | Instructions: Enter the name of the preparer's business or organization, if applicable. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100518.078,
+      "step": 81,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line2_nameofbusinessor",
+        "next_field_hint": "Next field to fill is #81: 'Street Number and Name'",
+        "message": "Field 'p7_line2_nameofbusinessor' skipped.",
+        "next_field_guidance": "ID: p7_line3a_streetnumbername | Spoken: preparer's street number and name | Type: text | Instructions: Enter the street number and name of the preparer's mailing address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100518.5,
+      "step": 81,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line3a_streetnumbername",
+        "next_field_hint": "Next field to fill is #82: 'Select Unit Type'",
+        "message": "Field 'p7_line3a_streetnumbername' skipped.",
+        "next_field_guidance": "ID: p7_unit_type3b_unit | Spoken: preparer's unit type | Type: radio | Instructions: Select the appropriate unit type for the preparer's mailing address: Apartment, Suite, or Floor. | Options: [\"Suite\" (use value: suite), \"Floor\" (use value: floor), \"Apartment\" (use value: apartment)] | Fill language: English"
+      }
+    },
+    {
+      "ts": 100518.953,
+      "step": 81,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_unit_type3b_unit",
+        "next_field_hint": "Next field to fill is #83: 'City or Town'",
+        "message": "Field 'p7_unit_type3b_unit' skipped.",
+        "next_field_guidance": "ID: p7_line3c_citytown | Spoken: preparer's city or town | Type: text | Instructions: Enter the city or town of the preparer's mailing address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100521.312,
+      "step": 81,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line3c_citytown",
+        "next_field_hint": "Next field to fill is #84: 'Select State from List of States'",
+        "message": "Field 'p7_line3c_citytown' skipped.",
+        "next_field_guidance": "ID: p7_line3d_state | Spoken: preparer's state | Type: select | Instructions: Select the state of the preparer's mailing address. | Options: [\"Alabama\" (use value: alabama), \"Alaska\" (use value: alaska), \"Arizona\" (use value: arizona), \"Arkansas\" (use value: arkansas), \"California\" (use value: california), \"Colorado\" (use value: colorado), \"Connecticut\" (use value: connecticut), \"Delaware\" (use value: delaware), \"Florida\" (use value: florida), \"Georgia\" (use value: georgia), \"Hawaii\" (use value: hawaii), \"Idaho\" (use value: idaho), \"Illinois\" (use value: illinois), \"Indiana\" (use value: indiana), \"Iowa\" (use value: iowa), \"Kansas\" (use value: kansas), \"Kentucky\" (use value: kentucky), \"Louisiana\" (use value: louisiana), \"Maine\" (use value: maine), \"Maryland\" (use value: maryland), \"Massachusetts\" (use value: massachusetts), \"Michigan\" (use value: michigan), \"Minnesota\" (use value: minnesota), \"Mississippi\" (use value: mississippi), \"Missouri\" (use value: missouri), \"Montana\" (use value: montana), \"Nebraska\" (use value: nebraska), \"Nevada\" (use value: nevada), \"New Hampshire\" (use value: new_hampshire), \"New Jersey\" (use value: new_jersey), \"New Mexico\" (use value: new_mexico), \"New York\" (use value: new_york), \"North Carolina\" (use value: north_carolina), \"North Dakota\" (use value: north_dakota), \"Ohio\" (use value: ohio), \"Oklahoma\" (use value: oklahoma), \"Oregon\" (use value: oregon), \"Pennsylvania\" (use value: pennsylvania), \"Rhode Island\" (use value: rhode_island), \"South Carolina\" (use value: south_carolina), \"South Dakota\" (use value: south_dakota), \"Tennessee\" (use value: tennessee), \"Texas\" (use value: texas), \"Utah\" (use value: utah), \"Vermont\" (use value: vermont), \"Virginia\" (use value: virginia), \"Washington\" (use value: washington), \"West Virginia\" (use value: west_virginia), \"Wisconsin\" (use value: wisconsin), \"Wyoming\" (use value: wyoming)] | Fill language: English"
+      }
+    },
+    {
+      "ts": 100521.781,
+      "step": 81,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line3d_state",
+        "next_field_hint": "Next field to fill is #85: 'Zip Code'",
+        "message": "Field 'p7_line3d_state' skipped.",
+        "next_field_guidance": "ID: p7_line3e_zipcode | Spoken: preparer's zip code | Type: text | Instructions: Enter the zip code of the preparer's mailing address. This should be a 5-digit code. | Format: 5 digits | format_preset: zip | pattern: ^\\d{5}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 100522.171,
+      "step": 81,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line3e_zipcode",
+        "next_field_hint": "Next field to fill is #86: 'Province. '",
+        "message": "Field 'p7_line3e_zipcode' skipped.",
+        "next_field_guidance": "ID: p7_line3f_province | Spoken: preparer's province | Type: text | Instructions: Enter the province of the preparer's mailing address, if applicable. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100524.843,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line3f_province",
+        "next_field_hint": "Next field to fill is #87: 'Postal Code'",
+        "message": "Field 'p7_line3f_province' skipped.",
+        "next_field_guidance": "ID: p7_line3g_postalcode | Spoken: preparer's postal code | Type: text | Instructions: Enter the postal code of the preparer's mailing address, if applicable. This should be an alphanumeric code between 3 and 10 characters. | Format: Alphanumeric postal code | pattern: ^[A-Z0-9]{3,10}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 100525.265,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line3g_postalcode",
+        "next_field_hint": "Next field to fill is #88: 'Country'",
+        "message": "Field 'p7_line3g_postalcode' skipped.",
+        "next_field_guidance": "ID: p7_line3h_country | Spoken: preparer's country | Type: text | Instructions: Enter the country of the preparer's mailing address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100525.671,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line3h_country",
+        "next_field_hint": "Next field to fill is #89: 'Preparer's Daytime Telephone Number'",
+        "message": "Field 'p7_line3h_country' skipped.",
+        "next_field_guidance": "ID: p7_line4_preparersdaytimephonenumber | Spoken: preparer's daytime phone number | Type: text | Instructions: Enter the preparer's daytime phone number. Use the format (XXX) XXX-XXXX. | Format: 10 digits (XXX-XXX-XXXX) | format_preset: phone | pattern: ^\\(\\d{3}\\) \\d{3}-\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 100526.093,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line4_preparersdaytimephonenumber",
+        "next_field_hint": "Next field to fill is #90: 'Preparer's Mobile Telephone Number (if any)'",
+        "message": "Field 'p7_line4_preparersdaytimephonenumber' skipped.",
+        "next_field_guidance": "ID: p7_line5_preparersfaxnumber | Spoken: preparer's mobile phone number | Type: text | Instructions: Enter the preparer's mobile phone number, if any. Use the format (XXX) XXX-XXXX. | Format: 10 digits (XXX-XXX-XXXX) | format_preset: phone | pattern: ^\\(\\d{3}\\) \\d{3}-\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 100526.531,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line5_preparersfaxnumber",
+        "next_field_hint": "Next field to fill is #91: 'Preparer's Email Address (if any)'",
+        "message": "Field 'p7_line5_preparersfaxnumber' skipped.",
+        "next_field_guidance": "ID: p7_line6_preparersemailaddress | Spoken: preparer's email address | Type: text | Instructions: Enter the preparer's email address, if any. | Format: *@*.* | format_preset: email | pattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 100526.937,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line6_preparersemailaddress",
+        "next_field_hint": "Next field to fill is #92: 'Preparer's Statement - Select whether the preparer is an attorney or accredited representative, or not'",
+        "message": "Field 'p7_line6_preparersemailaddress' skipped.",
+        "next_field_guidance": "ID: p7_checkbox7 | Spoken: Is the preparer an attorney or not | Type: radio | Instructions: Select whether the preparer is an attorney or accredited representative, or not. | Options: [\"I am not an attorney or accredited representative but have prepared this application on behalf of the applicant and with the applicant's consent\" (use value: i_am_not_an_attorney_or_accredited_representative_but_have_prepared_this_application_on_behalf_of_the_applicant_and_with_the_applicant_s_consent), \"I am an attorney or accredited representative and my representation of the applicant in this case extends / does not extend beyond the preparation of this application\" (use value: i_am_an_attorney_or_accredited_representative_and_my_representation_of_the_applicant_in_this_case_extends_does_not_extend_beyond_the_preparation_of_this_application)] | Fill language: English"
+      }
+    },
+    {
+      "ts": 100527.359,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_checkbox7",
+        "next_field_hint": "Next field to fill is #93: 'as 2-digit Month, 2-digit Day, and 4-digit Year. '",
+        "message": "Field 'p7_checkbox7' skipped.",
+        "next_field_guidance": "ID: p7_line8b_dateofsignature | Spoken: preparer's signature date | Type: date | Instructions: Enter the date the preparer signed the form in MM/DD/YYYY format. | Format: MM/DD/YYYY | pattern: ^\\d{2}/\\d{2}/\\d{4}$ | Fill language: English"
+      }
+    },
+    {
+      "ts": 100527.812,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p7_line8b_dateofsignature",
+        "next_field_hint": "Next field to fill is #94: 'Page Number'",
+        "message": "Field 'p7_line8b_dateofsignature' skipped.",
+        "next_field_guidance": "ID: p8_line3a_pagenumber | Spoken: entry 1 page number | Type: text | Instructions: Enter the page number this additional information refers to. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100528.281,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line3a_pagenumber",
+        "next_field_hint": "Next field to fill is #95: 'Part Number'",
+        "message": "Field 'p8_line3a_pagenumber' skipped.",
+        "next_field_guidance": "ID: p8_line3b_partnumber | Spoken: entry 1 part number | Type: text | Instructions: Enter the part number this additional information refers to. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100528.671,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line3b_partnumber",
+        "next_field_hint": "Next field to fill is #96: 'Item Number'",
+        "message": "Field 'p8_line3b_partnumber' skipped.",
+        "next_field_guidance": "ID: p8_line3c_itemnumber | Spoken: item number | Type: text | Instructions: Enter the item number this additional information refers to. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100529.015,
+      "step": 82,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line3c_itemnumber",
+        "next_field_hint": "Next field to fill is #97: 'Additional Information'",
+        "message": "Field 'p8_line3c_itemnumber' skipped.",
+        "next_field_guidance": "ID: p8_line3d_additionalinfo | Spoken: additional information | Type: textarea | Instructions: Enter any additional information needed for this page, part, and item. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100529.359,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line3d_additionalinfo",
+        "next_field_hint": "Next field to fill is #98: 'Page Number'",
+        "message": "Field 'p8_line3d_additionalinfo' skipped.",
+        "next_field_guidance": "ID: p8_line5a_pagenumber[1] | Spoken: entry 4 page number | Type: text | Instructions: Enter the page number this additional information refers to. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100529.796,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5a_pagenumber[1]",
+        "next_field_hint": "Next field to fill is #99: 'Part Number'",
+        "message": "Field 'p8_line5a_pagenumber[1]' skipped.",
+        "next_field_guidance": "ID: p8_line5b_partnumber[1] | Spoken: entry 4 part number | Type: text | Instructions: Enter the part number this additional information refers to. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100530.281,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5b_partnumber[1]",
+        "next_field_hint": "Next field to fill is #100: 'Item Number'",
+        "message": "Field 'p8_line5b_partnumber[1]' skipped.",
+        "next_field_guidance": "ID: p8_line5c_itemnumber[1] | Spoken: entry 4 Page 8, item number | Type: text | Instructions: Enter the item number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100530.734,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5c_itemnumber[1]",
+        "next_field_hint": "Next field to fill is #101: 'Additional Information'",
+        "message": "Field 'p8_line5c_itemnumber[1]' skipped.",
+        "next_field_guidance": "ID: p8_line5d_additionalinfo[1] | Spoken: entry 4 Page 8, additional information | Type: textarea | Instructions: Enter any additional information that you need to provide for the item number you specified. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100531.187,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5d_additionalinfo[1]",
+        "next_field_hint": "Next field to fill is #102: 'Page Number'",
+        "message": "Field 'p8_line5d_additionalinfo[1]' skipped.",
+        "next_field_guidance": "ID: p8_line4a_pagenumber | Spoken: entry 2 Page 8, page number | Type: text | Instructions: Enter the page number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100531.593,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line4a_pagenumber",
+        "next_field_hint": "Next field to fill is #103: 'Part Number'",
+        "message": "Field 'p8_line4a_pagenumber' skipped.",
+        "next_field_guidance": "ID: p8_line4b_partnumber | Spoken: entry 2 Page 8, part number | Type: text | Instructions: Enter the part number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100531.953,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line4b_partnumber",
+        "next_field_hint": "Next field to fill is #104: 'Item Number'",
+        "message": "Field 'p8_line4b_partnumber' skipped.",
+        "next_field_guidance": "ID: p8_line4c_itemnumber | Spoken: entry 2 Page 8, item number | Type: text | Instructions: Enter the item number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100532.312,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line4c_itemnumber",
+        "next_field_hint": "Next field to fill is #105: 'Additional Information'",
+        "message": "Field 'p8_line4c_itemnumber' skipped.",
+        "next_field_guidance": "ID: p8_line4d_additionalinfo | Spoken: entry 2 Page 8, additional information | Type: textarea | Instructions: Enter any additional information that you need to provide for the item number you specified. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100532.687,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line4d_additionalinfo",
+        "next_field_hint": "Next field to fill is #106: 'Page Number'",
+        "message": "Field 'p8_line4d_additionalinfo' skipped.",
+        "next_field_guidance": "ID: p8_line5a_pagenumber | Spoken: entry 3 Page 8, page number | Type: text | Instructions: Enter the page number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100533.312,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5a_pagenumber",
+        "next_field_hint": "Next field to fill is #107: 'Part Number'",
+        "message": "Field 'p8_line5a_pagenumber' skipped.",
+        "next_field_guidance": "ID: p8_line5b_partnumber | Spoken: entry 3 Page 8, part number | Type: text | Instructions: Enter the part number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100533.75,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5b_partnumber",
+        "next_field_hint": "Next field to fill is #108: 'Item Number'",
+        "message": "Field 'p8_line5b_partnumber' skipped.",
+        "next_field_guidance": "ID: p8_line5c_itemnumber | Spoken: entry 3 Page 8, item number | Type: text | Instructions: Enter the item number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100534.156,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5c_itemnumber",
+        "next_field_hint": "Next field to fill is #109: 'Additional Information'",
+        "message": "Field 'p8_line5c_itemnumber' skipped.",
+        "next_field_guidance": "ID: p8_line5d_additionalinfo | Spoken: entry 3 Page 8, additional information | Type: textarea | Instructions: Enter any additional information that you need to provide for the item number you specified. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100534.625,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5d_additionalinfo",
+        "next_field_hint": "Next field to fill is #110: 'Page Number'",
+        "message": "Field 'p8_line5d_additionalinfo' skipped.",
+        "next_field_guidance": "ID: p8_line5a_pagenumber[2] | Spoken: entry 5 Page 8, page number | Type: text | Instructions: Enter the page number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100535.015,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5a_pagenumber[2]",
+        "next_field_hint": "Next field to fill is #111: 'Part Number'",
+        "message": "Field 'p8_line5a_pagenumber[2]' skipped.",
+        "next_field_guidance": "ID: p8_line5b_partnumber[2] | Spoken: entry 5 Page 8, part number | Type: text | Instructions: Enter the part number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100535.343,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5b_partnumber[2]",
+        "next_field_hint": "Next field to fill is #112: 'Item Number'",
+        "message": "Field 'p8_line5b_partnumber[2]' skipped.",
+        "next_field_guidance": "ID: p8_line5c_itemnumber[2] | Spoken: entry 5 Page 8, item number | Type: text | Instructions: Enter the item number from the original form that you are providing additional information for. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100535.734,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5c_itemnumber[2]",
+        "next_field_hint": "Next field to fill is #113: 'Additional Information'",
+        "message": "Field 'p8_line5c_itemnumber[2]' skipped.",
+        "next_field_guidance": "ID: p8_line5d_additionalinfo[2] | Spoken: entry 5 Page 8, additional information | Type: textarea | Instructions: Enter any additional information that you need to provide for the item number you specified. | Fill language: English"
+      }
+    },
+    {
+      "ts": 100536.078,
+      "step": 83,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": true,
+        "field_skipped": "p8_line5d_additionalinfo[2]",
+        "next_field_hint": null,
+        "message": "Field 'p8_line5d_additionalinfo[2]' skipped. All fields addressed."
+      }
+    },
+    {
+      "ts": 100613.265,
+      "step": 92,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100629.64,
+      "step": 94,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100636.765,
+      "step": 95,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100644.203,
+      "step": 96,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100651.765,
+      "step": 97,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100659.265,
+      "step": 98,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100666.5,
+      "step": 99,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100673.781,
+      "step": 100,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100681.093,
+      "step": 101,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100688.328,
+      "step": 102,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100695.64,
+      "step": 103,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100703.093,
+      "step": 104,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100710.5,
+      "step": 105,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100717.828,
+      "step": 106,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100725.171,
+      "step": 107,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100732.515,
+      "step": 108,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100739.796,
+      "step": 109,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100747.14,
+      "step": 110,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100754.0,
+      "step": 111,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100760.875,
+      "step": 112,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    },
+    {
+      "ts": 100768.375,
+      "step": 113,
+      "tool": "skip_field",
+      "args": {
+        "field_id": "p6_line6a"
+      },
+      "response": {
+        "success": false,
+        "field_skipped": null,
+        "next_field_hint": null,
+        "status": "error",
+        "retryable": true,
+        "error": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value.",
+        "message": "Field 'p6_line6a' could not be skipped (unknown_field). Ask the user whether they want to skip it or provide a value."
+      }
+    }
+  ],
+  "text_ledger_calls": [
+    {
+      "caller": "validator",
+      "t_start": 99975.359,
+      "dur_s": 2.547
+    },
+    {
+      "caller": "validator",
+      "t_start": 100055.953,
+      "dur_s": 0.75
+    },
+    {
+      "caller": "validator",
+      "t_start": 100123.109,
+      "dur_s": 0.812
+    },
+    {
+      "caller": "validator",
+      "t_start": 100201.14,
+      "dur_s": 0.828
+    },
+    {
+      "caller": "secretary",
+      "t_start": 100366.0,
+      "dur_s": 1.015
+    },
+    {
+      "caller": "secretary",
+      "t_start": 100495.859,
+      "dur_s": 1.062
+    },
+    {
+      "caller": "secretary",
+      "t_start": 100506.031,
+      "dur_s": 1.015
+    },
+    {
+      "caller": "validator",
+      "t_start": 100515.484,
+      "dur_s": 0.547
+    },
+    {
+      "caller": "validator",
+      "t_start": 100529.343,
+      "dur_s": 0.516
+    },
+    {
+      "caller": "validator",
+      "t_start": 100529.343,
+      "dur_s": 0.61
+    },
+    {
+      "caller": "validator",
+      "t_start": 100536.187,
+      "dur_s": 0.641
+    },
+    {
+      "caller": "validator",
+      "t_start": 100536.187,
+      "dur_s": 0.766
+    }
+  ],
+  "eviction_drops": [
+    [
+      36,
+      4879,
+      3335
+    ],
+    [
+      55,
+      4778,
+      3403
+    ],
+    [
+      77,
+      4887,
+      3313
+    ],
+    [
+      100,
+      4905,
+      3322
+    ],
+    [
+      122,
+      4855,
+      3332
+    ],
+    [
+      143,
+      4898,
+      3355
+    ],
+    [
+      162,
+      4808,
+      3401
+    ],
+    [
+      175,
+      4521,
+      3393
+    ],
+    [
+      193,
+      4869,
+      3332
+    ],
+    [
+      210,
+      4796,
+      3381
+    ],
+    [
+      231,
+      4902,
+      3340
+    ],
+    [
+      250,
+      4718,
+      3300
+    ],
+    [
+      271,
+      4893,
+      3330
+    ],
+    [
+      286,
+      4870,
+      3378
+    ],
+    [
+      302,
+      4859,
+      3332
+    ],
+    [
+      306,
+      3617,
+      1167
+    ],
+    [
+      337,
+      4836,
+      3351
+    ],
+    [
+      352,
+      4786,
+      3045
+    ],
+    [
+      367,
+      4835,
+      3286
+    ],
+    [
+      379,
+      4794,
+      3325
+    ],
+    [
+      389,
+      4367,
+      3386
+    ],
+    [
+      399,
+      4830,
+      3385
+    ],
+    [
+      411,
+      4758,
+      3355
+    ],
+    [
+      422,
+      4818,
+      3358
+    ],
+    [
+      437,
+      4893,
+      3369
+    ],
+    [
+      451,
+      4854,
+      3279
+    ],
+    [
+      465,
+      4836,
+      3341
+    ],
+    [
+      478,
+      4798,
+      3251
+    ],
+    [
+      493,
+      4906,
+      3221
+    ]
+  ],
+  "client_confirmed_fields": [
+    "p5_line6a_signatureofapplicant",
+    "p5_line6b_dateofsignature",
+    "p6_line6a_signature",
+    "p7_line8a_signatureofpreparer",
+    "p1_line1_aliennumber[1]",
+    "p1_line3a_familyname[1]",
+    "p1_line3b_givenname[1]",
+    "p1_line3c_middlename[1]",
+    "p1_line1_aliennumber",
+    "p1_line2_acctidentifier",
+    "p1_line3a_familyname",
+    "p1_line3b_givenname",
+    "p1_line3c_middlename",
+    "p1_checkbox4",
+    "p1_line6a_incareofname",
+    "p1_line6b_streetnumbername",
+    "p1_unit_type6c_unit",
+    "p1_line6c_aptsteflrnumber",
+    "p1_line6d_cityortown",
+    "p1_line6e_state",
+    "p1_line6f_zipcode",
+    "p1_line6g_province",
+    "p1_line6h_postalcode",
+    "p1_line6i_country",
+    "p1_line7a_streetnumbername",
+    "p1_unit_type7b_unit",
+    "p1_line7b_aptsteflrnumber",
+    "p1_line7c_cityortown",
+    "p1_line7d_state",
+    "p1_line7e_zipcode",
+    "p1_line7f_province",
+    "p1_line7g_postalcode",
+    "p1_line7h_country",
+    "p1_line8_male",
+    "p1_line9_dateofbirth",
+    "p1_line10_citytownofbirth",
+    "p1_line11_countryofbirth",
+    "p1_line12_mothergivenname",
+    "p1_line13_fathergivenname",
+    "p1_line14_classofadmission",
+    "p1_line15_dateofadmission",
+    "p1_line16_ssn",
+    "p2_checkbox1",
+    "p2_checkbox2[5]",
+    "p3_line1_locationappliedvisa",
+    "p3_line2_locationissuedvisa",
+    "p3_line3a_destination",
+    "p3_line3a1_cityandstate",
+    "p3_checkbox4[1]",
+    "p3_checkbox5[1]",
+    "p3_ethnicity",
+    "p3_race",
+    "p3_line8_heightfeet",
+    "p3_line8_heightinches",
+    "p3_line9_heightinches1",
+    "p3_line9_heightinches2",
+    "p3_line9_heightinches3",
+    "p3_eye_color",
+    "p3_hair_color",
+    "p4_checkbox1[1]",
+    "p4_checkbox1a",
+    "p4_checkbox1b",
+    "p4_checkbox1c",
+    "p5_checkbox1a",
+    "p5_line1b_language",
+    "p5_line3_daytimephonenumber",
+    "p5_line4_mobilephonenumber",
+    "p5_line5_emailaddress",
+    "p6_line1a_interpretersfamilyname",
+    "p6_line1b_interpretersgivenname",
+    "p6_line2_nameofbusinessor",
+    "p6_line3a_streetnumbername",
+    "p6_unit_type3b_unit",
+    "p6_line3b_aptsteflrnumber",
+    "p6_line3c_citytown",
+    "p6_line3d_state",
+    "p6_line3e_zipcode",
+    "p6_line3f_province",
+    "p6_line3g_postalcode",
+    "p6_line3h_country",
+    "p6_line4_interpretersdaytimephonenumber",
+    "p6_line4_interpretersdaytimephonenumber[1]",
+    "p6_line5_interpretersemailaddress",
+    "p6_language",
+    "p6_line6b_dateofsignature",
+    "p7_line1b_preparersgivenname",
+    "p7_line1a_familyname",
+    "p7_line2_nameofbusinessor",
+    "p7_line3a_streetnumbername",
+    "p7_unit_type3b_unit",
+    "p7_line3c_citytown",
+    "p7_line3d_state",
+    "p7_line3e_zipcode",
+    "p7_line3f_province",
+    "p7_line3g_postalcode",
+    "p7_line3h_country",
+    "p7_line4_preparersdaytimephonenumber",
+    "p7_line5_preparersfaxnumber",
+    "p7_line6_preparersemailaddress",
+    "p7_checkbox7",
+    "p7_line8b_dateofsignature",
+    "p8_line3a_pagenumber",
+    "p8_line3b_partnumber",
+    "p8_line3c_itemnumber",
+    "p8_line3d_additionalinfo",
+    "p8_line5a_pagenumber[1]",
+    "p8_line5b_partnumber[1]",
+    "p8_line5c_itemnumber[1]",
+    "p8_line5d_additionalinfo[1]",
+    "p8_line4a_pagenumber",
+    "p8_line4b_partnumber",
+    "p8_line4c_itemnumber",
+    "p8_line4d_additionalinfo",
+    "p8_line5a_pagenumber",
+    "p8_line5b_partnumber",
+    "p8_line5c_itemnumber",
+    "p8_line5d_additionalinfo",
+    "p8_line5a_pagenumber[2]",
+    "p8_line5b_partnumber[2]",
+    "p8_line5c_itemnumber[2]",
+    "p8_line5d_additionalinfo[2]"
+  ],
+  "fill_accuracy": {
+    "matched": 101,
+    "total": 113,
+    "accuracy": 0.8938,
+    "detail": [
+      {
+        "field_id": "p1_line1_aliennumber",
+        "expected": "123456789",
+        "written": "123456789",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line2_acctidentifier",
+        "expected": "123456789012",
+        "written": "123456789012",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3a_familyname",
+        "expected": "Nguyen",
+        "written": "Nguyen",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3b_givenname",
+        "expected": "Linh",
+        "written": "Linh",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3c_middlename",
+        "expected": "Thi",
+        "written": "Thi",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_checkbox4",
+        "expected": "no_proceed_to_item_numbers_6_a_6_c",
+        "written": "no_proceed_to_item_numbers_6_a_6_c",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6a_incareofname",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6b_streetnumbername",
+        "expected": [
+          "4200 Westheimer Rd",
+          "4200 Westheimer Road"
+        ],
+        "written": "4200 Westheimer Road",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_unit_type6c_unit",
+        "expected": "apartment",
+        "written": "apartment",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6c_aptsteflrnumber",
+        "expected": "12",
+        "written": "12",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6d_cityortown",
+        "expected": "Houston",
+        "written": "Houston",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6e_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6f_zipcode",
+        "expected": "77027",
+        "written": "77027",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6g_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6h_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6i_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line7a_streetnumbername",
+        "expected": [
+          "4200 Westheimer Rd",
+          "4200 Westheimer Road"
+        ],
+        "written": "4200 Westhaimer Road",
+        "ok": false,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_unit_type7b_unit",
+        "expected": "apartment",
+        "written": "apartment",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7b_aptsteflrnumber",
+        "expected": "12",
+        "written": "12",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7c_cityortown",
+        "expected": "Houston",
+        "written": "Houston",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7d_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7e_zipcode",
+        "expected": "77027",
+        "written": "77027",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line7f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line7h_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_line8_male",
+        "expected": "female",
+        "written": "female",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line9_dateofbirth",
+        "expected": "04/12/1985",
+        "written": "1985-04-12",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line10_citytownofbirth",
+        "expected": "Hanoi",
+        "written": "Hanoi",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line11_countryofbirth",
+        "expected": "Vietnam",
+        "written": "Vietnam",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line12_mothergivenname",
+        "expected": "Lan",
+        "written": "Lan",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line13_fathergivenname",
+        "expected": "Minh",
+        "written": "Minh",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line14_classofadmission",
+        "expected": "IR1",
+        "written": "IR1",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line15_dateofadmission",
+        "expected": "06/20/2015",
+        "written": "2015-06-20",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line16_ssn",
+        "expected": "123456789",
+        "written": "123456789",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p2_checkbox1",
+        "expected": "lawful_permanent_resident",
+        "written": "lawful_permanent_resident",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p2_checkbox2[5]",
+        "expected": "my_previous_card_has_been_lost_stolen_or_destroyed",
+        "written": "my_previous_card_has_been_lost_stolen_or_destroyed",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line1_locationappliedvisa",
+        "expected": "Ho Chi Minh City, Vietnam",
+        "written": "Ho Chi Minh City, Vietnam",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line2_locationissuedvisa",
+        "expected": "Ho Chi Minh City, Vietnam",
+        "written": "Ho Chi Minh City, Vietnam",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line3a_destination",
+        "expected": "Houston, TX",
+        "written": "Houston, Texas",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line3a1_cityandstate",
+        "expected": "Houston, TX",
+        "written": "Houston, Texas",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_checkbox4[1]",
+        "expected": "select_no",
+        "written": "select_no",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_checkbox5[1]",
+        "expected": "select_no",
+        "written": "select_no",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_ethnicity",
+        "expected": "not_hispanic_or_latino",
+        "written": "not_hispanic_or_latino",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_race",
+        "expected": "asian",
+        "written": "asian",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line8_heightfeet",
+        "expected": "5",
+        "written": "5",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line8_heightinches",
+        "expected": "4",
+        "written": "4",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line9_heightinches1",
+        "expected": "1",
+        "written": "1",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line9_heightinches2",
+        "expected": "3",
+        "written": "3",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_line9_heightinches3",
+        "expected": "0",
+        "written": "0",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_eye_color",
+        "expected": "brown",
+        "written": "brown",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p3_hair_color",
+        "expected": "black",
+        "written": "black",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p4_checkbox1[1]",
+        "expected": "select_no",
+        "written": "select_no",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p4_checkbox1a",
+        "expected": "",
+        "written": "false",
+        "ok": false,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p4_checkbox1b",
+        "expected": "",
+        "written": "false",
+        "ok": false,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p4_checkbox1c",
+        "expected": "",
+        "written": "false",
+        "ok": false,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p5_checkbox1a",
+        "expected": "the_interpreter_named_in_part_6_has_read_to_me_every_question_and_instruction_on_this_application_and_my_answer_to_every_question_in_a_language_in_which_i_am_fluent_and_i_understood_everything",
+        "written": "the_interpreter_named_in_part_6_has_read_to_me_every_question_and_instruction_on_this_application_and_my_answer_to_every_question_in_a_language_in_which_i_am_fluent_and_i_understood_everything",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line1b_language",
+        "expected": "Vietnamese",
+        "written": "Vietnamese",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line3_daytimephonenumber",
+        "expected": "7135550142",
+        "written": "7135550142",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line4_mobilephonenumber",
+        "expected": "7135550199",
+        "written": "7135550199",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p5_line5_emailaddress",
+        "expected": "linh.nguyen@example.com",
+        "written": "lin.nguyen@example.com",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line1a_interpretersfamilyname",
+        "expected": "Garcia",
+        "written": "Garcia",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line1b_interpretersgivenname",
+        "expected": "Maria",
+        "written": "Maria",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line2_nameofbusinessor",
+        "expected": "Bayou City Language Services",
+        "written": "BioCity Language Services",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3a_streetnumbername",
+        "expected": [
+          "1000 Louisiana St",
+          "1000 Louisiana Street"
+        ],
+        "written": "1000 Louisiana Street",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p6_unit_type3b_unit",
+        "expected": "suite",
+        "written": "suite",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3b_aptsteflrnumber",
+        "expected": "2300",
+        "written": "230",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3c_citytown",
+        "expected": "Houston",
+        "written": "Houston",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3d_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3e_zipcode",
+        "expected": "77002",
+        "written": "77002",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line3f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p6_line3g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p6_line3h_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "United States",
+        "ok": true,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p6_line4_interpretersdaytimephonenumber",
+        "expected": "7135550188",
+        "written": "7135550188",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line4_interpretersdaytimephonenumber[1]",
+        "expected": "7135550177",
+        "written": "7135550177",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line5_interpretersemailaddress",
+        "expected": "maria.garcia@example.com",
+        "written": "maria.garcia@example.com",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_language",
+        "expected": "Vietnamese",
+        "written": "vietnamese",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p6_line6b_dateofsignature",
+        "expected": "06/01/2025",
+        "written": "",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p7_line1b_preparersgivenname",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line1a_familyname",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line2_nameofbusinessor",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3a_streetnumbername",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_unit_type3b_unit",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3c_citytown",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3d_state",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3e_zipcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3f_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3g_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line3h_country",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line4_preparersdaytimephonenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line5_preparersfaxnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line6_preparersemailaddress",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_checkbox7",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p7_line8b_dateofsignature",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3a_pagenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3b_partnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3c_itemnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line3d_additionalinfo",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5a_pagenumber[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5b_partnumber[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5c_itemnumber[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5d_additionalinfo[1]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4a_pagenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4b_partnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4c_itemnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line4d_additionalinfo",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5a_pagenumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5b_partnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5c_itemnumber",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5d_additionalinfo",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5a_pagenumber[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5b_partnumber[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5c_itemnumber[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p8_line5d_additionalinfo[2]",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [
+      "p6_line6b_dateofsignature"
+    ],
+    "format": [
+      "p1_line9_dateofbirth",
+      "p1_line15_dateofadmission"
+    ],
+    "transcription": [
+      "p1_line7a_streetnumbername",
+      "p5_line5_emailaddress",
+      "p6_line3b_aptsteflrnumber"
+    ],
+    "wrong-field": [],
+    "mismatch": [
+      "p3_line3a_destination",
+      "p3_line3a1_cityandstate",
+      "p6_line2_nameofbusinessor"
+    ],
+    "spurious": [
+      "p4_checkbox1a",
+      "p4_checkbox1b",
+      "p4_checkbox1c"
+    ]
+  },
+  "wall_clock_s": 946.7,
+  "auto_apply_fids": [
+    "p5_line6a_signatureofapplicant",
+    "p5_line6b_dateofsignature",
+    "p6_line6a_signature",
+    "p7_line8a_signatureofpreparer",
+    "p1_line1_aliennumber[1]",
+    "p1_line3a_familyname[1]",
+    "p1_line3b_givenname[1]",
+    "p1_line3c_middlename[1]"
+  ]
+}

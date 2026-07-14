@@ -1,0 +1,908 @@
+{
+  "bead": "polyglot-pdf-4loz",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "tier": "2.5",
+  "schema": "i90-full",
+  "arm": "dti",
+  "path": "happy",
+  "questions": 16,
+  "compression": true,
+  "trigger": 5000,
+  "window": 3500,
+  "continuous": true,
+  "schema_scope": "continuous-full-plan",
+  "started": "20260714T145942Z",
+  "turns": [
+    {
+      "q": 1,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.297
+    },
+    {
+      "q": 1,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 2,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 3,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 4,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 5,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 5,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 1.531
+    },
+    {
+      "q": 6,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 6,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 7,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 8,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 9,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 9,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 10,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 11,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 11,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 12,
+      "label": "value",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 12,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 13,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.281
+    },
+    {
+      "q": 13,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 14,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.188
+    },
+    {
+      "q": 14,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 15,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 2.156
+    },
+    {
+      "q": 15,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 16,
+      "label": "value",
+      "stalled": false,
+      "latency_s": 1.375
+    },
+    {
+      "q": 16,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "navigate-back",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "navigate-correct",
+      "stalled": false,
+      "latency_s": null
+    },
+    {
+      "q": 17,
+      "label": "confirm",
+      "stalled": false,
+      "latency_s": 0.219
+    }
+  ],
+  "per_question_tools": {
+    "1": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "2": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "3": [
+      "ask_secretary",
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "4": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "5": [
+      "update_form_fields",
+      "confirm_field"
+    ],
+    "6": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "7": [
+      "update_form_fields",
+      "confirm_field",
+      "ask_secretary"
+    ],
+    "8": [
+      "update_form_fields"
+    ],
+    "9": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "10": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "11": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "12": [
+      "confirm_field",
+      "update_form_fields",
+      "confirm_field",
+      "update_form_fields"
+    ],
+    "13": [
+      "confirm_field"
+    ],
+    "14": [
+      "get_form_status"
+    ],
+    "15": [
+      "get_form_status"
+    ],
+    "16": [
+      "get_form_status"
+    ],
+    "17": [
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "switch_to_field",
+      "switch_to_field",
+      "switch_to_field",
+      "switch_to_field",
+      "switch_to_field",
+      "switch_to_field",
+      "switch_to_field",
+      "ask_secretary",
+      "switch_to_field",
+      "switch_to_field",
+      "switch_to_field"
+    ]
+  },
+  "prompt_curve": [
+    1210,
+    1513,
+    1571,
+    1735,
+    1928,
+    2212,
+    2277,
+    2375,
+    2506,
+    2597,
+    2670,
+    2707,
+    2884,
+    2936,
+    3036,
+    3165,
+    3324,
+    3377,
+    3467,
+    3604,
+    3738,
+    3792,
+    3881,
+    4166,
+    4312,
+    4372,
+    4493,
+    4539,
+    4574,
+    4690,
+    4745,
+    4878,
+    3396,
+    3439,
+    3617,
+    3678,
+    3748,
+    3786,
+    3950,
+    4004,
+    4051,
+    4192,
+    4251,
+    4297,
+    4429,
+    4483,
+    4530,
+    3349,
+    3399,
+    3471,
+    3611,
+    3665,
+    3713,
+    3838,
+    3887,
+    3915,
+    4068,
+    4119,
+    4166,
+    4281,
+    4331,
+    4434,
+    4498,
+    4591,
+    4716,
+    4758,
+    4872,
+    3363,
+    3407,
+    3514,
+    3633,
+    3677,
+    3827,
+    3967,
+    4035,
+    4112,
+    4180,
+    4248,
+    4316,
+    4384,
+    4452,
+    4520,
+    4588,
+    4695,
+    4800,
+    3364,
+    3446
+  ],
+  "errors": [],
+  "rates_per_token": {
+    "text_input": 5e-07,
+    "audio_input": 3e-06,
+    "text_output": 2e-06,
+    "audio_output": 1.2e-05
+  },
+  "vad": "neutralized (explicit activity brackets; labeled deviation)",
+  "text_ai_wired": true,
+  "events_mode": "none",
+  "reactivity": "nav-vague-address",
+  "lang": "en",
+  "planted_groups": [],
+  "step_kinds": [
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "question",
+    "navigate_back"
+  ],
+  "pro_pass_wired": false,
+  "system_instruction_chars": 4457,
+  "greeting_tokens": 1332,
+  "pro_pass": {
+    "ran": false,
+    "model": null,
+    "conflicts": 0
+  },
+  "validation_records": [],
+  "drain_records": [],
+  "steer_records": [],
+  "event_records": [
+    {
+      "type": "navigate_back",
+      "step": 17,
+      "target": "p1_line6b_streetnumbername",
+      "switched_to": null,
+      "hit_target": false,
+      "seam_latency_s": 0.594
+    }
+  ],
+  "seam_tool_records": [
+    {
+      "ts": 130491.39,
+      "step": 3,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is their current family name?"
+      },
+      "response": {
+        "answer": "The secretary is still looking that up; the answer will arrive in a moment as a follow-up. Do NOT answer the question yet and do NOT repeat it back to the user. Either say nothing or give a brief natural acknowledgement (e.g. 'one sec'), then continue -- the answer will be delivered to you shortly.",
+        "available": true
+      }
+    },
+    {
+      "ts": 130495.0,
+      "step": 3,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is their current family name?"
+      },
+      "response": {
+        "answer": "The applicant's current family name has not been entered yet.",
+        "available": true
+      }
+    },
+    {
+      "ts": 130525.609,
+      "step": 6,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is their in care of name?"
+      },
+      "response": {
+        "answer": "The in care of name has not been entered.",
+        "available": true
+      }
+    },
+    {
+      "ts": 130534.687,
+      "step": 8,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "what is their mailing address street number and name?"
+      },
+      "response": {
+        "answer": "The applicant's mailing address street number and name has not been provided yet.",
+        "available": true
+      }
+    },
+    {
+      "ts": 130608.14,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130608.734,
+      "step": 17,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the field ID for the street address?"
+      },
+      "response": {
+        "answer": "There are two street address fields: one for the mailing address and one for the physical address. The mailing address street number and name is '4200 Westhiemer Rd'. The physical address street number and name has not been answered yet.",
+        "available": true
+      }
+    },
+    {
+      "ts": 130610.546,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130611.031,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130611.5,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130611.984,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130612.484,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130612.984,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130613.453,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130613.89,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130614.328,
+      "step": 17,
+      "tool": "ask_secretary",
+      "args": {
+        "query": "What is the exact field name or ID for the mailing street address?"
+      },
+      "response": {
+        "answer": "The field for the mailing street address is called \"mailing address street number and name\" and its ID is p1_line6b_streetnumbername.",
+        "available": true
+      }
+    },
+    {
+      "ts": 130615.375,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6a_street"
+      },
+      "response": {
+        "success": false,
+        "message": "No form field matches that name. Use the exact field_id from the guidance, or the field's exact spoken name -- or ask_secretary to identify the right field first."
+      }
+    },
+    {
+      "ts": 130615.984,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6b_streetnumbername"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'mailing address street number and name'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "current_value": "4200 Westhiemer Rd",
+        "field_guidance": "ID: p1_line6b_streetnumbername | Spoken: mailing address street number and name | Type: text | Instructions: Enter the street number and name of your mailing address. | Fill language: English"
+      }
+    },
+    {
+      "ts": 130616.39,
+      "step": 17,
+      "tool": "switch_to_field",
+      "args": {
+        "field": "p1_line6b_streetnumbername"
+      },
+      "response": {
+        "success": true,
+        "message": "Now on field 'mailing address street number and name'. It already has a confirmed answer -- read the current value back and ask what the user wants to change it to.",
+        "current_value": "4200 Westhiemer Rd",
+        "field_guidance": "ID: p1_line6b_streetnumbername | Spoken: mailing address street number and name | Type: text | Instructions: Enter the street number and name of your mailing address. | Fill language: English"
+      }
+    }
+  ],
+  "text_ledger_calls": [
+    {
+      "caller": "secretary",
+      "t_start": 130491.39,
+      "dur_s": 3.188
+    },
+    {
+      "caller": "secretary",
+      "t_start": 130495.0,
+      "dur_s": 0.75
+    },
+    {
+      "caller": "secretary",
+      "t_start": 130525.609,
+      "dur_s": 1.047
+    },
+    {
+      "caller": "secretary",
+      "t_start": 130534.687,
+      "dur_s": 1.219
+    },
+    {
+      "caller": "secretary",
+      "t_start": 130608.734,
+      "dur_s": 1.172
+    },
+    {
+      "caller": "secretary",
+      "t_start": 130614.328,
+      "dur_s": 1.047
+    }
+  ],
+  "eviction_drops": [
+    [
+      33,
+      4878,
+      3396
+    ],
+    [
+      48,
+      4530,
+      3349
+    ],
+    [
+      68,
+      4872,
+      3363
+    ],
+    [
+      86,
+      4800,
+      3364
+    ]
+  ],
+  "client_confirmed_fields": [
+    "p5_line6a_signatureofapplicant",
+    "p5_line6b_dateofsignature",
+    "p6_line6a_signature",
+    "p7_line8a_signatureofpreparer",
+    "p1_line1_aliennumber[1]",
+    "p1_line3a_familyname[1]",
+    "p1_line3b_givenname[1]",
+    "p1_line3c_middlename[1]",
+    "p1_line1_aliennumber",
+    "p1_line2_acctidentifier",
+    "p1_line3a_familyname",
+    "p1_line3b_givenname",
+    "p1_line3c_middlename",
+    "p1_checkbox4",
+    "p1_line6a_incareofname",
+    "p1_line6b_streetnumbername",
+    "p1_unit_type6c_unit",
+    "p1_line6c_aptsteflrnumber",
+    "p1_line6d_cityortown",
+    "p1_line6e_state",
+    "p1_line6f_zipcode",
+    "p1_line6g_province",
+    "p1_line6h_postalcode",
+    "p1_line6i_country"
+  ],
+  "fill_accuracy": {
+    "matched": 14,
+    "total": 16,
+    "accuracy": 0.875,
+    "detail": [
+      {
+        "field_id": "p1_line1_aliennumber",
+        "expected": "123456789",
+        "written": "123456789",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line2_acctidentifier",
+        "expected": "123456789012",
+        "written": "123456789012",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3a_familyname",
+        "expected": "Nguyen",
+        "written": "Nguyen",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3b_givenname",
+        "expected": "Linh",
+        "written": "Linh",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line3c_middlename",
+        "expected": "Thi",
+        "written": "Thi",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_checkbox4",
+        "expected": "no_proceed_to_item_numbers_6_a_6_c",
+        "written": "no_proceed_to_item_numbers_6_a_6_c",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6a_incareofname",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6b_streetnumbername",
+        "expected": [
+          "4200 Westheimer Rd",
+          "4200 Westheimer Road"
+        ],
+        "written": "4200 Westhiemer Rd",
+        "ok": false,
+        "scored": "any-of"
+      },
+      {
+        "field_id": "p1_unit_type6c_unit",
+        "expected": "apartment",
+        "written": "apartment",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6c_aptsteflrnumber",
+        "expected": "12",
+        "written": "Apt A",
+        "ok": false,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6d_cityortown",
+        "expected": "Houston",
+        "written": "Houston",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6e_state",
+        "expected": "texas",
+        "written": "texas",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6f_zipcode",
+        "expected": "77027",
+        "written": "77027",
+        "ok": true,
+        "scored": "exact"
+      },
+      {
+        "field_id": "p1_line6g_province",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6h_postalcode",
+        "expected": "",
+        "written": "",
+        "ok": true,
+        "scored": "expect-empty"
+      },
+      {
+        "field_id": "p1_line6i_country",
+        "expected": [
+          "United States",
+          "USA"
+        ],
+        "written": "USA",
+        "ok": true,
+        "scored": "any-of"
+      }
+    ]
+  },
+  "fill_failure_modes": {
+    "missing": [],
+    "format": [],
+    "transcription": [
+      "p1_line6b_streetnumbername"
+    ],
+    "wrong-field": [],
+    "mismatch": [
+      "p1_line6c_aptsteflrnumber"
+    ],
+    "spurious": []
+  },
+  "wall_clock_s": 157.0,
+  "auto_apply_fids": [
+    "p5_line6a_signatureofapplicant",
+    "p5_line6b_dateofsignature",
+    "p6_line6a_signature",
+    "p7_line8a_signatureofpreparer",
+    "p1_line1_aliennumber[1]",
+    "p1_line3a_familyname[1]",
+    "p1_line3b_givenname[1]",
+    "p1_line3c_middlename[1]"
+  ]
+}

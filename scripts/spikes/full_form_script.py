@@ -33,9 +33,13 @@ Build-time guards (all abort before any live spend):
   - the driver's _assert_expected_canon_matches_schema runs over the generated
     expected dict as it does for the hand-written plans.
 
-Language: phrase() takes lang ("en" now; "es" is the E6 Spanish arm, bd
-polyglot-pdf-0cyu -- the parameter exists so E6 is fixture-synthesis plus a
-translation table, not a rewrite).
+Language: phrase() takes lang ("en" or "es"; "es" is the E6 Spanish arm, bd
+polyglot-pdf-0cyu). The Spanish persona SPEAKS in Spanish (values spoken
+Spanish-style: digits, dates, option labels), but expected_canon() never
+takes a lang parameter -- the form fills in English regardless of the
+spoken language, so build_full_form_plan(schema, lang="es") produces the
+SAME field ids and expected canon as lang="en"; only the "say"/"wrong"
+phrasings differ.
 
 Stdlib-only (json/os/re/datetime) so --synth-only and the guards run without
 google-genai installed. ASCII only.
@@ -172,9 +176,15 @@ def field_visible(field: dict, field_by_id: dict, values: dict) -> bool:
 _DIGIT_WORDS = {
     "en": ["zero", "one", "two", "three", "four", "five", "six", "seven",
            "eight", "nine"],
+    "es": ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete",
+           "ocho", "nueve"],
 }
 _MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July",
               "August", "September", "October", "November", "December"]
+# Plain-ASCII Spanish month names (no accents -- gTTS 'es' pronounces
+# unaccented Spanish acceptably; CLAUDE.md scar #6).
+_MONTHS_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+              "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 _ORDINALS_EN = {
     1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth", 6: "sixth",
     7: "seventh", 8: "eighth", 9: "ninth", 10: "tenth", 11: "eleventh",
@@ -222,6 +232,54 @@ def _date_spoken_en(iso: str) -> str:
     return f"{_MONTHS_EN[d.month - 1]} {_ORDINALS_EN[d.day]}, {_year_spoken_en(d.year)}"
 
 
+_UNITS_ES = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete",
+             "ocho", "nueve", "diez", "once", "doce", "trece", "catorce",
+             "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve",
+             "veinte"]
+_TENS_ES = {2: "veinte", 3: "treinta", 4: "cuarenta", 5: "cincuenta",
+            6: "sesenta", 7: "setenta", 8: "ochenta", 9: "noventa"}
+
+
+def _two_digit_es(n: int) -> str:
+    """0-99 -> Spanish words, plain ASCII (e.g. 'veintidos', no accent)."""
+    if n <= 20:
+        return _UNITS_ES[n]
+    if n < 30:
+        # 21-29: "veintiuno".."veintinueve" (contracted, no "y")
+        ones = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete",
+                "ocho", "nueve"]
+        return "veinti" + ones[n - 20]
+    tens, ones = divmod(n, 10)
+    if ones == 0:
+        return _TENS_ES[tens]
+    return f"{_TENS_ES[tens]} y {_UNITS_ES[ones]}"
+
+
+def _year_spoken_es(year: int) -> str:
+    """1900-2099 -> Spanish words. 1985 -> 'mil novecientos ochenta y cinco';
+    2015 -> 'dos mil quince'; 2025 -> 'dos mil veinticinco'."""
+    if 1900 <= year <= 1999:
+        rem = year - 1900
+        if rem == 0:
+            return "mil novecientos"
+        return f"mil novecientos {_two_digit_es(rem)}"
+    if 2000 <= year <= 2099:
+        rem = year - 2000
+        if rem == 0:
+            return "dos mil"
+        return f"dos mil {_two_digit_es(rem)}"
+    # Fallback outside the covered range: digit-by-digit.
+    return _spell_digits(str(year), "es")
+
+
+def _date_spoken_es(iso: str) -> str:
+    """ISO 'YYYY-MM-DD' -> '12 de abril de 1985' style, spoken:
+    'doce de abril de mil novecientos ochenta y cinco'."""
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    day_words = _two_digit_es(d.day)
+    return f"{day_words} de {_MONTHS_ES[d.month - 1]} de {_year_spoken_es(d.year)}"
+
+
 def _iso_to_mdy(iso: str) -> str:
     d = datetime.strptime(iso, "%Y-%m-%d")
     return d.strftime("%m/%d/%Y")
@@ -259,6 +317,32 @@ _SAY_OVERRIDES_EN: dict = {
     "p1_line1_aliennumber": (
         "My alien registration number is A one two three four five six seven eight nine.",
         "My alien registration number is A nine eight seven six five four three two one.",
+    ),
+    # Personal names are SPELLED OUT (E0 pilot finding, bd polyglot-pdf-0cyu):
+    # English gTTS mangles the Vietnamese names badly enough that the live model
+    # transcribed "Nguyen" as "Smith", "Linh" as "Lynn", "Thi" as "T". Spelling
+    # an uncommon name is exactly what a real user does; the raw
+    # no-spelling fragility is recorded as a product finding in the E-series
+    # findings doc, not hidden by this phrasing.
+    "p1_line3a_familyname": (
+        "My current family name is Nguyen, spelled N G U Y E N.",
+        "My current family name is Tran, spelled T R A N.",
+    ),
+    "p1_line3b_givenname": (
+        "My current given name is Linh, spelled L I N H.",
+        "My current given name is Lan, spelled L A N.",
+    ),
+    "p1_line3c_middlename": (
+        "My current middle name is Thi, spelled T H I.",
+        "My current middle name is Van, spelled V A N.",
+    ),
+    "p1_line12_mothergivenname": (
+        "My mother's given name is Lan, spelled L A N.",
+        "My mother's given name is Mai, spelled M A I.",
+    ),
+    "p1_line13_fathergivenname": (
+        "My father's given name is Minh, spelled M I N H.",
+        "My father's given name is Duc, spelled D U C.",
     ),
     "p1_line6b_streetnumbername": (
         "My street address is four two zero zero Westheimer Road.",
@@ -309,6 +393,33 @@ _SAY_OVERRIDES_EN: dict = {
     ),
     "p3_line3a_destination": ("My destination in the United States is Houston Texas.", None),
     "p3_line3a1_cityandstate": ("The city and state is Houston Texas.", None),
+    # These seven fall through the generic mutation branches in _wrong_for:
+    # the three "_country" fields answer "United States" (13 chars, hits the
+    # len>=12 text fallback with no digits to swap); the two visa-location
+    # fields and the interpreter business-name field are long free-text with
+    # no digits either; the interpreter zip code is a plain "text" field with
+    # no validation block, so it renders via the generic "{name} is {answer}"
+    # template with RAW digits (not spelled-out words), and the digit-replace
+    # branch in _wrong_for silently no-ops because it looks for spelled-out
+    # digit words that were never in the say string. Explicit wrong phrasings,
+    # same style as the other overrides above.
+    "p1_line6i_country": ("My mailing country is United States.",
+                          "My mailing country is Canada."),
+    "p1_line7h_country": ("My physical country is United States.",
+                          "My physical country is Mexico."),
+    "p6_line3h_country": ("My interpreter's country is United States.",
+                          "My interpreter's country is Canada."),
+    "p3_line1_locationappliedvisa": (
+        "My location where you applied for immigrant visa is Ho Chi Minh City, Vietnam.",
+        "My location where you applied for immigrant visa is Hanoi, Vietnam."),
+    "p3_line2_locationissuedvisa": (
+        "My location where immigrant visa was issued is Ho Chi Minh City, Vietnam.",
+        "My location where immigrant visa was issued is Bangkok, Thailand."),
+    "p6_line2_nameofbusinessor": (
+        "My interpreter's business or organization name is Bayou City Language Services.",
+        "My interpreter's business or organization name is Gulf Coast Translation Group."),
+    "p6_line3e_zipcode": ("My interpreter's zip code is 77002.",
+                         "My interpreter's zip code is 99001."),
 }
 
 # Decline phrasings for visible fields the persona leaves EMPTY. Keyed by
@@ -330,6 +441,160 @@ _GENERIC_DECLINE_NA_EN = "That does not apply to me."
 _NA_STYLE_FIELDS = re.compile(r"^(p7_|p8_)")
 
 
+# --------------------------------------------------------------------------
+# Spanish (lang='es') phrasing -- E6 arm, bd polyglot-pdf-0cyu.
+#
+# The persona ANSWERS SPOKEN IN SPANISH (a Spanish-speaking user filling the
+# same I-90), while the EXPECTED canon is UNCHANGED from English (the form is
+# filled in English regardless of spoken language -- same slugs, same
+# MM/DD/YYYY dates, same digits; see expected_canon(), which takes no lang
+# parameter and is shared by both arms unmodified).
+#
+# Template scheme (value-forward, not a literal translation of the English
+# generic template): a Spanish speaker answering an English-voiced assistant
+# naturally leads with the VALUE, not the English field name -- so the
+# generic templates below never embed field.spoken_name (English) into the
+# Spanish sentence. Per field-shape:
+#   - digit fields:   "Es {digits spelled in Spanish}."
+#   - date fields:     "Es el {Spanish spoken date}."
+#   - option fields:   "Selecciono {ENGLISH option label}." -- the label is
+#                       kept VERBATIM in English (a realistic bilingual
+#                       answer pattern: the option text on an English form
+#                       has no natural Spanish slug for the model to map to,
+#                       so a real bilingual speaker reads the printed English
+#                       label back rather than translating it).
+#   - generic/text:    "Es {value}."
+#   - declines:        "No tengo eso." (generic) / "Eso no aplica en mi caso."
+#                       (NA-style block fields, mirrors _NA_STYLE_FIELDS).
+# All plain ASCII (no enye/accents in code strings) -- wordings were chosen to
+# avoid enye words where possible (e.g. "fecha de admision" not the accented
+# "admision" -- the word itself has no enye; "numero"/"direccion" drop the
+# accent only, gTTS 'es' pronounces the unaccented forms acceptably).
+# --------------------------------------------------------------------------
+_SAY_OVERRIDES_ES: dict = {
+    "p1_line1_aliennumber": (
+        "Mi numero de registro de extranjero es A uno dos tres cuatro cinco "
+        "seis siete ocho nueve.",
+        "Mi numero de registro de extranjero es A nueve ocho siete seis "
+        "cinco cuatro tres dos uno.",
+    ),
+    # Personal names are SPELLED OUT, same rationale as English: an uncommon
+    # name spoken to an English-tuned recognizer needs spelling to land.
+    "p1_line3a_familyname": (
+        "Mi apellido actual es Nguyen, se deletrea N G U Y E N.",
+        "Mi apellido actual es Tran, se deletrea T R A N.",
+    ),
+    "p1_line3b_givenname": (
+        "Mi nombre actual es Linh, se deletrea L I N H.",
+        "Mi nombre actual es Lan, se deletrea L A N.",
+    ),
+    "p1_line3c_middlename": (
+        "Mi segundo nombre es Thi, se deletrea T H I.",
+        "Mi segundo nombre es Van, se deletrea V A N.",
+    ),
+    "p1_line12_mothergivenname": (
+        "El nombre de mi madre es Lan, se deletrea L A N.",
+        "El nombre de mi madre es Mai, se deletrea M A I.",
+    ),
+    "p1_line13_fathergivenname": (
+        "El nombre de mi padre es Minh, se deletrea M I N H.",
+        "El nombre de mi padre es Duc, se deletrea D U C.",
+    ),
+    "p1_line6b_streetnumbername": (
+        "Mi direccion es cuatro dos cero cero Westheimer Road.",
+        "Mi direccion es nueve nueve cero cero Richmond Avenue.",
+    ),
+    "p1_line7a_streetnumbername": (
+        "Mi direccion fisica es cuatro dos cero cero Westheimer Road.",
+        "Mi direccion fisica es uno uno cero cero Main Street.",
+    ),
+    "p6_line3a_streetnumbername": (
+        "La direccion del interprete es uno cero cero cero Louisiana Street.",
+        "La direccion del interprete es dos cero cero cero Texas Avenue.",
+    ),
+    "p1_line6c_aptsteflrnumber": ("Es el apartamento numero doce.",
+                                 "Es el apartamento numero catorce."),
+    "p1_line7b_aptsteflrnumber": ("Es el apartamento numero doce.",
+                                 "Es el apartamento numero quince."),
+    "p6_line3b_aptsteflrnumber": ("Es la suite dos tres cero cero.",
+                                 "Es la suite dos cinco cero cero."),
+    "p1_line14_classofadmission": (
+        "Mi clase de admision es I R uno.", "Mi clase de admision es C R uno."),
+    "p5_checkbox1a": (
+        "Selecciono: Un interprete me leyo el formulario en mi idioma.",
+        "Selecciono: Yo puedo leer y entender ingles por mi mismo.",
+    ),
+    "p2_checkbox2[5]": (
+        "Selecciono: Necesito una tarjeta nueva porque mi tarjeta anterior "
+        "se perdio.",
+        "Selecciono: Necesito una tarjeta nueva porque mi tarjeta actual "
+        "esta mutilada.",
+    ),
+    "p2_checkbox1": ("Selecciono: Soy residente permanente legal.",
+                     "Selecciono: Soy residente permanente condicional."),
+    "p1_checkbox4": ("No, mi nombre no ha cambiado.",
+                     "Si, mi nombre ha cambiado legalmente."),
+    "p3_checkbox4[1]": ("No, nunca he estado en un proceso de deportacion.", None),
+    "p3_checkbox5[1]": (
+        "No, nunca he presentado el Formulario I-407 ni he abandonado mi estatus.",
+        None),
+    "p4_checkbox1[1]": ("No, no estoy solicitando ninguna adaptacion.", None),
+    "p3_ethnicity": ("No soy hispano ni latino.", "Soy hispano o latino."),
+    "p3_race": ("Asiatico.", "Blanco."),
+    "p3_line8_heightfeet": ("Mido cinco pies.", "Mido seis pies."),
+    "p3_line8_heightinches": ("Y cuatro pulgadas.", "Y siete pulgadas."),
+    "p3_line9_heightinches1": ("El primer digito de mi peso es uno.", None),
+    "p3_line9_heightinches2": ("El segundo digito es tres.", None),
+    "p3_line9_heightinches3": ("El ultimo digito es cero.", None),
+    "p5_line5_emailaddress": (
+        "Mi correo electronico es linh punto nguyen arroba example punto com.",
+        "Mi correo electronico es linh punto n arroba example punto org.",
+    ),
+    "p6_line5_interpretersemailaddress": (
+        "El correo del interprete es maria punto garcia arroba example punto com.",
+        "El correo del interprete es m punto garcia arroba example punto net.",
+    ),
+    "p3_line3a_destination": ("Mi destino en los Estados Unidos es Houston Texas.", None),
+    "p3_line3a1_cityandstate": ("La ciudad y el estado es Houston Texas.", None),
+    "p1_line6i_country": ("Mi pais de correo es Estados Unidos.",
+                          "Mi pais de correo es Canada."),
+    "p1_line7h_country": ("Mi pais fisico es Estados Unidos.",
+                          "Mi pais fisico es Mexico."),
+    "p6_line3h_country": ("El pais de mi interprete es Estados Unidos.",
+                          "El pais de mi interprete es Canada."),
+    "p3_line1_locationappliedvisa": (
+        "El lugar donde solicite la visa de inmigrante es Ciudad Ho Chi "
+        "Minh, Vietnam.",
+        "El lugar donde solicite la visa de inmigrante es Hanoi, Vietnam."),
+    "p3_line2_locationissuedvisa": (
+        "El lugar donde se emitio mi visa de inmigrante es Ciudad Ho Chi "
+        "Minh, Vietnam.",
+        "El lugar donde se emitio mi visa de inmigrante es Bangkok, Tailandia."),
+    "p6_line2_nameofbusinessor": (
+        "El nombre del negocio de mi interprete es Bayou City Language "
+        "Services.",
+        "El nombre del negocio de mi interprete es Gulf Coast Translation "
+        "Group."),
+    "p6_line3e_zipcode": ("El codigo postal de mi interprete es 77002.",
+                         "El codigo postal de mi interprete es 99001."),
+}
+
+# Decline phrasings for visible fields the persona leaves EMPTY, Spanish arm.
+# Mirrors _DECLINE_OVERRIDES_EN field-for-field.
+_DECLINE_OVERRIDES_ES: dict = {
+    "p1_line6a_incareofname": (
+        "No hay nombre de a cargo de, mi correo llega directamente a mi."),
+    "p4_checkbox1a": "Ninguna adaptacion, no soy sordo ni tengo problemas de audicion.",
+    "p4_checkbox1b": "Ninguna adaptacion, no soy ciego ni tengo baja vision.",
+    "p4_checkbox1c": "No, no necesito ninguna otra adaptacion.",
+    "p7_line1b_preparersgivenname": (
+        "No use un preparador, solo el interprete."),
+    "p7_checkbox7": "Eso no aplica, no tengo preparador.",
+}
+_GENERIC_DECLINE_ES = "No tengo eso."
+_GENERIC_DECLINE_NA_ES = "Eso no aplica en mi caso."
+
+
 def _wrong_for(field: dict, say: str, answer, lang: str) -> str:
     """Mechanical unhappy-path mutation. Option fields pick a DIFFERENT option
     label; digit fields reverse the digits; dates shift a month; text swaps to a
@@ -339,7 +604,10 @@ def _wrong_for(field: dict, say: str, answer, lang: str) -> str:
         others = [o for o in opts
                   if isinstance(o, dict) and str(o.get("value")) != str(answer)]
         if others:
-            return f"Actually, {_option_label(field, others[0].get('value'))}."
+            alt_label = _option_label(field, others[0].get("value"))
+            if lang == "es":
+                return f"En realidad, {alt_label}."
+            return f"Actually, {alt_label}."
     if answer and _is_date_field(field):
         d = datetime.strptime(str(answer), "%Y-%m-%d")
         # Shift one month LATER (December wraps to January of the NEXT year --
@@ -349,23 +617,30 @@ def _wrong_for(field: dict, say: str, answer, lang: str) -> str:
         month = (d.month % 12) + 1
         year = d.year + (1 if d.month == 12 else 0)
         alt = d.replace(year=year, month=month, day=min(d.day, 28))
-        return f"It was {_date_spoken_en(alt.strftime('%Y-%m-%d'))}."
+        alt_iso = alt.strftime("%Y-%m-%d")
+        if lang == "es":
+            return f"Fue el {_date_spoken_es(alt_iso)}."
+        return f"It was {_date_spoken_en(alt_iso)}."
     digits = re.sub(r"\D", "", str(answer or ""))
     if digits and len(digits) >= 5:
-        return say.replace(_spell_digits(digits, lang),
-                           _spell_digits(digits[::-1], lang))
+        spelled = _spell_digits(digits, lang)
+        reversed_spelled = _spell_digits(digits[::-1], lang)
+        if spelled in say:
+            return say.replace(spelled, reversed_spelled)
+        if digits in say:
+            # say rendered via the generic template with RAW digits (the
+            # field wasn't recognized as a digit field by _is_digit_field,
+            # e.g. a plain "text" field with no validation block) -- swap
+            # the raw digit substring instead of the (absent) spelled words.
+            return say.replace(digits, digits[::-1])
     if isinstance(answer, str) and answer:
+        if lang == "es":
+            return f"Es {answer[::-1].title()}." if len(answer) < 12 else say
         return f"It is {answer[::-1].title()}." if len(answer) < 12 else say
     return say
 
 
-def phrase(field: dict, answer, lang: str = "en") -> tuple:
-    """(say, wrong) spoken phrasings for a field + its persona answer.
-    answer=None means a visible field the persona declines (expect-empty)."""
-    if lang != "en":
-        raise NotImplementedError(
-            "Only lang='en' is implemented; the Spanish arm (E6, bd "
-            "polyglot-pdf-0cyu) adds an 'es' template + override table here.")
+def _phrase_en(field: dict, answer) -> tuple:
     fid = field.get("id", "")
     name = field.get("spoken_name") or field.get("name") or fid
 
@@ -381,23 +656,76 @@ def phrase(field: dict, answer, lang: str = "en") -> tuple:
     if fid in _SAY_OVERRIDES_EN:
         say, wrong = _SAY_OVERRIDES_EN[fid]
         return say, (wrong if wrong is not None
-                     else _wrong_for(field, say, answer, lang))
+                     else _wrong_for(field, say, answer, "en"))
 
     if field.get("options"):
         say = f"{_option_label(field, answer)}."
-        return say, _wrong_for(field, say, answer, lang)
+        return say, _wrong_for(field, say, answer, "en")
 
     if _is_date_field(field):
         say = f"My {name} is {_date_spoken_en(str(answer))}."
-        return say, _wrong_for(field, say, answer, lang)
+        return say, _wrong_for(field, say, answer, "en")
 
     digits = re.sub(r"\D", "", str(answer))
     if _is_digit_field(field) and digits:
-        say = f"My {name} is {_spell_digits(digits, lang)}."
-        return say, _wrong_for(field, say, answer, lang)
+        say = f"My {name} is {_spell_digits(digits, 'en')}."
+        return say, _wrong_for(field, say, answer, "en")
 
     say = f"My {name} is {answer}."
-    return say, _wrong_for(field, say, answer, lang)
+    return say, _wrong_for(field, say, answer, "en")
+
+
+def _phrase_es(field: dict, answer) -> tuple:
+    """Spanish-spoken phrasing. Value-forward templates (see the scheme note
+    above _SAY_OVERRIDES_ES) -- never embeds the English spoken_name into the
+    generic Spanish sentence."""
+    fid = field.get("id", "")
+
+    if answer is None:
+        say = _DECLINE_OVERRIDES_ES.get(fid)
+        if say is None:
+            say = (_GENERIC_DECLINE_NA_ES if _NA_STYLE_FIELDS.match(fid)
+                   else _GENERIC_DECLINE_ES)
+        return say, say  # a decline has no distinct unhappy variant
+
+    if fid in _SAY_OVERRIDES_ES:
+        say, wrong = _SAY_OVERRIDES_ES[fid]
+        return say, (wrong if wrong is not None
+                     else _wrong_for(field, say, answer, "es"))
+
+    if field.get("options"):
+        # Keep the ENGLISH option label verbatim -- a real bilingual answer
+        # pattern; the label is what's printed on the (English) form, and the
+        # model must map the spoken label back to its slug either way.
+        say = f"Selecciono {_option_label(field, answer)}."
+        return say, _wrong_for(field, say, answer, "es")
+
+    if _is_date_field(field):
+        say = f"Es el {_date_spoken_es(str(answer))}."
+        return say, _wrong_for(field, say, answer, "es")
+
+    digits = re.sub(r"\D", "", str(answer))
+    if _is_digit_field(field) and digits:
+        say = f"Es {_spell_digits(digits, 'es')}."
+        return say, _wrong_for(field, say, answer, "es")
+
+    say = f"Es {answer}."
+    return say, _wrong_for(field, say, answer, "es")
+
+
+def phrase(field: dict, answer, lang: str = "en") -> tuple:
+    """(say, wrong) spoken phrasings for a field + its persona answer.
+    answer=None means a visible field the persona declines (expect-empty).
+    Dispatches by lang ('en'/'es'); the expected-canon path (expected_canon)
+    is unchanged by lang -- the form fills in English regardless of the
+    spoken input language."""
+    if lang == "es":
+        return _phrase_es(field, answer)
+    if lang != "en":
+        raise NotImplementedError(
+            f"lang={lang!r} is not implemented; only 'en' and 'es' are "
+            "supported.")
+    return _phrase_en(field, answer)
 
 
 # --------------------------------------------------------------------------
@@ -507,6 +835,20 @@ def build_full_form_plan(schema: dict, lang: str = "en") -> dict:
         questions.append({"field_id": fid, "say": say, "wrong": wrong})
         expected[fid] = expected_canon(f, answer)
         answered_so_far[fid] = answer
+
+    # Guard: every answered (non-empty-expected) question must have a wrong
+    # utterance DISTINCT from say -- a degenerate unhappy-path turn (REJECT
+    # then re-hear the identical value) corrupts the unhappy-path measurement
+    # (bd polyglot-pdf-3gt9). Declines are exempt: phrase() intentionally
+    # returns the same text for both (a decline has no distinct unhappy
+    # variant -- see phrase()'s answer=None branch).
+    degenerate = [q["field_id"] for q in questions
+                  if expected[q["field_id"]] != "" and q["say"] == q["wrong"]]
+    if degenerate:
+        raise SystemExit(
+            "degenerate unhappy-path utterance(s) -- 'wrong' equals 'say' for "
+            "answered field(s): " + ", ".join(degenerate)
+            + " (fix _wrong_for or add a _SAY_OVERRIDES_EN entry)")
 
     return {"questions": questions, "expected": expected,
             "auto_apply": auto_apply, "hidden": hidden}

@@ -1,0 +1,172 @@
+{
+  "run": {
+    "model": "gemini-live-2.5-flash-native-audio",
+    "tier": "2.5",
+    "schema": "i90-full",
+    "arm": "dti",
+    "path": "happy",
+    "questions": 113,
+    "compression": true,
+    "trigger": 5000,
+    "window": 3500,
+    "continuous": true,
+    "started": "20260714T090804Z",
+    "events_mode": "standard",
+    "reactivity": null,
+    "lang": "en",
+    "text_ai_wired": true
+  },
+  "headline": {
+    "all_in_usd": 3.460401,
+    "voice_usd": 3.399272,
+    "text_usd": 0.061129,
+    "voice_tokens": 3111373,
+    "wall_clock_s": 1202.8,
+    "steps": 117,
+    "fill_accuracy": {
+      "matched": 72,
+      "total": 113,
+      "accuracy": 0.6372
+    },
+    "fill_failure_modes": {
+      "missing": 21,
+      "format": 2,
+      "transcription": 5,
+      "wrong-field": 3,
+      "mismatch": 6,
+      "spurious": 4
+    },
+    "usd_per_correct_field": 0.0481
+  },
+  "validator": {
+    "windows_submitted": 8,
+    "boundaries": 8,
+    "calls": 8,
+    "window_latency_s": {
+      "n": 8,
+      "p50": 0.781,
+      "p90": 3.062,
+      "p95": 3.985,
+      "max": 3.985
+    },
+    "verdict_latency_s": {
+      "n": 8,
+      "p50": 0.781,
+      "p90": 3.078,
+      "p95": 4.0,
+      "max": 4.0
+    },
+    "pr": {
+      "planted": 2,
+      "recalled": 1,
+      "recall": 0.5,
+      "flagged_groups": 1,
+      "plant_attributable": 1,
+      "precision": 1.0,
+      "false_positive_groups": [],
+      "missed_groups": [
+        [
+          "p5_line1b_language",
+          "p6_language"
+        ]
+      ]
+    },
+    "duplicate_steers": 0,
+    "steers": 1,
+    "steer_outcomes": {
+      "corrected_no_switch": 1
+    },
+    "steer_to_switch_s": {
+      "n": 0,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "max": null
+    },
+    "fail_opens": 1,
+    "drains": {
+      "count": 1,
+      "delivered": 1,
+      "undelivered_retries": 0
+    },
+    "drain_latency_s": {
+      "n": 1,
+      "p50": 0.0,
+      "p90": 0.0,
+      "p95": 0.0,
+      "max": 0.0
+    }
+  },
+  "pro_pass": {
+    "ran": false,
+    "model": null,
+    "usd": 0,
+    "latency_s": null,
+    "conflicts": 0,
+    "calls": 0
+  },
+  "secretary": {
+    "calls": 103,
+    "blocked_s": {
+      "n": 103,
+      "p50": 0.797,
+      "p90": 1.047,
+      "p95": 1.156,
+      "max": 1.297
+    },
+    "pending_detached": 0,
+    "recall_events": 2,
+    "tool_fired": 2,
+    "answers_correct": 2,
+    "answers_wrong": 0,
+    "cache_hit_rate": 0.641,
+    "warnings": 0
+  },
+  "navigation": {
+    "attempts": 2,
+    "switched": 1,
+    "hit_target": 1,
+    "seam_latency_s": {
+      "n": 2,
+      "p50": 0.578,
+      "p90": 1.015,
+      "p95": 1.015,
+      "max": 1.015
+    }
+  },
+  "skips": {
+    "requested": 1,
+    "recorded": 1
+  },
+  "latency": {
+    "turn_s": {
+      "n": 133,
+      "p50": 1.343,
+      "p90": 1.796,
+      "p95": 1.89,
+      "max": 2.406
+    }
+  },
+  "errors": {
+    "close_1011": 0,
+    "go_away_announced": 2,
+    "reconnects": 2,
+    "reconnect_downtime_s": {
+      "n": 2,
+      "p50": 6.422,
+      "p90": 7.609,
+      "p95": 7.609,
+      "max": 7.609
+    },
+    "stalled_turns": 0,
+    "tool_callback_exceptions": 0,
+    "dti_coercions": 140,
+    "unknown_field_rejections": 8,
+    "spurious_fills": [],
+    "validation_dropped": 0,
+    "secretary_delivers_dropped": 0,
+    "dropped_drains": 0,
+    "unpriced_model_calls": [],
+    "captured_errors": 0
+  }
+}
