@@ -87,3 +87,8 @@ backend/.venv
 # local developer setup, not shared project state -- keep it out of the tree.
 .mcp.json
 scripts/authoring/outputs/
+
+# Scratch pitch-deck work-in-progress (maintainer's local sandbox for pitch
+# material that isn't ready to share/commit). Everything else under pitch/ is
+# tracked as normal.
+pitch/ignored_pitch/
