@@ -126,6 +126,32 @@ describe('WebFormConnection validate_windows stride emit (bd polyglot-pdf-kxkw)'
     expect(w0[19].field_id).toBe('f19')
   })
 
+  it('got6: after an []-alias value migration, an EXACT-KEY-FIRST reader (buildValidatorFields.valueFor) gets the MIGRATED value', async () => {
+    // bd polyglot-pdf-got6, closing the fresh-eyes coverage gap through the actual
+    // validator-projection READ SEMANTICS. buildValidatorFields.valueFor
+    // (webFormConnection.ts) reads the EXACT schema-id key first, then falls back to
+    // the []-variant. The got6 bug was that a migration left a STALE entry under the
+    // exact key, so valueFor read it. Fill f5 under its id, then migrate to f5[]
+    // with a NEW value; the got6 fix removes the stale f5 key, so valueFor's
+    // exact-key-first read now correctly falls back to f5[] and gets the migration.
+    const conn2 = new WebFormConnection(nFieldSchema(50))
+    conn2.updateField('f5', 'stale', { confirmed: true })
+    conn2.updateField('f5[]', 'migrated', { confirmed: true })
+    const state = (conn2 as any).state
+    // Replicate buildValidatorFields.valueFor's exact-key-first + []-fallback read.
+    const valueFor = (fieldId: string): any => {
+      let fv = state.fieldValues[fieldId]
+      if (!fv && !fieldId.endsWith('[]')) fv = state.fieldValues[fieldId + '[]']
+      if (!fv && fieldId.endsWith('[]')) fv = state.fieldValues[fieldId.slice(0, -2)]
+      return fv
+    }
+    // valueFor for schema field 'f5' returns the migrated value, not the stale one.
+    expect(valueFor('f5')?.value).toBe('migrated')
+    // And there is no stale exact-key entry to be read in preference.
+    expect(state.fieldValues['f5']).toBeUndefined()
+    conn2.disconnect()
+  })
+
   it('does not re-send an already-sent window on later confirms (persisted high-water mark)', async () => {
     const ws = await connected(nFieldSchema(50))
     fillFirst(ws, 20)             // sends window 0

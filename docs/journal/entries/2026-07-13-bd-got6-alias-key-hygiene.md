@@ -58,3 +58,8 @@ note (W4) already describes the intended behavior this fix restores.
   stale variant key on a cross-variant migration (+ `priorKey` capture).
 - frontend/src/schema-forms/state/schemaFormState.test.ts -- 3 got6 regression tests
   (forward migration, reverse migration, same-key rewrite is untouched).
+- frontend/src/webFormConnection.validatewindows.test.ts -- a got6 test through the
+  VALIDATOR PROJECTION read semantics (fresh-eyes coverage gap): after a migration,
+  a byte-identical replica of buildValidatorFields' exact-key-first `valueFor` read
+  returns the migrated value (and no stale exact-key entry remains), so a future
+  change to valueFor's fallback order that reintroduced the bug would fail here.
