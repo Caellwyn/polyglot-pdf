@@ -51,6 +51,11 @@ Rules (stable ids; one finding per violation site):
                                 permanently non-fillable when shown
 - legacy-trigger-side-logic ERROR (v2 only) a schema still carries the removed
                                 controls_fields / conditional_fields key
+- required-top-level     ERROR   (v2 only) a field carries a TRUTHY top-level
+                                `required`; the canonical location is
+                                validation.required (read by every kit + the
+                                frontend) so a top-level true is silently ignored
+                                and the field is treated as optional
 
 ASCII only.
 """
@@ -683,6 +688,23 @@ def lint_schema(
                         f"lives target-side in show_if / require_if now) -- "
                         f"migrate it",
                     ))
+
+            # required lives at validation.required, the shape every kit + the
+            # frontend isFieldRequired reader + the Pydantic model consume. An
+            # old-extractor top-level `required` is read by NO consumer, so a
+            # field marked required=true there is silently treated as OPTIONAL
+            # -- a lost-intent gate (bd polyglot-pdf-a1ql). ERROR so a drifted kit
+            # cannot publish. Only a TRUTHY top-level required is flagged: a top-
+            # level required=false carries no lost intent (the field is optional
+            # either way) and legacy/merged fields still emit that inert key.
+            if f.get("required"):
+                out.append(LintFinding(
+                    SEVERITY_ERROR, "required-top-level",
+                    f"{field_path}.required",
+                    "required must live at validation.required, not the field top "
+                    "level -- a top-level required is read by no consumer, so this "
+                    "field is silently OPTIONAL; move it into validation",
+                ))
 
     _check_cycles(show_if_graph, out)
 

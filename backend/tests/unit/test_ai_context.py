@@ -95,6 +95,37 @@ def test_real_i90_section_si_carries_help_instructions():
     assert instr[:30] in si
 
 
+def test_real_i90_required_field_rejects_empty_and_uses_validation_required():
+    """The A-Number is marked required on the real i-90 kit via the CANONICAL
+    validation.required shape, so an empty confirm is rejected in production
+    semantics, while an optional field still accepts empty (bd polyglot-pdf-a1ql).
+    Also pins that no field carries the dead top-level `required` key anymore."""
+    from pathlib import Path
+    import pytest
+    from backend.models.form_models import FormSchema
+    repo_root = Path(__file__).resolve().parents[3]
+    schema_path = repo_root / "form-kits" / "i-90" / "schema.json"
+    if not schema_path.exists():
+        pytest.skip("form-kits/i-90/schema.json not present in this checkout")
+    raw = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    # Canonical shape: required lives under validation, never at the top level.
+    assert all("required" not in f for f in raw["fields"]), (
+        "a field still carries a dead top-level `required` key")
+    a_number = next(f for f in raw["fields"] if f["id"] == "p1_line1_aliennumber")
+    assert (a_number.get("validation") or {}).get("required") is True
+
+    fs = FormSchema.model_validate(raw)
+    ok_empty, msg = fs.validate_field_value("p1_line1_aliennumber", "")
+    assert ok_empty is False and "required" in (msg or ""), (
+        "required A-Number must reject an empty value")
+    ok_none, _ = fs.validate_field_value("p1_line1_aliennumber", None)
+    assert ok_none is False
+    # An optional field still accepts empty (the gate is genuinely required-scoped).
+    ok_opt, _ = fs.validate_field_value("p1_line3a_familyname", "")
+    assert ok_opt is True
+
+
 def test_nested_help_instructions_preferred_over_flat_description():
     """When both nested help.instructions and a flat description exist, the nested
     (canonical) instructions win for the Note: line."""

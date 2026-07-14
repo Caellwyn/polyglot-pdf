@@ -27,12 +27,15 @@ NESTED_FIELD = {
     "spoken_name": "alien registration number",
     "name": "A-Number",
     "type": "text",
-    "required": True,
     "help": {
         "instructions": "Your A-Number is a 7-9 digit number on your green card.",
         "format_hint": "7-9 digits",
     },
-    "validation": {"pattern": "^\\d{7,9}$", "format_preset": "a_number"},
+    # required lives at validation.required, the canonical shape every consumer
+    # reads (bd polyglot-pdf-a1ql).
+    "validation": {
+        "pattern": "^\\d{7,9}$", "format_preset": "a_number", "required": True,
+    },
 }
 
 # A field in the FLAT shape (demo schema) -- the renderer must fall back to it.

@@ -38,9 +38,23 @@ _ADDR_CLUSTERS = [
 
 
 def test_answer_key_is_structurally_valid():
-    """Coverage, valid option values, copy-field equality, NA bookkeeping all hold."""
+    """Coverage, valid option values, copy-field equality, NA bookkeeping, and
+    digit-preset pattern/length all hold."""
     problems = validate_answer_key()
     assert problems == [], "answer key invalid:\n  " + "\n  ".join(problems)
+
+
+def test_validate_answer_key_catches_digit_preset_length_drift(monkeypatch):
+    """A digit-preset value that violates the kit's pattern/length (e.g. a 13-digit
+    uscis_account under ^[0-9]{12}$) must be flagged, so the next kit drift aborts
+    loudly instead of passing silently (bd polyglot-pdf-kpa1)."""
+    import backend.scripts.g1b_answer_key as ak
+    bad = dict(ak.ANSWER_KEY)
+    bad["p1_line2_acctidentifier"] = "1234567890123"  # 13 digits, kit wants 12
+    monkeypatch.setattr(ak, "ANSWER_KEY", bad)
+    problems = ak.validate_answer_key()
+    assert any("p1_line2_acctidentifier" in p for p in problems), (
+        "pattern/length drift was not caught:\n  " + "\n  ".join(problems))
 
 
 def test_answer_key_covers_every_schema_field_exactly_once():
@@ -224,15 +238,25 @@ def test_p5_certification_matches_who_filled_the_form():
         assert fid not in d, f"{fid} should be omitted from the payload"
 
 
-def test_show_if_gated_reason_field_is_na_for_plain_lpr():
-    """p2_checkbox2[5] (reason for new card) is show_if-gated to commuter status;
-    the production renderer hides it for a plain LPR and rejects hidden updates, so
-    a real client cannot send it -- it must be NA here (Codex review, PR #253)."""
-    assert ANSWER_KEY["p2_checkbox2[5]"] is None
+def test_reason_for_new_card_is_answered_for_plain_lpr():
+    """p2_checkbox2[5] (reason for new card) is show_if-gated
+    `p2_checkbox1 in [lawful_permanent_resident,
+    permanent_resident_in_commuter_status]`, so it is VISIBLE for a plain LPR. The
+    persona's documented reason is a lost green card, so it must carry the
+    lost/stolen/destroyed option and appear in the payload wherever Part 2 is in the
+    size window (bd polyglot-pdf-kpa1; corrects the stale commuter-only NA)."""
+    assert ANSWER_KEY["p2_checkbox2[5]"] == "my_previous_card_has_been_lost_stolen_or_destroyed"
     assert ANSWER_KEY["p2_checkbox1"] == "lawful_permanent_resident"  # plain LPR
+    assert "p2_checkbox2[5]" not in NA_REASON
+    # It is filled (not NA) wherever it appears in a corpus size window.
+    seen_in_any = False
     for size in (20, 40, 132):
         for case in build_corpus(size):
-            assert "p2_checkbox2[5]" not in {f["field_id"] for f in case.fields}
+            d = {f["field_id"]: f["value"] for f in case.fields}
+            if "p2_checkbox2[5]" in d:
+                seen_in_any = True
+                assert d["p2_checkbox2[5]"] == "My previous card has been lost, stolen, or destroyed"
+    assert seen_in_any, "reason-for-new-card field never appeared in any corpus size"
 
 
 def test_injection_cases_carry_no_secondary_address_contradiction():
