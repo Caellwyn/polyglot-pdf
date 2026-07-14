@@ -1167,23 +1167,47 @@ describe('SchemaFormStateManager', () => {
       expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBe(true)
     })
 
-    it('PRESERVES the steered marker across a manual edit (raw value)', () => {
+    it('W4: RE-ARMS (clears steered) when a manual edit CHANGES the value (raw value)', () => {
+      // W4 (bd polyglot-pdf-ny4s): a value CHANGE re-arms -- the corrected field
+      // must re-enter the validator net. (Pre-W4 this test asserted preservation;
+      // that unconditional carry-forward was the bug the maintainer flagged.)
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
       state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
       state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
-      // User edits the field -> updateField replaces the FieldValue; steered must survive.
       state = SchemaFormStateManager.updateField(state, 'field-1', 'v2')
       expect((state.fieldValues['field-1'] as FieldValue).value).toBe('v2')
+      expect((state.fieldValues['field-1'] as FieldValue).steered).toBeFalsy()
+    })
+
+    it('W4: PRESERVES the marker when an edit does NOT change the value (raw value)', () => {
+      // No value change (a re-confirm / no-op write) -> the marker stays, so a user
+      // who confirms "both are intentional" is never re-asked (no-nagging guarantee).
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1') // same value
       expect((state.fieldValues['field-1'] as FieldValue).steered).toBe(true)
     })
 
-    it('PRESERVES the steered marker when a FieldValue object replaces the value', () => {
+    it('W4: RE-ARMS when a FieldValue object CHANGES the value', () => {
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
       state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
       state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
       state = SchemaFormStateManager.updateField(state, 'field-1', { value: 'v2', confirmed: true } as any)
+      expect((state.fieldValues['field-1'] as FieldValue).steered).toBeFalsy()
+    })
+
+    it('W4: a FieldValue object with an EXPLICIT steered wins over the re-arm rule', () => {
+      // An incoming FieldValue that explicitly sets steered is honored (the caller
+      // asserted intent); re-arm only governs the implicit carry-forward.
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
+      state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
+      state = SchemaFormStateManager.updateField(state, 'field-1', { value: 'v2', steered: true } as any)
       expect((state.fieldValues['field-1'] as FieldValue).steered).toBe(true)
     })
 
@@ -1194,28 +1218,31 @@ describe('SchemaFormStateManager', () => {
       expect(after.fieldValues['field-1']).toBeUndefined()
     })
 
-    it('PRESERVES the marker when the value migrates between []-alias variants (bd polyglot-pdf-5k52)', () => {
-      // The marker was written under the bracketed key (field-1[]); the model
-      // then re-fills the unbracketed id. The carry-forward must apply the same
-      // []-alias fallback as markFieldsSteered, or the marker is dropped and the
-      // backend re-steers the field once more than the invariant allows.
+    it('PRESERVES the marker across an []-alias migration when the value is UNCHANGED (bd polyglot-pdf-5k52 + W4)', () => {
+      // The marker was written under the bracketed key (field-1[]); the model then
+      // re-writes the unbracketed id with the SAME value. The carry-forward must apply
+      // the same []-alias fallback as markFieldsSteered (so the marker follows the
+      // field across the variant) AND, since the value did not change, keep the marker
+      // (W4 re-arm governs value changes, not the key-variant migration).
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
       state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v1')
       state = SchemaFormStateManager.markFieldsSteered(state, ['field-1[]'])
       expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBe(true)
-      state = SchemaFormStateManager.updateField(state, 'field-1', 'v2')
-      expect((state.fieldValues['field-1'] as FieldValue).value).toBe('v2')
+      state = SchemaFormStateManager.updateField(state, 'field-1', 'v1') // same value, other variant
+      expect((state.fieldValues['field-1'] as FieldValue).value).toBe('v1')
       expect((state.fieldValues['field-1'] as FieldValue).steered).toBe(true)
     })
 
-    it('PRESERVES the marker in the reverse direction (unbracketed -> bracketed)', () => {
+    it('W4: RE-ARMS across an []-alias migration when the value CHANGES', () => {
+      // A value change re-arms even across the bracket-variant migration (the alias
+      // fallback finds the prior value under the other key, sees it differ, clears).
       const schema = createTestSchema()
       let state = SchemaFormStateManager.init(schema)
       state = SchemaFormStateManager.updateField(state, 'field-1', 'v1')
       state = SchemaFormStateManager.markFieldsSteered(state, ['field-1'])
       state = SchemaFormStateManager.updateField(state, 'field-1[]', 'v2')
-      expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBe(true)
+      expect((state.fieldValues['field-1[]'] as FieldValue).steered).toBeFalsy()
     })
   })
 
