@@ -453,6 +453,38 @@ def test_stale_conditional_fields_on_a_v2_kit_is_a_lint_error():
     assert "legacy-trigger-side-logic" in _rules(findings)
 
 
+def test_top_level_required_on_a_v2_kit_is_a_lint_error():
+    # required must live at validation.required (the shape every kit + the frontend
+    # isFieldRequired reader consume); a top-level required is read by no consumer
+    # and the field is silently optional (bd polyglot-pdf-a1ql).
+    fields = [
+        {"id": "acct", "type": "text", "required": True},
+    ]
+    findings = lint_schema(_schema(fields, version="2"))
+    assert "required-top-level" in _rules(findings)
+    assert has_errors(findings)
+
+
+def test_validation_required_on_a_v2_kit_is_clean():
+    # The canonical location does NOT trip the rule.
+    fields = [
+        {"id": "acct", "type": "text", "validation": {"required": True}},
+    ]
+    findings = lint_schema(_schema(fields, version="2"))
+    assert "required-top-level" not in _rules(findings)
+
+
+def test_top_level_required_on_a_v1_draft_is_NOT_flagged():
+    # A raw pre-migration/prior-extractor draft carrying top-level required is not
+    # v2-stamped, so it is not yet held to the canonical shape (mirrors the
+    # controls_fields v1 tolerance below).
+    fields = [
+        {"id": "acct", "type": "text", "required": True},
+    ]
+    findings = lint_schema(_schema(fields))  # no version -> v1 draft
+    assert "required-top-level" not in _rules(findings)
+
+
 def test_controls_fields_on_a_v1_draft_is_NOT_flagged():
     # A raw pre-migration extraction draft (no v2 stamp) legitimately still
     # carries controls_fields until the repair/migrate pipeline converts it; lint

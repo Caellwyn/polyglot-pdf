@@ -92,6 +92,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 _SCHEMA_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -118,6 +119,7 @@ def load_schema_fields() -> list:
             "section_id": fld.get("section_id", ""),
             "options": fld.get("options") or [],
             "copy_from": fld.get("copy_from"),
+            "validation": fld.get("validation") or {},
         })
     return out
 
@@ -246,7 +248,7 @@ def option_label(field: dict, value: str) -> str:
 ANSWER_KEY: dict = {
     # ---- Part 1: Information About You ----
     "p1_line1_aliennumber": "A123456789",
-    "p1_line2_acctidentifier": "1234567890123",   # USCIS online account number (13 digits)
+    "p1_line2_acctidentifier": "123456789012",   # USCIS online account number (12 digits, kit pattern ^[0-9]{12}$)
     "p1_line3a_familyname": "Nguyen",
     "p1_line3b_givenname": "Linh",
     "p1_line3c_middlename": "Thi",
@@ -296,16 +298,12 @@ ANSWER_KEY: dict = {
     "p2_checkbox1": "lawful_permanent_resident",
     # Commuter port-of-entry: gated on commuter reason; NA for a plain LPR.
     "p2_line2h1_cityandstate": None,
-    # Reason for new card (p2_checkbox2[5]): NA for THIS persona. The schema is
-    # self-inconsistent here -- p2_checkbox1.controls_fields unlocks the reason
-    # field for option [0] (plain LPR) too, but p2_checkbox2[5].show_if requires
-    # option [1] (commuter). The PRODUCTION renderer gates on show_if
-    # (frontend shouldShowField) and HIDES the field for a plain LPR, rejecting any
-    # hidden-field update -- so a real client could NOT send this field for this
-    # persona. The corpus must reflect what a real client sends, so the field is NA
-    # here (Codex review on PR #253). The schema discrepancy itself is tracked in
-    # bd polyglot-pdf-zi2s.
-    "p2_checkbox2[5]": None,
+    # Reason for new card (p2_checkbox2[5]): VISIBLE and answered for this persona.
+    # The kit's show_if gates on p2_checkbox1 in
+    # [lawful_permanent_resident, permanent_resident_in_commuter_status], so the
+    # field is shown for a plain LPR (this persona's p2_checkbox1). Her documented
+    # reason is a lost green card, which is the "lost, stolen, or destroyed" option.
+    "p2_checkbox2[5]": "my_previous_card_has_been_lost_stolen_or_destroyed",
     # "issued but never received": gated on Conditional-PR (checkbox1 option [2]); NA.
     "p2_checkbox3": None,
 
@@ -463,7 +461,6 @@ NA_REASON: dict = {
     "p1_line7f_province": "US physical address, no foreign province",
     "p1_line7g_postalcode": "US physical address, no foreign postal code",
     "p2_line2h1_cityandstate": "commuter port-of-entry; persona is a plain LPR",
-    "p2_checkbox2[5]": "reason-for-new-card field is show_if-gated to commuter (option [1]); production hides it for a plain LPR, so a real client cannot send it (see bd zi2s)",
     "p2_checkbox3": "issued-but-never-received gate p2_checkbox1 = Conditional PR (not selected)",
     # The three accommodation-type checkboxes are SHOWN (their show_if is
     # is_not_empty on p4_checkbox1[1], which the persona answered -- "select_no"
@@ -588,6 +585,49 @@ def validate_answer_key() -> list:
                 problems.append(
                     f"copy mismatch: {fid}={ANSWER_KEY.get(fid)!r} but its source "
                     f"{src}={ANSWER_KEY.get(src)!r} (must be equal)")
+
+    # 5. Digit-preset fields (a_number, uscis_account) must satisfy the kit's
+    #    pattern/length AFTER the EXACT production digit-normalization. The answer
+    #    key stores these in canonical human form (e.g. "A123456789"); production
+    #    normalize_value collapses that to the bare digits the comb field stores,
+    #    and THAT must match the kit's pattern/length. We call the SAME
+    #    normalize_value the live update path uses (field_validator, stdlib-only)
+    #    so this check cannot pass a value production would reject. Scoped to the
+    #    digit presets deliberately: it is the class where the key holds a
+    #    directly-comparable digit string, so a length/pattern drift (e.g. a
+    #    13-digit uscis_account under a ^[0-9]{12}$ kit) is a value no real client
+    #    could enter. Other presets (phone/ssn) accept punctuated input the key
+    #    stores as-is and are out of scope here (bd kpa1).
+    from backend.utils.field_validator import normalize_value
+
+    for fid, val in ANSWER_KEY.items():
+        if val is None or fid not in by_id:
+            continue
+        f = by_id[fid]
+        validation = f.get("validation") or {}
+        preset = validation.get("format_preset")
+        if preset not in ("a_number", "uscis_account"):
+            continue
+        # normalize_value reads validation.format_preset; the loaded field dict
+        # here nests validation, so pass the raw schema field.
+        normalized = str(normalize_value({"validation": validation}, str(val)))
+        pattern = validation.get("pattern")
+        if pattern:
+            try:
+                if not re.fullmatch(pattern, normalized):
+                    problems.append(
+                        f"{fid}: normalized value {normalized!r} does not match kit "
+                        f"pattern {pattern!r} (raw {val!r})")
+            except re.error as exc:
+                problems.append(f"{fid}: kit pattern {pattern!r} is invalid regex ({exc})")
+        min_len = validation.get("min_length")
+        if isinstance(min_len, int) and len(normalized) < min_len:
+            problems.append(
+                f"{fid}: normalized value {normalized!r} shorter than kit min_length {min_len}")
+        max_len = validation.get("max_length")
+        if isinstance(max_len, int) and len(normalized) > max_len:
+            problems.append(
+                f"{fid}: normalized value {normalized!r} longer than kit max_length {max_len}")
 
     return problems
 

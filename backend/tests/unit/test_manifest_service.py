@@ -55,3 +55,20 @@ def test_get_field_guidance_passes_bare_string_options_through():
         "allowed_values": ["alpha", "beta"],
     }
     assert get_field_guidance(field)["options"] == ["alpha", "beta"]
+
+
+def test_get_field_guidance_reads_required_from_validation_not_top_level():
+    """required lives at validation.required (the canonical shape). A top-level
+    `required` is read by no consumer and must NOT surface in the guidance; the
+    nested one must (bd polyglot-pdf-a1ql)."""
+    nested = {
+        "id": "acct", "name": "Account", "spoken_name": "account", "type": "text",
+        "validation": {"required": True},
+    }
+    assert get_field_guidance(nested).get("required") is True
+
+    top_level_only = {
+        "id": "acct", "name": "Account", "spoken_name": "account", "type": "text",
+        "required": True,  # dead location -- must be ignored
+    }
+    assert "required" not in get_field_guidance(top_level_only)

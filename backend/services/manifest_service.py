@@ -88,8 +88,11 @@ def get_field_guidance(field: dict) -> dict | None:
     }
     if field.get("name"):
         guidance["name"] = field["name"]
-    if field.get("required"):
-        guidance["required"] = field["required"]
+    # Required lives at validation.required (the canonical shape shared by every
+    # kit + the frontend isFieldRequired reader; bd polyglot-pdf-a1ql).
+    required = (field.get("validation") or {}).get("required")
+    if required:
+        guidance["required"] = required
     if instructions:
         guidance["instructions"] = instructions
     if format_hint:

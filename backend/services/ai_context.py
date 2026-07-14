@@ -230,8 +230,9 @@ def build_form_context(
         field_id = field.get("id")
         field_name = field.get("name")
         field_type = field.get("type", "text")
-        required = field.get("required", False)
-        
+        # Required lives at validation.required (canonical shape; bd a1ql).
+        required = bool((field.get("validation") or {}).get("required"))
+
         # Check if this field has a current value
         current = current_values.get(field_id, "")
         field_info = {
