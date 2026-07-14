@@ -297,6 +297,18 @@ def test_dti_si_forbids_secretary_lookups_of_field_metadata():
     assert "answers" in lowered
 
 
+def test_ask_secretary_tool_description_does_not_invite_field_metadata_lookups():
+    """The ask_secretary tool DESCRIPTION (weighted heavily by the model) must not
+    contradict the SI prohibition: it must scope the secretary to the user's
+    answers and explicitly say NOT to use it for a field's spoken name/id (bd
+    polyglot-pdf-2af7; caught by the fresh-eyes tool-desc-vs-SI contradiction)."""
+    decls = {d["name"]: d for d in Settings().TOOL_DECLARATIONS}
+    desc = decls["ask_secretary"]["description"].lower()
+    assert "not" in desc and "spoken name" in desc  # forbids the metadata lookup
+    # It must NOT still advertise a generic "which field covers a topic" lookup.
+    assert "which field covers a topic" not in desc
+
+
 def test_dti_and_legacy_si_ask_names_by_spelling_and_verify_by_spelling():
     """Person-name fields must be asked for by SPELLING first ('How do you spell
     your <name>?') and verified by reading the spelling back, so an unspelled

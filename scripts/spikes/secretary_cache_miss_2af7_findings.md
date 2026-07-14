@@ -12,25 +12,42 @@ metadata `ask_secretary` waste is fixed in the same bead by SI/guidance changes.
 2. The secretary implicit-cache hit rate was **1/10 in-session**, vs the 96-98%
    the offline probe (`probe_secretary_latency.py`) reports.
 
-## Cause of (1): the guidance framed the secretary as the metadata source
+## Cause of (1): the guidance framed the secretary as a field-metadata source
 
-- `render_section_metadata` (`backend/services/ai_context.py`) told the model
-  "Available fields from completed sections (**use ask_secretary to recall these
-  exact names**)" -- steering it to fetch spoken NAMES from the secretary.
-- The `ask_secretary` tool description invited "which field covers a topic" +
-  "the secretary holds the whole form" + "instead of trying to remember other
-  fields yourself" -- readable as a field-metadata lookup path.
-- But the current field's `ID | Spoken | Type | ...` guidance block ALWAYS
-  carries its spoken name (`render_field_guidance`), delivered on the initiating
-  message (field 1) and every `confirm_field` response (fields 2..N). So the
-  per-field asks were fully redundant.
+The reported symptom is a per-field ask for the CURRENT field's spoken name
+("what is the spoken name for field <id>"), one per field across the run. Three
+places in the model's context invited that, in order of how much each drove the
+per-CURRENT-field symptom:
 
-**Fix (shipped in this bead, code-only):** reworded `render_section_metadata` so
-the completed-field names are listed inline (not framed as secretary-fetched) and
-scoped `ask_secretary` to the user's ANSWERS; added a DTI SI line: "Do NOT call
-ask_secretary to look up a field's spoken name or id -- that metadata is already
-in the guidance block. ask_secretary is ONLY for recalling the user's past
-ANSWERS/values." Static tests pin both.
+1. **The `ask_secretary` tool DESCRIPTION** (`backend/config.py`, shared by DTI +
+   legacy) advertised "which field covers a topic" + "the secretary holds the
+   whole form" + "instead of trying to remember other fields yourself" -- readable
+   as a general field-metadata lookup path. Tool descriptions are weighted heavily
+   by the model, so this is the strongest driver of the per-CURRENT-field symptom.
+2. **The DTI SI** had no line telling the model NOT to fetch field metadata from
+   the secretary.
+3. **`render_section_metadata`** (`ai_context.py`) told the model "Available
+   fields from completed sections (**use ask_secretary to recall these exact
+   names**)". Note this only concerns names of ALREADY-COMPLETED sections, so it
+   is a lesser driver of the per-CURRENT-field symptom -- but it still framed the
+   secretary as the name source and is worth correcting.
+
+But the current field's `ID | Spoken | Type | ...` guidance block ALWAYS carries
+its spoken name (`render_field_guidance`), delivered on the initiating message
+(field 1) and every `confirm_field` response (fields 2..N). So the per-field asks
+were fully redundant.
+
+**Fix (shipped in this bead, code-only), addressing all three:**
+1. Narrowed the `ask_secretary` tool description to the user's ANSWERS and added
+   "Do NOT use it to look up a field's spoken name or id -- that metadata is
+   already in your guidance block" (the strongest lever, per the fresh-eyes
+   review that caught the tool-desc-vs-SI contradiction).
+2. Added a DTI SI line: "Do NOT call ask_secretary to look up a field's spoken
+   name or id ... ask_secretary is ONLY for recalling the user's past
+   ANSWERS/values."
+3. Reworded `render_section_metadata` so the completed-field names are listed
+   inline (not framed as secretary-fetched).
+Static tests pin (2) and (3); (1) is pinned structurally by the tool-declaration.
 
 ## Cause of (2): NOT a byte-instability bug -- TTL + model-mixing
 
