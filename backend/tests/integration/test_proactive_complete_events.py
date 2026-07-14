@@ -47,6 +47,11 @@ def _mock_service(verdict=None, windows_delay=0.0):
         return verdict or {"conflicts": []}
 
     svc.handle_validation_windows = AsyncMock(side_effect=_windows)
+    # W3 (bd polyglot-pdf-pr3i): the drain arm routes through handle_drain_findings;
+    # echo the conflicts back as "delivered" by default.
+    async def _drain(conflicts):
+        return {"conflicts": conflicts if isinstance(conflicts, list) else []}
+    svc.handle_drain_findings = AsyncMock(side_effect=_drain)
     return svc
 
 
@@ -143,6 +148,56 @@ async def test_validate_windows_is_acked_and_runs_off_loop():
     (windows,) = svc.handle_validation_windows.await_args_list[0].args
     assert len(windows) == 2  # both windows handed to the batch
     assert {"type": "validation_result", "conflicts": []} in sent
+
+
+@pytest.mark.asyncio
+async def test_drain_findings_is_acked_and_pushes_result_off_loop():
+    """W3 (bd polyglot-pdf-pr3i): the drain arm acks immediately, hands the queued
+    conflicts to handle_drain_findings off the receive loop, and pushes the delivered
+    conflicts back as drain_findings_result."""
+    conflicts = [{"field_ids": ["a", "b"], "reason": "mismatch",
+                  "field_names": {"a": "A", "b": "B"}}]
+    _, svc, sent = await _run([
+        {"text": json.dumps({"type": "drain_findings", "conflicts": conflicts})},
+    ], hold_open=0.05)
+    assert {"type": "drain_findings_ack"} in sent
+    (passed,) = svc.handle_drain_findings.await_args_list[0].args
+    assert passed == conflicts
+    # The delivered conflicts ride back so the client marks steered + consumes.
+    results = [m for m in sent if m.get("type") == "drain_findings_result"]
+    assert len(results) == 1
+    assert results[0]["conflicts"] == conflicts
+
+
+@pytest.mark.asyncio
+async def test_drain_findings_tolerates_bad_conflicts():
+    """A malformed drain payload (conflicts absent or non-list) must still ack."""
+    _, _, sent = await _run([
+        {"text": json.dumps({"type": "drain_findings"})},              # no conflicts
+        {"text": json.dumps({"type": "drain_findings", "conflicts": "nope"})},
+    ], hold_open=0.05)
+    assert sent.count({"type": "drain_findings_ack"}) == 2
+
+
+@pytest.mark.asyncio
+async def test_drain_findings_pushes_empty_result_even_when_handler_raises():
+    """W3: handle_drain_findings raising must STILL push a drain_findings_result
+    (delivered=[]) so the client's drainInFlight guard clears -- a missing result
+    would stall the client's queue until reconnect (Opus outer-review finding). The
+    empty result means the client keeps the finding queued to retry but is unblocked.
+    """
+    svc = _mock_service()
+    svc.handle_drain_findings = AsyncMock(side_effect=RuntimeError("compose boom"))
+    _, _, sent = await _run([
+        {"text": json.dumps({"type": "drain_findings", "conflicts": [
+            {"field_ids": ["a"], "reason": "x", "field_names": {"a": "A"}}]})},
+        {"text": json.dumps({"type": "ping"})},
+    ], svc=svc, hold_open=0.05)
+    assert {"type": "drain_findings_ack"} in sent
+    # The result STILL went out, empty (the raise was swallowed).
+    assert {"type": "drain_findings_result", "conflicts": []} in sent
+    # The loop kept serving despite the raise.
+    assert any(m.get("type") == "pong" for m in sent)
 
 
 @pytest.mark.asyncio

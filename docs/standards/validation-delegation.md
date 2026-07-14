@@ -4,6 +4,7 @@
 
 *Last updated: 2026-07-13 (bd polyglot-pdf-ny4s (W4, async validator): the `steered` marker is NOT session-permanent -- the client RE-ARMS it (clears it) when a field's value changes in the updateField write path, so a correction re-enters the validator net; an unchanged edit keeps it (no-nagging). See the `steered` contract-2 note.). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
+
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
 cheap `gemini-2.5-flash-lite` TEXT model (the "validator") that, at section and
 form boundaries, reads the client's current form state and catches cross-field
@@ -149,10 +150,28 @@ auto-advance until the validator answers, so the client needs a deterministic
 "clean -> resume" signal. Without a mandatory clean response the no-conflict path
 would stall until the fail-OPEN timeout (or hang, depending on B4). So: clean
 verdict -> `validation_result` with empty `conflicts` (the client resumes the
-switch); conflicts -> `validation_result` with the conflicts AND a steer to the
-Live model (the client stays in-section until resolved); validator outage ->
-fail-OPEN (the client resumes after the timeout). Every boundary gets exactly one
-of these three terminal signals.
+switch); conflicts -> `validation_result` with the conflicts (the client stays
+in-section until resolved); validator outage -> fail-OPEN (the client resumes
+after the timeout). Every boundary gets exactly one of these three terminal
+signals.
+
+**W3 (bd polyglot-pdf-pr3i, report-cadence revision) -- the async-validator path
+(W1-W3) supersedes the inline steer.** For the async `validate_windows` trigger
+(and the async `section_complete`/`form_complete` arms since W1), the
+`validation_result` is now **REPORT-ONLY**: it carries the surviving conflicts but
+the backend does NOT inject a steer on it. The client OWNS the finding queue
+(stateless-backend invariant + it owns the `steered`-marker + W4 re-arm lifecycle):
+it ENQUEUES a conflict into `validatorFindingsQueue` (persisted; each conflict
+carries a `field_names` id->name rider) and drains it FINDING-DRIVEN via a
+`drain_findings` round-trip, which composes+injects the steer (contract 3) and
+replies `drain_findings_result` with the delivered conflicts -- only THEN does the
+client mark the fields `steered` + consume them. A CLEAN result drains nothing (no
+voice turn on an all-clear). The "conflicts -> validation_result with a steer" line
+above describes the original synchronous `handle_validation_boundary` shape, which
+is no longer on any live wire path (W1 rerouted section_complete/form_complete
+through the async report-only `handle_validation_windows`; `handle_validation_boundary`
+survives only as a test-covered single-window helper). The live async path routes
+the steer through the drain instead.
 
 ---
 

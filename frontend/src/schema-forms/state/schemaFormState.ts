@@ -12,7 +12,7 @@
  * - WebSocket handshake generation
  */
 
-import type { FormSchema, FormSection, FormField, FormPart, FieldValue } from "../types/schema";
+import type { FormSchema, FormSection, FormField, FormPart, FieldValue, ValidatorFinding } from "../types/schema";
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
 import { readFieldEntryWithAlias } from "../utils/fieldValue";
@@ -44,6 +44,15 @@ export interface SchemaFormState {
   // report-cadence revision 2026-07-13). Serialized to an array like the other
   // Sets; defaults to empty for old sessions (no migration key needed -- brand new).
   validatedWindowIndices: Set<number>;
+
+  // W3 (bd polyglot-pdf-pr3i): the finding-driven validator queue. A `validation_result`
+  // (report-only since W3) carries surviving contradictions as CANDIDATES; the client
+  // ENQUEUES them here and drains IMMEDIATELY via a `drain_findings` round-trip (the
+  // backend composes + injects one steer). A plain array (order-preserving, small);
+  // serialized as-is (no Set conversion); defaults to [] for old sessions. CLIENT-OWNED:
+  // survives a reconnect + batches concurrent findings into one steer (NOT a boundary
+  // buffer). A drained + delivered finding is consumed (removed) on the drain result.
+  validatorFindingsQueue: ValidatorFinding[];
   // Continuous-session mode (bd polyglot-pdf-x8rt): the whole form runs as ONE
   // session (no section resets). When on, the handshake spans every field as a
   // single synthetic section and section advancement is suppressed. From the
@@ -117,6 +126,8 @@ export class SchemaFormStateManager {
       jitModeEnabled: false, // Will be set during handshake based on backend flag
       // W2 (bd polyglot-pdf-kxkw): validated-window high-water mark (empty at start).
       validatedWindowIndices: new Set(),
+      // W3 (bd polyglot-pdf-pr3i): finding-driven validator queue (empty at start).
+      validatorFindingsQueue: [],
       continuousSessionEnabled: false, // Set during handshake from the backend CONTINUOUS_SESSION flag
       // Disclaimer acceptance
       disclaimerAccepted: false,
@@ -175,6 +186,13 @@ export class SchemaFormStateManager {
       } else {
         parsed.validatedWindowIndices = new Set();
       }
+
+      // W3 (bd polyglot-pdf-pr3i): restore the finding queue (a plain array -- no Set
+      // conversion). Default [] for a pre-W3 session (no key stored). Guard the type
+      // so a corrupted non-array blob cannot crash the enqueue/drain ops downstream.
+      parsed.validatorFindingsQueue = Array.isArray(parsed.validatorFindingsQueue)
+        ? parsed.validatorFindingsQueue
+        : [];
 
       // Initialize jitModeEnabled if missing (old state)
       if (parsed.jitModeEnabled === undefined) {
@@ -1205,6 +1223,74 @@ export class SchemaFormStateManager {
     }
     if (!changed) return state;
     const newState = { ...state, fieldValues, lastUpdated: Date.now() };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * W3 (bd polyglot-pdf-pr3i): a stable key for a finding = its SET of field_ids
+   * (order-insensitive), mirroring the backend's frozenset dedupe. Two findings that
+   * name the same fields are "the same conflict" for queue-dedup + consume-match.
+   */
+  private static findingKey(finding: { field_ids?: string[] }): string {
+    const ids = Array.isArray(finding.field_ids) ? finding.field_ids : [];
+    return JSON.stringify([...ids].map(String).sort());
+  }
+
+  /**
+   * W3 (bd polyglot-pdf-pr3i): ENQUEUE validator findings from a report-only
+   * `validation_result`. Appends only findings whose field-id SET is not already in
+   * the queue (dedupe -- overlapping windows + repeated results can re-report the
+   * same conflict). Malformed findings (no field_ids) are dropped. Returns the state
+   * unchanged (same reference) when nothing new is added, so the caller can skip the
+   * drain. Persisted (survives reconnect).
+   */
+  static enqueueValidatorFindings(
+    state: SchemaFormState,
+    findings: ValidatorFinding[]
+  ): SchemaFormState {
+    if (!Array.isArray(findings) || findings.length === 0) return state;
+    const existing = new Set(state.validatorFindingsQueue.map(f => this.findingKey(f)));
+    const toAdd: ValidatorFinding[] = [];
+    for (const f of findings) {
+      const ids = Array.isArray(f?.field_ids) ? f.field_ids.filter(i => typeof i === 'string') : [];
+      if (ids.length === 0) continue; // malformed -> drop (cannot steer/consume it)
+      const key = this.findingKey({ field_ids: ids });
+      if (existing.has(key)) continue; // already queued
+      existing.add(key);
+      toAdd.push({
+        field_ids: ids,
+        reason: typeof f.reason === 'string' ? f.reason : '',
+        field_names: (f.field_names && typeof f.field_names === 'object') ? f.field_names : {},
+      });
+    }
+    if (toAdd.length === 0) return state;
+    const newState = {
+      ...state,
+      validatorFindingsQueue: [...state.validatorFindingsQueue, ...toAdd],
+      lastUpdated: Date.now(),
+    };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
+   * W3 (bd polyglot-pdf-pr3i): CONSUME (remove) the findings whose field-id sets
+   * match the DELIVERED conflicts from a `drain_findings_result`. An un-delivered
+   * finding (dead session -> not in `delivered`) STAYS queued to retry on the next
+   * drain. Returns the state unchanged when nothing matched. Persisted.
+   */
+  static consumeValidatorFindings(
+    state: SchemaFormState,
+    delivered: Array<{ field_ids?: string[] }>
+  ): SchemaFormState {
+    if (!Array.isArray(delivered) || delivered.length === 0) return state;
+    const drainedKeys = new Set(delivered.map(d => this.findingKey(d)));
+    const remaining = state.validatorFindingsQueue.filter(
+      f => !drainedKeys.has(this.findingKey(f))
+    );
+    if (remaining.length === state.validatorFindingsQueue.length) return state; // nothing matched
+    const newState = { ...state, validatorFindingsQueue: remaining, lastUpdated: Date.now() };
     this.save(newState);
     return newState;
   }
