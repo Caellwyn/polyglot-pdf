@@ -2452,10 +2452,30 @@ async def run(args) -> int:
             # (next field first, as computeNextField would supply) and restart the
             # session via the same switch_to_section path production reconnects use.
             # Also fires if the session died WITHOUT a go_away (belt-and-suspenders).
+            # Dead-session detection (E2 run-1 wedge, bd polyglot-pdf-0cyu): a
+            # spontaneous 1011/1006 drop kills the adapter's receive task but
+            # can leave _session_ready stale-True, so ALSO check
+            # is_session_active() (bg task alive) -- production's client
+            # reconnects on spontaneous drops (bd ppfy); without this the
+            # driver burned 180 consecutive 40s stall timeouts (~2h) against a
+            # dead session. A stall STREAK is the belt-and-suspenders trigger:
+            # 3 consecutive stalled turns forces a reconnect even if the
+            # adapter still looks alive.
+            _recent = [t.get("stalled") for t in meta["turns"][-3:]]
+            _stall_streak = len(_recent) == 3 and all(_recent)
             if continuous and (client.go_away_pending
-                               or not getattr(adapter, "_session_ready", False)):
+                               or not getattr(adapter, "_session_ready", False)
+                               or not adapter.is_session_active()
+                               or _stall_streak):
                 was_announced = client.go_away_pending
                 client.go_away_pending = False
+                if _stall_streak:
+                    meta.setdefault("stall_streak_reconnects", 0)
+                    meta["stall_streak_reconnects"] += 1
+                    # Consume the streak so the next loop iteration does not
+                    # immediately re-trigger on the same three turns.
+                    meta["turns"].append({"q": i, "label": "stall-streak-reset",
+                                          "stalled": False, "latency_s": None})
                 _t_reconnect0 = time.monotonic()
                 # Settle async validator/secretary work first; count drops
                 # instead of losing them silently (bd polyglot-pdf-eh1h).
