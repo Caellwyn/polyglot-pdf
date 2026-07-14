@@ -260,6 +260,32 @@ _SAY_OVERRIDES_EN: dict = {
         "My alien registration number is A one two three four five six seven eight nine.",
         "My alien registration number is A nine eight seven six five four three two one.",
     ),
+    # Personal names are SPELLED OUT (E0 pilot finding, bd polyglot-pdf-0cyu):
+    # English gTTS mangles the Vietnamese names badly enough that the live model
+    # transcribed "Nguyen" as "Smith", "Linh" as "Lynn", "Thi" as "T". Spelling
+    # an uncommon name is exactly what a real user does; the raw
+    # no-spelling fragility is recorded as a product finding in the E-series
+    # findings doc, not hidden by this phrasing.
+    "p1_line3a_familyname": (
+        "My current family name is Nguyen, spelled N G U Y E N.",
+        "My current family name is Tran, spelled T R A N.",
+    ),
+    "p1_line3b_givenname": (
+        "My current given name is Linh, spelled L I N H.",
+        "My current given name is Lan, spelled L A N.",
+    ),
+    "p1_line3c_middlename": (
+        "My current middle name is Thi, spelled T H I.",
+        "My current middle name is Van, spelled V A N.",
+    ),
+    "p1_line12_mothergivenname": (
+        "My mother's given name is Lan, spelled L A N.",
+        "My mother's given name is Mai, spelled M A I.",
+    ),
+    "p1_line13_fathergivenname": (
+        "My father's given name is Minh, spelled M I N H.",
+        "My father's given name is Duc, spelled D U C.",
+    ),
     "p1_line6b_streetnumbername": (
         "My street address is four two zero zero Westheimer Road.",
         "My street address is nine nine zero zero Richmond Avenue.",

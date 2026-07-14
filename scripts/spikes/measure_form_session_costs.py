@@ -1639,17 +1639,24 @@ def build_summary(meta: dict, rows: list, log_sink: list, client,
 
 # ------------------------------------------------------------------- driver
 
-def _make_settings(arm: str, trigger: int, window: int, compression: bool = False):
+def _make_settings(arm: str, trigger: int, window: int, compression: bool = False,
+                   continuous: bool = False):
     # The production code defaults are continuous-DTI (bd polyglot-pdf-7872:
     # USE_DTI / CONTINUOUS_SESSION / CONTEXT_COMPRESSION_ENABLED all default ON),
     # so every arm PINS its full mode explicitly -- a future default flip must
     # never silently relabel an arm's measured configuration (the el92 /
-    # section-reset-jit failure class). The harness's per-section driver emulates
-    # continuity itself for --continuous runs, so CONTINUOUS_SESSION stays off
-    # for ALL arms, exactly as every accepted historical run measured it.
+    # section-reset-jit failure class). The driver still emulates the session
+    # LIFECYCLE itself for --continuous runs, but the SETTINGS flag must be True
+    # there (E0 pilot finding, bd polyglot-pdf-0cyu): the two production
+    # consumers must fire -- _build_tool_declarations drops switch_section (the
+    # E0 model actually CALLED the deprecated tool from the 7-tool catalog;
+    # production continuous runs 6 tools) and the SI suppresses the
+    # "Section N of M" counters. Neither consumer touches the driver's
+    # switch_to_section reconnect vehicle (verified: only those two reads).
+    # Non-continuous arms keep False, exactly as every historical run measured.
     overrides = {
         "USE_DTI": False,
-        "CONTINUOUS_SESSION": False,
+        "CONTINUOUS_SESSION": bool(continuous),
         "CONTEXT_COMPRESSION_ENABLED": False,
     }
     if arm == "sliding-window":
@@ -1880,7 +1887,8 @@ async def run(args) -> int:
         # demo uses this id). Pricing resolves by family, so rates are identical.
         model_name = MODEL_NATIVE_STANDARD_VERTEX
     rates = get_pricing_for_model(model_name)
-    settings = _make_settings(args.arm, args.trigger, args.window, args.compression)
+    settings = _make_settings(args.arm, args.trigger, args.window, args.compression,
+                              continuous=bool(getattr(args, "continuous", False)))
     # Install the arm's settings so EVERY get_settings() consumer sees it. A bare
     # `_config.get_settings = ...` is NOT enough: modules that did
     # `from backend.config import get_settings` at import time (ai_context,
