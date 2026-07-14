@@ -965,9 +965,12 @@ class FakeClientWebSocket:
         return _ffs.field_visible(f, self.schema_fields, values)
 
     def resolve_field(self, identifier: str) -> str | None:
-        """Resolve a model-supplied identifier: exact field_id, then exact
-        spoken_name (case-insensitive) -- the frontend's
-        resolveFieldForNavigation whole-schema lookup."""
+        """Resolve a model-supplied identifier -- the FULL mirror of the
+        frontend's resolveFieldForNavigation (schemaFormState.ts:1154): exact
+        field_id, then case-insensitive spoken_name, then field NAME, then any
+        spoken_aliases entry. (The first harness version checked only
+        id/spoken_name -- stricter than production -- which under-resolved the
+        E4 navigation scenarios; fixed to full parity.)"""
         ident = (identifier or "").strip()
         if not ident:
             return None
@@ -975,7 +978,12 @@ class FakeClientWebSocket:
             return ident
         low = ident.lower()
         for fid, f in self.schema_fields.items():
-            if str(f.get("spoken_name") or f.get("name") or "").lower() == low:
+            if str(f.get("spoken_name") or "").lower() == low:
+                return fid
+            if str(f.get("name") or "").lower() == low:
+                return fid
+            aliases = f.get("spoken_aliases") or []
+            if any(str(a).lower() == low for a in aliases):
                 return fid
         return None
 
