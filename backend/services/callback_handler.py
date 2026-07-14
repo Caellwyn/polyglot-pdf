@@ -1136,10 +1136,26 @@ class CallbackHandler:
                 )
             else:
                 message = (
-                    "No form field matches that name. Use the exact field_id "
-                    "from the guidance, or the field's exact spoken name -- or "
-                    "ask_secretary to identify the right field first."
+                    "No form field matches that name. Do NOT guess another "
+                    "field_id -- pass the field's exact spoken name instead."
                 )
+                # The ack carries nearest navigable candidates (id + spoken name);
+                # list their spoken names so the model retries with one it can
+                # resolve exactly (bd polyglot-pdf-3vby).
+                candidates = ack.get("candidates")
+                if isinstance(candidates, list) and candidates:
+                    names = [
+                        str(c.get("spoken_name"))
+                        for c in candidates
+                        if isinstance(c, dict) and c.get("spoken_name")
+                    ]
+                    if names:
+                        message += (
+                            " Closest fields you can switch to: "
+                            + "; ".join(names)
+                            + ". Retry switch_to_field with the exact spoken name "
+                            "of the one the user meant."
+                        )
             _log.info("switch_to_field_not_navigable",
                      reason=reason or "unknown_field",
                      session_id=self._session_id)

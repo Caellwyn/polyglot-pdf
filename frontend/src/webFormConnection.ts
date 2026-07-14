@@ -2000,7 +2000,12 @@ export class WebFormConnection {
     const fieldId = SchemaFormStateManager.resolveFieldForNavigation(this.state, identifier || '');
     if (!fieldId) {
       console.warn('[WebFormConnection] switch_field: no field matches the identifier.');
-      this.sendSwitchFieldResponse(request_id, false, { reason: 'unknown_field' });
+      // Carry nearest navigable candidates so the model can pick an exact name
+      // and retry, instead of guessing another id (bd polyglot-pdf-3vby).
+      const candidates = SchemaFormStateManager.suggestNavigationCandidates(
+        this.state, identifier || ''
+      );
+      this.sendSwitchFieldResponse(request_id, false, { reason: 'unknown_field', candidates });
       return;
     }
 

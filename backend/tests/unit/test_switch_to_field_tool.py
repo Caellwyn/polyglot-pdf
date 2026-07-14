@@ -143,9 +143,12 @@ class TestSwitchToFieldTool:
         assert "did not respond" in response["message"]
 
     @pytest.mark.asyncio
-    async def test_unknown_field_suggests_secretary(
+    async def test_unknown_field_tells_model_to_use_spoken_name(
         self, callback_handler, mock_coordinator
     ):
+        """An unresolved identifier must steer the model to the exact spoken name
+        (not another guessed id) rather than to ask_secretary (bd
+        polyglot-pdf-3vby)."""
         mock_coordinator.request_switch_field.return_value = {
             "found": False, "reason": "unknown_field",
         }
@@ -153,7 +156,29 @@ class TestSwitchToFieldTool:
             tool_name="switch_to_field", arguments={"field": "no such thing"},
         )
         assert response["success"] is False
-        assert "ask_secretary" in response["message"]
+        assert "spoken name" in response["message"].lower()
+        assert "guess" in response["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_unknown_field_lists_candidate_spoken_names(
+        self, callback_handler, mock_coordinator
+    ):
+        """When the ack carries nearest candidates, their spoken names are listed
+        so the model can retry with one it can resolve exactly (bd
+        polyglot-pdf-3vby)."""
+        mock_coordinator.request_switch_field.return_value = {
+            "found": False, "reason": "unknown_field",
+            "candidates": [
+                {"field_id": "p1_line6b_streetnumbername", "spoken_name": "mailing street address"},
+                {"field_id": "p1_line6d_cityortown", "spoken_name": "mailing city"},
+            ],
+        }
+        response = await callback_handler.on_tool_call(
+            tool_name="switch_to_field", arguments={"field": "mailing street"},
+        )
+        assert response["success"] is False
+        assert "mailing street address" in response["message"]
+        assert "mailing city" in response["message"]
 
     @pytest.mark.asyncio
     async def test_other_section_names_the_section_and_suggests_switch_section(

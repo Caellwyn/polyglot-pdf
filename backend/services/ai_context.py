@@ -120,9 +120,15 @@ def render_section_metadata(
             lines.append(title)
 
     if previous_spoken_names:
+        # These names are given to you HERE -- do not fetch them from the
+        # secretary (bd polyglot-pdf-2af7). The current field's own id + spoken
+        # name are always in the latest guidance block too; ask_secretary is for
+        # recalling the user's past ANSWERS/values, never field metadata you
+        # already hold.
         lines.append(
-            "Available fields from completed sections (use ask_secretary to recall "
-            "these exact names): " + ", ".join(previous_spoken_names)
+            "Fields already completed (their exact spoken names are listed here; "
+            "use ask_secretary to recall the user's ANSWERS to them, not their "
+            "names): " + ", ".join(previous_spoken_names)
         )
 
     policy = confirmation_policy

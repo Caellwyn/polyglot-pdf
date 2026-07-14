@@ -529,8 +529,12 @@ class Settings(BaseModel):
 				"Jump to ONE SPECIFIC field so it becomes the current field -- "
 				"use it when the user wants to change or revisit an earlier "
 				"answer, or after ask_secretary names the field the user is "
-				"asking about. Pass the exact field_id when you have it "
-				"(preferred), else the field's exact spoken name. On success "
+				"asking about. Pass a field_id ONLY when you have it verbatim in "
+				"a recent guidance block; for an EARLIER field you are navigating "
+				"back to, pass its exact SPOKEN NAME instead -- never reconstruct "
+				"or guess a field_id from memory (a wrong id fails). If the target "
+				"is not found, the response lists the candidate fields; pick one of "
+				"THOSE exact names and retry. On success "
 				"the response carries that field's guidance -- ask the user "
 				"about THAT field next. This does NOT navigate sections; for a "
 				"whole different section use switch_section."
@@ -541,8 +545,9 @@ class Settings(BaseModel):
 					"field": {
 						"type": "string",
 						"description": (
-							"The target field: its exact field_id (verbatim, "
-							"preferred) or its exact spoken name."
+							"The target field: its exact field_id (verbatim from "
+							"a recent guidance block), or -- for an earlier field -- "
+							"its exact spoken name. Do not invent or guess an id."
 						)
 					}
 				},
@@ -648,6 +653,7 @@ class Settings(BaseModel):
     "- SKIP vs NOT-APPLICABLE (two different things):\n"
     "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally. This is a real answer.\n"
     "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm_field a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
+    "- DECLINED CHECKBOX: for an optional checkbox the user declines (says no/none/'that does not apply'), call update_form_fields with value \"\" to leave it UNCHECKED. NEVER write \"true\"/\"false\" on a decline -- \"true\" wrongly checks the box, a wrong answer on a legal form. Only write a checked value when the user affirmatively asks for it.\n"
     "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
 
     "ADDRESS CONSISTENCY:\n"
@@ -686,7 +692,9 @@ class Settings(BaseModel):
     "earlier blocks. When you fill or confirm a field, COPY its field_id VERBATIM from that latest "
     "guidance block -- character for character. NEVER invent, reconstruct, guess, abbreviate, or "
     "pattern-match a field_id from another field's id. If you have no current guidance block (e.g. "
-    "after a reconnect), request the current form status or ask the user, rather than guessing.\n\n"
+    "after a reconnect), request the current form status or ask the user, rather than guessing.\n"
+    "Do NOT call ask_secretary to look up a field's spoken name or id -- that metadata is already in "
+    "the guidance block. ask_secretary is ONLY for recalling the user's past ANSWERS/values.\n\n"
 
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"
@@ -726,6 +734,7 @@ class Settings(BaseModel):
     "- SKIP vs NOT-APPLICABLE (two different things):\n"
     "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: fill it with value \"\" then confirm normally. This is a real answer.\n"
     "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
+    "- DECLINED CHECKBOX: for an optional checkbox the user declines (says no/none/'that does not apply' -- e.g. 'I do not need that accommodation'), fill it with value \"\" to leave it UNCHECKED. NEVER write \"true\"/\"false\" on a decline -- \"true\" wrongly checks the box, which on a legal form is a wrong answer. Only write a checked value when the user affirmatively asks for it.\n"
     "- Keep interactions conversational and empathetic - this is a medical form.\n\n"
 
     "ADDRESS CONSISTENCY:\n"

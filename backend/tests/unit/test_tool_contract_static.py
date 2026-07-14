@@ -275,6 +275,51 @@ def test_dti_si_recall_guidance_names_ask_secretary_not_get_field_value():
     )
     assert "ask_secretary" in block
     assert "get_field_value" not in block
+    # The names are listed inline, so the block must NOT frame ask_secretary as the
+    # way to fetch spoken NAMES -- it recalls the user's ANSWERS only (bd
+    # polyglot-pdf-2af7). Guards against the model burning a blocking per-field
+    # secretary lookup for metadata it already holds.
+    assert "first name" in block and "last name" in block
+    assert "ANSWERS" in block
+
+
+def test_dti_si_forbids_secretary_lookups_of_field_metadata():
+    """The DTI SI must explicitly tell the model NOT to ask_secretary for a
+    field's spoken name / id (it is always in the guidance), scoping the secretary
+    to the user's past answers -- the per-field blocking-lookup waste in bd
+    polyglot-pdf-2af7."""
+    si = Settings().DTI_SYSTEM_INSTRUCTION
+    assert "ask_secretary" in si
+    lowered = si.lower()
+    assert "spoken name" in lowered
+    # The prohibition and the answers-only scoping both present.
+    assert "do not call ask_secretary" in lowered or "not for field metadata" in lowered
+    assert "answers" in lowered
+
+
+def test_dti_and_legacy_si_forbid_checking_a_declined_optional_checkbox():
+    """Declining an optional checkbox must map to value \"\" (unchecked), never
+    \"true\"/\"false\" -- writing \"true\" wrongly checks a box the user declined, a
+    wrong answer on a legal form (bd polyglot-pdf-cx23). Both the live DTI SI and
+    the legacy harness-baseline SI must carry the rule."""
+    for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
+        lowered = si.lower()
+        assert "declined checkbox" in lowered
+        assert "unchecked" in lowered
+        # It must explicitly forbid the wrong write.
+        assert 'never write "true"' in lowered
+
+
+def test_switch_to_field_desc_steers_back_nav_to_spoken_name_not_guessed_id():
+    """switch_to_field's description must steer a back-navigation to the exact
+    SPOKEN NAME and forbid reconstructing/guessing a field_id from memory, and
+    tell the model the failure response lists candidates to pick from (bd
+    polyglot-pdf-3vby)."""
+    decls = {d["name"]: d for d in Settings().TOOL_DECLARATIONS}
+    desc = decls["switch_to_field"]["description"].lower()
+    assert "spoken name" in desc
+    assert "guess" in desc  # "never reconstruct or guess a field_id"
+    assert "candidate" in desc  # the ack lists candidate fields to retry with
 
 
 def test_legacy_si_recall_guidance_does_not_mention_get_field_value():
