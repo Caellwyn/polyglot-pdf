@@ -146,9 +146,12 @@ class TestSwitchToFieldTool:
     async def test_unknown_field_tells_model_to_use_spoken_name(
         self, callback_handler, mock_coordinator
     ):
-        """An unresolved identifier must steer the model to the exact spoken name
-        (not another guessed id) rather than to ask_secretary (bd
-        polyglot-pdf-3vby)."""
+        """An unresolved identifier with no secretary handler wired and no
+        algorithmic candidates in the ack degrades to the bare clarify message
+        (tier 4 of _switch_degrade_response; bd polyglot-pdf-y76q). This
+        fixture's CallbackHandler has no handle_ask_secretary injected, so
+        _resolve_field_via_secretary short-circuits to None and there is
+        nothing to suggest."""
         mock_coordinator.request_switch_field.return_value = {
             "found": False, "reason": "unknown_field",
         }
@@ -156,8 +159,8 @@ class TestSwitchToFieldTool:
             tool_name="switch_to_field", arguments={"field": "no such thing"},
         )
         assert response["success"] is False
-        assert "spoken name" in response["message"].lower()
-        assert "guess" in response["message"].lower()
+        assert "could not find" in response["message"].lower()
+        assert "describe" in response["message"].lower()
 
     @pytest.mark.asyncio
     async def test_unknown_field_lists_candidate_spoken_names(
@@ -246,3 +249,161 @@ class TestRequestSwitchFieldCoordinator:
         coordinator = RequestCoordinator(mock_websocket, session_id="s1")
         result = await coordinator.request_switch_field("anything")
         assert result is CONFIRM_REQUEST_TIMEOUT
+
+
+class TestSwitchToFieldSecretaryResolution:
+    """switch_to_field resolves vague prose via the secretary internally, then
+    re-attempts the switch -- one voice turn, not three (bd polyglot-pdf-y76q).
+    On an EXACT-resolver miss the handler asks the injected ask_secretary handler
+    to identify the field, and degrades gracefully (never hangs, never a silent
+    wrong-field fill) when it cannot."""
+
+    def _handler(self, switch_side_effect, ask_secretary):
+        ws = AsyncMock()
+        coordinator = AsyncMock(spec=RequestCoordinator)
+        coordinator.request_switch_field = AsyncMock(side_effect=switch_side_effect)
+        h = CallbackHandler(
+            websocket=ws, session_id="s1", request_coordinator=coordinator,
+        )
+        h.set_tool_handlers(
+            handle_update_fields=MagicMock(),
+            handle_switch_section=AsyncMock(),
+            request_form_state_from_client=AsyncMock(return_value={}),
+            handle_ask_secretary=ask_secretary,
+        )
+        return h, coordinator
+
+    @pytest.mark.asyncio
+    async def test_prose_miss_resolved_by_secretary_then_switches(self):
+        """Exact resolver misses the prose; the secretary identifies the field;
+        the handler re-attempts the switch with the exact id and succeeds -- in
+        ONE tool call (one voice turn)."""
+        # First call (the vague prose) misses; second call (the secretary's id) hits.
+        switch = [
+            {"found": False, "reason": "unknown_field", "candidates": []},
+            {"found": True, "field_id": "p1_line2_acctidentifier",
+             "spoken_name": "USCIS account number", "has_value": False},
+        ]
+        ask = AsyncMock(return_value={
+            "status": "ok",
+            "answer": "That's the USCIS account number.",
+            "resolved": True,
+            "sources": [{"field_id": "p1_line2_acctidentifier",
+                         "spoken_name": "USCIS account number"}],
+        })
+        h, coordinator = self._handler(switch, ask)
+
+        result = await h.on_tool_call(
+            tool_name="switch_to_field",
+            arguments={"field": "that government id thing with 12 digits"},
+        )
+
+        assert result["success"] is True
+        assert "USCIS account number" in result["message"]
+        # Two switch attempts: the prose (miss) then the secretary's exact id (hit).
+        assert coordinator.request_switch_field.await_count == 2
+        assert coordinator.request_switch_field.await_args_list[1].args[0] == \
+            "p1_line2_acctidentifier"
+        ask.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_secretary_pushback_degrades_to_clarify(self):
+        """When the secretary deliberately cannot identify a field (resolved
+        False), the handler voices the secretary's clarify prose -- no switch, no
+        hang."""
+        switch = [{"found": False, "reason": "unknown_field", "candidates": []}]
+        ask = AsyncMock(return_value={
+            "status": "ok",
+            "answer": "I could not find a 12-digit government ID field.",
+            "resolved": False,
+            "sources": [],
+        })
+        h, coordinator = self._handler(switch, ask)
+
+        result = await h.on_tool_call(
+            tool_name="switch_to_field",
+            arguments={"field": "the thing with twelve digits"},
+        )
+
+        assert result["success"] is False
+        assert "could not find a 12-digit government ID field" in result["message"]
+        assert "describe" in result["message"].lower()
+        # Only the initial prose attempt -- no second switch on a pushback.
+        assert coordinator.request_switch_field.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_secretary_multiple_candidates_degrades_to_did_you_mean(self):
+        """Several plausible fields (a genuinely ambiguous 'go back to the name')
+        that do not land directly -> a 'Did you mean ...?' pick-list."""
+        # The secretary's top pick fails to navigate (e.g. raced hidden), so we
+        # degrade to the candidate list rather than switching blindly.
+        switch = [
+            {"found": False, "reason": "unknown_field", "candidates": []},
+            {"found": False, "reason": "hidden", "field_id": "p1_line3a_familyname"},
+        ]
+        ask = AsyncMock(return_value={
+            "status": "ok",
+            "answer": "Could be the family name or the given name.",
+            "resolved": True,
+            "sources": [
+                {"field_id": "p1_line3a_familyname", "spoken_name": "family name"},
+                {"field_id": "p1_line3b_givenname", "spoken_name": "given name"},
+            ],
+        })
+        h, coordinator = self._handler(switch, ask)
+
+        result = await h.on_tool_call(
+            tool_name="switch_to_field", arguments={"field": "the name"},
+        )
+
+        assert result["success"] is False
+        assert "Did you mean" in result["message"]
+        assert "family name" in result["message"]
+        assert "given name" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_secretary_pending_degrades_to_algorithmic_candidates(self):
+        """A secretary lookup that blows its deadline (status 'pending') loses the
+        fields list, so the handler falls back to the frontend's algorithmic
+        candidate matcher (the ack's candidates) -- 'Did you mean ...?'."""
+        switch = [{
+            "found": False, "reason": "unknown_field",
+            "candidates": [
+                {"field_id": "p1_line6d_cityortown", "spoken_name": "mailing city"},
+                {"field_id": "p1_line6f_zipcode", "spoken_name": "mailing zip code"},
+            ],
+        }]
+        ask = AsyncMock(return_value={"status": "pending", "answer": "", "sources": []})
+        h, coordinator = self._handler(switch, ask)
+
+        result = await h.on_tool_call(
+            tool_name="switch_to_field", arguments={"field": "the mailing thing"},
+        )
+
+        assert result["success"] is False
+        assert "Did you mean" in result["message"]
+        assert "mailing city" in result["message"]
+        assert coordinator.request_switch_field.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_no_secretary_handler_still_degrades_to_candidates(self):
+        """With no ask_secretary handler injected, an exact miss still degrades to
+        the algorithmic candidate list -- the secretary path is optional."""
+        switch = [{
+            "found": False, "reason": "unknown_field",
+            "candidates": [
+                {"field_id": "p1_line6d_cityortown", "spoken_name": "mailing city"},
+            ],
+        }]
+        ws = AsyncMock()
+        coordinator = AsyncMock(spec=RequestCoordinator)
+        coordinator.request_switch_field = AsyncMock(side_effect=switch)
+        h = CallbackHandler(websocket=ws, session_id="s1",
+                            request_coordinator=coordinator)
+        # No set_tool_handlers -> _handle_ask_secretary stays None.
+        result = await h.on_tool_call(
+            tool_name="switch_to_field", arguments={"field": "the mailing thing"},
+        )
+        assert result["success"] is False
+        assert "Did you mean" in result["message"]
+        assert "mailing city" in result["message"]

@@ -283,20 +283,23 @@ def test_dti_si_recall_guidance_names_ask_secretary_not_get_field_value():
     assert "ANSWERS" in block
 
 
-def test_dti_si_forbids_current_field_metadata_but_allows_nav_identification():
+def test_dti_si_forbids_current_field_metadata_and_steers_nav_to_switch_tool():
     """The DTI SI must forbid ask_secretary for the CURRENT field's own name/id
-    (always in guidance -- the 2af7 waste), while ALLOWING it to IDENTIFY a
-    DIFFERENT field to navigate to, since the model does not hold other fields'
-    ids (bd polyglot-pdf-2af7 + polyglot-pdf-3vby refinement)."""
+    (always in guidance -- the 2af7 waste), and steer navigation to a DIFFERENT
+    field straight through switch_to_field with the user's own words (the tool now
+    resolves the field internally -- bd polyglot-pdf-y76q), reserving ask_secretary
+    for the user's past answers."""
     si = Settings().DTI_SYSTEM_INSTRUCTION
     assert "ask_secretary" in si
     lowered = si.lower()
     # Forbids the CURRENT field's own metadata specifically (not a blanket ban).
     assert "current field's own spoken name or id" in lowered
-    # But sanctions the navigation-identification use + the fields list it returns.
-    assert "which field is x" in lowered
+    # Navigation goes through switch_to_field with the user's words, not a
+    # pre-resolution round-trip through ask_secretary.
     assert "switch_to_field" in lowered
-    assert "`fields`" in si  # the response's fields list
+    assert "resolves the field for you" in lowered
+    # ask_secretary is scoped to the user's past answers.
+    assert "past answers" in lowered
 
 
 def test_ask_secretary_tool_description_supports_nav_identification_not_current_field():
@@ -342,15 +345,16 @@ def test_dti_and_legacy_si_forbid_checking_a_declined_optional_checkbox():
 
 
 def test_switch_to_field_desc_steers_back_nav_to_spoken_name_not_guessed_id():
-    """switch_to_field's description must steer a back-navigation to the exact
-    SPOKEN NAME and forbid reconstructing/guessing a field_id from memory, and
-    tell the model the failure response lists candidates to pick from (bd
-    polyglot-pdf-3vby)."""
+    """switch_to_field's description must let the model pass the user's own
+    words (spoken name or a rough description), forbid reconstructing/guessing
+    a field_id from memory, and tell the model the tool resolves the target
+    internally rather than the model or ask_secretary doing so (resolution
+    moved inside the tool; bd polyglot-pdf-y76q)."""
     decls = {d["name"]: d for d in Settings().TOOL_DECLARATIONS}
     desc = decls["switch_to_field"]["description"].lower()
-    assert "spoken name" in desc
-    assert "guess" in desc  # "never reconstruct or guess a field_id"
-    assert "candidate" in desc  # the ack lists candidate fields to retry with
+    assert "spoken name" in desc or "description" in desc
+    assert "guess" in desc or "invent" in desc  # never reconstruct/guess a field_id
+    assert "figures out" in desc or "resolves" in desc  # the tool resolves it for you
 
 
 def test_legacy_si_recall_guidance_does_not_mention_get_field_value():
