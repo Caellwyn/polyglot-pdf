@@ -322,9 +322,8 @@ replicate, E3 x3):
   written "Smith" (mismatch); `p1_line3b_givenname` expected "Linh,"
   written "Lynn" (transcription); `p1_line3c_middlename` expected "Thi,"
   written "T" (transcription). Fixed by pilot 2 (T055241Z, post-fix):
-  same 3 fields all exact. No dedicated bead ID found in `bd list` for
-  this specific finding as of this pass -- may be tracked only inside the
-  stress-test epic `polyglot-pdf-00pt`.
+  same 3 fields all exact. Bead filed: `polyglot-pdf-5roy` ("Non-Anglo
+  name transcription is fragile: unspelled 'Nguyen' became 'Smith'").
 - **Per-field `ask_secretary` spam / chatty-secretary mode.** Hit 3 of
   10 full runs (103 / 238 / 43 calls, plus a 39-call borderline run) vs
   the 0-7 normal band; worst case T100819Z at 238 calls with fill
@@ -365,11 +364,33 @@ replicate, E3 x3):
   chatty-mode runs (39-238 calls) approached higher hit rates
   (0.49-0.74).
 
-## 11. Numbers not yet in
+## 11. Deployed latency -- MEASURED GAP (asterisk)
 
-- **Deployed-demo latency legs** -- all wall-clock and turn-latency
-  numbers in this doc are from the **local** harness stack, which the
-  maintainer has flagged as overstating real Cloud-Run-deployed latency
-  (see Section 1 and bd memory
-  `harness-local-latency-overstates-deployed`). No deployed-latency
-  measurement exists yet in this series.
+**All wall-clock and turn-latency numbers in this doc are from the LOCAL
+harness stack and OVERSTATE the deployed product.** The deployed Cloud Run
+backend is co-located with Vertex in us-central1, so its model round-trip is
+faster than the local dev machine's; the maintainer estimates the deployed
+app is "much snappier" (bd memory `harness-local-latency-overstates-deployed`).
+Treat every latency figure here (turn p50 ~1.35 s, seam 0.53-0.66 s,
+reconnect 6-7.5 s) as a conservative UPPER BOUND, not the user-perceived
+number.
+
+**The deployed demo was verified GO on 2026-07-14** (revision
+`polyglot-backend-00074-md7`, frontend `polyglot-demo-aa709.web.app`): it
+loads, connects to Cloud Run over Vertex, negotiates
+JIT/continuous-DTI/native-VAD, streams audio, holds the session with no 1011.
+Connect-to-first-audio was ~1 s for the disclaimer read.
+
+**But deployed TURN latency could not be captured** and remains the one
+un-measured metric. Two hard blockers, both verified live: (1) the production
+build strips the dev-gated harness audio-injection hooks
+(`window.__VFF_TEST_INJECT` is undefined on the deployed build), and (2) the
+measurement environment has no microphone, so no full voice turn can be driven
+headlessly against the live site. A weak proxy (the ~1 s disclaimer-TTS start)
+is NOT reported as a turn-latency number because it measures a different thing.
+
+Capturing the real deployed turn latency needs either a demo build that keeps
+the harness hooks (a build-config change) or a human voice test-drive timing
+the thinking indicator. Filed as a follow-up bead (`polyglot-pdf` deployed-
+latency-capture task); the pitch should use the local numbers with this
+asterisk until it lands.

@@ -36,9 +36,14 @@ artifacts; this folder is a copy for pitch compilation.
   "Houston, TX" vs "Houston, Texas"), not model errors -- true accuracy is
   slightly higher.
 - **Latency in the findings doc is LOCAL and OVERSTATES the deployed product**
-  (the deployed backend is co-located with the model). Deployed-demo latency
-  legs are being measured; use those numbers for any latency claim, not the
-  local ones. Turn cadence felt ~1.3s locally; deployed is faster.
+  (the deployed backend is co-located with the model in us-central1). Turn
+  cadence was ~1.3s p50 LOCALLY; deployed is faster but the exact number is NOT
+  yet captured -- the deployed demo verified GO (loads, connects, streams, no
+  1011) but a full voice turn can't be driven headlessly (production build
+  strips the test hooks; no mic in the measurement env). For a pitch: state
+  latency as "~1.3s locally, faster in production" or omit a hard number until
+  the deployed capture lands (follow-up bead). Do NOT quote local latency as
+  the product's latency.
 - Sample size is 3 runs per arm. Ranges, not just means, are in the data.
 
 ## Known issues found (not blockers, filed as beads)
