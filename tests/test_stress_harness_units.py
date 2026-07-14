@@ -91,6 +91,65 @@ def test_override_must_be_valid_option():
         ffs.ANSWER_OVERRIDES.update(orig)
 
 
+# ------------------------------------------------------- Spanish (E6, 0cyu)
+
+def test_es_plan_matches_en_field_ids_and_expected_canon():
+    """The Spanish arm speaks the SAME persona in Spanish, but the form still
+    fills in English: build_full_form_plan(schema, lang='es') must produce
+    the identical set of field ids and the IDENTICAL expected canon as
+    lang='en' -- only the spoken say/wrong phrasings differ."""
+    schema = ffs.load_schema()
+    plan_en = ffs.build_full_form_plan(schema, lang="en")
+    plan_es = ffs.build_full_form_plan(schema, lang="es")
+
+    fids_en = {q["field_id"] for q in plan_en["questions"]}
+    fids_es = {q["field_id"] for q in plan_es["questions"]}
+    assert fids_en == fids_es
+    assert len(fids_es) == len(plan_en["questions"]) == len(plan_es["questions"])
+
+    assert plan_en["expected"] == plan_es["expected"]
+    assert plan_en["hidden"] == plan_es["hidden"]
+    assert plan_en["auto_apply"] == plan_es["auto_apply"]
+
+
+def test_no_degenerate_unhappy_wrong_utterances_es():
+    """The same degenerate say==wrong guard the English arm relies on
+    (bd polyglot-pdf-3gt9) must also hold for the Spanish arm's phrasings."""
+    plan = ffs.build_full_form_plan(ffs.load_schema(), lang="es")
+    qs, expected = plan["questions"], plan["expected"]
+    degenerate = [q["field_id"] for q in qs
+                  if expected[q["field_id"]] != "" and q["say"] == q["wrong"]]
+    assert degenerate == []
+
+
+def test_es_phrasing_spot_checks():
+    schema = ffs.load_schema()
+    field_by_id = {f["id"]: f for f in schema["fields"]}
+    answers = ffs.persona_answers()
+
+    a_number_field = field_by_id["p1_line1_aliennumber"]
+    say, wrong = ffs.phrase(a_number_field, answers["p1_line1_aliennumber"],
+                            lang="es")
+    assert "uno dos tres" in say
+    assert say != wrong
+
+    dob_field = field_by_id["p1_line9_dateofbirth"]
+    say, wrong = ffs.phrase(dob_field, answers["p1_line9_dateofbirth"], lang="es")
+    assert "abril" in say
+    assert "mil novecientos ochenta y cinco" in say
+    assert say != wrong
+
+    # Every ES override/decline phrasing must be plain ASCII (CLAUDE.md scar
+    # #6 -- gTTS 'es' pronounces unaccented Spanish acceptably, and non-ASCII
+    # in a code string risks a cp1252 crash on Windows stdout).
+    for value in list(ffs._SAY_OVERRIDES_ES.values()):
+        for text in value:
+            if text is not None:
+                assert text.isascii(), f"non-ASCII ES override text: {text!r}"
+    for text in ffs._DECLINE_OVERRIDES_ES.values():
+        assert text.isascii(), f"non-ASCII ES decline text: {text!r}"
+
+
 # ------------------------------------------------------------- fake client
 
 class _StubService:
