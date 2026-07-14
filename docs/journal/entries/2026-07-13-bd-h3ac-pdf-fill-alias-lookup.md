@@ -15,9 +15,13 @@ got6 alone would regress the PDF.
 
 `backend/routes/pdf_fill_routes.py` built its `field_lookup` (and `field_mappings`)
 keyed by the RAW schema `field.id` and did `field_lookup.get(field_id)` with NO
-`[]`-alias fallback -- unlike every FRONTEND reader (readFieldEntryWithAlias,
+`[]`-alias fallback -- unlike the frontend STATE readers (readFieldEntryWithAlias,
 buildValidatorFields.valueFor, markFieldsSteered, get_form_state), which all try
-both bracket variants. Gemini inconsistently adds/drops the trailing `[]` on
+both bracket variants. (One frontend reader is NOT alias-aware -- the in-browser
+PDF preview overlay, PDFViewer.tsx, reads exact-key only; got6 exposes it there
+too, tracked separately as bd polyglot-pdf-7sdc. That is preview-only cosmetic --
+the DOWNLOADED PDF is correct once this backend fill fix lands.) Gemini
+inconsistently adds/drops the trailing `[]` on
 checkbox-group ids (bd 5k52), so a value can arrive under `race` while the schema
 id is `race[]` (or vice-versa). The exact-key lookup missed, logged
 `field_not_in_schema`, and SKIPPED the field -> it filled BLANK on the
