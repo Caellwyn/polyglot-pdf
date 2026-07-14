@@ -527,7 +527,13 @@ def score_fill_accuracy(client, plan, expected) -> dict:
             ok = written not in (None, "")  # lenient: unknown field, count as filled
             scored = "lenient"
         elif exp == "":
-            ok = _canon_value(written) == ""   # correct to leave blank
+            canon = _canon_value(written)
+            # Correct to leave blank. For a CHECKBOX decline, an explicit
+            # false-ish write is the same correct end state (the box is
+            # unchecked); only a truthy write is a wrong answer (E1 finding,
+            # bd filed: the model sometimes CHECKS a declined checkbox).
+            is_checkbox = (client.schema_fields.get(fid) or {}).get("type") == "checkbox"
+            ok = canon == "" or (is_checkbox and canon in ("false", "unchecked", "no", "0"))
             scored = "expect-empty"
         elif isinstance(exp, (list, tuple)):
             # Any-of: fields with several equally-correct renderings (e.g. a text
@@ -2388,6 +2394,36 @@ async def run(args) -> int:
                                   and flagged_ids & set(p["conflict_group"]))):
                         plant = p
                         break
+                if plant is None:
+                    # Unplanted conflict: before conceding "both correct",
+                    # check whether the validator caught an ORGANIC error --
+                    # a flagged field whose current value canon-mismatches
+                    # the plan's expected answer (E1 run 1: the model wrote
+                    # "Denver" for Hanoi and the validator flagged it; the
+                    # old always-override reply threw that catch away). A
+                    # real user corrects to their truth: re-speak the
+                    # original scripted answer for the mismatched field.
+                    say_by_fid = {s["field_id"]: s.get("say") for s in steps
+                                  if "event" not in s}
+                    organic = None
+                    for ofid in flagged_ids:
+                        exp_o = expected_tbl.get(ofid)
+                        if exp_o in (None, ""):
+                            continue
+                        exp_set = ({_canon_value(e) for e in exp_o}
+                                   if isinstance(exp_o, (list, tuple))
+                                   else {_canon_value(exp_o)})
+                        written_o = client.state.get(ofid, {}).get("value")
+                        if _canon_value(written_o) not in exp_set and say_by_fid.get(ofid):
+                            organic = ofid
+                            break
+                    if organic is not None:
+                        await speak(f"No, that is wrong. {say_by_fid[organic]}",
+                                    "steer-organic-correct")
+                        await speak(CONFIRM_YES, "steer-confirm")
+                        rec["outcome"] = "corrected_organic"
+                        rec["organic_field"] = organic
+                        continue
                 if plant is not None:
                     await speak(plant["correct_say"], "steer-correct")
                     await speak(CONFIRM_YES, "steer-confirm")
