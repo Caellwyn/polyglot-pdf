@@ -329,11 +329,16 @@ export class SchemaFormStateManager {
     // as markFieldsSteered: the marker may sit under the bracketed/unbracketed
     // variant of this id (Gemini drops/adds the bracket), and an exact-key read
     // would drop it when the value migrates between variants (bd polyglot-pdf-5k52).
-    const priorEntry =
-      state.fieldValues[fieldId] ??
-      state.fieldValues[
-        fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]'
-      ];
+    const aliasId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId + '[]';
+    // Track WHICH key the prior entry lived under so a cross-variant migration can
+    // remove the stale one (bd polyglot-pdf-got6). Exact key wins; else the []-alias.
+    const priorKey =
+      state.fieldValues[fieldId] !== undefined
+        ? fieldId
+        : state.fieldValues[aliasId] !== undefined
+          ? aliasId
+          : undefined;
+    const priorEntry = priorKey ? state.fieldValues[priorKey] : undefined;
     const priorSteered = priorEntry?.steered;
 
     // W4 (bd polyglot-pdf-ny4s): RE-ARM the marker on a VALUE change. The prior
@@ -389,12 +394,24 @@ export class SchemaFormStateManager {
       };
     }
 
+    const nextFieldValues = {
+      ...state.fieldValues,
+      [fieldId]: fieldValue,
+    };
+    // W6-adjacent hygiene (bd polyglot-pdf-got6): a value that MIGRATES between the
+    // []-alias variants (prior entry under `field-1`, new write under `field-1[]` or
+    // vice-versa) must not leave the STALE entry (old value + old steered marker)
+    // under the other key. Both coexisting would let a downstream reader that prefers
+    // the exact schema-id key (buildValidatorFields' valueFor) pick up the stale
+    // value/steered and defeat W4's re-arm. Drop the stale variant so exactly ONE
+    // entry represents the field.
+    if (priorKey && priorKey !== fieldId) {
+      delete nextFieldValues[priorKey];
+    }
+
     const newState = {
       ...state,
-      fieldValues: {
-        ...state.fieldValues,
-        [fieldId]: fieldValue,
-      },
+      fieldValues: nextFieldValues,
       lastUpdated: Date.now(),
     };
 
