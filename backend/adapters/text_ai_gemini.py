@@ -90,6 +90,7 @@ class TextAIGemini(ITextAI):
         project: str | None = None,
         location: str = "us-central1",
         fallback_models: tuple | list | None = None,
+        thinking_budget: int | None = None,
     ):
         self._client = None
         self._model_name = model
@@ -97,6 +98,13 @@ class TextAIGemini(ITextAI):
         self._project = project
         self._location = location
         self._api_key = api_key
+        # W6 (bd polyglot-pdf-gbus): an optional bounded thinking budget for the
+        # 2.5-pro whole-form validator. None (the lite-tier default) sends NO
+        # thinking_config, so the lite path is byte-for-byte unchanged (its
+        # implicit-cache prefix stays stable). A set budget wires a
+        # types.ThinkingConfig(thinking_budget=N) into the generate config -- the
+        # W5-measured shape (budget 512; 2.5-pro cannot disable thinking).
+        self._thinking_budget = thinking_budget
 
         # Ordered, de-duplicated model chain: configured model first, then the
         # fallbacks (defaults if not overridden), dropping the configured model
@@ -341,6 +349,15 @@ class TextAIGemini(ITextAI):
             config_kwargs["system_instruction"] = system_instruction
         if response_mime_type is not None:
             config_kwargs["response_mime_type"] = response_mime_type
+        # W6 (bd polyglot-pdf-gbus): bounded thinking for the 2.5-pro whole-form
+        # validator (W5 config). None (the lite default) sends no thinking_config,
+        # leaving the lite path unchanged. Applies to every model in the chain, but
+        # the pro validator is constructed with an EMPTY fallback chain, so this only
+        # ever configures the single pro model.
+        if self._thinking_budget is not None:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(
+                thinking_budget=self._thinking_budget
+            )
 
         config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
 

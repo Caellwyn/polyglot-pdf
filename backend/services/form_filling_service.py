@@ -20,7 +20,7 @@ from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
 from .callback_handler import CallbackHandler
-from .validator_service import ValidatorService
+from .validator_service import ValidatorService, WHOLE_FORM_PRO_SI
 
 # Logger for service-level diagnostics
 _log = structlog.get_logger().bind(service="FormFillingService")
@@ -34,6 +34,7 @@ class FormFillingService:
         live_ai: Optional[ILiveAI] = None,
         settings: Optional[Settings] = None,
         text_ai: Optional[Any] = None,
+        text_ai_pro: Optional[Any] = None,
     ):
         # AI adapter is optional for unit tests that only exercise form logic
         self._live_ai = live_ai
@@ -42,6 +43,11 @@ class FormFillingService:
         # so unit tests that exercise only form logic need not wire it; the
         # ask_secretary handler fail-opens when it is None.
         self._text_ai = text_ai
+        # W6 (bd polyglot-pdf-gbus): the gemini-2.5-pro whole-form validator for the
+        # end-of-form pro pass. None unless FORM_COMPLETE_PRO_VALIDATOR is on (the
+        # dependency wires it only when the flag is set), so handle_form_complete_pro
+        # no-ops when the pro pass is disabled -- the default.
+        self._text_ai_pro = text_ai_pro
         self._websocket = None
         self._session_id = None
         # Web session state - schema only (no field caching)
@@ -1628,6 +1634,84 @@ class FormFillingService:
                 # drain_findings payload carries the names the steer composer needs.
                 "field_names": {i: name_by_id.get(i) for i in ids if isinstance(i, str)},
             })
+        return {"conflicts": reported}
+
+    async def handle_form_complete_pro(self, fields: list) -> dict:
+        """W6 (bd polyglot-pdf-gbus): the WHOLE-FORM gemini-2.5-pro contradiction
+        pass at form_complete -- the SOLE end-of-form report. It catches cross-page
+        (far-pair) contradictions the ~20-field lite windows cannot see (W5 measured
+        recall 1.000). REPORT-ONLY, like the lite windows: it returns the surviving
+        conflicts (each with a field_names rider) for the client to ENQUEUE and drain
+        via the same finding-driven path (validation_result -> validatorFindingsQueue
+        -> drain_findings); it does NOT inject a steer.
+
+        Runs one whole-form pro call with WHOLE_FORM_PRO_SI (the far-pair rule + the
+        g1c anti-hedging block + the W6 anti-over-flag items for the Part 5/6
+        certification block and bracketed-repeat fields -- the precision condition
+        W5 attached to the GO). The pass is FED the already-steered field ids so it
+        does not re-report an adjudicated contradiction, and its conflicts are then
+        DEDUPED against those same steered markers (_suppress_already_steered) -- the
+        authoritative "not re-flagged" guarantee (exit criterion 2). Prompt-layer +
+        dedupe-layer both key on the steered markers riding the contract-2 payload.
+
+        Fail-OPEN + off the receive loop: no pro wired (flag off) -> {"conflicts":[]}
+        no-op; a timeout (VALIDATOR_PRO_TIMEOUT_SEC) or any error returns clean, never
+        blocks form_complete. The spawn at the call site runs it as a background task.
+        PII: logs counts only.
+        """
+        if self._text_ai_pro is None:
+            # Pro pass disabled (FORM_COMPLETE_PRO_VALIDATOR off) -- clean no-op.
+            return {"conflicts": []}
+
+        safe_fields = fields if isinstance(fields, list) else []
+        if not safe_fields:
+            return {"conflicts": []}
+
+        steered_ids = [
+            f.get("field_id")
+            for f in safe_fields
+            if isinstance(f, dict) and f.get("steered") and f.get("field_id")
+        ]
+        try:
+            verdict = await asyncio.wait_for(
+                ValidatorService(self._text_ai_pro).validate(
+                    safe_fields, si=WHOLE_FORM_PRO_SI, steered_field_ids=steered_ids
+                ),
+                timeout=self._settings.VALIDATOR_PRO_TIMEOUT_SEC,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001 -- fail-OPEN
+            _log.warning("validator_pro_fail_open",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+            return {"conflicts": []}
+        conflicts = verdict.get("conflicts", []) if isinstance(verdict, dict) else []
+
+        # DEDUPE against already-steered fields -- the authoritative not-re-flag
+        # guarantee (belt to the prompt's suspenders). Reuses the same per-field
+        # suppression the lite path uses; the steered markers ride the payload.
+        surviving = self._suppress_already_steered(conflicts, safe_fields)
+
+        name_by_id = {
+            f.get("field_id"): f.get("name")
+            for f in safe_fields
+            if isinstance(f, dict) and f.get("field_id")
+        }
+        reported = []
+        for c in surviving:
+            if not isinstance(c, dict):
+                continue
+            ids = c.get("field_ids", [])
+            reported.append({
+                "field_ids": ids,
+                "reason": c.get("reason", ""),
+                "field_names": {i: name_by_id.get(i) for i in ids if isinstance(i, str)},
+            })
+        _log.info(
+            "validator_pro_complete",
+            field_count=len(safe_fields),
+            raw_conflict_count=len(conflicts),
+            reported_conflict_count=len(reported),
+            session_id=self._session_id,
+        )
         return {"conflicts": reported}
 
     async def handle_drain_findings(self, conflicts: list) -> dict:

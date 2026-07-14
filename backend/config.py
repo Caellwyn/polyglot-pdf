@@ -174,6 +174,26 @@ class Settings(BaseModel):
 	# flash-lite calls. Windows beyond the cap queue and run as slots free; each
 	# still gets its own VALIDATOR_TIMEOUT_SEC. Per-window fail-open is unchanged.
 	VALIDATOR_MAX_CONCURRENT_WINDOWS: int = 8
+
+	# W6 (bd polyglot-pdf-gbus): the whole-form gemini-2.5-pro contradiction pass at
+	# form_complete -- the SOLE end-of-form report, catching cross-page (far-pair)
+	# contradictions the ~20-field lite windows cannot see. W5 (bd polyglot-pdf-g0w1)
+	# measured pro far-pair recall = 1.000 (GO) with thinking bounded to 512.
+	# DEFAULT-OFF: pro is a new operational-cost dependency (~$0.0093/call) and its
+	# uncorrected whole-form PRECISION is 0.750 (it over-flags the Part 5/6
+	# preparer-interpreter certification block). The anti-over-flag prompt ships in
+	# WHOLE_FORM_PRO_SI; flip this on by env (no redeploy, mirrors EXTRACTOR_MODEL
+	# doctrine) only AFTER the precision re-measure confirms the prompt lifts it.
+	FORM_COMPLETE_PRO_VALIDATOR: bool = os.getenv("FORM_COMPLETE_PRO_VALIDATOR", "false").lower() == "true"
+	# The pro model + its bounded thinking budget (W5 config; env-swappable like
+	# EXTRACTOR_MODEL). thinking_budget must be > 0 for 2.5-pro (it cannot be turned
+	# off); 512 is the W5-measured bound (in-band cost, p50 ~6s).
+	VALIDATOR_PRO_MODEL: str = os.getenv("VALIDATOR_PRO_MODEL", "gemini-2.5-pro")
+	VALIDATOR_PRO_THINKING_BUDGET: int = int(os.getenv("VALIDATOR_PRO_THINKING_BUDGET", "512"))
+	# Fail-open ceiling for the single whole-form pro call (~2.5x W5 p90 7.5s). Above
+	# this the pass returns clean (no report) rather than blocking form_complete.
+	VALIDATOR_PRO_TIMEOUT_SEC: float = float(os.getenv("VALIDATOR_PRO_TIMEOUT_SEC", "20.0"))
+
 	WS_MAX_AUDIO_FRAME_BYTES: int = 32000  # ~1s at 16kHz mono PCM16 (2 bytes/sample)
 
 	# === DTI (Dynamic Turn Injection) Settings ===
