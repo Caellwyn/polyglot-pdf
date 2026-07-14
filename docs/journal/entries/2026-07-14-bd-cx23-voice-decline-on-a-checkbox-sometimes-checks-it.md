@@ -36,16 +36,24 @@ directly.
   normally; NEVER `"true"`/`"false"`. The client already renders `""` as unchecked
   and cannot distinguish a decline from an intentional check, so the fix is
   model-side.
-- **2af7**: reworded `render_section_metadata` so completed-field names are listed
-  inline (not framed as secretary-fetched); added a DTI SI line forbidding
-  ask_secretary metadata lookups; and -- caught by the fresh-eyes review as the
-  strongest lever -- NARROWED the ask_secretary tool description (and the sibling
-  switch_to_field description that said "after ask_secretary names the field") so no
-  tool text invites field-metadata lookups. The 1/10 in-session implicit-cache hit
-  rate (vs 96-98% offline) was diagnosed as cache-TTL expiry between the
-  widely-spaced per-field asks + 2.5->3.1 lite-fallback namespace mixing -- NOT a
-  byte-instability bug (the prefix is stable); eliminating the redundant asks removes
-  the exposure. Documented in `scripts/spikes/secretary_cache_miss_2af7_findings.md`.
+- **2af7**: the measured waste was the model asking the secretary for the CURRENT
+  field's spoken name -- metadata already in guidance. The FIRST fix over-reached
+  with a blanket "do not ask_secretary for a field's name/id" ban; **maintainer
+  feedback corrected it**: the secretary is BY DESIGN the voice model's "which
+  field does the user mean" resolver for navigation (the model cannot hold other
+  fields' ids -- tight compression window). The corrected fix (a) reworded the SI +
+  both tool descriptions to forbid only the CURRENT field's metadata while
+  ALLOWING the nav-identification use, and (b) WIRED the secretary's `sourced_from`
+  field ids -- previously DISCARDED at the adapter -- through to the ask_secretary
+  tool response as a `fields` list of {field_id, spoken_name}, so the "secretary
+  names a field -> switch_to_field navigates to it" flow (designed in jnjj.36) now
+  actually returns a usable identifier. `TextAIGemini.ask()` changed from `-> str`
+  to `-> (answer, sources)`, threaded through the handler's status dict and the
+  callback dispatch (surfaced only when non-empty and well-formed; async-deliver
+  path stays prose-only). The 1/10 in-session implicit-cache hit rate (vs 96-98%
+  offline) was diagnosed as cache-TTL expiry between the widely-spaced per-field
+  asks + 2.5->3.1 lite-fallback namespace mixing -- NOT a byte-instability bug (the
+  prefix is stable). Documented in `scripts/spikes/secretary_cache_miss_2af7_findings.md`.
 - **3vby**: steered switch_to_field to pass the exact SPOKEN NAME for back-navigation
   (never a reconstructed id), and made the unknown_field ack carry nearest navigable
   candidates (id + spoken name). Candidate ranking is whole-word overlap + document
@@ -64,6 +72,17 @@ product/legal call the maintainer flagged).
 
 ## Lessons
 
+- **The secretary IS the voice model's field-navigation resolver -- do not tell the
+  model to stop using it for field identification.** The model cannot hold other
+  fields' ids (tight compression window), so "which field does the user mean?" is a
+  legitimate, designed ask_secretary use. The 2af7 fix's first cut wrongly banned it
+  wholesale; the correct line is narrow: forbid only the CURRENT field's own
+  metadata (redundant), keep the nav-identification use. Underneath, the secretary's
+  `sourced_from` field ids had been DISCARDED at the adapter since jnjj.45, so the
+  jnjj.36-designed "secretary names a field -> switch_to_field" flow had never
+  actually returned a usable id -- a designed-but-unwired path. Wiring it
+  (`ask()` -> `(answer, sources)` -> tool response `fields`) is what makes the
+  navigation work.
 - **Tool descriptions and the SI must agree -- a contradiction between them silently
   defeats an SI fix.** The 2af7 SI prohibition against fetching field metadata from
   the secretary was undermined by two tool descriptions (ask_secretary's own, and
@@ -86,13 +105,19 @@ as-is per the doc-maintenance rule for docs tracking otherwise-unchanged behavio
 
 ## Files touched
 
-- `backend/config.py` -- DECLINED CHECKBOX + NAMES SI blocks (both SIs); DTI SI ask_secretary-metadata prohibition; narrowed ask_secretary + switch_to_field tool descriptions.
-- `backend/services/ai_context.py` -- render_section_metadata reworded (names inline, ask_secretary = answers only).
-- `backend/services/callback_handler.py` -- unknown_field ack surfaces candidate spoken names; message steers to spoken name, not a guessed id.
+- `backend/config.py` -- DECLINED CHECKBOX + NAMES SI blocks (both SIs); DTI SI current-field-metadata prohibition + nav-identification allowance; reworded ask_secretary + switch_to_field tool descriptions (two uses: recall answer / identify field for nav).
+- `backend/services/ai_context.py` -- render_section_metadata reworded (names inline).
+- `backend/adapters/text_ai_gemini.py` -- ask() -> (answer, sources); _resolve_sources resolves sourced_from ids to {field_id, spoken_name} (deduped, capped 8).
+- `backend/ports/text_ai_port.py` -- ITextAI.ask() contract updated to the (answer, sources) tuple.
+- `backend/services/form_filling_service.py` -- handle_ask_secretary unpacks + carries `sources`; async-deliver path unpacks the tuple.
+- `backend/services/callback_handler.py` -- unknown_field ack surfaces candidate spoken names; ask_secretary dispatch surfaces resolved `fields`; messages steer to spoken name, not a guessed id.
 - `frontend/src/schema-forms/state/schemaFormState.ts` -- suggestNavigationCandidates (visible-only, word-overlap ranked, exact-resolvable).
 - `frontend/src/webFormConnection.ts` -- unknown_field ack carries candidates.
 - `scripts/spikes/measure_form_session_costs.py` -- harness mirror of the candidate ack.
-- `backend/tests/unit/test_tool_contract_static.py` -- static pins for all four SI/tool changes.
+- `backend/tests/unit/test_tool_contract_static.py` -- static pins for all SI/tool changes (incl. the nav-identification allowance).
 - `backend/tests/unit/test_switch_to_field_tool.py` -- candidate-listing + spoken-name-steer tests.
+- `backend/tests/unit/test_text_ai_gemini.py` -- ask() tuple return, _resolve_sources dedup/cap/skip-unknown tests.
+- `backend/tests/unit/test_ask_secretary_handler.py` -- handler `sources` propagation across the deadline/detach paths.
+- `backend/tests/test_callback_handler.py` -- ask_secretary dispatch surfaces `fields`; omits it when no sources.
 - `frontend/src/__tests__/switch-to-field-pin.test.ts` -- suggestNavigationCandidates + ack-candidate tests.
 - `scripts/spikes/secretary_cache_miss_2af7_findings.md`, `scripts/spikes/nonanglo_name_transcription_5roy_findings.md` -- diagnosis + mitigation records.
