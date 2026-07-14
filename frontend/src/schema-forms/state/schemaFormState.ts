@@ -1188,6 +1188,47 @@ export class SchemaFormStateManager {
   }
 
   /**
+   * Nearest navigable-field candidates for an identifier that did NOT resolve
+   * exactly (bd polyglot-pdf-3vby). Returns up to `limit` currently-visible
+   * fields, ranked by whole-WORD overlap between the identifier and each field's
+   * spoken name/aliases, then document order. This is a SUGGESTION aid only --
+   * the model picks one and switch_to_field re-resolves it EXACTLY, so no fuzzy
+   * match ever auto-fills a field (the lt9z mis-fill trap is avoided). Hidden and
+   * conditionally-inactive fields are excluded because they are not navigable.
+   */
+  static suggestNavigationCandidates(
+    state: SchemaFormState,
+    identifier: string,
+    limit = 6
+  ): Array<{ field_id: string; spoken_name: string }> {
+    const words = (identifier || "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(w => w.length > 2);
+    const navigable = state.schema.fields.filter(
+      f => !f.hidden && shouldShowField(f, state.fieldValues, state.schema.fields)
+    );
+    const scored = navigable.map((f, idx) => {
+      const hay = [f.spoken_name, f.name, ...(f.spoken_aliases || [])]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const hayWords = new Set(hay.split(/[^a-z0-9]+/).filter(Boolean));
+      const overlap = words.reduce((n, w) => n + (hayWords.has(w) ? 1 : 0), 0);
+      return { f, idx, overlap };
+    });
+    scored.sort((a, b) => b.overlap - a.overlap || a.idx - b.idx);
+    // When nothing overlaps at all, fall back to the first navigable fields in
+    // document order so the model still gets a concrete pick-list to choose from.
+    return scored
+      .slice(0, limit)
+      .map(s => ({
+        field_id: s.f.id,
+        spoken_name: s.f.spoken_name || s.f.name || s.f.id,
+      }));
+  }
+
+  /**
    * Pin a field as the navigation target (see pinnedFieldId on the state
    * interface). computeNextField returns the pinned field first while it is
    * visible + unconfirmed; confirm/skip release the pin.

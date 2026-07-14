@@ -1273,15 +1273,18 @@ class FormFillingService:
         round-trip) -- and runs the BLOCKING TextAIGemini.ask().
 
         Returns a status dict the dispatch maps to a tool response:
-          {"status": "ok",      "answer": <prose>}  -- answered within the deadline.
-          {"status": "pending", "answer": ""}       -- the lookup blew
+          {"status": "ok",      "answer": <prose>, "sources": [...]}  -- answered
+              within the deadline. `sources` is the resolved {field_id, spoken_name}
+              list (bd polyglot-pdf-2af7/3vby) the answer was grounded in -- lets the
+              voice model hand an EXACT id to switch_to_field for navigation.
+          {"status": "pending", "answer": "", "sources": []}       -- the lookup blew
               SECRETARY_DEADLINE_S; it has been DETACHED to deliver its answer on a
               later turn (see _deliver_secretary_answer_later). The principal must NOT
               keep its turn open waiting; the gap-based thinking indicator (bd wpw.5)
               covers the wait visually -- no spoken filler turn is spent.
-          {"status": "failed",  "answer": ""}       -- no adapter / no schema / the
-              client form-state round-trip errored; fail-open (the dispatch voices an
-              apology).
+          {"status": "failed",  "answer": "", "sources": []}       -- no adapter / no
+              schema / the client form-state round-trip errored; fail-open (the
+              dispatch voices an apology).
 
         Tail-latency design (jnjj.43): Gate 2 (jnjj.27) measured median ~1s but spikes
         to 8.5s / 20s. The synchronous tool call only waits SECRETARY_DEADLINE_S
@@ -1294,7 +1297,7 @@ class FormFillingService:
         """
         if self._text_ai is None:
             _log.warning("ask_secretary_no_text_ai", session_id=self._session_id)
-            return {"status": "failed", "answer": ""}
+            return {"status": "failed", "answer": "", "sources": []}
 
         # Prefer the full-form catalog the client supplies at handshake (bd
         # polyglot-pdf-p68s): the secretary must see the WHOLE form, not just the
@@ -1304,7 +1307,7 @@ class FormFillingService:
         schema = self._full_schema or self._schema or {}
         if not schema.get("fields"):
             _log.warning("ask_secretary_no_schema", session_id=self._session_id)
-            return {"status": "failed", "answer": ""}
+            return {"status": "failed", "answer": "", "sources": []}
 
         # Fresh full form state from the client (all fields). Shape:
         # {field_id: {"value": ..., "confirmed": ..., ["shown": bool]}} -- the
@@ -1315,7 +1318,7 @@ class FormFillingService:
         except Exception as exc:  # noqa: BLE001
             _log.warning("ask_secretary_form_state_error",
                          exc_type=type(exc).__name__, session_id=self._session_id)
-            return {"status": "failed", "answer": ""}
+            return {"status": "failed", "answer": "", "sources": []}
         form_state = form_state or {}
 
         shown_map = {}
@@ -1358,27 +1361,28 @@ class FormFillingService:
         if lookup in done:
             # Resolved within the deadline -- the common path.
             try:
-                answer = lookup.result()
+                answer, sources = lookup.result()
             except asyncio.TimeoutError:
                 _log.warning("ask_secretary_timeout", timeout_s=timeout_s,
                              session_id=self._session_id)
-                return {"status": "failed", "answer": ""}
+                return {"status": "failed", "answer": "", "sources": []}
             except Exception as exc:  # noqa: BLE001
                 _log.warning("ask_secretary_ask_error",
                              exc_type=type(exc).__name__, session_id=self._session_id)
-                return {"status": "failed", "answer": ""}
+                return {"status": "failed", "answer": "", "sources": []}
             _log.info(
                 "ask_secretary_complete",
                 field_count=len(form_state),
                 shown_count=len(shown_map),
                 answer_len=len(answer or ""),
+                source_count=len(sources) if isinstance(sources, list) else 0,
                 session_id=self._session_id,
             )
             # Treat an all-whitespace answer as empty (the model occasionally returns
             # blanks) so the dispatch fail-opens instead of voicing whitespace.
             if not (answer or "").strip():
-                return {"status": "failed", "answer": ""}
-            return {"status": "ok", "answer": answer}
+                return {"status": "failed", "answer": "", "sources": []}
+            return {"status": "ok", "answer": answer, "sources": sources or []}
 
         # Deadline blown: free the principal's turn and DETACH the still-running
         # lookup to deliver its answer asynchronously (jnjj.43). Track a strong ref
@@ -1397,7 +1401,7 @@ class FormFillingService:
         entry = (deliver, lookup)
         self._secretary_deliver_tasks.add(entry)
         deliver.add_done_callback(lambda _t: self._secretary_deliver_tasks.discard(entry))
-        return {"status": "pending", "answer": ""}
+        return {"status": "pending", "answer": "", "sources": []}
 
     async def _deliver_secretary_answer_later(
         self, lookup: "asyncio.Future", field_count: int, shown_count: int
@@ -1419,7 +1423,7 @@ class FormFillingService:
         letting it go. PII: never log the answer text; counts/status only.
         """
         try:
-            answer = await lookup
+            answer, _sources = await lookup
         except asyncio.TimeoutError:
             _log.warning("ask_secretary_async_timeout", session_id=self._session_id)
             return

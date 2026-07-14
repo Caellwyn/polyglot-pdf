@@ -99,6 +99,44 @@ describe('switch_to_field pin (bd jnjj.36)', () => {
     expect(SchemaFormStateManager.resolveFieldForNavigation(baseState(), '')).toBeNull()
   })
 
+  // ---- suggestNavigationCandidates (bd polyglot-pdf-3vby) -------------------
+
+  it('suggests word-overlapping candidates for an unresolved identifier', () => {
+    const s = baseState()
+    const cands = SchemaFormStateManager.suggestNavigationCandidates(s, 'field gamma-ish')
+    // "field" overlaps all; "gamma" overlaps only c -> c ranks first.
+    expect(cands[0]).toEqual({ field_id: 'c', spoken_name: 'field gamma' })
+    // Every candidate is a real navigable field with an id + spoken name.
+    for (const c of cands) {
+      expect(c.field_id).toBeTruthy()
+      expect(c.spoken_name).toBeTruthy()
+    }
+  })
+
+  it('excludes conditionally-hidden fields from candidates', () => {
+    // field 'd' is hidden (its show_if needs c === "open sesame"), so it must
+    // never be offered as a navigation target.
+    const s = baseState()
+    const cands = SchemaFormStateManager.suggestNavigationCandidates(s, 'field delta')
+    expect(cands.some(c => c.field_id === 'd')).toBe(false)
+  })
+
+  it('still returns a bounded pick-list when nothing overlaps', () => {
+    const s = baseState()
+    const cands = SchemaFormStateManager.suggestNavigationCandidates(s, 'zzzzz', 2)
+    expect(cands.length).toBeLessThanOrEqual(2)
+    expect(cands.length).toBeGreaterThan(0)  // document-order fallback
+  })
+
+  it('never suggests a candidate the exact resolver would reject (round-trip safe)', () => {
+    const s = baseState()
+    const cands = SchemaFormStateManager.suggestNavigationCandidates(s, 'field')
+    for (const c of cands) {
+      // Each suggested spoken name resolves back to its own field_id exactly.
+      expect(SchemaFormStateManager.resolveFieldForNavigation(s, c.spoken_name)).toBe(c.field_id)
+    }
+  })
+
   // ---- computeNextField pin priority ---------------------------------------
 
   it('returns the pinned field first even when earlier fields are unfilled', () => {
@@ -275,6 +313,12 @@ describe('switch_field end-to-end probe (WebFormConnection)', () => {
     const ack = sent.find(m => m.type === 'switch_field_response')
     expect(ack.found).toBe(false)
     expect(ack.reason).toBe('unknown_field')
+    // The ack carries nearest navigable candidates so the model can retry with
+    // an exact name instead of guessing another id (bd polyglot-pdf-3vby).
+    expect(Array.isArray(ack.candidates)).toBe(true)
+    expect(ack.candidates.length).toBeGreaterThan(0)
+    expect(ack.candidates[0]).toHaveProperty('field_id')
+    expect(ack.candidates[0]).toHaveProperty('spoken_name')
     expect(onNextField).not.toHaveBeenCalled()
     expect(SchemaFormStateManager.load()?.pinnedFieldId ?? null).toBeNull()
   })

@@ -135,14 +135,14 @@ async def test_validate_fail_open_when_no_client():
 @pytest.mark.asyncio
 async def test_ask_empty_context_fails_open():
     """ask() is implemented now (bd polyglot-pdf-jnjj.45b): an empty context (no
-    schema to ground the answer in) fail-opens to "" rather than raising. The
+    schema to ground the answer in) fail-opens to ("", []) rather than raising. The
     full implemented behavior is covered by the test_ask_* block below."""
     from backend.adapters.text_ai_gemini import TextAIGemini
 
     with patch("backend.adapters.text_ai_gemini.genai"):
         adapter = TextAIGemini(api_key="test-key", vertexai=False)
 
-    assert await adapter.ask("what is the zip code?", {}) == ""
+    assert await adapter.ask("what is the zip code?", {}) == ("", [])
 
 
 @pytest.mark.asyncio
@@ -236,16 +236,66 @@ _ASK_SCHEMA = {
 
 @pytest.mark.asyncio
 async def test_ask_returns_prose_answer(adapter_with_client):
-    """ask() returns the secretary's `answer` prose from the JSON response."""
+    """ask() returns the secretary's `answer` prose from the JSON response, plus the
+    resolved `sources` list (bd polyglot-pdf-2af7/3vby)."""
     response = _make_response(
         text='{"answer": "Their first name is Ada.", "sourced_from": ["f_first"]}')
     adapter = adapter_with_client(response)
-    out = await adapter.ask("what is their first name?", {
+    answer, sources = await adapter.ask("what is their first name?", {
         "schema": _ASK_SCHEMA,
         "field_values": {"f_first": "Ada"},
         "shown_map": {"f_first": True, "f_last": True},
     })
-    assert out == "Their first name is Ada."
+    assert answer == "Their first name is Ada."
+    assert sources == [{"field_id": "f_first", "spoken_name": "first name"}]
+
+
+@pytest.mark.asyncio
+async def test_ask_sources_dedupe_cap_and_skip_unknown_ids(adapter_with_client):
+    """sourced_from ids not present in the schema are dropped; duplicates are
+    de-duped (order preserved); the resolved list is capped at 8 entries."""
+    # 10 duplicate/unknown ids referencing only the 2 real schema fields, plus a
+    # ghost id that does not exist in the schema.
+    sourced_from = (
+        ["f_first", "f_first", "f_ghost", "f_last"]
+        + ["f_first"] * 10  # excess duplicates -- must not blow the cap by count
+    )
+    response = _make_response(
+        text=json.dumps({"answer": "ok", "sourced_from": sourced_from}))
+    adapter = adapter_with_client(response)
+    answer, sources = await adapter.ask("q", {
+        "schema": _ASK_SCHEMA,
+        "field_values": {},
+        "shown_map": {},
+    })
+    assert answer == "ok"
+    # Only the two real, de-duped fields resolve -- order preserved, no ghost id.
+    assert sources == [
+        {"field_id": "f_first", "spoken_name": "first name"},
+        {"field_id": "f_last", "spoken_name": "last name"},
+    ]
+    assert len(sources) <= 8
+
+
+@pytest.mark.asyncio
+async def test_ask_sources_truncates_to_eight(adapter_with_client):
+    """When the secretary sources MORE than 8 distinct real fields, the resolved
+    list truncates to the first 8 in order (the cap actually fires)."""
+    schema = {
+        "fields": [
+            {"id": f"f{i}", "spoken_name": f"field {i}", "type": "text"}
+            for i in range(12)
+        ],
+    }
+    sourced_from = [f"f{i}" for i in range(12)]  # 12 distinct real fields
+    response = _make_response(
+        text=json.dumps({"answer": "ok", "sourced_from": sourced_from}))
+    adapter = adapter_with_client(response)
+    _answer, sources = await adapter.ask("q", {
+        "schema": schema, "field_values": {}, "shown_map": {},
+    })
+    assert len(sources) == 8
+    assert [s["field_id"] for s in sources] == [f"f{i}" for i in range(8)]
 
 
 @pytest.mark.asyncio
@@ -316,44 +366,45 @@ async def test_ask_logs_no_pii(adapter_with_client):
 
 @pytest.mark.asyncio
 async def test_ask_fail_open_on_api_error(adapter_with_client):
-    """An API exception fail-opens to "" so the principal asks the user directly."""
+    """An API exception fail-opens to ("", []) so the principal asks the user
+    directly."""
     response = _make_response(text='{"answer": "x", "sourced_from": []}')
     adapter = adapter_with_client(response)
     adapter._client.aio.models.generate_content = AsyncMock(
         side_effect=RuntimeError("boom"))
     out = await adapter.ask("q", {"schema": _ASK_SCHEMA, "field_values": {},
                                   "shown_map": {}})
-    assert out == ""
+    assert out == ("", [])
 
 
 @pytest.mark.asyncio
 async def test_ask_fail_open_on_bad_json(adapter_with_client):
-    """Unparseable JSON fail-opens to ""."""
+    """Unparseable JSON fail-opens to ("", [])."""
     response = _make_response(text="not json at all")
     adapter = adapter_with_client(response)
     out = await adapter.ask("q", {"schema": _ASK_SCHEMA, "field_values": {},
                                   "shown_map": {}})
-    assert out == ""
+    assert out == ("", [])
 
 
 @pytest.mark.asyncio
 async def test_ask_fail_open_on_missing_schema(adapter_with_client):
-    """No catalog to ground in -> fail-open "" (cannot retrieve)."""
+    """No catalog to ground in -> fail-open ("", []) (cannot retrieve)."""
     response = _make_response(text='{"answer": "x", "sourced_from": []}')
     adapter = adapter_with_client(response)
     out = await adapter.ask("q", {"schema": None, "field_values": {}})
-    assert out == ""
+    assert out == ("", [])
 
 
 @pytest.mark.asyncio
 async def test_ask_fail_open_on_no_client():
-    """No configured client -> fail-open "" without raising."""
+    """No configured client -> fail-open ("", []) without raising."""
     from backend.adapters.text_ai_gemini import TextAIGemini
     with patch("backend.adapters.text_ai_gemini.genai"):
         adapter = TextAIGemini(api_key="k", vertexai=False)
     adapter._client = None
     out = await adapter.ask("q", {"schema": _ASK_SCHEMA})
-    assert out == ""
+    assert out == ("", [])
 
 
 # --------------------------------------------------------------------------- #

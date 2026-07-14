@@ -457,19 +457,27 @@ class Settings(BaseModel):
 		{
 			# The secretary (bd polyglot-pdf-jnjj.45): a cheap text-model helper
 			# that holds the WHOLE form catalog + the applicant's current answers
-			# and answers prose questions about them. The principal asks in plain
-			# language and gets back a prose answer -- it does NOT need the field
-			# catalog in its own (expensive) context. Use this for "what did they
-			# say for X?", "have we answered Y?", "which field is Z?" -- anything
-			# about a PAST answer or a field other than the current one.
+			# and answers prose questions about them -- the principal does NOT
+			# hold that catalog (tight compression window). Two uses (bd
+			# polyglot-pdf-2af7/3vby): (1) recall a PAST ANSWER/value; (2) IDENTIFY
+			# which field the user means when you need to navigate to a field you do
+			# not currently hold -- the response's `fields` list carries the exact
+			# field_id + spoken_name to pass to switch_to_field. The ONE thing it is
+			# NOT for: the CURRENT field's own name/id, which is always already in
+			# your latest guidance block.
 			"name": "ask_secretary",
 			"description": (
-				"Ask the secretary a plain-language question about the form -- a "
-				"past answer, whether something has been filled, or which field "
-				"covers a topic (e.g. 'what previous name did they give?', 'have "
-				"we got their date of birth yet?'). The secretary holds the whole "
-				"form and the applicant's current answers and replies in prose. "
-				"Use this instead of trying to remember other fields yourself."
+				"Ask the secretary a plain-language question about the form. Two "
+				"uses: (1) recall a past ANSWER/value -- 'what previous name did "
+				"they give?', 'have we got their date of birth yet?'; (2) IDENTIFY "
+				"which field the user means when you need to jump to a field you do "
+				"NOT currently hold -- 'which field is the mailing city?'. The "
+				"secretary holds the whole form catalog + the applicant's answers "
+				"and replies in prose; when it identifies fields, the response also "
+				"carries a `fields` list of exact {field_id, spoken_name} you can "
+				"pass straight to switch_to_field. Do NOT ask it for the CURRENT "
+				"field's own name or id -- that is always in your latest guidance "
+				"block already."
 			),
 			"parameters": {
 				"type": "object",
@@ -477,8 +485,10 @@ class Settings(BaseModel):
 					"query": {
 						"type": "string",
 						"description": (
-							"The plain-language question about the form or a past "
-							"answer (e.g. 'what is their mailing zip code?')."
+							"The plain-language question: a past answer/value "
+							"('what is their mailing zip code?'), or which field the "
+							"user means for navigation ('which field is the apartment "
+							"number?')."
 						)
 					}
 				},
@@ -518,19 +528,29 @@ class Settings(BaseModel):
 		},
 		{
 			# Field-level navigation (bd polyglot-pdf-jnjj.36): jump the form's
-			# focus to ONE SPECIFIC field -- the principal's half of the
-			# secretary architecture (ask_secretary names a field; this tool
-			# navigates to it) and the correction path ("actually, my zip code
-			# was wrong"). DISTINCT from switch_section, which navigates whole
-			# sections and (in section mode) restarts the session; this stays in
-			# the current session and just changes which field is current.
+			# focus to ONE SPECIFIC field -- the correction/revisit path
+			# ("actually, my zip code was wrong"; "go back to my mailing city").
+			# The target identifier comes from the user's own words, from a field
+			# this tool's candidate list named on a miss, or from ask_secretary's
+			# `fields` list when the model asked it "which field is X?" to identify
+			# a field it does not hold (bd polyglot-pdf-3vby). DISTINCT from
+			# switch_section, which navigates whole sections and (in section mode)
+			# restarts the session; this stays in the current session and just
+			# changes which field is current.
 			"name": "switch_to_field",
 			"description": (
 				"Jump to ONE SPECIFIC field so it becomes the current field -- "
 				"use it when the user wants to change or revisit an earlier "
-				"answer, or after ask_secretary names the field the user is "
-				"asking about. Pass the exact field_id when you have it "
-				"(preferred), else the field's exact spoken name. On success "
+				"answer (e.g. 'go back to my mailing city'). Pass a field_id ONLY "
+				"when you have it verbatim in "
+				"a recent guidance block; for an EARLIER field you are navigating "
+				"back to, pass its exact SPOKEN NAME instead -- never reconstruct "
+				"or guess a field_id from memory (a wrong id fails). If you do not "
+				"know the target's exact name, ask_secretary 'which field is X?' "
+				"first -- its `fields` list gives you an exact field_id + spoken "
+				"name to pass here. If the target "
+				"is not found, the response lists the candidate fields; pick one of "
+				"THOSE exact names and retry. On success "
 				"the response carries that field's guidance -- ask the user "
 				"about THAT field next. This does NOT navigate sections; for a "
 				"whole different section use switch_section."
@@ -541,8 +561,9 @@ class Settings(BaseModel):
 					"field": {
 						"type": "string",
 						"description": (
-							"The target field: its exact field_id (verbatim, "
-							"preferred) or its exact spoken name."
+							"The target field: its exact field_id (verbatim from "
+							"a recent guidance block), or -- for an earlier field -- "
+							"its exact spoken name. Do not invent or guess an id."
 						)
 					}
 				},
@@ -648,7 +669,19 @@ class Settings(BaseModel):
     "- SKIP vs NOT-APPLICABLE (two different things):\n"
     "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: call update_form_fields with value \"\" then confirm_field normally. This is a real answer.\n"
     "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm_field a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
+    "- DECLINED CHECKBOX: for an optional checkbox the user declines (says no/none/'that does not apply'), call update_form_fields with value \"\" to leave it UNCHECKED, then confirm_field normally. NEVER write \"true\"/\"false\" on a decline -- \"true\" wrongly checks the box, a wrong answer on a legal form. Only write a checked value when the user affirmatively asks for it.\n"
     "- Greet warmly in user's language, mention form/section, ask for: {next_field_hint}\n\n"
+
+    "NAMES (spell first, verify by spelling):\n"
+    "For any PERSON'S NAME field (family/last, given/first, middle, interpreter's "
+    "or preparer's name), the SPELLING is the answer -- do not guess a common "
+    "spelling from the sound. ASK for the spelling first ('How do you spell your "
+    "<name>?' rather than 'What is your <name>?'), fill the exact spelling letter "
+    "for letter, and VERIFY by reading the SPELLING back ('N-G-U-Y-E-N, Nguyen -- "
+    "did I get that right?'), not just the name. If the user only says the name, "
+    "ask them to spell it before filling -- never fill a guessed spelling. Uncommon "
+    "and non-Anglo names mishear into Anglo defaults, which on a legal form is a "
+    "wrong name.\n\n"
 
     "ADDRESS CONSISTENCY:\n"
     "After filling any address-cluster field (state, zip, province, country), "
@@ -686,7 +719,13 @@ class Settings(BaseModel):
     "earlier blocks. When you fill or confirm a field, COPY its field_id VERBATIM from that latest "
     "guidance block -- character for character. NEVER invent, reconstruct, guess, abbreviate, or "
     "pattern-match a field_id from another field's id. If you have no current guidance block (e.g. "
-    "after a reconnect), request the current form status or ask the user, rather than guessing.\n\n"
+    "after a reconnect), request the current form status or ask the user, rather than guessing.\n"
+    "Do NOT call ask_secretary for the CURRENT field's own spoken name or id -- that is always in "
+    "this guidance block already. But you DO NOT hold other fields' ids: to jump to a DIFFERENT field "
+    "the user names ('go back to my mailing city'), you may ask_secretary 'which field is X?' -- its "
+    "response's `fields` list gives you the exact field_id + spoken name to pass to switch_to_field. "
+    "ask_secretary is for the user's past ANSWERS and for IDENTIFYING a field to navigate to, never "
+    "for the current field's metadata.\n\n"
 
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"
@@ -726,7 +765,23 @@ class Settings(BaseModel):
     "- SKIP vs NOT-APPLICABLE (two different things):\n"
     "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: fill it with value \"\" then confirm normally. This is a real answer.\n"
     "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
+    "- DECLINED CHECKBOX: for an optional checkbox the user declines (says no/none/'that does not apply' -- e.g. 'I do not need that accommodation'), fill it with value \"\" to leave it UNCHECKED, then confirm normally. NEVER write \"true\"/\"false\" on a decline -- \"true\" wrongly checks the box, which on a legal form is a wrong answer. Only write a checked value when the user affirmatively asks for it.\n"
     "- Keep interactions conversational and empathetic - this is a medical form.\n\n"
+
+    "NAMES (spell first, verify by spelling):\n"
+    "For any field that is a PERSON'S NAME (family/last name, given/first name, "
+    "middle name, an interpreter's or preparer's name, etc.), the SPELLING is the "
+    "answer -- do NOT guess a common spelling from the sound. So:\n"
+    "- ASK for the spelling first: lead with 'How do you spell your <name>?' "
+    "rather than 'What is your <name>?'. Uncommon and non-Anglo names (e.g. Nguyen, "
+    "Johansen, Thi) are easy to mishear into a common Anglo default, which on a "
+    "legal form is a wrong name.\n"
+    "- FILL the exact spelling the user gives, letter for letter.\n"
+    "- VERIFY by reading the SPELLING back, not just the name: "
+    "'N-G-U-Y-E-N, Nguyen -- did I get that right?'. Only confirm once the user "
+    "agrees the spelling is correct.\n"
+    "- If the user just says the name without spelling it, ask them to spell it "
+    "before you fill -- never fill a guessed spelling.\n\n"
 
     "ADDRESS CONSISTENCY:\n"
     "After filling any address-cluster field (state, zip, province, country), "

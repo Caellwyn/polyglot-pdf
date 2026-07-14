@@ -221,7 +221,7 @@ class TextAIGemini(ITextAI):
             )
             return {"conflicts": []}
 
-    async def ask(self, query: str, context: dict) -> str:
+    async def ask(self, query: str, context: dict) -> tuple[str, list[dict]]:
         """Secretary query (bd polyglot-pdf-jnjj.45b): map a prose question about
         the form to a prose answer, using the cheap text model.
 
@@ -242,28 +242,32 @@ class TextAIGemini(ITextAI):
                           prefix + tail, so the leading bytes stay identical
                           call-to-call even as values change.
 
-        Returns the secretary's PROSE answer (the {answer, sourced_from} probe
-        shape; we return `answer`). Fail-open: on missing client / bad context /
-        API or parse error, returns "" so the principal asks the user directly
-        (ITextAI.ask contract).
+        Returns (answer, sources): `answer` is the secretary's PROSE answer; `sources`
+        is a list of {"field_id", "spoken_name"} dicts resolved from the model's
+        `sourced_from` field-id list against the schema (bd polyglot-pdf-2af7/3vby --
+        lets the voice model hand an EXACT field id to switch_to_field instead of
+        guessing from memory). Ids not present in the schema are dropped; the list is
+        de-duped (order preserved) and capped at 8 entries. Fail-open: on missing
+        client / bad context / API or parse error, returns ("", []) so the principal
+        asks the user directly (ITextAI.ask contract).
 
         PII: logs field ids/counts/model only -- NEVER the query, the rendered
-        context/values, or the answer prose (callback_handler PII discipline;
-        validation-delegation contract 6).
+        context/values, the answer prose, or spoken names (callback_handler PII
+        discipline; validation-delegation contract 6).
         """
         if self._client is None:
             self._log.warning("text_ai_no_client_ask_fail_open")
-            return ""
+            return "", []
 
         if not isinstance(context, dict):
             self._log.warning("text_ai_ask_bad_context_fail_open")
-            return ""
+            return "", []
 
         schema = context.get("schema")
         if not isinstance(schema, dict) or not schema.get("fields"):
             # No catalog to ground the answer in -- cannot retrieve; fail open.
             self._log.warning("text_ai_ask_no_schema_fail_open")
-            return ""
+            return "", []
 
         field_values = context.get("field_values") or {}
         shown_map = context.get("shown_map") or {}
@@ -295,27 +299,62 @@ class TextAIGemini(ITextAI):
             sourced = verdict.get("sourced_from", [])
             if not isinstance(answer, str):
                 answer = str(answer)
+            sources = self._resolve_sources(schema, sourced)
             self._log.info(
                 "text_ai_ask_complete",
-                # ids/counts only -- never the query/answer/values.
+                # ids/counts only -- never the query/answer/values/spoken names.
                 sourced_field_ids=[str(x) for x in sourced][:10]
                 if isinstance(sourced, list) else [],
                 sourced_count=len(sourced) if isinstance(sourced, list) else 0,
+                resolved_source_count=len(sources),
                 answer_len=len(answer),
             )
-            return answer
+            return answer, sources
         except json.JSONDecodeError:
             self._log.warning(
                 "text_ai_ask_parse_error_fail_open",
                 raw_length=len(raw) if isinstance(raw, str) else None,
             )
-            return ""
+            return "", []
         except Exception as exc:  # noqa: BLE001
             self._log.warning(
                 "text_ai_ask_error_fail_open",
                 exc_type=type(exc).__name__,
             )
-            return ""
+            return "", []
+
+    @staticmethod
+    def _resolve_sources(schema: dict, sourced_from) -> list[dict]:
+        """Resolve the model's sourced_from field-id list against the schema.
+
+        Returns a list of {"field_id": <str>, "spoken_name": <str>} for each id
+        that exists in schema["fields"] (matched by field["id"]); ids not found
+        in the schema are dropped. De-duped by field_id (first occurrence wins,
+        order preserved), capped at 8 entries.
+        """
+        if not isinstance(sourced_from, list):
+            return []
+
+        by_id = {}
+        for field in schema.get("fields", []):
+            if isinstance(field, dict) and field.get("id") is not None:
+                by_id[str(field["id"])] = field
+
+        sources: list[dict] = []
+        seen: set = set()
+        for raw_id in sourced_from:
+            field_id = str(raw_id)
+            if field_id in seen:
+                continue
+            field = by_id.get(field_id)
+            if field is None:
+                continue
+            spoken_name = field.get("spoken_name") or field.get("name") or field_id
+            sources.append({"field_id": field_id, "spoken_name": spoken_name})
+            seen.add(field_id)
+            if len(sources) >= 8:
+                break
+        return sources
 
     # ------------------------------------------------------------------
     # Internal helpers

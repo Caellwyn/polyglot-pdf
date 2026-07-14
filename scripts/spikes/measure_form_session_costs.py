@@ -987,6 +987,31 @@ class FakeClientWebSocket:
                 return fid
         return None
 
+    def _suggest_candidates(self, identifier: str, limit: int = 6) -> list[dict]:
+        """Mirror SchemaFormStateManager.suggestNavigationCandidates: up to
+        `limit` currently-visible fields ranked by whole-word overlap with the
+        identifier, then document order. Suggestion only -- resolution stays
+        exact (bd polyglot-pdf-3vby)."""
+        import re as _re
+        words = [w for w in _re.split(r"[^a-z0-9]+", (identifier or "").lower())
+                 if len(w) > 2]
+        scored = []
+        for idx, (fid, f) in enumerate(self.schema_fields.items()):
+            if f.get("hidden") or not self.field_shown(fid):
+                continue
+            hay = " ".join(str(x) for x in [
+                f.get("spoken_name"), f.get("name"), *(f.get("spoken_aliases") or [])
+            ] if x).lower()
+            hay_words = set(w for w in _re.split(r"[^a-z0-9]+", hay) if w)
+            overlap = sum(1 for w in words if w in hay_words)
+            scored.append((overlap, idx, fid, f))
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        return [
+            {"field_id": fid,
+             "spoken_name": str(f.get("spoken_name") or f.get("name") or fid)}
+            for _, _, fid, f in scored[:limit]
+        ]
+
     def _handle_skip_field(self, msg: dict):
         """Mirror handleSkipFieldRequest: refuse unknown/already-filled, else
         record the skip (empty value + skipped flag, counts as confirmed)."""
@@ -1030,8 +1055,10 @@ class FakeClientWebSocket:
         if fid is None:
             rec["outcome"] = "unknown_field"
             self.switch_events.append(rec)
+            candidates = self._suggest_candidates(str(ident))
             self._reply(lambda: self.service.handle_switch_field_response(
-                rid, {"found": False, "reason": "unknown_field"}))
+                rid, {"found": False, "reason": "unknown_field",
+                      "candidates": candidates}))
             return
         rec["field_id"] = fid
         if not self.field_shown(fid):
