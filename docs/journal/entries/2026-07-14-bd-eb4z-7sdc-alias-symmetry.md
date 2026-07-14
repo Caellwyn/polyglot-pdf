@@ -71,4 +71,32 @@ empty case.
 The click-to-edit `FieldEditPopover` (also in `PDFViewer.tsx`) still reads
 `fieldValues[editingHere.id]` exact-key. That is an EDIT surface, not the "shows
 blank" overlay the bead targets, and its exit criteria name only the overlay's
-value resolution -- left as-is, deliberately out of scope.
+value resolution -- left as-is, deliberately out of scope. Fresh-eyes flagged it
+as a real distinct bug (the overlay now correctly shows a filled state but the
+editor opens empty on click for an alias-keyed value) and filed it as its own bead
+**polyglot-pdf-1utg**.
+
+## Doc freshness
+
+- **docs/components/pdf-view.md** -- bumped: added a current-state sentence noting
+  the overlay resolves each value via `readFieldEntryWithAlias`.
+- **docs/components/pdf-filling.md** -- bumped: documented the two-pass exact-wins
+  invariant for the backend `field_mappings`/`field_lookup` build.
+- Other docs the freshness checker flagged STALE (auth.md, config-deployment.md,
+  context-compression.md, jit-schema.md, schema-forms.md, tool-call-flow.md,
+  voice-ai.md, websocket-routing.md, the ai-models/hipaa-pii/risk-rating/logging/
+  section-reset/si-reduction/stateless/terminology/validation-delegation/
+  voice-and-vad/ws-protocol standards, technical_guide.md) were stale from OTHER
+  branches' 07-12/07-13 changes, NOT this branch. hipaa-pii-policy.md, risk-rating.md
+  and technical_guide.md do track pdf_fill_routes.py, but this change adds no
+  PII/value logging, no risk-surface behavior, and no deploy/env change -- reviewed
+  and left. All were already stale before this branch.
+
+## Files touched
+
+- backend/routes/pdf_fill_routes.py -- two-pass lookup/mapping build (eb4z fix)
+- backend/tests/test_pdf_widget_lookup.py -- two new mapping-less exact-field tests
+- frontend/src/pdf-view/PDFViewer.tsx -- alias-aware overlay read (7sdc fix)
+- frontend/src/pdf-view/PDFViewer.aliasOverlay.test.tsx -- new overlay alias tests
+- docs/components/pdf-filling.md, docs/components/pdf-view.md -- current-state bumps
+- docs/journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md -- this entry

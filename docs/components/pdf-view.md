@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-09. See [../journal/entries/2026-07-09-bd-95q0-p2-4-epic-verification-pass.md](../journal/entries/2026-07-09-bd-95q0-p2-4-epic-verification-pass.md) for the epic verification record.*
+*Last updated: 2026-07-14. See [../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the overlay []-alias read fix.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -83,7 +83,11 @@ session (pinned by `SchemaForm.test.tsx`, bd `polyglot-pdf-fdz8`).
   opacity, dashed border), never removed -- they exist on paper -- and are
   not clickable; `current` wins over dimmed. PDFViewer computes `dimmed` via
   `shouldShowField` on the wrapped value map, so dimming flips live with the
-  controlling field (bd lp5v).
+  controlling field (bd lp5v). Each overlay resolves its field's value with the
+  `[]`-alias-aware `readFieldEntryWithAlias` (bd 7sdc), so a checkbox-group value
+  stored under the OTHER bracket variant than the schema id (Gemini drops/adds
+  the trailing `[]`, bd 5k52) still paints -- a bare `fieldValues[field.id]` read
+  rendered such a field blank after the got6 dedup collapsed the duplicate key.
 - Click-to-edit (`FieldEditPopover`, bd 7esr): clicking a non-dimmed overlay
   (or one of its option marks -- extra hit targets for the SAME whole-field
   editor, never a direct toggle) opens a popover hosting the SAME
