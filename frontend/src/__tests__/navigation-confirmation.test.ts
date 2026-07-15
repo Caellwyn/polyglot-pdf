@@ -366,3 +366,57 @@ describe('checkbox-group []-alias awareness (bd polyglot-pdf-ipw7)', () => {
     expect(isFormComplete(updatedState)).toBe(false);
   });
 });
+
+describe('required-agnostic completion (bd polyglot-pdf-taw3)', () => {
+  // The shipped regression: with the A-Number the ONLY validation.required field
+  // on the I-90, confirming it (the first field) reported the whole form complete
+  // via isFormComplete's old required-only short-circuit. These pin exit criterion
+  // 1 WITHOUT a navigation pin -- the required-agnostic "every shown field" gate is
+  // exercised directly, not masked by resolveLivePin.
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('does NOT report complete after the single REQUIRED field is confirmed (rest empty, no pin)', async () => {
+    const { isFormComplete } = await import('../navigation');
+    const schema = createTestSchema([
+      { id: 'a_number', name: 'A-Number', validation: { required: true } },
+      { id: 'family_name', name: 'Family Name' }, // optional, still empty
+      { id: 'given_name', name: 'Given Name' },   // optional, still empty
+    ]);
+    const state = SchemaFormStateManager.init(schema);
+    const updated = SchemaFormStateManager.updateField(state, 'a_number', 'A123', {
+      confirmed: true,
+      confirmationMethod: 'ai_voice',
+    });
+
+    // pinnedFieldId defaults to null from init -- no pin confound.
+    expect(updated.pinnedFieldId ?? null).toBeNull();
+    // The form is NOT complete: two shown optional fields remain unconfirmed.
+    expect(isFormComplete(updated)).toBe(false);
+    // ...and the next unconfirmed shown field is still offered.
+    expect(computeNextField(updated, { skipConfirmed: true })?.id).toBe('family_name');
+  });
+
+  it('reports complete only when every shown field is confirmed (a skipped field counts, no pin)', async () => {
+    const { isFormComplete } = await import('../navigation');
+    const schema = createTestSchema([
+      { id: 'a_number', name: 'A-Number', validation: { required: true } },
+      { id: 'family_name', name: 'Family Name' },
+      { id: 'given_name', name: 'Given Name' },
+    ]);
+    let state = SchemaFormStateManager.init(schema);
+    state = SchemaFormStateManager.updateField(state, 'a_number', 'A123', {
+      confirmed: true, confirmationMethod: 'ai_voice',
+    });
+    state = SchemaFormStateManager.updateField(state, 'family_name', 'Doe', {
+      confirmed: true, confirmationMethod: 'ai_voice',
+    });
+    // The last field is SKIPPED (empty value + confirmed=true, flagged for review).
+    state = SchemaFormStateManager.markFieldSkipped(state, 'given_name', 'ai_voice');
+
+    expect(state.pinnedFieldId ?? null).toBeNull();
+    expect(isFormComplete(state)).toBe(true);
+    expect(computeNextField(state, { skipConfirmed: true })).toBeNull();
+  });
+});
