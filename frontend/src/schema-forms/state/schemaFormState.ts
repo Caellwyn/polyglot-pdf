@@ -582,8 +582,14 @@ export class SchemaFormStateManager {
    * one section at a time -- so when the model's focus (onNextField) lands on a
    * field outside the currently-shown section, the UI must page to that field's
    * section. Mirrors getCurrentSectionFields' `section.fields` (array of field
-   * ids) lookup. Resolves the []-alias variants so a field stored/hinted under
-   * `id[]` still finds its section (Gemini drops/adds the bracket).
+   * ids) lookup. Matches across the []-alias variants because the incoming id
+   * and the section's `fields` entry can carry DIFFERENT bracket forms of the
+   * same field (Gemini drops/adds the bracket, so a generated schema may list
+   * `race[]` in section.fields while a caller passes the base `race`, or vice
+   * versa). Today's callers pass a base schema id (computeNextField /
+   * resolveFieldForNavigation both return `field.id`), so the fallback bites
+   * only on the section-side bracket variant -- matching both directions keeps
+   * it robust to either side carrying the bracket.
    */
   static findSectionIdForField(state: SchemaFormState, fieldId: string): string | null {
     if (!fieldId) return null;

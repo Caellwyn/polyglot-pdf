@@ -339,6 +339,48 @@ describe('switch_field end-to-end probe (WebFormConnection)', () => {
     expect(sent.find(m => m.type === 'switch_field_response')).toBeUndefined()
   })
 
+  // bd polyglot-pdf-gz20 (fresh-eyes criterion-2 integration gap): a
+  // switch_to_field to an out-of-section target drives, IN ONE SYNCHRONOUS
+  // CALL, pinField (saves + fires schemaFormStateChange) THEN onNextField ->
+  // the UI's section-paging (setVisibleSection). Both the connection and the
+  // component persist through the SAME sessionStorage key, so a section-page
+  // that used the manual-jump navigateToSection (pin-clearing) would CLOBBER
+  // the pin this very tool just set. This test wires onNextField to the real
+  // setVisibleSection (what SchemaForm.handleNextField does in continuous mode)
+  // and asserts BOTH halves of the contract on the actual two-write path: the
+  // view paged to the target's section AND the pin survived.
+  it('a cross-section switch_to_field pages the view AND preserves the pin (setVisibleSection, not navigateToSection)', async () => {
+    // onNextField mirrors SchemaForm.handleNextField's continuous-mode branch:
+    // resolve the focused field's section and page to it via setVisibleSection.
+    const onNextField = vi.fn((fieldId: string | null) => {
+      if (!fieldId) return
+      const cur = SchemaFormStateManager.load()
+      if (!cur?.continuousSessionEnabled) return
+      const target = SchemaFormStateManager.findSectionIdForField(cur, fieldId)
+      if (target && target !== cur.currentSectionId) {
+        SchemaFormStateManager.save(SchemaFormStateManager.setVisibleSection(cur, target))
+      }
+    })
+    const conn = new WebFormConnection(probeSchema, { onNextField }) as any
+    conn.continuousSessionEnabled = true
+    conn.state.continuousSessionEnabled = true
+    conn.state.currentSectionId = 'sec1' // start on section 1
+    conn.dtiModeEnabled = true
+    SchemaFormStateManager.save(conn.state)
+    conn.send = vi.fn()
+
+    // The model jumps to field 'c', which lives in sec2.
+    await dispatch(conn, { type: 'switch_field', request_id: 'rx', field: 'field gamma' })
+
+    const persisted = SchemaFormStateManager.load()
+    // The view paged to the target field's section...
+    expect(persisted?.currentSectionId).toBe('sec2')
+    // ...and the pin the same tool set SURVIVED the paging write (the clobber
+    // that navigateToSection would have caused).
+    expect(persisted?.pinnedFieldId).toBe('c')
+    expect(onNextField).toHaveBeenCalledWith('c')
+  })
+
   // bd polyglot-pdf-luju nit 1: an EMPTY checkbox group ([]) must ack
   // has_value:false and ride NO value -- otherwise the model is told the field
   // "already holds an unconfirmed value" and reads back nothing. Mirrors the skip
