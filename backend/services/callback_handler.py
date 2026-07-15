@@ -21,6 +21,11 @@ from backend.utils.confirmation_logger import log_field_confirmation
 _log = structlog.get_logger().bind(module="callback_handler")
 _dev_log = get_dev_logger()
 
+# Consecutive wholly-unknown update_form_fields rejections at which the tool
+# response escalates to an explicit stop-retrying instruction
+# (bd polyglot-pdf-b1gj; a live session looped 338 rejected updates).
+UNKNOWN_REJECTION_LOOP_THRESHOLD = 3
+
 
 class CallbackHandler:
     """Handles callbacks from Gemini Live AI session."""
@@ -78,6 +83,10 @@ class CallbackHandler:
         # not a snapshot, so a mid-session change_fill_language is reflected in the
         # next field's guidance without a second source of truth to go stale.
         self._get_fill_language = None
+        # Live getter for the current SPOKEN language (bd polyglot-pdf-ghv4): rides
+        # a "Speak <lang> aloud" segment on every injected guidance block so the
+        # conversation language is re-anchored per turn, not only at session start.
+        self._get_spoken_language = None
         # Live getter for the current field id (bd polyglot-pdf-h1bn): so confirm_field
         # can be coerced onto the current field when the model confirms a hallucinated /
         # drifted id (mirrors the update_form_fields coercion). Getter, not snapshot.
@@ -99,6 +108,13 @@ class CallbackHandler:
         # Resolver for "does this id name a field the session has seen?" -- gates
         # the confirm-side coercion (known ids are authoritative, bd 8vy3).
         self._is_known_field = None
+        # Consecutive update_form_fields calls rejected wholly as unknown-field
+        # (bd polyglot-pdf-b1gj): a model stuck targeting an inactive/invented id
+        # retried 338 times in one live session. Reset on any applied update or
+        # a plain validation error (those are working paths); at
+        # UNKNOWN_REJECTION_LOOP_THRESHOLD the tool response escalates to a
+        # stop-retrying instruction.
+        self._consecutive_unknown_rejections = 0
 
     def set_tool_handlers(
         self,
@@ -108,6 +124,7 @@ class CallbackHandler:
         merge_field_schema=None,
         handle_ask_secretary=None,
         get_fill_language=None,
+        get_spoken_language=None,
         get_current_field_id=None,
         get_use_dti=None,
         clear_current_field=None,
@@ -120,6 +137,7 @@ class CallbackHandler:
         self._merge_field_schema = merge_field_schema
         self._handle_ask_secretary = handle_ask_secretary
         self._get_fill_language = get_fill_language
+        self._get_spoken_language = get_spoken_language
         self._get_current_field_id = get_current_field_id
         self._get_use_dti = get_use_dti
         self._clear_current_field = clear_current_field
@@ -471,7 +489,33 @@ class CallbackHandler:
         validation_errors = result.get("validation_errors", [])
         unknown_fields = result.get("unknown_fields", [])
         applied_fields = result.get("applied_fields", [])
-        
+
+        # Split unknown ids into "real field, just not active" vs "no such field"
+        # (bd polyglot-pdf-b1gj). In DTI mode the validation pool holds only the
+        # current field, so a REAL field elsewhere in the form (a manifest-known
+        # id the secretary handed back) is rejected as unknown; the recovery for
+        # those is switch_to_field, and the response must say so or the model
+        # retries the same rejected update indefinitely (338x in one live session).
+        known_inactive_fields = [
+            fid for fid in unknown_fields
+            if self._is_known_field and self._is_known_field(fid)
+        ]
+
+        # Loop-breaker counter (bd polyglot-pdf-b1gj): a call rejected WHOLLY as
+        # unknown-field advances the stuck counter; any applied field or a plain
+        # validation error (a working path the model should keep retrying with a
+        # corrected VALUE) resets it.
+        if unknown_fields and not applied_fields:
+            self._consecutive_unknown_rejections += 1
+            if self._consecutive_unknown_rejections >= UNKNOWN_REJECTION_LOOP_THRESHOLD:
+                _log.warning(
+                    "unknown_field_loop_breaker_fired",
+                    consecutive=self._consecutive_unknown_rejections,
+                    session_id=self._session_id,
+                )
+        else:
+            self._consecutive_unknown_rejections = 0
+
         # Add rejected fields to validation errors if multiple fields were sent
         if rejected_fields:
             for field_id in rejected_fields:
@@ -482,7 +526,7 @@ class CallbackHandler:
                     "constraint": "single_field_only",
                     "message": "Rejected - only one field per call allowed"
                 })
-        
+
         # Send form update to frontend (no next field info - save tokens)
         # Next field info will be sent after confirm_field to reduce round trips
         if not validation_errors and not unknown_fields and applied_fields:
@@ -498,7 +542,9 @@ class CallbackHandler:
             unknown_fields,
             applied_fields,
             None,  # No next_field_hint - send after confirmation
-            rejected_count=len(rejected_fields)
+            rejected_count=len(rejected_fields),
+            known_inactive_fields=known_inactive_fields,
+            consecutive_unknown_rejections=self._consecutive_unknown_rejections,
         )
 
         # Dev logging: Log tool response to daily file
@@ -598,12 +644,11 @@ class CallbackHandler:
         # The fail-open instruction the principal voices: an apology for an
         # internal error, explicitly NOT a verbatim re-ask of the user's question.
         fallback = (
-            "INTERNAL ERROR: the secretary lookup failed. Apologize to the user for "
-            "a technical problem and say you could not retrieve that information "
-            "right now (e.g. 'I'm sorry, due to an internal error I wasn't able to "
-            "look that up'). Do NOT simply repeat their question back to them. You "
-            "may offer to continue, or ask them to provide the information directly "
-            "ONLY after acknowledging the error."
+            "INTERNAL ERROR: the secretary lookup failed. Apologize to the user, in "
+            "the user's language, for a technical problem and say you could not "
+            "retrieve that information right now. Do NOT simply repeat their "
+            "question back to them. You may offer to continue, or ask them to "
+            "provide the information directly ONLY after acknowledging the error."
         )
 
         # The PENDING instruction when the lookup blew the deadline (bd jnjj.43): the
@@ -616,8 +661,8 @@ class CallbackHandler:
             "The secretary is still looking that up; the answer will arrive in a "
             "moment as a follow-up. Do NOT answer the question yet and do NOT repeat "
             "it back to the user. Either say nothing or give a brief natural "
-            "acknowledgement (e.g. 'one sec'), then continue -- the answer will be "
-            "delivered to you shortly."
+            "acknowledgement in the user's language, then continue -- the answer "
+            "will be delivered to you shortly."
         )
 
         if not self._handle_ask_secretary:
@@ -900,8 +945,10 @@ class CallbackHandler:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
                 if client_next_schema:
                     fill_language = self._get_fill_language() if self._get_fill_language else None
+                    spoken_language = self._get_spoken_language() if self._get_spoken_language else None
                     next_field_guidance = render_field_guidance(
-                        client_next_schema, fill_language=fill_language
+                        client_next_schema, fill_language=fill_language,
+                        spoken_language=spoken_language
                     )
                     # Merge the field into the backend's validation schema so the
                     # SUBSEQUENT update_form_fields for this field is not rejected as
@@ -1050,8 +1097,10 @@ class CallbackHandler:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
                 if client_next_schema:
                     fill_language = self._get_fill_language() if self._get_fill_language else None
+                    spoken_language = self._get_spoken_language() if self._get_spoken_language else None
                     next_field_guidance = render_field_guidance(
-                        client_next_schema, fill_language=fill_language
+                        client_next_schema, fill_language=fill_language,
+                        spoken_language=spoken_language
                     )
                     if self._merge_field_schema:
                         self._merge_field_schema(client_next_schema)
@@ -1326,8 +1375,10 @@ class CallbackHandler:
             if self._merge_field_schema:
                 self._merge_field_schema(field_schema)
             fill_language = self._get_fill_language() if self._get_fill_language else None
+            spoken_language = self._get_spoken_language() if self._get_spoken_language else None
             field_guidance = render_field_guidance(
-                field_schema, fill_language=fill_language
+                field_schema, fill_language=fill_language,
+                spoken_language=spoken_language
             )
 
         if ack.get("already_confirmed"):
@@ -1462,7 +1513,9 @@ class CallbackHandler:
         unknown_fields: list,
         applied_fields: list,
         next_field_hint: Optional[str],
-        rejected_count: int = 0
+        rejected_count: int = 0,
+        known_inactive_fields: Optional[list] = None,
+        consecutive_unknown_rejections: int = 0
     ) -> Dict[str, Any]:
         """Build tool response for update_form_fields.
 
@@ -1472,6 +1525,13 @@ class CallbackHandler:
             applied_fields: List of successfully applied field IDs
             next_field_hint: Spoken name hint for next field
             rejected_count: Number of fields rejected due to multi-field constraint
+            known_inactive_fields: Subset of unknown_fields that ARE real fields
+                the session has seen (manifest/merge-known) but are not the active
+                field -- their rejection message points at switch_to_field
+                (bd polyglot-pdf-b1gj)
+            consecutive_unknown_rejections: Running count of update calls rejected
+                wholly as unknown-field; at UNKNOWN_REJECTION_LOOP_THRESHOLD the
+                message escalates to a stop-retrying instruction
 
         Returns:
             Tool response dict for Gemini
@@ -1515,10 +1575,48 @@ class CallbackHandler:
                 
                 error_lines.append(" | ".join(parts))
             
-            # Format unknown fields
+            # Format unknown fields. Two distinct failure modes with distinct
+            # recoveries (bd polyglot-pdf-b1gj):
+            # - a REAL field that is not the active one -> the exit ramp is
+            #   switch_to_field (retrying the update fails identically forever);
+            # - a nonexistent id -> the model invented it; it must copy the id
+            #   from the latest guidance block or navigate by the user's words.
+            known_inactive = set(known_inactive_fields or [])
             for field_id in unknown_fields:
-                error_lines.append(f"{field_id}: unknown field")
-            
+                if field_id in known_inactive:
+                    error_lines.append(
+                        f"{field_id}: this field exists but is NOT the active field, "
+                        f"so it cannot be filled right now. Do NOT retry "
+                        f"update_form_fields with it -- that will keep failing. Call "
+                        f"switch_to_field (with this field or the user's own words) "
+                        f"to navigate to it first; once it is the active field, fill it."
+                    )
+                else:
+                    error_lines.append(
+                        f"{field_id}: unknown field -- no field with this id exists. "
+                        f"Never invent or guess field ids. Copy the exact field_id "
+                        f"from the latest guidance block, or call switch_to_field "
+                        f"with the user's own words to locate the right field."
+                    )
+
+            # Loop-breaker escalation (bd polyglot-pdf-b1gj): after N consecutive
+            # wholly-unknown rejections the model is stuck (observed live: 338
+            # retries until idle-timeout disconnect). Lead with an explicit STOP.
+            if (
+                unknown_fields
+                and not applied_fields
+                and consecutive_unknown_rejections >= UNKNOWN_REJECTION_LOOP_THRESHOLD
+            ):
+                error_lines.insert(0, (
+                    f"STOP RETRYING: {consecutive_unknown_rejections} update attempts "
+                    f"in a row have been rejected. Do NOT call update_form_fields "
+                    f"again with this target. Briefly tell the user, in their "
+                    f"language, that you are finding the right place on the form; "
+                    f"then call switch_to_field to navigate to the field they are "
+                    f"answering (or get_form_status to see where you are), and "
+                    f"continue from there."
+                ))
+
             # Build message
             message_parts = []
             if error_lines:
