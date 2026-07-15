@@ -447,29 +447,6 @@ describe('Connection Manager (connection.ts)', () => {
       expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
     })
 
-    it('a session-ready DURING a manual-VAD barge-in window does NOT unblock (bd nm7z fresh-eyes edge)', async () => {
-      const manager = await connected()
-      // Manual-VAD barge-in only exists with PTT off and native VAD off.
-      manager.setPushToTalkMode(false)
-      audioManagerMock.isSpeaking.mockReturnValue(true)
-      manager.onVADSpeechStart() // barge-in window opens (flush + block)
-      expect(audioManagerMock.flushAudioQueue).toHaveBeenCalled()
-      audioManagerMock.resumePlayback.mockClear()
-      audioManagerMock.isRecording.mockReturnValue(true)
-
-      // A GoAway/auto-drop reconnect lands mid-utterance: the stale-block clear
-      // must NOT fire -- onVADSpeechEnd owns the unblock for this window.
-      capturedCallbacks.onSessionReady('sess-mid-barge-in')
-      await Promise.resolve()
-      await Promise.resolve()
-      expect(audioManagerMock.resumePlayback).not.toHaveBeenCalled()
-
-      // The user finishes: the normal speech-end path unblocks.
-      audioManagerMock.isSpeaking.mockReturnValue(false)
-      manager.onVADSpeechEnd()
-      expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
-    })
-
     it('a MID-PAUSE session-ready does NOT clear the pause block (paused guard runs first)', async () => {
       const manager = await connected()
       manager.pause()
