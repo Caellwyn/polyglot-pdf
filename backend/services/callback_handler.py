@@ -1115,11 +1115,8 @@ class CallbackHandler:
                 ),
             }
 
-        ack = CONFIRM_REQUEST_TIMEOUT
-        if self._request_coordinator is not None:
-            ack = await self._request_coordinator.request_switch_field(identifier)
-
-        if ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(ack, dict):
+        ack = await self._request_switch_ack(identifier)
+        if ack is None:
             return {
                 "success": False,
                 "message": (
@@ -1129,59 +1126,200 @@ class CallbackHandler:
                 ),
             }
 
-        if not ack.get("found"):
-            reason = ack.get("reason")
-            if reason == "other_section":
-                label = ack.get("section_label") or "another section"
-                order = ack.get("section_order")
-                where = (f"section {order} ('{label}')" if order
-                         else f"'{label}'")
-                message = (
-                    f"That field is in {where}, not the current section. "
-                    f"Call switch_section to go there first, then "
-                    f"switch_to_field."
-                )
-            elif reason == "hidden":
-                message = (
-                    "That field is currently hidden by the form's conditional "
-                    "logic (an earlier answer keeps it inactive), so it cannot "
-                    "be navigated to. If the user disagrees, revisit the "
-                    "controlling answer instead."
-                )
-            else:
-                message = (
-                    "No form field matches that name. Do NOT guess another "
-                    "field_id -- pass the field's exact spoken name instead."
-                )
-                # The ack carries nearest navigable candidates (id + spoken name);
-                # list their spoken names so the model retries with one it can
-                # resolve exactly (bd polyglot-pdf-3vby).
-                candidates = ack.get("candidates")
-                if isinstance(candidates, list) and candidates:
-                    names = [
-                        str(c.get("spoken_name"))
-                        for c in candidates
-                        if isinstance(c, dict) and c.get("spoken_name")
-                    ]
-                    if names:
-                        message += (
-                            " Closest fields you can switch to: "
-                            + "; ".join(names)
-                            + ". Retry switch_to_field with the exact spoken name "
-                            "of the one the user meant."
-                        )
-            _log.info("switch_to_field_not_navigable",
-                     reason=reason or "unknown_field",
-                     session_id=self._session_id)
-            return {"success": False, "message": message}
+        # Direct hit: the frontend resolved the identifier EXACTLY. The common,
+        # zero-secretary path ("go back to my mailing city").
+        if ack.get("found"):
+            return self._switch_success_response(ack)
 
+        reason = ack.get("reason")
+        # other_section / hidden are real, specific outcomes -- not "which field?"
+        # ambiguity, so they never go through the secretary resolver.
+        if reason == "other_section":
+            label = ack.get("section_label") or "another section"
+            order = ack.get("section_order")
+            where = f"section {order} ('{label}')" if order else f"'{label}'"
+            return self._switch_miss_log(reason, {
+                "success": False,
+                "message": (
+                    f"That field is in {where}, not the current section. "
+                    f"Call switch_section to go there first, then switch_to_field."
+                ),
+            })
+        if reason == "hidden":
+            return self._switch_miss_log(reason, {
+                "success": False,
+                "message": (
+                    "That field is currently hidden by the form's conditional "
+                    "logic (an earlier answer keeps it inactive), so it cannot be "
+                    "navigated to. If the user disagrees, revisit the controlling "
+                    "answer instead."
+                ),
+            })
+
+        # unknown_field: the frontend's EXACT resolver missed. Rather than bounce
+        # the whole thing back to the voice model (a wasted turn + an id-guess
+        # risk), ask the secretary to identify the field from the (possibly vague)
+        # prose, then re-attempt the switch with the exact id it returns -- one
+        # voice turn, not three (bd polyglot-pdf-y76q). Fuzzy matching lives in the
+        # secretary (a model reasoning over the catalog), never in the exact
+        # frontend resolver, so no silent mis-fill.
+        resolved = await self._resolve_field_via_secretary(identifier)
+        if resolved is not None and resolved.get("field_id"):
+            ack2 = await self._request_switch_ack(resolved["field_id"])
+            if isinstance(ack2, dict) and ack2.get("found"):
+                return self._switch_success_response(ack2)
+            # The secretary's id did not navigate (hidden / other-section / raced
+            # away). Fall through to the clarify/candidate degrade below.
+
+        return self._switch_degrade_response(identifier, ack, resolved)
+
+    async def _request_switch_ack(self, identifier: str):
+        """Ask the frontend to resolve+pin `identifier` (exact match) and return
+        its ack dict, or None if the coordinator is absent or timed out. The
+        identifier may be a spoken name; it is passed to the client but NEVER
+        logged (no-PII policy)."""
+        if self._request_coordinator is None:
+            return None
+        ack = await self._request_coordinator.request_switch_field(identifier)
+        if ack is CONFIRM_REQUEST_TIMEOUT or not isinstance(ack, dict):
+            return None
+        return ack
+
+    def _switch_miss_log(self, reason, response: Dict[str, Any]) -> Dict[str, Any]:
+        """Log a non-navigable switch outcome (no PII) and pass the response
+        through."""
+        _log.info("switch_to_field_not_navigable",
+                 reason=reason or "unknown_field",
+                 session_id=self._session_id)
+        return response
+
+    async def _resolve_field_via_secretary(self, identifier: str):
+        """Ask the secretary to identify the field the (possibly vague) `identifier`
+        names, for navigation (bd polyglot-pdf-y76q). Returns:
+          {"field_id", "spoken_name", "candidates": [...]}  -- a confident single
+              match to re-attempt the switch with (candidates carries any extras);
+          {"pushback": <prose>}  -- the secretary deliberately could NOT identify a
+              field (resolved False); the prose asks the user to clarify;
+          None  -- no secretary handler, a pending/failed lookup, or a timeout (the
+              caller degrades to the algorithmic candidate matcher).
+        The identifier is passed in the query but never logged (no-PII)."""
+        if not self._handle_ask_secretary:
+            return None
+        query = f"Which field does this refer to, for navigation: {identifier}"
+        try:
+            # deliver_late=False: this is an INTERNAL query (no user question is
+            # pending), so a deadline-blown lookup must NOT be voiced as a spurious
+            # follow-up turn -- we degrade in-turn instead (bd polyglot-pdf-y76q).
+            result = await self._handle_ask_secretary(query, deliver_late=False)
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("switch_secretary_resolve_error",
+                        exc_type=type(exc).__name__, session_id=self._session_id)
+            return None
+        if not isinstance(result, dict) or result.get("status") != "ok":
+            # pending (deadline blown) / failed -> degrade to the candidate matcher.
+            return None
+        # Deliberate pushback: the secretary answered but could not identify a field.
+        if result.get("resolved") is False:
+            return {"pushback": str(result.get("answer") or "")}
+        sources = result.get("sources")
+        clean = [
+            {"field_id": str(s["field_id"]), "spoken_name": str(s["spoken_name"])}
+            for s in sources
+            if isinstance(s, dict) and s.get("field_id") and s.get("spoken_name")
+        ] if isinstance(sources, list) else []
+        if not clean:
+            return None
+        _log.info("switch_secretary_resolved",
+                 candidate_count=len(clean), session_id=self._session_id)
+        return {"field_id": clean[0]["field_id"],
+                "spoken_name": clean[0]["spoken_name"],
+                "candidates": clean}
+
+    def _switch_degrade_response(
+        self, identifier: str, ack: Dict[str, Any], resolved
+    ) -> Dict[str, Any]:
+        """Build the graceful-degrade tool response for an unresolved switch (bd
+        polyglot-pdf-y76q). Never hangs, never navigates a guessed field -- lands
+        on a clarify prompt or a 'did you mean...?' pick-list. Order of preference:
+          1. secretary semantic pushback -> voice the secretary's clarify prose;
+          2. secretary candidates (>=2, or a single that failed to navigate) ->
+             'Did you mean X or Y?';
+          3. the frontend's algorithmic candidate matcher (word-overlap) ->
+             'Did you mean ...?';
+          4. a bare clarify ask."""
+        # 1. Secretary pushback (it could not find a match and said so).
+        if isinstance(resolved, dict) and resolved.get("pushback"):
+            return self._switch_miss_log("secretary_pushback", {
+                "success": False,
+                "message": (
+                    resolved["pushback"]
+                    + " Ask the user to describe the field more specifically, then "
+                    "try switch_to_field again."
+                ),
+            })
+
+        def _did_you_mean(names):
+            uniq = []
+            for n in names:
+                if n and n not in uniq:
+                    uniq.append(n)
+            return uniq
+
+        def _did_you_mean_msg(names, prefix=""):
+            """A 'Did you mean X?' clarify line, singular or plural."""
+            if len(names) == 1:
+                head = f"Did you mean '{names[0]}'?"
+            else:
+                head = "Did you mean one of these? " + "; ".join(names) + "."
+            return (
+                prefix + head + " Ask the user which, then call switch_to_field "
+                "with that exact spoken name."
+            )
+
+        # 2. Secretary candidates the switch could not land on directly.
+        if isinstance(resolved, dict) and resolved.get("candidates"):
+            names = _did_you_mean(
+                [c.get("spoken_name") for c in resolved["candidates"]])
+            if names:
+                return self._switch_miss_log("secretary_candidates", {
+                    "success": False,
+                    "message": _did_you_mean_msg(names),
+                })
+
+        # 3. The frontend's algorithmic (word-overlap) candidate matcher.
+        candidates = ack.get("candidates") if isinstance(ack, dict) else None
+        if isinstance(candidates, list) and candidates:
+            names = _did_you_mean(
+                [c.get("spoken_name") for c in candidates
+                 if isinstance(c, dict)])
+            if names:
+                return self._switch_miss_log("algorithmic_candidates", {
+                    "success": False,
+                    "message": _did_you_mean_msg(
+                        names, prefix="I could not find that field. "),
+                })
+
+        # 4. Nothing to suggest -- a bare clarify ask.
+        return self._switch_miss_log("unknown_field", {
+            "success": False,
+            "message": (
+                "I could not find a field matching that. Ask the user to describe "
+                "which field they mean, then call switch_to_field again."
+            ),
+        })
+
+    def _switch_success_response(self, ack: Dict[str, Any]) -> Dict[str, Any]:
+        """Build the switch_to_field success tool response from a found ack: merge
+        the target's schema (re-point the coercion pointer), render its guidance,
+        and describe where the model landed + the field's state. The current value
+        rides the response (same Gemini trust boundary as ask_secretary) but is
+        never logged."""
         field_id = ack.get("field_id")
         spoken_name = ack.get("spoken_name") or field_id
 
-        # DTI: the ack carries the target's full schema -- record it for
-        # validation AND re-point the current-field coercion pointer at the
-        # target (merge_field_schema does both), then render its guidance so
-        # the model asks about THIS field next.
+        # DTI: the ack carries the target's full schema -- record it for validation
+        # AND re-point the current-field coercion pointer at the target
+        # (merge_field_schema does both), then render its guidance.
         field_guidance = None
         field_schema = ack.get("next_field_schema")
         if field_schema:
@@ -1192,19 +1330,15 @@ class CallbackHandler:
                 field_schema, fill_language=fill_language
             )
 
-        # Tell the model where it landed and what state the field is in. The
-        # current value (when any) rides the tool response so the model can
-        # read it back -- same Gemini trust boundary as ask_secretary; it is
-        # never logged.
         if ack.get("already_confirmed"):
             state_note = (
-                "It already has a confirmed answer -- read the current value "
-                "back and ask what the user wants to change it to."
+                "It already has a confirmed answer -- read the current value back "
+                "and ask what the user wants to change it to."
             )
         elif ack.get("has_value"):
             state_note = (
-                "It already holds an unconfirmed value -- read it back and "
-                "verify it with the user."
+                "It already holds an unconfirmed value -- read it back and verify "
+                "it with the user."
             )
         else:
             state_note = "It is currently unanswered -- ask the user for it."

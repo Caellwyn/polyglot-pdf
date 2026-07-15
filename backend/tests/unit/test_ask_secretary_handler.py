@@ -53,6 +53,7 @@ async def test_handle_ask_secretary_happy_path():
     text_ai.ask = AsyncMock(return_value=(
         "Their first name is Ada.",
         [{"field_id": "f_first", "spoken_name": "first name"}],
+        True,
     ))
     svc = _service(text_ai, form_state={
         "f_first": {"value": "Ada", "confirmed": True, "shown": True},
@@ -65,7 +66,9 @@ async def test_handle_ask_secretary_happy_path():
         "status": "ok",
         "answer": "Their first name is Ada.",
         "sources": [{"field_id": "f_first", "spoken_name": "first name"}],
+        "resolved": True,
     }
+    assert out["resolved"] is True
     # Context carries the schema + the client's form state + a derived shown_map.
     _, kwargs = text_ai.ask.call_args
     ctx = text_ai.ask.call_args.args[1] if len(text_ai.ask.call_args.args) > 1 else kwargs["context"]
@@ -81,7 +84,7 @@ async def test_handle_ask_secretary_timeout_fail_open():
     already done-with-timeout when the race resolves)."""
     async def _slow(query, context):
         await asyncio.sleep(10)
-        return "too late", []
+        return "too late", [], True
 
     text_ai = MagicMock()
     text_ai.ask = _slow
@@ -114,7 +117,7 @@ async def test_handle_ask_secretary_no_text_ai_fail_open():
 async def test_handle_ask_secretary_no_schema_fail_open():
     """No catalog (empty schema) -> status=failed (cannot retrieve)."""
     text_ai = MagicMock()
-    text_ai.ask = AsyncMock(return_value=("should not be called", []))
+    text_ai.ask = AsyncMock(return_value=("should not be called", [], True))
     svc = _service(text_ai, schema={})
     assert await svc.handle_ask_secretary("q") == {
         "status": "failed", "answer": "", "sources": []}
@@ -127,12 +130,12 @@ async def test_handle_ask_secretary_shown_defaults_true_without_shown_key():
     renderers default shown=True), not crashing -- covers an older client that omits
     applicability (bd polyglot-pdf-p68s fallback)."""
     text_ai = MagicMock()
-    text_ai.ask = AsyncMock(return_value=("ok", []))
+    text_ai.ask = AsyncMock(return_value=("ok", [], True))
     svc = _service(text_ai, form_state={
         "f_first": {"value": "Ada", "confirmed": True},  # no 'shown' key
     })
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "ok", "answer": "ok", "sources": []}
+    assert out == {"status": "ok", "answer": "ok", "sources": [], "resolved": True}
     ctx = text_ai.ask.call_args.args[1]
     assert ctx["shown_map"] == {}  # no explicit shown -> renderer defaults True
 
@@ -160,12 +163,12 @@ async def test_handle_ask_secretary_prefers_full_schema_over_section_schema():
     """When the client supplied the full-form catalog at handshake, the handler
     passes the WHOLE form to the secretary, not the current section's schema."""
     text_ai = MagicMock()
-    text_ai.ask = AsyncMock(return_value=("ok", []))
+    text_ai.ask = AsyncMock(return_value=("ok", [], True))
     svc = _service(text_ai, schema=_SCHEMA)  # _schema = section-only (2 fields)
     svc._full_schema = _FULL_SCHEMA          # full catalog (3 fields, 2 sections)
 
     out = await svc.handle_ask_secretary("q")
-    assert out == {"status": "ok", "answer": "ok", "sources": []}
+    assert out == {"status": "ok", "answer": "ok", "sources": [], "resolved": True}
     ctx = text_ai.ask.call_args.args[1]
     assert ctx["schema"] is _FULL_SCHEMA
 
@@ -237,7 +240,7 @@ async def test_handle_ask_secretary_deadline_returns_pending_then_delivers_async
     follow-up turn via send_client_content (jnjj.43)."""
     async def _slow(query, context):
         await asyncio.sleep(0.2)
-        return "Their previous last name was Smith.", []
+        return "Their previous last name was Smith.", [], True
 
     live = _live_ai_active()
     text_ai = MagicMock()
@@ -267,7 +270,7 @@ async def test_async_deliver_drops_when_session_inactive():
     dropped (no push into a dead session)."""
     async def _slow(query, context):
         await asyncio.sleep(0.2)
-        return "too late, nobody home", []
+        return "too late, nobody home", [], True
 
     live = _live_ai_active()
     live.is_session_active = MagicMock(return_value=False)  # session gone
@@ -319,7 +322,7 @@ async def test_async_deliver_drops_empty_answer():
     nowhere -- the user has already moved on)."""
     async def _slow(query, context):
         await asyncio.sleep(0.2)
-        return "", []
+        return "", [], True
 
     live = _live_ai_active()
     text_ai = MagicMock()
@@ -333,6 +336,37 @@ async def test_async_deliver_drops_empty_answer():
 
 
 @pytest.mark.asyncio
+async def test_deliver_late_false_never_voices_late_result():
+    """An INTERNAL query (deliver_late=False, e.g. switch_to_field's field
+    resolution) that blows the deadline must be DRAINED, not voiced: even when the
+    lookup finishes with a real (non-empty) answer, no late turn is pushed -- the
+    caller already degraded in-turn (bd polyglot-pdf-y76q)."""
+    started = asyncio.Event()
+
+    async def _slow(query, context):
+        started.set()
+        await asyncio.sleep(0.2)
+        # A real answer that WOULD be voiced on the normal late-deliver path.
+        return "That's the USCIS account number field.", [], True
+
+    live = _live_ai_active()
+    text_ai = MagicMock()
+    text_ai.ask = _slow
+    svc = _service(text_ai, deadline_s=0.05, timeout_s=5.0, live_ai=live)
+
+    out = await svc.handle_ask_secretary("which field is X?", deliver_late=False)
+    assert out == {"status": "pending", "answer": "", "sources": []}
+    await started.wait()
+    # A drain task is tracked (so teardown can cancel it), NOT a deliver.
+    assert len(svc._secretary_deliver_tasks) == 1
+    # Let the lookup finish; it must be drained, never voiced.
+    await asyncio.sleep(0.4)
+    live.send_client_content.assert_not_awaited()
+    # The drain self-removed on completion.
+    assert len(svc._secretary_deliver_tasks) == 0
+
+
+@pytest.mark.asyncio
 async def test_end_session_cancels_inflight_secretary_deliver():
     """end_session cancels an in-flight async-deliver so a disconnect never pushes a
     late turn into a session being torn down."""
@@ -341,7 +375,7 @@ async def test_end_session_cancels_inflight_secretary_deliver():
     async def _slow(query, context):
         started.set()
         await asyncio.sleep(5)  # still running when end_session fires
-        return "never delivered", []
+        return "never delivered", [], True
 
     live = _live_ai_active()
     live.finalize = AsyncMock()
@@ -376,7 +410,7 @@ async def test_section_switch_cancels_inflight_secretary_deliver():
     async def _slow(query, context):
         started.set()
         await asyncio.sleep(5)  # still running when the switch fires
-        return "section-1 answer that must NOT leak into section 2", []
+        return "section-1 answer that must NOT leak into section 2", [], True
 
     live = _live_ai_active()
     live.finalize = AsyncMock()

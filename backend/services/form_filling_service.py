@@ -1264,7 +1264,9 @@ class FormFillingService:
         
         return await self._request_coordinator.request_form_state(field_ids)
 
-    async def handle_ask_secretary(self, query: str) -> Dict[str, Any]:
+    async def handle_ask_secretary(
+        self, query: str, deliver_late: bool = True
+    ) -> Dict[str, Any]:
         """Run an ask_secretary lookup (bd polyglot-pdf-jnjj.45c, tail guard jnjj.43).
 
         Assembles the secretary's context -- the form catalog (self._full_schema,
@@ -1272,11 +1274,23 @@ class FormFillingService:
         / jnjj.45d) plus the client's CURRENT values + applicability (a fresh
         round-trip) -- and runs the BLOCKING TextAIGemini.ask().
 
+        deliver_late (default True): when a lookup blows SECRETARY_DEADLINE_S it is
+        detached to deliver its answer on a LATER turn (the user asked a question;
+        the answer is worth voicing whenever it lands). For an INTERNAL query where
+        no user question is pending -- switch_to_field's field-resolution
+        (bd polyglot-pdf-y76q) -- pass deliver_late=False: a deadline-blown lookup
+        is drained (never leaked) but its result is DISCARDED, never voiced as a
+        spurious "answer to your earlier question" turn. The caller degrades to its
+        own in-turn fallback on the returned "pending".
+
         Returns a status dict the dispatch maps to a tool response:
-          {"status": "ok",      "answer": <prose>, "sources": [...]}  -- answered
-              within the deadline. `sources` is the resolved {field_id, spoken_name}
-              list (bd polyglot-pdf-2af7/3vby) the answer was grounded in -- lets the
-              voice model hand an EXACT id to switch_to_field for navigation.
+          {"status": "ok",  "answer": <prose>, "sources": [...], "resolved": bool}
+              -- answered within the deadline. `sources` is the resolved
+              {field_id, spoken_name} list (bd polyglot-pdf-2af7/3vby) the answer was
+              grounded in -- lets the voice model hand an EXACT id to switch_to_field
+              for navigation. `resolved` is False when the secretary deliberately
+              could not identify a requested navigation target (semantic pushback,
+              bd polyglot-pdf-y76q); True otherwise.
           {"status": "pending", "answer": "", "sources": []}       -- the lookup blew
               SECRETARY_DEADLINE_S; it has been DETACHED to deliver its answer on a
               later turn (see _deliver_secretary_answer_later). The principal must NOT
@@ -1361,7 +1375,7 @@ class FormFillingService:
         if lookup in done:
             # Resolved within the deadline -- the common path.
             try:
-                answer, sources = lookup.result()
+                answer, sources, resolved = lookup.result()
             except asyncio.TimeoutError:
                 _log.warning("ask_secretary_timeout", timeout_s=timeout_s,
                              session_id=self._session_id)
@@ -1376,17 +1390,42 @@ class FormFillingService:
                 shown_count=len(shown_map),
                 answer_len=len(answer or ""),
                 source_count=len(sources) if isinstance(sources, list) else 0,
+                resolved=resolved,
                 session_id=self._session_id,
             )
             # Treat an all-whitespace answer as empty (the model occasionally returns
             # blanks) so the dispatch fail-opens instead of voicing whitespace.
             if not (answer or "").strip():
                 return {"status": "failed", "answer": "", "sources": []}
-            return {"status": "ok", "answer": answer, "sources": sources or []}
+            # `resolved` False = the secretary deliberately could not identify a
+            # navigation target (semantic pushback, bd polyglot-pdf-y76q); it rides
+            # the ok dict so the switch handler can degrade to a clarify prompt.
+            return {"status": "ok", "answer": answer,
+                    "sources": sources or [], "resolved": bool(resolved)}
 
-        # Deadline blown: free the principal's turn and DETACH the still-running
-        # lookup to deliver its answer asynchronously (jnjj.43). Track a strong ref
-        # so it isn't GC'd mid-flight; the deliver coroutine self-removes on finish.
+        # Deadline blown. For an INTERNAL query (deliver_late=False, e.g.
+        # switch_to_field's field resolution) there is no user question waiting, so
+        # do NOT voice a late answer -- just DRAIN the still-running lookup so it
+        # neither leaks (a billable call past the turn / "Task was destroyed") nor
+        # surfaces as a spurious follow-up turn (bd polyglot-pdf-y76q). The caller
+        # degrades to its own in-turn fallback on this "pending".
+        if not deliver_late:
+            _log.info("ask_secretary_pending_no_deliver",
+                      deadline_s=deadline_s, field_count=len(form_state),
+                      session_id=self._session_id)
+            drain = asyncio.ensure_future(self._drain_secretary_lookup(lookup))
+            # Register as a (drain, lookup) PAIR so teardown handles it exactly like
+            # a deliver pair (cancel + drain both) -- _cancel_secretary_deliver_tasks
+            # unpacks pairs. The drain self-removes the pair on finish.
+            entry = (drain, lookup)
+            self._secretary_deliver_tasks.add(entry)
+            drain.add_done_callback(
+                lambda _t: self._secretary_deliver_tasks.discard(entry))
+            return {"status": "pending", "answer": "", "sources": []}
+
+        # DETACH the still-running lookup to deliver its answer asynchronously
+        # (jnjj.43). Track a strong ref so it isn't GC'd mid-flight; the deliver
+        # coroutine self-removes on finish.
         _log.info("ask_secretary_pending_async_deliver",
                   deadline_s=deadline_s, field_count=len(form_state),
                   session_id=self._session_id)
@@ -1423,7 +1462,7 @@ class FormFillingService:
         letting it go. PII: never log the answer text; counts/status only.
         """
         try:
-            answer, _sources = await lookup
+            answer, _sources, _resolved = await lookup
         except asyncio.TimeoutError:
             _log.warning("ask_secretary_async_timeout", session_id=self._session_id)
             return
@@ -1470,6 +1509,22 @@ class FormFillingService:
             )
         except Exception as exc:  # noqa: BLE001
             _log.warning("ask_secretary_async_deliver_failed",
+                         exc_type=type(exc).__name__, session_id=self._session_id)
+
+    async def _drain_secretary_lookup(self, lookup: "asyncio.Future") -> None:
+        """Await a detached secretary lookup purely to drain it (bd
+        polyglot-pdf-y76q), DISCARDING its result. Used for an internal
+        (deliver_late=False) query -- switch_to_field's field resolution -- that
+        blew the deadline: the switch already degraded in-turn, so the late result
+        must NOT be voiced. Awaiting here (not inside a cancelled task) lets the
+        inner wait_for unwind cleanly rather than leaking "Task was destroyed".
+        Never raises; never voices anything."""
+        try:
+            await lookup
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            return
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("ask_secretary_drain_failed",
                          exc_type=type(exc).__name__, session_id=self._session_id)
 
     async def handle_validation_boundary(self, fields: list) -> dict:

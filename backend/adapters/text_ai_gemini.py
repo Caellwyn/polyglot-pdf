@@ -28,18 +28,30 @@ SECRETARY_SI = (
     "whether it is shown (applicable) to this applicant. A field can be shown but "
     "<empty> (applicable, not answered yet) OR not shown (not applicable to this "
     "applicant) -- treat these as DIFFERENT.\n\n"
-    "Answer the colleague's question. Work in this order:\n"
-    "1. Find ALL fields relevant to the question (there may be several).\n"
-    "2. Copy their current values.\n"
-    "3. Answer in natural, brief prose using ONLY those values. If a relevant "
-    "field is <empty> but applicable, say it has not been answered yet. If it is "
-    "not applicable to this applicant, say so. If the question is genuinely "
-    "ambiguous across several fields, either answer for all of them and name each, "
-    "or ask a short clarifying question. NEVER invent a value that is not shown.\n\n"
+    "Colleague questions are one of two kinds:\n"
+    "A) VALUE RECALL -- 'what did they say for X?', 'have we got their DOB yet?'. "
+    "Find ALL fields relevant to the question (there may be several), and answer "
+    "in natural, brief prose using ONLY their current values. If a relevant field "
+    "is <empty> but applicable, say it has not been answered yet; if not "
+    "applicable, say so. NEVER invent a value that is not shown.\n"
+    "B) FIELD IDENTIFICATION -- 'which field is X?', or a vague description of a "
+    "field the colleague wants to navigate to (e.g. 'that government id thing with "
+    "12 digits', 'the box where they sign'). Identify WHICH field(s) match, using "
+    "the field spoken names, types, and help text -- NOT their values. This is a "
+    "smart match: reason about what the applicant likely means. Put the matched "
+    "field id(s) in sourced_from (most-likely first) and name them in `answer`.\n\n"
+    "If you CANNOT confidently identify any field the colleague is asking to "
+    "navigate to (nothing plausibly matches the description), set \"resolved\": "
+    "false, leave sourced_from empty, and in `answer` say what you could not find "
+    "and ask the colleague to have the applicant clarify (e.g. 'I could not find a "
+    "12-digit government ID field -- ask which document they mean'). Do NOT guess "
+    "a field just to return something. For a genuine VALUE-RECALL question you "
+    "answered normally, or a field-identification you resolved, set \"resolved\": "
+    "true (the default).\n\n"
     "Return JSON ONLY, no other text:\n"
-    '{"answer": "<your prose answer>", "sourced_from": ["<field_id>", ...]}\n'
-    "Put in sourced_from the exact field ids you used to answer (the fields whose "
-    "values your answer is grounded in). Use ids exactly as shown."
+    '{"answer": "<prose>", "sourced_from": ["<field_id>", ...], "resolved": true}\n'
+    "sourced_from holds the exact field ids your answer is grounded in / the fields "
+    "you identified, most-relevant first. Use ids exactly as shown."
 )
 
 
@@ -221,7 +233,7 @@ class TextAIGemini(ITextAI):
             )
             return {"conflicts": []}
 
-    async def ask(self, query: str, context: dict) -> tuple[str, list[dict]]:
+    async def ask(self, query: str, context: dict) -> tuple[str, list[dict], bool]:
         """Secretary query (bd polyglot-pdf-jnjj.45b): map a prose question about
         the form to a prose answer, using the cheap text model.
 
@@ -242,14 +254,17 @@ class TextAIGemini(ITextAI):
                           prefix + tail, so the leading bytes stay identical
                           call-to-call even as values change.
 
-        Returns (answer, sources): `answer` is the secretary's PROSE answer; `sources`
-        is a list of {"field_id", "spoken_name"} dicts resolved from the model's
-        `sourced_from` field-id list against the schema (bd polyglot-pdf-2af7/3vby --
-        lets the voice model hand an EXACT field id to switch_to_field instead of
-        guessing from memory). Ids not present in the schema are dropped; the list is
-        de-duped (order preserved) and capped at 8 entries. Fail-open: on missing
-        client / bad context / API or parse error, returns ("", []) so the principal
-        asks the user directly (ITextAI.ask contract).
+        Returns (answer, sources, resolved): `answer` is the secretary's PROSE
+        answer; `sources` is a list of {"field_id", "spoken_name"} dicts resolved
+        from the model's `sourced_from` field-id list against the schema (bd
+        polyglot-pdf-2af7/3vby -- lets the voice model hand an EXACT field id to
+        switch_to_field instead of guessing from memory); `resolved` is False when
+        the secretary could NOT confidently identify a field the colleague asked to
+        navigate to (bd polyglot-pdf-y76q -- the semantic-pushback signal), True
+        otherwise. Ids not present in the schema are dropped; the list is de-duped
+        (order preserved) and capped at 8 entries. Fail-open: on missing client /
+        bad context / API or parse error, returns ("", [], True) so the principal
+        asks the user directly (a fail-open is NOT a deliberate "not found").
 
         PII: logs field ids/counts/model only -- NEVER the query, the rendered
         context/values, the answer prose, or spoken names (callback_handler PII
@@ -257,17 +272,17 @@ class TextAIGemini(ITextAI):
         """
         if self._client is None:
             self._log.warning("text_ai_no_client_ask_fail_open")
-            return "", []
+            return "", [], True
 
         if not isinstance(context, dict):
             self._log.warning("text_ai_ask_bad_context_fail_open")
-            return "", []
+            return "", [], True
 
         schema = context.get("schema")
         if not isinstance(schema, dict) or not schema.get("fields"):
             # No catalog to ground the answer in -- cannot retrieve; fail open.
             self._log.warning("text_ai_ask_no_schema_fail_open")
-            return "", []
+            return "", [], True
 
         field_values = context.get("field_values") or {}
         shown_map = context.get("shown_map") or {}
@@ -297,6 +312,10 @@ class TextAIGemini(ITextAI):
             verdict = json.loads(raw)
             answer = verdict.get("answer", "")
             sourced = verdict.get("sourced_from", [])
+            # resolved defaults True (a value-recall answer, or a resolved
+            # identification); only an explicit False is the pushback signal
+            # (bd polyglot-pdf-y76q). Coerce non-bool defensively.
+            resolved = verdict.get("resolved", True) is not False
             if not isinstance(answer, str):
                 answer = str(answer)
             sources = self._resolve_sources(schema, sourced)
@@ -307,21 +326,22 @@ class TextAIGemini(ITextAI):
                 if isinstance(sourced, list) else [],
                 sourced_count=len(sourced) if isinstance(sourced, list) else 0,
                 resolved_source_count=len(sources),
+                resolved=resolved,
                 answer_len=len(answer),
             )
-            return answer, sources
+            return answer, sources, resolved
         except json.JSONDecodeError:
             self._log.warning(
                 "text_ai_ask_parse_error_fail_open",
                 raw_length=len(raw) if isinstance(raw, str) else None,
             )
-            return "", []
+            return "", [], True
         except Exception as exc:  # noqa: BLE001
             self._log.warning(
                 "text_ai_ask_error_fail_open",
                 exc_type=type(exc).__name__,
             )
-            return "", []
+            return "", [], True
 
     @staticmethod
     def _resolve_sources(schema: dict, sourced_from) -> list[dict]:

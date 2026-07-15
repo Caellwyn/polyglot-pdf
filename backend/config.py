@@ -540,20 +540,19 @@ class Settings(BaseModel):
 			"name": "switch_to_field",
 			"description": (
 				"Jump to ONE SPECIFIC field so it becomes the current field -- "
-				"use it when the user wants to change or revisit an earlier "
-				"answer (e.g. 'go back to my mailing city'). Pass a field_id ONLY "
-				"when you have it verbatim in "
-				"a recent guidance block; for an EARLIER field you are navigating "
-				"back to, pass its exact SPOKEN NAME instead -- never reconstruct "
-				"or guess a field_id from memory (a wrong id fails). If you do not "
-				"know the target's exact name, ask_secretary 'which field is X?' "
-				"first -- its `fields` list gives you an exact field_id + spoken "
-				"name to pass here. If the target "
-				"is not found, the response lists the candidate fields; pick one of "
-				"THOSE exact names and retry. On success "
-				"the response carries that field's guidance -- ask the user "
-				"about THAT field next. This does NOT navigate sections; for a "
-				"whole different section use switch_section."
+				"use it when the user wants to change or revisit an earlier answer "
+				"(e.g. 'go back to my mailing city'). Just pass what the USER "
+				"called the field, in their own words -- an exact field_id if you "
+				"have one in a recent guidance block, otherwise the field's spoken "
+				"name OR even a rough description ('that government id with 12 "
+				"digits', 'the box where they sign'). The tool figures out which "
+				"field that is for you -- do NOT reconstruct or guess a field_id "
+				"from memory. If it cannot tell which field you mean, the response "
+				"says so and may list options to pick from -- ask the user which, "
+				"then call again with that field. On success the response carries "
+				"that field's guidance -- ask the user about THAT field next. This "
+				"does NOT navigate sections; for a whole different section use "
+				"switch_section."
 			),
 			"parameters": {
 				"type": "object",
@@ -561,9 +560,11 @@ class Settings(BaseModel):
 					"field": {
 						"type": "string",
 						"description": (
-							"The target field: its exact field_id (verbatim from "
-							"a recent guidance block), or -- for an earlier field -- "
-							"its exact spoken name. Do not invent or guess an id."
+							"The target field, in whatever form you have: an exact "
+							"field_id from a recent guidance block, the field's "
+							"spoken name, or a plain-language description of it (the "
+							"tool resolves a description to the field). Do not invent "
+							"a field_id."
 						)
 					}
 				},
@@ -721,11 +722,10 @@ class Settings(BaseModel):
     "pattern-match a field_id from another field's id. If you have no current guidance block (e.g. "
     "after a reconnect), request the current form status or ask the user, rather than guessing.\n"
     "Do NOT call ask_secretary for the CURRENT field's own spoken name or id -- that is always in "
-    "this guidance block already. But you DO NOT hold other fields' ids: to jump to a DIFFERENT field "
-    "the user names ('go back to my mailing city'), you may ask_secretary 'which field is X?' -- its "
-    "response's `fields` list gives you the exact field_id + spoken name to pass to switch_to_field. "
-    "ask_secretary is for the user's past ANSWERS and for IDENTIFYING a field to navigate to, never "
-    "for the current field's metadata.\n\n"
+    "this guidance block already. You DO NOT hold OTHER fields' ids, but you do not need them: to jump "
+    "to a DIFFERENT field the user names ('go back to my mailing city', 'that 12-digit government id'), "
+    "just call switch_to_field with the user's own words -- it resolves the field for you. Reserve "
+    "ask_secretary for recalling the user's past ANSWERS/values, not field metadata.\n\n"
 
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"
