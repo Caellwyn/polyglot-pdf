@@ -295,6 +295,12 @@ export function createConnectionManager(
 	// turns -- we suppress all manual activity signals (PTT + Silero) and stream
 	// continuous audio. Set from the backend session_ready handshake.
 	let nativeVad: boolean = false
+	// Manual-VAD (Silero) barge-in window in progress (bd polyglot-pdf-nm7z):
+	// set at onVADSpeechStart, cleared at onVADSpeechEnd. Only meaningful when
+	// PTT and native VAD are both off. Gates rehydrateAudio's stale-block clear
+	// so a GoAway/auto-drop reconnect landing MID-UTTERANCE cannot let new AI
+	// audio talk over the user's in-progress interruption.
+	let vadSpeechActive: boolean = false
 
 	// TEST-ONLY (bd polyglot-pdf-g8w): tracks the most recent field id Gemini
 	// advanced to, so the dev-gated E2E voice harness can assert "moved to the
@@ -395,10 +401,15 @@ export function createConnectionManager(
 		// (tester bugs 0/7: "Gemini still hears me but I can't hear her"). This
 		// routine runs exactly at session-(re)establishment, where no legitimate
 		// in-flight barge-in flush can exist (the old session's audio died with its
-		// socket), so unblocking here is always safe -- and it is the ONE funnel all
-		// reconnect paths share. The paused guard above keeps a mid-pause block
-		// intact (resume() clears `paused` before calling this).
-		audioManager.resumePlayback()
+		// socket), so unblocking here is safe -- and it is the ONE funnel all
+		// reconnect paths share. Two guards: the paused guard above keeps a
+		// mid-pause block intact (resume() clears `paused` before calling this),
+		// and vadSpeechActive keeps a manual-VAD barge-in window intact when a
+		// GoAway/auto-drop reconnect lands mid-utterance (onVADSpeechEnd clears
+		// the block itself when the user finishes).
+		if (!vadSpeechActive) {
+			audioManager.resumePlayback()
+		}
 		const wasRecording = audioManager.isRecording()
 		if (!wasRecording) {
 			console.log('[VFF Connection] rehydrateAudio: arming mic (' + reason + ')')
@@ -1110,6 +1121,11 @@ export function createConnectionManager(
 			if (!audioManager) return			// PUSH-TO-TALK MODE: Disable VAD-based barge-in
 			if (pushToTalkMode) return
 
+			// A manual-VAD barge-in is now in progress: rehydrateAudio must not
+			// clear the flush block until onVADSpeechEnd does (bd polyglot-pdf-nm7z
+			// fresh-eyes edge: a GoAway/auto-drop reconnect racing this window).
+			vadSpeechActive = true
+
 			// Send activity_start signal to Gemini (user started speaking)
 			if (connection) {
 				connection.sendActivityStart()
@@ -1139,6 +1155,9 @@ export function createConnectionManager(
 
 			// PUSH-TO-TALK MODE: Disable VAD-based barge-in
 			if (pushToTalkMode) return
+
+			// The manual-VAD barge-in window is over (see onVADSpeechStart).
+			vadSpeechActive = false
 
 			const geminiSpeaking = audioManager.isSpeaking()
 
