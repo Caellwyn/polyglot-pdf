@@ -554,6 +554,18 @@ def test_render_field_guidance_appends_fill_language():
     assert render_field_guidance(NESTED_FIELD, fill_language=None) == render_field_guidance(NESTED_FIELD)
 
 
+def test_render_field_guidance_appends_spoken_language():
+    """spoken_language re-anchors the conversation language on every injected
+    guidance block (bd polyglot-pdf-ghv4); omitted -> byte-identical to the
+    no-arg render, and distinct from fill_language."""
+    text = render_field_guidance(
+        NESTED_FIELD, fill_language="English", spoken_language="Spanish")
+    assert "Speak Spanish aloud" in text
+    assert "Fill language: English" in text
+    assert "Speak" not in render_field_guidance(NESTED_FIELD)
+    assert render_field_guidance(NESTED_FIELD, spoken_language=None) == render_field_guidance(NESTED_FIELD)
+
+
 def test_render_section_metadata_block():
     from backend.services.ai_context import render_section_metadata
     block = render_section_metadata(

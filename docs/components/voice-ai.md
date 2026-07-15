@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-15 (bd polyglot-pdf-b1gj + ghv4: actionable unknown-field rejections + the STOP-RETRYING loop-breaker on update_form_fields; per-injection spoken-language re-anchor and the no-quoted-English rule for prompts/tool descriptions -- see the tool-calling section). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -150,6 +150,22 @@ polyglot-pdf-p5h2): in continuous mode (the only production path) recall is
 
 The `complete_section` tool was **removed** — section completion is frontend-driven
 (see [websocket-routing.md](websocket-routing.md)).
+
+An `update_form_fields` rejection is ACTIONABLE, not bare (bd polyglot-pdf-b1gj):
+an id that names a real-but-not-active field (manifest/merge-known) is told to
+navigate with `switch_to_field` first; an unresolvable id is told never to invent
+ids. Three consecutive wholly-unknown rejections escalate the response to an
+explicit STOP-RETRYING instruction (`UNKNOWN_REJECTION_LOOP_THRESHOLD`, logged as
+`unknown_field_loop_breaker_fired`) -- a live Spanish session had looped 338
+rejected updates with the old bare "unknown field" text.
+
+Every injected guidance block also re-anchors the SESSION LANGUAGE with a
+"Speak <lang> aloud" segment (bd polyglot-pdf-ghv4): `render_field_guidance`
+takes `spoken_language` from a live getter on the service (the client-sent,
+user-chosen language from the app-start modal -- never a hardcoded language),
+mirroring the `Fill language:` segment. Recovery prompts and tool descriptions
+carry NO quoted English utterances (they get spoken verbatim in English
+otherwise).
 
 Every tool call gets a `FunctionResponse` that **echoes the call's `id`** back
 (`_build_function_response`). The SDK's AI-Studio (`VERTEXAI=false`) path requires

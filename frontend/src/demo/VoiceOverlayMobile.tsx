@@ -15,6 +15,7 @@ import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
+import { getOverlayStrings } from './overlayTranslations'
 import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
@@ -82,6 +83,8 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')  // Track selected spoken language
+	// Panel UI copy in the session language (bd polyglot-pdf-ibxz); English fallback.
+	const overlayText = getOverlayStrings(selectedLanguage)
 	const [pendingDisclaimerRead, setPendingDisclaimerRead] = useState(false)  // Track if we need to send disclaimer prompt when connected
 
 	// FIX #1: Use shared stream from parent (created before React rendering)
@@ -872,8 +875,9 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 	}
 
 	const handleClearForm = () => {
-		// Confirm before clearing
-		if (!confirm('Are you sure you want to clear all form data? This cannot be undone.')) {
+		// Confirm before clearing (shared translated copy, bd polyglot-pdf-ibxz --
+		// also unifies the previously divergent desktop/mobile confirm wording)
+		if (!confirm('⚠️ ' + overlayText.clearFormConfirm)) {
 			return
 		}
 
@@ -1256,7 +1260,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 								onTouchCancel={handlePushToTalkTouchEnd}
 								onContextMenu={(e) => e.preventDefault()}
 							>
-								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Tap & Hold to Talk'}
+								{isHoldingPushToTalk ? '🔴 ' + overlayText.recording : '⌨️ ' + overlayText.tapHoldToTalk}
 							</button>
 						</div>
 					)}
@@ -1267,21 +1271,21 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					    (bd polyglot-pdf-b2yj). */}
 					{status === 'idle_timeout' || status === 'disconnected' ? (
 						<button className="vff-action-btn vff-reconnect-btn" onClick={handleConnect}>
-							🔄 Reconnect
+							🔄 {overlayText.reconnect}
 						</button>
 					) : isPausedState ? (
 						<button className="vff-action-btn vff-resume-btn" onClick={handleConnect}>
-							▶️ Resume
+							▶️ {overlayText.resume}
 						</button>
 					) : isConnected ? (
 						<button className="vff-action-btn vff-pause-btn" onClick={handleDisconnect}>
-							⏸️ Pause
+							⏸️ {overlayText.pause}
 						</button>
 					) : null}
 
 					{/* Clear Form Button */}
 					<button className="vff-action-btn vff-clear-btn" onClick={handleClearForm}>
-						🗑️ Clear Form
+						🗑️ {overlayText.clearForm}
 					</button>
 
 					{/* Error */}
@@ -1289,7 +1293,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						{(error || streamError) && (
 							<div className="vff-error-compact">
 								{streamError && (
-									<div><strong>🎤 Mic Error:</strong> {streamError}</div>
+									<div><strong>🎤 {overlayText.micErrorLabel}</strong> {streamError}</div>
 								)}
 								{error && <div>{error}</div>}
 							</div>
@@ -1297,7 +1301,9 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 
 						{/* Info */}
 						<div className="vff-info-compact">
-							{fieldCount} fields · {requiredCount} required
+							{overlayText.fieldsRequiredInfo
+								.replace('{count}', String(fieldCount))
+								.replace('{required}', String(requiredCount))}
 						</div>
 					</div>
 				</div>

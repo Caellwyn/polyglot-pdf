@@ -605,7 +605,12 @@ async def _handle_fill_session(
 								_log.warning("missing_disclaimer_text", session_id=session_id)
 								disclaimer_text = "Please read the disclaimer."
 
-							await service.send_disclaimer_message(spoken_language, disclaimer_text)
+							# Translated on-screen agree-button label (bd polyglot-pdf-s863);
+							# optional -- the service falls back to 'I Agree' when absent.
+							agree_button_label = obj.get("agree_button_label")
+							await service.send_disclaimer_message(
+								spoken_language, disclaimer_text,
+								agree_button_label=agree_button_label)
 							await websocket.send_json({"type": "disclaimer_read_initiated", "language": spoken_language})
 							_log.info("disclaimer_read_initiated", session_id=session_id, language=spoken_language)
 						except Exception as e:

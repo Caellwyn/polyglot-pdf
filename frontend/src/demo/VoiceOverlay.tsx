@@ -24,6 +24,7 @@ import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
+import { getOverlayStrings, formatFieldsCompleted } from './overlayTranslations'
 import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
@@ -96,6 +97,8 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const energyRef = useRef({ energy: 0, sending: false, lastFrameAt: 0 })
 	// If initialLanguage is provided (from parent onboarding), use it and skip language modal
 	const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage || '')
+	// Panel UI copy in the session language (bd polyglot-pdf-ibxz); English fallback.
+	const overlayText = getOverlayStrings(selectedLanguage)
 	const [showLanguageModal, setShowLanguageModal] = useState(!initialLanguage)  // Skip if language pre-selected
 	const [showDisclaimerModal, setShowDisclaimerModal] = useState(false)  // Track if disclaimer modal is showing
 	// User dismissed the connection-timeout modal without reconnecting (bd
@@ -1305,7 +1308,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 	// Handle clear form button
 	const handleClearForm = () => {
-		if (!confirm('⚠️ Clear all form data?\n\nThis will delete all fields and reload the page.\nThis action cannot be undone.')) {
+		if (!confirm('⚠️ ' + overlayText.clearFormConfirm)) {
 			return
 		}
 
@@ -1531,7 +1534,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 							)}
 						</div>
 						<div className="vff-field-counter">
-							📊 {sectionFieldCount.filled} of {sectionFieldCount.total} fields completed
+							📊 {formatFieldsCompleted(overlayText, sectionFieldCount.filled, sectionFieldCount.total)}
 						</div>
 						{/* DEPRECATED (bd polyglot-pdf-55jg): the manual section-jump
 						    dropdown is section-reset production UI; continuous-DTI is
@@ -1608,7 +1611,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								? 'Push-to-talk: audio is sent only while you hold the button (good for noisy rooms).'
 								: 'Continuous: your mic streams to Gemini and its voice detection decides when you are speaking.'}
 						>
-							<span className="vff-ptt-label-text">Input Mode:</span>
+							<span className="vff-ptt-label-text">{overlayText.inputMode}</span>
 							<div className="vff-ptt-toggle-switch">
 								<input
 									type="checkbox"
@@ -1626,7 +1629,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 									<span className="vff-ptt-toggle-icon vff-ptt-toggle-icon-ptt">⌨️</span>
 								</span>
 							</div>
-							<span className="vff-ptt-mode-label">{pushToTalkMode ? 'PTT' : 'Auto'}</span>
+							<span className="vff-ptt-mode-label">{pushToTalkMode ? overlayText.modePTT : overlayText.modeAuto}</span>
 						</label>
 					</div>
 
@@ -1639,7 +1642,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								onMouseDown={handlePushToTalkPress}
 								onTouchStart={handlePushToTalkPress}
 							>
-								{isHoldingPushToTalk ? '🔴 Recording...' : '⌨️ Hold to Talk (or Spacebar)'}
+								{isHoldingPushToTalk ? '🔴 ' + overlayText.recording : '⌨️ ' + overlayText.holdToTalk}
 							</button>
 						</div>
 					)}
@@ -1655,25 +1658,25 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 								className="vff-button vff-reconnect"
 								onClick={handleConnect}
 							>
-								🔄 Reconnect
+								🔄 {overlayText.reconnect}
 							</button>
 						) : isPausedState ? (
 							<button
 								className="vff-button vff-resume"
 								onClick={handleConnect}
 							>
-								▶️ Resume
+								▶️ {overlayText.resume}
 							</button>
 						) : isConnected ? (
 							<button
 								className="vff-button vff-pause"
 								onClick={handleDisconnect}
 							>
-								⏸️ Pause
+								⏸️ {overlayText.pause}
 							</button>
 						) : null}
 						<button className="vff-button vff-clear-form" onClick={handleClearForm}>
-							🗑️ Clear Form
+							🗑️ {overlayText.clearForm}
 						</button>
 					</div>
 
@@ -1682,7 +1685,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					{(error || streamError) && (
 						<div className="vff-error">
 							{streamError && (
-								<div><strong>🎤 Microphone Error:</strong> {streamError}</div>
+								<div><strong>🎤 {overlayText.micErrorLabel}</strong> {streamError}</div>
 							)}
 							{error && <div>{error}</div>}
 						</div>

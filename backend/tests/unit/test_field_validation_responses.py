@@ -92,7 +92,8 @@ def validation_handler_unknown_field():
     return handler
 
 
-def create_callback_handler(mock_websocket, mock_coordinator, update_handler):
+def create_callback_handler(mock_websocket, mock_coordinator, update_handler,
+                            is_known_field=None):
     """Helper to create CallbackHandler with specific validation behavior."""
     handler = CallbackHandler(
         websocket=mock_websocket,
@@ -104,6 +105,7 @@ def create_callback_handler(mock_websocket, mock_coordinator, update_handler):
         handle_update_fields=update_handler,
         handle_switch_section=AsyncMock(),
         request_form_state_from_client=AsyncMock(),
+        is_known_field=is_known_field,
     )
 
     return handler
@@ -594,6 +596,173 @@ class TestNestedValidationConstraints:
             "a far-future date should fail the nested past_only constraint"
         result = validate_updates([field], {"d1": "2020-01-01"})
         assert "d1" in result["valid_fields"]
+
+
+class TestUnknownFieldRecoveryGuidance:
+    """FORMATTER-ONLY (mocked validator), bd polyglot-pdf-b1gj: unknown-field
+    rejections must carry an actionable recovery path, and repeated
+    wholly-unknown rejections must escalate to a stop-retrying instruction.
+    Live evidence: one session looped 338 rejected updates ("unknown field" with
+    no exit ramp) until the idle-timeout disconnect."""
+
+    @pytest.mark.asyncio
+    async def test_known_inactive_field_points_at_switch_to_field(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A REAL-but-not-active field id (manifest/merge-known) is told to
+        navigate with switch_to_field instead of retrying the update."""
+        update_handler = MagicMock(return_value={
+            "form_state": {},
+            "applied_fields": [],
+            "unknown_fields": ["p1_line3a_familyname"],
+            "validation_errors": [],
+        })
+        handler = create_callback_handler(
+            mock_websocket, mock_coordinator, update_handler,
+            is_known_field=lambda fid: fid == "p1_line3a_familyname",
+        )
+
+        tool_response = await handler.on_tool_call(
+            tool_name="update_form_fields",
+            arguments={"field_id": "p1_line3a_familyname", "value": "Nguyen"},
+        )
+
+        assert tool_response["success"] is False
+        msg = tool_response["message"]
+        assert "switch_to_field" in msg
+        assert "NOT the active field" in msg
+        assert "Do NOT retry" in msg
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_field_says_never_invent_ids(
+        self, mock_websocket, mock_coordinator, validation_handler_unknown_field
+    ):
+        """A genuinely unresolvable id gets the never-invent-ids wording, and
+        still names switch_to_field as the navigation recovery."""
+        handler = create_callback_handler(
+            mock_websocket, mock_coordinator, validation_handler_unknown_field,
+            is_known_field=lambda fid: False,
+        )
+
+        tool_response = await handler.on_tool_call(
+            tool_name="update_form_fields",
+            arguments={"field_id": "nonexistent_field", "value": "some value"},
+        )
+
+        msg = tool_response["message"]
+        assert "no field with this id exists" in msg
+        assert "Never invent or guess field ids" in msg
+        assert "switch_to_field" in msg
+
+    @pytest.mark.asyncio
+    async def test_third_consecutive_unknown_rejection_escalates_to_stop(
+        self, mock_websocket, mock_coordinator, validation_handler_unknown_field
+    ):
+        """The 3rd wholly-unknown rejection in a row leads with STOP RETRYING;
+        the first two do not."""
+        handler = create_callback_handler(
+            mock_websocket, mock_coordinator, validation_handler_unknown_field,
+            is_known_field=lambda fid: False,
+        )
+        args = {"field_id": "nonexistent_field", "value": "v"}
+
+        first = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        second = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        third = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+
+        assert "STOP RETRYING" not in first["message"]
+        assert "STOP RETRYING" not in second["message"]
+        assert "STOP RETRYING" in third["message"]
+        # The escalation leads the ERRORS block so the model reads it first.
+        assert third["message"].startswith("ERRORS: STOP RETRYING")
+
+    @pytest.mark.asyncio
+    async def test_successful_update_resets_the_stuck_counter(
+        self, mock_websocket, mock_coordinator
+    ):
+        """An applied update between unknown rejections resets the counter, so
+        the next rejection is a fresh count, not an escalation."""
+        results = [
+            {"form_state": {}, "applied_fields": [], "unknown_fields": ["x"],
+             "validation_errors": []},
+            {"form_state": {}, "applied_fields": [], "unknown_fields": ["x"],
+             "validation_errors": []},
+            {"form_state": {"f1": "v"}, "applied_fields": ["f1"],
+             "unknown_fields": [], "validation_errors": []},
+            {"form_state": {}, "applied_fields": [], "unknown_fields": ["x"],
+             "validation_errors": []},
+        ]
+        update_handler = MagicMock(side_effect=results)
+        handler = create_callback_handler(
+            mock_websocket, mock_coordinator, update_handler,
+            is_known_field=lambda fid: False,
+        )
+        args = {"field_id": "x", "value": "v"}
+
+        await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        ok = await handler.on_tool_call(
+            tool_name="update_form_fields", arguments={"field_id": "f1", "value": "v"})
+        after_reset = await handler.on_tool_call(
+            tool_name="update_form_fields", arguments=args)
+
+        assert ok["success"] is True
+        assert "STOP RETRYING" not in after_reset["message"]
+
+    @pytest.mark.asyncio
+    async def test_validator_exception_path_gets_message_and_counts(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A validator exception (handler returns None) still yields an
+        actionable message and advances the loop-breaker, instead of the old
+        bare message-less dict (Opus fresh-eyes finding on bd b1gj)."""
+        update_handler = MagicMock(return_value=None)
+        handler = create_callback_handler(
+            mock_websocket, mock_coordinator, update_handler,
+            is_known_field=lambda fid: False,
+        )
+        args = {"field_id": "x", "value": "v"}
+
+        first = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        second = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        third = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+
+        assert first["success"] is False
+        assert "unknown field" in first["message"]
+        assert "STOP RETRYING" in third["message"]
+        assert "STOP RETRYING" not in second["message"]
+
+    @pytest.mark.asyncio
+    async def test_validation_error_resets_the_stuck_counter(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A plain validation error (real field, bad value) is a working path
+        the model should keep correcting -- it must not feed the unknown-field
+        escalation."""
+        unknown = {"form_state": {}, "applied_fields": [], "unknown_fields": ["x"],
+                   "validation_errors": []}
+        val_err = {"form_state": {}, "applied_fields": [], "unknown_fields": [],
+                   "validation_errors": [{
+                       "field_id": "p1_line1_aliennumber",
+                       "field_name": "Alien Registration Number",
+                       "value": "1234", "constraint": "pattern",
+                       "constraint_value": "^\\d{7,9}$"}]}
+        update_handler = MagicMock(side_effect=[unknown, unknown, val_err, unknown])
+        handler = create_callback_handler(
+            mock_websocket, mock_coordinator, update_handler,
+            is_known_field=lambda fid: False,
+        )
+        args = {"field_id": "x", "value": "v"}
+
+        await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        await handler.on_tool_call(
+            tool_name="update_form_fields",
+            arguments={"field_id": "p1_line1_aliennumber", "value": "1234"})
+        after = await handler.on_tool_call(
+            tool_name="update_form_fields", arguments=args)
+
+        assert "STOP RETRYING" not in after["message"]
 
 
 # Run with: pytest backend/tests/unit/test_field_validation_responses.py -v
