@@ -305,6 +305,10 @@ class FormFillingService:
             # Live getter so fields 2..N's guidance carries the CURRENT fill language
             # even after a mid-session change_fill_language (bd polyglot-pdf-uogm).
             get_fill_language=lambda: self._fill_language,
+            # Live getter so every injected guidance block re-anchors the SPOKEN
+            # language ("Speak <lang> aloud") -- long non-English sessions drifted
+            # into English with only the session-start anchor (bd polyglot-pdf-ghv4).
+            get_spoken_language=lambda: self._spoken_language,
             # Live getter so confirm_field can coerce onto the current field when the
             # model confirms a hallucinated/drifted id (bd polyglot-pdf-h1bn).
             get_current_field_id=lambda: self._current_field_id,
@@ -470,7 +474,10 @@ class FormFillingService:
         if self._callback_handler is not None:
             await self._callback_handler.on_processing_done()
 
-    async def send_disclaimer_message(self, spoken_language: str, disclaimer_text: str):
+    async def send_disclaimer_message(
+        self, spoken_language: str, disclaimer_text: str,
+        agree_button_label: Optional[str] = None,
+    ):
         """
         Send disclaimer initiating message to Gemini.
 
@@ -480,6 +487,10 @@ class FormFillingService:
         Args:
             spoken_language: Language for Gemini to speak (e.g., "Spanish", "French")
             disclaimer_text: The full translated disclaimer text to read verbatim
+            agree_button_label: The TRANSLATED on-screen agree-button label the
+                client displays (bd polyglot-pdf-s863) so the model names the
+                button the user actually sees; falls back to 'I Agree' when the
+                client omits it (old clients)
         """
         if not self._live_ai:
             _log.warning("send_disclaimer_message_no_ai", session_id=self._session_id)
@@ -487,7 +498,8 @@ class FormFillingService:
 
         message = self._settings.DISCLAIMER_INITIATING_MESSAGE.format(
             spoken_language=spoken_language,
-            disclaimer_text=disclaimer_text
+            disclaimer_text=disclaimer_text,
+            agree_button_label=agree_button_label or "I Agree",
         )
 
         _log.info("sending_disclaimer_message", session_id=self._session_id, language=spoken_language)

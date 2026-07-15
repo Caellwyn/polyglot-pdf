@@ -7,7 +7,8 @@ from backend.services.manifest_service import get_field_guidance
 
 
 def render_field_guidance(
-    field: Optional[Dict[str, Any]], fill_language: Optional[str] = None
+    field: Optional[Dict[str, Any]], fill_language: Optional[str] = None,
+    spoken_language: Optional[str] = None
 ) -> str:
     """Render a single field's guidance as the readable text block the model reads
     (bd polyglot-pdf-jnjj.22, Dynamic Turn Injection).
@@ -24,6 +25,13 @@ def render_field_guidance(
     segment so the language for field VALUES rides with EVERY field render -- the
     static DTI SI no longer carries it. Omitted/None -> no segment (legacy/JIT and
     the no-arg callers render byte-identically).
+
+    spoken_language (bd polyglot-pdf-ghv4): when set, appends a "Speak <lang>
+    aloud" segment so the SPOKEN-language rule is re-asserted on every injected
+    guidance block -- long Spanish sessions drifted into English because the only
+    spoken-language anchor was the session-start message. Omitted/None -> no
+    segment (the initiating-message path already carries "Speak {spoken_language}"
+    in its template and passes None here).
     """
     guidance = get_field_guidance(field) if field else None
     if not guidance:
@@ -72,6 +80,10 @@ def render_field_guidance(
     # so a no-arg / non-DTI render is byte-identical.
     if fill_language:
         parts.append(f"Fill language: {fill_language}")
+    # spoken_language re-anchors the conversation language per injection
+    # (bd polyglot-pdf-ghv4); distinct from fill_language above.
+    if spoken_language:
+        parts.append(f"Speak {spoken_language} aloud")
 
     return " | ".join(parts)
 
