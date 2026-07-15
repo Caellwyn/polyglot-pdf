@@ -334,7 +334,7 @@ export function getFormProgress(state: SchemaFormState): ProgressMetrics {
 /**
  * Check if the form is complete
  *
- * Completion criterion (required-agnostic, bd polyglot-pdf-972d77): this product
+ * Completion criterion (required-agnostic, bd polyglot-pdf-taw3): this product
  * does NOT distinguish required vs. optional fields -- the voice model asks for
  * EVERY currently-shown field, and the user may skip/NA any of them. So the form
  * is complete when EVERY currently-shown field is confirmed. A skipped/NA'd field

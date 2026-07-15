@@ -197,7 +197,7 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
 
   it('EXCLUDES an empty (skipped) field from the fired form_complete payload (contract 2: non-empty only)', async () => {
     // Two fields; the second is SKIPPED (confirmed=true, empty value flagged for
-    // follow-up). Completion is required-agnostic (bd polyglot-pdf-972d77): the form
+    // follow-up). Completion is required-agnostic (bd polyglot-pdf-taw3): the form
     // is complete only when EVERY shown field is confirmed, and a skipped field reads
     // as confirmed -- so filling+confirming f_a and skipping f_b reaches complete.
     // The manual-edit path (sendManualFieldUpdate -> maybeEmitFormComplete) fires
@@ -327,7 +327,7 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
   // --- Codex PR #271 round-1 findings ---
 
   it('emits form_complete when the last remaining field is SKIPPED via the voice path', async () => {
-    // Completion is required-agnostic (bd polyglot-pdf-972d77): every shown field must
+    // Completion is required-agnostic (bd polyglot-pdf-taw3): every shown field must
     // be confirmed, and a skipped field reads as confirmed. Fill+confirm f_a, then
     // SKIP f_b via the voice skip_field path -- that reaches complete, and the confirm/
     // skip handler's maybeEmitFormComplete() fires form_complete so the voice/AI

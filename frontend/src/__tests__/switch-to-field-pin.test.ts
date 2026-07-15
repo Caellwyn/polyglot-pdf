@@ -379,7 +379,7 @@ describe('switch_field end-to-end probe (WebFormConnection)', () => {
 // incomplete -- otherwise the completion-gated consumers (the post-confirm hint
 // round-trip, reconnect hints, manual-edit hints, the form-complete event)
 // report "complete" and silently abandon the jump. Completion is required-
-// agnostic (bd polyglot-pdf-972d77): "confirmed" spans every shown field, so
+// agnostic (bd polyglot-pdf-taw3): "confirmed" spans every shown field, so
 // these fixtures confirm BOTH fields in the baseline/stale-pin cases and leave
 // the pinned field unconfirmed only in the live-pin case.
 // ---------------------------------------------------------------------------
