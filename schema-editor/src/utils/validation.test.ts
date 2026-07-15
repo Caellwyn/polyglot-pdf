@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { validateSchema } from './validation';
 import type { FormSchema, FormField } from '../types/schema';
 
-// Minimal valid field; override per test. read_only/required/pdf_field_name are
-// the non-optional FormField props validateSchema does not itself require, but the
+// Minimal valid field; override per test. read_only/pdf_field_name are the
+// non-optional FormField props validateSchema does not itself require, but the
 // type does.
 function field(id: string, extra: Partial<FormField> = {}): FormField {
   return {
@@ -12,7 +12,6 @@ function field(id: string, extra: Partial<FormField> = {}): FormField {
     type: 'text',
     pdf_field_name: id,
     read_only: false,
-    required: false,
     section_id: 'sec-1',
     ...extra,
   };

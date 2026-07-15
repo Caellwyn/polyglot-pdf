@@ -65,7 +65,6 @@ export interface FormField {
   consolidated_widgets?: string[];
   label?: string;
   read_only: boolean;
-  required: boolean;
   multiline?: boolean;
   is_comb?: boolean;
   hidden?: boolean;
@@ -107,6 +106,10 @@ export interface FieldHelp {
 }
 
 export interface ValidationRules {
+  // Canonical required signal (mirrors backend ValidationRules.required, bd
+  // polyglot-pdf-a1ql) -- every runtime consumer reads validation.required, never
+  // a top-level field.required (bd polyglot-pdf-8n2s).
+  required?: boolean;
   pattern?: string;
   format_preset?: string;
   min_length?: number;

@@ -1080,7 +1080,7 @@ export function ungroupField(schema: FormSchema, fieldId: string): FormSchema {
       label: opt.label,
       spoken_name: idx === 0 ? field.spoken_name : undefined,
       read_only: field.read_only,
-      required: field.required,
+      validation: field.validation,
     };
   });
 

@@ -36,7 +36,7 @@ const mockMultiPageSchema: FormSchema = {
       section_id: 'section-1',
       pdf_field_name: 'field_page1',
       read_only: false,
-      required: false,
+      
       pdf_position: {
         page: 1,
         x: 100,
@@ -52,7 +52,7 @@ const mockMultiPageSchema: FormSchema = {
       section_id: 'section-1',
       pdf_field_name: 'field_page2',
       read_only: false,
-      required: false,
+      
       pdf_position: {
         page: 2,
         x: 100,
@@ -68,7 +68,7 @@ const mockMultiPageSchema: FormSchema = {
       section_id: 'section-1',
       pdf_field_name: 'field_page3',
       read_only: false,
-      required: false,
+      
       pdf_position: {
         page: 3,
         x: 100,

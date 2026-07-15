@@ -17,7 +17,7 @@ describe('FieldOverlay', () => {
     type: 'text',
     pdf_field_name: 'test_field',
     read_only: false,
-    required: false,
+    
     spoken_name: 'Test Field',
     help: {
       instructions: 'Fill this out',

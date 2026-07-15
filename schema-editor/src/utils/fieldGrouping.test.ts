@@ -54,7 +54,7 @@ function reasonField(letter: string): FormField {
     section_id: 'reason',
     pdf_field_name: `form1[0].#subform[0].reason_${letter}[0]`,
     read_only: false,
-    required: false,
+    
     spoken_name: `reason ${letter}`,
   };
 }
@@ -170,7 +170,7 @@ describe('mergeFields (crit 1: group W-7 reason_a..e)', () => {
     const schema = w7Schema();
     schema.fields.push({
       id: 'note', name: 'Note', type: 'text', section_id: 'reason',
-      pdf_field_name: 'note[0]', read_only: false, required: false,
+      pdf_field_name: 'note[0]', read_only: false,
     });
     // Only one groupable field + one text field -> not enough to merge.
     const { schema: out } = mergeFields(schema, ['reason_a', 'note']);
@@ -238,7 +238,7 @@ describe('ungroupField (crit 2: reversible)', () => {
     // A dependent shown when the (soon-to-be-merged) reason_b box is checked.
     schema.fields.push({
       id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      pdf_field_name: 'detail[0]', read_only: false,
       show_if: { field: 'reason_b', operator: 'is_checked' },
     } as FormField);
     schema.sections[0].fields.push('detail');
@@ -270,7 +270,7 @@ describe('ungroupField (crit 2: reversible)', () => {
     const schema = w7Schema();
     schema.fields = [{
       id: 'solo', name: 'Solo', type: 'radio', section_id: 'reason',
-      pdf_field_name: 'solo[0]', read_only: false, required: false,
+      pdf_field_name: 'solo[0]', read_only: false,
       options: [{ value: 'a', label: 'A', pdf_field_name: 'a[0]' }],
     }];
     expect(ungroupField(schema, 'solo')).toBe(schema);
@@ -280,7 +280,7 @@ describe('ungroupField (crit 2: reversible)', () => {
     const schema = w7Schema();
     schema.fields = [{
       id: 'plain', name: 'Plain', type: 'select', section_id: 'reason',
-      pdf_field_name: 'plain[0]', read_only: false, required: false,
+      pdf_field_name: 'plain[0]', read_only: false,
       options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
     }];
     expect(canUngroup(schema.fields[0])).toBe(false);
@@ -294,7 +294,7 @@ describe('ungroupField (crit 2: reversible)', () => {
     schema.fields = [
       {
         id: 'race', name: 'Race', type: 'checkbox', section_id: 'reason',
-        pdf_field_name: 'race[0]', read_only: false, required: false,
+        pdf_field_name: 'race[0]', read_only: false,
         options: [
           { value: 'race', label: 'A', pdf_field_name: 'a[0]' },
           { value: 'white', label: 'B', pdf_field_name: 'b[0]' },
@@ -303,7 +303,7 @@ describe('ungroupField (crit 2: reversible)', () => {
       // a surviving field squats on the would-be reconstructed id 'white'
       {
         id: 'white', name: 'Squatter', type: 'text', section_id: 'reason',
-        pdf_field_name: 'squat[0]', read_only: false, required: false,
+        pdf_field_name: 'squat[0]', read_only: false,
       },
     ];
     schema.sections[0].fields = ['race', 'white'];
@@ -358,7 +358,7 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
     // an unrelated field shows only when reason_b (about to be merged away) is set
     schema.fields.push({
       id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      pdf_field_name: 'detail[0]', read_only: false,
       show_if: { field: 'reason_b', operator: 'is_checked' },
     });
     schema.sections[0].fields.push('detail');
@@ -375,7 +375,7 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
     const schema = w7Schema();
     schema.fields.push({
       id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      pdf_field_name: 'detail[0]', read_only: false,
       show_if: { field: 'reason_b', operator: 'is_checked' },
     });
     schema.sections[0].fields.push('detail');
@@ -397,7 +397,7 @@ describe('fresh-eyes fixes (bd polyglot-pdf-s4dp.1)', () => {
     const schema = w7Schema();
     schema.fields.push({
       id: 'mirror', name: 'Mirror', type: 'text', section_id: 'reason',
-      pdf_field_name: 'mirror[0]', read_only: false, required: false,
+      pdf_field_name: 'mirror[0]', read_only: false,
       copy_to: ['reason_b', 'reason_c'],
     });
     schema.sections[0].fields.push('mirror');
@@ -448,7 +448,7 @@ describe('Codex PR #256 fixes', () => {
     const schema = w7Schema();
     schema.fields = [{
       id: 'p3_race', name: 'Race', type: 'checkbox', section_id: 'reason',
-      pdf_field_name: 'p3_race[0]', read_only: false, required: false,
+      pdf_field_name: 'p3_race[0]', read_only: false,
       options: [
         { value: 'white', label: 'White', pdf_field_name: 'white[0]' },
         { value: 'asian', label: 'Asian', pdf_field_name: 'asian[0]' },
@@ -487,7 +487,7 @@ describe('Opus fallback review fixes', () => {
     schema.fields = [
       {
         id: 'p3_race', name: 'Race', type: 'radio', section_id: 'reason',
-        pdf_field_name: 'p3_race[0]', read_only: false, required: false,
+        pdf_field_name: 'p3_race[0]', read_only: false,
         options: [
           { value: 'p3_race', label: 'White', pdf_field_name: 'white[0]', source_type: 'checkbox' },
           { value: 'asian', label: 'Asian', pdf_field_name: 'asian[0]', source_type: 'checkbox' },
@@ -496,7 +496,7 @@ describe('Opus fallback review fixes', () => {
       // a dependent that should show only when the (non-primary) 'asian' option is set
       {
         id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        pdf_field_name: 'detail[0]', read_only: false,
         show_if: { field: 'p3_race', operator: 'equals', value: 'asian' },
       },
     ];
@@ -597,7 +597,7 @@ describe('Opus fallback review fixes', () => {
     schema.fields = [
       {
         id: 'grp', name: 'Grp', type: 'radio', section_id: 'reason',
-        pdf_field_name: 'grp[0]', read_only: false, required: false,
+        pdf_field_name: 'grp[0]', read_only: false,
         options: [
           { value: '', label: 'None', pdf_field_name: 'none[0]', source_type: 'checkbox' },
           { value: 'x', label: 'X', pdf_field_name: 'x[0]', source_type: 'checkbox' },
@@ -605,7 +605,7 @@ describe('Opus fallback review fixes', () => {
       },
       {
         id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        pdf_field_name: 'detail[0]', read_only: false,
         show_if: { field: 'grp', operator: 'not_equals', value: '' },
       },
     ];
@@ -660,7 +660,7 @@ describe('Opus fallback review fixes', () => {
     schema.fields = [
       {
         id: 'p3_race', name: 'Race', type: 'radio', section_id: 'reason',
-        pdf_field_name: 'p3_race[0]', read_only: false, required: false,
+        pdf_field_name: 'p3_race[0]', read_only: false,
         options: [
           { value: 'p3_race', label: 'White', pdf_field_name: 'white[0]', source_type: 'checkbox' },
           { value: 'white', label: 'Asian', pdf_field_name: 'asian[0]', source_type: 'checkbox' },
@@ -669,12 +669,12 @@ describe('Opus fallback review fixes', () => {
       // a surviving field squats on the would-be reconstructed id 'white'
       {
         id: 'white', name: 'Squatter', type: 'text', section_id: 'reason',
-        pdf_field_name: 'squat[0]', read_only: false, required: false,
+        pdf_field_name: 'squat[0]', read_only: false,
       },
       // dependent gated on the colliding 'white' option value
       {
         id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-        pdf_field_name: 'detail[0]', read_only: false, required: false,
+        pdf_field_name: 'detail[0]', read_only: false,
         show_if: { field: 'p3_race', operator: 'equals', value: 'white' },
       },
     ];
@@ -735,7 +735,7 @@ describe('require_if handling in merge/un-merge (bd 319g)', () => {
     const schema = w7Schema();
     schema.fields.push({
       id: 'dep', name: 'Dep', type: 'text', section_id: 'reason',
-      pdf_field_name: 'dep[0]', read_only: false, required: false,
+      pdf_field_name: 'dep[0]', read_only: false,
       require_if: { field: 'reason_b', operator: 'is_checked' },
     } as FormField);
     schema.sections[0].fields.push('dep');
@@ -755,7 +755,7 @@ describe('require_if handling in merge/un-merge (bd 319g)', () => {
     const schema = w7Schema();
     schema.fields.push({
       id: 'bystander', name: 'Bystander', type: 'text', section_id: 'reason',
-      pdf_field_name: 'by[0]', read_only: false, required: false,
+      pdf_field_name: 'by[0]', read_only: false,
       // References a field OUTSIDE the merge; also give it a show_if that IS
       // rewritten, so its rewrite record carries had_require_if=true with no
       // recorded require_if -- the sentinel combination that used to clobber.
@@ -778,7 +778,7 @@ describe('require_if handling in merge/un-merge (bd 319g)', () => {
     const schema = w7Schema();
     schema.fields.push({
       id: 'combo', name: 'Combo', type: 'text', section_id: 'reason',
-      pdf_field_name: 'combo[0]', read_only: false, required: false,
+      pdf_field_name: 'combo[0]', read_only: false,
       show_if: {
         all_of: [{ field: 'reason_b', operator: 'is_checked' }],
         none_of: [{ field: 'reason_e', operator: 'is_checked' }],
@@ -810,7 +810,7 @@ describe('merge converts negative selection predicates (Codex PR #310 round 3)',
     const schema = w7Schema();
     schema.fields.push({
       id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      pdf_field_name: 'detail[0]', read_only: false,
       show_if: { field: 'reason_b', operator: op, ...(value !== undefined ? { value } : {}) },
     } as unknown as FormField);
     schema.sections[0].fields.push('detail');
@@ -866,7 +866,7 @@ describe('un-merge fallback remaps require_if too (Codex PR #310 round 2)', () =
     const schema = w7Schema();
     schema.fields.push({
       id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      pdf_field_name: 'detail[0]', read_only: false,
       require_if: { field: 'reason_b', operator: 'is_checked' },
     } as FormField);
     schema.sections[0].fields.push('detail');
@@ -897,16 +897,16 @@ describe('optionValueReferencedBy (Codex PR #310)', () => {
       parts: [],
       sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep', 'dep2', 'combo'] }],
       fields: [
-        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', read_only: false, required: false,
+        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', read_only: false,
           options: [
             { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
             { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
           ] },
-        { id: 'dep', name: 'Dep', type: 'text', section_id: 's1', read_only: false, required: false,
+        { id: 'dep', name: 'Dep', type: 'text', section_id: 's1', read_only: false,
           show_if: { field: 'grp', operator: 'includes', value: 'b' } },
-        { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false, required: false,
+        { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false,
           require_if: { field: 'grp', operator: 'includes', value: 'b' } },
-        { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false, required: false,
+        { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false,
           show_if: { all_of: [{ field: 'grp', operator: 'includes', value: 'a' }] } },
       ],
     } as unknown as FormSchema;
@@ -927,7 +927,7 @@ describe('optionValueReferencedBy (Codex PR #310)', () => {
   it('ignores references to the SAME slug on a different trigger field', () => {
     const s = groupSchema();
     s.fields.push({ id: 'other', name: 'Other', type: 'checkbox_group', section_id: 's1',
-      read_only: false, required: false,
+      read_only: false,
       options: [{ value: 'b', label: 'B', pdf_field_name: 'ob[0]' }] } as unknown as FormField);
     // 'dep' references grp.b, not other.b -> deleting other.b is unblocked.
     expect(optionValueReferencedBy(s, 'other', 'b')).toEqual([]);
@@ -989,16 +989,16 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
       parts: [],
       sections: [{ id: 's1', label: 'S1', order: 0, fields: ['grp', 'dep', 'dep2', 'combo'] }],
       fields: [
-        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', read_only: false, required: false,
+        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', read_only: false,
           options: [
             { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
             { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
           ] },
-        { id: 'dep', name: 'Dep', type: 'text', section_id: 's1', read_only: false, required: false,
+        { id: 'dep', name: 'Dep', type: 'text', section_id: 's1', read_only: false,
           show_if: { field: 'grp', operator: 'includes', value: 'b' } },
-        { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false, required: false,
+        { id: 'dep2', name: 'Dep2', type: 'text', section_id: 's1', read_only: false,
           require_if: { field: 'grp', operator: 'includes', value: 'b' } },
-        { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false, required: false,
+        { id: 'combo', name: 'Combo', type: 'text', section_id: 's1', read_only: false,
           show_if: { all_of: [{ field: 'grp', operator: 'includes', value: 'a' }] } },
       ],
     } as unknown as FormSchema;
@@ -1036,7 +1036,7 @@ describe('retargetOptionValueReferences (bd polyglot-pdf-432u)', () => {
   it('ignores references to the SAME slug on a different trigger field', () => {
     const s = groupSchema();
     s.fields.push({ id: 'other', name: 'Other', type: 'checkbox_group', section_id: 's1',
-      read_only: false, required: false,
+      read_only: false,
       options: [{ value: 'b', label: 'B', pdf_field_name: 'ob[0]' }] } as unknown as FormField);
     const { fields: next } = retargetOptionValueReferences(s.fields, 'other', 'b', 'whyte');
     // 'dep' references grp.b, not other.b -> unaffected by retargeting other's slug.
@@ -1095,7 +1095,7 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
       fields: [
         {
           id: 'grp', name: 'Group', type, section_id: 's1',
-          pdf_field_name: '', read_only: false, required: false,
+          pdf_field_name: '', read_only: false,
           options: [
             { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
             { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
@@ -1104,7 +1104,7 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
         // Gated on a SPECIFIC option slug -- the operator must flip with the kind.
         {
           id: 'dep', name: 'Dep', type: 'text', section_id: 's1',
-          pdf_field_name: 'dep[0]', read_only: false, required: false,
+          pdf_field_name: 'dep[0]', read_only: false,
           show_if: {
             field: 'grp',
             operator: type === 'checkbox_group' ? 'includes' : 'equals',
@@ -1119,7 +1119,7 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
         // Gated on a WHOLE-GROUP operator (no specific option) -- kind-agnostic.
         {
           id: 'whole', name: 'Whole', type: 'text', section_id: 's1',
-          pdf_field_name: 'whole[0]', read_only: false, required: false,
+          pdf_field_name: 'whole[0]', read_only: false,
           show_if: { field: 'grp', operator: 'is_checked' },
         } as unknown as FormField,
       ],
@@ -1197,7 +1197,7 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
       fields: [
         {
           id: 'grp', name: 'Group', type: 'radio', section_id: 's1',
-          pdf_field_name: 'form1[0].grp[0]', read_only: false, required: false,
+          pdf_field_name: 'form1[0].grp[0]', read_only: false,
           options: [
             { value: 'a', label: 'A', pdf_on_value: 'A' },
             { value: 'b', label: 'B', pdf_on_value: 'B' },
@@ -1275,7 +1275,7 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
       fields: [
         {
           id: 'grp', name: 'Group', type: 'radio', section_id: 's1',
-          pdf_field_name: '', read_only: false, required: false,
+          pdf_field_name: '', read_only: false,
           options: [
             { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
             { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
@@ -1284,7 +1284,7 @@ describe('changeGroupKind (in-place checkbox_group <-> radio flip)', () => {
         } as unknown as FormField,
         {
           id: 'dep', name: 'Dep', type: 'text', section_id: 's1',
-          pdf_field_name: 'dep[0]', read_only: false, required: false,
+          pdf_field_name: 'dep[0]', read_only: false,
           show_if: depCond,
         } as unknown as FormField,
       ],
@@ -1387,7 +1387,7 @@ describe('section show_if rewriting across group mutations (bd polyglot-pdf-6b7z
       fields: [
         {
           id: 'grp', name: 'Group', type: 'checkbox_group', section_id: 's1',
-          pdf_field_name: '', read_only: false, required: false,
+          pdf_field_name: '', read_only: false,
           options: [
             { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
             { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
@@ -1395,7 +1395,7 @@ describe('section show_if rewriting across group mutations (bd polyglot-pdf-6b7z
         } as unknown as FormField,
         {
           id: 'other', name: 'Other', type: 'text', section_id: 's2',
-          pdf_field_name: 'other[0]', read_only: false, required: false,
+          pdf_field_name: 'other[0]', read_only: false,
         },
       ],
     };
@@ -1447,7 +1447,7 @@ describe('section show_if rewriting across group mutations (bd polyglot-pdf-6b7z
     // field remaps can be compared directly.
     schema.fields.push({
       id: 'detail', name: 'Detail', type: 'text', section_id: 'reason',
-      pdf_field_name: 'detail[0]', read_only: false, required: false,
+      pdf_field_name: 'detail[0]', read_only: false,
       show_if: { field: 'reason_b', operator: 'is_checked' },
     } as FormField);
     schema.sections[0].fields.push('detail');
@@ -1483,7 +1483,7 @@ describe('section show_if rewriting across group mutations (bd polyglot-pdf-6b7z
         },
       ],
       fields: [
-        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', pdf_field_name: '', read_only: false, required: false,
+        { id: 'grp', name: 'Grp', type: 'checkbox_group', section_id: 's1', pdf_field_name: '', read_only: false,
           options: [
             { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
             { value: 'b', label: 'B', pdf_field_name: 'b[0]' },

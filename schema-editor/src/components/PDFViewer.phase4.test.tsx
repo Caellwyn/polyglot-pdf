@@ -47,7 +47,7 @@ const mockSchema: FormSchema = {
       type: 'text',
       pdf_field_name: 'field_click_me',
       read_only: false,
-      required: false,
+      
       spoken_name: 'Clickable Field',
       pdf_position: { page: 1, x: 100, y: 500, width: 200, height: 20 },
     },

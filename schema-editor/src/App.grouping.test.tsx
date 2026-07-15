@@ -29,10 +29,10 @@ const SCHEMA: FormSchema = {
     { id: 'other', label: 'Other', order: 1, fields: ['other_a'] },
   ],
   fields: [
-    { id: 'reason_a', name: 'Reason A', type: 'checkbox', section_id: 'reason', pdf_field_name: 'reason_a[0]', read_only: false, required: false, spoken_name: 'reason a' },
-    { id: 'reason_b', name: 'Reason B', type: 'checkbox', section_id: 'reason', pdf_field_name: 'reason_b[0]', read_only: false, required: false, spoken_name: 'reason b' },
-    { id: 'note', name: 'Note', type: 'text', section_id: 'reason', pdf_field_name: 'note[0]', read_only: false, required: false, spoken_name: 'note' },
-    { id: 'other_a', name: 'Other A', type: 'checkbox', section_id: 'other', pdf_field_name: 'other_a[0]', read_only: false, required: false, spoken_name: 'other a' },
+    { id: 'reason_a', name: 'Reason A', type: 'checkbox', section_id: 'reason', pdf_field_name: 'reason_a[0]', read_only: false, spoken_name: 'reason a' },
+    { id: 'reason_b', name: 'Reason B', type: 'checkbox', section_id: 'reason', pdf_field_name: 'reason_b[0]', read_only: false, spoken_name: 'reason b' },
+    { id: 'note', name: 'Note', type: 'text', section_id: 'reason', pdf_field_name: 'note[0]', read_only: false, spoken_name: 'note' },
+    { id: 'other_a', name: 'Other A', type: 'checkbox', section_id: 'other', pdf_field_name: 'other_a[0]', read_only: false, spoken_name: 'other a' },
   ],
 } as unknown as FormSchema;
 

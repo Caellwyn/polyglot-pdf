@@ -19,7 +19,7 @@ function groupField(type: 'checkbox_group' | 'radio'): FormField {
     section_id: 's1',
     pdf_field_name: '',
     read_only: false,
-    required: false,
+    
     options: [
       { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
       { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
@@ -111,7 +111,7 @@ describe('FieldEditor group-kind flip', () => {
     // per-option pdf_field_name -> cannot become a valid checkbox_group.
     const field = {
       id: 'reason_for_submission', name: 'Reason', type: 'radio', section_id: 's1',
-      pdf_field_name: 'form1[0].reason[0]', read_only: false, required: false,
+      pdf_field_name: 'form1[0].reason[0]', read_only: false,
       options: [
         { value: 'a', label: 'A', pdf_on_value: 'A' },
         { value: 'b', label: 'B', pdf_on_value: 'B' },
@@ -140,7 +140,7 @@ describe('FieldEditor group-kind flip', () => {
     // refused for the in/not_in reason, and the hint must say so.
     const grp = {
       id: 'grp', name: 'Group', type: 'radio', section_id: 's1',
-      pdf_field_name: '', read_only: false, required: false,
+      pdf_field_name: '', read_only: false,
       options: [
         { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
         { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },
@@ -148,7 +148,7 @@ describe('FieldEditor group-kind flip', () => {
     } as unknown as FormField;
     const dep = {
       id: 'dep', name: 'Dep', type: 'text', section_id: 's1',
-      pdf_field_name: 'dep[0]', read_only: false, required: false,
+      pdf_field_name: 'dep[0]', read_only: false,
       show_if: { all_of: [{ field: 'grp', operator: 'in', value: ['a', 'b'] }] },
     } as unknown as FormField;
     const schema = {
@@ -171,7 +171,7 @@ describe('FieldEditor group-kind flip', () => {
   it('does NOT render the flip control for a non-group field (plain checkbox)', () => {
     const field = {
       id: 'agree', name: 'Agree', type: 'checkbox', section_id: 's1',
-      pdf_field_name: 'agree[0]', read_only: false, required: false,
+      pdf_field_name: 'agree[0]', read_only: false,
     } as unknown as FormField;
     render(
       <FieldEditor
