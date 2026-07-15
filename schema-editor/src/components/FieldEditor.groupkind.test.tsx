@@ -19,7 +19,6 @@ function groupField(type: 'checkbox_group' | 'radio'): FormField {
     section_id: 's1',
     pdf_field_name: '',
     read_only: false,
-    
     options: [
       { value: 'a', label: 'A', pdf_field_name: 'ga[0]' },
       { value: 'b', label: 'B', pdf_field_name: 'gb[0]' },

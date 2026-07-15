@@ -8,6 +8,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FieldEditor } from './FieldEditor';
+import { stripEditorState } from '../utils/fieldGrouping';
 import type { FormSchema, FormField } from '../types/schema';
 
 function textField(id: string, extra: Partial<FormField> = {}): FormField {
@@ -75,5 +76,33 @@ describe('FieldEditor Required checkbox (bd polyglot-pdf-8n2s)', () => {
 
     const checkbox = screen.getByLabelText('Required') as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
+  });
+
+  // Exit criterion 1: the round-trip through the ACTUAL save path (not just the
+  // in-memory patch). saveRemoteSchema/fileSystemAccess both persist a kit as
+  // JSON.stringify(stripEditorState(schema)); this reproduces that exact
+  // serialization and asserts validation.required survives with no top-level
+  // required key -- the shape backend schema_lint's required-top-level rule
+  // accepts (bd polyglot-pdf-8n2s).
+  it('the check -> save serialization round-trips validation.required and emits no top-level required key', () => {
+    let field = textField('f1');
+    let schema = oneFieldSchema(field);
+    const onUpdateField = (updated: FormField) => {
+      field = updated;
+      schema = { ...schema, fields: [updated] };
+    };
+    const { rerender } = render(
+      <FieldEditor field={field} schema={schema} onUpdateField={onUpdateField} />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Required'));
+    rerender(<FieldEditor field={field} schema={schema} onUpdateField={onUpdateField} />);
+    expect((screen.getByLabelText('Required') as HTMLInputElement).checked).toBe(true);
+
+    // The exact save serialization the remote + local save paths apply.
+    const persisted = JSON.parse(JSON.stringify(stripEditorState(schema))) as FormSchema;
+    const savedField = persisted.fields[0] as unknown as Record<string, unknown>;
+    expect((savedField.validation as Record<string, unknown>).required).toBe(true);
+    expect(savedField.required).toBeUndefined();
   });
 });

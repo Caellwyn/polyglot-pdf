@@ -54,7 +54,6 @@ function reasonField(letter: string): FormField {
     section_id: 'reason',
     pdf_field_name: `form1[0].#subform[0].reason_${letter}[0]`,
     read_only: false,
-    
     spoken_name: `reason ${letter}`,
   };
 }
@@ -459,6 +458,27 @@ describe('Codex PR #256 fixes', () => {
     const unmerged = ungroupField(schema, 'p3_race');
     expect(unmerged.fields).toHaveLength(2);
     expect(unmerged.fields.map(f => f.pdf_field_name)).toEqual(['white[0]', 'asian[0]']);
+  });
+
+  it('propagates validation (incl. validation.required) onto each reconstructed field, never a top-level required (bd polyglot-pdf-8n2s)', () => {
+    const schema = w7Schema();
+    schema.fields = [{
+      id: 'p3_race', name: 'Race', type: 'checkbox', section_id: 'reason',
+      pdf_field_name: 'p3_race[0]', read_only: false,
+      validation: { required: true },
+      options: [
+        { value: 'white', label: 'White', pdf_field_name: 'white[0]' },
+        { value: 'asian', label: 'Asian', pdf_field_name: 'asian[0]' },
+      ],
+    }];
+    schema.sections[0].fields = ['p3_race'];
+    const unmerged = ungroupField(schema, 'p3_race');
+    expect(unmerged.fields).toHaveLength(2);
+    for (const f of unmerged.fields) {
+      expect(f.validation?.required).toBe(true);
+      // The dead top-level required key must never be reintroduced.
+      expect((f as unknown as Record<string, unknown>).required).toBeUndefined();
+    }
   });
 });
 
