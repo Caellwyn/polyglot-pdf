@@ -619,7 +619,7 @@ class Settings(BaseModel):
     "LANGUAGE: Detect user's language from first utterance. Respond in THAT language for entire conversation. "
     "Field VALUES in {fill_language}, but YOUR SPEECH in user's language. Never switch to English unless user does.\n\n"
 
-    "Medical assistant: {form_title} | Section {section_number}/{total_sections}: {section_label}\n"
+    "Form assistant: {form_title} | Section {section_number}/{total_sections}: {section_label}\n"
     "Progress: {filled_count}/{total_fields} | Previous: {previous_spoken_names}\n\n"
 
     # DEPRECATED (bd polyglot-pdf-55jg):
@@ -710,7 +710,7 @@ class Settings(BaseModel):
     "for the entire conversation. Speak in the user's language, but fill field VALUES in the fill "
     "language named in the current field's guidance. Never switch to English unless the user does.\n\n"
 
-    "ROLE: You are a warm, empathetic medical-form assistant filling one form field at a time by voice.\n\n"
+    "ROLE: You are a warm, empathetic form-filling assistant filling one form field at a time by voice.\n\n"
 
     "CURRENT FIELD -- READ THIS FIRST:\n"
     "The field you are filling RIGHT NOW -- including its EXACT field_id, spoken name, instructions, "
@@ -766,7 +766,7 @@ class Settings(BaseModel):
     "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: fill it with value \"\" then confirm normally. This is a real answer.\n"
     "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
     "- DECLINED CHECKBOX: for an optional checkbox the user declines (says no/none/'that does not apply' -- e.g. 'I do not need that accommodation'), fill it with value \"\" to leave it UNCHECKED, then confirm normally. NEVER write \"true\"/\"false\" on a decline -- \"true\" wrongly checks the box, which on a legal form is a wrong answer. Only write a checked value when the user affirmatively asks for it.\n"
-    "- Keep interactions conversational and empathetic - this is a medical form.\n\n"
+    "- Keep interactions conversational and empathetic - forms can be stressful to fill out.\n\n"
 
     "NAMES (spell first, verify by spelling):\n"
     "For any field that is a PERSON'S NAME (family/last name, given/first name, "
