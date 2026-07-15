@@ -59,8 +59,22 @@ callback; (2) pin-preservation + no completed-section growth pinned by state-man
 tests; (3) no auto-paging outside continuous mode pinned by a test, full suite +
 typecheck green.
 
-Fresh-eyes (Step 5.5.b): <FILL: rounds + adopt/reject/defer>.
-Outer review (Step 5.6): <FILL: rounds + two-independent NO-GAPS>.
+Fresh-eyes (Step 5.5.b): 2 rounds. Round 1 (Sonnet) found 4 items: 1 correct
+blocker ADOPTED (criterion-2's named pin-preservation race was covered only by
+isolated unit tests -> added an integration test through the real
+WebFormConnection.handleSwitchFieldRequest that asserts the view paged AND the pin
+survived); 3 REJECTED as non-blocking (a []-alias branch the reviewer called dead
+-- actually exercised by the section-side-bracket case, docstring tightened instead;
+a hidden-field silent-scroll no-op that is pre-existing, not a regression; a stateRef
+microtask-staleness latent pattern with no current bug). Round 2 (Opus, the required
+final clearing round) returned NO-GAPS. One out-of-scope observation DEFERRED to a
+new bead: bd polyglot-pdf-rctj (getCurrentSectionFields exact-id vs
+findSectionIdForField alias-aware asymmetry -- pre-existing, P3).
+
+Outer review (Step 5.6): 1 round, TWO independent Opus passes both NO-GAPS on the
+identical final diff (no blockers or nits from either; both independently traced the
+two-writer pin-clobber race closed and confirmed the new tests fail on pre-fix
+behavior).
 
 Verification: 992 frontend tests green (11 new: 4 for `findSectionIdForField`, 4
 for `setVisibleSection` incl. pin-preservation vs `navigateToSection`, 3 SchemaForm
