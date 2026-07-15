@@ -10,7 +10,7 @@ import PreviewPane from './PreviewPane';
 import type { FormSchema, FormField } from '../types/schema';
 
 function field(p: Partial<FormField> & { id: string }): FormField {
-  return { name: p.id, type: 'text', pdf_field_name: `${p.id}[0]`, read_only: false, required: false, ...p };
+  return { name: p.id, type: 'text', pdf_field_name: `${p.id}[0]`, read_only: false, ...p };
 }
 
 // A W-7-style "check one box" group consolidated into one radio, plus a checkbox

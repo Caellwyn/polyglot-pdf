@@ -28,13 +28,13 @@ function entry(partial: Partial<CatalogueEntry> & { id: string }): CatalogueEntr
 function completeField(id: string): FormField {
   return {
     id, name: id, type: 'text', pdf_field_name: id, read_only: false,
-    required: false, spoken_name: id, help: { instructions: 'Fill this in.' },
+    spoken_name: id, help: { instructions: 'Fill this in.' },
   } as FormField;
 }
 function incompleteField(id: string): FormField {
   return {
     id, name: id, type: 'text', pdf_field_name: id, read_only: false,
-    required: false, // no spoken_name, no help -> needsReview
+    // no spoken_name, no help -> needsReview
   } as FormField;
 }
 

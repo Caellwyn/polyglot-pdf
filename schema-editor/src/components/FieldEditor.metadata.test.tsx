@@ -86,7 +86,7 @@ describe('FieldEditor option metadata (bd h76m.10)', () => {
   function groupField(): FormField {
     return {
       id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
-      section_id: 's1', read_only: false, required: false,
+      section_id: 's1', read_only: false,
       options: [
         { value: 'white', label: 'White', pdf_field_name: 'w[0]' },
         { value: 'black', label: 'Black', pdf_field_name: 'b[0]' },
@@ -135,7 +135,7 @@ describe('FieldEditor group guards (Codex PR #310 round 3)', () => {
   function twoOptionGroup(): FormField {
     return {
       id: 'race', name: 'Race', spoken_name: 'race', type: 'checkbox_group',
-      section_id: 's1', read_only: false, required: false,
+      section_id: 's1', read_only: false,
       options: [
         { value: 'white', label: 'White', pdf_field_name: 'w[0]' },
         { value: 'black', label: 'Black', pdf_field_name: 'b[0]' },

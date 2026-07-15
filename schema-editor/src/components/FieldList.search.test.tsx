@@ -15,7 +15,6 @@ function field(partial: Partial<FormField> & { id: string }): FormField {
     type: 'text',
     pdf_field_name: partial.id,
     read_only: false,
-    required: false,
     ...partial,
   } as FormField;
 }

@@ -18,7 +18,7 @@ import type { FieldCondition, FormField, FormSchema } from '../types/schema';
 function field(p: Partial<FormField> & { id: string }): FormField {
   return {
     name: p.id, type: 'text', pdf_field_name: `${p.id}[0]`,
-    read_only: false, required: false, ...p,
+    read_only: false, ...p,
   } as FormField;
 }
 

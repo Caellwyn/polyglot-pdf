@@ -174,7 +174,7 @@ describe('FormCatalogue', () => {
       form_metadata: { form_number: 'T-1' }, sections: [],
       fields: [{
         id: 'f1', name: 'f1', type: 'text', pdf_field_name: 'f1',
-        read_only: false, required: false, spoken_name: 'first',
+        read_only: false, spoken_name: 'first',
         help: { instructions: 'Enter it.' },
       }],
     });

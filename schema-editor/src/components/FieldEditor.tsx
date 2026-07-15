@@ -480,8 +480,10 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={field.required}
-                onChange={(e) => updateField({ required: e.target.checked })}
+                checked={!!field.validation?.required}
+                onChange={(e) => updateField({
+                  validation: { ...field.validation, required: e.target.checked },
+                })}
                 className="rounded"
               />
               <span className="text-sm text-gray-700">Required</span>

@@ -186,14 +186,13 @@ export function shouldShowField(
 // Whether a field is REQUIRED right now (bd h76m.8): statically required, or
 // dynamically via a satisfied require_if (same legacy-or-composite shape as
 // show_if). Fail-open means NOT required. Mirrors the runtime's
-// isFieldRequired; the editor's FormField carries `required` as a plain
-// boolean rather than validation.required.
+// isFieldRequired, reading validation.required (bd polyglot-pdf-8n2s).
 export function isFieldRequired(
   field: FormField,
   fieldValues: Record<string, unknown>,
   fields: FormField[],
 ): boolean {
-  if (field.required) return true;
+  if (field.validation?.required) return true;
   const group = normalizeToComposite(field.require_if);
   if (!group || conditionHasUnknownOperator(group)) return false;
   return evaluateConditionGroup(group, fieldValues, fields);

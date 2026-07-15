@@ -10,7 +10,7 @@ import type { FormField } from '../types/schema';
 function field(partial: Partial<FormField> & { id: string }): FormField {
   return {
     name: partial.id, type: 'text', pdf_field_name: `${partial.id}[0]`,
-    read_only: false, required: false, ...partial,
+    read_only: false, ...partial,
   };
 }
 

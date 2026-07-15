@@ -14,7 +14,7 @@ import type { FormSchema, FormField } from '../types/schema';
 function textField(id: string, section_id: string): FormField {
   return {
     id, name: id, type: 'text', section_id,
-    pdf_field_name: '', read_only: false, required: false,
+    pdf_field_name: '', read_only: false,
   } as unknown as FormField;
 }
 

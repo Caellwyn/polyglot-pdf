@@ -35,7 +35,6 @@ const mockSchema: FormSchema = {
       section_id: 'section-1',
       pdf_field_name: 'test_field_1',
       read_only: false,
-      required: false,
       pdf_position: {
         page: 1,
         x: 100,
@@ -51,7 +50,6 @@ const mockSchema: FormSchema = {
       section_id: 'section-1',
       pdf_field_name: 'test_field_2',
       read_only: false,
-      required: false,
     },
   ],
 };
