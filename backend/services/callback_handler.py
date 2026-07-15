@@ -485,6 +485,15 @@ class CallbackHandler:
             # (bd polyglot-pdf-b1gj, Opus fresh-eyes finding 2).
             await self.send_form_update({}, [])
             self._consecutive_unknown_rejections += 1
+            if self._consecutive_unknown_rejections >= UNKNOWN_REJECTION_LOOP_THRESHOLD:
+                # Same telemetry signal as the normal path -- a runaway loop
+                # through the exception path must not be invisible to cost
+                # telemetry (Opus outer-review finding 2, bd polyglot-pdf-b1gj).
+                _log.warning(
+                    "unknown_field_loop_breaker_fired",
+                    consecutive=self._consecutive_unknown_rejections,
+                    session_id=self._session_id,
+                )
             return self._build_update_fields_response(
                 [],  # validation_errors
                 list(normalized_updates.keys()),  # unknown_fields

@@ -435,8 +435,8 @@ class Settings(BaseModel):
 			"description": (
 				"Confirm that a field value is correct after user verification. "
 				"MUST be called before moving to next field. After filling a field with update_form_fields, "
-				"ask user 'Is that correct?' and wait for confirmation (yes/correct/that's right). "
-				"If confirmed, call this tool. If user says no/incorrect, ask for correct value."
+				"ask the user, in the session language, whether the value is correct, and wait for their "
+				"confirmation. If confirmed, call this tool. If the user says it is wrong, ask for the correct value."
 			),
 			"parameters": {
 				"type": "object",
@@ -510,8 +510,8 @@ class Settings(BaseModel):
 				"to ask a translator or look it up later). This is NOT 'not "
 				"applicable' -- for a question that does not apply (e.g. no middle "
 				"name), use update_form_fields with an empty value instead. First "
-				"CONFIRM with the user that they want to skip ('Would you like to "
-				"skip this question for now?'); only call this after they say yes. "
+				"CONFIRM with the user, in the session language, that they want to "
+				"skip this question for now; only call this after they say yes. "
 				"The question stays flagged for follow-up and the form can still be "
 				"completed. Use the exact field_id from the schema."
 			),
