@@ -39,15 +39,21 @@ style), s863 (disclaimer agree-button label), ibxz (overlay i18n).
   instruction and logs unknown_field_loop_breaker_fired (cost-telemetry
   visibility for runaway loops). Counter resets on any applied field or plain
   validation error.
-- **ghv4 -- language lock**: the DTI SI LANGUAGE block now states that
-  English system text (tool responses, errors, injected instructions) never
-  changes the spoken language; every injected guidance block re-anchors the
-  spoken language via a new "Speak <lang> aloud" segment in
-  render_field_guidance (same pattern as the uogm fill-language segment; a
-  get_spoken_language getter is injected into CallbackHandler). Quoted
+- **ghv4 -- language lock**: the DTI SI LANGUAGE block is now
+  CHOICE-authoritative, not detection-first (maintainer directive at closeout:
+  pin to the language dynamically chosen at the app-start modal -- 18
+  languages today, growing toward 90; utterance detection is only the
+  fallback when no session language was announced). English system text (tool
+  responses, errors, injected instructions) never changes the spoken
+  language; every injected guidance block re-anchors the chosen language via
+  a new "Speak <lang> aloud" segment in render_field_guidance (same pattern
+  as the uogm fill-language segment; a get_spoken_language getter is injected
+  into CallbackHandler and tracks the client-sent choice live). Quoted
   English utterances were purged from the get_form_status tool description,
   the secretary pending/fallback instructions, and RECOVERY_PROMPT_LEVEL_1-3
-  (now instructions, not verbatim scripts).
+  (now instructions, not verbatim scripts). Nothing anywhere keys on Spanish
+  specifically -- Spanish appears only in translation tables and test
+  fixtures.
 - **poc3 -- epistemic block**: new "WHAT YOU CANNOT SEE" SI block -- the model
   never knows fill/confirm state without checking get_form_status /
   ask_secretary, and must not assert form state unchecked.
@@ -103,9 +109,16 @@ explicitly @pytest.mark.skip'd with context (repair = tjs1).
 
 ## Doc freshness
 
-check_doc_freshness run at closeout; no tier-2 doc tracks the SI text or the
-overlay UI copy at the level these changes altered (voice-ai.md documents the
-adapter/tool architecture, unchanged). Docs reviewed and left as-is.
+- docs/standards/ws-protocol.md -- UPDATED: `read_disclaimer` row documents the
+  new optional `agree_button_label` rider (s863); stamp bumped 2026-07-15.
+- docs/components/voice-ai.md -- UPDATED: actionable unknown-field rejections +
+  STOP-RETRYING loop-breaker (b1gj); per-injection spoken-language re-anchor +
+  no-quoted-English rule (ghv4); stamp bumped 2026-07-15.
+- docs/standards/voice-and-vad.md, docs/technical_guide.md -- flagged stale by
+  the checker (they track config.py / websocket_routes.py, which this branch
+  touched), REVIEWED AND LEFT: this branch changed no VAD behavior and no HTTP
+  API; their staleness predates this branch (tracked files last changed by
+  earlier commits).
 
 ## Files touched
 
