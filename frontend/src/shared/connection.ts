@@ -385,6 +385,20 @@ export function createConnectionManager(
 			console.warn('[VFF Connection] rehydrateAudio: audioManager not initialized (' + reason + ')')
 			return
 		}
+		// Clear any STALE barge-in playback block (bd polyglot-pdf-nm7z). Every
+		// flushAudioQueue() (playbackBlocked=true) is paired with a resumePlayback()
+		// later in the SAME interaction flow (PTT release, VAD speech-end, resume()),
+		// but a session teardown between the pair orphans the block: pause() flushes,
+		// the warm connection idle-times-out during the pause, and the user comes
+		// back via connect() -- resume() (the only unblocker on that path) never
+		// runs, so EVERY AI audio chunk after the reconnect is silently discarded
+		// (tester bugs 0/7: "Gemini still hears me but I can't hear her"). This
+		// routine runs exactly at session-(re)establishment, where no legitimate
+		// in-flight barge-in flush can exist (the old session's audio died with its
+		// socket), so unblocking here is always safe -- and it is the ONE funnel all
+		// reconnect paths share. The paused guard above keeps a mid-pause block
+		// intact (resume() clears `paused` before calling this).
+		audioManager.resumePlayback()
 		const wasRecording = audioManager.isRecording()
 		if (!wasRecording) {
 			console.log('[VFF Connection] rehydrateAudio: arming mic (' + reason + ')')

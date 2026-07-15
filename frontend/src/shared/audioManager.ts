@@ -157,6 +157,12 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 	// Barge-in state: block new audio playback during user interruption
 	let playbackBlocked = false
+	// Count chunks discarded while blocked (bd polyglot-pdf-nm7z): a STALE block
+	// (a flush whose paired resumePlayback never ran) silently killed all AI audio
+	// with zero console evidence, making tester bugs 0/7 undiagnosable from logs.
+	// A periodic warning keeps the console quiet in a normal barge-in (a handful
+	// of discards) but makes a runaway discard loop visible.
+	let blockedDiscardCount = 0
 
 	// Flag to suppress onended callbacks during flush (prevents spurious watchdog triggers)
 	let isFlushing = false
@@ -419,7 +425,16 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			
 			// CRITICAL: Block new audio playback during barge-in
 			if (playbackBlocked) {
-				// Silently discard chunks during barge-in (no logging to reduce spam)
+				// Discard chunks during barge-in. Quiet for a normal barge-in, but a
+				// periodic warning so a STALE block (bd polyglot-pdf-nm7z) is visible:
+				// 50 chunks is far beyond any legitimate barge-in window.
+				blockedDiscardCount++
+				if (blockedDiscardCount % 50 === 0) {
+					console.warn(
+						`[AudioManager] [warn] ${blockedDiscardCount} audio chunks discarded ` +
+						`while playback is blocked -- if no barge-in is in progress, the ` +
+						`block is stale (bd polyglot-pdf-nm7z)`)
+				}
 				return
 			}
 
@@ -575,6 +590,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 	 */
 	function resumePlayback(): void {
 		playbackBlocked = false
+		blockedDiscardCount = 0
 	}
 
 	/**
