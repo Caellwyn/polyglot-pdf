@@ -195,42 +195,41 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
     expect(ofType(ws, 'form_complete')).toHaveLength(0)
   })
 
-  it('EXCLUDES an empty (unfilled) field from the fired form_complete payload (contract 2: non-empty only)', async () => {
-    // One REQUIRED field + one OPTIONAL field left empty. isFormComplete keys off the
-    // REQUIRED field only, so once the required field is confirmed the form is
-    // complete -- but computeNextField still returns the unconfirmed optional, so the
-    // CONFIRM-handler branch never reaches form_complete. The manual-edit path
-    // (sendManualFieldUpdate -> maybeEmitFormComplete) keys directly off
-    // isFormComplete, so it DOES fire here -- and the fired payload must omit the
-    // empty optional field. This proves buildValidatorFields' non-empty filter on a
-    // payload that ACTUALLY fires.
+  it('EXCLUDES an empty (skipped) field from the fired form_complete payload (contract 2: non-empty only)', async () => {
+    // Two fields; the second is SKIPPED (confirmed=true, empty value flagged for
+    // follow-up). Completion is required-agnostic (bd polyglot-pdf-taw3): the form
+    // is complete only when EVERY shown field is confirmed, and a skipped field reads
+    // as confirmed -- so filling+confirming f_a and skipping f_b reaches complete.
+    // The manual-edit path (sendManualFieldUpdate -> maybeEmitFormComplete) fires
+    // form_complete, and the fired payload must OMIT the empty skipped field. This
+    // proves buildValidatorFields' non-empty filter on a payload that ACTUALLY fires.
     const schema = {
       source: 'web',
       fields: [
-        { id: 'f_req', name: 'reqname', spoken_name: 'Required', type: 'text',
-          validation: { required: true } },
-        { id: 'f_opt', name: 'optname', spoken_name: 'Optional', type: 'text' },
+        { id: 'f_a', name: 'aname', spoken_name: 'Field A', type: 'text' },
+        { id: 'f_b', name: 'bname', spoken_name: 'Field B', type: 'text' },
       ],
-      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_req', 'f_opt'] }],
+      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_a', 'f_b'] }],
     } as unknown as FormSchema
     const ws = await connected(schema)
 
-    // Confirm the required field via the manual-edit flow: apply+save to
-    // sessionStorage (as connection.ts onManualEdit does), then call
-    // sendManualFieldUpdate. The optional field stays empty/untouched.
+    // Confirm f_a and SKIP f_b via the manual-edit flow: apply+save to sessionStorage
+    // (as connection.ts onManualEdit does), then call sendManualFieldUpdate. The
+    // skipped field is confirmed-but-empty, so the form is complete.
     const persisted = SchemaFormStateManager.load()!
-    const edited = SchemaFormStateManager.updateField(persisted, 'f_req', 'present', {
+    const withA = SchemaFormStateManager.updateField(persisted, 'f_a', 'present', {
       confirmed: true,
       confirmationMethod: 'manual_edit',
     })
+    const edited = SchemaFormStateManager.markFieldSkipped(withA, 'f_b', 'manual_edit')
     SchemaFormStateManager.save(edited)
-    conn!.sendManualFieldUpdate('f_req', 'Required', 'present')
+    conn!.sendManualFieldUpdate('f_a', 'Field A', 'present')
 
     const events = ofType(ws, 'form_complete')
     expect(events).toHaveLength(1)
-    // Only the filled required field rides; the empty optional is filtered out.
+    // Only the filled field rides; the empty skipped field is filtered out.
     expect(events[0].fields).toEqual([
-      { field_id: 'f_req', name: 'Required', value: 'present', steered: false },
+      { field_id: 'f_a', name: 'Field A', value: 'present', steered: false },
     ])
   })
 
@@ -327,29 +326,33 @@ describe('WebFormConnection proactive section/form-complete (bd polyglot-pdf-jnj
 
   // --- Codex PR #271 round-1 findings ---
 
-  it('emits form_complete when all REQUIRED fields are confirmed but an OPTIONAL field is still unconfirmed (voice path)', async () => {
-    // isFormComplete keys off required fields, so the form is complete once f_req is
-    // confirmed -- but computeNextField returns the unconfirmed optional f_opt, so the
-    // confirm handler never reaches the last-section form-complete branch. The
-    // unconditional maybeEmitFormComplete() must still fire form_complete here, or the
-    // voice/AI completion path skips the B5 validator entirely (Codex finding 2).
+  it('emits form_complete when the last remaining field is SKIPPED via the voice path', async () => {
+    // Completion is required-agnostic (bd polyglot-pdf-taw3): every shown field must
+    // be confirmed, and a skipped field reads as confirmed. Fill+confirm f_a, then
+    // SKIP f_b via the voice skip_field path -- that reaches complete, and the confirm/
+    // skip handler's maybeEmitFormComplete() fires form_complete so the voice/AI
+    // completion path still triggers the B5 validator. The empty skipped f_b is
+    // filtered from the payload (contract 2: non-empty only).
     const schema = {
       source: 'web',
       fields: [
-        { id: 'f_req', name: 'reqname', spoken_name: 'Required', type: 'text',
-          validation: { required: true } },
-        { id: 'f_opt', name: 'optname', spoken_name: 'Optional', type: 'text' },
+        { id: 'f_a', name: 'aname', spoken_name: 'Field A', type: 'text' },
+        { id: 'f_b', name: 'bname', spoken_name: 'Field B', type: 'text' },
       ],
-      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_req', 'f_opt'] }],
+      sections: [{ id: 'only', label: 'Only', order: 1, fields: ['f_a', 'f_b'] }],
     } as unknown as FormSchema
     const ws = await connected(schema)
-    fireFieldUpdate(ws, 'reqname', 'present')
-    fireConfirm(ws, 'f_req')
+    fireFieldUpdate(ws, 'aname', 'present')
+    fireConfirm(ws, 'f_a')
+    // Skip the last remaining field via the voice skip_field handler.
+    ws.onmessage?.({
+      data: JSON.stringify({ type: 'skip_field', field_id: 'f_b', request_id: 'req-skip-f_b' }),
+    })
 
     const events = ofType(ws, 'form_complete')
     expect(events).toHaveLength(1)
     expect(events[0].fields).toEqual([
-      { field_id: 'f_req', name: 'Required', value: 'present', steered: false },
+      { field_id: 'f_a', name: 'Field A', value: 'present', steered: false },
     ])
   })
 

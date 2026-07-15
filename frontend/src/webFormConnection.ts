@@ -1773,14 +1773,14 @@ export class WebFormConnection {
     }
 
     // B4 (bd polyglot-pdf-jnjj.16): check whole-form completeness on EVERY confirm,
-    // not only in the last-section/no-next-field branch below (Codex PR #271). When
-    // a form has required fields plus still-unconfirmed OPTIONAL fields,
-    // isFormComplete() is already true once the required ones are confirmed -- but
-    // computeNextField(skipConfirmed) still returns an optional field, so execution
-    // never reaches the `!nextField` form-complete branch and the voice/AI path would
-    // skip form_complete (and the B5 validator) entirely. maybeEmitFormComplete is
-    // guarded (fires only when isFormComplete AND the snapshot changed), so calling
-    // it here is a no-op for an incomplete form and idempotent vs. the branch below.
+    // not only in the last-section/no-next-field branch below (Codex PR #271).
+    // isFormComplete and computeNextField are both required-agnostic (they iterate
+    // the same "every shown field confirmed" set, bd polyglot-pdf-taw3), so the two
+    // agree on completion -- but the `!nextField` branch below only runs on the
+    // last section. Calling maybeEmitFormComplete here covers whole-form completion
+    // reached on any confirm. It is guarded (fires only when isFormComplete AND the
+    // snapshot changed), so it is a no-op for an incomplete form and idempotent vs.
+    // the branch below.
     this.maybeEmitFormComplete();
     // W2 (bd polyglot-pdf-kxkw): stride-window validator check on the same
     // state-change seam (guarded: sends only newly-eligible, unsent windows).
