@@ -40,11 +40,23 @@ vi.mock('../../shared/config', () => ({
 
 // A no-op connection manager so SchemaForm's stream-ready effect can create one
 // and render the overlay. Only the methods SchemaForm calls need to exist.
+// We ALSO capture the onNextField callback SchemaForm passes in (5th arg): the
+// continuous-mode section-paging test drives it directly to simulate the voice
+// model advancing its focus to a field in another section.
+let capturedOnNextField: ((fieldId: string | null) => void) | null = null;
 vi.mock('../../shared/connection', () => ({
-  createConnectionManager: vi.fn(() => ({
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-  })),
+  createConnectionManager: vi.fn(
+    (
+      _schema: unknown,
+      _onStatus: unknown,
+      _lang: unknown,
+      _stream: unknown,
+      onNextField: (fieldId: string | null) => void,
+    ) => {
+      capturedOnNextField = onNextField;
+      return { connect: vi.fn(), disconnect: vi.fn() };
+    },
+  ),
 }));
 
 vi.mock('../../shared/audioConstraints', () => ({
@@ -76,6 +88,7 @@ vi.mock('../../pdf-view/FilledPreviewModal', () => ({
 }));
 
 import { SchemaForm } from './SchemaForm';
+import { SchemaFormStateManager } from '../state/schemaFormState';
 
 // --- A minimal valid schema ------------------------------------------------
 
@@ -99,6 +112,29 @@ function makeSchema(): FormSchema {
         section_id: 'sec1',
         type: 'text',
       } as any,
+    ],
+  };
+}
+
+// A two-section schema for the continuous-mode paging test: the voice model can
+// advance focus from a field in sec1 to a field in sec2, and the simplified view
+// must page to sec2.
+function makeTwoSectionSchema(): FormSchema {
+  return {
+    source: 'pdf',
+    form_metadata: {
+      title: 'Two Section Form',
+      version: '1.0',
+      language: 'en',
+      form_number: 'TEST-2',
+    },
+    sections: [
+      { id: 'sec1', label: 'Section One', order: 1, fields: ['f1'] },
+      { id: 'sec2', label: 'Section Two', order: 2, fields: ['f2'] },
+    ],
+    fields: [
+      { id: 'f1', name: 'Field One', spoken_name: 'field one', section_id: 'sec1', type: 'text' } as any,
+      { id: 'f2', name: 'Field Two', spoken_name: 'field two', section_id: 'sec2', type: 'text' } as any,
     ],
   };
 }
@@ -251,5 +287,105 @@ describe('SchemaForm view-mode structure (bd polyglot-pdf-fdz8)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ============================================================================
+// Continuous-mode section paging (bd polyglot-pdf-gz20)
+//
+// The voice model fills across the whole form in ONE continuous session, but
+// the simplified view still renders one section at a time and currentSectionId
+// stays pinned to the first section. When the model's focus (onNextField) lands
+// on a field in a later section, the simplified view must PAGE to that field's
+// section -- otherwise the field is never rendered and the view is stranded on
+// section 1 (the reported bug: "not changing sections visually").
+// ============================================================================
+describe('SchemaForm continuous-mode section paging (bd polyglot-pdf-gz20)', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    capturedOnNextField = null;
+    // Preview UI off here -- this is about the simplified <form> view.
+    isPreviewUiEnabled.mockReturnValue(false);
+    setWidth(1280);
+    // jsdom does not implement scrollIntoView; handleNextField's focus step
+    // calls it on the located element. Stub it so the focus path is exercised
+    // without throwing (we assert the section render, not the scroll itself).
+    (Element.prototype as any).scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  // Seed sessionStorage with a continuous-mode state for the given schema so the
+  // component mounts already in continuous mode (in production this flag is set
+  // during the handshake, which the stubbed connection manager never runs).
+  function seedContinuousState(schema: FormSchema) {
+    let s = SchemaFormStateManager.init(schema);
+    s = SchemaFormStateManager.setContinuousSession(s, true);
+    return s;
+  }
+
+  it('pages the simplified view to the section of the model-focused field', async () => {
+    const schema = makeTwoSectionSchema();
+    seedContinuousState(schema);
+
+    render(<SchemaForm schema={schema} kitId="test" />);
+    // Flush stream-ready + connection-manager effects so onNextField is captured.
+    await act(async () => {});
+
+    // Mount shows section 1 (currentSectionId pinned to the first section).
+    expect(screen.getByText('Section One')).toBeTruthy();
+    expect(screen.queryByText('Section Two')).toBeNull();
+    expect(capturedOnNextField).toBeTruthy();
+
+    // The voice model advances its focus to f2, which lives in section 2.
+    await act(async () => {
+      capturedOnNextField!('f2');
+    });
+
+    // The simplified view paged to section 2 -- f2 now renders, section 1 is gone.
+    expect(screen.getByText('Section Two')).toBeTruthy();
+    expect(screen.queryByText('Section One')).toBeNull();
+  });
+
+  it('does not page when the focused field is already in the shown section', async () => {
+    const schema = makeTwoSectionSchema();
+    seedContinuousState(schema);
+
+    render(<SchemaForm schema={schema} kitId="test" />);
+    await act(async () => {});
+
+    expect(screen.getByText('Section One')).toBeTruthy();
+
+    // Focus stays on f1 (already in the shown section) -> no section change.
+    await act(async () => {
+      capturedOnNextField!('f1');
+    });
+
+    expect(screen.getByText('Section One')).toBeTruthy();
+    expect(screen.queryByText('Section Two')).toBeNull();
+  });
+
+  it('does NOT page when continuous mode is off (deprecated section-reset flow owns nav)', async () => {
+    // Without continuous mode, section advancement is the manual/section-reset
+    // path's job; onNextField must not hijack it by paging the view.
+    const schema = makeTwoSectionSchema();
+    // Seed a NON-continuous state so init() reuses it (default continuous=false).
+    SchemaFormStateManager.init(schema);
+
+    render(<SchemaForm schema={schema} kitId="test" />);
+    await act(async () => {});
+
+    expect(screen.getByText('Section One')).toBeTruthy();
+
+    await act(async () => {
+      capturedOnNextField!('f2');
+    });
+
+    // Still on section 1 -- no auto-paging outside continuous mode.
+    expect(screen.getByText('Section One')).toBeTruthy();
+    expect(screen.queryByText('Section Two')).toBeNull();
   });
 });

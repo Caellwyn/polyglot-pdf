@@ -933,6 +933,89 @@ describe('SchemaFormStateManager', () => {
   })
 
   // ============================================================================
+  // findSectionIdForField() -- drives continuous-mode UI section paging
+  // (bd polyglot-pdf-gz20)
+  // ============================================================================
+
+  describe('findSectionIdForField()', () => {
+    it('returns the section that contains the field', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+
+      expect(SchemaFormStateManager.findSectionIdForField(state, 'field-1')).toBe('section-1a')
+      expect(SchemaFormStateManager.findSectionIdForField(state, 'field-3')).toBe('section-1b')
+      expect(SchemaFormStateManager.findSectionIdForField(state, 'field-5')).toBe('section-2a')
+      expect(SchemaFormStateManager.findSectionIdForField(state, 'field-6')).toBe('section-3a')
+    })
+
+    it('resolves a []-alias field id to its base field section', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+
+      // Gemini drops/adds the bracket; the section is keyed on the base id.
+      expect(SchemaFormStateManager.findSectionIdForField(state, 'field-4[]')).toBe('section-2a')
+    })
+
+    it('resolves a base id when the section lists the bracketed variant', () => {
+      const schema = createTestSchema()
+      // Section lists the field under its []-alias; a hint for the base id must
+      // still resolve.
+      schema.sections[2].fields = ['field-4[]', 'field-5']
+      const state = SchemaFormStateManager.init(schema)
+
+      expect(SchemaFormStateManager.findSectionIdForField(state, 'field-4')).toBe('section-2a')
+    })
+
+    it('returns null for an unknown field or empty id', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+
+      expect(SchemaFormStateManager.findSectionIdForField(state, 'no-such-field')).toBeNull()
+      expect(SchemaFormStateManager.findSectionIdForField(state, '')).toBeNull()
+    })
+  })
+
+  // ============================================================================
+  // setVisibleSection() -- continuous-mode UI paging that PRESERVES the pin
+  // (bd polyglot-pdf-gz20)
+  // ============================================================================
+
+  describe('setVisibleSection()', () => {
+    it('changes currentSectionId', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      expect(state.currentSectionId).toBe('section-1a')
+
+      const next = SchemaFormStateManager.setVisibleSection(state, 'section-2a')
+      expect(next.currentSectionId).toBe('section-2a')
+    })
+
+    it('PRESERVES pinnedFieldId (unlike navigateToSection, which clears it)', () => {
+      let state = SchemaFormStateManager.init(createTestSchema())
+      state = SchemaFormStateManager.pinField(state, 'field-4')
+      expect(state.pinnedFieldId).toBe('field-4')
+
+      // setVisibleSection follows the model's own focus (which may include a
+      // switch_to_field pin), so it must NOT abandon the pin.
+      const paged = SchemaFormStateManager.setVisibleSection(state, 'section-2a')
+      expect(paged.currentSectionId).toBe('section-2a')
+      expect(paged.pinnedFieldId).toBe('field-4')
+
+      // Contrast: navigateToSection (a manual jump) DOES clear it.
+      const manual = SchemaFormStateManager.navigateToSection(state, 'section-2a')
+      expect(manual.pinnedFieldId).toBeNull()
+    })
+
+    it('does not grow completedSections', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      const next = SchemaFormStateManager.setVisibleSection(state, 'section-2a')
+      expect(next.completedSections.size).toBe(0)
+    })
+
+    it('is a no-op (same reference) when already on the target section', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      const same = SchemaFormStateManager.setVisibleSection(state, 'section-1a')
+      expect(same).toBe(state)
+    })
+  })
+
+  // ============================================================================
   // Edge cases
   // ============================================================================
 

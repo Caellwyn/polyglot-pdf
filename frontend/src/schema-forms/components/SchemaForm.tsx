@@ -54,6 +54,13 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     return SchemaFormStateManager.init(schema);
   });
 
+  // Mirror the latest state into a ref so callbacks captured once (e.g.
+  // handleNextField, held by the ConnectionManager created in a [streamReady]
+  // effect) can read CURRENT continuousSessionEnabled / currentSectionId without
+  // a stale closure. Same pattern as isMobileRef / connectionManagerRef below.
+  const stateRef = useRef<SchemaFormState>(state);
+  stateRef.current = state;
+
   // Prevent rapid navigation/submission (debounce)
   const [isNavigating, setIsNavigating] = useState(false);
 
@@ -253,16 +260,55 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     // the P1.3 snap-to camera keys on it too.
     setCurrentFieldId(fieldId);
 
-    const element = document.getElementById(fieldId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element.classList.add('field-highlight');
+    // Scroll/highlight the field. If we just advanced the section, the target
+    // element does not exist yet (React re-renders on the next tick), so defer
+    // the scroll a frame so getElementById can find the newly-mounted element.
+    const focusField = () => {
+      const element = document.getElementById(fieldId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.classList.add('field-highlight');
 
-      // Remove highlight after the pulse animation completes
-      setTimeout(() => {
-        element.classList.remove('field-highlight');
-      }, FIELD_HIGHLIGHT_DURATION_MS);
+        // Remove highlight after the pulse animation completes
+        setTimeout(() => {
+          element.classList.remove('field-highlight');
+        }, FIELD_HIGHLIGHT_DURATION_MS);
+      }
+    };
+
+    // Continuous mode (bd polyglot-pdf-gz20): the voice model fills across the
+    // whole form in one session, but the simplified view still renders ONE
+    // section at a time and `currentSectionId` stays pinned to the first section
+    // (section advancement is otherwise suppressed). So when the model's focus
+    // moves to a field in a different section, that field is not rendered --
+    // getElementById returns null and the view is stranded on the first section.
+    // Page the UI to the field's section so the simplified view follows the
+    // model. setVisibleSection sets ONLY currentSectionId -- it preserves any
+    // switch_to_field pin (which navigateToSection would clear) and has no
+    // completed-section side effects, unlike the deprecated
+    // markSectionComplete/switchToSection nav.
+    //
+    // Read CURRENT state from stateRef, not the captured `state`: this callback
+    // is created once (the ConnectionManager is built in a [streamReady] effect),
+    // so the closed-over `state` is frozen at mount (continuous not-yet-enabled,
+    // first section).
+    const current = stateRef.current;
+    if (current.continuousSessionEnabled) {
+      const targetSectionId = SchemaFormStateManager.findSectionIdForField(current, fieldId);
+      if (targetSectionId && targetSectionId !== current.currentSectionId) {
+        setState(prevState =>
+          SchemaFormStateManager.setVisibleSection(prevState, targetSectionId)
+        );
+        // The target element mounts on the next render, so defer the scroll a
+        // couple of frames until getElementById can find it.
+        requestAnimationFrame(() => requestAnimationFrame(focusField));
+        return;
+      }
     }
+
+    // Already on the right section (or not continuous / section-less field):
+    // the element is present now, scroll immediately.
+    focusField();
   };
 
   // Create connection manager once (only when stream becomes ready)
