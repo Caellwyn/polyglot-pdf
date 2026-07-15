@@ -477,13 +477,25 @@ class CallbackHandler:
         )
         
         if result is None:
-            # No updates applied
+            # Validation itself errored (exception inside validate_field_updates).
+            # Report the keys as unknown THROUGH the same formatter as the normal
+            # path so the model still gets an actionable message, and advance the
+            # loop-breaker counter -- otherwise a repeated exception-path failure
+            # could loop unbounded with a bare, message-less response
+            # (bd polyglot-pdf-b1gj, Opus fresh-eyes finding 2).
             await self.send_form_update({}, [])
-            return {
-                "form_state": {},
-                "applied_fields": [],
-                "unknown_fields": list(normalized_updates.keys()),
-            }
+            self._consecutive_unknown_rejections += 1
+            return self._build_update_fields_response(
+                [],  # validation_errors
+                list(normalized_updates.keys()),  # unknown_fields
+                [],  # applied_fields
+                None,
+                known_inactive_fields=[
+                    fid for fid in normalized_updates
+                    if self._is_known_field and self._is_known_field(fid)
+                ],
+                consecutive_unknown_rejections=self._consecutive_unknown_rejections,
+            )
         
         # Extract results
         validation_errors = result.get("validation_errors", [])

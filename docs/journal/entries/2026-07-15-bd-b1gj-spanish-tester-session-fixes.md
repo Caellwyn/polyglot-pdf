@@ -89,6 +89,19 @@ without asyncio markers, so pytest collected but silently SKIPPED them (they
 only ran via __main__). Now marked; the un-runnable route-loop test is
 explicitly @pytest.mark.skip'd with context (repair = tjs1).
 
+Fresh-eyes assess (Step 5.5): round 1 Sonnet NO-GAPS; round 2 (final Opus)
+GAPS-FOUND(1) + 2 minor observations. Adopted all three: (1) the SI's
+pre-existing quoted English example utterances ('Is that correct?', the
+address-conflict sample, the spelling read-back) violated the ghv4 criterion
+-- fixed with an explicit illustration rider in the LANGUAGE block (quoted
+phrases are English illustrations of intent, always expressed in the session
+language) rather than deleting the load-bearing examples; (2) the
+validator-exception path (result=None) returned a bare message-less response
+and bypassed the loop-breaker -- now routed through the same formatter with
+the counter advanced (+ unit test); (3) the untranslated connection-error
+toasts (pre-existing, outside ibxz scope) deferred onto the ryu6
+consolidation bead. Rejected: none.
+
 ## Lessons
 
 - **A tool-rejection message with no exit ramp is a loop generator.** The

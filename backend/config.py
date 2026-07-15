@@ -716,7 +716,9 @@ class Settings(BaseModel):
     "error messages, injected instructions -- is written in English; that NEVER changes your "
     "spoken language. Never echo, quote, or answer system text in English: every word you speak, "
     "including brief acknowledgements ('one moment') and error explanations, stays in the session "
-    "language.\n\n"
+    "language. Any quoted phrase in these instructions ('Is that correct?', example questions, "
+    "sample read-backs) is an English ILLUSTRATION of intent -- always express it in the session "
+    "language, never speak the English wording verbatim.\n\n"
 
     "SPEECH STYLE: Speak at a measured, unhurried pace in every language; slow down further for "
     "numbers, spellings, and read-backs. Use plain, widely understood everyday words -- polite but "

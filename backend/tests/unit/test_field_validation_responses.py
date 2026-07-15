@@ -710,6 +710,29 @@ class TestUnknownFieldRecoveryGuidance:
         assert "STOP RETRYING" not in after_reset["message"]
 
     @pytest.mark.asyncio
+    async def test_validator_exception_path_gets_message_and_counts(
+        self, mock_websocket, mock_coordinator
+    ):
+        """A validator exception (handler returns None) still yields an
+        actionable message and advances the loop-breaker, instead of the old
+        bare message-less dict (Opus fresh-eyes finding on bd b1gj)."""
+        update_handler = MagicMock(return_value=None)
+        handler = create_callback_handler(
+            mock_websocket, mock_coordinator, update_handler,
+            is_known_field=lambda fid: False,
+        )
+        args = {"field_id": "x", "value": "v"}
+
+        first = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        second = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+        third = await handler.on_tool_call(tool_name="update_form_fields", arguments=args)
+
+        assert first["success"] is False
+        assert "unknown field" in first["message"]
+        assert "STOP RETRYING" in third["message"]
+        assert "STOP RETRYING" not in second["message"]
+
+    @pytest.mark.asyncio
     async def test_validation_error_resets_the_stuck_counter(
         self, mock_websocket, mock_coordinator
     ):
