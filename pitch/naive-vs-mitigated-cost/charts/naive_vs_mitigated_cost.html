@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Naive vs. mitigated cost -- full I-90 form fill</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #16161a;
+    background: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e7e7e5; background: #16161a; }
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 0.25rem; }
+  .sub { font-size: 14px; color: #6b6b68; margin: 0 0 1.5rem; }
+  .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .card {
+    flex: 1; min-width: 150px; background: rgba(127,127,127,0.08);
+    border-radius: 8px; padding: 1rem;
+  }
+  .card p.label { font-size: 13px; color: #6b6b68; margin: 0 0 4px; }
+  .card p.value { font-size: 24px; font-weight: 600; margin: 0; }
+  .legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 12px; color: #6b6b68; }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .swatch { width: 16px; height: 2px; display: inline-block; }
+  .chart-wrap { position: relative; width: 100%; height: 360px; }
+  .footnote { font-size: 11px; color: #8a8a86; margin-top: 1.5rem; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<h1>Cumulative cost -- full I-90 form fill by voice (113 questions)</h1>
+<p class="sub">Naive (no cost mitigation) vs. mitigated (current production pipeline)</p>
+
+<div class="cards">
+  <div class="card">
+    <p class="label">Mitigated, 113 questions (measured)</p>
+    <p class="value">$2.66</p>
+  </div>
+  <div class="card">
+    <p class="label">Naive baseline, 113 questions (derived)</p>
+    <p class="value">$18.74</p>
+  </div>
+  <div class="card">
+    <p class="label">Cost reduction</p>
+    <p class="value">7.1x</p>
+  </div>
+</div>
+
+<div class="legend">
+  <span><span class="swatch" style="background:#e34948;"></span>Naive baseline (no mitigation)</span>
+  <span><span class="swatch" style="background:#1baf7a;"></span>Mitigated</span>
+</div>
+<div class="chart-wrap">
+  <canvas id="cmpChart" role="img" aria-label="Line chart, cumulative dollar cost vs question number 1 to 113. Naive baseline curves upward steeply reaching about 18.74 dollars. Mitigated stays nearly flat-sloped reaching about 2.66 dollars."></canvas>
+</div>
+
+<p class="footnote">
+  Mitigated: measured, real, gemini-2.5-flash-native-audio, full I-90 form, 113 questions, happy path.
+  Naive baseline: derived, not measured -- no real "everything off" run exists at full-form scale.
+  Built from real building blocks: (1) the actual per-question spoken content (voice in/out, text out)
+  from the same session, so the conversation itself is identical between the two lines; (2) a full-form
+  (132-field), non-mitigated system instruction size fit from real measured full-SI-vs-field-count data
+  across 12 sections of a different schema (R-squared = 0.998: chars = 117.5 x fields + 3235 fixed
+  overhead), applied to the I-90's 132 fields => ~4,687 tokens, re-sent every turn with the full
+  conversation history accumulating without limit; (3) the same real per-token rates ($0.50 / $3.00 /
+  $2.00 / $12.00 per 1M tokens for text-in / voice-in / text-out / voice-out). See README.md and
+  data/naive_vs_mitigated_cost_curve.csv in this folder for the full methodology and underlying numbers.
+</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function(){
+  var labels = []; for (var q=1;q<=113;q++) labels.push(q);
+  var naive = [0.008559,0.021733,0.039814,0.062885,0.091044,0.124339,0.163683,0.201387,0.241753,0.287151,0.33508,0.378382,0.425637,0.476928,0.532411,0.586591,0.643744,0.709144,0.774954,0.842075,0.910172,0.983197,1.055372,1.131769,1.212787,1.297005,1.37797,1.466712,1.556535,1.653833,1.75026,1.851768,1.958547,2.065667,2.174612,2.284789,2.394933,2.510444,2.629823,2.746873,2.868575,2.996234,3.129385,3.265684,3.399229,3.536984,3.679403,3.826972,3.972794,4.121296,4.274142,4.432264,4.589048,4.751187,4.917364,5.082538,5.252437,5.428283,5.604088,5.78147,5.951409,6.12165,6.294831,6.472123,6.653115,6.838269,7.032183,7.223032,7.411626,7.610841,7.811621,8.013788,8.213726,8.421278,8.634587,8.8536,9.073731,9.31111,9.531694,9.749858,9.968195,10.188347,10.411057,10.632274,10.857319,11.086511,11.320302,11.556987,11.798887,12.046468,12.300216,12.553487,12.813179,13.079171,13.349262,13.618229,13.886807,14.166543,14.449926,14.731159,15.017532,15.309525,15.607421,15.903265,16.206919,16.511771,16.822174,17.133521,17.445381,17.761851,18.083738,18.411256,18.737038];
+  var actual = [0.008612,0.02243,0.04021,0.061485,0.085961,0.11346,0.144248,0.168521,0.19281,0.219899,0.246588,0.26483,0.285866,0.309364,0.335216,0.355495,0.376801,0.406514,0.431285,0.453952,0.474706,0.499366,0.519569,0.542512,0.5682,0.594235,0.610986,0.635576,0.65745,0.685837,0.708637,0.734452,0.76314,0.788017,0.811506,0.835234,0.855479,0.879748,0.905024,0.922376,0.943185,0.968357,0.99667,1.024959,1.045945,1.06943,1.095515,1.124331,1.14661,1.169296,1.194509,1.222819,1.244582,1.269831,1.296369,1.317861,1.342188,1.370379,1.394657,1.417509,1.426367,1.434816,1.445779,1.460112,1.476973,1.49647,1.524468,1.545021,1.559109,1.585451,1.609356,1.630847,1.6455,1.667552,1.693153,1.721574,1.747669,1.793761,1.81851,1.838285,1.85998,1.881898,1.906138,1.918481,1.933501,1.951816,1.973391,1.993278,2.016431,2.042826,2.072467,2.096146,2.123579,2.15411,2.184693,2.209438,2.229747,2.259931,2.28977,2.312862,2.338408,2.366519,2.397127,2.420908,2.450612,2.476934,2.5057,2.531247,2.553617,2.578081,2.605117,2.634601,2.657622];
+
+  var isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  var muted = isDark ? '#c3c2b7' : '#52514e';
+  var grid = isDark ? '#2c2c2a' : '#e1e0d9';
+
+  new Chart(document.getElementById('cmpChart'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Naive baseline (no mitigation)', data: naive, borderColor: '#e34948', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.15 },
+        { label: 'Mitigated', data: actual, borderColor: '#1baf7a', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0, tension: 0.15 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(c){ return c.dataset.label + ': $' + c.parsed.y.toFixed(3); } } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Question number', color: muted, font: {size:12} }, ticks: { color: muted, maxRotation:0, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
+        y: { title: { display: true, text: 'Cumulative cost (USD)', color: muted, font: {size:12} }, ticks: { color: muted, callback: function(v){ return '$'+v.toFixed(0); } }, grid: { color: grid } }
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>
