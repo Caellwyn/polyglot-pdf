@@ -473,6 +473,30 @@ export class SchemaFormStateManager {
   }
 
   /**
+   * Page the VISIBLE section to follow the voice model in continuous mode
+   * (bd polyglot-pdf-gz20; continuous-mode design is bd polyglot-pdf-55jg). Sets
+   * ONLY currentSectionId -- unlike navigateToSection
+   * it PRESERVES pinnedFieldId, because this is not a manual jump that should
+   * abandon a voice-set pin: it follows the model's own focus, and a switch_to_field
+   * to an out-of-section target sets the pin THEN drives this via onNextField -- so
+   * clearing the pin here would wipe the pin that same tool just set (both the
+   * connection's state and this one persist through the shared sessionStorage key, so
+   * a pin-clearing save would clobber it). No completed-section side effects either;
+   * continuous mode never grows completedSections. Idempotent when already on the
+   * target section.
+   */
+  static setVisibleSection(state: SchemaFormState, sectionId: string): SchemaFormState {
+    if (state.currentSectionId === sectionId) return state;
+    const newState = {
+      ...state,
+      currentSectionId: sectionId,
+      lastUpdated: Date.now(),
+    };
+    this.save(newState);
+    return newState;
+  }
+
+  /**
    * Mark section as completed
    *
    * DEPRECATED (bd polyglot-pdf-55jg): section-reset production path;
@@ -549,6 +573,39 @@ export class SchemaFormStateManager {
     return sortedSections[currentIndex - 1];
   }
 
+
+  /**
+   * Find the ID of the section that contains a given field, or null if the
+   * field is in no section. Used to advance the paged UI to follow the voice
+   * model in continuous mode (bd polyglot-pdf-gz20): the model fills fields
+   * across the whole form in one session, but the simplified view still renders
+   * one section at a time -- so when the model's focus (onNextField) lands on a
+   * field outside the currently-shown section, the UI must page to that field's
+   * section. Mirrors getCurrentSectionFields' `section.fields` (array of field
+   * ids) lookup. Matches across the []-alias variants because the incoming id
+   * and the section's `fields` entry can carry DIFFERENT bracket forms of the
+   * same field (Gemini drops/adds the bracket, so a generated schema may list
+   * `race[]` in section.fields while a caller passes the base `race`, or vice
+   * versa). Today's callers pass a base schema id (computeNextField /
+   * resolveFieldForNavigation both return `field.id`), so the fallback bites
+   * only on the section-side bracket variant -- matching both directions keeps
+   * it robust to either side carrying the bracket.
+   */
+  static findSectionIdForField(state: SchemaFormState, fieldId: string): string | null {
+    if (!fieldId) return null;
+    const baseId = fieldId.endsWith('[]') ? fieldId.slice(0, -2) : fieldId;
+    const aliasId = baseId + '[]';
+    for (const section of state.schema.sections) {
+      if (
+        section.fields.includes(fieldId) ||
+        section.fields.includes(baseId) ||
+        section.fields.includes(aliasId)
+      ) {
+        return section.id;
+      }
+    }
+    return null;
+  }
 
   /**
    * Get first section from schema

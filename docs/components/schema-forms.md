@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-12. Production continuous-DTI runs the whole form as one session: section-navigation state (`currentSectionId`/`completedSections`) is inert and manual prev/next is suppressed; sections still page the UI. Section navigation is the deprecated section-reset fallback (bd polyglot-pdf-55jg). Prior: 2026-07-08 (bd ipin/jq17/fdz8 preview polish; bd w146 checkbox_group cleanup).*
+*Last updated: 2026-07-15. Production continuous-DTI runs the whole form as one session: `completedSections` never grows and manual prev/next is suppressed, BUT `currentSectionId` now FOLLOWS the voice model -- the simplified view pages to the section of the model-focused field (`onNextField` -> `setVisibleSection`) so the shown section tracks fill progress (bd polyglot-pdf-55jg). Section navigation (manual prev/next, section resets) is the deprecated section-reset fallback. Prior: 2026-07-12 (continuous-DTI); 2026-07-08 (bd ipin/jq17/fdz8 preview polish; bd w146 checkbox_group cleanup).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -21,10 +21,17 @@ instances) operating on a `SchemaFormState` value:
 - `fieldValues: Record<string, FieldValue>` — the answers (see FieldValue below).
 - `currentSectionId` + `completedSections: Set<string>` — **section**-based
   navigation state (not parts; see terminology). In production continuous mode
-  these are inert: `currentSectionId` stays pinned to the first section and
-  `completedSections` never grows (the model never advances sections). They
-  drive real navigation only in the DEPRECATED section-reset fallback (bd
-  polyglot-pdf-55jg). Sections still page the UI either way.
+  `completedSections` never grows and manual prev/next is suppressed, but
+  `currentSectionId` FOLLOWS the voice model: when the model's focus lands on a
+  field in another section (`onNextField`), `SchemaForm` calls
+  `setVisibleSection` to page the simplified view to that field's section
+  (bd polyglot-pdf-55jg) — so the shown section tracks fill progress even though
+  no section-COMPLETE transitions happen. `setVisibleSection` sets only
+  `currentSectionId` and PRESERVES `pinnedFieldId` (unlike `navigateToSection`,
+  the manual-jump path, which clears the pin). The section-COMPLETE machinery
+  (`markSectionComplete`/`switchToSection`, manual prev/next) drives real
+  navigation only in the DEPRECATED section-reset fallback. Sections page the UI
+  in both modes.
 - `formSessionId` — persistent `fss_<base36-ts>_<random>`, survives reconnects
   (the durability boundary; see stateless-architecture).
 - `validationErrors`, `loadedFieldIds`/`jitModeEnabled` (JIT token-reduction),
