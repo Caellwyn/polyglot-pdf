@@ -24,19 +24,28 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
 - 🔄 **Round-Trip Integrity** - Data preserved through PDF generation/extraction cycle
 
 ### Privacy & Accuracy
-- 🔒 **HIPAA-Compliant** - Zero PHI storage, stateless backend
+- 🔒 **Zero PII/PHI Storage** - Stateless backend, all sensitive data stays client-side (HIPAA-compliant by design; matters as much for immigration data as medical)
 - ✔️ **Voice Confirmation** - Verbal readback before moving to next field
 - 🎓 **Validation** - Sanity checking for logical errors
 - 🌍 **Multilingual** - Converse in native language, form fills in any language
 
 ## 🎯 Project Vision
 
-**Transform form-filling into a natural conversation** while maintaining accuracy, privacy, and user control. Enable organizations to create custom forms easily and allow users to complete them in their native language using voice, keyboard, or both.
+**Immigration is our first stop.** The initial focus is complex U.S. immigration and
+legal-intake forms (e.g. USCIS I-90, IRS W-7) — long, high-stakes, multi-page
+government PDFs that applicants routinely fill out in a non-native language.
+
+The broader goal: **transform form-filling into a natural conversation** while
+maintaining accuracy, privacy, and user control — enabling organizations to create
+custom forms easily and letting users complete them in their native language using
+voice, keyboard, or both. The architecture is form-agnostic (any schema/PDF kit
+works), so the same system generalizes to other domains over time; immigration is
+where we prove it first.
 
 ### Primary Use Cases
-1. **Medical Intake Forms** - Patients complete complex forms in their language
+1. **Immigration & Legal Intake** *(first target)* - Applicants complete complex USCIS/IRS forms (I-90, W-7, ...) accurately in their native language
 2. **Government Services** - Accessible forms for diverse populations
-3. **Job Applications** - Multilingual application process
+3. **Medical Intake Forms** - Patients complete complex forms in their language
 4. **Any Multi-Page Form** - Where voice guidance improves completion rates
 
 ### Key Design Principles
@@ -49,7 +58,7 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
 ## 📊 Current Status
 
 **Status**: Live Demo Available
-**Last Updated**: June 2026
+**Last Updated**: July 2026
 
 > There is **no active production** environment for this project today; the demo
 > is the live target. The production-project plumbing below remains wired for
@@ -67,14 +76,18 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
   native-audio (backend-aware id: `gemini-live-2.5-flash-native-audio` on Vertex,
   `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio), with
   `gemini-3.1-flash-live-preview` selectable via `USE_PREMIUM_MODEL` (AI Studio only)
-- ✅ Schema-driven form filling with section navigation
+- ✅ Schema-driven form filling; continuous single-session flow is the default
+  (`CONTINUOUS_SESSION` + `USE_DTI`), with the legacy per-section reset flow kept
+  as an env-flippable fallback
 - ✅ 18+ spoken languages with real-time switching
 - ✅ Stateless backend architecture (HIPAA compliant)
 - ✅ WebSocket real-time communication (`/ws/fill`)
+- ✅ Voice tool-call loop with 7 tools (fill, confirm, form status, skip,
+  field/section navigation, and the cheap-text-model "secretary" for recall)
 - ✅ Hybrid voice/keyboard workflow
 - ✅ GCS-backed form kit storage for deployed environments
 - ✅ PDF generation/filling from filled forms (PyMuPDF, `/api/fill-pdf`)
-- ✅ Visual schema editor (`schema-editor/`)
+- ✅ Visual schema editor (`schema-editor/`, hosted via `deploy-editor.sh`)
 - ✅ Dual deployment paths (demo vs production)
 
 ## 🚀 Quick Start
@@ -83,7 +96,9 @@ A comprehensive multilingual form system with voice interaction, PDF generation,
 
 - **Python 3.12+** with venv support
 - **Node.js 18+** with npm
-- **Google Gemini API key** (set as environment variable)
+- **Gemini access** — either a Google Cloud project with Vertex AI + ADC (the
+  default), or a Gemini Developer API key for the AI Studio path (see
+  [Environment Variables](#environment-variables))
 
 ### Setup
 
@@ -103,16 +118,35 @@ npm install -C frontend
 
 ### Environment Variables
 
-Set one of these:
+The backend talks to Gemini through **Vertex AI by default** (`VERTEXAI=true`),
+which uses Application Default Credentials plus `GOOGLE_CLOUD_PROJECT` rather than
+an API key — this is the compliance-friendly path and required for production. For
+local dev, authenticate ADC (`gcloud auth application-default login`) and point at
+your project:
+
 ```bash
-export GOOGLE_API_KEY=your_key_here
-# or
+export GOOGLE_CLOUD_PROJECT=your_gcp_project
+```
+
+To use the **Gemini Developer API (AI Studio)** instead — e.g. to run the premium
+`gemini-3.1-flash-live-preview` model, which is not yet on Vertex — set
+`VERTEXAI=false` and provide an API key:
+
+```bash
+export VERTEXAI=false
 export GEMINI_API_KEY=your_key_here
 ```
 
+Use `GEMINI_API_KEY` specifically — the backend reads that variable, and `/health`
+and the startup diagnostics key off it. (The underlying SDK will also pick up
+`GOOGLE_API_KEY` as an implicit fallback, but the app's own health check reports it
+as missing, so it makes for confusing debugging.)
+
 **Windows PowerShell:**
 ```powershell
-$env:GOOGLE_API_KEY="your_key_here"
+$env:GOOGLE_CLOUD_PROJECT="your_gcp_project"
+# or, for AI Studio:
+$env:VERTEXAI="false"; $env:GEMINI_API_KEY="your_key_here"
 ```
 
 ### Run Development Servers
@@ -190,7 +224,7 @@ This workflow keeps dev and prod aligned: the frontend manifest and the backend 
 ┌─────────────────────────────────────────────┐
 │        Gemini Live API                       │
 │  - Voice interaction                         │
-│  - Function calling (5 tools)                │
+│  - Function calling (7 tools)                │
 │  - Audio responses                           │
 └─────────────────────────────────────────────┘
 ```
@@ -305,7 +339,7 @@ entry points and follow them on demand:
 ### Common Issues
 
 **Connection Errors:**
-- Check `GOOGLE_API_KEY` or `GEMINI_API_KEY` is set
+- On the default Vertex path, check ADC is authenticated and `GOOGLE_CLOUD_PROJECT` is set (`gcloud auth application-default login`); on the AI Studio path (`VERTEXAI=false`), check `GEMINI_API_KEY` is set (that is the variable `/health` reports on)
 - Verify backend is running on port 8000
 - Check for zombie processes
 
@@ -434,11 +468,18 @@ POLYGLOT_PROJECT_NAME=polyglot-demo-aa709 ./deploy-new.sh polyglot-backend polyg
 POLYGLOT_PROJECT_NAME=polyglot-forms-919f2 ./deploy-new.sh polyglot-backend polyglot-forms-919f2
 ```
 
-**Required Cloud Run environment variables** (set via `gcloud run services update --update-env-vars`):
+`deploy-new.sh` builds from the repo root and sets `GOOGLE_CLOUD_PROJECT` on the
+service (the Vertex/ADC path — Cloud Run's service account authenticates to Gemini
+via Vertex, so no API key is needed). The form-kit storage vars are **not** set by
+the script and must be configured separately (via
+`gcloud run services update --update-env-vars`):
 
-- `GOOGLE_API_KEY` — Gemini API key
 - `FORM_KITS_MODE=gcs`
 - `FORM_KITS_GCS_BUCKET=<project-id>-form-kits`
+
+Only if you deliberately run the AI Studio backend instead of Vertex
+(`VERTEXAI=false`, e.g. for the premium 3.1 model) do you also need
+`GEMINI_API_KEY` set on the service.
 
 ### Auth Setup (Firebase Console)
 
@@ -453,7 +494,7 @@ See `firestore.rules` (wired into `firebase.json`) — users can only read/write
 
 ### Deployment Checklist
 
-- [ ] `GOOGLE_API_KEY` set in Cloud Run for target project
+- [ ] `GOOGLE_CLOUD_PROJECT` set in Cloud Run (done by `deploy-new.sh`); for the AI Studio path (`VERTEXAI=false`) set `GEMINI_API_KEY` instead
 - [ ] `FORM_KITS_MODE` and `FORM_KITS_GCS_BUCKET` set in Cloud Run
 - [ ] Firebase Auth sign-in methods enabled (Google + Email/Password)
 - [ ] Firestore security rules deployed (shipped automatically by `deploy-demo.sh` / `deploy-production.sh`; standalone: `firebase deploy --only firestore:rules`) — a project on default-deny breaks email signup + profile sync
