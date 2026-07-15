@@ -374,11 +374,14 @@ describe('switch_field end-to-end probe (WebFormConnection)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// isFormComplete pin integration (fresh-eyes gap, bd jnjj.36): with every
-// REQUIRED field confirmed, a live pin on an unconfirmed OPTIONAL field must
-// keep the form incomplete -- otherwise the completion-gated consumers (the
-// post-confirm hint round-trip, reconnect hints, manual-edit hints, the
-// form-complete event) report "complete" and silently abandon the jump.
+// isFormComplete pin integration (fresh-eyes gap, bd jnjj.36): with every OTHER
+// shown field confirmed, a live pin on an unconfirmed field must keep the form
+// incomplete -- otherwise the completion-gated consumers (the post-confirm hint
+// round-trip, reconnect hints, manual-edit hints, the form-complete event)
+// report "complete" and silently abandon the jump. Completion is required-
+// agnostic (bd polyglot-pdf-972d77): "confirmed" spans every shown field, so
+// these fixtures confirm BOTH fields in the baseline/stale-pin cases and leave
+// the pinned field unconfirmed only in the live-pin case.
 // ---------------------------------------------------------------------------
 
 import { isFormComplete } from '../navigation'
@@ -397,9 +400,15 @@ describe('isFormComplete honors a live pin (bd jnjj.36)', () => {
     ],
   }
 
-  const pinState = (pin: string | null): any => ({
+  // Both fields confirmed by default (required-agnostic completion needs every
+  // shown field confirmed); `optConfirmed: false` leaves opt unconfirmed for the
+  // live-pin case.
+  const pinState = (pin: string | null, optConfirmed = true): any => ({
     schema: pinSchema,
-    fieldValues: { req: { value: 'x', confirmed: true } },
+    fieldValues: {
+      req: { value: 'x', confirmed: true },
+      ...(optConfirmed ? { opt: { value: 'y', confirmed: true } } : {}),
+    },
     currentSectionId: 's1',
     completedSections: new Set<string>(),
     validationErrors: {},
@@ -412,12 +421,12 @@ describe('isFormComplete honors a live pin (bd jnjj.36)', () => {
     pinnedFieldId: pin,
   })
 
-  it('all required confirmed + NO pin -> complete (baseline behavior unchanged)', () => {
+  it('all shown fields confirmed + NO pin -> complete', () => {
     expect(isFormComplete(pinState(null))).toBe(true)
   })
 
-  it('all required confirmed + live pin on an unconfirmed optional field -> NOT complete', () => {
-    const s = pinState('opt')
+  it('a live pin on an unconfirmed field -> NOT complete', () => {
+    const s = pinState('opt', false)
     expect(isFormComplete(s)).toBe(false)
     // ...and the pin IS what the next-field consumers get.
     expect(computeNextField(s, { skipConfirmed: true })?.id).toBe('opt')
@@ -425,7 +434,6 @@ describe('isFormComplete honors a live pin (bd jnjj.36)', () => {
 
   it('a stale pin (confirmed target) does not hold the form open', () => {
     const s = pinState('opt')
-    s.fieldValues.opt = { value: 'y', confirmed: true }
     expect(isFormComplete(s)).toBe(true)
   })
 

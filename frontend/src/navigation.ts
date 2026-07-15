@@ -333,14 +333,27 @@ export function getFormProgress(state: SchemaFormState): ProgressMetrics {
 
 /**
  * Check if the form is complete
- * 
- * Completion criteria:
- * - If form has required fields: ALL required fields must be confirmed
- * - If form has no required fields: ALL fields must be confirmed
- * 
+ *
+ * Completion criterion (required-agnostic, bd polyglot-pdf-972d77): this product
+ * does NOT distinguish required vs. optional fields -- the voice model asks for
+ * EVERY currently-shown field, and the user may skip/NA any of them. So the form
+ * is complete when EVERY currently-shown field is confirmed. A skipped/NA'd field
+ * is already stored as confirmed (SchemaFormStateManager.markFieldSkipped sets
+ * confirmed=true with an empty value flagged for follow-up), so "confirmed"
+ * transparently covers skipped and NA -- no separate check is needed.
+ *
+ * The old required-vs-optional split short-circuited to complete once all
+ * REQUIRED fields were confirmed, which (on forms whose only required field was
+ * field 1) declared the form done after the very first field and stranded every
+ * remaining field. It is gone: completion now spans all shown fields uniformly.
+ *
+ * Hidden fields (failing their show_if / marked hidden) are EXCLUDED: a field the
+ * conditional logic hides cannot be answered, so it must not hold the form open
+ * (same visibility test isSectionValid uses).
+ *
  * @param state - Current form state from sessionStorage
  * @returns true if form meets completion criteria, false otherwise
- * 
+ *
  * @example
  * ```typescript
  * if (isFormComplete(state)) {
@@ -356,48 +369,31 @@ export function isFormComplete(state: SchemaFormState): boolean {
   }
 
   // A LIVE navigation pin means the form is NOT complete (bd jnjj.36): the
-  // AI jumped to a specific field (often an unconfirmed OPTIONAL one, e.g.
-  // "let me add my middle name" after every required field confirmed).
-  // Without this, the completion-gated consumers (post-confirm hint,
-  // reconnect/manual-edit hints, the form-complete event) would report
-  // "complete" and silently abandon the jump (fresh-eyes on this bead).
+  // AI jumped to a specific field the user wants to answer or correct. Without
+  // this, the completion-gated consumers (post-confirm hint, reconnect/
+  // manual-edit hints, the form-complete event) would report "complete" and
+  // silently abandon the jump (fresh-eyes on this bead).
   if (resolveLivePin(state)) {
     return false;
   }
 
-  // Check if form has any required fields
-  const hasRequiredFields = state.schema.fields.some(field => field.validation?.required);
-
-  if (hasRequiredFields) {
-    // If form has required fields, ALL required fields must be confirmed
-    for (const field of state.schema.fields) {
-      if (field.validation?.required) {
-        // `[]`-alias-aware read (bd polyglot-pdf-ipw7): a required group
-        // confirmed under the bracket variant must not hold the form open.
-        const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
-        const isConfirmed = currentValue?.confirmed === true;
-
-        if (!isConfirmed) {
-          return false; // Found an unconfirmed required field
-        }
-      }
+  // Every currently-shown field must be confirmed. Hidden fields (field.hidden
+  // or an unmet show_if) are skipped -- they cannot be answered. A skipped/NA'd
+  // field reads as confirmed (markFieldSkipped sets confirmed=true), so this one
+  // loop covers answered, NA'd, and skipped-for-review fields alike.
+  for (const field of state.schema.fields) {
+    if (field.hidden || !shouldShowField(field, state.fieldValues, state.schema.fields)) {
+      continue;
     }
-
-    return true; // All required fields are confirmed
-  } else {
-    // If form has no required fields, ALL fields must be confirmed
-    for (const field of state.schema.fields) {
-      // `[]`-alias-aware read (bd polyglot-pdf-ipw7) -- see above.
-      const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
-      const isConfirmed = currentValue?.confirmed === true;
-
-      if (!isConfirmed) {
-        return false; // Found an unconfirmed field
-      }
+    // `[]`-alias-aware read (bd polyglot-pdf-ipw7): a group confirmed under the
+    // bracket-key variant must not hold the form open.
+    const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
+    if (currentValue?.confirmed !== true) {
+      return false; // Found a shown, unconfirmed field
     }
-
-    return true; // All fields are confirmed
   }
+
+  return true; // All shown fields are confirmed
 }
 
 /**
