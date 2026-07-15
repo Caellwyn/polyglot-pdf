@@ -44,6 +44,7 @@ declare global {
 import { WebFormConnection, type ConnectionCallbacks, type ConnectionStatus } from '../webFormConnection'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { SchemaFormStateManager, type SchemaFormState } from '../schema-forms/state/schemaFormState'
+import { BUTTON_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
 import { createFieldManager, type FieldManager } from './fieldManager'
 import { createAudioManager, type AudioManager } from './audioManager'
 import { metrics } from './metrics'
@@ -968,12 +969,19 @@ export function createConnectionManager(
 				SchemaFormStateManager.setSelectedLanguage(currentState, language);
 			}
 
-			// Send read_disclaimer message to backend
+			// Send read_disclaimer message to backend. agree_button_label is the
+			// TRANSLATED label the DisclaimerModal actually shows, so the voice
+			// model names the button the user sees instead of the English
+			// 'I Agree' (bd polyglot-pdf-s863). Resolved here so every caller
+			// gets it without a signature change.
 			if (connection && connection.getStatus() === 'connected') {
+				const agreeButtonLabel =
+					(BUTTON_TRANSLATIONS[language] || BUTTON_TRANSLATIONS['English']).agree
 				connection.send({
 					type: 'read_disclaimer',
 					spoken_language: language,
-					disclaimer_text: disclaimerText
+					disclaimer_text: disclaimerText,
+					agree_button_label: agreeButtonLabel
 				})
 				console.log('[VFF Connection] [check] Sent read_disclaimer to backend:', language)
 			} else {

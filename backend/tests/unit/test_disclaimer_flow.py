@@ -39,9 +39,10 @@ async def test_read_disclaimer_route_logic():
     # The loop calls ws.receive_json()
     mock_ws.receive_json.side_effect = [
         {
-            "type": "read_disclaimer", 
-            "spoken_language": "French", 
-            "disclaimer_text": "Ceci est un avis important"
+            "type": "read_disclaimer",
+            "spoken_language": "French",
+            "disclaimer_text": "Ceci est un avis important",
+            "agree_button_label": "J'accepte"
         },
         WebSocketDisconnect() # Break the loop
     ]
@@ -61,8 +62,31 @@ async def test_read_disclaimer_route_logic():
     except WebSocketDisconnect:
         pass
         
-    # Verify
-    mock_service.send_disclaimer_message.assert_awaited_once_with("French", "Ceci est un avis important")
+    # Verify: the translated agree-button label rides through to the service
+    # (bd polyglot-pdf-s863).
+    mock_service.send_disclaimer_message.assert_awaited_once_with(
+        "French", "Ceci est un avis important", agree_button_label="J'accepte")
+    print("PASS")
+
+async def test_disclaimer_message_names_translated_agree_button():
+    """bd polyglot-pdf-s863: the REAL template names the translated on-screen
+    agree-button label (the old hardcoded 'I Agree' was spoken in English
+    mid-Spanish), and falls back to 'I Agree' when the client omits it."""
+    print("Running test_disclaimer_message_names_translated_agree_button...")
+    mock_ai = AsyncMock()
+    service = FormFillingService(live_ai=mock_ai, settings=Settings())
+    service._session_id = "test_session"
+
+    await service.send_disclaimer_message(
+        "Spanish", "Texto de descargo", agree_button_label="Estoy de Acuerdo")
+    message = mock_ai.send_client_content.call_args[0][0]
+    assert "Estoy de Acuerdo" in message
+    assert "'I Agree'" not in message
+
+    mock_ai.send_client_content.reset_mock()
+    await service.send_disclaimer_message("Spanish", "Texto de descargo")
+    message = mock_ai.send_client_content.call_args[0][0]
+    assert "I Agree" in message  # old-client fallback
     print("PASS")
 
 if __name__ == "__main__":
@@ -70,4 +94,5 @@ if __name__ == "__main__":
     asyncio.set_event_loop(loop)
     loop.run_until_complete(test_send_disclaimer_message_formats_correctly())
     loop.run_until_complete(test_read_disclaimer_route_logic())
+    loop.run_until_complete(test_disclaimer_message_names_translated_agree_button())
     loop.close()

@@ -20,7 +20,7 @@ export interface DisclaimerModalProps {
 }
 
 // Translation data for button text
-const BUTTON_TRANSLATIONS: Record<string, { listenAgain: string; agree: string }> = {
+export const BUTTON_TRANSLATIONS: Record<string, { listenAgain: string; agree: string }> = {
   'English': { listenAgain: 'Listen Again', agree: 'I Agree' },
   'Spanish': { listenAgain: 'Escuchar de Nuevo', agree: 'Estoy de Acuerdo' },
   'Chinese': { listenAgain: '再听一次', agree: '我同意' },
