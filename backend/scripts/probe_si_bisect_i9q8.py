@@ -148,9 +148,9 @@ def _full_minus_critical() -> str:
 # language-detection preamble crowding out the tool directive).
 def _full_minus_language() -> str:
     si = _full_si()
-    end = si.find("Medical assistant:")
+    end = si.find("Form assistant:")
     if end == -1:
-        raise RuntimeError("could not locate 'Medical assistant:' anchor")
+        raise RuntimeError("could not locate 'Form assistant:' anchor")
     return si[end:]
 
 
