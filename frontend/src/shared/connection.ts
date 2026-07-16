@@ -713,13 +713,24 @@ export function createConnectionManager(
 		async resume() {
 			console.log('[VFF Connection] Resuming...')
 
-			if (!connection || connection.getStatus() !== 'connected') {
+			// Gate on the SAME truth the mic-send gate reads: an OPEN socket
+			// (bd polyglot-pdf-l8z7). The old gate trusted connection.getStatus()
+			// alone, but an idle-timeout can land DURING a pause and leave the
+			// socket closed while the manager's rendered status still reads as if
+			// resumable -- resume() then logged "Resumed successfully" onto a dead
+			// socket, cleared `paused`, re-armed the mic, and every chunk was
+			// dropped forever with no recovery affordance (tester bugs 0/7; the
+			// exact 22:49Z repro). A closed socket cannot be resumed regardless of
+			// what status says, so DELEGATE to connect(), which self-heals: on a
+			// dead socket its isWebSocketConnected check is false and it runs a
+			// full reconnect. `paused` is cleared first so connect() takes the
+			// connect path, not a re-entrant resume.
+			if (!connection || !connection.isSocketOpen()) {
 				const currentStatus = connection?.getStatus() ?? 'no connection'
-				console.error('[VFF Connection] Cannot resume - not connected (status:', currentStatus, ')')
-				console.log('[VFF Connection] Hint: After timeout/disconnect, use connect() instead of resume()')
-				// BUG FIX (Nov 10, 2025): Reset paused flag so connect() can work
+				console.warn('[VFF Connection] resume() on a closed socket (status:',
+					currentStatus, ') -- routing to reconnect')
 				paused = false
-				onStatusChange('error')
+				await manager.connect()
 				return
 			}
 
