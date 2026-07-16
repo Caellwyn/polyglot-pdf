@@ -418,6 +418,47 @@ describe('Connection Manager (connection.ts)', () => {
       expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
     })
 
+    it('resume() on a CLOSED socket routes to reconnect, not a false "resumed" (bd l8z7)', async () => {
+      const manager = await connected()
+      manager.pause()
+
+      // The tester repro (22:49Z): an idle-timeout landed during the pause, so
+      // the socket is CLOSED even though the manager still offered a resume. The
+      // old gate trusted getStatus() alone and could log "Resumed successfully"
+      // onto a dead socket, re-arming the mic into a black hole. resume() must
+      // instead see the closed socket and hand off to the full reconnect.
+      webFormConnectionMock.isSocketOpen.mockReturnValue(false)
+      webFormConnectionMock.getStatus.mockReturnValue('idle_timeout')
+      webFormConnectionMock.connect.mockClear()
+
+      await manager.resume()
+
+      // Routed to connect()'s full-reconnect path (dead socket -> not the warm
+      // restart_gemini_session shortcut), which drives a real WS reconnect...
+      expect(webFormConnectionMock.connect).toHaveBeenCalled()
+      // ...and the paused flag is cleared so connect() does not re-enter resume.
+      expect(manager.isPaused()).toBe(false)
+    })
+
+    it('resume() reads isSocketOpen, NOT getStatus: an OPEN socket resumes in place even when status != connected (bd l8z7)', async () => {
+      const manager = await connected()
+      manager.pause()
+      // The DISCRIMINATING case that makes this non-vacuous: the socket is OPEN
+      // but getStatus() reads something other than 'connected' (e.g. a transient
+      // 'reconnecting' between a warm session_ready and the status settling).
+      // The OLD gate (getStatus() !== 'connected') would wrongly bail to a full
+      // reconnect here; the fixed gate (isSocketOpen) correctly resumes in place.
+      webFormConnectionMock.isSocketOpen.mockReturnValue(true)
+      webFormConnectionMock.getStatus.mockReturnValue('reconnecting')
+      webFormConnectionMock.connect.mockClear()
+
+      await manager.resume()
+
+      // Warm resume: no full reconnect, mic re-armed via the shared rehydrate.
+      expect(webFormConnectionMock.connect).not.toHaveBeenCalled()
+      expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
+    })
+
     it('a session (re)establishment clears a STALE playback block (bd nm7z: pause -> idle-timeout -> reconnect)', async () => {
       const manager = await connected()
       // The tester-reproduced kill chain (bugs 0/7): pause() flushes
