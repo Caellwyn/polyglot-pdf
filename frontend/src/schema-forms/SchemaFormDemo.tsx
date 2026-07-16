@@ -16,50 +16,11 @@ import type { FormSchema } from "./types/schema";
 import type { FormKitDescriptor, FormKitManifest } from "./types/formKit";
 import { getBackendHttpUrl } from "./utils/pdfFiller";
 import { LanguageSelectionModal } from "./components/LanguageSelectionModal";
-
-// Session storage keys for onboarding state
-const ONBOARDING_FORM_KEY = "vff_selected_form_id";
-const ONBOARDING_LANGUAGE_KEY = "vff_selected_language";
-
-interface OnboardingState {
-  formId: string | null;
-  language: string | null;
-}
-
-function loadOnboardingState(): OnboardingState {
-  if (typeof window === "undefined") {
-    return { formId: null, language: null };
-  }
-  return {
-    formId: sessionStorage.getItem(ONBOARDING_FORM_KEY),
-    language: sessionStorage.getItem(ONBOARDING_LANGUAGE_KEY),
-  };
-}
-
-function saveOnboardingState(state: Partial<OnboardingState>) {
-  if (typeof window === "undefined") return;
-
-  if (state.formId !== undefined) {
-    if (state.formId) {
-      sessionStorage.setItem(ONBOARDING_FORM_KEY, state.formId);
-    } else {
-      sessionStorage.removeItem(ONBOARDING_FORM_KEY);
-    }
-  }
-  if (state.language !== undefined) {
-    if (state.language) {
-      sessionStorage.setItem(ONBOARDING_LANGUAGE_KEY, state.language);
-    } else {
-      sessionStorage.removeItem(ONBOARDING_LANGUAGE_KEY);
-    }
-  }
-}
-
-function clearOnboardingState() {
-  if (typeof window === "undefined") return;
-  sessionStorage.removeItem(ONBOARDING_FORM_KEY);
-  sessionStorage.removeItem(ONBOARDING_LANGUAGE_KEY);
-}
+import {
+  loadOnboardingState,
+  saveOnboardingState,
+  clearOnboardingState,
+} from "./onboardingStorage";
 
 export function SchemaFormDemo() {
   // Onboarding state - form + language must be selected before proceeding

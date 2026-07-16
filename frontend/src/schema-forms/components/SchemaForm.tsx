@@ -364,7 +364,15 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       console.log('[SchemaForm] Section change triggered by Gemini');
       const newState = SchemaFormStateManager.load();
       if (newState) {
-        setState(newState);
+        setState(prevState => {
+          // Same continuous-mode guard as the storage listener below: the visible
+          // section is UI-only in continuous mode (paged by handleNextField), so
+          // never let a persisted section-1-pinned state clobber it (bd voice-ux).
+          if (prevState.continuousSessionEnabled) {
+            return { ...newState, currentSectionId: prevState.currentSectionId };
+          }
+          return newState;
+        });
       }
     };
 
@@ -384,7 +392,20 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
       const fieldsChanged = newState.lastUpdated !== state.lastUpdated;
 
       if (sectionChanged || fieldsChanged) {
-        setState(newState);
+        setState(prevState => {
+          // In continuous mode the visible section is UI-only: the voice session
+          // fills across the whole form and the persisted/connection state keeps
+          // currentSectionId pinned at the first section. A field-value save (e.g.
+          // a confirmation) dispatches this event with that pinned section, so
+          // blindly adopting newState.currentSectionId rubber-bands the simplified
+          // view back to section 1 after every confirmation. Preserve the section
+          // the UI has paged to (set by handleNextField/setVisibleSection) and take
+          // only the fresh field values (bd voice-ux issues).
+          if (prevState.continuousSessionEnabled) {
+            return { ...newState, currentSectionId: prevState.currentSectionId };
+          }
+          return newState;
+        });
       }
     };
 
@@ -508,6 +529,16 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   const handleSubmit = (e: React.FormEvent) => {
     console.log('[handleSubmit] Form submit triggered! isNavigating:', isNavigating);
     e.preventDefault();
+
+    // Continuous-session mode (bd polyglot-pdf-rvac): the Submit Form button is
+    // hidden (no downstream submission target yet), but the <form onSubmit> is
+    // still reachable via Enter in a text input. Make submit a no-op here so the
+    // Enter key cannot trigger the validate/alert "final submit" the removed
+    // button would have -- same defense-in-depth as handleNextSection/Previous.
+    if (state.continuousSessionEnabled) {
+      console.log('[handleSubmit] Continuous mode - submit is disabled (no target)');
+      return;
+    }
 
     // Ignore if we're currently navigating (prevents double-trigger from click event)
     if (isNavigating) {
@@ -745,32 +776,33 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         {/* Navigation. In continuous-session mode (bd polyglot-pdf-x8rt) the form
             is one session with no sections to navigate -- hide the Previous/Next
             section buttons so a manual section jump (which desyncs the visible
-            section from the live voice session) is unreachable; only Submit shows. */}
-        <div className="schema-form__navigation">
-          {!state.continuousSessionEnabled && prevSection && (
-            <button
-              type="button"
-              onClick={handlePreviousSection}
-              className="schema-form__nav-button schema-form__nav-button--prev"
-            >
-              ← Previous
-            </button>
-          )}
+            section from the live voice session) is unreachable. The Submit Form
+            button is hidden for now: there is no downstream system to submit to,
+            so it only confused testers (bd voice-ux issues). Re-add it here when a
+            real submission target exists. */}
+        {!state.continuousSessionEnabled && (
+          <div className="schema-form__navigation">
+            {prevSection && (
+              <button
+                type="button"
+                onClick={handlePreviousSection}
+                className="schema-form__nav-button schema-form__nav-button--prev"
+              >
+                ← Previous
+              </button>
+            )}
 
-          {!state.continuousSessionEnabled && nextSection ? (
-            <button
-              type="button"
-              onClick={handleNextSection}
-              className="schema-form__nav-button schema-form__nav-button--next"
-            >
-              Next →
-            </button>
-          ) : (
-            <button type="submit" className="schema-form__nav-button schema-form__nav-button--submit">
-              Submit Form
-            </button>
-          )}
-        </div>
+            {nextSection && (
+              <button
+                type="button"
+                onClick={handleNextSection}
+                className="schema-form__nav-button schema-form__nav-button--next"
+              >
+                Next →
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Legal Warnings */}
         {state.schema.legal_warnings && state.schema.legal_warnings.length > 0 && (

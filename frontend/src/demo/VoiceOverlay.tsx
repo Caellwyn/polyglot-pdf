@@ -19,6 +19,7 @@ declare global {
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
+import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
@@ -1314,6 +1315,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 		// Clear sessionStorage
 		SchemaFormStateManager.clear()
+		// Also clear the app-start form + language choice so the reload returns
+		// all the way to the language-choice modal -- this is how a tester resets
+		// between clients (bd voice-ux issues).
+		clearOnboardingState()
 		// Clear all DOM fields
 		const inputs = document.querySelectorAll('input, textarea, select')
 		let clearedCount = 0

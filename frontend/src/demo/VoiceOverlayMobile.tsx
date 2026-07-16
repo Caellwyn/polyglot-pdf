@@ -11,6 +11,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
+import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
 import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
@@ -883,6 +884,10 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 		// Clear the form state
 		SchemaFormStateManager.clear()
+		// Also clear the app-start form + language choice so the reload returns
+		// all the way to the language-choice modal -- this is how a tester resets
+		// between clients (bd voice-ux issues).
+		clearOnboardingState()
 
 		// Reload the page to reset everything
 		window.location.reload()

@@ -368,6 +368,67 @@ describe('SchemaForm continuous-mode section paging (bd polyglot-pdf-gz20)', () 
     expect(screen.queryByText('Section Two')).toBeNull();
   });
 
+  it('stays on the paged section after a field-value save (no rubber-band to section 1)', async () => {
+    // Reported bug (bd voice-ux issues): the simplified view paged to the model's
+    // section, but as soon as the field value was confirmed it popped back to
+    // section 1. Cause: a confirmation-time updateField in the connection saves
+    // the connection's OWN state, whose currentSectionId stays pinned at section 1
+    // in continuous mode, and dispatches 'schemaFormStateChange'. The listener
+    // must NOT adopt that pinned section over the section the UI has paged to.
+    const schema = makeTwoSectionSchema();
+    seedContinuousState(schema);
+
+    render(<SchemaForm schema={schema} kitId="test" />);
+    await act(async () => {});
+
+    // Voice model focus moves to f2 (section 2); the view pages there.
+    await act(async () => {
+      capturedOnNextField!('f2');
+    });
+    expect(screen.getByText('Section Two')).toBeTruthy();
+    expect(screen.queryByText('Section One')).toBeNull();
+
+    // Simulate the confirmation: the connection updates f2's value on ITS state,
+    // whose currentSectionId is still the pinned first section (sec1). save()
+    // dispatches 'schemaFormStateChange', which the listener handles.
+    await act(async () => {
+      const connState = SchemaFormStateManager.load()!;
+      const pinned = { ...connState, currentSectionId: 'sec1' };
+      SchemaFormStateManager.updateField(pinned, 'f2', 'Jane', {
+        confirmed: true,
+        confirmationMethod: 'ai_voice',
+      });
+    });
+
+    // Still on section 2 -- the value save did NOT rubber-band the view back.
+    expect(screen.getByText('Section Two')).toBeTruthy();
+    expect(screen.queryByText('Section One')).toBeNull();
+  });
+
+  it('does not submit on Enter in continuous mode (Submit button hidden -> onSubmit is a no-op)', async () => {
+    // The "Submit Form" button is hidden in continuous mode (no submission
+    // target), but the <form onSubmit> is still reachable via Enter in a text
+    // input. handleSubmit must no-op in continuous mode so Enter cannot fire the
+    // removed button's submit path (bd polyglot-pdf-rvac).
+    const schema = makeTwoSectionSchema();
+    seedContinuousState(schema);
+    const onSubmit = vi.fn();
+
+    const { container } = render(
+      <SchemaForm schema={schema} kitId="test" onSubmit={onSubmit} />,
+    );
+    await act(async () => {});
+
+    const form = container.querySelector('form.schema-form') as HTMLFormElement;
+    expect(form).toBeTruthy();
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    // Continuous mode: submit is disabled, so the onSubmit prop is never called.
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('does NOT page when continuous mode is off (deprecated section-reset flow owns nav)', async () => {
     // Without continuous mode, section advancement is the manual/section-reset
     // path's job; onNextField must not hijack it by paging the view.

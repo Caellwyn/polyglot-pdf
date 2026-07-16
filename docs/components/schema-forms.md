@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-15. Production continuous-DTI runs the whole form as one session: `completedSections` never grows and manual prev/next is suppressed, BUT `currentSectionId` now FOLLOWS the voice model -- the simplified view pages to the section of the model-focused field (`onNextField` -> `setVisibleSection`) so the shown section tracks fill progress (bd polyglot-pdf-55jg). Section navigation (manual prev/next, section resets) is the deprecated section-reset fallback. Prior: 2026-07-12 (continuous-DTI); 2026-07-08 (bd ipin/jq17/fdz8 preview polish; bd w146 checkbox_group cleanup).*
+*Last updated: 2026-07-16. Production continuous-DTI runs the whole form as one session: `completedSections` never grows and the nav block (manual prev/next AND the "Submit Form" button) is hidden entirely; `currentSectionId` FOLLOWS the voice model -- the simplified view pages to the section of the model-focused field (`onNextField` -> `setVisibleSection`) and the state listeners preserve that paged section so a confirmation no longer rubber-bands to section 1 (bd polyglot-pdf-rvac). Submit is hidden pending a real submission target. See [../journal/entries/2026-07-16-bd-rvac-fix-voice-ux-tester-session-ux-fixes-slower-pace.md](../journal/entries/2026-07-16-bd-rvac-fix-voice-ux-tester-session-ux-fixes-slower-pace.md). Prior: 2026-07-15 (bd 55jg currentSectionId follows the model); 2026-07-12 (continuous-DTI); 2026-07-08 (bd ipin/jq17/fdz8 preview polish; bd w146 checkbox_group cleanup).*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -28,7 +28,13 @@ instances) operating on a `SchemaFormState` value:
   (bd polyglot-pdf-55jg) — so the shown section tracks fill progress even though
   no section-COMPLETE transitions happen. `setVisibleSection` sets only
   `currentSectionId` and PRESERVES `pinnedFieldId` (unlike `navigateToSection`,
-  the manual-jump path, which clears the pin). The section-COMPLETE machinery
+  the manual-jump path, which clears the pin). Because this paged
+  `currentSectionId` is UI-only in continuous mode -- the connection's persisted
+  state keeps it pinned at the first section -- `SchemaForm`'s `schemaFormStateChange`
+  and `vffOnSectionChanged` listeners PRESERVE the current React `currentSectionId`
+  in continuous mode rather than adopting the pinned value; otherwise every
+  confirmation-time field-value save rubber-banded the view back to section 1
+  (bd polyglot-pdf-rvac). The section-COMPLETE machinery
   (`markSectionComplete`/`switchToSection`, manual prev/next) drives real
   navigation only in the DEPRECATED section-reset fallback. Sections page the UI
   in both modes.
@@ -90,10 +96,13 @@ as an array even though `FieldValue.value` itself is only `string | boolean | nu
 ## Rendering
 
 `SchemaForm.tsx` renders one section at a time (`getCurrentSectionFields`), with a
-progress bar (`getProgress`) and a final Submit. Manual prev/next section nav
-(`getNextSection`/`getPreviousSection`, gated by `isSectionValid`) is suppressed
-in production continuous mode -- it belongs to the DEPRECATED section-reset
-fallback (bd polyglot-pdf-55jg); continuous sessions show only Submit. It also mounts the voice overlay
+progress bar (`getProgress`). The whole navigation block -- manual prev/next
+(`getNextSection`/`getPreviousSection`, gated by `isSectionValid`) AND the trailing
+"Submit Form" button -- renders ONLY in the deprecated non-continuous section-reset
+fallback (bd polyglot-pdf-55jg); production continuous sessions show no nav block at
+all. The Submit button is hidden for now because there is no downstream submission
+target (bd polyglot-pdf-rvac) -- re-add it in the nav block when a real target
+exists. It also mounts the voice overlay
 (desktop `VoiceOverlay` / mobile `VoiceOverlayMobile`, `window.innerWidth <= 768`)
 and the PDF print/download buttons, and creates the shared mic `MediaStream` +
 `ConnectionManager` once the stream is ready. Behind the preview-UI flag
