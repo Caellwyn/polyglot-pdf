@@ -84,6 +84,46 @@ def _membership_trigger(f: dict) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# Step 0: top-level `required` migration (bd polyglot-pdf-0x10.4).
+# --------------------------------------------------------------------------- #
+
+def _migrate_top_level_required(fields: List[dict], repairs: List[dict]) -> None:
+    """Move a legacy top-level field `required` into validation.required.
+
+    The canonical home is validation.required (bd a1ql); a top-level key is
+    read by NO consumer, so a kit carrying one has silently-optional fields
+    and lints required-top-level ERROR with no editor control that could fix
+    it (kits saved by the pre-8n2s editor carry the key permanently). A
+    truthy value moves into validation.required unless the canonical key is
+    already explicitly set (never clobber the canonical shape); the top-level
+    key is dropped either way."""
+    for i, f in enumerate(fields):
+        if "required" not in f:
+            continue
+        val = f.pop("required")
+        path = f"fields[{i}] (id={f.get('id')})"
+        if bool(val):
+            validation = f.get("validation")
+            if not isinstance(validation, dict):
+                validation = {}
+                f["validation"] = validation
+            if validation.get("required") is None:
+                validation["required"] = True
+                detail = "top-level required=true moved into validation.required"
+            else:
+                detail = ("top-level required dropped (validation.required "
+                          f"already {validation['required']!r})")
+        else:
+            detail = "dead top-level required (falsy) dropped"
+        repairs.append({
+            "action": "migrate-top-level-required",
+            "path": path,
+            "detail": detail,
+            "error": False,
+        })
+
+
+# --------------------------------------------------------------------------- #
 # Step 1: option-value slugs.
 # --------------------------------------------------------------------------- #
 
@@ -750,6 +790,10 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
 
     if dump is not None:
         _check_widgets_exist(fields, dump)
+
+    # Legacy top-level `required` -> validation.required (bd 0x10.4) before
+    # anything else: it is independent of the condition/slug machinery.
+    _migrate_top_level_required(fields, repairs)
 
     alias_hits: Dict[str, int] = {}
 

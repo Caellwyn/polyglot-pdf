@@ -64,10 +64,6 @@ export function TextField({
         aria-describedby={error ? `${field.id}-error` : undefined}
       />
 
-      {field.help?.instructions && (
-        <p className="form-field__instructions">{field.help.instructions}</p>
-      )}
-
       {field.help?.example && (
         <p className="form-field__example">Example: {field.help.example}</p>
       )}

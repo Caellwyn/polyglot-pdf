@@ -189,9 +189,10 @@ function PreviewField({ field, required, value, onSetValue, onToggleOption }: Pr
         onSetValue={onSetValue}
         onToggleOption={onToggleOption}
       />
-      {field.help?.instructions && (
-        <p className="text-xs text-gray-500 mt-1">{field.help.instructions}</p>
-      )}
+      {/* help.instructions is deliberately NOT rendered here: it is reference
+          material for the voice AI (SI/guidance paths), not on-screen form
+          text; format_hint is the user-visible hint (as the input's
+          placeholder). bd polyglot-pdf-0x10.2. */}
     </div>
   );
 }

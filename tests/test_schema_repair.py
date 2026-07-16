@@ -948,3 +948,66 @@ def test_multi_entry_overflow_supplement_aliases_like_field_level():
     assert any(r["action"] == "alias-overflow-supplement"
                and r["path"].endswith(".multi_entry") for r in repairs)
     assert _model_validates(repaired) == ""
+
+
+# --------------------------------------------------------------------------- #
+# Top-level `required` migration (bd polyglot-pdf-0x10.4).
+# --------------------------------------------------------------------------- #
+
+def _text_field(fid, **extra):
+    f = {"id": fid, "type": "text", "pdf_field_name": f"{fid}[0]"}
+    f.update(extra)
+    return f
+
+
+def test_truthy_top_level_required_moves_into_validation():
+    schema = _v2_schema([_text_field("a", required=True)])
+    assert has_errors(lint_schema(schema))  # required-top-level is RED going in
+    repaired, repairs = repair(schema)
+    field = repaired["fields"][0]
+    assert "required" not in field
+    assert field["validation"]["required"] is True
+    assert any(r["action"] == "migrate-top-level-required" for r in repairs)
+    assert not has_errors(lint_schema(repaired))
+
+
+def test_truthy_top_level_required_merges_into_existing_validation():
+    schema = _v2_schema([
+        _text_field("a", required=True, validation={"max_length": 5}),
+    ])
+    repaired, _ = repair(schema)
+    field = repaired["fields"][0]
+    assert "required" not in field
+    # Sibling validation keys survive the merge.
+    assert field["validation"] == {"max_length": 5, "required": True}
+
+
+def test_top_level_required_never_clobbers_explicit_validation_required():
+    schema = _v2_schema([
+        _text_field("a", required=True, validation={"required": False}),
+    ])
+    repaired, repairs = repair(schema)
+    field = repaired["fields"][0]
+    assert "required" not in field
+    # The canonical key wins; the legacy key is dropped, recorded.
+    assert field["validation"]["required"] is False
+    assert any(r["action"] == "migrate-top-level-required" for r in repairs)
+
+
+def test_falsy_top_level_required_is_dropped_without_inventing_validation():
+    schema = _v2_schema([_text_field("a", required=False)])
+    repaired, repairs = repair(schema)
+    field = repaired["fields"][0]
+    assert "required" not in field
+    assert "validation" not in field  # nothing invented for a dead falsy key
+    assert any(r["action"] == "migrate-top-level-required" for r in repairs)
+
+
+def test_required_migration_is_idempotent():
+    schema = _v2_schema([_text_field("a", required=True)])
+    once, _ = repair(schema)
+    twice, repairs2 = repair(once)
+    assert twice["fields"][0]["validation"]["required"] is True
+    assert not any(
+        r["action"] == "migrate-top-level-required" for r in repairs2
+    )

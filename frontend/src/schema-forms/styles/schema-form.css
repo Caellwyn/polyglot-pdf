@@ -139,11 +139,9 @@
   margin-left: 0.25rem;
 }
 
-.form-field__instructions {
-  font-size: 0.875rem;
-  color: #666;
-  margin: 0.5rem 0 0 0;
-}
+/* help.instructions is voice-AI reference material, not on-screen form text
+   (bd polyglot-pdf-0x10.2) -- no .form-field__instructions rule; the short
+   user-facing hint is the input placeholder (format_hint). */
 
 .form-field__example {
   font-size: 0.875rem;

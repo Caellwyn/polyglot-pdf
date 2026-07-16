@@ -57,9 +57,6 @@ export function SelectField({
           className={`form-field__input ${error ? "form-field__input--error" : ""}`}
           placeholder={field.help?.inline || field.help?.example || ""}
         />
-        {field.help?.instructions && (
-          <p className="form-field__instructions">{field.help.instructions}</p>
-        )}
         {error && (
           <p id={`${field.id}-error`} className="form-field__error" role="alert">
             {error}
@@ -110,10 +107,6 @@ export function SelectField({
           </option>
         ))}
       </select>
-
-      {field.help?.instructions && (
-        <p className="form-field__instructions">{field.help.instructions}</p>
-      )}
 
       {error && (
         <p id={`${field.id}-error`} className="form-field__error" role="alert">
