@@ -754,6 +754,34 @@ describe('Connection Manager (connection.ts)', () => {
       expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
     })
 
+    it('sendActivityStart (the overlays REAL speech-start wiring) cancels the re-prompt', async () => {
+      // The production overlays call connectionManager.sendActivityStart()
+      // directly from their VAD speech-start handlers and never route through
+      // onVADSpeechStart (fresh-eyes gap) -- the cancel must live on the path
+      // the real UI actually drives.
+      const manager = await pausedManager()
+
+      await manager.resume()
+      manager.sendActivityStart()
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('sendActivityStart cancels the re-prompt even under native VAD (signal suppressed, cancel not)', async () => {
+      const manager = await pausedManager()
+      // Backend reports native VAD: the activity SIGNAL is suppressed, but the
+      // user-spoke fact must still cancel the pending re-prompt.
+      capturedCallbacks.onNativeVadMode(true)
+
+      await manager.resume()
+      manager.sendActivityStart()
+      expect(webFormConnectionMock.sendActivityStart).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
     it('disconnect inside the window cancels the re-prompt', async () => {
       const manager = await pausedManager()
 

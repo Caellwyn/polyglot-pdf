@@ -866,6 +866,14 @@ export function createConnectionManager(
 		},
 
 		sendActivityStart() {
+			// The user started a turn -- their answer supersedes the pending
+			// post-resume re-prompt. Cleared HERE (not only in onVADSpeechStart)
+			// because the overlays' real manual-VAD speech-start handlers call
+			// sendActivityStart() directly and never route through
+			// onVADSpeechStart (fresh-eyes gap, bd polyglot-pdf-yo5t). Cleared
+			// BEFORE the native-VAD suppression: the signal itself is suppressed
+			// under native VAD, but the user-spoke fact still cancels the timer.
+			clearResumeReprompt()
 			// bd polyglot-pdf-333: in native-VAD mode Gemini owns turn detection;
 			// suppress manual activity signals (this also covers the PTT button path).
 			if (nativeVad) return
@@ -1122,6 +1130,11 @@ export function createConnectionManager(
 				throw new Error('Connection not initialized')
 			}
 
+			// A section (re)start supersedes any pending post-resume re-prompt --
+			// the new section's initiating message re-asks its own field
+			// (bd polyglot-pdf-yo5t, fresh-eyes gap 2).
+			clearResumeReprompt()
+
 			// Stop recording if active
 			if (audioManager?.isRecording()) {
 				audioManager.stopRecording()
@@ -1143,6 +1156,10 @@ export function createConnectionManager(
 			if (!connection) {
 				throw new Error('Connection not initialized')
 			}
+
+			// Same as startSection: a switch supersedes the pending re-prompt
+			// (bd polyglot-pdf-yo5t, fresh-eyes gap 2).
+			clearResumeReprompt()
 
 			// Stop recording if active (buffer draining handled by WebFormConnection)
 			if (audioManager?.isRecording()) {
