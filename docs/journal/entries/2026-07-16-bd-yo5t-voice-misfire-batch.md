@@ -96,12 +96,30 @@ plan. This PR closes polyglot-pdf-yo5t, -h7wx, -oqkj, and -y25o.
 
 ## Doc freshness
 
+Bumped (content + stamp):
 - `docs/genai_docs/live-api-best-practices.md` -- language_codes section
   updated from "NOT yet endpoint-verified" to verified-on-default-tier, with
   the probe pointer and the premium-tier caveat.
 - `docs/standards/ws-protocol.md` -- new `spoken_language` handshake key row
   (enforced by the key-coverage contract test).
+- `docs/components/voice-ai.md` -- ASR language bias + stored-value echo in the
+  Response config section.
+- `docs/components/websocket-routing.md` -- handshake spoken_language ->
+  pre-connect service seeding.
+- `docs/components/tool-call-flow.md` -- update round-trip now describes the
+  stored-value echo + read-back-from-response.
+- `docs/standards/voice-and-vad.md` -- new "Pause / unpause" section (the
+  re-prompt debounce + guards).
 - New findings doc: `scripts/spikes/transcription_lang_codes_findings.md`.
+
+Reviewed and left as-is (flagged stale by the checker because they track
+`backend/config.py` / other files this branch touched, but their prose is not
+invalidated by this diff -- most were already stale from other branches'
+churn): components/auth.md, config-deployment.md, context-compression.md,
+jit-schema.md; standards/ai-models.md, confirmation-and-audit.md,
+hipaa-pii-policy.md, logging-and-cost.md, risk-rating.md,
+section-reset-deprecation.md, si-reduction.md, stateless-architecture.md,
+terminology.md, validation-delegation.md; technical_guide.md.
 
 ## Files touched
 
