@@ -36,6 +36,7 @@ import {
 } from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
+import { renameBlockReason, renameFieldId } from './utils/fieldRename';
 import { SectionManager } from './components/SectionManager';
 import type { DivisionsPatch } from './utils/sectionOps';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
@@ -364,6 +365,21 @@ export const App: React.FC = () => {
   const handleUpdateFields = React.useCallback((fields: FormField[], sections?: FormSection[]) => {
     if (!schema) return;
     commitSchema({ ...schema, fields, ...(sections ? { sections } : {}) });
+  }, [schema, commitSchema]);
+
+  // Rename a field's internal id, retargeting every in-schema reference
+  // (conditions, section membership, copy_to, supplements) in ONE undoable
+  // commit (bd polyglot-pdf-0x10.1). Returns a human-readable block reason,
+  // or null on success/no-op. Selection follows the renamed field.
+  const handleRenameField = React.useCallback((oldId: string, newId: string): string | null => {
+    if (!schema) return 'No schema loaded.';
+    const trimmed = newId.trim();
+    const reason = renameBlockReason(schema, oldId, trimmed);
+    if (reason) return reason;
+    if (trimmed === oldId) return null;
+    commitSchema(renameFieldId(schema, oldId, trimmed));
+    setSelectedFieldId(prev => (prev === oldId ? trimmed : prev));
+    return null;
   }, [schema, commitSchema]);
 
   // Update form-level metadata (version, edition, OMB, expiration -- bd
@@ -1148,6 +1164,7 @@ export const App: React.FC = () => {
                       : undefined
                   }
                   onUpdateField={handleUpdateField}
+                  onRenameField={handleRenameField}
                   onUnmergeField={handleUnmergeField}
                   onChangeGroupKind={handleChangeGroupKind}
                   onUpdateMetadata={handleUpdateMetadata}

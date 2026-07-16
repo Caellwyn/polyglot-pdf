@@ -22,6 +22,11 @@ interface FieldEditorProps {
   field: FormField | null;
   schema: FormSchema;
   onUpdateField: (field: FormField) => void;
+  // Rename the field's internal id, retargeting every in-schema reference in
+  // one undoable commit (bd polyglot-pdf-0x10.1). Returns a human-readable
+  // block reason (shown inline) or null on success. Optional: without it the
+  // id header stays read-only.
+  onRenameField?: (oldId: string, newId: string) => string | null;
   // Un-merge a consolidated options[] field back into separate per-widget fields
   // (bd polyglot-pdf-s4dp.1). Optional so the editor still renders without it.
   onUnmergeField?: (fieldId: string) => void;
@@ -59,6 +64,95 @@ interface FieldEditorProps {
   // a field is flagged while editing it (bd polyglot-pdf-0x10.6).
   lintFindings?: LintFinding[];
 }
+
+// Editable field-id header (bd polyglot-pdf-0x10.1). The id is the schema's
+// join key, so it renames through an explicit edit mode (pencil -> input ->
+// Enter/check commits, Escape/x cancels) rather than a live-typing input; the
+// commit routes through onRenameField, which retargets every in-schema
+// reference atomically and returns a block reason (shown inline) when the id
+// is empty/duplicate/not-a-slug.
+const FieldIdHeader: React.FC<{
+  fieldId: string;
+  onRenameField: (oldId: string, newId: string) => string | null;
+}> = ({ fieldId, onRenameField }) => {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(fieldId);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const start = () => {
+    setDraft(fieldId);
+    setError(null);
+    setEditing(true);
+  };
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+  };
+  const commit = () => {
+    const reason = onRenameField(fieldId, draft);
+    if (reason) {
+      setError(reason);
+      return;
+    }
+    setEditing(false);
+    setError(null);
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-gray-900">{fieldId}</h3>
+        <button
+          type="button"
+          className="text-gray-400 hover:text-gray-700"
+          title="Rename this field's internal ID (updates every reference to it)"
+          aria-label="Rename field ID"
+          onClick={start}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          className="input flex-1 font-mono text-sm"
+          value={draft}
+          autoFocus
+          aria-label="Field ID"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') cancel();
+          }}
+        />
+        <button type="button" className="btn-sm btn-primary" onClick={commit}>
+          Rename
+        </button>
+        <button type="button" className="btn-sm btn-secondary" onClick={cancel}>
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p className="text-xs text-red-600" role="alert">{error}</p>
+      )}
+      <p className="text-xs text-gray-500">
+        Renaming updates every condition, section and copy that references this field.
+      </p>
+    </div>
+  );
+};
 
 // The editable form-metadata panel (bd polyglot-pdf-s4dp.2). Shown when no field
 // is selected, so a human can correct an auto-extracted version -- or fill one a
@@ -284,6 +378,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   field,
   schema,
   onUpdateField,
+  onRenameField,
   onUnmergeField,
   onChangeGroupKind,
   onUpdateMetadata,
@@ -305,9 +400,14 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   return (
     <div className="h-full overflow-auto custom-scrollbar">
       <div className="p-4 space-y-6">
-        {/* Header */}
+        {/* Header. key={field.id} remounts the id editor on rename/selection
+            change so its draft state never leaks across fields. */}
         <div className="border-b border-gray-200 pb-4">
-          <h3 className="text-lg font-semibold text-gray-900">{field.id}</h3>
+          {onRenameField ? (
+            <FieldIdHeader key={field.id} fieldId={field.id} onRenameField={onRenameField} />
+          ) : (
+            <h3 className="text-lg font-semibold text-gray-900">{field.id}</h3>
+          )}
           <p className="text-sm text-gray-500 font-mono">{field.pdf_field_name}</p>
         </div>
 
