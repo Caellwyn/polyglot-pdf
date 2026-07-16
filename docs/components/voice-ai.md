@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-07-15 (bd polyglot-pdf-b1gj + ghv4: actionable unknown-field rejections + the STOP-RETRYING loop-breaker on update_form_fields; per-injection spoken-language re-anchor and the no-quoted-English rule for prompts/tool descriptions -- see the tool-calling section). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-16 (bd polyglot-pdf-yo5t/h7wx/oqkj/y25o voice-misfire batch: ASR language bias on the transcription configs + the stored-value echo on update_form_fields + the debounced post-unpause re-prompt caller in connection.ts -- see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-15 (bd polyglot-pdf-b1gj + ghv4: actionable unknown-field rejections + the STOP-RETRYING loop-breaker on update_form_fields; per-injection spoken-language re-anchor and the no-quoted-English rule for prompts/tool descriptions -- see the tool-calling section). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -195,6 +195,29 @@ production default; verified on the deployed Vertex model). Requesting it never
 forwards the text to the client (PHI stays server-side, bd hjo). VAD config
 (`realtime_input_config`) is covered in
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md).
+
+**ASR language bias** (bd polyglot-pdf-y25o): when `TRANSCRIPTION_LANGUAGE_HINT_ENABLED`
+(default true) and the service has set codes via
+`set_transcription_language_codes(...)` (derived in `FormFillingService.start_session`
+from the handshake's `spoken_language` through
+`backend/utils/language_codes.py`), the requested transcription blocks carry
+`language_codes` (BCP-47, e.g. `["es-US"]`) so the ASR listens FOR the session
+language -- the SI steers only the LLM's output language, and unbiased
+multilingual ASR can transcribe a mumbled session-language word as a neighboring
+language and drag the model's auto-detect with it. The hint never turns a
+transcription block on by itself, and it is per-connect: a mid-session language
+change takes effect at the next session (re)establishment. Endpoint-verified
+ACCEPTED on the Vertex 2.5 native-audio default tier
+(`scripts/spikes/transcription_lang_codes_findings.md`); the AI-Studio 3.1
+premium tier is unverified -- the env flag is the kill-switch.
+
+**Stored-value echo** (bd polyglot-pdf-h7wx): a successful `update_form_fields`
+tool response carries `stored_values` (field_id -> the post-validator CANONICAL
+value) and repeats it in the `message`; the DTI SI directs the model to read its
+confirmation read-back from that echo -- never from its own conversational
+memory, which the compression window can have evicted (live sessions confirmed
+values that were never in the field). The echo is model-facing only; production
+structlog calls still log counts, never values.
 
 Model **thinking** is turned off by default: when `DISABLE_MODEL_THINKING` is set
 (default on) and the active model is 2.5-family, the config carries

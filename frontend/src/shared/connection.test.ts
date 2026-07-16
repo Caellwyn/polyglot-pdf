@@ -17,7 +17,7 @@
  * WebFormConnection constructor and invoking it directly.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createConnectionManager } from './connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import type { FormSchema } from '../schema-forms/types/schema'
@@ -32,7 +32,10 @@ let webFormConnectionMock: any = null
 
 vi.mock('./fieldManager', () => ({
   createFieldManager: vi.fn(() => ({
-    cleanup: vi.fn()
+    cleanup: vi.fn(),
+    // disconnect() tears the field manager down via destroy() (the re-prompt
+    // suite is the first to exercise disconnect through this mock).
+    destroy: vi.fn()
   }))
 }))
 
@@ -40,6 +43,9 @@ vi.mock('./audioManager', () => ({
   createAudioManager: vi.fn(() => {
     audioManagerMock = {
       cleanup: vi.fn(),
+      // disconnect() tears the audio manager down via destroy() (first
+      // exercised by the re-prompt suite's disconnect test).
+      destroy: vi.fn(),
       startRecording: vi.fn(),
       stopRecording: vi.fn(),
       isRecording: vi.fn(() => false),
@@ -72,6 +78,7 @@ vi.mock('../webFormConnection', () => ({
     this.sendActivityStart = vi.fn()
     this.sendActivityEnd = vi.fn(() => Promise.resolve())
     this.sendPrompt = vi.fn()
+    this.sendRecoveryPrompt = vi.fn()
     this.sendManualFieldUpdate = vi.fn()
     this.setGetToken = vi.fn()
     this.getState = vi.fn()
@@ -623,6 +630,166 @@ describe('Connection Manager (connection.ts)', () => {
 
       manager.onVADSpeechStart()
       expect(audioManagerMock.flushAudioQueue).not.toHaveBeenCalled()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // (d) Debounced post-unpause re-prompt (bd polyglot-pdf-yo5t)
+  //
+  // pause() discards Gemini's in-flight question CLIENT-side only, so after a
+  // warm resume both sides sit waiting. resume() therefore arms a debounce
+  // timer that asks the backend (recovery_prompt level 1) to have Gemini
+  // re-ask the current field -- unless the user re-paused, the AI is already
+  // talking, or the user started answering themselves. The reconnect-routed
+  // resume path must NOT arm it (the backend RESUME initiating message
+  // already re-prompts there).
+  // ---------------------------------------------------------------------------
+  describe('debounced post-unpause re-prompt (bd yo5t)', () => {
+    async function pausedManager() {
+      const manager = createConnectionManager(testSchema, vi.fn(), 'English')
+      await manager.connect()
+      manager.pause()
+      // Default mock has Gemini speaking; the re-prompt only fires into
+      // silence, so these tests start from a quiet session.
+      audioManagerMock.isSpeaking.mockReturnValue(false)
+      return manager
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('fires exactly ONE level-1 recovery prompt ~1.5s after a settled warm resume', async () => {
+      const manager = await pausedManager()
+
+      await manager.resume()
+      // Not yet -- the debounce window is still open.
+      vi.advanceTimersByTime(1400)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(200)
+      expect(webFormConnectionMock.sendRecoveryPrompt).toHaveBeenCalledTimes(1)
+      expect(webFormConnectionMock.sendRecoveryPrompt).toHaveBeenCalledWith(1)
+
+      // The window closed; nothing further fires.
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).toHaveBeenCalledTimes(1)
+    })
+
+    it('pause/unpause flutter reschedules ONE re-prompt instead of stacking them', async () => {
+      const manager = await pausedManager()
+
+      // Three rapid pause/resume cycles inside the window.
+      await manager.resume()
+      vi.advanceTimersByTime(500)
+      manager.pause()
+      await manager.resume()
+      vi.advanceTimersByTime(500)
+      manager.pause()
+      await manager.resume()
+
+      // Only the LAST resume's timer survives: nothing at +1.4s...
+      vi.advanceTimersByTime(1400)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+      // ...one prompt once it settles.
+      vi.advanceTimersByTime(200)
+      expect(webFormConnectionMock.sendRecoveryPrompt).toHaveBeenCalledTimes(1)
+    })
+
+    it('a re-pause inside the window cancels the pending re-prompt', async () => {
+      const manager = await pausedManager()
+
+      await manager.resume()
+      manager.pause()
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('does NOT arm on the reconnect-routed resume path (dead socket)', async () => {
+      const manager = await pausedManager()
+      webFormConnectionMock.isSocketOpen.mockReturnValue(false)
+      webFormConnectionMock.getStatus.mockReturnValue('idle_timeout')
+
+      await manager.resume()
+
+      vi.advanceTimersByTime(5000)
+      // The reconnect path re-prompts via the backend RESUME initiating
+      // message; a client re-prompt on top would double-speak.
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('stays silent when the AI is already talking at fire time', async () => {
+      const manager = await pausedManager()
+
+      await manager.resume()
+      // Gemini's audio came back on its own (e.g. a turn still streaming).
+      audioManagerMock.isSpeaking.mockReturnValue(true)
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('a PTT press inside the window cancels the re-prompt (user is answering)', async () => {
+      const manager = await pausedManager()
+
+      await manager.resume()
+      manager.setPushToTalkHeld(true)
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('a VAD speech-start inside the window cancels the re-prompt (user is answering)', async () => {
+      const manager = await pausedManager()
+
+      await manager.resume()
+      manager.onVADSpeechStart()
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('sendActivityStart (the overlays REAL speech-start wiring) cancels the re-prompt', async () => {
+      // The production overlays call connectionManager.sendActivityStart()
+      // directly from their VAD speech-start handlers and never route through
+      // onVADSpeechStart (fresh-eyes gap) -- the cancel must live on the path
+      // the real UI actually drives.
+      const manager = await pausedManager()
+
+      await manager.resume()
+      manager.sendActivityStart()
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('sendActivityStart cancels the re-prompt even under native VAD (signal suppressed, cancel not)', async () => {
+      const manager = await pausedManager()
+      // Backend reports native VAD: the activity SIGNAL is suppressed, but the
+      // user-spoke fact must still cancel the pending re-prompt.
+      capturedCallbacks.onNativeVadMode(true)
+
+      await manager.resume()
+      manager.sendActivityStart()
+      expect(webFormConnectionMock.sendActivityStart).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
+    })
+
+    it('disconnect inside the window cancels the re-prompt', async () => {
+      const manager = await pausedManager()
+
+      await manager.resume()
+      manager.disconnect()
+
+      vi.advanceTimersByTime(5000)
+      expect(webFormConnectionMock.sendRecoveryPrompt).not.toHaveBeenCalled()
     })
   })
 

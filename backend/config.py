@@ -270,6 +270,22 @@ class Settings(BaseModel):
 	CONTEXT_COMPRESSION_TRIGGER_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_TRIGGER_TOKENS") or "5000")
 	CONTEXT_COMPRESSION_WINDOW_TOKENS: int = int(os.getenv("CONTEXT_COMPRESSION_WINDOW_TOKENS") or "3000")
 
+	# --- ASR language bias (bd polyglot-pdf-y25o) ---
+	# When on, the Live connect config's input/output AudioTranscriptionConfig
+	# carries `language_codes` derived from the user's app-start language choice
+	# (backend/utils/language_codes.py), biasing the ASR listener toward the
+	# session language. SI text steers only the LLM's output language; without
+	# this bias a mumbled session-language word can be TRANSCRIBED as a
+	# neighboring language and drag the model's auto-detect with it (live es->pt
+	# slip: "distrito quintal"). Endpoint-verified ACCEPTED on the default tier
+	# (Vertex 2.5 native audio, 2026-07-16 -- see
+	# scripts/spikes/transcription_lang_codes_findings.md); the premium tier
+	# (AI Studio 3.1) is unverified, so this kill-switch reverts to unbiased
+	# multilingual ASR if a model tier rejects it (1007 at connect).
+	TRANSCRIPTION_LANGUAGE_HINT_ENABLED: bool = (
+		os.getenv("TRANSCRIPTION_LANGUAGE_HINT_ENABLED", "true").lower() == "true"
+	)
+
 	# --- Per-form window derivation (bd polyglot-pdf-jnjj.35 / A6) ---
 	# The jnjj.25 cost measurement proved DTI + CALIBRATED eviction is the win
 	# (-21% on the unhappy path), and the calibration is LOAD-BEARING and
@@ -710,7 +726,9 @@ class Settings(BaseModel):
 	DTI_SYSTEM_INSTRUCTION: str = (
     "LANGUAGE: The session language is CHOSEN BY THE USER at app start and announced to you in "
     "system messages as 'Speak <language>' -- that choice is authoritative. Speak THAT language "
-    "for the entire conversation, whichever of the supported languages it is. Do NOT switch "
+    "for the entire conversation, whichever of the supported languages it is. YOU MUST RESPOND "
+    "UNMISTAKABLY IN the session language -- every turn, every word, including single words and "
+    "place names: never let a neighboring language's word slip in. Do NOT switch "
     "languages because the user's speech momentarily sounds like another language; only the "
     "user's explicit request to switch changes the session language. Only if NO session language "
     "has been announced, detect it from the user's first utterance. Fill field VALUES in the fill "
@@ -759,7 +777,10 @@ class Settings(BaseModel):
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"
     "2. User answers -> IMMEDIATELY fill that ONE field, using its exact field_id from the guidance.\n"
-    "3. Read the value back -> ask 'Is that correct?'\n"
+    "3. Read the value back -> ask 'Is that correct?'. Read back the STORED value the fill tool "
+    "returned ('stored_values' / 'Stored value' in its response) -- that is the authoritative "
+    "saved value; NEVER read a value back from your own memory of the conversation. For names "
+    "and for numbers (ids, dates, phone, ZIP), read the stored value character by character.\n"
     "4. Wait for verbal confirmation (yes/correct/that's right).\n"
     "5. Confirm the field with confirmation_method='verbal'.\n"
     "6. The confirmation returns the NEXT field's guidance. Ask for THAT field next, following its "
@@ -782,15 +803,30 @@ class Settings(BaseModel):
     "MATCHING:\n"
     "- Options must match EXACTLY from the field's guidance (punctuation matters).\n"
     "- Translate the user's response to the options in the field's fill language.\n"
+    "- Option labels in the guidance are written in ENGLISH. When you SPEAK options to the user "
+    "-- offering choices or reading a selection back -- ALWAYS say them translated into the "
+    "session language; NEVER read an English label aloud verbatim in a non-English session. The "
+    "exact English value is only for the tool call.\n"
     "- Multiple checkboxes: comma-separated exact values.\n"
     "- Validation error -> retry with the correct option or ask the user to clarify.\n"
     "- Never proceed until the field updates successfully.\n\n"
+
+    "DATES:\n"
+    "Accept a date spoken naturally in the session language ('January first two thousand one', "
+    "'primero de enero de dos mil uno'). Convert it to the field's required format YOURSELF -- "
+    "NEVER ask the user to restate a date in a format like 'year, month, day'; the format "
+    "requirement is for YOU, not for them. If a spoken date is ambiguous or incomplete, ask a "
+    "natural clarifying question (e.g. which year), not a format request. Read the date back "
+    "naturally in the session language, then confirm the stored value.\n\n"
 
     "CONSTRAINTS:\n"
     "- Never read field IDs aloud (use spoken names only).\n"
     "- Never abbreviate spoken names (use the full name from the guidance).\n"
     "- When asking for a field, use natural phrasing without mentioning 'field' or IDs.\n"
     "- For required fields: ask naturally without pressuring.\n"
+    "- NEVER fill a field with a value the user has not explicitly given in this conversation. "
+    "If you heard nothing, or only noise or silence, ask the question (again) -- never invent, "
+    "guess, or reuse an example value as an answer.\n"
     "- SKIP vs NOT-APPLICABLE (two different things):\n"
     "    * NOT APPLICABLE -- the question does not apply (e.g. no middle name), or the user wants to clear a field: fill it with value \"\" then confirm normally. This is a real answer.\n"
     "    * SKIP -- the question DOES apply but the user cannot answer right now (wants to ask a translator, or look it up later): first CONFIRM ('Would you like to skip this question for now?'); once they say yes, call skip_field with the field_id. Do NOT confirm a skip -- skip_field records it. Only skip when the user asks to; for a value they simply have not given yet, keep asking.\n"
@@ -841,7 +877,8 @@ class Settings(BaseModel):
 	# the read-back + 'Is that correct?' step, so it auto-confirmed field 1 without
 	# re-asking (bd polyglot-pdf-choa).
 	INITIATING_MESSAGE: str = (
-		"Speak {spoken_language}. Greet user warmly, state section name, immediately ask for {next_field_hint}. "
+		"Speak {spoken_language}. You MUST respond UNMISTAKABLY in {spoken_language}. "
+		"Greet user warmly, state section name, immediately ask for {next_field_hint}. "
 		"Do NOT re-verify fields that were already confirmed earlier - start by asking for this field. "
 		"This field follows the normal workflow like every other: after the user answers, fill it, "
 		"read the value back, ask 'Is that correct?', and confirm only after the user says yes.{current_field_guidance}"
@@ -854,7 +891,8 @@ class Settings(BaseModel):
 	# ({current_field_guidance} as in INITIATING_MESSAGE: the DTI field-1 channel,
 	# "" in non-DTI mode.)
 	RESUME_INITIATING_MESSAGE: str = (
-		"Speak {spoken_language}. Do NOT greet the user. Do NOT introduce the form or section. "
+		"Speak {spoken_language}. You MUST respond UNMISTAKABLY in {spoken_language}. "
+		"Do NOT greet the user. Do NOT introduce the form or section. "
 		"Simply ask for {next_field_hint} in one short sentence, as if continuing naturally.{current_field_guidance}"
 	)
 
@@ -883,7 +921,7 @@ class Settings(BaseModel):
 	# language (observed live in a Spanish session, bd polyglot-pdf-ghv4).
 	RECOVERY_PROMPT_LEVEL_1: str = (
 		"The user seems to have paused. Re-ask them, in the session language, for the same field "
-		"you just asked for."
+		"you just asked for. Do not fill or change any field until the user answers."
 	)
 
 	# Level 2: "Are you still there?"

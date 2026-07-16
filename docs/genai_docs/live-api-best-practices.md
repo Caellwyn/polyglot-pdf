@@ -124,13 +124,19 @@ These are intended to replace manual `activity_start`/`activity_end` signaling
 for VAD-aware clients; our current VAD path (via `DISABLE_GEMINI_VAD` and
 `activity_start`/`activity_end`) remains the only endpoint-verified approach.
 
-### Transcription language codes (available as of 2.8.0, NOT yet endpoint-verified)
+### Transcription language codes (available as of 2.8.0, endpoint-verified on the default tier 2026-07-16)
 
 `AudioTranscriptionConfig` gained `language_codes` (list of BCP-47 strings,
 e.g. `["en-US", "es-MX"]`). Pass via `LiveConnectConfig.input_audio_transcription`
 or `output_audio_transcription`. This allows hinting the transcription language
 for multilingual sessions, which is directly relevant to the polyglot-pdf use
-case. Endpoint behavior on our native-audio models: unverified.
+case. Endpoint behavior: **VERIFIED ACCEPTED** on the production default tier
+(`gemini-live-2.5-flash-native-audio`, Vertex) with the full deploy config --
+connect + audio reply, no 1007 (bd polyglot-pdf-y25o;
+`scripts/spikes/transcription_lang_codes_findings.md`). Shipped as the ASR
+language bias behind `TRANSCRIPTION_LANGUAGE_HINT_ENABLED` (default true).
+Premium tier (AI Studio 3.1) remains unverified -- 3.1 does not exist on
+Vertex; disable the flag or verify first if a deploy flips USE_PREMIUM_MODEL.
 
 ### Translation config (available as of 2.8.0, NOT yet endpoint-verified)
 

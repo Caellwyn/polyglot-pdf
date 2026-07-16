@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/adapters/live_ai_gemini.py backend/routes/websocket_routes.py backend/main.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts frontend/src/webFormConnection.ts frontend/src/demo/useDemoVAD.ts frontend/src/demo/VoiceOverlay.tsx frontend/src/vad-tuning
 
-*Last updated: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
+*Last updated: 2026-07-16 (bd polyglot-pdf-yo5t: new "Pause / unpause" section -- the debounced post-unpause level-1 re-prompt, its cancel/fire guards, and the recovery_prompt channel's first production caller; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-07 (bd polyglot-pdf-qt7w: `rehydrateAudio`'s fresh-arm mute now reads the PTT-hold state so a press during the arm await is not re-muted). See [../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md](../journal/entries/2026-07-07-bd-qt7w-ptt-hold-arm-race.md).*
 
 The cross-cutting rules for voice turn-taking: who decides when the user is
 speaking, how barge-in works, and the language distinction. The Gemini Live
@@ -252,6 +252,24 @@ There's a barge-in **grace period**: tool calls arriving within
 `frontend/src/shared/metrics.ts`) of a barge-in are treated as hallucinations from
 the interrupted generation and rejected (`metrics.recordToolCall` → `reject`; see
 `connection.ts onFieldUpdate`).
+
+## Pause / unpause (the re-prompt debounce)
+
+`pause()` keeps the WebSocket warm but stops the mic and flushes queued AI audio
+CLIENT-side only -- Gemini is never told, so it finishes its in-flight question
+into a discarded buffer and then waits for an answer the user never heard. The
+warm-resume path in `resume()` therefore arms a **1.5s debounced re-prompt**
+(bd polyglot-pdf-yo5t): when it fires, the client sends `recovery_prompt` level 1
+("re-ask, in the session language, for the same field; do not fill or change any
+field until the user answers") so Gemini re-initiates the turn. Flutter-safe:
+`pause()`, `disconnect()`, `connect()` (the reconnect route already re-prompts
+via `RESUME_INITIATING_MESSAGE`), a PTT press, and a VAD speech-start all cancel
+the pending timer, and the fire-time guards (still unpaused, socket open, no AI
+audio currently playing, no PTT hold) keep it silent when the moment has passed
+-- a short pause whose interrupted turn resumes audibly does NOT get a
+double-prompt. This is the first (and only) production caller of the
+`recovery_prompt` channel; the old activity-watchdog design that channel was
+built for was replaced by the connection-timeout modal (bd jf6w).
 
 ## Mic send gate (audio-up path)
 

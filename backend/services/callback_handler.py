@@ -557,6 +557,17 @@ class CallbackHandler:
             # Validation failed - send empty form_state so frontend doesn't apply invalid values
             await self.send_form_update({}, [])
 
+        # Echo the CANONICAL stored value back to the model (bd polyglot-pdf-h7wx):
+        # form_state carries the post-normalization value (e.g. "A-12345678" ->
+        # "12345678"), which is what the client actually stores. The model reads its
+        # confirmation read-back from THIS echo instead of its own (possibly
+        # compression-evicted) memory -- live sessions confirmed values that were
+        # never in the field. Values go to the model only; never into _log.* calls.
+        _form_state = result.get("form_state") or {}
+        applied_values = {
+            fid: _form_state[fid] for fid in applied_fields if fid in _form_state
+        }
+
         # Build and return tool response (no next field info - reduces tokens)
         tool_response = self._build_update_fields_response(
             validation_errors,
@@ -566,6 +577,7 @@ class CallbackHandler:
             rejected_count=len(rejected_fields),
             known_inactive_fields=known_inactive_fields,
             consecutive_unknown_rejections=self._consecutive_unknown_rejections,
+            applied_values=applied_values,
         )
 
         # Dev logging: Log tool response to daily file
@@ -1536,7 +1548,8 @@ class CallbackHandler:
         next_field_hint: Optional[str],
         rejected_count: int = 0,
         known_inactive_fields: Optional[list] = None,
-        consecutive_unknown_rejections: int = 0
+        consecutive_unknown_rejections: int = 0,
+        applied_values: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Build tool response for update_form_fields.
 
@@ -1546,6 +1559,11 @@ class CallbackHandler:
             applied_fields: List of successfully applied field IDs
             next_field_hint: Spoken name hint for next field
             rejected_count: Number of fields rejected due to multi-field constraint
+            applied_values: field_id -> CANONICAL stored value for each applied
+                field (post-normalization, bd polyglot-pdf-h7wx). Echoed back so
+                the model reads its confirmation read-back from the authoritative
+                stored value, never from its own (possibly evicted) memory. Model-
+                facing only -- must never be logged.
             known_inactive_fields: Subset of unknown_fields that ARE real fields
                 the session has seen (manifest/merge-known) but are not the active
                 field -- their rejection message points at switch_to_field
@@ -1652,14 +1670,33 @@ class CallbackHandler:
                 "unknown_fields": unknown_fields,
                 "message": "\n".join(message_parts)
             }
+            if applied_values:
+                # A collapsed multi-field call can still apply its first field:
+                # echo that stored value too (bd polyglot-pdf-h7wx).
+                tool_response["stored_values"] = applied_values
         else:
             # All fields valid. Next-field guidance is sent after confirm_field
             # (DTI), not on the update response, to reduce round trips.
+            # stored_values echoes the CANONICAL saved value (bd polyglot-pdf-h7wx):
+            # the SI directs the model to read its confirmation read-back from this
+            # echo -- the authoritative stored value -- never from its own memory,
+            # which compression eviction can have emptied (live sessions confirmed
+            # values that were never in the field). The message repeats it inline
+            # because message text is what the model most reliably attends to.
             tool_response = {
                 "success": True,
                 "applied_fields": applied_fields,
                 "message": "Fields updated successfully.",
             }
+            if applied_values:
+                tool_response["stored_values"] = applied_values
+                stored_str = "; ".join(
+                    f"{fid} = {val!r}" for fid, val in applied_values.items()
+                )
+                tool_response["message"] = (
+                    f"Fields updated successfully. Stored value: {stored_str}. "
+                    f"Read THIS stored value back to the user for confirmation."
+                )
 
         _log.info("-" * 80)
         _log.info("GEMINI TOOL RESPONSE", success=tool_response.get("success"), 

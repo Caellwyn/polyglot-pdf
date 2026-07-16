@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-07-12 (continuous-DTI is the production law; switch_section is deprecated section-reset-fallback, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool
+*Last updated: 2026-07-16 (bd polyglot-pdf-h7wx: update_form_fields success responses now carry the stored-value echo (`stored_values` + message line) the model reads its confirmation back from; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is deprecated section-reset-fallback, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool
 `skip_field` to the tool table + count -- a voice skip of a required field the
 user cannot answer, distinct from N/A; it mirrors confirm_field's round-trip).
 Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth
@@ -96,11 +96,16 @@ callbacks.
    (`callback_handler.py`): normalizes, validates, applies; then calls
    `send_form_update(...)` which emits a **`form_updated`** WS message to the
    frontend (value lands as `confirmed:false`).
-3. The callback returns a tool response (applied/unknown/validation result). The
-   adapter sends it back via `send_tool_response`. dev-log: `tool_callback_result`
-   (the body the callback produced) then `tool_response` (the body actually sent
-   on the wire).
-4. Gemini reads it back to the user and asks "Is that correct?"
+3. The callback returns a tool response (applied/unknown/validation result). On
+   success it carries the **stored-value echo** (bd polyglot-pdf-h7wx):
+   `stored_values` maps each applied field_id to the post-validator CANONICAL
+   value (e.g. "A-12345678" -> "12345678"), repeated in `message` with a
+   read-THIS-back instruction. The adapter sends it back via
+   `send_tool_response`. dev-log: `tool_callback_result` (the body the callback
+   produced) then `tool_response` (the body actually sent on the wire).
+4. Gemini reads the ECHOED stored value back to the user (the DTI SI directs
+   read-back from the tool response, char-by-char for names/numbers -- its own
+   conversational memory is compression-evictable) and asks "Is that correct?"
 
 **Note:** `update_form_fields` deliberately does NOT fetch the next-field hint
 (that is deferred to `confirm_field`) to save a round-trip.

@@ -1,0 +1,108 @@
+"""Connect-and-probe: does the production native-audio Live model accept
+AudioTranscriptionConfig.language_codes? (bd polyglot-pdf-y25o)
+
+The field is SDK-2.8-present but was never endpoint-verified
+(docs/genai_docs/live-api-best-practices.md). This probe mirrors the deploy
+config exactly (production tool declarations + the adapter's real
+_build_live_config, per docs/standards/testing.md deploy-fidelity rule) and
+adds the ONE experimental delta under test: language_codes on the input/output
+transcription blocks.
+
+Arms (run serially):
+  1. hint-on  : language_codes=["es-US"] on both transcription configs.
+  2. hint-off : control -- only runs if arm 1 fails, to distinguish "endpoint
+                rejects the hint" from "endpoint/model is broken right now".
+
+Success = session connects, a text turn gets audio back, no 1007/1011 close.
+Cost: <= 2 connects x 1 short text turn on the default-tier native-audio model
+(well under $0.05; Gate-2 trivial-pilot allowance).
+
+Vertex only (ADC + GOOGLE_CLOUD_PROJECT), per all-live-model-work-runs-on-vertex.
+
+Usage: backend/.venv/Scripts/python.exe scripts/spikes/probe_transcription_lang_codes.py
+"""
+import asyncio
+import os
+import sys
+import traceback
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
+from backend.config import get_settings  # noqa: E402
+
+
+async def _wait_for_audio(session, timeout: float = 30.0):
+    async def _reader():
+        async for chunk in session.receive():
+            sc = getattr(chunk, "server_content", None)
+            if sc is None:
+                continue
+            mt = getattr(sc, "model_turn", None)
+            if mt is None:
+                continue
+            for part in getattr(mt, "parts", []) or []:
+                inline = getattr(part, "inline_data", None)
+                data = getattr(inline, "data", None) if inline is not None else None
+                if data:
+                    return data
+        return None
+
+    try:
+        return await asyncio.wait_for(_reader(), timeout=timeout)
+    except asyncio.TimeoutError:
+        return None
+
+
+async def run_arm(label: str, codes) -> bool:
+    settings = get_settings()
+    model = os.getenv("GEMINI_LIVE_MODEL", settings.MODEL_NATIVE)
+    api_key = os.getenv("GEMINI_API_KEY")
+
+    adapter = LiveAIGemini(api_key=api_key, model=model, vertexai=settings.VERTEXAI)
+    adapter._function_declarations = settings.TOOL_DECLARATIONS
+    adapter._system_instruction = (
+        "You are a diagnostics bot. When contacted, say the word ACK."
+    )
+    # Deploy shape: production requests input transcription (liveness) always;
+    # output transcription when transcripts are on. Enable both so the probe
+    # exercises language_codes on BOTH blocks.
+    adapter._enable_transcripts = True
+    adapter.set_transcription_language_codes(codes)
+
+    # The flag gates application in _build_live_config; force it on for the
+    # probe regardless of env.
+    settings.TRANSCRIPTION_LANGUAGE_HINT_ENABLED = True
+
+    config = adapter._build_live_config(settings)
+    print(f"[{label}] model={model} vertexai={settings.VERTEXAI}")
+    print(f"[{label}] input_audio_transcription={config.get('input_audio_transcription')}")
+    print(f"[{label}] output_audio_transcription={config.get('output_audio_transcription')}")
+
+    try:
+        async with adapter.connect(model=model, config=config) as session:
+            await adapter._send_text_turn(session._session, "Please reply.")
+            audio = await _wait_for_audio(session)
+            if audio:
+                print(f"[{label}] RESULT: OK -- connected, audio reply received ({len(audio)} bytes)")
+                return True
+            print(f"[{label}] RESULT: NO-AUDIO -- connected but no audio within timeout")
+            return False
+    except Exception as e:
+        print(f"[{label}] RESULT: FAIL -- {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return False
+
+
+async def main():
+    ok = await run_arm("hint-on", ["es-US"])
+    if not ok:
+        print("hint-on failed; running hint-off control to isolate the cause...")
+        control = await run_arm("hint-off", None)
+        print(f"CONTROL (no hint): {'OK' if control else 'ALSO FAILED (endpoint/model issue, not the hint)'}")
+        sys.exit(1)
+    print("VERDICT: language_codes ACCEPTED by the endpoint (hint-on arm clean)")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

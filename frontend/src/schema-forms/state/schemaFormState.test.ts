@@ -544,6 +544,32 @@ describe('SchemaFormStateManager', () => {
       expect((payload as any).resume).toBe(true)
     })
 
+    // === bd polyglot-pdf-y25o: spoken_language rides the handshake ===
+    // The backend derives the per-connect ASR language bias from it, so it must
+    // arrive BEFORE the Gemini connect -- the change_spoken_language message the
+    // client sends after session_ready is too late for per-connect config.
+    it('carries the selected spoken language (both handshake shapes)', () => {
+      const schema = createTestSchema()
+      let state = SchemaFormStateManager.init(schema)
+      state = { ...state, selectedLanguage: 'Spanish' }
+
+      const legacy = SchemaFormStateManager.getHandshakePayload(state) as any
+      expect(legacy.spoken_language).toBe('Spanish')
+
+      const jitState = { ...state, jitModeEnabled: true }
+      const jit = SchemaFormStateManager.getHandshakePayload(jitState) as any
+      expect(jit.type).toBe('handshake_jit')
+      expect(jit.spoken_language).toBe('Spanish')
+    })
+
+    it('sends spoken_language:null when no language was chosen yet', () => {
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+
+      const payload = SchemaFormStateManager.getHandshakePayload(state) as any
+      expect(payload.spoken_language).toBeNull()
+    })
+
     // === bd polyglot-pdf-bo4m: field.help must survive the handshake wire ===
     // The backend rebuilds the SI from THIS payload (stateless backend), and
     // help.instructions feeds the SI's "Note:" line -- if the handshake

@@ -895,6 +895,11 @@ export class SchemaFormStateManager {
       total_sections: state.schema.sections.length,
       previous_spoken_names: previousSpokenNames,
       fill_language: fillLanguage,
+      // The user's app-start language choice (bd polyglot-pdf-y25o): the Live
+      // session's transcription language bias is per-connect config, so the
+      // backend needs the language BEFORE Gemini connects -- the later
+      // change_spoken_language message arrives too late for that.
+      spoken_language: state.selectedLanguage ?? null,
       resume,
     };
   }
@@ -974,6 +979,10 @@ export class SchemaFormStateManager {
       form_title: state.schema.form_metadata?.title ?? 'Form',
       previous_spoken_names: this.getPreviousSpokenNames(state),
       initial_field_hint: initialFieldHint,
+      // The user's app-start language choice (bd polyglot-pdf-y25o): needed
+      // BEFORE the Gemini connect for the per-connect transcription language
+      // bias (change_spoken_language arrives after session_ready -- too late).
+      spoken_language: state.selectedLanguage ?? null,
     };
   }
 

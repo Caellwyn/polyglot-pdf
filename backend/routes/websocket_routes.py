@@ -176,6 +176,7 @@ async def _handle_fill_session(
 	full_schema: dict | None = None,  # Full-form catalog for the secretary (bd polyglot-pdf-p68s)
 	current_values: dict | None = None,  # For reconnect
 	fill_language: str = "English",  # Language for AI to use
+	spoken_language: str | None = None,  # App-start SPOKEN language choice (ASR bias, bd polyglot-pdf-y25o)
 	section_id: str | None = None,  # Current section ID (for token-log context, bd polyglot-pdf-tb7)
 	section_number: int | None = None,  # Phase 3: Current section (1-indexed)
 	section_label: str | None = None,  # Phase 3: Section label
@@ -194,6 +195,14 @@ async def _handle_fill_session(
 	# Store resume flag on the service so send_initiating_message can select
 	# the correct template (bd polyglot-pdf-vmxx).
 	service._is_resume_session = is_reconnect
+
+	# Seed the spoken language from the handshake BEFORE start_session (bd
+	# polyglot-pdf-y25o): start_session derives the per-connect transcription
+	# language bias from service._spoken_language, and the client's
+	# change_spoken_language announcement only arrives after session_ready.
+	# Leave the service default ("English") untouched when the client omits it.
+	if spoken_language:
+		service._spoken_language = spoken_language
 
 	if schema:
 		# Update schema with fill_language
@@ -1038,6 +1047,16 @@ async def fill_form_from_schema(
 	current_values = handshake.get("current_values") or {}
 	fill_language = handshake.get("fill_language", "English")  # Default to English
 
+	# The user's app-start SPOKEN language choice (bd polyglot-pdf-y25o). Needed
+	# at handshake time -- before the Gemini connect -- because the transcription
+	# language bias is per-connect Live config; the change_spoken_language message
+	# the client auto-sends after session_ready arrives too late for that.
+	# Optional: an older client that omits it gets no ASR bias (None -> service
+	# keeps its "English" default for SI purposes only once the client announces).
+	spoken_language = handshake.get("spoken_language")
+	if not isinstance(spoken_language, str) or not spoken_language.strip():
+		spoken_language = None
+
 	# Full-form schema for the secretary catalog (bd polyglot-pdf-p68s / jnjj.45d).
 	# `schema` above is the per-section schema that drives the live-model SI; the
 	# secretary needs the WHOLE form (all parts/sections/fields). The client sends
@@ -1135,6 +1154,7 @@ async def fill_form_from_schema(
 		full_schema=full_schema,  # Full-form catalog for the secretary (bd polyglot-pdf-p68s)
 		current_values=current_values,  # Pre-filled values for reconnect
 		fill_language=fill_language,  # Language for AI to use
+		spoken_language=spoken_language,  # App-start language choice for the ASR bias (bd polyglot-pdf-y25o)
 		section_id=section_id,  # Current section ID for token-log context (bd polyglot-pdf-tb7)
 		section_number=section_number,  # Phase 3: Current section
 		section_label=section_label,  # Phase 3: Section label
