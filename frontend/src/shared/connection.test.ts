@@ -418,6 +418,50 @@ describe('Connection Manager (connection.ts)', () => {
       expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
     })
 
+    it('a session (re)establishment clears a STALE playback block (bd nm7z: pause -> idle-timeout -> reconnect)', async () => {
+      const manager = await connected()
+      // The tester-reproduced kill chain (bugs 0/7): pause() flushes
+      // (playbackBlocked=true), the warm connection idle-times-out DURING the
+      // pause, and the user comes back via connect() -- so resume(), the only
+      // unblocker on that path, never runs. The reconnect's onSessionReady must
+      // clear the stale block via the shared rehydrate routine, or every AI
+      // chunk after the reconnect is silently discarded (mic works, the AI's
+      // voice never returns).
+      manager.pause()
+      expect(audioManagerMock.flushAudioQueue).toHaveBeenCalled()
+      // The idle timeout closed the socket, so the WS reports a non-connected
+      // status and connect() takes the FULL-reconnect path (not the warm
+      // restart_gemini_session shortcut) -- matching the tester's console trace.
+      webFormConnectionMock.getStatus.mockReturnValue('idle_timeout')
+      // The reconnect path clears `paused` in connect() (the overlay's Reconnect
+      // button), NOT via resume().
+      await manager.connect()
+      webFormConnectionMock.getStatus.mockReturnValue('connected')
+      audioManagerMock.resumePlayback.mockClear()
+      audioManagerMock.isRecording.mockReturnValue(false)
+
+      capturedCallbacks.onSessionReady('sess-after-timeout')
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(audioManagerMock.resumePlayback).toHaveBeenCalled()
+    })
+
+    it('a MID-PAUSE session-ready does NOT clear the pause block (paused guard runs first)', async () => {
+      const manager = await connected()
+      manager.pause()
+      audioManagerMock.resumePlayback.mockClear()
+
+      // While still paused, a stray ready-callback must not unblock playback --
+      // the pause's own flush is intentional; resume() clears it when the user
+      // actually resumes.
+      capturedCallbacks.onSessionReady('sess-mid-pause')
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(audioManagerMock.resumePlayback).not.toHaveBeenCalled()
+    })
+
     it('a PTT press landing DURING the fresh-arm await is NOT clobbered by the resting-mute (bd qt7w)', async () => {
       const manager = await connected()
       // Fresh-arm branch: mic not yet recording at the reconnect ready-callback.
