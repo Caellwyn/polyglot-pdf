@@ -721,10 +721,16 @@ export function createConnectionManager(
 			// socket, cleared `paused`, re-armed the mic, and every chunk was
 			// dropped forever with no recovery affordance (tester bugs 0/7; the
 			// exact 22:49Z repro). A closed socket cannot be resumed regardless of
-			// what status says, so DELEGATE to connect(), which self-heals: on a
-			// dead socket its isWebSocketConnected check is false and it runs a
-			// full reconnect. `paused` is cleared first so connect() takes the
-			// connect path, not a re-entrant resume.
+			// what status says, so DELEGATE to connect() to recover. In the
+			// idle-timeout case (status now idle_timeout) connect()'s
+			// isWebSocketConnected check is false, so it runs a FULL WS reconnect.
+			// In the rarer GoAway window (status deliberately kept 'connected'
+			// over a transiently-null socket, webFormConnection.ts) connect() sends
+			// a warm restart_gemini_session that no-ops on the dead socket -- but a
+			// GoAway reconnect is already in flight there, so the socket recovers
+			// regardless and audio is never stranded. Either way `paused` is
+			// cleared first so connect() takes the connect path, not a re-entrant
+			// resume.
 			if (!connection || !connection.isSocketOpen()) {
 				const currentStatus = connection?.getStatus() ?? 'no connection'
 				console.warn('[VFF Connection] resume() on a closed socket (status:',
