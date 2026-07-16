@@ -118,8 +118,14 @@ if ($Model -eq 'premium') {
 } else {
     # Vertex ADC lives at the well-known gcloud path; if it is absent, Vertex calls
     # will fail auth. Warn (do not block) -- the user may have ADC via a
-    # service-account key env instead.
-    $Adc = Join-Path $env:APPDATA 'gcloud\application_default_credentials.json'
+    # service-account key env instead. Guard the base path: under
+    # $ErrorActionPreference='Stop', Join-Path with a null base (a stripped
+    # %APPDATA%) would THROW and abort the runner; fall back to $HOME\AppData\Roaming
+    # (or CLOUDSDK_CONFIG if the user relocated the gcloud config dir).
+    $GcloudDir = if ($env:CLOUDSDK_CONFIG) { $env:CLOUDSDK_CONFIG }
+                 elseif ($env:APPDATA)     { Join-Path $env:APPDATA 'gcloud' }
+                 else                      { Join-Path $HOME 'AppData\Roaming\gcloud' }
+    $Adc = Join-Path $GcloudDir 'application_default_credentials.json'
     if (-not (Test-Path $Adc) -and -not $env:GOOGLE_APPLICATION_CREDENTIALS) {
         Write-Host "WARNING: Vertex (default) needs Application Default Credentials, but none found." -ForegroundColor Yellow
         Write-Host "  Run 'gcloud auth application-default login', or set GOOGLE_APPLICATION_CREDENTIALS." -ForegroundColor Yellow

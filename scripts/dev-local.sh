@@ -126,9 +126,13 @@ start_backend() {
   else
     # Vertex ADC lives at the well-known gcloud path; if it is absent, Vertex
     # calls will fail auth. Warn (do not block) -- the user may have ADC via a
-    # service-account key env instead.
-    local adc="$HOME/AppData/Roaming/gcloud/application_default_credentials.json"
-    if [ ! -f "$adc" ] && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
+    # service-account key env instead. The path differs by OS: Windows uses
+    # %APPDATA%\gcloud, POSIX (WSL/macOS/Linux, which this script also targets)
+    # uses ~/.config/gcloud. Check BOTH so a valid POSIX ADC does not trip a
+    # spurious warning every launch (fresh-eyes finding).
+    local adc_win="${APPDATA:-$HOME/AppData/Roaming}/gcloud/application_default_credentials.json"
+    local adc_posix="${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/application_default_credentials.json"
+    if [ ! -f "$adc_win" ] && [ ! -f "$adc_posix" ] && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
       echo "WARNING: Vertex (default) needs Application Default Credentials, but none found." >&2
       echo "  Run 'gcloud auth application-default login', or set GOOGLE_APPLICATION_CREDENTIALS." >&2
     fi
