@@ -48,8 +48,18 @@ genuinely has no Vertex id yet -- removing it would lose the A/B arm. (3) Fixed 
 runners (bash + PowerShell), not just the bash one the agent can run, so a human
 using the .ps1 isn't left on Studio.
 
-Fresh-eyes (Step 5.5.b): <FILL>.
-Outer review (Step 5.6): <FILL>.
+Fresh-eyes (Step 5.5.b): 1 round on Opus (the final clearing tier), NO-GAPS -- it
+traced the env-var contract into the adapter (Vertex client ignores api_key) and
+confirmed the .ps1 mirrors bash + ASCII compliance. No gaps, nothing deferred.
+
+Outer review (Step 5.6): 2 rounds. Round 1 (Opus primary) returned NO-GAPS but
+noted two warn-only preflight edges: the bash ADC check was Windows-path-only (a
+valid POSIX ~/.config/gcloud ADC would trip a spurious warning every launch), and
+the ps1 Join-Path $env:APPDATA could throw if %APPDATA% were unset. Both fixed
+inline (bash checks both OS ADC locations honoring CLOUDSDK_CONFIG; ps1 guards the
+base path with a CLOUDSDK_CONFIG/APPDATA/$HOME fallback) and re-verified live (no
+spurious ADC warning). Round 2: TWO independent Opus passes (primary re-run +
+second independent) both NO-GAPS on the identical fixed diff.
 
 Verification: booted `./scripts/dev-local.sh backend` and confirmed `/health`
 reports `vertexai:true` and the Vertex model id
