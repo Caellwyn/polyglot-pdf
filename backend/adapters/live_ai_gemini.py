@@ -503,6 +503,10 @@ class LiveAIGemini(ILiveAI):
         self._form_id: Optional[str] = None
         self._current_section_id: Optional[str] = None
 
+        # BCP-47 transcription language bias (bd polyglot-pdf-y25o; set by the
+        # service from the handshake's spoken_language, read at connect time).
+        self._transcription_language_codes: Optional[List[str]] = None
+
         # Monotonic per-instance sequence counter for the dev I/O log, so a
         # captured gemini_<date>.jsonl can be re-ordered into the exact
         # send/receive sequence even across interleaved turns (bd polyglot-pdf-kbf).
@@ -619,6 +623,20 @@ class LiveAIGemini(ILiveAI):
         self._form_session_id = form_session_id
         self._form_id = form_id
         self._current_section_id = current_section_id
+
+    def set_transcription_language_codes(self, codes: Optional[List[str]]):
+        """Set the BCP-47 language_codes hint for input/output transcription
+        (bd polyglot-pdf-y25o).
+
+        Biases the ASR listener toward the user's chosen session language so a
+        mumbled session-language word is not transcribed as a neighboring
+        language (which drags the native-audio model's language auto-detect
+        with it). Applied by _build_live_config at the NEXT connect -- the Live
+        config is per-connect, so a mid-session language change takes effect on
+        the next session (re)establishment; the SI language lock governs until
+        then. None clears the hint (unbiased multilingual ASR).
+        """
+        self._transcription_language_codes = codes or None
 
     def set_callbacks(
         self,
@@ -1624,6 +1642,23 @@ class LiveAIGemini(ILiveAI):
         # Output transcription is the client-visible transcript -- only when requested.
         if self._enable_transcripts:
             config['output_audio_transcription'] = {}
+
+        # ASR language bias (bd polyglot-pdf-y25o): carry the session language's
+        # BCP-47 code on the transcription configs so the ASR listens FOR that
+        # language -- the SI only steers the LLM's output language, and an
+        # unbiased multilingual ASR transcribing a mumbled es word as pt drags
+        # the model's auto-detect with it ("distrito quintal", tester
+        # 2026-07-16). Applied only to transcription blocks already requested
+        # above (the hint never turns transcription on by itself). getattr-guard:
+        # minimal Settings stubs in unit tests may not define the flag.
+        lang_codes = getattr(self, "_transcription_language_codes", None)
+        if lang_codes and getattr(settings, "TRANSCRIPTION_LANGUAGE_HINT_ENABLED", False):
+            if 'input_audio_transcription' in config:
+                config['input_audio_transcription'] = {'language_codes': list(lang_codes)}
+            if 'output_audio_transcription' in config:
+                config['output_audio_transcription'] = {'language_codes': list(lang_codes)}
+            self._log.info("[lang] Transcription language bias applied",
+                          language_codes=list(lang_codes))
 
         # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
         # sliding window bounds the live context so per-turn re-billing stops compounding

@@ -261,6 +261,23 @@ export function createConnectionManager(
 	let fillLanguage: string = initialFillLanguage
 	let paused: boolean = false
 	let connectedUrl: string = wsUrl  // Track the actual URL we connected to
+	// Debounced post-unpause re-prompt (bd polyglot-pdf-yo5t). pause() discards the
+	// AI's in-flight audio CLIENT-side only -- Gemini finished asking its question
+	// into a flushed buffer and now waits for an answer the user never heard, while
+	// the user waits for the AI to speak. On a WARM resume (socket still open --
+	// the reconnect path re-prompts via the backend RESUME initiating message
+	// instead) we ask the backend to have Gemini re-ask the current field, on a
+	// short delay so rapid pause/unpause flutter reschedules ONE re-prompt rather
+	// than firing one per click. Fire-time guards (paused/socket/AI-speaking) keep
+	// it silent when the moment has passed.
+	const RESUME_REPROMPT_DELAY_MS = 1500
+	let resumeRepromptTimer: ReturnType<typeof setTimeout> | null = null
+	const clearResumeReprompt = () => {
+		if (resumeRepromptTimer !== null) {
+			clearTimeout(resumeRepromptTimer)
+			resumeRepromptTimer = null
+		}
+	}
 	// Single mic send callback shared by EVERY arming site (initial startRecording,
 	// rearmAudioCapture, and the startSection/switchToSection re-arms) so the gate
 	// policy (shouldSendMicChunk) and the drop logging stay consistent (bd xroy).
@@ -578,6 +595,10 @@ export function createConnectionManager(
 
 	const manager: ConnectionManager = {
 		async connect() {
+			// A (re)connect re-prompts via the backend RESUME initiating message,
+			// so any pending warm-resume re-prompt is superseded (bd polyglot-pdf-yo5t).
+			clearResumeReprompt()
+
 			// BUG FIX (Nov 10, 2025): Reset paused flag on connect attempt
 			// This fixes the issue where after idle timeout, isPaused() returns true
 			// and handleConnect tries to resume() instead of connect()
@@ -696,6 +717,9 @@ export function createConnectionManager(
 		pause() {
 			console.log('[VFF Connection] Pausing (keeping connection warm)...')
 			paused = true
+			// Flutter guard (bd polyglot-pdf-yo5t): a re-pause inside the re-prompt
+			// window cancels the pending re-prompt; the next resume re-arms it.
+			clearResumeReprompt()
 
 			// Stop recording
 			if (audioManager?.isRecording()) {
@@ -759,6 +783,24 @@ export function createConnectionManager(
 			// mic and re-syncs PTT in one place.
 			await rehydrateAudio('resume')
 
+			// Debounced re-prompt (bd polyglot-pdf-yo5t): the pause discarded
+			// Gemini's question client-side, so nothing will speak until the user
+			// does -- and the user is waiting for Gemini. After the debounce window
+			// (flutter guard: pause() cancels, a newer resume reschedules), ask the
+			// backend to have Gemini re-ask the current field -- unless the moment
+			// has passed (re-paused, socket died, AI already talking, or the user
+			// started a PTT turn themselves).
+			clearResumeReprompt()
+			resumeRepromptTimer = setTimeout(() => {
+				resumeRepromptTimer = null
+				if (paused) return
+				if (!connection || !connection.isSocketOpen()) return
+				if (audioManager?.isSpeaking()) return
+				if (pushToTalkHeld) return
+				console.log('[VFF Connection] Post-resume re-prompt: asking Gemini to re-ask the current field')
+				connection.sendRecoveryPrompt(1)
+			}, RESUME_REPROMPT_DELAY_MS)
+
 			// Audio will automatically resume when user starts speaking again
 			// The connection stayed warm, so Gemini is still ready
 			console.log('[VFF Connection] Resumed successfully')
@@ -767,6 +809,10 @@ export function createConnectionManager(
 		disconnect() {
 			// End metrics session and print summary
 			metrics.endSession()
+
+			// A tear-down must not leave a pending post-resume re-prompt behind
+			// (bd polyglot-pdf-yo5t).
+			clearResumeReprompt()
 
 			// BUG FIX (Nov 10, 2025): Reset paused flag on disconnect
 			paused = false
@@ -880,6 +926,12 @@ export function createConnectionManager(
 		// user. Purely advisory: the audioManager's own inputMuted is still the gate.
 		setPushToTalkHeld(held: boolean) {
 			pushToTalkHeld = held
+			// A PTT press right after an unpause means the user is answering the
+			// question they remember -- cancel the pending re-prompt rather than
+			// talking over their turn (bd polyglot-pdf-yo5t).
+			if (held) {
+				clearResumeReprompt()
+			}
 		},
 
 		// Current PTT mode, so an overlay remounted onto a LIVE session (a
@@ -1129,6 +1181,9 @@ export function createConnectionManager(
 		// VAD-based barge-in: Called when VAD detects speech start
 		// Sends activity_start signal before audio chunks begin streaming
 		onVADSpeechStart() {
+			// The user spoke first after an unpause -- their turn supersedes the
+			// pending post-resume re-prompt (bd polyglot-pdf-yo5t).
+			clearResumeReprompt()
 			// bd polyglot-pdf-333: in native-VAD mode Gemini owns turn-taking AND
 			// interruption (server_content.interrupted), so the client-side Silero
 			// activity signal + instant barge-in flush are intentionally disabled.

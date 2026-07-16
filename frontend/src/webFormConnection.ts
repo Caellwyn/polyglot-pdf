@@ -1671,10 +1671,9 @@ export class WebFormConnection {
           capped ? '(final re-prompt -- giving up after this)' : ''
         );
         // Re-prompt Gemini (via send_prompt) to collect the value rather than
-        // confirming an empty field. completion_message -> send_prompt is wired and
-        // works today (unlike recovery_prompt, which is broken backend-side until
-        // bd polyglot-pdf-zy3 lands), so this is the channel that actually redirects
-        // Gemini.
+        // confirming an empty field. completion_message -> send_prompt carries a
+        // custom instruction; the fixed-script recovery_prompt channel (bd zy3)
+        // would not fit this field-specific message.
         this.send({
           type: 'completion_message',
           message:

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from backend.config import Settings, get_settings
 from backend.ports.live_ai_port import ILiveAI
+from backend.utils.language_codes import bcp47_codes_for_spoken_language
 from .field_utils import (
     build_fields_from_schema,
     strip_field_id_from_hint,
@@ -345,6 +346,18 @@ class FormFillingService:
             except AttributeError as e:
                 # Older adapters may not have this method
                 _log.warning("set_session_context not available on adapter", error=str(e))
+
+            # ASR language bias (bd polyglot-pdf-y25o): derive the BCP-47 hint
+            # from the session's spoken language (set from the handshake BEFORE
+            # this runs -- the Live config is per-connect) so the adapter can
+            # bias input/output transcription toward the chosen language.
+            try:
+                self._live_ai.set_transcription_language_codes(
+                    bcp47_codes_for_spoken_language(self._spoken_language)
+                )
+            except AttributeError:
+                # Adapter (or a test double) without the setter: no bias.
+                pass
 
             # Register callbacks with Gemini Live AI
             # System instruction is passed from caller and included in the initial

@@ -81,9 +81,13 @@ def render_field_guidance(
     if fill_language:
         parts.append(f"Fill language: {fill_language}")
     # spoken_language re-anchors the conversation language per injection
-    # (bd polyglot-pdf-ghv4); distinct from fill_language above.
+    # (bd polyglot-pdf-ghv4); distinct from fill_language above. UNMISTAKABLY is
+    # Google's documented power phrasing for language adherence
+    # (docs/genai_docs/live-api-best-practices.md; bd polyglot-pdf-oqkj).
     if spoken_language:
-        parts.append(f"Speak {spoken_language} aloud")
+        parts.append(
+            f"Speak {spoken_language} aloud -- respond UNMISTAKABLY in {spoken_language}"
+        )
 
     return " | ".join(parts)
 

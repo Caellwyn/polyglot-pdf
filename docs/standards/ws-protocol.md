@@ -41,6 +41,7 @@ removed JIT SI mode (bd polyglot-pdf-en2j).
 | `current_values` | object (field_id -> FieldValue) | both | Pre-filled values for reconnect; defaults to `{}` (line 830). |
 | `full_schema` | object (`{source, fields, sections, parts, ...}`) \| absent | both | The WHOLE form schema (all parts/sections/fields), for the secretary catalog (bd polyglot-pdf-p68s / jnjj.45d). Distinct from `schema`/`manifest`, which carry only the CURRENT section. The backend caches it in-session in `FormFillingService._full_schema` and `handle_ask_secretary` renders the secretary's static catalog from it; preserved across same-form section switches. Schema only -- no PII; rebuilt from this on every (re)connect (stateless invariant). Optional: an older client that omits it makes the secretary fall back to the per-section `schema`. |
 | `fill_language` | string | both | Language the AI fills/speaks in; defaults to `"English"` (line 831). |
+| `spoken_language` | string \| null | both | The user's app-start SPOKEN-language choice (bd polyglot-pdf-y25o). Read at handshake time -- BEFORE the Gemini connect -- to derive the per-connect ASR transcription `language_codes` bias (the later `change_spoken_language` control message arrives too late for per-connect config). Null/omitted -> no bias change (older clients). |
 | `section_number` | int (1-indexed) | both | Current section order (line 846). |
 | `section_label` | string | both | Display label for the current section (line 847). |
 | `total_sections` | int | both | Section count (line 848). |
