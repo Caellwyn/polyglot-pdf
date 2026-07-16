@@ -405,6 +405,30 @@ describe('SchemaForm continuous-mode section paging (bd polyglot-pdf-gz20)', () 
     expect(screen.queryByText('Section One')).toBeNull();
   });
 
+  it('does not submit on Enter in continuous mode (Submit button hidden -> onSubmit is a no-op)', async () => {
+    // The "Submit Form" button is hidden in continuous mode (no submission
+    // target), but the <form onSubmit> is still reachable via Enter in a text
+    // input. handleSubmit must no-op in continuous mode so Enter cannot fire the
+    // removed button's submit path (bd polyglot-pdf-rvac).
+    const schema = makeTwoSectionSchema();
+    seedContinuousState(schema);
+    const onSubmit = vi.fn();
+
+    const { container } = render(
+      <SchemaForm schema={schema} kitId="test" onSubmit={onSubmit} />,
+    );
+    await act(async () => {});
+
+    const form = container.querySelector('form.schema-form') as HTMLFormElement;
+    expect(form).toBeTruthy();
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    // Continuous mode: submit is disabled, so the onSubmit prop is never called.
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('does NOT page when continuous mode is off (deprecated section-reset flow owns nav)', async () => {
     // Without continuous mode, section advancement is the manual/section-reset
     // path's job; onNextField must not hijack it by paging the view.

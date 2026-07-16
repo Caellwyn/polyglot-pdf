@@ -530,6 +530,16 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
     console.log('[handleSubmit] Form submit triggered! isNavigating:', isNavigating);
     e.preventDefault();
 
+    // Continuous-session mode (bd polyglot-pdf-rvac): the Submit Form button is
+    // hidden (no downstream submission target yet), but the <form onSubmit> is
+    // still reachable via Enter in a text input. Make submit a no-op here so the
+    // Enter key cannot trigger the validate/alert "final submit" the removed
+    // button would have -- same defense-in-depth as handleNextSection/Previous.
+    if (state.continuousSessionEnabled) {
+      console.log('[handleSubmit] Continuous mode - submit is disabled (no target)');
+      return;
+    }
+
     // Ignore if we're currently navigating (prevents double-trigger from click event)
     if (isNavigating) {
       console.log('[handleSubmit] Currently navigating - ignoring submit');
