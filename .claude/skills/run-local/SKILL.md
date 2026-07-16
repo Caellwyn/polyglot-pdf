@@ -30,9 +30,14 @@ the same stack:
 
 - **Backend** -- `uvicorn backend.main:app` on `http://localhost:8000`.
   Port 8000 is deliberate: the frontend's dev WS URL defaults to
-  `ws://localhost:8000/ws/fill` (`frontend/src/shared/config.ts`). It forces
-  `VERTEXAI=false` (AI Studio, which has the 3.1 model) so it needs
-  `GEMINI_API_KEY` (in the shell or `backend/.env`).
+  `ws://localhost:8000/ws/fill` (`frontend/src/shared/config.ts`). It runs on
+  **Vertex by default** (`VERTEXAI=true` + `GOOGLE_CLOUD_PROJECT=polyglot-demo-aa709`,
+  authenticating via ADC -- run `gcloud auth application-default login` if you have
+  no ADC), so ALL local spend lands on the ONE Vertex billing account
+  (bd polyglot-pdf-6les; maintainer directive 2026-07-15). The **premium (3.1)
+  arm is the sole exception**: 3.1 is AI-Studio-only for now, so `premium` /
+  `-Model premium` uses `VERTEXAI=false` + `GEMINI_API_KEY` and bills to the AI
+  Studio account (the runner warns when it does).
 - **Frontend** -- vite on `http://localhost:5173` -- the schema-forms voice
   form-filler SPA. (The bash runner uses `--mode demo` so the committed
   `frontend/.env.demo` Firebase web config loads + the WS URL is overridden to
@@ -97,8 +102,9 @@ bash runner is somehow unavailable AND you cannot run it, ask the user to run
 ## Preflight the script already does
 
 - Verifies the main-repo venv python exists (worktrees have no venv).
-- Warns (does not block) if `GEMINI_API_KEY` is absent and `backend/.env` is
-  missing.
+- Credential preflight, arm-aware (warns, does not block): the default (Vertex)
+  arm warns if no ADC is found; the `premium` (AI Studio) arm warns if
+  `GEMINI_API_KEY` is absent and `backend/.env` is missing.
 - Checks `frontend/node_modules` exists (else tells the user to `npm install`).
 - Creates `backend/.env.DEV` (gitignored) unless `-NoDevLog`.
 
