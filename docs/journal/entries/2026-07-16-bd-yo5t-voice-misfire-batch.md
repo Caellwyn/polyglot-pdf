@@ -72,7 +72,24 @@ plan. This PR closes polyglot-pdf-yo5t, -h7wx, -oqkj, and -y25o.
   the level-1 re-prompt reaching Gemini as a text turn (and run 1 showing the
   AI-speaking guard correctly suppressing a double-prompt on a short pause),
   and the en-US bias applied on a real handshake-driven connect.
-- Fresh-eyes triage breakdown: (filled at closeout -- see PR.)
+- **Assess/review record.** Fresh-eyes round 1 (Sonnet): GAPS-FOUND (2), both
+  adopted and fixed -- (1) the overlays' real manual-VAD speech-start handlers
+  call `sendActivityStart()` directly and never `onVADSpeechStart()`, so the
+  user-speaks-first cancel lived on a dead path (fixed by clearing the timer in
+  `sendActivityStart()` itself + 2 tests driving the real wiring, incl. native
+  VAD); (2) the deprecated `startSection`/`switchToSection` paths did not cancel
+  the pending re-prompt (fixed). Round 2 (Opus clearing round): NO-GAPS, all 11
+  exit criteria PASS. Outer review (pre-PR): primary Opus NO-GAPS; second
+  independent Opus NO-GAPS on the identical diff, with two out-of-rubric
+  findings the orchestrator triaged: the collapsed-multi-field partial-apply
+  divergence (PRE-EXISTING -- the client already received an empty form update
+  while the message said "OK"; the new error-branch echo does not change client
+  state, and the client-side no-value confirm guard blocks any wrong confirm --
+  filed by the reviewer as bd polyglot-pdf-f7h7) and a low-confidence sub-second
+  double-re-prompt race on an INTERNAL reconnect landing inside the 1.5s window
+  (benign -- one redundant re-ask -- accepted narrow race, same class as the
+  nm7z manual-VAD race). Adopt/reject/defer: 2 adopted, 0 rejected, 2 deferred
+  (f7h7 + the recorded race).
 
 ## Lessons
 
