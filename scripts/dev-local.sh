@@ -12,13 +12,17 @@
 # we start here (the .env.demo default points at Cloud Run).
 #
 # Starts:
-#   - Backend  : uvicorn backend.main:app on http://localhost:8000 (VERTEXAI=false,
-#                AI Studio -- needs GEMINI_API_KEY in the env or backend/.env)
+#   - Backend  : uvicorn backend.main:app on http://localhost:8000. Runs on VERTEX
+#                by default (ADC + GOOGLE_CLOUD_PROJECT), so ALL local spend lands
+#                on the ONE Vertex billing account -- never AI Studio (bd
+#                polyglot-pdf-6les). The premium (3.1) arm is the sole exception:
+#                3.1 is AI-Studio-only for now, so `premium` uses VERTEXAI=false +
+#                GEMINI_API_KEY and bills to the AI Studio account (it warns).
 #   - Frontend : vite dev server on http://localhost:5173 (--mode demo + local WS)
 #
 # Usage:
-#   ./scripts/dev-local.sh              # both servers (default 2.5 model)
-#   ./scripts/dev-local.sh premium      # both, USE_PREMIUM_MODEL=true (3.1)
+#   ./scripts/dev-local.sh              # both servers (default 2.5 model, VERTEX)
+#   ./scripts/dev-local.sh premium      # both, USE_PREMIUM_MODEL=true (3.1, AI Studio)
 #   ./scripts/dev-local.sh backend      # backend only
 #   ./scripts/dev-local.sh frontend     # frontend only (talks to whatever WS URL)
 #
@@ -109,10 +113,25 @@ start_backend() {
     echo "  backend/.venv/Scripts/pip install -r backend/requirements.txt" >&2
     exit 1
   fi
-  # backend/main.py load_dotenv()s backend/.env, so GEMINI_API_KEY can live there.
-  if [ -z "${GEMINI_API_KEY:-}" ] && [ ! -f "$REPO_ROOT/backend/.env" ]; then
-    echo "WARNING: GEMINI_API_KEY not set and backend/.env missing." >&2
-    echo "  Local dev uses AI Studio (VERTEXAI=false), which REQUIRES an API key." >&2
+  # Credential preflight (bd polyglot-pdf-6les). The DEFAULT arm runs on Vertex
+  # (see start_backend), which authenticates via Application Default Credentials
+  # (ADC) + GOOGLE_CLOUD_PROJECT -- NOT an API key. The premium (3.1) arm runs on
+  # AI Studio and DOES need GEMINI_API_KEY. Warn per the arm actually selected.
+  if [ "$PREMIUM" = "true" ]; then
+    # backend/main.py load_dotenv()s backend/.env, so GEMINI_API_KEY can live there.
+    if [ -z "${GEMINI_API_KEY:-}" ] && [ ! -f "$REPO_ROOT/backend/.env" ]; then
+      echo "WARNING: premium arm uses AI Studio (VERTEXAI=false), which REQUIRES GEMINI_API_KEY," >&2
+      echo "  but it is not set and backend/.env is missing." >&2
+    fi
+  else
+    # Vertex ADC lives at the well-known gcloud path; if it is absent, Vertex
+    # calls will fail auth. Warn (do not block) -- the user may have ADC via a
+    # service-account key env instead.
+    local adc="$HOME/AppData/Roaming/gcloud/application_default_credentials.json"
+    if [ ! -f "$adc" ] && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
+      echo "WARNING: Vertex (default) needs Application Default Credentials, but none found." >&2
+      echo "  Run 'gcloud auth application-default login', or set GOOGLE_APPLICATION_CREDENTIALS." >&2
+    fi
   fi
   # Enable the dev Gemini I/O file logger (backend/logs/gemini_<date>.jsonl): it is
   # gated on backend/.env.DEV existing (DEV_LOGGING_ENABLED). This is the ONLY place
@@ -131,7 +150,24 @@ start_backend() {
   # and Gemini does NOT rely on detecting silence in a continuous stream -- with:
   #   DISABLE_GEMINI_VAD=true ./scripts/dev-local.sh
   local vad_mode="${DISABLE_GEMINI_VAD:-false}"
-  echo "Starting backend (uvicorn :8000, VERTEXAI=false, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed, DISABLE_GEMINI_VAD=$vad_mode)..."
+  # Backend selection (bd polyglot-pdf-6les). ALL sessions -- local or remote --
+  # run on VERTEX by default so spend lands on ONE billing account
+  # (GOOGLE_CLOUD_PROJECT below), never split across the AI Studio account
+  # (maintainer directive 2026-07-15, reaffirming the 2026-07-12
+  # all-live-model-work-on-vertex rule). The ONE exception is the premium (3.1)
+  # arm: gemini-3.1 is AI-Studio-only as of 2026-06 (backend/config.py MODEL
+  # notes), so `dev-local.sh premium` MUST use VERTEXAI=false -- a model-
+  # availability constraint, not a billing choice. That arm therefore spends on
+  # the AI Studio account; we warn loudly so it is a deliberate, visible choice.
+  local vertexai
+  if [ "$PREMIUM" = "true" ]; then
+    vertexai=false
+    echo "WARNING: premium (3.1) arm runs on AI STUDIO (VERTEXAI=false) -- 3.1 is not on Vertex yet." >&2
+    echo "  This arm bills to the AI Studio account, NOT the Vertex project. Use the default (2.5) arm for Vertex." >&2
+  else
+    vertexai=true
+  fi
+  echo "Starting backend (uvicorn :8000, VERTEXAI=$vertexai, USE_PREMIUM_MODEL=$PREMIUM, auth bypassed, DISABLE_GEMINI_VAD=$vad_mode)..."
   # Run from the SOURCE repo root so backend.main imports THIS checkout's code.
   # VFF_DISABLE_AUTH=true bypasses Firebase token verification on /ws/fill: locally,
   # firebase_admin uses ADC and verify_id_token() validates the token against the
@@ -143,8 +179,14 @@ start_backend() {
   # transcription so the dev log captures what Gemini HEARD from the mic -- the
   # decisive datapoint for "audio reaches Gemini but it stays silent". Safe for
   # native-audio (adds only *_audio_transcription config, not TEXT modality).
+  #
+  # GOOGLE_CLOUD_PROJECT is exported for the Vertex path (adapter reads it via
+  # google-genai + ADC); it is harmless on the Studio (premium) path, which uses
+  # GEMINI_API_KEY instead. Respect an already-set value so a different project
+  # can be used per run.
   ( cd "$REPO_ROOT" && \
-    VERTEXAI=false USE_PREMIUM_MODEL="$PREMIUM" PYTHONPATH="$REPO_ROOT" \
+    VERTEXAI="$vertexai" USE_PREMIUM_MODEL="$PREMIUM" PYTHONPATH="$REPO_ROOT" \
+    GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
     VFF_DISABLE_AUTH="${VFF_DISABLE_AUTH:-true}" \
     DISABLE_GEMINI_VAD="$vad_mode" \
     SEND_TRANSCRIPT="${SEND_TRANSCRIPT:-true}" \

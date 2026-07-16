@@ -10,8 +10,11 @@
                  ws://localhost:8000/ws/fill -- see frontend/src/shared/config.ts)
     - Frontend : vite dev server on http://localhost:5173 (npm run dev)
 
-  Local dev runs against the Gemini Developer API (AI Studio), which has the
-  3.1 model, so it forces VERTEXAI=false and requires GEMINI_API_KEY.
+  Local dev runs on VERTEX by default (ADC + GOOGLE_CLOUD_PROJECT), so ALL local
+  spend lands on the ONE Vertex billing account -- never AI Studio (bd
+  polyglot-pdf-6les). The premium (3.1) arm is the sole exception: 3.1 is
+  AI-Studio-only for now, so -Model premium uses VERTEXAI=false + GEMINI_API_KEY
+  and bills to the AI Studio account.
 
   It also ensures backend/.env.DEV exists so the dev file logger captures FULL
   message bodies (tool-call args, tool responses, hints) to
@@ -95,16 +98,31 @@ if (-not (Test-Path $VenvPython)) {
     exit 1
 }
 
-if (-not $env:GEMINI_API_KEY) {
-    # backend/.env is auto-loaded by load_dotenv() at backend/main.py, so the key
-    # may live there even if it's not in this shell. Only warn -- do not block.
-    $BackendEnv = Join-Path $RepoRoot 'backend\.env'
-    if (Test-Path $BackendEnv) {
-        Write-Host "NOTE: GEMINI_API_KEY not in this shell; relying on backend/.env (load_dotenv)." -ForegroundColor Yellow
-    } else {
-        Write-Host "WARNING: GEMINI_API_KEY is not set and backend/.env does not exist." -ForegroundColor Yellow
-        Write-Host "  Local dev uses AI Studio (VERTEXAI=false), which REQUIRES an API key." -ForegroundColor Yellow
-        Write-Host "  Set it: \$env:GEMINI_API_KEY = '<your-key>'  (or add it to backend/.env)" -ForegroundColor Yellow
+# Credential preflight (bd polyglot-pdf-6les). The DEFAULT (standard) arm runs on
+# Vertex, which authenticates via Application Default Credentials (ADC) +
+# GOOGLE_CLOUD_PROJECT -- NOT an API key. The premium (3.1) arm runs on AI Studio
+# and DOES need GEMINI_API_KEY. Warn per the arm actually selected.
+if ($Model -eq 'premium') {
+    if (-not $env:GEMINI_API_KEY) {
+        # backend/.env is auto-loaded by load_dotenv() at backend/main.py, so the
+        # key may live there even if it's not in this shell. Only warn -- do not block.
+        $BackendEnv = Join-Path $RepoRoot 'backend\.env'
+        if (Test-Path $BackendEnv) {
+            Write-Host "NOTE: GEMINI_API_KEY not in this shell; relying on backend/.env (load_dotenv)." -ForegroundColor Yellow
+        } else {
+            Write-Host "WARNING: premium arm uses AI Studio (VERTEXAI=false), which REQUIRES GEMINI_API_KEY," -ForegroundColor Yellow
+            Write-Host "  but it is not set and backend/.env does not exist." -ForegroundColor Yellow
+            Write-Host "  Set it: \$env:GEMINI_API_KEY = '<your-key>'  (or add it to backend/.env)" -ForegroundColor Yellow
+        }
+    }
+} else {
+    # Vertex ADC lives at the well-known gcloud path; if it is absent, Vertex calls
+    # will fail auth. Warn (do not block) -- the user may have ADC via a
+    # service-account key env instead.
+    $Adc = Join-Path $env:APPDATA 'gcloud\application_default_credentials.json'
+    if (-not (Test-Path $Adc) -and -not $env:GOOGLE_APPLICATION_CREDENTIALS) {
+        Write-Host "WARNING: Vertex (default) needs Application Default Credentials, but none found." -ForegroundColor Yellow
+        Write-Host "  Run 'gcloud auth application-default login', or set GOOGLE_APPLICATION_CREDENTIALS." -ForegroundColor Yellow
     }
 }
 
@@ -131,11 +149,20 @@ if (-not $NoDevLog) {
     Write-Host "NoDevLog set: NOT creating .env.DEV (production-style redacted logging)." -ForegroundColor Yellow
 }
 
-# --- Model selection ----------------------------------------------------------
+# --- Model + backend selection ------------------------------------------------
+# ALL sessions run on VERTEX by default so spend lands on ONE billing account
+# (bd polyglot-pdf-6les; maintainer directive 2026-07-15). The premium (3.1) arm
+# is the sole exception: 3.1 is AI-Studio-only for now, so it MUST use
+# VERTEXAI=false + GEMINI_API_KEY -- a model-availability constraint, not a
+# billing choice -- and therefore bills to the AI Studio account (warned below).
 if ($Model -eq 'premium') {
     $UsePremium = 'true'
+    $VertexAi = 'false'
+    Write-Host "WARNING: premium (3.1) arm runs on AI STUDIO (VERTEXAI=false) -- 3.1 is not on Vertex yet." -ForegroundColor Yellow
+    Write-Host "  This arm bills to the AI Studio account, NOT the Vertex project. Use the default (standard) arm for Vertex." -ForegroundColor Yellow
 } else {
     $UsePremium = 'false'
+    $VertexAi = 'true'
 }
 
 # --- Launch backend -----------------------------------------------------------
@@ -152,11 +179,16 @@ $BackendArgs = @(
     '-m', 'uvicorn', 'backend.main:app',
     '--host', '127.0.0.1', '--port', '8000', '--reload'
 )
+# GOOGLE_CLOUD_PROJECT is used by the Vertex path (google-genai + ADC); harmless
+# on the Studio (premium) path, which uses GEMINI_API_KEY. Respect an already-set
+# value so a different project can be used per run.
+$VertexProject = if ($env:GOOGLE_CLOUD_PROJECT) { $env:GOOGLE_CLOUD_PROJECT } else { 'polyglot-demo-aa709' }
 $BackendEnvVars = @{
-    'VERTEXAI'          = 'false'
-    'USE_PREMIUM_MODEL' = $UsePremium
-    'PYTHONPATH'        = $RepoRoot
-    'PYTHONUNBUFFERED'  = '1'
+    'VERTEXAI'             = $VertexAi
+    'USE_PREMIUM_MODEL'    = $UsePremium
+    'GOOGLE_CLOUD_PROJECT' = $VertexProject
+    'PYTHONPATH'           = $RepoRoot
+    'PYTHONUNBUFFERED'     = '1'
 }
 $PriorEnv = @{}
 foreach ($k in $BackendEnvVars.Keys) {
@@ -165,7 +197,7 @@ foreach ($k in $BackendEnvVars.Keys) {
 }
 
 Write-Host ""
-Write-Host "Starting backend (uvicorn :8000, VERTEXAI=false, USE_PREMIUM_MODEL=$UsePremium)..." -ForegroundColor Cyan
+Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium)..." -ForegroundColor Cyan
 
 try {
     $BackendProc = Start-Process -FilePath $VenvPython -ArgumentList $BackendArgs `
