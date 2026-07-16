@@ -440,11 +440,16 @@ describe('Connection Manager (connection.ts)', () => {
       expect(manager.isPaused()).toBe(false)
     })
 
-    it('resume() on an OPEN socket still resumes in place (no spurious reconnect)', async () => {
+    it('resume() reads isSocketOpen, NOT getStatus: an OPEN socket resumes in place even when status != connected (bd l8z7)', async () => {
       const manager = await connected()
       manager.pause()
-      // Socket healthy (the normal pause -> resume path).
+      // The DISCRIMINATING case that makes this non-vacuous: the socket is OPEN
+      // but getStatus() reads something other than 'connected' (e.g. a transient
+      // 'reconnecting' between a warm session_ready and the status settling).
+      // The OLD gate (getStatus() !== 'connected') would wrongly bail to a full
+      // reconnect here; the fixed gate (isSocketOpen) correctly resumes in place.
       webFormConnectionMock.isSocketOpen.mockReturnValue(true)
+      webFormConnectionMock.getStatus.mockReturnValue('reconnecting')
       webFormConnectionMock.connect.mockClear()
 
       await manager.resume()
