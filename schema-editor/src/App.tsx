@@ -30,6 +30,8 @@ import {
   repairKit,
   saveRemoteSchema,
   type EditorRole,
+  type LintFinding,
+  type LintReport,
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
@@ -85,6 +87,23 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = React.useState<'edit' | 'preview'>('edit');
   // Section-management modal (bd polyglot-pdf-6cfu.3).
   const [showSectionManager, setShowSectionManager] = React.useState(false);
+  // The latest lint findings, mirrored up from the ValidationPanel (which owns
+  // the lint round-trip) so the FIELD LIST can explain a red row in place
+  // (bd polyglot-pdf-0x10.6).
+  const [lintFindings, setLintFindings] = React.useState<LintFinding[]>([]);
+  const handleLintReport = React.useCallback((report: LintReport | null) => {
+    setLintFindings(report?.findings ?? []);
+  }, []);
+  const lintFindingsByField = React.useMemo(() => {
+    const map = new Map<string, LintFinding[]>();
+    for (const f of lintFindings) {
+      if (!f.field_id) continue;
+      const bucket = map.get(f.field_id);
+      if (bucket) bucket.push(f);
+      else map.set(f.field_id, [f]);
+    }
+    return map;
+  }, [lintFindings]);
   // Multi-selection for the merge/group operation (bd polyglot-pdf-s4dp.1). This
   // is the set of fields ticked for a merge; insertion order is preserved (the
   // first ticked field is the merge primary). Separate from selectedFieldId,
@@ -1065,6 +1084,7 @@ export const App: React.FC = () => {
                 onToggleGroupSelection={toggleGroupSelection}
                 onClearGroupSelection={clearGroupSelection}
                 onMergeFields={handleMergeFields}
+                lintFindingsByField={lintFindingsByField}
               />
             </div>
           </div>
@@ -1122,6 +1142,11 @@ export const App: React.FC = () => {
                 <FieldEditor
                   field={selectedField}
                   schema={schema}
+                  lintFindings={
+                    selectedField
+                      ? lintFindingsByField.get(selectedField.id)
+                      : undefined
+                  }
                   onUpdateField={handleUpdateField}
                   onUnmergeField={handleUnmergeField}
                   onChangeGroupKind={handleChangeGroupKind}
@@ -1155,6 +1180,7 @@ export const App: React.FC = () => {
             setSelectedFieldId(fieldId);
           }}
           onAuthError={handleAuthExpired}
+          onReport={handleLintReport}
           // Repair-all is author-tier on an open hosted kit only (bd zgln); the
           // panel additionally shows the button only when errors exist.
           onRepairAll={

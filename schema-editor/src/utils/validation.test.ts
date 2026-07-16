@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateSchema } from './validation';
+import { checkFieldComplete, validateSchema } from './validation';
 import type { FormSchema, FormField } from '../types/schema';
 
 // Minimal valid field; override per test. read_only/pdf_field_name are the
@@ -132,5 +132,76 @@ describe("validateSchema 'To review' gate mirror (bd polyglot-pdf-6cfu.3)", () =
     } as unknown as FormSchema;
     expect(validateSchema(schema).filter(e =>
       e.message.includes("'To review'"))).toHaveLength(0);
+  });
+});
+
+// checkFieldComplete PDF-mapping + reasons (bd polyglot-pdf-0x10.6): a
+// CONSOLIDATED choice field (per-option pdf_field_name, none at field level)
+// is legitimately mapped -- the old blanket "Missing PDF field name" marked
+// every merged group red with nothing actually wrong. And the status now
+// carries plain-language reasons the UI can show.
+describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', () => {
+  const complete = { spoken_name: 'spoken', help: { instructions: 'Done.' } };
+
+  it('accepts a consolidated group whose options each carry pdf_field_name', () => {
+    const status = checkFieldComplete(field('gender', {
+      ...complete,
+      type: 'radio',
+      pdf_field_name: undefined,
+      options: [
+        { value: 'male', label: 'Male', pdf_field_name: 'g[0]' },
+        { value: 'female', label: 'Female', pdf_field_name: 'g[1]' },
+      ],
+    } as Partial<FormField>));
+    expect(status.errors).toEqual([]);
+    expect(status.isComplete).toBe(true);
+  });
+
+  it('names the specific unmapped options of a partially-mapped group', () => {
+    const status = checkFieldComplete(field('race', {
+      ...complete,
+      type: 'checkbox_group',
+      pdf_field_name: undefined,
+      options: [
+        { value: 'white', label: 'White', pdf_field_name: 'r[0]' },
+        { value: 'black', label: 'Black' },
+      ],
+    } as Partial<FormField>));
+    expect(status.errors).toEqual(['Options missing a PDF widget mapping: Black']);
+  });
+
+  it('flags a group with NO mapping anywhere (field or options)', () => {
+    const status = checkFieldComplete(field('race', {
+      ...complete,
+      type: 'checkbox_group',
+      pdf_field_name: undefined,
+      options: [
+        { value: 'white', label: 'White' },
+        { value: 'black', label: 'Black' },
+      ],
+    } as Partial<FormField>));
+    expect(status.errors).toEqual([
+      'No PDF mapping: neither the field nor its options name a PDF widget',
+    ]);
+  });
+
+  it('still requires pdf_field_name on a plain (non-group) field', () => {
+    const status = checkFieldComplete(field('name', {
+      ...complete,
+      pdf_field_name: undefined,
+    } as Partial<FormField>));
+    expect(status.errors).toEqual(['Missing PDF field name']);
+  });
+
+  it('names the review reasons so the UI can say WHY a field is amber', () => {
+    const status = checkFieldComplete(field('bare', {} as Partial<FormField>));
+    expect(status.needsReview).toBe(true);
+    expect(status.reviewReasons).toEqual([
+      'Help instructions are missing or a placeholder',
+      'Missing spoken name',
+    ]);
+    const clean = checkFieldComplete(field('done', complete as Partial<FormField>));
+    expect(clean.reviewReasons).toEqual([]);
+    expect(clean.isComplete).toBe(true);
   });
 });

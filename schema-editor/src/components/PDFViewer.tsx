@@ -351,7 +351,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                     pageRefs.current.delete(pageNum);
                   }
                 }}
-                className="relative"
+                // w-fit + mx-auto: the wrapper shrinks to the canvas and centers
+                // ITSELF, so the overlay layer (absolute at the wrapper's origin)
+                // shares the canvas's coordinate space at every zoom. With a
+                // full-width wrapper and a centered canvas, overlays sat left of
+                // their fields by half the leftover width whenever the zoomed
+                // page was narrower than the pane (bd polyglot-pdf-0x10.3).
+                className="relative w-fit mx-auto"
               >
                 <PDFPage
                   document={document}

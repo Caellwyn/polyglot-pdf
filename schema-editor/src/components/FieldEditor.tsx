@@ -15,7 +15,8 @@ import {
 } from '../utils/fieldGrouping';
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
-import type { UnclaimedWidget } from '../utils/remoteKitStore';
+import { checkFieldComplete } from '../utils/validation';
+import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
 
 interface FieldEditorProps {
   field: FormField | null;
@@ -53,6 +54,10 @@ interface FieldEditorProps {
   // box to a group. Optional -- provided only in hosted author mode on an open
   // kit; when absent the picker is not offered (local mode has no backend dump).
   onLoadUnclaimedWidgets?: () => Promise<UnclaimedWidget[]>;
+  // Backend lint findings anchored to THIS field (lifted from the
+  // ValidationPanel's report by App), shown as a banner so the author sees why
+  // a field is flagged while editing it (bd polyglot-pdf-0x10.6).
+  lintFindings?: LintFinding[];
 }
 
 // The editable form-metadata panel (bd polyglot-pdf-s4dp.2). Shown when no field
@@ -285,6 +290,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   onUpdateFields,
   authorTier = true,
   onLoadUnclaimedWidgets,
+  lintFindings,
 }) => {
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -304,6 +310,34 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           <h3 className="text-lg font-semibold text-gray-900">{field.id}</h3>
           <p className="text-sm text-gray-500 font-mono">{field.pdf_field_name}</p>
         </div>
+
+        {/* Why this field is flagged (bd polyglot-pdf-0x10.6): the list's red X /
+            amber clock and the bottom strip's findings, explained AT the field.
+            Local completeness errors + backend lint findings; hidden when clean. */}
+        {(() => {
+          const completeness = checkFieldComplete(field);
+          const problems = [
+            ...completeness.errors,
+            ...(lintFindings ?? []).map(f => f.message),
+          ];
+          if (problems.length === 0) return null;
+          return (
+            <div
+              className="bg-red-50 border border-red-200 rounded-md p-3 space-y-1"
+              role="alert"
+              data-testid="field-problems"
+            >
+              <p className="text-xs font-semibold text-red-700">
+                Why this field is flagged
+              </p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {problems.map((message, i) => (
+                  <li key={i} className="text-xs text-red-700">{message}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
 
         {/* Basic Properties */}
         <div className="space-y-4">
@@ -658,10 +692,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
         )}
 
         {/* Field Options (select / radio / checkbox_group). The option VALUE
-            is a read-only slug chip -- an internal join key minted from the
-            label, never free-typed (bd h76m.10); editing the label is how an
-            author renames an option. Per-option PDF-widget mapping is
-            author-tier only, under an Advanced disclosure. */}
+            is an internal join key minted from the label, never free-typed
+            (bd h76m.10); editing the label is how an author renames an option,
+            and the value re-mints once when the edit settles (blur). The value
+            is shown only inside the author-tier Advanced disclosure, alongside
+            the per-option PDF-widget mapping. */}
         {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group') && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -678,38 +713,49 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         className="input flex-1"
                         value={option.label}
                         onChange={(e) => {
-                          const label = e.target.value;
+                          // Per keystroke: update the LABEL only. The internal
+                          // value slug settles once, on blur -- re-minting it
+                          // per keystroke churned the slug through every
+                          // intermediate label (and visibly mutated the chip
+                          // under the author's cursor), bd polyglot-pdf-0x10.5.
                           const newOptions = [...(field.options || [])];
-                          // Re-mint the slug from the new label, unique across
-                          // the OTHER options (the value is a read-only chip;
-                          // renaming the label is how it changes). bd h76m.10.
-                          const otherLabels = newOptions
+                          newOptions[idx] = { ...option, label: e.target.value };
+                          updateField({ options: newOptions });
+                        }}
+                        onBlur={() => {
+                          // Edit settled: mint the slug from the final label,
+                          // unique across the OTHER options (the value is an
+                          // internal join key, never free-typed; renaming the
+                          // label is how it changes). bd h76m.10. An empty
+                          // label mints nothing -- keep the old value so
+                          // dependents' references stay intact.
+                          const label = option.label || '';
+                          if (!label.trim()) return;
+                          const otherLabels = (field.options || [])
                             .filter((_, i) => i !== idx)
                             .map(o => o.label || '');
                           const oldValue = option.value;
                           const value = mintUniqueSlugs([...otherLabels, label]).slice(-1)[0];
-                          newOptions[idx] = { ...option, label, value };
+                          if (!value || value === oldValue) return;
+                          const newOptions = [...(field.options || [])];
+                          newOptions[idx] = { ...option, value };
                           const updatedField = { ...field, options: newOptions };
                           // A dependent's show_if/require_if can reference this
                           // option by its OLD slug. Unlike Remove (which BLOCKS
-                          // deleting a referenced option), rename can't block --
-                          // this onChange fires on every keystroke, and typing a
-                          // new label necessarily passes through intermediate
-                          // slugs, so a per-keystroke block would make a
-                          // referenced option's label un-editable. Instead,
-                          // retarget every referencing condition to the new slug
-                          // atomically with the rename, keeping the schema
-                          // ref-clean without freezing the field (bd
-                          // polyglot-pdf-432u). Both the field's own rename AND
+                          // deleting a referenced option), rename retargets
+                          // every referencing condition to the new slug
+                          // atomically with the value change, keeping the
+                          // schema ref-clean without freezing the field (bd
+                          // polyglot-pdf-432u). Both the field's own change AND
                           // the dependents' retarget must land in ONE commit --
                           // two separate onUpdateField/onUpdateFields calls would
                           // race (the second overwrites the first's result via
                           // the undo history's functional setState) -- so when
-                          // onUpdateFields is available, splice the renamed field
+                          // onUpdateFields is available, splice the changed field
                           // into the retargeted list and commit once; only fall
                           // back to the single-field path when it is absent (no
                           // dependents can be retargeted without it anyway).
-                          if (onUpdateFields && oldValue && oldValue !== value) {
+                          if (onUpdateFields && oldValue) {
                             const withRename = schema.fields.map(f =>
                               f.id === field.id ? updatedField : f,
                             );
@@ -723,14 +769,6 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         }}
                         placeholder="Option label"
                       />
-                      {option.value && (
-                        <span
-                          className="text-xs font-mono text-gray-500 bg-gray-100 rounded px-1.5 py-0.5"
-                          title="Internal value (slug) -- minted from the label, not editable"
-                        >
-                          {option.value}
-                        </span>
-                      )}
                       {(() => {
                         // A dependent gated on this option's slug would dangle
                         // (or, if silently stripped, flip from hidden to
@@ -774,6 +812,23 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
                           Advanced: PDF widget
                         </summary>
+                        {/* The internal value slug lives here, out of the
+                            default option row -- it is plumbing (the join key
+                            conditions and the fill path match on), and showing
+                            it beside the label confused editors (bd
+                            polyglot-pdf-0x10.5). Author tier can still inspect
+                            it; it re-mints from the label when an edit settles. */}
+                        {option.value && (
+                          <div className="mt-1 text-gray-500">
+                            Internal value:{' '}
+                            <span
+                              className="font-mono bg-gray-100 rounded px-1.5 py-0.5"
+                              title="Internal value (slug) -- minted from the label when editing settles, not editable"
+                            >
+                              {option.value}
+                            </span>
+                          </div>
+                        )}
                         <input
                           type="text"
                           className="input input-sm mt-1 w-full font-mono"
