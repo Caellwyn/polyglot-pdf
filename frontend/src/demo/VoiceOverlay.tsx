@@ -734,7 +734,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
 			setError(err instanceof Error ? err.message : 'Connection failed')
-			setStatus('Connection failed')
+			// Set the union status 'error', NOT a freeform 'Connection failed'
+			// string (bd polyglot-pdf-m77y): the freeform value matches no arm of
+			// the controls ternary, so a RE-failed Reconnect (both backends still
+			// down) would fall back to no button -- the same dead end this bead
+			// fixes -- and only recover via the parent prop-sync effect winning a
+			// render race. 'error' is a real ConnectionStatus, so the Reconnect
+			// button renders deterministically. The failure message still reaches
+			// the user via setError above. (The mobile overlay's catch never set a
+			// status here, so it was already immune; this aligns desktop with it.)
+			setStatus('error')
 		}
 	}
 

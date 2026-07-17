@@ -35,14 +35,35 @@ this arm: it already has its own recovery surface, the `ConnectionTimeoutModal`
 (gated on `status === 'reconnect_failed'`), so it is not a dead end and adding it
 here would double up the affordance.
 
+**Hardening (fresh-eyes finding).** The Opus fresh-eyes round traced a sibling
+re-exposure of the same dead end: the desktop `handleConnect` catch set the
+status to the FREEFORM string `'Connection failed'` (not a `ConnectionStatus`
+union value), which matches no controls-ternary arm. So a RE-failed Reconnect
+(user clicks Reconnect while both backends are still down) would fall back to no
+button, recovering only if the parent prop-sync effect won a render race. Fixed
+by setting the union status `'error'` in that catch instead -- the Reconnect
+button then renders deterministically. The user-facing message is unchanged
+(still set via `setError`). The MOBILE overlay's catch never set a status here,
+so it was already immune; this aligns desktop with it. This is in scope: it makes
+the bead's own "no dead-end on total connection failure" fix robust rather than
+ordering-dependent.
+
 Test: extended `VoiceOverlay.reconnectbutton.test.tsx` (the bd b2yj regression
 test that already parameterizes both overlays) with a `status` argument and two
 new cases asserting a Reconnect button renders at `status='error'` and is wired
 to `connectionManager.connect()`, for desktop and mobile. Verified non-vacuous:
-reverting the desktop fix fails the new desktop case. `tsc --noEmit` clean; all
-45 demo overlay tests pass.
+reverting the desktop ternary arm fails the new desktop case. `tsc --noEmit`
+clean; all demo overlay tests pass.
 
-Fresh-eyes + Opus outer review: see the "What shipped" fold-in at closeout.
+Note on the hardening's test coverage: the freeform->`'error'` catch change is
+NOT covered by a dedicated re-fail test. A render test cannot isolate the catch's
+local `setStatus` from the injected `status` prop's sync effect (the prop keeps
+overriding local state, so such a test passes regardless of the catch value --
+i.e. it is vacuous). Rather than ship a vacuous test that gives false confidence,
+the hardening rests on the existing `status='error'` render test (which proves
+the ternary arm shows the button) plus the direct reasoning that the catch now
+emits that exact union status. A candidate follow-up would be to extract the
+status-reconciliation so the catch path is unit-testable in isolation.
 
 ## Lessons
 
@@ -63,7 +84,10 @@ branch -- noted at closeout.
 
 ## Files touched
 
-- `frontend/src/demo/VoiceOverlay.tsx` -- add `error` to the Reconnect ternary arm.
-- `frontend/src/demo/VoiceOverlayMobile.tsx` -- same, mobile overlay.
+- `frontend/src/demo/VoiceOverlay.tsx` -- add `error` to the Reconnect ternary
+  arm; harden the `handleConnect` catch to set the union status `error` instead
+  of the freeform `Connection failed` string.
+- `frontend/src/demo/VoiceOverlayMobile.tsx` -- add `error` to the Reconnect
+  ternary arm (its catch already set no status).
 - `frontend/src/demo/VoiceOverlay.reconnectbutton.test.tsx` -- parameterize by
   status; add desktop + mobile `error`-status cases.
