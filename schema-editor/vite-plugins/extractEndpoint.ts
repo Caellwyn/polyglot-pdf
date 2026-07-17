@@ -400,6 +400,15 @@ export async function handleExtract(
   const args = [ctx.extractScript, '--pdf', pdfPath, '--out', tmpOut];
   if (ctx.model) args.push('--model', ctx.model);
   if (instructionsPdfPath) args.push('--instructions-pdf', instructionsPdfPath);
+  // Local dev extraction is the extraction-STRATEGY-testing path, so the option
+  // label-translation bake (bd 2h9j; pro-tier Gemini, default ON in the script)
+  // is opted OUT here for cost efficiency -- otherwise a dev shell with
+  // GEMINI_API_KEY/VERTEXAI exported would silently spend pro tokens on every
+  // test run, with no local checkbox to stop it (the hosted editor has one).
+  // Bake translations for a locally-authored kit via the decoupled paths:
+  // scripts/authoring/translate_option_labels.py or the hosted editor's
+  // Translate-options action.
+  args.push('--no-translate-options');
 
   const cleanupTmp = () => { try { if (fs.existsSync(tmpOut)) fs.rmSync(tmpOut); } catch { /* best effort */ } };
 

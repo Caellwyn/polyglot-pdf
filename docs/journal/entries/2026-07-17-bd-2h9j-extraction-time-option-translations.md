@@ -73,8 +73,19 @@ standalone on an already-extracted schema -- no re-doing the i-90. Plan file:
 - Beads filed: polyglot-pdf-d25e (editor label rename keeps now-wrong
   translations -- FieldEditor spreads the option on rename; remedy today is
   `--force`), polyglot-pdf-ierm (on-screen display of translated labels --
-  maintainer chose voice-only scope now), and a first-session handshake gap
-  found during live verification (see Lessons).
+  maintainer chose voice-only scope now), and polyglot-pdf-p8sq (first-session
+  handshake omits spoken_language; see Lessons).
+- Assess outcome: rubric 3/3 PASS. Fresh-eyes round 1 (Sonnet) NO-GAPS, zero
+  findings; round 2 (Opus final clearing round) NO-GAPS. Outer review: primary
+  Opus pass NO-GAPS; second independent Opus pass NO-GAPS with ONE
+  low-confidence behavior note ADOPTED as a fix (the local Vite dev extract
+  endpoint spawned the extractor without `--no-translate-options`, so a dev
+  shell with Gemini creds would silently spend pro-tier tokens on every local
+  extraction-strategy test run -- exactly the cost case the maintainer's
+  off-switch exists for; `extractEndpoint.ts` now passes the flag with a
+  pointer to the decoupled bake paths). The fix invalidated both clears, so
+  both outer passes re-ran on the final diff (both NO-GAPS). No deferred-nit
+  bead needed (zero true nits).
 
 ## Lessons
 
