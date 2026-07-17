@@ -17,6 +17,7 @@ from .field_utils import (
     strip_field_id_from_hint,
 )
 from .ai_context import render_field_guidance, render_section_metadata
+from .option_translation import get_option_label_overrides
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
@@ -73,6 +74,17 @@ class FormFillingService:
         self._last_section_metadata: Optional[Dict[str, Any]] = None
         self._fill_language: str = "English"  # Default fill language
         self._spoken_language: str = "English"  # Default spoken conversation language (persists across sections)
+        # Runtime option-label translation (bd polyglot-pdf-ow1e):
+        # {english_label: translated_label} for the session's spoken language,
+        # assigned by the background task fired in start_session. Empty until
+        # (and unless) the translation lands -- renders in that window fall back
+        # to English labels, covered by the SI's translate-on-the-fly rule.
+        # Schema data only (labels, no user values); the stateless invariant holds.
+        self._option_translations: Dict[str, str] = {}
+        # Strong ref to the in-flight translation task so it isn't GC'd and can
+        # be cancelled on end_session (the shared per-process build it awaits is
+        # shielded and keeps running for other sessions).
+        self._option_translation_task: Optional[asyncio.Task] = None
         # DTI (bd polyglot-pdf-jnjj.22): client-supplied field schemas merged for
         # VALIDATION only -- kept SEPARATE from self._schema['fields'] so the DTI SI
         # branch's "fields[0] is the current field" assumption is never disturbed by
@@ -324,7 +336,17 @@ class FormFillingService:
             # Resolvable ids are authoritative -- only an unknown id is coerced
             # (bd polyglot-pdf-8vy3; symmetric with the update-side gate).
             is_known_field=self._is_known_field_id,
+            # Live getter so fields 2..N's guidance carries the session-language
+            # option labels once the background translation lands (bd
+            # polyglot-pdf-ow1e). Empty dict -> render falls back to English.
+            get_option_label_overrides=lambda: self._option_translations,
         )
+
+        # Runtime option-label translation (bd polyglot-pdf-ow1e): fire the
+        # background build now -- _spoken_language is already seeded pre-connect
+        # from the handshake (bd y25o) and _full_schema was cached above. Never
+        # blocks the session; failure/slow paths leave English labels.
+        self._maybe_start_option_translation(form_id)
 
         # Use web form tool declarations (stateless)
         tool_declarations = self._build_tool_declarations()
@@ -544,6 +566,75 @@ class FormFillingService:
                 return field
         return self._dti_extra_fields.get(field_id)
 
+    def _maybe_start_option_translation(self, form_id: str) -> None:
+        """Fire the background option-label translation task (bd polyglot-pdf-ow1e).
+
+        Skips entirely when: the flag is off; the session language is unset,
+        English, or not code-backed (labels are already English / nothing to
+        pin); no text model is wired; or there is no schema to read labels from.
+        SESSION-START ONLY -- mid-session language changes are not a supported
+        flow (maintainer 2026-07-16); see the note in send_initiating_message.
+        An internal section-switch restart re-enters here with the same form +
+        language and dedupes onto the process-level cached build.
+        """
+        if not getattr(self._settings, "RUNTIME_OPTION_TRANSLATION_ENABLED", False):
+            return
+        language = self._spoken_language
+        if not language or language.strip().lower() == "english":
+            return
+        if not bcp47_codes_for_spoken_language(language):
+            return
+        if self._text_ai is None:
+            return
+        schema = self._full_schema or self._schema
+        if not schema:
+            return
+        # Cache-key form id: prefer the form_number of the schema the labels are
+        # actually collected from (the full-form catalog). The passed-in form_id
+        # comes from the PER-SECTION schema, which on a DTI manifest-first
+        # handshake carries no form_metadata and resolves to "unknown" -- two
+        # different forms must never share a cache entry (verified live, W-7).
+        translation_form_id = (
+            (schema.get("form_metadata") or {}).get("form_number") or form_id
+        )
+        # An internal restart (section switch) re-enters here while an earlier
+        # awaiter may still be in flight -- cancel it so the reference we are
+        # about to overwrite never becomes an unjoinable orphan (fresh-eyes,
+        # this PR). Cancelling the awaiter never cancels the SHARED build
+        # (get_option_label_overrides shields it); the replacement task awaits
+        # the same cached build.
+        if (self._option_translation_task is not None
+                and not self._option_translation_task.done()):
+            self._option_translation_task.cancel()
+        self._option_translation_task = asyncio.create_task(
+            self._run_option_translation(translation_form_id, schema, language)
+        )
+
+    async def _run_option_translation(
+        self, form_id: str, schema: Dict[str, Any], language: str
+    ) -> None:
+        """Await the (process-cached) label-translation build and publish the
+        result. Fail-open by construction: get_option_label_overrides returns {}
+        on any failure/timeout, and this wrapper never lets an exception escape
+        the task -- the session simply keeps English labels."""
+        try:
+            overrides = await get_option_label_overrides(
+                form_id, schema, language, self._text_ai
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 -- belt-and-suspenders fail-open
+            _log.warning("option_translation_task_error",
+                         session_id=self._session_id,
+                         exc_type=type(exc).__name__)
+            return
+        if overrides:
+            self._option_translations = overrides
+            _log.info("option_translation_applied",
+                      session_id=self._session_id,
+                      language=language,
+                      override_count=len(overrides))
+
     async def send_initiating_message(
         self,
         spoken_language: str,
@@ -573,7 +664,10 @@ class FormFillingService:
             # No-op when live AI is not configured (used in unit tests)
             return
 
-        # Store spoken language for section switching (persists across sections)
+        # Store spoken language for section switching (persists across sections).
+        # If mid-session language switching ever becomes a supported flow, this is
+        # where the option-label translation would re-fire for the new language
+        # (bd polyglot-pdf-ow1e; today it runs at session start only).
         self._spoken_language = spoken_language
 
         # Strip the technical "(field_id: ...)" parenthetical so Gemini doesn't
@@ -612,7 +706,13 @@ class FormFillingService:
                 # longer carries it.
                 current_field_guidance = (
                     "\n\nCURRENT FIELD (copy this field_id verbatim; do NOT read it aloud):\n"
-                    + render_field_guidance(field, fill_language=self._fill_language)
+                    + render_field_guidance(
+                        field, fill_language=self._fill_language,
+                        # Session-language option labels when the background
+                        # translation has landed (bd polyglot-pdf-ow1e); empty
+                        # -> None -> English labels, byte-identical render.
+                        option_label_overrides=self._option_translations or None,
+                    )
                 )
 
             # DTI form/section metadata channel (bd polyglot-pdf-uogm): the static SI
@@ -981,6 +1081,16 @@ class FormFillingService:
             except (asyncio.CancelledError, Exception):
                 pass
         await self._cancel_secretary_deliver_tasks()
+        # Cancel this session's option-translation awaiter (bd polyglot-pdf-ow1e).
+        # The underlying per-process build is shielded, so it keeps running and
+        # later sessions still hit the cache; only THIS session's publish stops.
+        if (self._option_translation_task is not None
+                and not self._option_translation_task.done()):
+            self._option_translation_task.cancel()
+            try:
+                await self._option_translation_task
+            except (asyncio.CancelledError, Exception):
+                pass
         if self._live_ai is not None:
             await self._live_ai.finalize()
         self._websocket = None

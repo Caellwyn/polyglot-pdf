@@ -87,6 +87,11 @@ class CallbackHandler:
         # a "Speak <lang> aloud" segment on every injected guidance block so the
         # conversation language is re-anchored per turn, not only at session start.
         self._get_spoken_language = None
+        # Live getter for the session-language option-label overrides (bd
+        # polyglot-pdf-ow1e): a getter, not a snapshot, because the background
+        # translation task publishes them AFTER session start -- renders before
+        # that see an empty dict and fall back to English labels.
+        self._get_option_label_overrides = None
         # Live getter for the current field id (bd polyglot-pdf-h1bn): so confirm_field
         # can be coerced onto the current field when the model confirms a hallucinated /
         # drifted id (mirrors the update_form_fields coercion). Getter, not snapshot.
@@ -129,6 +134,7 @@ class CallbackHandler:
         get_use_dti=None,
         clear_current_field=None,
         is_known_field=None,
+        get_option_label_overrides=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -138,11 +144,20 @@ class CallbackHandler:
         self._handle_ask_secretary = handle_ask_secretary
         self._get_fill_language = get_fill_language
         self._get_spoken_language = get_spoken_language
+        self._get_option_label_overrides = get_option_label_overrides
         self._get_current_field_id = get_current_field_id
         self._get_use_dti = get_use_dti
         self._clear_current_field = clear_current_field
         self._is_known_field = is_known_field
-    
+
+    def _option_overrides(self):
+        """The current session-language option-label overrides, or None (bd
+        polyglot-pdf-ow1e). None/empty keeps render_field_guidance byte-identical
+        to the pre-translation behavior (English labels)."""
+        overrides = (self._get_option_label_overrides()
+                     if self._get_option_label_overrides else None)
+        return overrides or None
+
     async def send_form_update(
         self,
         data: Optional[Dict[str, Any]],
@@ -981,7 +996,8 @@ class CallbackHandler:
                     spoken_language = self._get_spoken_language() if self._get_spoken_language else None
                     next_field_guidance = render_field_guidance(
                         client_next_schema, fill_language=fill_language,
-                        spoken_language=spoken_language
+                        spoken_language=spoken_language,
+                        option_label_overrides=self._option_overrides()
                     )
                     # Merge the field into the backend's validation schema so the
                     # SUBSEQUENT update_form_fields for this field is not rejected as
@@ -1133,7 +1149,8 @@ class CallbackHandler:
                     spoken_language = self._get_spoken_language() if self._get_spoken_language else None
                     next_field_guidance = render_field_guidance(
                         client_next_schema, fill_language=fill_language,
-                        spoken_language=spoken_language
+                        spoken_language=spoken_language,
+                        option_label_overrides=self._option_overrides()
                     )
                     if self._merge_field_schema:
                         self._merge_field_schema(client_next_schema)
@@ -1411,7 +1428,8 @@ class CallbackHandler:
             spoken_language = self._get_spoken_language() if self._get_spoken_language else None
             field_guidance = render_field_guidance(
                 field_schema, fill_language=fill_language,
-                spoken_language=spoken_language
+                spoken_language=spoken_language,
+                option_label_overrides=self._option_overrides()
             )
 
         if ack.get("already_confirmed"):

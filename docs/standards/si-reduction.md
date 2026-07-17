@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/services/ai_context.py backend/services/manifest_service.py
 
-*Last updated: 2026-07-12. Continuous-DTI is the production default (`USE_DTI` defaults true, bd polyglot-pdf-7872); the legacy full-SI is the deprecated section-reset fallback (bd polyglot-pdf-55jg). The JIT manifest SI mode was removed (bd polyglot-pdf-en2j); the two surviving SI modes are DTI (shipped) and legacy full-SI (fallback). Both templates' CONSTRAINTS direct the model to briefly convey a field's Note / hint-carried context WHILE asking (bd polyglot-pdf-bo4m; the qualifying fine print was rendered but not voiced); the per-turn `{next_field_hint}` string built by the frontend (`formatNextFieldHint`) appends `help.instructions` as "Context to briefly convey when asking: ...". See [../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md). The legacy SI renders the canonical nested `help` block (`help.instructions`/`help.format_hint`) (bd polyglot-pdf-jnjj.23). Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2).*
+*Last updated: 2026-07-17 (bd polyglot-pdf-ow1e: guidance option labels now render pre-translated into the session language via the runtime option-translation overrides -- see the per-field-guidance bullet and [../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md](../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md)). Prior: 2026-07-12. Continuous-DTI is the production default (`USE_DTI` defaults true, bd polyglot-pdf-7872); the legacy full-SI is the deprecated section-reset fallback (bd polyglot-pdf-55jg). The JIT manifest SI mode was removed (bd polyglot-pdf-en2j); the two surviving SI modes are DTI (shipped) and legacy full-SI (fallback). Both templates' CONSTRAINTS direct the model to briefly convey a field's Note / hint-carried context WHILE asking (bd polyglot-pdf-bo4m; the qualifying fine print was rendered but not voiced); the per-turn `{next_field_hint}` string built by the frontend (`formatNextFieldHint`) appends `help.instructions` as "Context to briefly convey when asking: ...". See [../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md](../journal/entries/2026-07-05-bd-bo4m-field-fine-print-reaches-voice-ai.md). The legacy SI renders the canonical nested `help` block (`help.instructions`/`help.format_hint`) (bd polyglot-pdf-jnjj.23). Created as the F1 foundation contract (bd polyglot-pdf-jnjj.2).*
 
 This is the interface the SI templates and their placeholder sets build against, so
 work touching the system instruction does not collide on the `config.py` templates.
@@ -45,6 +45,12 @@ everything form-specific OFF the SI and onto the per-turn injection:
 
 - **Per-field guidance** -- `render_field_guidance` (`ai_context.py`) renders one
   field's guidance (from `manifest_service.get_field_guidance`, incl. `fill_language`).
+  Option labels render pre-translated into the session language when the runtime
+  option-translation overrides are available (bd polyglot-pdf-ow1e:
+  `option_label_overrides` substitutes the label and omits `spoken_label` on
+  overridden options; option VALUES stay English for tool-call matching, and the
+  DTI SI's MATCHING block scopes its translate-aloud rule to the English-fallback
+  window). No overrides -> byte-identical English render.
   The SAME text delivers field 1 via the initiating message
   (`FormFillingService.send_initiating_message`) and fields 2..N via the `confirm_field`
   tool response (`response["next_field_guidance"]`), so the model sees identical

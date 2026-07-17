@@ -8,7 +8,8 @@ from backend.services.manifest_service import get_field_guidance
 
 def render_field_guidance(
     field: Optional[Dict[str, Any]], fill_language: Optional[str] = None,
-    spoken_language: Optional[str] = None
+    spoken_language: Optional[str] = None,
+    option_label_overrides: Optional[Dict[str, str]] = None,
 ) -> str:
     """Render a single field's guidance as the readable text block the model reads
     (bd polyglot-pdf-jnjj.22, Dynamic Turn Injection).
@@ -32,8 +33,17 @@ def render_field_guidance(
     spoken-language anchor was the session-start message. Omitted/None -> no
     segment (the initiating-message path already carries "Speak {spoken_language}"
     in its template and passes None here).
+
+    option_label_overrides (bd polyglot-pdf-ow1e): when set, option labels are
+    substituted with their session-language translations (spoken_label omitted
+    on overridden options; values untouched) so the rendered Options list is
+    already in the language the model speaks. Omitted/None/empty -> the render
+    is byte-identical to before.
     """
-    guidance = get_field_guidance(field) if field else None
+    guidance = (
+        get_field_guidance(field, option_label_overrides=option_label_overrides)
+        if field else None
+    )
     if not guidance:
         return "No fields available"
 
