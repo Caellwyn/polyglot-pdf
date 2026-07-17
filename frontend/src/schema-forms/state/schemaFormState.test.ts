@@ -223,6 +223,47 @@ describe('SchemaFormStateManager', () => {
       // formSessionId is the persistent fss_ id (durability boundary).
       expect(state.formSessionId).toMatch(/^fss_/)
     })
+
+    // bd polyglot-pdf-p8sq: the FIRST connect's handshake reads
+    // state.selectedLanguage; before this seed it was only written at
+    // disclaimer-AGREE, so a fresh session's first connect carried no
+    // language (wrong en-US ASR bias, option-translation warm-up skipped).
+    it('seeds selectedLanguage from the onboarding choice (bd p8sq)', () => {
+      sessionStorageMock['vff_selected_language'] = 'Spanish'
+      const state = SchemaFormStateManager.init(createTestSchema())
+      expect(state.selectedLanguage).toBe('Spanish')
+      // ... and the handshake payload carries it on the FIRST connect.
+      const payload = SchemaFormStateManager.getHandshakePayload(state)
+      expect(payload.spoken_language).toBe('Spanish')
+    })
+
+    it('leaves selectedLanguage unset when onboarding recorded none', () => {
+      const state = SchemaFormStateManager.init(createTestSchema())
+      expect(state.selectedLanguage).toBeUndefined()
+      expect(SchemaFormStateManager.getHandshakePayload(state).spoken_language)
+        .toBeNull()
+    })
+
+    it('backfills a pre-p8sq persisted state missing selectedLanguage', () => {
+      // A state saved BEFORE the seed existed: language chosen at onboarding
+      // but absent from the persisted form state.
+      const first = SchemaFormStateManager.init(createTestSchema())
+      expect(first.selectedLanguage).toBeUndefined()
+      sessionStorageMock['vff_selected_language'] = 'French'
+      const resumed = SchemaFormStateManager.init(createTestSchema())
+      expect(resumed.selectedLanguage).toBe('French')
+      // The backfill persisted, so a raw load() sees it too.
+      expect(SchemaFormStateManager.load()?.selectedLanguage).toBe('French')
+    })
+
+    it('does not overwrite an explicit selectedLanguage on resume', () => {
+      sessionStorageMock['vff_selected_language'] = 'Spanish'
+      const state = SchemaFormStateManager.init(createTestSchema())
+      state.selectedLanguage = 'German' // e.g. set by a later language change
+      SchemaFormStateManager.save(state)
+      const resumed = SchemaFormStateManager.init(createTestSchema())
+      expect(resumed.selectedLanguage).toBe('German')
+    })
   })
 
   // ============================================================================

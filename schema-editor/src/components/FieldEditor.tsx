@@ -819,7 +819,17 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // intermediate label (and visibly mutated the chip
                           // under the author's cursor), bd polyglot-pdf-0x10.5.
                           const newOptions = [...(field.options || [])];
-                          newOptions[idx] = { ...option, label: e.target.value };
+                          // A label edit invalidates the option's baked
+                          // label_translations -- they translate the OLD text,
+                          // and the runtime keys them by language on the option,
+                          // so a renamed option would show/speak wrong-language
+                          // text (bd polyglot-pdf-d25e). Drop them on the first
+                          // real change (React fires onChange only when the text
+                          // differs); the editor's Translate-options action or
+                          // translate_option_labels.py re-bakes on demand.
+                          const edited = { ...option, label: e.target.value };
+                          delete edited.label_translations;
+                          newOptions[idx] = edited;
                           updateField({ options: newOptions });
                         }}
                         onBlur={() => {

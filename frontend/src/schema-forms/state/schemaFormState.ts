@@ -16,6 +16,7 @@ import type { FormSchema, FormSection, FormField, FormPart, FieldValue, Validato
 import { buildHandshakeManifest, buildContinuousManifest, getFieldSchema } from "../utils/manifestUtils";
 import { normalizeFieldValue, isFieldRequired, shouldShowField } from "../utils/validation";
 import { readFieldEntryWithAlias } from "../utils/fieldValue";
+import { loadOnboardingState } from "../onboardingStorage";
 // Value imports for the JIT handshake's first-unfilled-field selection + hint.
 // navigation.ts back-references SchemaFormState as a TYPE-only import, so this
 // does not create a runtime import cycle (bd polyglot-pdf-jnjj.9).
@@ -107,6 +108,16 @@ export class SchemaFormStateManager {
         existing.formSessionId = this.generateFormSessionId();
         this.save(existing);
       }
+      // Backfill for states created before bd p8sq: an in-flight session may
+      // carry no selectedLanguage even though onboarding recorded one -- seed
+      // it so the next (re)connect handshake carries the language.
+      if (!existing.selectedLanguage) {
+        const onboardingLanguage = loadOnboardingState().language;
+        if (onboardingLanguage) {
+          existing.selectedLanguage = onboardingLanguage;
+          this.save(existing);
+        }
+      }
       return existing;
     }
 
@@ -132,7 +143,13 @@ export class SchemaFormStateManager {
       // Disclaimer acceptance
       disclaimerAccepted: false,
       disclaimerAcceptedAt: undefined,
-      selectedLanguage: undefined,
+      // Seed the spoken language from the app-start onboarding choice (bd
+      // polyglot-pdf-p8sq): the FIRST connect's handshake reads
+      // state.selectedLanguage, and before this seed it was only written at
+      // disclaimer-AGREE -- so the disclaimer-phase connection got an en-US
+      // ASR bias and skipped the option-translation warm-up (bd y25o / ow1e
+      // intent defeated for the first connect).
+      selectedLanguage: loadOnboardingState().language ?? undefined,
       pinnedFieldId: null, // Field-level navigation pin (bd jnjj.36)
     };
 

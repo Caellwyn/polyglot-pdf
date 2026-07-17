@@ -13,6 +13,8 @@ voice-harness gate (bd jnjj.25), not a unit test.
 
 from unittest.mock import AsyncMock
 
+import asyncio
+
 import pytest
 
 import backend.services.ai_context as ai_context_mod
@@ -185,17 +187,24 @@ def test_dti_extra_fields_reset_on_section_switch():
 
 
 def test_coordinator_stash_and_consume():
-    coord = RequestCoordinator(websocket=None, session_id="t")
-    # No schema stashed -> None.
-    assert coord.consume_pending_next_field_schema() is None
-    # Register a pending next_field request (as request_next_field_hint does), so
-    # the response _resolves a real future and the schema is stashed.
-    request_id, _future = coord._register("next_field")
-    coord.handle_next_field_hint_response(request_id, "some hint", NESTED_FIELD)
-    got = coord.consume_pending_next_field_schema()
-    assert got == NESTED_FIELD
-    # Consumed -> cleared.
-    assert coord.consume_pending_next_field_schema() is None
+    # Runs inside asyncio.run: _register creates an asyncio.Future, which needs
+    # a RUNNING loop once any earlier test has closed the legacy implicit main
+    # loop (bd polyglot-pdf-r8gq); production always calls it from the WS loop.
+    async def _scenario():
+        coord = RequestCoordinator(websocket=None, session_id="t")
+        # No schema stashed -> None.
+        assert coord.consume_pending_next_field_schema() is None
+        # Register a pending next_field request (as request_next_field_hint
+        # does), so the response _resolves a real future and the schema is
+        # stashed.
+        request_id, _future = coord._register("next_field")
+        coord.handle_next_field_hint_response(request_id, "some hint", NESTED_FIELD)
+        got = coord.consume_pending_next_field_schema()
+        assert got == NESTED_FIELD
+        # Consumed -> cleared.
+        assert coord.consume_pending_next_field_schema() is None
+
+    asyncio.run(_scenario())
 
 
 def test_coordinator_no_schema_when_legacy_client():
@@ -860,7 +869,7 @@ def test_manual_field_update_clears_current_field_pointer():
     svc = FormFillingService(live_ai=None, settings=settings)
     svc._current_field_id = "p1_line3a_familyname"
     svc._audio_handler = None  # no-op delegate; we only assert the pointer clear
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         svc.send_manual_field_update("p1_line3a_familyname", "Family Name", "Vasquez",
                                      "next (field_id: 'p1_line3b_givenname')"))
     assert svc._current_field_id is None
@@ -893,7 +902,7 @@ def test_manual_field_update_reestablishes_pointer_from_next_field_schema():
     import asyncio
     svc = _dti_service_for_manual_edit()
     next_schema = {"id": "p1_line3b_givenname", "name": "Given Name", "type": "text"}
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         svc.send_manual_field_update("p1_line3a_familyname", "Family Name", "Vasquez",
                                      "next (field_id: 'p1_line3b_givenname')",
                                      next_field_schema=next_schema))
@@ -910,7 +919,7 @@ def test_manual_field_update_without_schema_leaves_pointer_cleared():
     complete) keeps the strictly-safer h1bn behavior: pointer stays cleared."""
     import asyncio
     svc = _dti_service_for_manual_edit()
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         svc.send_manual_field_update("p1_line3a_familyname", "Family Name", "Vasquez",
                                      "next (field_id: 'p1_line3b_givenname')"))
     assert svc._current_field_id is None
@@ -926,7 +935,7 @@ def test_manual_field_update_non_dti_ignores_next_field_schema():
     svc = FormFillingService(live_ai=None, settings=settings)
     svc._current_field_id = "whatever"
     svc._audio_handler = None
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         svc.send_manual_field_update("f1", "Field One", "v",
                                      next_field_schema={"id": "f2", "name": "Two",
                                                         "type": "text"}))
