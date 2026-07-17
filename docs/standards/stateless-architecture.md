@@ -1,6 +1,6 @@
 # Stateless architecture
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the secretary's request-use-discard pattern into the Rules section; verified accurate against current code otherwise). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-17 (bd polyglot-pdf-ow1e: noted the schema-data-only boundary example -- the process-level option-label translation cache stores form labels/translations, never user field values; see [../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md](../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md)). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: folded the secretary's request-use-discard pattern into the Rules section; verified accurate against current code otherwise). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 **Tracks:** `backend/services/form_filling_service.py` `backend/routes/websocket_routes.py` `frontend/src/schema-forms/state/schemaFormState.ts` `frontend/src/webFormConnection.ts` `frontend/src/shared/connection.ts`
 
@@ -90,6 +90,11 @@ durability is a property of the form-session (client-side), never the WS session
 - **Never add server-side persistence of field values** -- no DB row, file, cache,
   or in-memory dict that outlives the request handling. If you need a value later,
   the client re-sends it on the next message.
+  (Boundary example: the process-level option-label translation cache,
+  `backend/services/option_translation.py` (bd polyglot-pdf-ow1e), stores only
+  SCHEMA-derived data -- English option labels and their translations, keyed by
+  form + language -- never a user's field values, so it does not breach this
+  rule. Anything keyed by or containing a USER'S data would.)
 - **Never log field values / PII / PHI server-side.** Log ids, types, counts,
   timings (see [`logging-and-cost.md`](logging-and-cost.md), planned `polyglot-pdf-m8s`).
 - **Treat `current_values` as ephemeral context, not storage.** It's an input to

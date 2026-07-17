@@ -94,11 +94,18 @@ no BCP-47 code) is removed. Plan file:
 
 ## Doc freshness
 
-- No `docs/components/` or `docs/standards/` doc tracks the option-label
-  language path or the spoken-language list count (checked: no doc claims
-  18 languages outside the archived legacy guide, which is exempt history).
-  `docs/standards/ai-models.md` untouched -- the secretary model chain is
-  unchanged (the new call rides the existing `MODEL_LABELING` adapter).
+- Bumped `docs/standards/validation-delegation.md` (the `ITextAI` port grew
+  `translate_labels()`), `docs/standards/si-reduction.md` (guidance option
+  labels now render pre-translated), and
+  `docs/standards/stateless-architecture.md` (the schema-data-only boundary
+  example for the new process cache).
+- Reviewed and LEFT: `docs/standards/terminology.md`,
+  `docs/standards/voice-and-vad.md`, `docs/technical_guide.md` -- this branch's
+  touches to their tracked files do not change what those docs describe (naming
+  canon / VAD signals / ops guide), and each was already stale from other
+  files before this branch. `docs/standards/ai-models.md` untouched -- the
+  secretary model chain is unchanged (the new call rides the existing
+  `MODEL_LABELING` adapter).
 - Local memory `language-support-18-growing-to-90-never-pin` updated to 17 +
   the code-backed invariant.
 
