@@ -61,3 +61,28 @@ case) -- and asserts `stored_values` is absent. Verified the test is non-vacuous
 by temporarily re-inserting the echo on the error branch: the new test failed,
 then passed again once reverted. Existing success/failure echo tests and the full
 backend suite (1143 passed, 1 skipped) stay green.
+
+## Doc freshness
+
+Bumped the two component docs that track `callback_handler.py` AND describe the
+stored-value echo: `docs/components/voice-ai.md` (echo section now states the
+success-branch-only rule) and `docs/components/tool-call-flow.md` (the
+round-trip step-3 prose now spells out the error-branch/collapsed carve-out; its
+"on success" wording already matched the fix). The other docs the freshness
+checker flagged STALE -- `ai-models`, `confirmation-and-audit`,
+`hipaa-pii-policy`, `logging-and-cost`, `risk-rating`,
+`section-reset-deprecation`, `terminology`, `voice-and-vad`, `technical_guide`
+-- were stale before this branch, from other recent commits' mtimes on
+`config.py` / `live_ai_gemini.py` / etc. Two of them also track
+`callback_handler.py` (`confirmation-and-audit`, `hipaa-pii-policy`) but neither
+mentions the stored-value echo, and this change is PII-neutral (it REMOVES a
+model-facing field and adds nothing to any log), so they were correctly left.
+
+## Files touched
+
+- `backend/services/callback_handler.py` -- drop the `stored_values` echo from
+  the error branch of `_build_update_fields_response`; docstring updated.
+- `backend/tests/unit/test_stored_value_echo.py` -- new
+  `test_collapsed_multi_field_error_carries_no_stored_values`.
+- `docs/components/voice-ai.md`, `docs/components/tool-call-flow.md` -- echo is
+  success-branch-only.
