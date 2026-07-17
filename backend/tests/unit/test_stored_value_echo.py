@@ -108,6 +108,47 @@ async def test_validation_failure_carries_no_stored_values():
 
 
 @pytest.mark.asyncio
+async def test_collapsed_multi_field_error_carries_no_stored_values():
+    """A COLLAPSED multi-field update (two field_ids in one call, first valid)
+    lands in the error branch: rejected_fields -> validation_errors is non-empty,
+    so the caller sent send_form_update({}, []) and the CLIENT STORED NOTHING --
+    yet applied_values still holds the first field's canonical value. The response
+    must NOT echo that as stored_values, or the model reads back a value the client
+    never stored (bd polyglot-pdf-f7h7).
+
+    The public tool parser caps arguments at a single field, so the collapsed path
+    is exercised at its invariant site -- _build_update_fields_response with both
+    applied_values populated AND validation_errors present -- which is exactly the
+    shape the caller hands it in the collapsed case.
+    """
+    handler = _make_handler([A_NUMBER_FIELD])
+
+    resp = handler._build_update_fields_response(
+        # A collapsed call: first field applied, the rest rejected as
+        # single_field_only (mirrors the caller's rejected_fields -> errors path).
+        validation_errors=[
+            {
+                "field_id": "p1_other_field",
+                "field_name": "p1_other_field",
+                "value": "SOMETHING",
+                "constraint": "single_field_only",
+                "message": "Rejected - only one field per call allowed",
+            }
+        ],
+        unknown_fields=[],
+        applied_fields=["p1_line1_aliennumber"],
+        next_field_hint=None,
+        rejected_count=1,
+        applied_values={"p1_line1_aliennumber": "12345678"},
+    )
+
+    assert resp.get("success") is False
+    # The first field validated (applied_fields is non-empty), but send_form_update
+    # carried nothing to the client on this branch -> no stored_values echo.
+    assert "stored_values" not in resp
+
+
+@pytest.mark.asyncio
 async def test_echoed_value_never_reaches_structlog(monkeypatch):
     """PII guard: the echo is model-facing only. The production structlog calls
     around the update path log counts/flags -- the stored value must not appear
