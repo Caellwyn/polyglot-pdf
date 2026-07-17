@@ -1655,10 +1655,17 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					{/* Controls */}
 					<div className="vff-controls">
 						{/* Connection is automatic after language selection - no connect button needed.
-						    The Reconnect button covers both the idle timeout AND a generic
-						    "disconnected" drop: the latter sets the "please click Reconnect"
-						    error, so it must offer a button to click (bd polyglot-pdf-b2yj). */}
-						{status === 'idle_timeout' || status === 'disconnected' ? (
+						    The Reconnect button covers the idle timeout, a generic
+						    "disconnected" drop (the latter sets the "please click Reconnect"
+						    error, so it must offer a button to click -- bd polyglot-pdf-b2yj),
+						    AND a bare 'error' status. 'error' is set by connect()'s catch when
+						    BOTH the localhost and cloud attempts fail (a completely-failed
+						    initial connect or resume); without this branch it renders NO button
+						    at all -- a dead end recoverable only by a page refresh
+						    (bd polyglot-pdf-m77y). handleConnect retries the connection.
+						    ('reconnect_failed' has its own recovery surface, the
+						    connection-timeout modal, so it is deliberately not listed here.) */}
+						{status === 'idle_timeout' || status === 'disconnected' || status === 'error' ? (
 							<button
 								className="vff-button vff-reconnect"
 								onClick={handleConnect}

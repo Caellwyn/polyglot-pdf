@@ -1270,11 +1270,17 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 						</div>
 					)}
 
-					{/* Action Buttons - Resume/Pause/Reconnect. Reconnect covers both the
-					    idle timeout AND a generic "disconnected" drop, which sets the
+					{/* Action Buttons - Resume/Pause/Reconnect. Reconnect covers the
+					    idle timeout, a generic "disconnected" drop (which sets the
 					    "please click Reconnect" error and so needs a button to click
-					    (bd polyglot-pdf-b2yj). */}
-					{status === 'idle_timeout' || status === 'disconnected' ? (
+					    -- bd polyglot-pdf-b2yj), AND a bare 'error' status. 'error' is
+					    set by connect()'s catch when BOTH the localhost and cloud attempts
+					    fail (a completely-failed initial connect or resume); without this
+					    branch it renders NO button at all -- a dead end recoverable only by
+					    a page refresh (bd polyglot-pdf-m77y). handleConnect retries the
+					    connection. ('reconnect_failed' has its own connection-timeout modal,
+					    so it is deliberately not listed here.) */}
+					{status === 'idle_timeout' || status === 'disconnected' || status === 'error' ? (
 						<button className="vff-action-btn vff-reconnect-btn" onClick={handleConnect}>
 							🔄 {overlayText.reconnect}
 						</button>

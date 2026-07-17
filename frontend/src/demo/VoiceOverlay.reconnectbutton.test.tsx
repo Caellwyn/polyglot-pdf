@@ -11,6 +11,12 @@
 // with status="disconnected" and asserts a Reconnect button is present and wired
 // to the connect path (handleConnect -> connectionManager.connect()).
 //
+// Extended for bd polyglot-pdf-m77y: the SAME dead-end existed for a bare 'error'
+// status -- set by connect()'s catch when BOTH the localhost and cloud connect
+// attempts fail (a completely-failed initial connect or resume). It fell through
+// the Reconnect/Resume/Pause ternary to `null`, leaving no recovery control at
+// all (page refresh only). The same assertion now also covers status="error".
+//
 // We render WITHOUT initialLanguage so the mount-time auto-connect effect (gated
 // on `initialLanguage && !showLanguageModal`) never runs and cannot overwrite the
 // injected "disconnected" status. The language-selection modal renders as an
@@ -137,13 +143,14 @@ describe('Reconnect button on "disconnected" status (bd b2yj)', () => {
   async function assertReconnectButtonShows(
     Overlay: typeof VoiceOverlay | typeof VoiceOverlayMobile,
     isMobile: boolean,
+    status: 'disconnected' | 'error' = 'disconnected',
   ) {
     const manager = makeMockManager()
     const { container } = render(
       <Overlay
         schema={MINIMAL_SCHEMA}
         connectionManager={manager}
-        status="disconnected"
+        status={status}
       />
     )
 
@@ -170,5 +177,15 @@ describe('Reconnect button on "disconnected" status (bd b2yj)', () => {
 
   it('mobile (VoiceOverlayMobile): shows a Reconnect button when disconnected', async () => {
     await assertReconnectButtonShows(VoiceOverlayMobile, true)
+  })
+
+  // bd polyglot-pdf-m77y: a bare 'error' status (both localhost + cloud connect
+  // failed) must also offer a recovery control, not fall through to no button.
+  it('desktop (VoiceOverlay): shows a Reconnect button on error status', async () => {
+    await assertReconnectButtonShows(VoiceOverlay, false, 'error')
+  })
+
+  it('mobile (VoiceOverlayMobile): shows a Reconnect button on error status', async () => {
+    await assertReconnectButtonShows(VoiceOverlayMobile, true, 'error')
   })
 })
