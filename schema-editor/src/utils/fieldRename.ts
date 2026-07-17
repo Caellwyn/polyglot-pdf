@@ -116,6 +116,20 @@ export function renameFieldId(
       patch.copy_to = copyTo.map(id => (id === oldId ? newId : id));
     }
 
+    // address_fields is another untyped pass-through (backend AddressFields:
+    // a flat slot -> field-id map, street/apt/city/...). The backend integrity
+    // check does not walk it, so a missed slot would dangle SILENTLY on save
+    // (Opus review finding on bd 0x10.1).
+    const addr = (out as Record<string, unknown>).address_fields;
+    if (addr && typeof addr === 'object' && !Array.isArray(addr)) {
+      const entries = Object.entries(addr as Record<string, unknown>);
+      if (entries.some(([, v]) => v === oldId)) {
+        patch.address_fields = Object.fromEntries(
+          entries.map(([k, v]) => [k, v === oldId ? newId : v]),
+        );
+      }
+    }
+
     // The session-only merge stash holds verbatim pre-merge snapshots; a
     // stash mentioning the renamed id would restore stale references on
     // ungroup, so it is dropped (ungroup then takes the documented

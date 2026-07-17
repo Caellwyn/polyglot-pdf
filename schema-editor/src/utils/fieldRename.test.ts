@@ -91,6 +91,30 @@ describe('renameFieldId retargets every reference (bd 0x10.1)', () => {
     expect((out.sections[0] as any).show_if.field).toBe('relationship_to_us_person');
   });
 
+  it('retargets address_fields slot references (untyped pass-through)', () => {
+    const schema = schemaWith([
+      field('addr_group', {
+        address_fields: {
+          street: 'street_field', apt: null, city: 'city_field',
+          state: 'state_field', zip: 'zip_field',
+        },
+      } as unknown as Partial<FormField>),
+      field('street_field'),
+    ]);
+    const out = renameFieldId(schema, 'street_field', 'mailing_street');
+    expect((out.fields[0] as any).address_fields).toEqual({
+      street: 'mailing_street', apt: null, city: 'city_field',
+      state: 'state_field', zip: 'zip_field',
+    });
+    expect(out.fields[1].id).toBe('mailing_street');
+    // Renaming a field the map does NOT reference leaves the map untouched
+    // (same object -- no gratuitous rewrite).
+    const out2 = renameFieldId(schema, 'addr_group', 'address_group');
+    expect((out2.fields[0] as any).address_fields).toBe(
+      (schema.fields[0] as any).address_fields,
+    );
+  });
+
   it('retargets the untyped supplements[].fields pass-through', () => {
     const schema = schemaWith([field('a'), field('b')], {
       supplements: [
