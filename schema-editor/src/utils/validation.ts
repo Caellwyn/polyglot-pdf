@@ -23,22 +23,48 @@ export function checkFieldComplete(field: FormField): FieldStatus {
   // Check required properties
   if (!field.id) errors.push('Missing field ID');
   if (!field.type) errors.push('Missing field type');
-  if (!field.pdf_field_name) errors.push('Missing PDF field name');
+
+  // PDF mapping: a plain field carries pdf_field_name itself; a CONSOLIDATED
+  // choice field (select/radio/checkbox_group built from per-widget checkboxes)
+  // legitimately has NO field-level name -- each option carries its own
+  // pdf_field_name instead. Flagging those as "Missing PDF field name" marked
+  // every merged group red with nothing actually wrong (bd polyglot-pdf-0x10.6).
+  const options = field.options ?? [];
+  const isChoice =
+    field.type === 'select' || field.type === 'radio' || field.type === 'checkbox_group';
+  if (isChoice && options.length > 0) {
+    if (!field.pdf_field_name) {
+      const unmapped = options.filter(o => !o.pdf_field_name);
+      if (unmapped.length === options.length) {
+        errors.push('No PDF mapping: neither the field nor its options name a PDF widget');
+      } else if (unmapped.length > 0) {
+        const names = unmapped.map(o => o.label || String(o.value ?? '?')).join(', ');
+        errors.push(`Options missing a PDF widget mapping: ${names}`);
+      }
+    }
+  } else if (!field.pdf_field_name) {
+    errors.push('Missing PDF field name');
+  }
 
   // Check for placeholder help text
   const hasPlaceholderHelp =
     field.help?.instructions?.includes('[TODO]') ||
     field.help?.instructions === undefined;
 
-  const needsReview =
-    hasPlaceholderHelp ||
-    !field.spoken_name ||
-    field.spoken_name.trim() === '';
+  const hasSpokenName = Boolean(field.spoken_name && field.spoken_name.trim() !== '');
+  const needsReview = hasPlaceholderHelp || !hasSpokenName;
+
+  // Name the review reasons so the UI can SAY why a field is amber instead of
+  // showing a bare clock icon (bd polyglot-pdf-0x10.6).
+  const reviewReasons: string[] = [];
+  if (hasPlaceholderHelp) reviewReasons.push('Help instructions are missing or a placeholder');
+  if (!hasSpokenName) reviewReasons.push('Missing spoken name');
 
   return {
     isComplete: errors.length === 0 && !needsReview,
     needsReview,
     errors,
+    reviewReasons,
   };
 }
 

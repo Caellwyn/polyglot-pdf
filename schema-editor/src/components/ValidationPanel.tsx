@@ -22,6 +22,10 @@ interface ValidationPanelProps {
   // and the host reloads the repaired schema. Omitted -> no button (the panel is
   // read-only for the editor tier / local mode / an unsaved schema).
   onRepairAll?: () => Promise<void>;
+  // Report escape hatch (bd polyglot-pdf-0x10.6): the panel owns the lint
+  // round-trip, but the FIELD LIST also wants the findings (to explain a red
+  // row where the author is looking). Fired with each fresh report.
+  onReport?: (report: LintReport | null) => void;
 }
 
 // Human-readable rule labels: the backend rule ids are stable/terse (bd h76m.5);
@@ -74,6 +78,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   onSelectField,
   onAuthError,
   onRepairAll,
+  onReport,
 }) => {
   const stats = React.useMemo(() => getCompletionStats(schema), [schema]);
   const hosted = React.useMemo(isHostedMode, []);
@@ -123,6 +128,13 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
         if (seq === seqRef.current) setLinting(false);
       });
   }, [schema, hosted, onAuthError]);
+
+  // Mirror each fresh report up to the host (App feeds it to the field list).
+  // An effect, not a call inside the fetch handlers, so the local-mode
+  // synchronous path and the async backend path share one notification point.
+  React.useEffect(() => {
+    onReport?.(report);
+  }, [report, onReport]);
 
   const findings = report?.findings ?? [];
   const errorCount = report?.errorCount ?? 0;

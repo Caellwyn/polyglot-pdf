@@ -207,3 +207,39 @@ describe('ValidationPanel Repair-all (bd zgln, P5.3b)', () => {
     expect(screen.queryByRole('button', { name: /Repair all/ })).toBeNull();
   });
 });
+
+// Report mirror (bd polyglot-pdf-0x10.6): the panel owns the lint round-trip,
+// but App needs the findings too (the field list explains red rows in place),
+// so each fresh report is mirrored up through onReport.
+describe('ValidationPanel onReport mirror (bd 0x10.6)', () => {
+  it('mirrors the backend report up to the host once it lands', async () => {
+    const onReport = vi.fn();
+    lintSchema.mockResolvedValue(report([
+      { severity: 'ERROR', rule: 'required-top-level', path: 'fields.picker', message: 'move it into validation', field_id: 'picker' },
+    ]));
+    render(<ValidationPanel schema={SCHEMA} onReport={onReport} />);
+    await waitFor(() => {
+      expect(onReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorCount: 1,
+          findings: [expect.objectContaining({ field_id: 'picker' })],
+        }),
+      );
+    });
+  });
+
+  it('mirrors the local-mode synchronous report too', async () => {
+    hostedMode = false;
+    const onReport = vi.fn();
+    // SCHEMA's two fields lack pdf_field_name etc., but validateSchema flags
+    // schema-level problems only; whatever it produces, the report shape must
+    // arrive. Assert on the call, not the specific findings.
+    render(<ValidationPanel schema={SCHEMA} onReport={onReport} />);
+    await waitFor(() => {
+      expect(onReport).toHaveBeenCalledWith(
+        expect.objectContaining({ findings: expect.any(Array) }),
+      );
+    });
+    expect(lintSchema).not.toHaveBeenCalled();
+  });
+});

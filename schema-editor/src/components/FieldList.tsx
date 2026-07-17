@@ -3,6 +3,7 @@ import type { FormSchema, FormField } from '../types/schema';
 import { checkFieldComplete } from '../utils/validation';
 import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
 import { isToReviewSection } from '../utils/sectionOps';
+import type { LintFinding } from '../utils/remoteKitStore';
 
 interface FieldListProps {
   schema: FormSchema;
@@ -19,6 +20,10 @@ interface FieldListProps {
   onToggleGroupSelection?: (fieldId: string) => void;
   onClearGroupSelection?: () => void;
   onMergeFields?: (kind: 'checkbox_group' | 'radio') => void;
+  // Backend lint findings keyed by field id (lifted from the ValidationPanel's
+  // report by App) so a flagged row can say WHY it is flagged right where the
+  // author is looking, not only in the bottom strip (bd polyglot-pdf-0x10.6).
+  lintFindingsByField?: Map<string, LintFinding[]>;
 }
 
 export const FieldList: React.FC<FieldListProps> = ({
@@ -32,6 +37,7 @@ export const FieldList: React.FC<FieldListProps> = ({
   onToggleGroupSelection,
   onClearGroupSelection,
   onMergeFields,
+  lintFindingsByField,
 }) => {
   // Grouping UI is active only when the parent wired the merge callbacks.
   const groupingEnabled = !!onToggleGroupSelection;
@@ -161,9 +167,42 @@ export const FieldList: React.FC<FieldListProps> = ({
 
   const getFieldStatus = (field: FormField) => {
     const status = checkFieldComplete(field);
-    if (status.isComplete) return 'complete';
+    // A backend lint ERROR anchored to this field is as red as a local
+    // completeness error -- the row should agree with the bottom strip
+    // (bd polyglot-pdf-0x10.6).
+    const hasLintError = (lintFindingsByField?.get(field.id) ?? []).some(
+      f => f.severity === 'ERROR'
+    );
+    if (status.errors.length > 0 || hasLintError) return 'error';
     if (status.needsReview) return 'review';
-    return 'error';
+    return 'complete';
+  };
+
+  // Every reason a row is red or amber, in plain language, for the icon's
+  // tooltip: local completeness errors + review reasons + backend lint
+  // findings. Empty for a complete field with no findings.
+  const getFieldMessages = (field: FormField): string[] => {
+    const status = checkFieldComplete(field);
+    const lint = lintFindingsByField?.get(field.id) ?? [];
+    return [
+      ...status.errors,
+      ...status.reviewReasons,
+      ...lint.map(f => f.message),
+    ];
+  };
+
+  // The status icon, with the WHY on hover: a plain icon told the author a
+  // field was broken but not what was wrong (bd polyglot-pdf-0x10.6).
+  const renderStatusIcon = (field: FormField, status: string) => {
+    const messages = getFieldMessages(field);
+    return (
+      <span
+        title={messages.length > 0 ? messages.join('\n') : undefined}
+        data-testid={`field-status-${field.id}`}
+      >
+        {getFieldIcon(status)}
+      </span>
+    );
   };
 
   const getFieldIcon = (status: string) => {
@@ -270,9 +309,10 @@ export const FieldList: React.FC<FieldListProps> = ({
   // form reads as DONE instead of a silently dead button (fresh-eyes note).
   const hasReviewTarget = React.useMemo(
     () => visibleOrderedFields.some(f => getFieldStatus(f) !== 'complete'),
-    // getFieldStatus is a pure per-field check; the memo keys on the fields.
+    // getFieldStatus is a pure per-field check; the memo keys on the fields
+    // plus the lint findings (a backend ERROR also makes a row a review target).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleOrderedFields]
+    [visibleOrderedFields, lintFindingsByField]
   );
 
   const jumpToNextReview = React.useCallback(() => {
@@ -289,7 +329,8 @@ export const FieldList: React.FC<FieldListProps> = ({
       }
     }
     // Everything visible is complete -> nothing to jump to.
-  }, [visibleOrderedFields, selectedBaseId, onSelectField]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleOrderedFields, selectedBaseId, onSelectField, lintFindingsByField]);
 
   const moveSelection = React.useCallback(
     (delta: 1 | -1) => {
@@ -627,7 +668,7 @@ export const FieldList: React.FC<FieldListProps> = ({
                               <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2z" />
                               </svg>
-                              {getFieldIcon(status)}
+                              {renderStatusIcon(field, status)}
                               <span className="flex-1 truncate text-gray-700 font-mono text-xs">
                                 {field.id}
                               </span>
@@ -735,7 +776,7 @@ export const FieldList: React.FC<FieldListProps> = ({
                     <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2zm0-4a1 1 0 100-2 1 1 0 000 2z" />
                     </svg>
-                    {getFieldIcon(status)}
+                    {renderStatusIcon(field, status)}
                     <span className="flex-1 truncate text-gray-700 font-mono text-xs">
                       {field.id}
                     </span>

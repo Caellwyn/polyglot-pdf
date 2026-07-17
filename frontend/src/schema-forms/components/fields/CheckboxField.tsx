@@ -62,10 +62,6 @@ export function CheckboxField({
           </span>
         </label>
 
-        {field.help?.instructions && (
-          <p className="form-field__instructions">{field.help.instructions}</p>
-        )}
-
         {error && (
           <p id={`${field.id}-error`} className="form-field__error" role="alert">
             {error}
@@ -123,10 +119,6 @@ export function CheckboxField({
             </label>
           ))}
         </div>
-
-        {field.help?.instructions && (
-          <p className="form-field__instructions">{field.help.instructions}</p>
-        )}
 
         {error && (
           <p id={`${field.id}-error`} className="form-field__error" role="alert">

@@ -195,6 +195,9 @@ export interface FieldStatus {
   isComplete: boolean;
   needsReview: boolean;
   errors: string[];
+  // Plain-language reasons a field is amber (needs review), so the UI can show
+  // WHY instead of a bare status icon (bd polyglot-pdf-0x10.6).
+  reviewReasons: string[];
 }
 
 export interface ValidationError {

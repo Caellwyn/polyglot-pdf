@@ -20,6 +20,7 @@
  */
 import type { FormSchema } from '../types/schema';
 import { stripEditorState } from './fieldGrouping';
+import { migrateLegacyRequired } from './schemaMigrate';
 
 export type EditorRole = 'editor' | 'author';
 
@@ -137,12 +138,13 @@ export async function listRemoteKits(): Promise<RemoteKitEntry[]> {
   return Array.isArray(body.kits) ? body.kits : [];
 }
 
-/** A kit's schema for editing (drafts included). Null when it has none yet. */
+/** A kit's schema for editing (drafts included). Null when it has none yet.
+ * Legacy shapes self-heal on load (bd 0x10.4). */
 export async function loadRemoteSchema(kitId: string): Promise<FormSchema | null> {
   const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/schema`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not load the schema'));
-  return (await res.json()) as FormSchema;
+  return migrateLegacyRequired((await res.json()) as FormSchema);
 }
 
 /** A kit's PDF as a blob object URL for the viewer (caller revokes it). Null

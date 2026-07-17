@@ -30,10 +30,13 @@ import {
   repairKit,
   saveRemoteSchema,
   type EditorRole,
+  type LintFinding,
+  type LintReport,
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
+import { renameBlockReason, renameFieldId } from './utils/fieldRename';
 import { SectionManager } from './components/SectionManager';
 import type { DivisionsPatch } from './utils/sectionOps';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
@@ -85,6 +88,23 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = React.useState<'edit' | 'preview'>('edit');
   // Section-management modal (bd polyglot-pdf-6cfu.3).
   const [showSectionManager, setShowSectionManager] = React.useState(false);
+  // The latest lint findings, mirrored up from the ValidationPanel (which owns
+  // the lint round-trip) so the FIELD LIST can explain a red row in place
+  // (bd polyglot-pdf-0x10.6).
+  const [lintFindings, setLintFindings] = React.useState<LintFinding[]>([]);
+  const handleLintReport = React.useCallback((report: LintReport | null) => {
+    setLintFindings(report?.findings ?? []);
+  }, []);
+  const lintFindingsByField = React.useMemo(() => {
+    const map = new Map<string, LintFinding[]>();
+    for (const f of lintFindings) {
+      if (!f.field_id) continue;
+      const bucket = map.get(f.field_id);
+      if (bucket) bucket.push(f);
+      else map.set(f.field_id, [f]);
+    }
+    return map;
+  }, [lintFindings]);
   // Multi-selection for the merge/group operation (bd polyglot-pdf-s4dp.1). This
   // is the set of fields ticked for a merge; insertion order is preserved (the
   // first ticked field is the merge primary). Separate from selectedFieldId,
@@ -345,6 +365,21 @@ export const App: React.FC = () => {
   const handleUpdateFields = React.useCallback((fields: FormField[], sections?: FormSection[]) => {
     if (!schema) return;
     commitSchema({ ...schema, fields, ...(sections ? { sections } : {}) });
+  }, [schema, commitSchema]);
+
+  // Rename a field's internal id, retargeting every in-schema reference
+  // (conditions, section membership, copy_to, supplements) in ONE undoable
+  // commit (bd polyglot-pdf-0x10.1). Returns a human-readable block reason,
+  // or null on success/no-op. Selection follows the renamed field.
+  const handleRenameField = React.useCallback((oldId: string, newId: string): string | null => {
+    if (!schema) return 'No schema loaded.';
+    const trimmed = newId.trim();
+    const reason = renameBlockReason(schema, oldId, trimmed);
+    if (reason) return reason;
+    if (trimmed === oldId) return null;
+    commitSchema(renameFieldId(schema, oldId, trimmed));
+    setSelectedFieldId(prev => (prev === oldId ? trimmed : prev));
+    return null;
   }, [schema, commitSchema]);
 
   // Update form-level metadata (version, edition, OMB, expiration -- bd
@@ -1065,6 +1100,7 @@ export const App: React.FC = () => {
                 onToggleGroupSelection={toggleGroupSelection}
                 onClearGroupSelection={clearGroupSelection}
                 onMergeFields={handleMergeFields}
+                lintFindingsByField={lintFindingsByField}
               />
             </div>
           </div>
@@ -1122,7 +1158,13 @@ export const App: React.FC = () => {
                 <FieldEditor
                   field={selectedField}
                   schema={schema}
+                  lintFindings={
+                    selectedField
+                      ? lintFindingsByField.get(selectedField.id)
+                      : undefined
+                  }
                   onUpdateField={handleUpdateField}
+                  onRenameField={handleRenameField}
                   onUnmergeField={handleUnmergeField}
                   onChangeGroupKind={handleChangeGroupKind}
                   onUpdateMetadata={handleUpdateMetadata}
@@ -1155,6 +1197,7 @@ export const App: React.FC = () => {
             setSelectedFieldId(fieldId);
           }}
           onAuthError={handleAuthExpired}
+          onReport={handleLintReport}
           // Repair-all is author-tier on an open hosted kit only (bd zgln); the
           // panel additionally shows the button only when errors exist.
           onRepairAll={

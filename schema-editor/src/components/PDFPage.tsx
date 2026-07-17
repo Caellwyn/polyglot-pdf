@@ -126,10 +126,14 @@ export const PDFPage: React.FC<PDFPageProps> = ({
 
   return (
     <div className={`pdf-page relative ${className}`}>
+      {/* No margin auto here: the canvas must sit at its wrapper's origin so
+          the absolutely-positioned field overlays (measured from the wrapper's
+          top-left) line up at every zoom. Centering is the page wrapper's job
+          (PDFViewer sizes it to the canvas and centers the wrapper itself). */}
       <canvas
         ref={canvasRef}
         className="shadow-lg"
-        style={{ display: 'block', margin: '0 auto' }}
+        style={{ display: 'block' }}
       />
       {isRendering && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-50">

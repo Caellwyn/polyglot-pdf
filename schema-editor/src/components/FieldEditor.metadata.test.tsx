@@ -79,9 +79,11 @@ describe('FieldEditor form-metadata panel (no field selected)', () => {
   });
 });
 
-// Option metadata surfacing for v2 groups (bd h76m.10): the option VALUE is a
-// read-only slug chip (never a free-text input), and the per-option PDF widget
-// mapping is author-tier only, under an Advanced disclosure.
+// Option metadata surfacing for v2 groups (bd h76m.10, revised by bd
+// polyglot-pdf-0x10.5): the option VALUE is internal plumbing -- never a
+// free-text input, and no longer shown in the default option row (the
+// mutating slug chip alarmed editors). Authors can still inspect it inside
+// the Advanced: PDF widget disclosure.
 describe('FieldEditor option metadata (bd h76m.10)', () => {
   function groupField(): FormField {
     return {
@@ -103,14 +105,17 @@ describe('FieldEditor option metadata (bd h76m.10)', () => {
     } as FormSchema;
   }
 
-  it('shows the option value as a read-only chip, never a text input', () => {
+  it('shows the option value inside Advanced only -- never a text input, never in the option row (bd 0x10.5)', () => {
     const f = groupField();
-    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} />);
-    // The slug appears as text (chip), and there is no input carrying it.
+    render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} authorTier />);
+    // The slug appears as inspectable text inside the Advanced disclosure...
     expect(screen.getByText('white')).toBeInTheDocument();
     expect(screen.getByText('black')).toBeInTheDocument();
+    // ...under the "Internal value" label, not floating beside the label input.
+    expect(screen.getAllByText('Internal value:').length).toBe(2);
+    // And there is no input carrying it (not editable).
     const inputs = screen.queryAllByDisplayValue('white');
-    expect(inputs).toHaveLength(0); // value is not editable
+    expect(inputs).toHaveLength(0);
   });
 
   it('exposes the per-option PDF widget under Advanced for an author', () => {
@@ -120,13 +125,15 @@ describe('FieldEditor option metadata (bd h76m.10)', () => {
     expect(screen.getByDisplayValue('w[0]')).toBeInTheDocument();
   });
 
-  it('hides the per-option PDF widget from an editor-tier contractor', () => {
+  it('hides the widget plumbing AND the value slug from an editor-tier contractor (bd 0x10.5)', () => {
     const f = groupField();
     render(<FieldEditor field={f} schema={schemaWith(f)} onUpdateField={vi.fn()} authorTier={false} />);
     expect(screen.queryByText('Advanced: PDF widget')).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('w[0]')).not.toBeInTheDocument();
-    // The value chip and label editing remain visible.
-    expect(screen.getByText('white')).toBeInTheDocument();
+    // The value slug is internal plumbing -- not shown to contractors at all;
+    // label editing remains available.
+    expect(screen.queryByText('white')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('White')).toBeInTheDocument();
   });
 });
 

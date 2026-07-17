@@ -1,5 +1,6 @@
 import type { FormSchema, FormConfig } from '../types/schema';
 import { stripEditorState } from './fieldGrouping';
+import { migrateLegacyRequired } from './schemaMigrate';
 
 // Re-export so consumers (e.g. FormSelector) can import FormConfig from here.
 export type { FormConfig };
@@ -33,7 +34,9 @@ export async function loadSchema(schemaPath: string): Promise<FormSchema> {
   if (!response.ok) {
     throw new Error(`Failed to load schema: ${response.statusText}`);
   }
-  return await response.json();
+  // Self-heal legacy shapes on the way in (bd 0x10.4) so a stale kit does
+  // not re-save its dead top-level `required` keys forever.
+  return migrateLegacyRequired(await response.json());
 }
 
 /**

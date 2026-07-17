@@ -14,6 +14,7 @@
 import type { FormSchema } from '../types/schema';
 import type { FsDirectoryHandle, FsFileHandle } from './fileSystemAccess';
 import { getCompletionStats } from './validation';
+import { migrateLegacyRequired } from './schemaMigrate';
 
 export type KitStatus = 'draft' | 'complete' | 'unknown';
 
@@ -121,13 +122,15 @@ export async function listKits(
   return entries;
 }
 
-/** Read a kit's schema.json (the draft to edit). Null if absent/unparseable. */
+/** Read a kit's schema.json (the draft to edit). Null if absent/unparseable.
+ * Legacy shapes self-heal on load (bd 0x10.4). */
 export async function loadKitSchema(
   entry: CatalogueEntry,
 ): Promise<FormSchema | null> {
   const handle = await tryGetFile(entry.dirHandle, entry.schemaFile);
   if (!handle) return null;
-  return readJsonFile<FormSchema>(handle);
+  const schema = await readJsonFile<FormSchema>(handle);
+  return schema ? migrateLegacyRequired(schema) : schema;
 }
 
 /**
