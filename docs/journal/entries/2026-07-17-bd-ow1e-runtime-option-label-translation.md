@@ -73,9 +73,16 @@ no BCP-47 code) is removed. Plan file:
   `RUNTIME_OPTION_TRANSLATION_ENABLED=false` Spanish session both rendered
   English labels with no translation call; the language modal shows 17
   languages.
-- Fresh-eyes/outer-review triage: recorded in the PR + merge ping (this entry
-  predates the loops; closeout appends nothing here -- the scorecard lives in
-  the PR body).
+- Assess outcome: exit-criteria rubric 4/4 PASS. Fresh-eyes round 1 (Sonnet)
+  returned zero rubric gaps + four sub-rubric notes -- 1 adopted (cancel a
+  superseded translation awaiter on section-switch restart), 1 refuted (the
+  "two hardcoded language lists let a one-sided addition pass" claim: each
+  side's exact-equality test fails on its own divergence), 1 deferred to the
+  existing bd polyglot-pdf-2h9j (bare ISO-639-1 kit-key convention -- the
+  canonical-key decision already lives there; no new bead), 1 journal count
+  fix. Round 2 (Opus final clearing round) NO-GAPS. Outer review: two
+  independent Opus passes, both NO-GAPS on the identical final commit, one
+  round. No deferred-nit bead filed.
 
 ## Lessons
 
