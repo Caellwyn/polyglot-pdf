@@ -129,6 +129,7 @@ no BCP-47 code) is removed. Plan file:
   `frontend/src/demo/overlayTranslations.ts`,
   `frontend/src/schema-forms/components/connectionTimeoutTranslations.ts`,
   `frontend/src/schema-forms/components/DisclaimerModal.tsx` -- Quechua removed.
-- Tests: NEW `backend/tests/unit/test_option_translation.py` (22);
+- Tests: NEW `backend/tests/unit/test_option_translation.py` (18 tests, 22
+  run items with parametrization);
   `test_text_ai_gemini.py` (+8 translate/temperature);
   `test_transcription_language_bias.py` (strict enforcement).

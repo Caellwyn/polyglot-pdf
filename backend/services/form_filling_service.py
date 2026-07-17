@@ -597,6 +597,15 @@ class FormFillingService:
         translation_form_id = (
             (schema.get("form_metadata") or {}).get("form_number") or form_id
         )
+        # An internal restart (section switch) re-enters here while an earlier
+        # awaiter may still be in flight -- cancel it so the reference we are
+        # about to overwrite never becomes an unjoinable orphan (fresh-eyes,
+        # this PR). Cancelling the awaiter never cancels the SHARED build
+        # (get_option_label_overrides shields it); the replacement task awaits
+        # the same cached build.
+        if (self._option_translation_task is not None
+                and not self._option_translation_task.done()):
+            self._option_translation_task.cancel()
         self._option_translation_task = asyncio.create_task(
             self._run_option_translation(translation_form_id, schema, language)
         )
