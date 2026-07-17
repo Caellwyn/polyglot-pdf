@@ -286,6 +286,29 @@ async def test_start_session_fires_translation_and_publishes_overrides():
 
 
 @pytest.mark.asyncio
+async def test_cache_key_uses_full_schema_form_number():
+    """The cache key must come from the schema the labels are collected from
+    (the full-form catalog): on a DTI manifest-first handshake the per-section
+    schema has NO form_metadata and resolves to 'unknown', which would make two
+    different forms share one cache entry (observed live on the W-7)."""
+    ai = _text_ai({"Male": ESPANOL_MASCULINO, "Female": ESPANOL_FEMENINO,
+                   "Yes": "Si", "No": "No"})
+    service = _service(text_ai=ai)
+    service._spoken_language = "Spanish"
+
+    ws = MagicMock()
+    ws.accept = AsyncMock()
+    await service.start_session(
+        ws, "ow1e-key-test", accept_connection=False,
+        schema={"fields": []},  # manifest-first: no form_metadata -> 'unknown'
+        full_schema=_schema() | {"form_metadata": {"form_number": "W-7"}},
+    )
+    await service._option_translation_task
+    assert ("W-7", "spanish") in ot._build_tasks
+    assert ("unknown", "spanish") not in ot._build_tasks
+
+
+@pytest.mark.asyncio
 async def test_english_session_makes_no_translation_call():
     ai = _text_ai({})
     service = _service(text_ai=ai)
