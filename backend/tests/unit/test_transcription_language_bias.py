@@ -35,16 +35,19 @@ def test_lookup_known_language_case_insensitive():
 
 
 def test_lookup_unknown_or_unset_returns_none():
-    # Quechua is deliberately unmapped (no reliable Google ASR support).
-    assert bcp47_codes_for_spoken_language("Quechua") is None
     assert bcp47_codes_for_spoken_language("Klingon") is None
     assert bcp47_codes_for_spoken_language(None) is None
     assert bcp47_codes_for_spoken_language("") is None
 
 
-def test_map_covers_spoken_languages_except_quechua():
-    """Mirror of frontend SPOKEN_LANGUAGES (languages.ts) minus the deliberate
-    Quechua gap -- a new app language should surface here as a reminder to map it."""
+def test_map_covers_all_spoken_languages():
+    """ENFORCEMENT test (bd polyglot-pdf-ow1e): supported == code-backed.
+
+    Every supported spoken language MUST have a BCP-47 code (maintainer
+    decision; Quechua, the one uncoded entry, was removed from the app). This
+    set mirrors frontend SPOKEN_LANGUAGES (languages.ts) exactly -- no
+    exceptions: adding an app language without a code, or a code without the
+    app language, fails here."""
     expected = {
         "english", "spanish", "chinese", "tagalog", "arabic", "french",
         "korean", "german", "portuguese", "hindi", "italian", "urdu",
@@ -78,7 +81,7 @@ async def test_start_session_hands_derived_codes_to_adapter():
 async def test_start_session_unknown_language_hands_none():
     live_ai = MagicMock()
     service = FormFillingService(live_ai=live_ai, settings=Settings())
-    service._spoken_language = "Quechua"
+    service._spoken_language = "Klingon"
 
     ws = MagicMock()
     ws.accept = AsyncMock()

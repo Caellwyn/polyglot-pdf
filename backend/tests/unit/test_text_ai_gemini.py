@@ -470,3 +470,80 @@ async def test_no_thinking_budget_sends_no_thinking_config():
     config = call.kwargs["config"]
     # No thinking_config on the lite path (attribute is None / unset).
     assert getattr(config, "thinking_config", None) is None
+
+
+# --- translate_labels (bd polyglot-pdf-ow1e) ----------------------------------
+
+@pytest.mark.asyncio
+async def test_translate_labels_happy_path_sets_temperature_and_json(adapter_with_client):
+    response = _make_response(text='{"Male": "Masculino", "Female": "Femenino"}')
+    adapter = adapter_with_client(response)
+    result = await adapter.translate_labels(["Male", "Female"], "Spanish", "es-US")
+    assert result == {"Male": "Masculino", "Female": "Femenino"}
+
+    call = adapter._client.aio.models.generate_content.await_args
+    config = call.kwargs["config"]
+    # Determinism levers: temperature 0.1 + JSON mime; name AND code in the prompt.
+    assert config.temperature == pytest.approx(0.1)
+    assert config.response_mime_type == "application/json"
+    prompt = call.kwargs["contents"][0]
+    assert "Spanish (es-US)" in prompt
+    assert "UNMISTAKABLY in Spanish" in prompt
+
+
+@pytest.mark.asyncio
+async def test_translate_labels_drops_unrequested_and_non_str_entries(adapter_with_client):
+    response = _make_response(
+        text='{"Male": "Masculino", "Ghost": "X", "Female": 3, "Yes": "  "}')
+    adapter = adapter_with_client(response)
+    result = await adapter.translate_labels(
+        ["Male", "Female", "Yes"], "Spanish", "es-US")
+    # Not-requested keys, non-str values, and blank values are dropped.
+    assert result == {"Male": "Masculino"}
+
+
+@pytest.mark.asyncio
+async def test_translate_labels_none_on_bad_json(adapter_with_client):
+    adapter = adapter_with_client(_make_response(text="not json"))
+    assert await adapter.translate_labels(["Male"], "Spanish", "es-US") is None
+
+
+@pytest.mark.asyncio
+async def test_translate_labels_none_on_non_dict_shape(adapter_with_client):
+    adapter = adapter_with_client(_make_response(text='["Masculino"]'))
+    assert await adapter.translate_labels(["Male"], "Spanish", "es-US") is None
+
+
+@pytest.mark.asyncio
+async def test_translate_labels_none_on_api_error(adapter_with_client):
+    adapter = adapter_with_client(_make_response(text="{}"))
+    adapter._client.aio.models.generate_content = AsyncMock(
+        side_effect=RuntimeError("boom"))
+    assert await adapter.translate_labels(["Male"], "Spanish", "es-US") is None
+
+
+@pytest.mark.asyncio
+async def test_translate_labels_none_when_no_client():
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    with patch("backend.adapters.text_ai_gemini.genai") as mock_genai:
+        mock_genai.Client.side_effect = Exception("no creds")
+        adapter = TextAIGemini(api_key=None, vertexai=False)
+    assert await adapter.translate_labels(["Male"], "Spanish", "es-US") is None
+
+
+@pytest.mark.asyncio
+async def test_translate_labels_empty_input_returns_empty_without_call(adapter_with_client):
+    adapter = adapter_with_client(_make_response(text="{}"))
+    assert await adapter.translate_labels([], "Spanish", "es-US") == {}
+    adapter._client.aio.models.generate_content.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_validate_sends_no_temperature(adapter_with_client):
+    """The validator/secretary requests must stay byte-unchanged (implicit-cache
+    prefix stability): the new temperature param is None by default and must not
+    appear in their config."""
+    adapter = adapter_with_client(_make_response(text='{"conflicts":[]}'))
+    await adapter.validate({"stable_prefix": ["si"], "fresh_tail": ["state"]})
+    call = adapter._client.aio.models.generate_content.await_args
+    assert getattr(call.kwargs["config"], "temperature", None) is None

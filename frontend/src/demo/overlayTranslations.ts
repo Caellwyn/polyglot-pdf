@@ -311,22 +311,6 @@ export const OVERLAY_TRANSLATIONS: Record<string, OverlayStrings> = {
     fieldsRequiredInfo: '{count} velde · {required} verplig',
     micErrorLabel: 'Mikrofoonfout:',
   },
-  'Quechua': {
-    inputMode: 'Yaykuchiy modo:',
-    modeAuto: 'Auto',
-    modePTT: 'PTT',
-    holdToTalk: "Rimanaykipaq ñit'iy (utaq spacebar)",
-    tapHoldToTalk: "Rimanaykipaq ñit'iy",
-    recording: 'Grabashan...',
-    reconnect: "Huktawan t'inkuy",
-    resume: 'Qatipay',
-    pause: 'Samay',
-    clearForm: 'Formulariota pichay',
-    clearFormConfirm: 'Llapan formulario datokunata pichay?\n\nKayqa llapan kampokunata chinkachinqa, paginapas huktawan cargakunqa.\nKayqa mana kutichiy atikunchu.',
-    fieldsCompleted: "{filled} / {total} kampokuna hunt'asqa",
-    fieldsRequiredInfo: '{count} kampokuna · {required} necesario',
-    micErrorLabel: 'Microfono pantay:',
-  },
 };
 
 /** Resolve the overlay strings for a spoken-language name, English fallback. */

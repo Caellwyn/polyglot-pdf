@@ -9,9 +9,11 @@ transcription then drags the native-audio model's language auto-detect with it.
 Keys mirror frontend/src/shared/languages.ts SPOKEN_LANGUAGES (the app-start
 modal's choices -- the names travel the wire verbatim, per the
 choice-authoritative language design). Values are the BCP-47 codes Google's
-speech stack uses for those languages. A language with no reliable ASR code
-(Quechua) is deliberately absent: lookup returns None and the session simply
-gets no bias -- today's behavior.
+speech stack uses for those languages. Every supported spoken language MUST be
+code-backed (maintainer decision, bd polyglot-pdf-ow1e -- Quechua, the one
+unmapped entry, was removed from the app): the map keys and SPOKEN_LANGUAGES
+are kept in exact sync, enforced by
+test_transcription_language_bias.py::test_map_covers_all_spoken_languages.
 
 This is a HINT map for an endpoint feature that is SDK-present but was not
 endpoint-verified before bd y25o (docs/genai_docs/live-api-best-practices.md);
@@ -40,7 +42,6 @@ SPOKEN_LANGUAGE_BCP47 = {
     "ukrainian": "uk-UA",
     "swedish": "sv-SE",
     "afrikaans": "af-ZA",
-    # "quechua": no Google ASR support -- intentionally unmapped (no bias).
 }
 
 

@@ -343,6 +343,86 @@ class TextAIGemini(ITextAI):
             )
             return "", [], True
 
+    async def translate_labels(
+        self, labels: list, language_name: str, language_code: str
+    ) -> dict | None:
+        """Translate option labels for the runtime option-translation path (bd
+        polyglot-pdf-ow1e). One batched JSON call on the lite chain, following
+        the validate() pattern (response_mime_type=application/json, shape-
+        validate, fail-open) -- except the fail-open SIGNAL is None (not {}),
+        so the caller can distinguish "call failed, do not cache" from a valid
+        empty result.
+
+        Determinism levers (maintainer 2026-07-16): the text-generation config
+        has no output-language field (unlike the Live API's transcription
+        config -- verified against docs/genai_docs), so the output language is
+        pinned by BOTH name and BCP-47 code in the prompt, plus temperature 0.1.
+
+        Returns {input_label: translated_label} with non-str / empty /
+        not-requested entries dropped, or None on any client/API/parse error.
+        Labels are form-schema data (PII-free), but log counts only anyway.
+        """
+        if self._client is None:
+            self._log.warning("text_ai_no_client_translate_fail_open")
+            return None
+        if not labels:
+            return {}
+
+        requested = [str(label) for label in labels]
+        language_ref = (
+            f"{language_name} ({language_code})" if language_code else language_name
+        )
+        prompt = (
+            f"Translate each of the following strings into {language_ref}. "
+            f"Respond UNMISTAKABLY in {language_name}. "
+            "Return a JSON object mapping each input string (exactly as given) "
+            "to its translation. These are legal-form answer labels -- translate "
+            "precisely; return proper nouns, codes, and abbreviations unchanged.\n\n"
+            "Strings to translate:\n"
+            + json.dumps(requested, ensure_ascii=False)
+        )
+
+        raw = ""
+        try:
+            raw = await self._generate(
+                stable_prefix=[prompt],
+                fresh_tail=[],
+                response_mime_type="application/json",
+                temperature=0.1,
+            )
+            parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                self._log.warning(
+                    "text_ai_translate_bad_shape_fail_open",
+                    parsed_type=type(parsed).__name__,
+                )
+                return None
+            requested_set = set(requested)
+            result = {
+                k: v.strip()
+                for k, v in parsed.items()
+                if isinstance(k, str) and k in requested_set
+                and isinstance(v, str) and v.strip()
+            }
+            self._log.info(
+                "text_ai_translate_complete",
+                requested_count=len(requested),
+                translated_count=len(result),
+            )
+            return result
+        except json.JSONDecodeError:
+            self._log.warning(
+                "text_ai_translate_parse_error_fail_open",
+                raw_length=len(raw) if isinstance(raw, str) else None,
+            )
+            return None
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning(
+                "text_ai_translate_error_fail_open",
+                exc_type=type(exc).__name__,
+            )
+            return None
+
     @staticmethod
     def _resolve_sources(schema: dict, sourced_from) -> list[dict]:
         """Resolve the model's sourced_from field-id list against the schema.
@@ -386,6 +466,7 @@ class TextAIGemini(ITextAI):
         fresh_tail: list,
         system_instruction: str | None = None,
         response_mime_type: str | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Core generate_content call shared by validate() and future ask().
 
@@ -408,6 +489,12 @@ class TextAIGemini(ITextAI):
             config_kwargs["system_instruction"] = system_instruction
         if response_mime_type is not None:
             config_kwargs["response_mime_type"] = response_mime_type
+        # temperature: only the translate_labels path sets it (0.1, a determinism
+        # lever for output-language adherence). None (the default) sends no
+        # temperature, so the validator/secretary requests are byte-unchanged and
+        # their implicit-cache prefixes stay stable (bd polyglot-pdf-ow1e).
+        if temperature is not None:
+            config_kwargs["temperature"] = temperature
         # W6 (bd polyglot-pdf-gbus): bounded thinking for the 2.5-pro whole-form
         # validator (W5 config). None (the lite default) sends no thinking_config,
         # leaving the lite path unchanged. Applies to every model in the chain, but

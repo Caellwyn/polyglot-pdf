@@ -44,7 +44,33 @@ def _sanitize_options(options: list | None) -> list | None:
     ]
 
 
-def get_field_guidance(field: dict) -> dict | None:
+def _apply_label_overrides(options: list, overrides: dict) -> list:
+    """Substitute translated option labels (bd polyglot-pdf-ow1e).
+
+    For each sanitized option dict whose label has an override, replace the
+    label and OMIT spoken_label -- an English spoken_label alongside a
+    translated label would reintroduce the mixed-language confusion. The value
+    is untouched, so tool-call matching (update_form_fields) is unaffected.
+    Bare-string options and no-override labels pass through unchanged.
+    """
+    result = []
+    for opt in options:
+        if not isinstance(opt, dict):
+            result.append(opt)
+            continue
+        override = overrides.get(opt.get("label"))
+        if not override or override == opt.get("label"):
+            result.append(opt)
+            continue
+        new_opt = {k: v for k, v in opt.items() if k != "spoken_label"}
+        new_opt["label"] = override
+        result.append(new_opt)
+    return result
+
+
+def get_field_guidance(
+    field: dict, option_label_overrides: dict | None = None
+) -> dict | None:
     """Build the per-field guidance block for Dynamic Turn Injection (bd
     polyglot-pdf-jnjj.22).
 
@@ -61,6 +87,10 @@ def get_field_guidance(field: dict) -> dict | None:
 
     Args:
         field: A full field dict from the schema.
+        option_label_overrides: Optional {english_label: translated_label} map
+            (bd polyglot-pdf-ow1e). Applied AFTER _sanitize_options: overridden
+            options carry the translated label and no spoken_label; values are
+            untouched. None/empty -> byte-identical output to the no-arg call.
 
     Returns:
         A guidance dict, or None if no field. Keys: field_id, spoken_name, name,
@@ -104,7 +134,13 @@ def get_field_guidance(field: dict) -> dict | None:
     # pdf_position/label_translations into a model-facing payload.
     options = field.get("options") or field.get("allowed_values")
     if options:
-        guidance["options"] = _sanitize_options(options)
+        sanitized = _sanitize_options(options)
+        # Runtime option-label translation (bd polyglot-pdf-ow1e): substitute
+        # the session-language labels AFTER sanitizing, so the override applies
+        # to exactly the model-facing dicts.
+        if option_label_overrides:
+            sanitized = _apply_label_overrides(sanitized, option_label_overrides)
+        guidance["options"] = sanitized
 
     # Validation hints that help the model guide the user (no internal-only keys).
     validation = field.get("validation")

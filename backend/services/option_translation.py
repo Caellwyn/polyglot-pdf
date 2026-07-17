@@ -1,0 +1,210 @@
+"""Runtime option-label translation (bd polyglot-pdf-ow1e).
+
+Multiple-choice option labels reach the voice model in English only, and the
+model translates them aloud on the fly -- which misfired live (English "Male or
+Female" spoken in a Spanish session). This module pre-translates the labels so
+the guidance the model reads is already in the session language; the option
+VALUES are untouched, so tool-call matching (update_form_fields) is unaffected.
+
+Precedence per label (maintainer 2026-07-16):
+  1. kit-provided FieldOption.label_translations for the session language
+     (once the extraction-time bead polyglot-pdf-2h9j populates them, the
+     secretary call below becomes a natural no-op);
+  2. else ONE batched secretary call (TextAIGemini.translate_labels, lite tier)
+     over the remaining unique labels;
+  3. else (failure/timeout) English fallback -- the DTI SI's translate-on-the-fly
+     rule still covers that window.
+
+Process-level cache keyed (form_id, language): concurrent sessions in the same
+language await ONE in-flight task; later sessions hit the result instantly.
+Failures (including the ~20s timeout) are NOT cached, so the next session
+retries. ASCII only (CLAUDE.md scar #6) -- translated strings are runtime data.
+"""
+from __future__ import annotations
+
+import asyncio
+from typing import Any, Dict, List, Optional, Tuple
+
+import structlog
+
+from backend.utils.language_codes import bcp47_codes_for_spoken_language
+
+_log = structlog.get_logger(__name__)
+
+# Hard bound on one build (collection is instant; this bounds the secretary
+# call). A build that blows it fails -- uncached -- and the session runs on
+# English labels; the next session retries.
+OPTION_TRANSLATION_TIMEOUT_S = 20.0
+
+# (form_id, language-lowercase) -> the in-flight/completed build task. Module
+# level on purpose: the translation of a form's labels into a language is
+# process-global, not per-session (schema data only, no PII, stateless-backend
+# invariant holds -- nothing about a USER is stored).
+_build_tasks: Dict[Tuple[str, str], asyncio.Task] = {}
+
+
+class OptionTranslationError(Exception):
+    """The secretary translate call failed -- build fails, result is not cached."""
+
+
+def _reset_cache_for_tests() -> None:
+    _build_tasks.clear()
+
+
+def _kit_translation_keys(language_name: str) -> List[str]:
+    """The label_translations keys accepted for a session language, lowercase.
+
+    The extraction-time bead (polyglot-pdf-2h9j) will settle the canonical key;
+    until then accept the plain name ("Spanish"/"spanish"), the short code
+    ("es") and the full BCP-47 code ("es-US"), all case-insensitively.
+    """
+    keys = [language_name.strip().lower()]
+    codes = bcp47_codes_for_spoken_language(language_name)
+    if codes:
+        full = codes[0].lower()
+        keys.append(full)
+        short = full.split("-")[0]
+        if short != full:
+            keys.append(short)
+    return keys
+
+
+def _kit_translation(label_translations: Any, keys: List[str]) -> Optional[str]:
+    """Resolve a kit-provided translation from an option's label_translations
+    dict against the accepted key candidates (case-insensitive). Returns None
+    when the dict is absent/empty or carries no usable entry."""
+    if not isinstance(label_translations, dict) or not label_translations:
+        return None
+    lowered = {
+        str(k).strip().lower(): v
+        for k, v in label_translations.items()
+        if isinstance(v, str) and v.strip()
+    }
+    for key in keys:
+        if key in lowered:
+            return lowered[key]
+    return None
+
+
+def _collect_labels(
+    full_schema: Optional[Dict[str, Any]], language_name: str
+) -> Tuple[List[str], Dict[str, str]]:
+    """Walk every option dict in the schema's flat fields[] array and return
+    (unique_labels_in_order, kit_translations). Dedupes -- "Yes"/"No" repeat
+    across the I-90's 294 options, so the unique set is far smaller."""
+    keys = _kit_translation_keys(language_name)
+    labels: List[str] = []
+    seen: set = set()
+    kit: Dict[str, str] = {}
+    for field in (full_schema or {}).get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        options = field.get("options") or field.get("allowed_values")
+        for opt in options or []:
+            if not isinstance(opt, dict):
+                continue
+            label = opt.get("label")
+            if not isinstance(label, str) or not label.strip():
+                continue
+            if label not in seen:
+                seen.add(label)
+                labels.append(label)
+            if label not in kit:
+                translated = _kit_translation(opt.get("label_translations"), keys)
+                if translated:
+                    kit[label] = translated
+    return labels, kit
+
+
+async def build_option_label_overrides(
+    full_schema: Optional[Dict[str, Any]],
+    language_name: str,
+    text_ai: Any,
+) -> Dict[str, str]:
+    """Build {english_label: translated_label} for the session language.
+
+    Kit label_translations win; the remainder goes through ONE batched
+    translate_labels call. Raises OptionTranslationError when that call fails,
+    so the cache layer does not keep a failed build.
+    """
+    labels, overrides = _collect_labels(full_schema, language_name)
+    if not labels:
+        return {}
+
+    remaining = [label for label in labels if label not in overrides]
+    if remaining:
+        codes = bcp47_codes_for_spoken_language(language_name)
+        language_code = codes[0] if codes else ""
+        translated = await text_ai.translate_labels(
+            remaining, language_name, language_code
+        )
+        if translated is None:
+            raise OptionTranslationError("translate_labels failed")
+        # Kit precedence is absolute: only labels actually sent to the
+        # secretary may land, so a stray response entry can never overwrite a
+        # kit-provided translation (translate_labels filters to its request
+        # set too -- this keeps the invariant local).
+        remaining_set = set(remaining)
+        overrides.update(
+            {k: v for k, v in translated.items()
+             if k in remaining_set and isinstance(v, str) and v}
+        )
+    return overrides
+
+
+async def _build_bounded(
+    full_schema: Optional[Dict[str, Any]], language_name: str, text_ai: Any
+) -> Dict[str, str]:
+    return await asyncio.wait_for(
+        build_option_label_overrides(full_schema, language_name, text_ai),
+        timeout=OPTION_TRANSLATION_TIMEOUT_S,
+    )
+
+
+async def get_option_label_overrides(
+    form_id: str,
+    full_schema: Optional[Dict[str, Any]],
+    language_name: str,
+    text_ai: Any,
+) -> Dict[str, str]:
+    """Cached entry point: one build per (form, language) per process.
+
+    Concurrent callers share the in-flight task (shielded, so one session's
+    teardown never cancels the shared build). On build failure -- secretary
+    error or the 20s timeout -- returns {} and DROPS the cache entry so the
+    next session retries. Never raises (except CancelledError propagation for
+    the awaiting session's own teardown).
+    """
+    key = (str(form_id), (language_name or "").strip().lower())
+    task = _build_tasks.get(key)
+    if task is None:
+        task = asyncio.create_task(
+            _build_bounded(full_schema, language_name, text_ai)
+        )
+        _build_tasks[key] = task
+    try:
+        result = await asyncio.shield(task)
+    except asyncio.CancelledError:
+        if not task.cancelled():
+            # WE were cancelled (session teardown); the shared build keeps
+            # running for other sessions -- leave it cached and propagate.
+            raise
+        _build_tasks.pop(key, None)
+        return {}
+    except Exception as exc:  # noqa: BLE001 -- fail-open by design
+        if _build_tasks.get(key) is task:
+            _build_tasks.pop(key, None)
+        _log.warning(
+            "option_translation_build_failed",
+            form_id=str(form_id),
+            language=key[1],
+            exc_type=type(exc).__name__,
+        )
+        return {}
+    _log.info(
+        "option_translation_ready",
+        form_id=str(form_id),
+        language=key[1],
+        override_count=len(result),
+    )
+    return result

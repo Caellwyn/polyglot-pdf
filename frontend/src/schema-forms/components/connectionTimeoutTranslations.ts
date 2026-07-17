@@ -172,12 +172,4 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     reconnectingTitle: 'Herverbind tans...',
     reconnectingMessage: 'Wag asseblief -- ons het probleme om die KI-assistent te bereik. Jou vordering is gestoor en ons sal jou outomaties herverbind.',
   },
-  'Quechua': {
-    title: 'Tinkuy Pʼitisqa',
-    message: 'Tinkuy chinkarisqa. Llamkayniyki waqaychasqa. Uraypi ñitiy watiqmanta tinkunaykipaq, maypichus saqirqanki chaymanta qatinaykipaqpas.',
-    reconnectButton: 'Watiqmanta Tinkuy',
-    cancelButton: 'Manaraq',
-    reconnectingTitle: 'Watiqmanta tinkuchkan...',
-    reconnectingMessage: 'Ama hina kaspa suyay -- AI yanapaqwan tinkuypi sasachakuyku. Llamkayniyki waqaychasqa, kikinmanta watiqmanta tinkuchisqaykiku.',
-  },
 };

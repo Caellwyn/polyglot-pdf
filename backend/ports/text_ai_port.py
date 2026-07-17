@@ -28,3 +28,18 @@ class ITextAI(ABC):
         raise NotImplementedError(
             "ask() is not implemented until the A-pillar secretary bead lands."
         )
+
+    async def translate_labels(
+        self, labels: list, language_name: str, language_code: str
+    ) -> dict | None:
+        """Batch-translate option labels into the session language (bd
+        polyglot-pdf-ow1e, runtime option-label translation). Returns
+        {input_label: translated_label} on success (entries may be dropped by
+        validation), or None on any error -- None is the fail-open SIGNAL that
+        tells the caller not to cache, distinct from a valid empty dict.
+        Non-abstract default raises so implementations without the feature
+        fail loudly (the option_translation cache layer converts that to a
+        fail-open empty result)."""
+        raise NotImplementedError(
+            "translate_labels() is not implemented by this text-AI adapter."
+        )

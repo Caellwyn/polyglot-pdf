@@ -22,7 +22,6 @@ export const SPOKEN_LANGUAGES = [
 	{ name: "Ukrainian", nativeName: "Українська (Ukrayins'ka)" },
 	{ name: "Swedish", nativeName: "Svenska" },
 	{ name: "Afrikaans", nativeName: "Afrikaans" },
-	{ name: "Quechua", nativeName: "Qhichwa" },
 ] as const;
 
 /**

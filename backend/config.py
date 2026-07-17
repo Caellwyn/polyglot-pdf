@@ -286,6 +286,19 @@ class Settings(BaseModel):
 		os.getenv("TRANSCRIPTION_LANGUAGE_HINT_ENABLED", "true").lower() == "true"
 	)
 
+	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
+	# the secretary (lite text model) translates the form's option labels into
+	# the session language (one batched call per form+language per process,
+	# cached); guidance renders then carry translated labels so the voice model
+	# stops translating aloud on the fly (the tester-observed misfires). Kill
+	# switch now; once extraction-time kit translations exist (bd
+	# polyglot-pdf-2h9j) the kit-precedence step makes the secretary call a
+	# natural no-op. Fail-open: any failure leaves English labels + the SI's
+	# translate-on-the-fly rule.
+	RUNTIME_OPTION_TRANSLATION_ENABLED: bool = (
+		os.getenv("RUNTIME_OPTION_TRANSLATION_ENABLED", "true").lower() == "true"
+	)
+
 	# --- Per-form window derivation (bd polyglot-pdf-jnjj.35 / A6) ---
 	# The jnjj.25 cost measurement proved DTI + CALIBRATED eviction is the win
 	# (-21% on the unhappy path), and the calibration is LOAD-BEARING and
@@ -803,9 +816,10 @@ class Settings(BaseModel):
     "MATCHING:\n"
     "- Options must match EXACTLY from the field's guidance (punctuation matters).\n"
     "- Translate the user's response to the options in the field's fill language.\n"
-    "- Option labels in the guidance are written in ENGLISH. When you SPEAK options to the user "
-    "-- offering choices or reading a selection back -- ALWAYS say them translated into the "
-    "session language; NEVER read an English label aloud verbatim in a non-English session. The "
+    "- Option labels in the guidance are normally already written in the session language -- "
+    "when you SPEAK options to the user, say them as written. If a label appears in ENGLISH in a "
+    "non-English session (its translation was unavailable), say it translated into the session "
+    "language; NEVER read an English label aloud verbatim in a non-English session. The "
     "exact English value is only for the tool call.\n"
     "- Multiple checkboxes: comma-separated exact values.\n"
     "- Validation error -> retry with the correct option or ask the user to clarify.\n"
