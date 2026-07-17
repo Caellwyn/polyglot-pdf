@@ -1578,10 +1578,13 @@ class CallbackHandler:
             next_field_hint: Spoken name hint for next field
             rejected_count: Number of fields rejected due to multi-field constraint
             applied_values: field_id -> CANONICAL stored value for each applied
-                field (post-normalization, bd polyglot-pdf-h7wx). Echoed back so
+                field (post-normalization, bd polyglot-pdf-h7wx). Echoed back as
+                stored_values ONLY on the success path (bd polyglot-pdf-f7h7) so
                 the model reads its confirmation read-back from the authoritative
-                stored value, never from its own (possibly evicted) memory. Model-
-                facing only -- must never be logged.
+                stored value, never from its own (possibly evicted) memory. On the
+                error branch it is deliberately NOT echoed -- send_form_update
+                carried nothing to the client there, so an echo would diverge.
+                Model-facing only -- must never be logged.
             known_inactive_fields: Subset of unknown_fields that ARE real fields
                 the session has seen (manifest/merge-known) but are not the active
                 field -- their rejection message points at switch_to_field
@@ -1688,10 +1691,16 @@ class CallbackHandler:
                 "unknown_fields": unknown_fields,
                 "message": "\n".join(message_parts)
             }
-            if applied_values:
-                # A collapsed multi-field call can still apply its first field:
-                # echo that stored value too (bd polyglot-pdf-h7wx).
-                tool_response["stored_values"] = applied_values
+            # NO stored_values echo on the error branch (bd polyglot-pdf-f7h7):
+            # reaching this branch means the caller took send_form_update's else
+            # path and sent send_form_update({}, []) -- the client stored NOTHING.
+            # A collapsed multi-field call DOES leave applied_values populated
+            # (its first field validated), but that value was still never carried
+            # to the client, so echoing it as "stored" tells the model to read
+            # back a value client and model do not agree on -- exactly the
+            # confabulation-confirm divergence h7wx set out to kill, on the error
+            # path. The echo belongs only on the true success path below, where
+            # send_form_update actually delivered the value.
         else:
             # All fields valid. Next-field guidance is sent after confirm_field
             # (DTI), not on the update response, to reduce round trips.

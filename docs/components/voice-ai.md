@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-07-16 (bd polyglot-pdf-yo5t/h7wx/oqkj/y25o voice-misfire batch: ASR language bias on the transcription configs + the stored-value echo on update_form_fields + the debounced post-unpause re-prompt caller in connection.ts -- see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-15 (bd polyglot-pdf-b1gj + ghv4: actionable unknown-field rejections + the STOP-RETRYING loop-breaker on update_form_fields; per-injection spoken-language re-anchor and the no-quoted-English rule for prompts/tool descriptions -- see the tool-calling section). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-16 (bd polyglot-pdf-f7h7: the stored-value echo is success-branch-only -- a collapsed multi-field update_form_fields call no longer echoes stored_values on its error branch, where the client stored nothing. Same-day: bd polyglot-pdf-yo5t/h7wx/oqkj/y25o voice-misfire batch: ASR language bias on the transcription configs + the stored-value echo on update_form_fields + the debounced post-unpause re-prompt caller in connection.ts -- see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-15 (bd polyglot-pdf-b1gj + ghv4: actionable unknown-field rejections + the STOP-RETRYING loop-breaker on update_form_fields; per-injection spoken-language re-anchor and the no-quoted-English rule for prompts/tool descriptions -- see the tool-calling section). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -217,7 +217,12 @@ value) and repeats it in the `message`; the DTI SI directs the model to read its
 confirmation read-back from that echo -- never from its own conversational
 memory, which the compression window can have evicted (live sessions confirmed
 values that were never in the field). The echo is model-facing only; production
-structlog calls still log counts, never values.
+structlog calls still log counts, never values. The echo fires ONLY on the
+success branch (bd polyglot-pdf-f7h7): the error branch sends
+`send_form_update({}, [])` (the client stores nothing), so a collapsed
+multi-field call -- whose first field validates but is never carried to the
+client -- must NOT echo `stored_values`, or the model reads back a value client
+and model never agreed on.
 
 Model **thinking** is turned off by default: when `DISABLE_MODEL_THINKING` is set
 (default on) and the active model is 2.5-family, the config carries
