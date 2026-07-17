@@ -259,8 +259,8 @@ The top-level container for the entire form definition.
       "label": "Male",
       "spoken_label": "male",
       "label_translations": {
-        "es": "Masculino",
-        "zh": "男"
+        "spanish": "Masculino",
+        "chinese": "男"
       }
     },
     {
@@ -268,8 +268,8 @@ The top-level container for the entire form definition.
       "label": "Female",
       "spoken_label": "female",
       "label_translations": {
-        "es": "Femenino",
-        "zh": "女"
+        "spanish": "Femenino",
+        "chinese": "女"
       }
     }
   ],
@@ -574,39 +574,42 @@ The top-level container for the entire form definition.
 
 ### 11. Multi-Language Support
 
-**name_translations** (on FormField):
-```json
-{
-  "name": "Complete Last Name",
-  "name_translations": {
-    "es": "Apellido Completo",
-    "zh": "完整姓氏",
-    "vi": "Họ Đầy Đủ"
-  }
-}
-```
+**label_translations** (on FieldOption). The **canonical key is the lowercase
+spoken-language NAME** ("spanish", "chinese") -- settled by bd polyglot-pdf-2h9j:
 
-**label_translations** (on FieldOption):
 ```json
 {
   "value": "single",
   "label": "Single",
   "label_translations": {
-    "es": "Soltero",
-    "zh": "单身",
-    "vi": "Độc thân"
+    "spanish": "Soltero",
+    "chinese": "单身"
   }
 }
 ```
 
-**Supported Languages** (ISO 639-1 codes):
-- `en`: English
-- `es`: Spanish
-- `zh`: Chinese
-- `vi`: Vietnamese
-- `ar`: Arabic
-- `tl`: Tagalog
-- _(Add more as needed)_
+- **Authoring**: the extraction pipeline bakes these for every supported spoken
+  language (a post-pass in `scripts/authoring/extract_form.py`, skippable with
+  `--no-translate-options`); `scripts/authoring/translate_option_labels.py`
+  bakes/patches an existing kit standalone (idempotent; `--check` reports,
+  `--force` retranslates after label renames). The hosted editor exposes both
+  (extract checkbox + `POST /api/editor/kits/{id}/translate-options`).
+- **Runtime**: kit translations take precedence -- the secretary
+  (`backend/services/option_translation.py`) only translates labels the kit
+  lacks. The runtime reader is tolerant for hand-authored kits: the plain name
+  ("Spanish"/"spanish"), the short BCP-47 stem ("es") and the full code
+  ("es-US") all resolve, case-insensitively. **Bare ISO-639-1 codes that differ
+  from the BCP-47 stem do NOT resolve** -- Chinese is "cmn" (from cmn-CN), not
+  "zh"; Tagalog is "fil" (from fil-PH), not "tl". Write lowercase names.
+- **Supported languages**: the canonical list is
+  `backend/utils/language_codes.py::SPOKEN_LANGUAGE_BCP47` (17 code-backed
+  spoken languages, mirrored by `frontend/src/shared/languages.ts`
+  SPOKEN_LANGUAGES). Never hardcode the list; when it grows, re-running the
+  patch tool fills only the missing languages.
+
+**name_translations** (on FormField) is documented-but-dormant: the model field
+is commented out in `backend/models/form_models.py` and nothing populates or
+reads it today.
 
 ---
 

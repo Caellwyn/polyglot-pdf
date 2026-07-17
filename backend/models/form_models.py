@@ -370,10 +370,14 @@ class FieldOption(BaseModel):
     spoken_label: Optional[str] = Field(None, description="Alternative label for voice input")
     label_translations: Optional[Dict[str, str]] = Field(
         None,
-        # zh value uses unicode escapes (decodes to the CJK word for "single") so
-        # this source stays ASCII-only (scar #6 / bd polyglot-pdf-bw8); the runtime
-        # string is unchanged.
-        description='Multi-language labels (e.g., {"es": "Soltero", "zh": "\u5355\u8eab"})'
+        # Canonical key = LOWERCASE SPOKEN-LANGUAGE NAME (bd polyglot-pdf-2h9j;
+        # baked at authoring time by option_translation.bake_label_translations).
+        # The runtime reader also tolerates BCP-47 codes/stems for hand-authored
+        # kits, but bare ISO-639-1 that differs from the stem ("zh", "tl") does
+        # NOT resolve. The chinese value uses unicode escapes (the CJK word for
+        # "single") so this source stays ASCII-only (scar #6 / bd bw8).
+        description='Multi-language labels keyed by lowercase spoken-language '
+                    'name (e.g., {"spanish": "Soltero", "chinese": "\u5355\u8eab"})'
     )
     pdf_field_name: Optional[str] = Field(None, description="Original PDF field backing this option")
     pdf_on_value: Optional[str] = Field(

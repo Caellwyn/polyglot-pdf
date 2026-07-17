@@ -64,6 +64,7 @@ def _settings(editor=None, author=None, **overrides):
         EXTRACTOR_MODEL="gemini-2.5-pro",
         EXTRACTOR_TIMEOUT_SEC=60.0,
         EXTRACTOR_MAX_PDF_MB=25.0,
+        OPTION_TRANSLATION_MODEL="gemini-2.5-pro",
         GEMINI_API_KEY="fake-key",
         # Default to AI Studio auth in tests (a key is present above); the
         # Vertex/ADC path is exercised explicitly where it matters (bd fyq4).
@@ -2022,3 +2023,192 @@ def test_mark_complete_publish_gate_refuses_to_review_fields(client):
         json={"status": "complete"},
     )
     assert r2.status_code == 200, r2.text
+
+
+# --- POST /kits/{id}/translate-options (bd polyglot-pdf-2h9j) ------------------
+
+_TRANSLATABLE_DRAFT = {
+    "source": "pdf", "form_metadata": {"title": "T", "version": "unknown"},
+    "sections": [],
+    "fields": [
+        {"id": "sex", "name": "Sex", "spoken_name": "sex", "type": "radio",
+         "options": [{"value": "M", "label": "Male"},
+                     {"value": "F", "label": "Female"}]},
+        {"id": "confirm", "name": "C", "spoken_name": "c", "type": "radio",
+         "options": [{"value": "y", "label": "Yes"}]},
+    ],
+}
+
+
+class _FakeTranslateAI:
+    """Stands in for TextAIGemini in the translate-options route: records the
+    constructor kwargs (tier-discipline pins) and answers every language."""
+
+    instances: list = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.calls = []
+        type(self).instances.append(self)
+
+    async def translate_labels(self, labels, language_name, language_code):
+        self.calls.append((tuple(labels), language_name))
+        return {label: f"{label} ({language_name})" for label in labels}
+
+
+@pytest.fixture()
+def translate_ai(monkeypatch):
+    _FakeTranslateAI.instances = []
+    monkeypatch.setattr(ekr, "TextAIGemini", _FakeTranslateAI)
+    return _FakeTranslateAI
+
+
+def test_translate_options_bakes_stores_and_is_idempotent(client, translate_ai):
+    c, store, root = client
+    _make_kit(root, "fresh", status="draft", schema=_TRANSLATABLE_DRAFT)
+    r = c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["changed"] is True
+    assert body["failedLanguages"] == []
+    # Every supported spoken language minus english, keyed lowercase.
+    from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
+    expected_langs = sorted(n for n in SPOKEN_LANGUAGE_BCP47 if n != "english")
+    assert sorted(body["languages"]) == expected_langs
+    assert body["languages"]["spanish"]["translated"] == 3
+
+    # Tier discipline pinned: no lite fallback chain, bounded thinking budget.
+    ai = translate_ai.instances[0]
+    assert ai.kwargs["fallback_models"] == ()
+    assert ai.kwargs["thinking_budget"] == 512
+    assert ai.kwargs["model"] == "gemini-2.5-pro"
+
+    # Stored: canonical lowercase-name keys, values/labels untouched.
+    stored = _run(store.load_schema("fresh"))
+    male = stored["fields"][0]["options"][0]
+    assert male["label_translations"]["spanish"] == "Male (Spanish)"
+    assert (male["value"], male["label"]) == ("M", "Male")
+
+    # Idempotent: a second run translates nothing and stores nothing.
+    r2 = c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["changed"] is False
+    assert translate_ai.instances[1].calls == []
+
+
+def test_translate_options_force_retranslates(client, translate_ai):
+    c, store, root = client
+    _make_kit(root, "fresh", status="draft", schema=_TRANSLATABLE_DRAFT)
+    assert c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    ).status_code == 200
+    r = c.post(
+        "/api/editor/kits/fresh/translate-options?force=true",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r.status_code == 200, r.text
+    # force retranslates everything: the second instance made real calls.
+    assert len(translate_ai.instances[1].calls) > 0
+
+
+def test_translate_options_partial_failure_stores_and_reports(
+        client, translate_ai, monkeypatch):
+    c, store, root = client
+    _make_kit(root, "fresh", status="draft", schema=_TRANSLATABLE_DRAFT)
+
+    async def _flaky(self, labels, language_name, language_code):
+        self.calls.append((tuple(labels), language_name))
+        if language_name.lower() == "french":
+            return None
+        return {label: f"{label} ({language_name})" for label in labels}
+
+    monkeypatch.setattr(_FakeTranslateAI, "translate_labels", _flaky)
+    r = c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["failedLanguages"] == ["french"]
+    assert body["changed"] is True
+    stored = _run(store.load_schema("fresh"))
+    male = stored["fields"][0]["options"][0]
+    assert "spanish" in male["label_translations"]
+    assert "french" not in male["label_translations"]
+
+
+def test_translate_options_gates(client, translate_ai, monkeypatch):
+    c, _store, root = client
+    _make_kit(root, "fresh", status="draft", schema=_TRANSLATABLE_DRAFT)
+    # Author-only (it mutates the stored schema).
+    assert c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "edit-tok"},
+    ).status_code == 403
+    # Unknown kit -> 404; published kit -> 409 (same gating as repair).
+    assert c.post(
+        "/api/editor/kits/ghost/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    ).status_code == 404
+    _make_kit(root, "done", status="complete", schema=VALID_SCHEMA)
+    assert c.post(
+        "/api/editor/kits/done/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    ).status_code == 409
+    # No Gemini auth configured -> 503 (same gate as hosted extraction).
+    monkeypatch.setattr(ekr, "get_settings", lambda: _settings(
+        editor="edit-tok", author="auth-tok", GEMINI_API_KEY=None, VERTEXAI=False))
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    ).status_code == 503
+
+
+def test_translate_options_schemaless_kit_is_404(client, translate_ai):
+    c, _store, root = client
+    _make_kit(root, "fresh", status="draft")  # PDF, no schema
+    assert c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    ).status_code == 404
+
+
+def test_extract_threads_the_translate_options_flag(client, monkeypatch):
+    # The extract route passes --translation-model (settings-resolved) when the
+    # checkbox is on (the default) and --no-translate-options when it is off.
+    c, _store, root = client
+    seen_cmds = []
+
+    draft = {"source": "pdf", "form_metadata": {"title": "T", "version": "u"},
+             "sections": [], "fields": [{"id": "a", "type": "text"}]}
+
+    def _capture(cmd, **kwargs):
+        seen_cmds.append(cmd)
+        return _fake_extractor(draft, exit_code=0)(cmd, **kwargs)
+
+    monkeypatch.setattr(ekr.subprocess, "run", _capture)
+
+    _make_kit(root, "fresh1")
+    r = c.post("/api/editor/kits/fresh1/extract",
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 200, r.text
+    assert "--translation-model" in seen_cmds[0]
+    model = seen_cmds[0][seen_cmds[0].index("--translation-model") + 1]
+    assert model == "gemini-2.5-pro"
+    assert "--no-translate-options" not in seen_cmds[0]
+
+    _make_kit(root, "fresh2")
+    r = c.post("/api/editor/kits/fresh2/extract",
+               headers={"X-Editor-Token": "auth-tok"},
+               data={"translate_options": "false"})
+    assert r.status_code == 200, r.text
+    assert "--no-translate-options" in seen_cmds[1]
+    assert "--translation-model" not in seen_cmds[1]

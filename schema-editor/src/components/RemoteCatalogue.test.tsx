@@ -17,13 +17,14 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     setRemoteLabel: vi.fn(),
     onboardRemoteKit: vi.fn(),
     extractRemoteKit: vi.fn(),
+    translateRemoteKitOptions: vi.fn(),
   };
 });
 
 import { RemoteCatalogue } from './RemoteCatalogue';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  onboardRemoteKit, setRemoteLabel, setRemoteStatus,
+  onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 
@@ -288,9 +289,24 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
 
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() => expect(extractRemoteKit).toHaveBeenCalledWith(
-      'fresh-kit', { instructionsPdf: undefined }));
+      'fresh-kit', { instructionsPdf: undefined, translateOptions: true }));
     await waitFor(() =>
       expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
+  });
+
+  it('unchecking the translate-options checkbox threads false (bd 2h9j)', async () => {
+    vi.mocked(extractRemoteKit).mockResolvedValue({
+      ok: true, detail: '[OK] wrote schema.json -- 42 fields', fieldCount: 42,
+    });
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
+
+    const checkbox = screen.getByTestId('translate-options-checkbox');
+    expect(checkbox).toBeChecked(); // default ON
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(extractRemoteKit).toHaveBeenCalledWith(
+      'fresh-kit', { instructionsPdf: undefined, translateOptions: false }));
   });
 
   it('store-with-issues extraction surfaces the lint counts (bd v96b)', async () => {
@@ -442,5 +458,81 @@ describe('rename from the selector strip (bd 15ic)', () => {
     fireEvent.keyDown(screen.getByLabelText('New form name'), { key: 'Escape' });
     expect(screen.queryByLabelText('New form name')).not.toBeInTheDocument();
     expect(setRemoteLabel).not.toHaveBeenCalled();
+  });
+});
+
+describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
+  const REPORT = {
+    changed: true, model: 'gemini-2.5-pro', failedLanguages: [] as string[],
+    languages: {
+      spanish: { labels: 3, missing: 3, translated: 3, options_updated: 4, failed: false },
+      french: { labels: 3, missing: 3, translated: 3, options_updated: 4, failed: false },
+    },
+    errorCount: 0, warningCount: 0,
+  };
+
+  it('author bakes translations for an OPEN draft kit -> call + notice + reopen', async () => {
+    vi.mocked(translateRemoteKitOptions).mockResolvedValue(REPORT);
+    const onOpenKit = vi.fn();
+    render(<RemoteCatalogue onOpenKit={onOpenKit} selectedKitId="draft-kit" role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Translate options')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Translate options'));
+    await waitFor(() => expect(translateRemoteKitOptions)
+      .toHaveBeenCalledWith('draft-kit'));
+    await waitFor(() => expect(
+      screen.getByText(/8 option-language entries baked/)).toBeInTheDocument());
+    // The open kit is re-opened so the editor shows the stored (translated) schema.
+    expect(onOpenKit).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'draft-kit' }));
+  });
+
+  it('reports failed languages and does not reopen when nothing changed', async () => {
+    vi.mocked(translateRemoteKitOptions).mockResolvedValue(
+      { ...REPORT, changed: false });
+    const onOpenKit = vi.fn();
+    render(<RemoteCatalogue onOpenKit={onOpenKit} selectedKitId="draft-kit" role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Translate options')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Translate options'));
+    await waitFor(() => expect(
+      screen.getByText(/already fully translated/)).toBeInTheDocument());
+    expect(onOpenKit).not.toHaveBeenCalled();
+  });
+
+  it('surfaces failed languages in the notice', async () => {
+    vi.mocked(translateRemoteKitOptions).mockResolvedValue(
+      { ...REPORT, failedLanguages: ['french'] });
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit" role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Translate options')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Translate options'));
+    await waitFor(() => expect(
+      screen.getByText(/FAILED: french/)).toBeInTheDocument());
+  });
+
+  it('editor tier never sees the action; complete kits never offer it', async () => {
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit" role="editor" />);
+    await waitFor(() =>
+      expect(screen.getByTestId('catalogue-strip')).toBeInTheDocument());
+    expect(screen.queryByText('Translate options')).not.toBeInTheDocument();
+
+    // Author + a COMPLETE open kit: the route would 409; the button is absent.
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="done-kit" role="author" />);
+    await waitFor(() =>
+      expect(screen.getAllByTestId('catalogue-strip').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Translate options')).not.toBeInTheDocument();
+  });
+
+  it('routes a 401 to onAuthError', async () => {
+    vi.mocked(translateRemoteKitOptions).mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit"
+      role="author" onAuthError={onAuthError} />);
+    await waitFor(() =>
+      expect(screen.getByText('Translate options')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Translate options'));
+    await waitFor(() => expect(onAuthError).toHaveBeenCalled());
   });
 });

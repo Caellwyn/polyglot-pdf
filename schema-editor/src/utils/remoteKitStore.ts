@@ -338,7 +338,7 @@ export interface RemoteExtractionResult {
  * enriches the per-field help text (parity with the local dev flow). */
 export async function extractRemoteKit(
   kitId: string,
-  opts: { force?: boolean; instructionsPdf?: File } = {},
+  opts: { force?: boolean; instructionsPdf?: File; translateOptions?: boolean } = {},
 ): Promise<RemoteExtractionResult> {
   const form = new FormData();
   // ALWAYS append force (true or false) so the multipart body is never empty.
@@ -348,6 +348,9 @@ export async function extractRemoteKit(
   // parsing the body" BEFORE the route runs (bd polyglot-pdf-1ysc). The backend
   // declares force: Form() = False and coerces the string, so this is safe.
   form.append('force', opts.force ? 'true' : 'false');
+  // Bake option label_translations during extraction (bd 2h9j; backend default
+  // true) -- uncheckable in the catalogue for cheap extraction-strategy runs.
+  form.append('translate_options', opts.translateOptions === false ? 'false' : 'true');
   if (opts.instructionsPdf) {
     form.append('instructions_pdf', opts.instructionsPdf, opts.instructionsPdf.name);
   }
@@ -357,4 +360,32 @@ export async function extractRemoteKit(
   );
   if (!res.ok) throw new Error(await errorDetail(res, 'Extraction failed'));
   return (await res.json()) as RemoteExtractionResult;
+}
+
+/** Standalone option-label translation bake (bd polyglot-pdf-2h9j). The kit's
+ * option label_translations are baked server-side IN PLACE (idempotent: only
+ * missing languages are translated; force retranslates after label renames),
+ * so the caller must RELOAD the kit's schema after this resolves. Author tier. */
+export interface TranslateOptionsReport {
+  changed: boolean;
+  model: string;
+  failedLanguages: string[];
+  languages: Record<string, {
+    labels: number; missing: number; translated: number;
+    options_updated: number; failed: boolean;
+  }>;
+  errorCount: number;
+  warningCount: number;
+}
+
+export async function translateRemoteKitOptions(
+  kitId: string, opts: { force?: boolean } = {},
+): Promise<TranslateOptionsReport> {
+  const qs = opts.force ? '?force=true' : '';
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/translate-options${qs}`,
+    { method: 'POST' },
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not translate option labels'));
+  return (await res.json()) as TranslateOptionsReport;
 }

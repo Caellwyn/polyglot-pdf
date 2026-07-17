@@ -880,11 +880,64 @@ def _lint_schema(schema: dict, dump: dict | None) -> dict:
     }
 
 
+def _bake_option_translations(schema: dict, model: str | None = None) -> dict:
+    """Bake FieldOption.label_translations for every supported spoken language
+    (bd polyglot-pdf-2h9j). The shared implementation lives in
+    backend/services/option_translation.py::bake_label_translations (also used
+    by the standalone CLI translate_option_labels.py and the hosted editor
+    route); this wrapper only handles authoring-pipeline concerns.
+
+    FAIL-OPEN by contract: extraction NEVER fails because translation failed --
+    any error is returned as a report dict, never raised (same graceful-degrade
+    contract as _lint_schema). Skipped outright when no Gemini credentials are
+    present (the local claude-CLI-only dev path); the gate mirrors the hosted
+    route's "configured" check and llm_providers.py's auth split: VERTEXAI=true
+    -> Vertex/ADC, else GEMINI_API_KEY.
+    """
+    vertex = os.getenv("VERTEXAI", "").lower() == "true"
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not (vertex or api_key):
+        return {"skipped": "no gemini credentials (set VERTEXAI=true or "
+                           "GEMINI_API_KEY)"}
+    try:
+        import asyncio  # noqa: E402 -- authoring script stays sync elsewhere
+        sys.path.insert(0, _REPO)
+        from backend.adapters.text_ai_gemini import TextAIGemini  # noqa: E402
+        from backend.services.option_translation import (  # noqa: E402
+            bake_label_translations,
+        )
+        from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47  # noqa: E402
+
+        model = model or os.getenv("OPTION_TRANSLATION_MODEL", "gemini-2.5-pro")
+        # 2.5-pro cannot disable thinking; bound it (W6 pattern). The fallback
+        # chain is disabled so a deliberately chosen tier fails loud (and
+        # fail-open catches it) instead of silently degrading to lite.
+        thinking = 512 if "pro" in model else None
+        if vertex:
+            text_ai = TextAIGemini(
+                model=model, vertexai=True,
+                project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+                location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+                fallback_models=(), thinking_budget=thinking)
+        else:
+            text_ai = TextAIGemini(model=model, api_key=api_key,
+                                   fallback_models=(), thinking_budget=thinking)
+        languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
+                     if n != "english"}
+        report = asyncio.run(bake_label_translations(schema, text_ai, languages))
+        report["model"] = model
+        return report
+    except Exception as exc:  # noqa: BLE001 -- fail-open by contract
+        return {"failed": f"{type(exc).__name__}: {exc}"}
+
+
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             model: str = "claude-opus-4-8", keep_dump: bool = False,
             instructions_pdf: str | None = None,
             group_candidates: bool = True,
-            division_cap: int = derive_sections.DEFAULT_CAP) -> dict:
+            division_cap: int = derive_sections.DEFAULT_CAP,
+            translate_options: bool = True,
+            translation_model: str | None = None) -> dict:
     """Run the full PDF -> draft-schema pass and write `out_path`. Returns the
     draft dict (with a `_bakeoff` provenance block).
 
@@ -901,7 +954,13 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     h76m.12 ablation showed no held-out regression and P5.2 repair (h76m.13)
     now owns the ON-arm's repairable vocabulary defects; the deterministic
     _complete_grouped_families safety net (3c2) backstops any residual drop.
-    Pass group_candidates=False (--no-group-candidates) to opt out."""
+    Pass group_candidates=False (--no-group-candidates) to opt out.
+
+    translate_options (bd 2h9j): when True (default) a post-pass bakes
+    FieldOption.label_translations for every supported spoken language --
+    credential-gated (no Gemini creds -> skipped) and fail-open (extraction
+    never fails because translation failed). translation_model overrides the
+    OPTION_TRANSLATION_MODEL env default (gemini-2.5-pro)."""
     # 1. Deterministic AcroForm dump (to a temp file unless --keep-dump).
     dump_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     if keep_dump:
@@ -993,6 +1052,15 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     #    (bd v96b: 0 valid+clean / 3 stored-with-issues / 1 no usable draft).
     _normalize_for_schema(schema)
     schema, repair_report = _repair_schema(schema, dump_data)
+
+    # 3f. Bake option label_translations for the supported spoken languages
+    #     (bd polyglot-pdf-2h9j). After repair so translations key off the
+    #     final labels, before validate/lint so the validated artifact is the
+    #     shipped artifact. Fail-open + credential-gated (see the helper);
+    #     --no-translate-options skips it for cheap extraction-strategy runs.
+    translation_report = (_bake_option_translations(schema, translation_model)
+                          if translate_options else {"skipped": "disabled"})
+
     ok, detail = _validate_schema(schema)
     lint_report = _lint_schema(schema, dump_data)
     schema.setdefault("_bakeoff", {})["authoring"] = {
@@ -1012,6 +1080,7 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "schema_valid": ok, "validation": detail,
         "repair": repair_report,
         "lint": lint_report,
+        "option_translation": translation_report,
     }
 
     with open(out_path, "w", encoding="utf-8") as fh:
@@ -1037,6 +1106,20 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         print(f"repair: {repair_report['applied']} applied, "
               f"{repair_report['dropped']} dropped-with-error, "
               f"alias hits: {repair_report['alias_hits']}")
+    if translation_report.get("skipped"):
+        print(f"option translations: skipped ({translation_report['skipped']})")
+    elif translation_report.get("failed"):
+        print(f"option translations: FAILED ({translation_report['failed']}) "
+              "-- run scripts/authoring/translate_option_labels.py to bake "
+              "them later", file=sys.stderr)
+    else:
+        langs = translation_report.get("languages", {})
+        updated = sum(e.get("options_updated", 0) for e in langs.values())
+        failed = translation_report.get("failed_languages") or []
+        print(f"option translations: {updated} option-language entries across "
+              f"{len(langs)} language(s), model {translation_report.get('model')}"
+              + (f"; FAILED: {', '.join(failed)} -- re-run "
+                 "translate_option_labels.py to fill the gap" if failed else ""))
     if lint_report.get("skipped"):
         print(f"lint: skipped ({lint_report['skipped']})", file=sys.stderr)
     else:
@@ -1111,6 +1194,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="display-sanity cap on fields per derived section "
                          f"(bd 6cfu.2; default {derive_sections.DEFAULT_CAP}, "
                          "splits are balanced)")
+    ap.add_argument("--no-translate-options", dest="translate_options",
+                    action="store_false", default=True,
+                    help="skip baking option label_translations (bd 2h9j; "
+                         "default ON, credential-gated + fail-open -- turn "
+                         "off for cheap extraction-strategy test runs)")
+    ap.add_argument("--translation-model", default=None,
+                    help="Gemini model for the option-translation bake "
+                         "(default: OPTION_TRANSLATION_MODEL env or "
+                         "gemini-2.5-pro)")
     args = ap.parse_args(argv)
 
     plain = DEFAULT_PLAIN if args.plain is None else args.plain
@@ -1118,7 +1210,9 @@ def main(argv: list[str] | None = None) -> int:
                      keep_dump=args.keep_dump,
                      instructions_pdf=args.instructions_pdf,
                      group_candidates=args.group_candidates,
-                     division_cap=args.division_cap)
+                     division_cap=args.division_cap,
+                     translate_options=args.translate_options,
+                     translation_model=args.translation_model)
     # Tri-state exit (bd v96b): 0 valid+clean / 3 stored-with-issues / 1 no
     # usable draft. The draft was already written unconditionally in extract().
     return _classify_exit(schema)

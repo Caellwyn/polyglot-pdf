@@ -57,12 +57,15 @@ from backend.config import get_settings
 from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
+from backend.adapters.text_ai_gemini import TextAIGemini
+from backend.services.option_translation import bake_label_translations
 from backend.services.schema_lint import (
     SEVERITY_ERROR, SEVERITY_WARNING, lint_schema,
 )
 from backend.services.schema_repair import (
     RepairError, alias_hit_count, repair as repair_schema,
 )
+from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
 from backend.services.widget_picker import unclaimed_button_widgets
 from backend.services.form_kits import (
     FormKitNotFound,
@@ -208,6 +211,25 @@ class RepairResponse(BaseModel):
     repairs: list[dict]   # the full repair report (verbatim from schema_repair)
     errorCount: int       # lint ERRORs remaining after repair
     warningCount: int     # lint WARNINGs remaining after repair
+
+
+class TranslateOptionsResponse(BaseModel):
+    """Standalone option-label translation bake (bd polyglot-pdf-2h9j).
+
+    The kit's option label_translations were baked in place (the SAME
+    backend.services.option_translation.bake_label_translations the extraction
+    post-pass and the translate_option_labels.py CLI run) and stored. Idempotent:
+    already-covered options are untouched, so re-running is cheap and fills any
+    failed language's gap. errorCount/warningCount are the post-bake lint counts
+    (baking only ADDS label_translations, so they should not move)."""
+
+    changed: bool                     # did the stored schema change at all
+    model: str                        # the Gemini model that translated
+    failedLanguages: list[str]        # languages whose batch call failed (re-run)
+    languages: dict[str, dict]        # per-language {labels, missing, translated,
+                                      # options_updated, failed}
+    errorCount: int                   # lint ERRORs after the bake
+    warningCount: int                 # lint WARNINGs after the bake
 
 
 class DeriveDivisionsResponse(BaseModel):
@@ -580,6 +602,96 @@ async def repair_editor_kit(
     return RepairResponse(
         applied=applied, dropped=dropped, aliasHits=alias_hit_count(repairs),
         repairs=repairs, errorCount=error_count, warningCount=warning_count,
+    )
+
+
+@router.post("/kits/{kit_id}/translate-options",
+             response_model=TranslateOptionsResponse)
+async def translate_editor_kit_options(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+    force: bool = False,
+) -> TranslateOptionsResponse:
+    """Bake option label_translations into a kit's stored draft, standalone
+    (bd polyglot-pdf-2h9j) -- the decoupled counterpart of the extraction
+    post-pass, for schemas that were extracted before translations existed (or
+    with the translation checkbox off). Runs IN-PROCESS (it is just the text
+    adapter, no subprocess): ONE batched pro-tier call per supported spoken
+    language over the labels the kit lacks, fanned out under the canonical
+    lowercase-name key. force=true retranslates everything and overwrites the
+    canonical keys (the remedy after option labels were renamed).
+
+    Author tier + draft-only (409 on complete), same write-gating as repair.
+    503 when no Gemini auth is configured (same gate as hosted extraction).
+    Per-language failures do not fail the request -- the partial result is
+    stored and failedLanguages tells the author to re-run.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    settings = get_settings()
+    if not (settings.VERTEXAI or settings.GEMINI_API_KEY
+            or os.getenv("GEMINI_API_KEY")):
+        raise HTTPException(
+            status_code=503,
+            detail="Option translation is not configured (set VERTEXAI=true "
+                   "for service-account auth, or provide a GEMINI_API_KEY)",
+        )
+    store = get_form_kit_store()
+    meta, _files = await _load_meta_or_404(store, kit_id)
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is published (status complete). Revert it to "
+                   "draft before translating -- the bake rewrites the schema.",
+        )
+    schema_file, _pdf = _resolve_meta_names(meta)
+    try:
+        schema = await store.load_schema(kit_id, schema_file)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Kit {kit_id} has no schema to translate"
+        ) from exc
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to load schema") from exc
+
+    # Same constructor discipline as dependencies.get_text_ai_pro: an EMPTY
+    # fallback chain (a deliberately chosen tier fails loud, never silently
+    # degrades to lite) and a bounded thinking budget (2.5-pro cannot disable
+    # thinking).
+    model = settings.OPTION_TRANSLATION_MODEL
+    text_ai = TextAIGemini(
+        api_key=settings.GEMINI_API_KEY,
+        model=model,
+        vertexai=settings.VERTEXAI,
+        fallback_models=(),
+        thinking_budget=512 if "pro" in model else None,
+    )
+    languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
+                 if n != "english"}
+    report = await bake_label_translations(
+        schema, text_ai, languages, only_missing=not force)
+
+    if report["changed"]:
+        try:
+            await store.put_schema(kit_id, schema, schema_file)
+        except FormKitStoreError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Translation succeeded but the schema could not be stored",
+            ) from exc
+
+    dump_data = await _load_kit_dump(store, kit_id)
+    findings = lint_schema(schema, dump_data)
+    error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+    warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+    _log.info("editor_kit_options_translated", kit_id=kit_id, role=role,
+              model=model, changed=report["changed"], force=force,
+              failed_languages=report["failed_languages"],
+              errors_after=error_count, warnings_after=warning_count)
+    return TranslateOptionsResponse(
+        changed=report["changed"], model=model,
+        failedLanguages=report["failed_languages"],
+        languages=report["languages"],
+        errorCount=error_count, warningCount=warning_count,
     )
 
 
@@ -1089,6 +1201,11 @@ async def extract_editor_kit(
     kit_id: str,
     role: Annotated[str, Depends(require_author_role)],
     force: Annotated[bool, Form()] = False,
+    translate_options: Annotated[bool, Form(
+        description="Also bake option label_translations (bd 2h9j; pro-tier, "
+                    "one call per language). Uncheck for cheap "
+                    "extraction-strategy test runs."
+    )] = True,
     instructions_pdf: Annotated[Optional[UploadFile], File(
         description="OPTIONAL official instructions PDF; enriches help text"
     )] = None,
@@ -1184,6 +1301,13 @@ async def extract_editor_kit(
                 "--model", settings.EXTRACTOR_MODEL,
                 "--keep-dump",
             ]
+            if translate_options:
+                # Pass the settings-resolved model explicitly: the child env
+                # may not carry OPTION_TRANSLATION_MODEL (same reasoning as
+                # the VERTEXAI pin below).
+                cmd += ["--translation-model", settings.OPTION_TRANSLATION_MODEL]
+            else:
+                cmd += ["--no-translate-options"]
             if instructions_bytes is not None:
                 instructions_path = tmp / "instructions.pdf"
                 instructions_path.write_bytes(instructions_bytes)
@@ -1216,6 +1340,7 @@ async def extract_editor_kit(
 
             _log.info("editor_extract_start", kit_id=kit_id,
                       model=settings.EXTRACTOR_MODEL,
+                      translate_options=translate_options,
                       with_instructions=instructions_bytes is not None)
             try:
                 proc = await anyio.to_thread.run_sync(_run)

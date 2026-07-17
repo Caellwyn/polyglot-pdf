@@ -8,8 +8,9 @@ VALUES are untouched, so tool-call matching (update_form_fields) is unaffected.
 
 Precedence per label (maintainer 2026-07-16):
   1. kit-provided FieldOption.label_translations for the session language
-     (once the extraction-time bead polyglot-pdf-2h9j populates them, the
-     secretary call below becomes a natural no-op);
+     (bake_label_translations below -- bd polyglot-pdf-2h9j -- populates them
+     at authoring time, making the secretary call a natural no-op on baked
+     kits);
   2. else ONE batched secretary call (TextAIGemini.translate_labels, lite tier)
      over the remaining unique labels;
   3. else (failure/timeout) English fallback -- the DTI SI's translate-on-the-fly
@@ -54,9 +55,12 @@ def _reset_cache_for_tests() -> None:
 def _kit_translation_keys(language_name: str) -> List[str]:
     """The label_translations keys accepted for a session language, lowercase.
 
-    The extraction-time bead (polyglot-pdf-2h9j) will settle the canonical key;
-    until then accept the plain name ("Spanish"/"spanish"), the short code
-    ("es") and the full BCP-47 code ("es-US"), all case-insensitively.
+    CANONICAL key (settled by bd polyglot-pdf-2h9j): the lowercase spoken-
+    language NAME ("spanish") -- what bake_label_translations writes. The read
+    side stays tolerant for hand-authored kits: the plain name, the short code
+    ("es") and the full BCP-47 code ("es-US") all resolve, case-insensitively.
+    (Bare ISO-639-1 codes that differ from the BCP-47 stem -- "zh", "tl" -- do
+    NOT resolve; the accepted short forms are the stems "cmn", "fil".)
     """
     keys = [language_name.strip().lower()]
     codes = bcp47_codes_for_spoken_language(language_name)
@@ -114,6 +118,124 @@ def _collect_labels(
                 if translated:
                     kit[label] = translated
     return labels, kit
+
+
+def _iter_option_dicts(schema: Optional[Dict[str, Any]]):
+    """Yield every option dict bake/collect traversal covers: the flat
+    fields[] array's options / dict-shaped allowed_values. TableColumn.options
+    are deliberately skipped -- parity with _collect_labels, whose output is
+    what the runtime consumer renders."""
+    for field in (schema or {}).get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        options = field.get("options") or field.get("allowed_values")
+        for opt in options or []:
+            if isinstance(opt, dict):
+                yield opt
+
+
+async def bake_label_translations(
+    schema: Optional[Dict[str, Any]],
+    text_ai: Any,
+    languages: Dict[str, str],
+    *,
+    only_missing: bool = True,
+    concurrency: int = 4,
+) -> Dict[str, Any]:
+    """Bake label_translations into a kit schema, in place (bd polyglot-pdf-2h9j).
+
+    The authoring-time counterpart of build_option_label_overrides: for each
+    language in `languages` ({lowercase-name: bcp47-code}, normally
+    SPOKEN_LANGUAGE_BCP47 minus english), collect the unique option labels,
+    batch-translate the ones the kit lacks (ONE translate_labels call per
+    language), and fan the results out to every option carrying that label --
+    written under the CANONICAL key, the lowercase language name. Option
+    value / label / spoken_label are never touched.
+
+    Idempotent when only_missing=True (the default): an option already covered
+    under ANY accepted key form counts as covered and is not rewritten, so
+    re-runs are no-ops and future language additions are cheap. A pre-existing
+    translation of a duplicate label fans out to uncovered twins WITHOUT a
+    model call. only_missing=False retranslates everything and overwrites the
+    canonical key (the stale-after-rename remedy).
+
+    Per-language failures (translate_labels -> None, or an adapter exception)
+    skip that language and continue -- one flaky language must not cost the
+    rest; the report's failed_languages drives the caller's exit code and an
+    idempotent re-run fills the gap. Returns a JSON-ready report:
+    {"changed": bool, "failed_languages": [...],
+     "languages": {name: {labels, missing, translated, options_updated, failed}}}.
+    """
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+    report: Dict[str, Any] = {"changed": False, "failed_languages": [], "languages": {}}
+
+    async def _bake_one(name: str, code: str) -> None:
+        name = name.strip().lower()
+        entry: Dict[str, Any] = {
+            "labels": 0, "missing": 0, "translated": 0,
+            "options_updated": 0, "failed": False,
+        }
+        report["languages"][name] = entry
+        if name == "english":  # labels are already English; nothing to bake
+            return
+        keys = _kit_translation_keys(name)
+        labels, existing = _collect_labels(schema, name)
+        entry["labels"] = len(labels)
+        if not labels:
+            return
+        missing = labels if not only_missing else [
+            label for label in labels if label not in existing
+        ]
+        entry["missing"] = len(missing)
+        overrides = dict(existing)
+        if missing:
+            try:
+                async with semaphore:
+                    translated = await text_ai.translate_labels(
+                        missing, name.capitalize(), code
+                    )
+            except Exception as exc:  # noqa: BLE001 -- skip-and-report by design
+                _log.warning(
+                    "option_translation_bake_language_failed",
+                    language=name, exc_type=type(exc).__name__,
+                )
+                translated = None
+            if translated is None:
+                entry["failed"] = True
+                report["failed_languages"].append(name)
+                # Existing kit entries can still fan out to uncovered twins.
+                translated = {}
+            missing_set = set(missing)
+            fresh = {
+                k: v for k, v in translated.items()
+                if k in missing_set and isinstance(v, str) and v.strip()
+            }
+            entry["translated"] = len(fresh)
+            overrides.update(fresh)
+        for opt in _iter_option_dicts(schema):
+            label = opt.get("label")
+            if not isinstance(label, str) or not label.strip():
+                continue
+            value = overrides.get(label)
+            if not value:
+                continue
+            if only_missing and _kit_translation(opt.get("label_translations"), keys):
+                continue  # covered under an accepted key -- no rewrite, minimal diff
+            translations = opt.get("label_translations")
+            if not isinstance(translations, dict):
+                translations = {}
+                opt["label_translations"] = translations
+            if translations.get(name) == value:
+                continue
+            translations[name] = value
+            entry["options_updated"] += 1
+            report["changed"] = True
+
+    await asyncio.gather(*(
+        _bake_one(name, code) for name, code in languages.items()
+    ))
+    report["failed_languages"].sort()
+    return report
 
 
 async def build_option_label_overrides(
