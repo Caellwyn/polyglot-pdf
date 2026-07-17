@@ -116,6 +116,14 @@ export function renameFieldId(
       patch.copy_to = copyTo.map(id => (id === oldId ? newId : id));
     }
 
+    // copy_from is copy_to's untyped symmetric twin: a SINGLE field-id string
+    // real kits carry (the i-90 page-header repeats), declared in neither the
+    // editor's FormField type nor the backend model -- it survives save
+    // untouched, so a missed retarget dangles silently (Opus review finding).
+    if ((out as Record<string, unknown>).copy_from === oldId) {
+      patch.copy_from = newId;
+    }
+
     // address_fields is another untyped pass-through (backend AddressFields:
     // a flat slot -> field-id map, street/apt/city/...). The backend integrity
     // check does not walk it, so a missed slot would dangle SILENTLY on save

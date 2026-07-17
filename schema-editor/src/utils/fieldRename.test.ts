@@ -160,6 +160,8 @@ describe('renameFieldId retargets every reference (bd 0x10.1)', () => {
         show_if: { any_of: [{ field: 'old_name', operator: 'is_not_empty' }] },
         copy_to: ['old_name'],
       }),
+      // copy_from: the untyped single-id twin of copy_to (real i-90 shape).
+      field('header_repeat', { copy_from: 'old_name' } as unknown as Partial<FormField>),
     ], {
       supplements: [{ id: 's', name: 'S', purpose: 'S', fields: ['old_name'] }],
     });
