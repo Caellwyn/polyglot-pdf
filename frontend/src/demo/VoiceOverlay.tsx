@@ -734,7 +734,16 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 		} catch (err) {
 			console.error('[VoiceOverlay] Connection error:', err)
 			setError(err instanceof Error ? err.message : 'Connection failed')
-			setStatus('Connection failed')
+			// Set the union status 'error', NOT a freeform 'Connection failed'
+			// string (bd polyglot-pdf-m77y): the freeform value matches no arm of
+			// the controls ternary, so a RE-failed Reconnect (both backends still
+			// down) would fall back to no button -- the same dead end this bead
+			// fixes -- and only recover via the parent prop-sync effect winning a
+			// render race. 'error' is a real ConnectionStatus, so the Reconnect
+			// button renders deterministically. The failure message still reaches
+			// the user via setError above. (The mobile overlay's catch never set a
+			// status here, so it was already immune; this aligns desktop with it.)
+			setStatus('error')
 		}
 	}
 
@@ -1655,10 +1664,17 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					{/* Controls */}
 					<div className="vff-controls">
 						{/* Connection is automatic after language selection - no connect button needed.
-						    The Reconnect button covers both the idle timeout AND a generic
-						    "disconnected" drop: the latter sets the "please click Reconnect"
-						    error, so it must offer a button to click (bd polyglot-pdf-b2yj). */}
-						{status === 'idle_timeout' || status === 'disconnected' ? (
+						    The Reconnect button covers the idle timeout, a generic
+						    "disconnected" drop (the latter sets the "please click Reconnect"
+						    error, so it must offer a button to click -- bd polyglot-pdf-b2yj),
+						    AND a bare 'error' status. 'error' is set by connect()'s catch when
+						    BOTH the localhost and cloud attempts fail (a completely-failed
+						    initial connect or resume); without this branch it renders NO button
+						    at all -- a dead end recoverable only by a page refresh
+						    (bd polyglot-pdf-m77y). handleConnect retries the connection.
+						    ('reconnect_failed' has its own recovery surface, the
+						    connection-timeout modal, so it is deliberately not listed here.) */}
+						{status === 'idle_timeout' || status === 'disconnected' || status === 'error' ? (
 							<button
 								className="vff-button vff-reconnect"
 								onClick={handleConnect}
