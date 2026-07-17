@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-17. See [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md) for closeout details.*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -73,6 +73,16 @@ of 2026-06.
   The reuse decision + the "why flash-lite" rationale are owned by
   [validation-delegation.md](validation-delegation.md) (F3); this doc just records
   that the validator's model id rides on `MODEL_LABELING`, not a new env var.
+- `OPTION_TRANSLATION_MODEL` (default `gemini-2.5-pro`) is the AUTHORING-time
+  knob for baking option `label_translations` into kit JSON (bd polyglot-pdf-2h9j:
+  the extraction post-pass, the editor translate-options route, and
+  `scripts/authoring/translate_option_labels.py` all read it). Pro over lite on
+  the same one-off-per-form rationale as `EXTRACTOR_MODEL`; consumers construct
+  `TextAIGemini` with an EMPTY fallback chain (a deliberately chosen tier fails
+  loud rather than silently degrading to lite) and a bounded thinking budget
+  (2.5-pro cannot disable thinking). The RUNTIME option-translation path (bd
+  ow1e) still rides `MODEL_LABELING`'s lite chain and is unchanged -- it is only
+  the fallback for labels a kit does not carry.
 - `VERTEXAI` (env, **default `true`**) picks the **service/auth mode**, not the
   model. `true` -> Vertex AI ("AI Agent Platform") via service-account ADC +
   `GOOGLE_CLOUD_PROJECT` (compliance-friendly; keeps request data private). `false`
