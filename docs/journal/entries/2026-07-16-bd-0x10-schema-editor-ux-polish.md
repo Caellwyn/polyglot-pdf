@@ -53,8 +53,16 @@ beats three for a single coherent epic):
   findings are lifted from the ValidationPanel (new `onReport` prop) through
   App into the list AND a "Why this field is flagged" banner in FieldEditor.
 
-Fresh-eyes/outer-review outcome: recorded in the PR body (this entry is
-written pre-assess; the scorecard lands there).
+Assess/review outcome: fresh-eyes ran 3 rounds (Sonnet clear -> Opus found
+the address_fields rename dangle, fixed inline + closed reviewer-filed bd
+polyglot-pdf-8k7v -> Opus round 2 found the symmetric copy_from dangle,
+fixed inline -> Opus round 3 NO-GAPS with an exhaustive kit-JSON
+field-id-key enumeration). Outer review: two independent Opus passes both
+NO-GAPS on the final diff. Adopt/reject/defer: 2 adopted (address_fields,
+copy_from), 1 refuted (empty-string field_id can never reach the wire --
+schema_lint.field_id_of returns None for falsy ids), 2 deferred as true
+nits to bd polyglot-pdf-6hhc (WARNING-severity banner styling; selection
+drop on undo-after-rename, a pre-existing pattern).
 
 ## Lessons
 
