@@ -2,7 +2,7 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-07-09. See [../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md](../journal/entries/2026-07-06-bd-emm7-deploy-time-backend-url.md) for closeout details.*
+*Last updated: 2026-07-17. See [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md) for closeout details.*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -112,6 +112,13 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   the REPO ROOT (`Dockerfile` at the root; `backend/Dockerfile` is gone) so
   `scripts/authoring` + `scripts/bakeoff` ship in it; `.gcloudignore` keeps the
   Cloud Build upload lean. Needs `GEMINI_API_KEY` mounted (Secret Manager).
+- **`OPTION_TRANSLATION_MODEL`** — the authoring-time option-label translation
+  model (bd `polyglot-pdf-2h9j`; default `gemini-2.5-pro`, same one-off-per-form
+  rationale). Read by the extraction post-pass (skippable via the extract
+  request's `translate_options` flag / editor checkbox), the standalone
+  `POST /api/editor/kits/{id}/translate-options` route, and
+  `scripts/authoring/translate_option_labels.py`. Tier detail in
+  [../standards/ai-models.md](../standards/ai-models.md).
 - **`GENAI_WEBSOCKET_BASE`** — optional override of the genai SDK's Live WebSocket
   base (`backend/adapters/live_ai_gemini.py`), for pointing at a non-default
   endpoint.

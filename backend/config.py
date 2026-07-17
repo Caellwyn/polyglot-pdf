@@ -627,6 +627,14 @@ class Settings(BaseModel):
 	EXTRACTOR_TIMEOUT_SEC: float = float(os.getenv("EXTRACTOR_TIMEOUT_SEC", "1500"))
 	# Upload cap for the onboarding PDF (MB). Government form PDFs run 1-15 MB.
 	EXTRACTOR_MAX_PDF_MB: float = float(os.getenv("EXTRACTOR_MAX_PDF_MB", "25"))
+	# Authoring-time option-label translation (bd polyglot-pdf-2h9j): the model
+	# that bakes FieldOption.label_translations into kit JSON. Pro over lite on
+	# the same one-off-per-form rationale as EXTRACTOR_MODEL -- these are legal-
+	# form answer labels shipped as permanent artifacts. The RUNTIME secretary
+	# path (option_translation.build_option_label_overrides) stays lite-tier and
+	# is untouched; it is only the fallback for unbaked labels.
+	OPTION_TRANSLATION_MODEL: str = os.getenv(
+		"OPTION_TRANSLATION_MODEL", "gemini-2.5-pro")
 
 	# Form kit storage (schema/PDF pairs)
 	FORM_KITS_MODE: str = os.getenv("FORM_KITS_MODE", "local")

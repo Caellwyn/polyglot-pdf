@@ -1,6 +1,6 @@
 # Terminology canon
 
-*Last updated: 2026-07-12. Section is now a DISPLAY division, not the conversation/navigation unit: production continuous-DTI runs the whole form as one session, and the section-navigation vocabulary is the deprecated section-reset fallback (bd polyglot-pdf-55jg).*
+*Last updated: 2026-07-17 (bd polyglot-pdf-2h9j: label_translations canonical-key row). Section is now a DISPLAY division, not the conversation/navigation unit: production continuous-DTI runs the whole form as one session, and the section-navigation vocabulary is the deprecated section-reset fallback (bd polyglot-pdf-55jg).*
 
 **Tracks:** `backend/models/form_models.py` `backend/services/manifest_service.py` `frontend/src/schema-forms/state/schemaFormState.ts` `docs/schema_format.md`
 
@@ -84,6 +84,7 @@ both dialects parse.
 | **checkbox_group** | ONE logical multi-select question; the only group mechanism is its `options[]`. Value shape is a `List[str]` of option slugs. No field-level `pdf_field_name`; per-box PDF identity lives on `options[].pdf_field_name` (+ `pdf_on_value`, + the per-option `pdf_position` rect since bd polyglot-pdf-5f41). |
 | **radio** | Single-select choice field (value is one option slug). PDF mapping is per-option `pdf_field_name` OR a shared field-level `pdf_field_name` + per-option `pdf_on_value` (true-AcroForm kids); each option may also carry its own `pdf_position` rect (bd polyglot-pdf-5f41). |
 | **option slug** | `FieldOption.value` in v2: a SEMANTIC slug minted deterministically from the label (lowercase ascii `[a-z0-9_-]`, no commas/spaces, unique per field, immutable once minted). Widget identity never lives in `value`. |
+| **label_translations key** | The canonical key is the LOWERCASE SPOKEN-LANGUAGE NAME (`"spanish"`, `"chinese"`) -- settled by bd polyglot-pdf-2h9j. The runtime reader also tolerates BCP-47 codes/stems (`"es"`, `"es-us"`) for hand-authored kits, but bare ISO-639-1 that differs from the BCP-47 stem (`"zh"`, `"tl"`) does NOT resolve (the stems are `"cmn"`, `"fil"`). Authoring tools write names only. |
 | **ConditionGroup** | The composite condition: one level of `all_of` / `any_of` / `none_of` buckets of atomic `{field, operator, value}` conditions. Flat by construction -- no nesting. "(A AND B) AND NOT C" = `all_of:[A,B] + none_of:[C]`. |
 | **require_if** | Field-level condition (same shape as `show_if`) under which the field becomes REQUIRED. Replaces `controls_fields.makes_required`. |
 | **includes / not_includes** | Group-membership operators: "option slug X is (not) in the checkbox_group trigger's selected set". In v2, `equals` on a group trigger is a validation ERROR -- the undocumented equals-means-membership evaluator hack (bd vq4m) is retired vocabulary. |

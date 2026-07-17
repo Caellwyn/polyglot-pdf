@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
-  onboardRemoteKit, setRemoteLabel, setRemoteStatus,
+  onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
   type EditorRole, type RemoteKitEntry,
 } from '../utils/remoteKitStore';
 import { getCompletionStats } from '../utils/validation';
@@ -85,6 +85,11 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   const [extractElapsed, setExtractElapsed] = React.useState(0);
   const [instructionsPdfByKit, setInstructionsPdfByKit] =
     React.useState<Record<string, File>>({});
+  // bd 2h9j: extraction also bakes translated option labels by default; the
+  // checkbox opts OUT for cheap extraction-strategy test runs. The standalone
+  // Translate-options action covers already-extracted kits (one at a time).
+  const [translateOptionsChecked, setTranslateOptionsChecked] = React.useState(true);
+  const [translatingId, setTranslatingId] = React.useState<string | null>(null);
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
   const isAuthor = role === 'author';
 
@@ -278,7 +283,9 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setExtractingId(kit.id);
     try {
       const instructionsPdf = instructionsPdfByKit[kit.id];
-      const result = await extractRemoteKit(kit.id, { instructionsPdf });
+      const result = await extractRemoteKit(kit.id, {
+        instructionsPdf, translateOptions: translateOptionsChecked,
+      });
       await refresh();
       // Store-with-issues (bd v96b): a stored-but-imperfect draft surfaces its
       // lint counts here so the author knows to open + repair it, rather than
@@ -311,7 +318,48 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     } finally {
       setExtractingId(null);
     }
-  }, [refresh, onAuthError, extractingId, instructionsPdfByKit]);
+  }, [refresh, onAuthError, extractingId, instructionsPdfByKit,
+      translateOptionsChecked]);
+
+  // bd 2h9j: bake translated option labels into an ALREADY-extracted kit's
+  // stored schema, standalone (the decoupled counterpart of the extraction
+  // checkbox). Idempotent server-side; on success the open kit is re-opened so
+  // the editor shows the stored (translated) schema. Gated on saved state by
+  // the callers (like Mark complete) -- the bake rewrites the stored schema.
+  const handleTranslateOptions = React.useCallback(async (kit: RemoteKitEntry) => {
+    if (translatingId !== null) return;
+    setNotice(null);
+    setError(null);
+    setTranslatingId(kit.id);
+    try {
+      const report = await translateRemoteKitOptions(kit.id);
+      const updated = Object.values(report.languages)
+        .reduce((n, e) => n + e.options_updated, 0);
+      const failed = report.failedLanguages;
+      if (!report.changed) {
+        setNotice(`"${kit.id}" option labels are already fully translated.`);
+      } else {
+        setNotice(
+          `Translated option labels for "${kit.id}" -- ${updated} ` +
+          `option-language entr${updated === 1 ? 'y' : 'ies'} baked` +
+          (failed.length
+            ? `; FAILED: ${failed.join(', ')} (run again to fill the gap)`
+            : '') + '.',
+        );
+        // Reload the stored schema when this kit is open (safe: the button is
+        // disabled while the open kit has unsaved edits).
+        if (kit.id === selectedKitId) onOpenKit(kit);
+      }
+    } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthError?.();
+        return;
+      }
+      setError(err instanceof Error ? err.message : 'Option translation failed');
+    } finally {
+      setTranslatingId(null);
+    }
+  }, [translatingId, selectedKitId, onOpenKit, onAuthError]);
 
   const summary = React.useMemo(() => {
     let complete = 0, inProgress = 0, noSchema = 0;
@@ -504,6 +552,23 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                     Mark complete
                   </button>
                 ))}
+                {isAuthor && kit.hasSchema && kit.status !== 'complete' && (
+                  <button
+                    className="btn-sm btn-secondary text-xs"
+                    onClick={() => void handleTranslateOptions(kit)}
+                    disabled={busy || extractingId !== null
+                      || translatingId !== null || stripDirty}
+                    title={stripDirty
+                      ? 'Save your changes first (Cmd+S) -- translation '
+                        + 'rewrites the stored schema'
+                      : 'Bake translated option labels (all supported spoken '
+                        + 'languages) into this form on the server'}
+                  >
+                    {translatingId === kit.id
+                      ? 'Translating...'
+                      : 'Translate options'}
+                  </button>
+                )}
                 {isAuthor && !kit.hasSchema && kit.hasPdf && (
                   <button
                     className="btn-sm btn-primary text-xs"
@@ -677,6 +742,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       {instructionsPdfByKit[kit.id]
                         ? `instructions: ${instructionsPdfByKit[kit.id].name}`
                         : '+ instructions PDF'}
+                    </label>
+                    <label
+                      className="text-xs text-gray-500 cursor-pointer hover:text-gray-700"
+                      title="Also bake translated option labels (all supported spoken languages, pro-tier) into the extracted schema. Uncheck when just testing extraction strategies -- the standalone Translate options action can bake them later."
+                    >
+                      <input
+                        type="checkbox"
+                        className="mr-1 align-middle"
+                        data-testid="translate-options-checkbox"
+                        checked={translateOptionsChecked}
+                        disabled={busy || extractingId !== null}
+                        onChange={(e) => setTranslateOptionsChecked(e.target.checked)}
+                      />
+                      translate options
                     </label>
                     <button
                       className="btn-sm btn-primary text-xs"

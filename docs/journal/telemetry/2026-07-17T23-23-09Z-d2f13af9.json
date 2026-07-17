@@ -1,0 +1,109 @@
+{
+  "recorded_at": "2026-07-17T23:23:09Z",
+  "session_id": "d2f13af9-0623-4ea2-b92a-b45803784b5d",
+  "beads": [
+    "polyglot-pdf-2h9j"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-07-17T02:37:50.719Z",
+    "last_ts": "2026-07-17T23:22:59.236Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 936,
+      "output_tokens": 370096,
+      "cache_read_input_tokens": 118937939,
+      "cache_creation_input_tokens": 3150460
+    },
+    "subagent": {
+      "input_tokens": 5705,
+      "output_tokens": 145014,
+      "cache_read_input_tokens": 49579868,
+      "cache_creation_input_tokens": 2376618
+    },
+    "total": {
+      "input_tokens": 6641,
+      "output_tokens": 515110,
+      "cache_read_input_tokens": 168517807,
+      "cache_creation_input_tokens": 5527078
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-fable-5": {
+        "input_tokens": 936,
+        "output_tokens": 370096,
+        "cache_read_input_tokens": 118937939,
+        "cache_creation_input_tokens": 3150460
+      },
+      "<synthetic>": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      }
+    },
+    "subagent": {
+      "claude-opus-4-8": {
+        "input_tokens": 5110,
+        "output_tokens": 96832,
+        "cache_read_input_tokens": 34226901,
+        "cache_creation_input_tokens": 1692593
+      },
+      "claude-sonnet-5": {
+        "input_tokens": 266,
+        "output_tokens": 15399,
+        "cache_read_input_tokens": 11767796,
+        "cache_creation_input_tokens": 382364
+      },
+      "claude-fable-5": {
+        "input_tokens": 329,
+        "output_tokens": 32783,
+        "cache_read_input_tokens": 3585171,
+        "cache_creation_input_tokens": 301661
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-fable-5": 176.832849,
+      "<synthetic>": 0.0
+    },
+    "subagent": {
+      "claude-opus-4-8": 30.138507,
+      "claude-sonnet-5": 0.0,
+      "claude-fable-5": 8.998374
+    },
+    "by_model": {
+      "claude-fable-5": 185.831223,
+      "<synthetic>": 0.0,
+      "claude-opus-4-8": 30.138507,
+      "claude-sonnet-5": 0.0
+    },
+    "unpriced_models": [
+      "<synthetic>",
+      "claude-sonnet-5"
+    ],
+    "orchestrator_total": 176.832849,
+    "subagent_total": 39.13688,
+    "total": 215.969729,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-sonnet-5"
+  ],
+  "assistant_turns": {
+    "orchestrator": 471,
+    "subagent": 623
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 2,
+  "maintainer_touchpoints": 2,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 1
+}

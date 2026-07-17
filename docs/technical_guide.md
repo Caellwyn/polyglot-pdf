@@ -1,6 +1,6 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-07-12. Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872; section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-07-17 (bd polyglot-pdf-2h9j: editor route table gained the translate-options route + extract flag). Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872; section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -75,7 +75,8 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | PUT | `/api/editor/kits/{kit_id}/schema` | Save an edited schema back to the store (lenient draft save). Token-gated. |
 | POST | `/api/editor/kits/{kit_id}/status` | Flip draft/complete; promotion validates against the Pydantic `FormSchema` AND requires zero schema-lint ERRORs (`backend/services/schema_lint.py`; violations 409 naming the findings -- bd h76m.5). Token-gated. |
 | POST | `/api/editor/kits` | Author-tier onboarding: multipart PDF upload -> new draft kit in the store. Author token only. |
-| POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. |
+| POST | `/api/editor/kits/{kit_id}/extract` | Author-tier hosted extraction: runs the PDF->schema pipeline server-side (EXTRACTOR_MODEL, minutes-long, serialized per instance). Author token only. `translate_options` form flag (default true) also bakes option label_translations (bd 2h9j). |
+| POST | `/api/editor/kits/{kit_id}/translate-options` | Author-tier standalone option-label translation bake (OPTION_TRANSLATION_MODEL, in-process, idempotent; `?force=true` retranslates after label renames; 409 on complete kits -- bd 2h9j). Author token only. |
 | GET | `/health` | Liveness + reports active models, audio rates, limits, key-presence. |
 | GET | `/version` | App version string. |
 | POST | `/dev/console-log` | Dev-only console-log ingest (404 in prod; no `/api` prefix). `frontend/src/shared/devConsoleCapture.ts`, `backend/routes/dev_console_routes.py`. |

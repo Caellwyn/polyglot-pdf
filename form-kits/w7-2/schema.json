@@ -203,6 +203,24 @@
             "y": 97.75,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Solicitar un ITIN nuevo",
+            "arabic": "\u0627\u0644\u062a\u0642\u062f\u0645 \u0628\u0637\u0644\u0628 \u0644\u0644\u062d\u0635\u0648\u0644 \u0639\u0644\u0649 ITIN \u062c\u062f\u064a\u062f",
+            "tagalog": "Mag-apply para sa bagong ITIN",
+            "chinese": "\u7533\u8bf7\u65b0\u7684ITIN",
+            "french": "Demander un nouvel ITIN",
+            "portuguese": "Solicitar um novo ITIN",
+            "korean": "\uc2e0\uaddc ITIN \uc2e0\uccad",
+            "german": "Eine neue ITIN beantragen",
+            "italian": "Richiedere un nuovo ITIN",
+            "hindi": "\u090f\u0915 \u0928\u090f ITIN \u0915\u0947 \u0932\u093f\u090f \u0906\u0935\u0947\u0926\u0928 \u0915\u0930\u0947\u0902",
+            "persian": "\u062a\u0642\u0627\u0636\u0627\u06cc ITIN \u062c\u062f\u06cc\u062f",
+            "urdu": "\u0646\u0626\u06d2 ITIN \u06a9\u06d2 \u0644\u06cc\u06d2 \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u062f\u06cc\u06ba",
+            "dutch": "Een nieuw ITIN aanvragen",
+            "swedish": "Ans\u00f6k om ett nytt ITIN",
+            "ukrainian": "\u041f\u043e\u0434\u0430\u0442\u0438 \u0437\u0430\u044f\u0432\u043a\u0443 \u043d\u0430 \u043e\u0442\u0440\u0438\u043c\u0430\u043d\u043d\u044f \u043d\u043e\u0432\u043e\u0433\u043e ITIN",
+            "afrikaans": "Doen aansoek vir 'n nuwe ITIN"
           }
         },
         {
@@ -215,6 +233,24 @@
             "y": 109.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Renovar un ITIN existente",
+            "arabic": "\u062a\u062c\u062f\u064a\u062f ITIN \u062d\u0627\u0644\u064a",
+            "tagalog": "I-renew ang kasalukuyang ITIN",
+            "chinese": "\u66f4\u65b0\u73b0\u6709\u7684ITIN",
+            "french": "Renouveler un ITIN existant",
+            "portuguese": "Renovar um ITIN existente",
+            "korean": "\uae30\uc874 ITIN \uac31\uc2e0",
+            "german": "Eine bestehende ITIN erneuern",
+            "italian": "Rinnovare un ITIN esistente",
+            "hindi": "\u092e\u094c\u091c\u0942\u0926\u093e ITIN \u0915\u093e \u0928\u0935\u0940\u0928\u0940\u0915\u0930\u0923 \u0915\u0930\u0947\u0902",
+            "persian": "\u062a\u0645\u062f\u06cc\u062f ITIN \u0645\u0648\u062c\u0648\u062f",
+            "urdu": "\u0645\u0648\u062c\u0648\u062f\u06c1 ITIN \u06a9\u06cc \u062a\u062c\u062f\u06cc\u062f \u06a9\u0631\u06cc\u06ba",
+            "dutch": "Een bestaand ITIN verlengen",
+            "swedish": "F\u00f6rnya ett befintligt ITIN",
+            "ukrainian": "\u041f\u043e\u043d\u043e\u0432\u0438\u0442\u0438 \u043d\u0430\u044f\u0432\u043d\u0438\u0439 ITIN",
+            "afrikaans": "Hernu 'n bestaande ITIN"
           }
         }
       ]
@@ -784,6 +820,24 @@
             "y": 422.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Masculino",
+            "arabic": "\u0630\u0643\u0631",
+            "tagalog": "Lalaki",
+            "chinese": "\u7537\u6027",
+            "french": "Masculin",
+            "portuguese": "Masculino",
+            "korean": "\ub0a8\uc131",
+            "german": "M\u00e4nnlich",
+            "italian": "Maschio",
+            "hindi": "\u092a\u0941\u0930\u0941\u0937",
+            "persian": "\u0645\u0631\u062f",
+            "urdu": "\u0645\u0631\u062f",
+            "dutch": "Man",
+            "swedish": "Man",
+            "ukrainian": "\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430",
+            "afrikaans": "Manlik"
           }
         },
         {
@@ -796,6 +850,24 @@
             "y": 433.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Femenino",
+            "arabic": "\u0623\u0646\u062b\u0649",
+            "tagalog": "Babae",
+            "chinese": "\u5973\u6027",
+            "french": "F\u00e9minin",
+            "portuguese": "Feminino",
+            "korean": "\uc5ec\uc131",
+            "german": "Weiblich",
+            "italian": "Femmina",
+            "hindi": "\u092e\u0939\u093f\u0932\u093e",
+            "persian": "\u0632\u0646",
+            "urdu": "\u062e\u0627\u062a\u0648\u0646",
+            "dutch": "Vrouw",
+            "swedish": "Kvinna",
+            "ukrainian": "\u0416\u0456\u043d\u043e\u0447\u0430",
+            "afrikaans": "Vroulik"
           }
         }
       ]
@@ -881,6 +953,24 @@
             "y": 482.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Pasaporte",
+            "arabic": "\u062c\u0648\u0627\u0632 \u0633\u0641\u0631",
+            "tagalog": "Pasaporte",
+            "chinese": "\u62a4\u7167",
+            "french": "Passeport",
+            "portuguese": "Passaporte",
+            "korean": "\uc5ec\uad8c",
+            "german": "Reisepass",
+            "italian": "Passaporto",
+            "hindi": "\u092a\u093e\u0938\u092a\u094b\u0930\u094d\u091f",
+            "persian": "\u06af\u0630\u0631\u0646\u0627\u0645\u0647",
+            "urdu": "\u067e\u0627\u0633\u067e\u0648\u0631\u0679",
+            "dutch": "Paspoort",
+            "swedish": "Pass",
+            "ukrainian": "\u041f\u0430\u0441\u043f\u043e\u0440\u0442",
+            "afrikaans": "Paspoort"
           }
         },
         {
@@ -893,6 +983,24 @@
             "y": 482.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Licencia de conducir/identificaci\u00f3n del estado",
+            "arabic": "\u0631\u062e\u0635\u0629 \u0642\u064a\u0627\u062f\u0629/\u0628\u0637\u0627\u0642\u0629 \u0647\u0648\u064a\u0629 \u0635\u0627\u062f\u0631\u0629 \u0639\u0646 \u0627\u0644\u0648\u0644\u0627\u064a\u0629",
+            "tagalog": "Lisensya sa pagmamaneho/State I.D.",
+            "chinese": "\u9a7e\u9a76\u6267\u7167/\u5dde\u8eab\u4efd\u8bc1",
+            "french": "Permis de conduire/Carte d'identit\u00e9 de l'\u00c9tat",
+            "portuguese": "Carteira de motorista/Documento de identidade estadual",
+            "korean": "\uc6b4\uc804\uba74\ud5c8\uc99d/\uc8fc \uc2e0\ubd84\uc99d",
+            "german": "F\u00fchrerschein/Staatlicher Ausweis",
+            "italian": "Patente di guida/Documento di identit\u00e0 statale",
+            "hindi": "\u0921\u094d\u0930\u093e\u0907\u0935\u0930 \u0915\u093e \u0932\u093e\u0907\u0938\u0947\u0902\u0938/\u0930\u093e\u091c\u094d\u092f \u0915\u093e \u092a\u0939\u091a\u093e\u0928 \u092a\u0924\u094d\u0930",
+            "persian": "\u06af\u0648\u0627\u0647\u06cc\u0646\u0627\u0645\u0647 \u0631\u0627\u0646\u0646\u062f\u06af\u06cc/\u06a9\u0627\u0631\u062a \u0634\u0646\u0627\u0633\u0627\u06cc\u06cc \u0627\u06cc\u0627\u0644\u062a\u06cc",
+            "urdu": "\u0688\u0631\u0627\u0626\u06cc\u0648\u0646\u06af \u0644\u0627\u0626\u0633\u0646\u0633/\u0631\u06cc\u0627\u0633\u062a\u06cc \u0634\u0646\u0627\u062e\u062a\u06cc \u06a9\u0627\u0631\u0688",
+            "dutch": "Rijbewijs/Identiteitskaart van de staat",
+            "swedish": "K\u00f6rkort/Statlig ID-handling",
+            "ukrainian": "\u0412\u043e\u0434\u0456\u0439\u0441\u044c\u043a\u0435 \u043f\u043e\u0441\u0432\u0456\u0434\u0447\u0435\u043d\u043d\u044f/\u0406\u0434\u0435\u043d\u0442\u0438\u0444\u0456\u043a\u0430\u0446\u0456\u0439\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u0448\u0442\u0430\u0442\u0443",
+            "afrikaans": "Bestuurslisensie/Staats-ID"
           }
         },
         {
@@ -905,6 +1013,24 @@
             "y": 482.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Documentaci\u00f3n del USCIS",
+            "arabic": "\u0648\u062b\u0627\u0626\u0642 \u062f\u0627\u0626\u0631\u0629 \u062e\u062f\u0645\u0627\u062a \u0627\u0644\u0647\u062c\u0631\u0629 \u0648\u0627\u0644\u062c\u0646\u0633\u064a\u0629 \u0627\u0644\u0623\u0645\u0631\u064a\u0643\u064a\u0629 (USCIS)",
+            "tagalog": "Dokumentasyon mula sa USCIS",
+            "chinese": "USCIS \u6587\u4ef6",
+            "french": "Documentation de l'USCIS",
+            "portuguese": "Documenta\u00e7\u00e3o do USCIS",
+            "korean": "USCIS \uc11c\ub958",
+            "german": "USCIS-Dokumentation",
+            "italian": "Documentazione USCIS",
+            "hindi": "USCIS \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c\u0940\u0915\u0930\u0923",
+            "persian": "\u0645\u062f\u0627\u0631\u06a9 USCIS",
+            "urdu": "USCIS \u062f\u0633\u062a\u0627\u0648\u06cc\u0632\u0627\u062a",
+            "dutch": "USCIS-documentatie",
+            "swedish": "USCIS-dokumentation",
+            "ukrainian": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0456\u044f USCIS",
+            "afrikaans": "USCIS-dokumentasie"
           }
         },
         {
@@ -917,6 +1043,24 @@
             "y": 482.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Otro",
+            "arabic": "\u0623\u062e\u0631\u0649",
+            "tagalog": "Iba pa",
+            "chinese": "\u5176\u4ed6",
+            "french": "Autre",
+            "portuguese": "Outro",
+            "korean": "\uae30\ud0c0",
+            "german": "Sonstiges",
+            "italian": "Altro",
+            "hindi": "\u0905\u0928\u094d\u092f",
+            "persian": "\u0633\u0627\u06cc\u0631",
+            "urdu": "\u062f\u06cc\u06af\u0631",
+            "dutch": "Overig",
+            "swedish": "Annat",
+            "ukrainian": "\u0406\u043d\u0448\u0435",
+            "afrikaans": "Ander"
           }
         }
       ]
@@ -1021,6 +1165,24 @@
             "y": 529.75,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "No/No s\u00e9. Omita la l\u00ednea 6f.",
+            "arabic": "\u0644\u0627/\u0644\u0627 \u0623\u0639\u0631\u0641. \u062a\u062e\u0637\u0651\u064e \u0627\u0644\u0633\u0637\u0631 6f.",
+            "tagalog": "Hindi/Hindi alam. Laktawan ang linya 6f.",
+            "chinese": "\u5426/\u4e0d\u77e5\u9053\u3002\u8df3\u8fc7\u7b2c6f\u884c\u3002",
+            "french": "Non/Ne sais pas. Passer la ligne 6f.",
+            "portuguese": "N\u00e3o/N\u00e3o sei. Pule a linha 6f.",
+            "korean": "\uc544\ub2c8\uc694/\ubaa8\ub984. 6f \ud56d\ubaa9\uc740 \uac74\ub108\ub6f0\uc2ed\uc2dc\uc624.",
+            "german": "Nein/Nicht bekannt. Zeile 6f \u00fcberspringen.",
+            "italian": "No/Non so. Saltare la riga 6f.",
+            "hindi": "\u0928\u0939\u0940\u0902/\u092a\u0924\u093e \u0928\u0939\u0940\u0902\u0964 \u092a\u0902\u0915\u094d\u0924\u093f 6f \u091b\u094b\u0921\u093c \u0926\u0947\u0902\u0964",
+            "persian": "\u062e\u06cc\u0631/\u0646\u0645\u06cc\u200c\u062f\u0627\u0646\u0645. \u0627\u0632 \u062e\u0637 6f \u0639\u0628\u0648\u0631 \u06a9\u0646\u06cc\u062f.",
+            "urdu": "\u0646\u06c1\u06cc\u06ba/\u0645\u0639\u0644\u0648\u0645 \u0646\u06c1\u06cc\u06ba\u06d4 \u0644\u0627\u0626\u0646 6f \u0686\u06be\u0648\u0691 \u062f\u06cc\u06ba\u06d4",
+            "dutch": "Nee/Weet niet. Sla regel 6f over.",
+            "swedish": "Nej/Vet inte. Hoppa \u00f6ver rad 6f.",
+            "ukrainian": "\u041d\u0456/\u041d\u0435 \u0437\u043d\u0430\u044e. \u041f\u0440\u043e\u043f\u0443\u0441\u0442\u0456\u0442\u044c \u0440\u044f\u0434\u043e\u043a 6f.",
+            "afrikaans": "Nee/Weet nie. Slaan re\u00ebl 6f oor."
           }
         },
         {
@@ -1033,6 +1195,24 @@
             "y": 541.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "S\u00ed. Complete la l\u00ednea 6f.",
+            "arabic": "\u0646\u0639\u0645. \u0623\u0643\u0645\u0644 \u0627\u0644\u0633\u0637\u0631 6f.",
+            "tagalog": "Oo. Kumpletuhin ang linya 6f.",
+            "chinese": "\u662f\u3002\u586b\u5199\u7b2c6f\u884c\u3002",
+            "french": "Oui. Remplir la ligne 6f.",
+            "portuguese": "Sim. Preencha a linha 6f.",
+            "korean": "\uc608. 6f \ud56d\ubaa9\uc744 \uc791\uc131\ud558\uc2ed\uc2dc\uc624.",
+            "german": "Ja. Zeile 6f ausf\u00fcllen.",
+            "italian": "S\u00ec. Compilare la riga 6f.",
+            "hindi": "\u0939\u093e\u0901\u0964 \u092a\u0902\u0915\u094d\u0924\u093f 6f \u092a\u0942\u0930\u0940 \u0915\u0930\u0947\u0902\u0964",
+            "persian": "\u0628\u0644\u0647. \u062e\u0637 6f \u0631\u0627 \u06a9\u0627\u0645\u0644 \u06a9\u0646\u06cc\u062f.",
+            "urdu": "\u06c1\u0627\u06ba\u06d4 \u0644\u0627\u0626\u0646 6f \u0645\u06a9\u0645\u0644 \u06a9\u0631\u06cc\u06ba\u06d4",
+            "dutch": "Ja. Vul regel 6f in.",
+            "swedish": "Ja. Fyll i rad 6f.",
+            "ukrainian": "\u0422\u0430\u043a. \u0417\u0430\u043f\u043e\u0432\u043d\u0456\u0442\u044c \u0440\u044f\u0434\u043e\u043a 6f.",
+            "afrikaans": "Ja. Voltooi re\u00ebl 6f."
           }
         }
       ]
@@ -1444,6 +1624,24 @@
             "y": 686.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Padre/Madre",
+            "arabic": "\u0623\u062d\u062f \u0627\u0644\u0648\u0627\u0644\u062f\u064a\u0646",
+            "tagalog": "Magulang",
+            "chinese": "\u7236\u6bcd",
+            "french": "Parent",
+            "portuguese": "Pai/M\u00e3e",
+            "korean": "\ubd80\ubaa8",
+            "german": "Elternteil",
+            "italian": "Genitore",
+            "hindi": "\u092e\u093e\u0924\u093e-\u092a\u093f\u0924\u093e",
+            "persian": "\u0648\u0627\u0644\u062f\u06cc\u0646",
+            "urdu": "\u0648\u0627\u0644\u062f/\u0648\u0627\u0644\u062f\u06c1",
+            "dutch": "Ouder",
+            "swedish": "F\u00f6r\u00e4lder",
+            "ukrainian": "\u041e\u0434\u0438\u043d \u0437 \u0431\u0430\u0442\u044c\u043a\u0456\u0432",
+            "afrikaans": "Ouer"
           }
         },
         {
@@ -1456,6 +1654,24 @@
             "y": 686.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Poder legal",
+            "arabic": "\u062a\u0648\u0643\u064a\u0644 \u0631\u0633\u0645\u064a",
+            "tagalog": "Power of attorney",
+            "chinese": "\u6388\u6743\u4e66",
+            "french": "Procuration",
+            "portuguese": "Procura\u00e7\u00e3o",
+            "korean": "\uc704\uc784\uc7a5",
+            "german": "Vollmacht",
+            "italian": "Procura",
+            "hindi": "\u092a\u0949\u0935\u0930 \u0911\u092b\u093c \u0905\u091f\u0949\u0930\u094d\u0928\u0940",
+            "persian": "\u0648\u06a9\u0627\u0644\u062a\u200c\u0646\u0627\u0645\u0647",
+            "urdu": "\u0645\u062e\u062a\u0627\u0631 \u0646\u0627\u0645\u06c1",
+            "dutch": "Volmacht",
+            "swedish": "Fullmakt",
+            "ukrainian": "\u0414\u043e\u0432\u0456\u0440\u0435\u043d\u0456\u0441\u0442\u044c",
+            "afrikaans": "Volmag"
           }
         },
         {
@@ -1468,6 +1684,24 @@
             "y": 686.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Tutor designado por el tribunal",
+            "arabic": "\u0648\u0635\u064a \u0645\u0639\u064a\u0646 \u0645\u0646 \u0642\u0628\u0644 \u0627\u0644\u0645\u062d\u0643\u0645\u0629",
+            "tagalog": "Tagapangalaga na itinalaga ng korte",
+            "chinese": "\u6cd5\u9662\u6307\u5b9a\u7684\u76d1\u62a4\u4eba",
+            "french": "Tuteur d\u00e9sign\u00e9 par le tribunal",
+            "portuguese": "Tutor nomeado pelo tribunal",
+            "korean": "\ubc95\uc6d0 \uc9c0\uc815 \ubcf4\ud638\uc790",
+            "german": "Gerichtlich bestellter Vormund",
+            "italian": "Tutore nominato dal tribunale",
+            "hindi": "\u0928\u094d\u092f\u093e\u092f\u093e\u0932\u092f \u0926\u094d\u0935\u093e\u0930\u093e \u0928\u093f\u092f\u0941\u0915\u094d\u0924 \u0905\u092d\u093f\u092d\u093e\u0935\u0915",
+            "persian": "\u0642\u06cc\u0645 \u0645\u0646\u0635\u0648\u0628 \u062f\u0627\u062f\u06af\u0627\u0647",
+            "urdu": "\u0639\u062f\u0627\u0644\u062a \u06a9\u0627 \u0645\u0642\u0631\u0631 \u06a9\u0631\u062f\u06c1 \u0633\u0631\u067e\u0631\u0633\u062a",
+            "dutch": "Door de rechtbank aangestelde voogd",
+            "swedish": "Domstolsutsedd f\u00f6rmyndare",
+            "ukrainian": "\u041e\u043f\u0456\u043a\u0443\u043d, \u043f\u0440\u0438\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0439 \u0441\u0443\u0434\u043e\u043c",
+            "afrikaans": "Hof-aangestelde voog"
           }
         }
       ]

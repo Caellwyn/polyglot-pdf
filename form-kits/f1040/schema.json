@@ -873,6 +873,24 @@
             "y": 206.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Soltero(a)",
+            "chinese": "\u5355\u8eab",
+            "arabic": "\u0623\u0639\u0632\u0628",
+            "tagalog": "Walang asawa",
+            "korean": "\ub3c5\uc2e0",
+            "german": "Ledig",
+            "portuguese": "Solteiro(a)",
+            "french": "C\u00e9libataire",
+            "hindi": "\u0905\u0935\u093f\u0935\u093e\u0939\u093f\u0924",
+            "italian": "Celibe/Nubile",
+            "persian": "\u0645\u062c\u0631\u062f",
+            "urdu": "\u063a\u06cc\u0631 \u0634\u0627\u062f\u06cc \u0634\u062f\u06c1",
+            "dutch": "Alleenstaand",
+            "swedish": "Ensamst\u00e5ende",
+            "ukrainian": "\u041e\u0441\u043e\u0431\u0430, \u044f\u043a\u0430 \u043d\u0435 \u043f\u0435\u0440\u0435\u0431\u0443\u0432\u0430\u0454 \u0443 \u0448\u043b\u044e\u0431\u0456",
+            "afrikaans": "Enkel"
           }
         },
         {
@@ -885,6 +903,24 @@
             "y": 218.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Casado(a) que presenta una declaraci\u00f3n conjunta",
+            "chinese": "\u592b\u59bb\u8054\u5408\u7533\u62a5",
+            "arabic": "\u0645\u062a\u0632\u0648\u062c \u0648\u064a\u0642\u062f\u0645 \u0625\u0642\u0631\u0627\u0631\u064b\u0627 \u0645\u0634\u062a\u0631\u0643\u064b\u0627",
+            "tagalog": "Kasal na magkasamang naghahain",
+            "korean": "\ubd80\ubd80 \uacf5\ub3d9 \uc2e0\uace0",
+            "german": "Zusammenveranlagung",
+            "portuguese": "Casado(a), declara\u00e7\u00e3o em conjunto",
+            "french": "Mari\u00e9(e) d\u00e9clarant conjointement",
+            "hindi": "\u0935\u093f\u0935\u093e\u0939\u093f\u0924 \u0938\u0902\u092f\u0941\u0915\u094d\u0924 \u0930\u0942\u092a \u0938\u0947 \u0926\u093e\u0916\u093f\u0932",
+            "italian": "Coniugi con dichiarazione congiunta",
+            "persian": "\u0645\u062a\u0627\u0647\u0644\u060c \u062b\u0628\u062a \u0645\u0634\u062a\u0631\u06a9",
+            "urdu": "\u0634\u0627\u062f\u06cc \u0634\u062f\u06c1 \u0645\u0634\u062a\u0631\u06a9\u06c1 \u0637\u0648\u0631 \u067e\u0631 \u0641\u0627\u0626\u0644\u0646\u06af",
+            "dutch": "Gehuwd, gezamenlijke aangifte",
+            "swedish": "Gift och deklarerar gemensamt",
+            "ukrainian": "\u041f\u043e\u0434\u0440\u0443\u0436\u0436\u044f, \u0449\u043e \u043f\u043e\u0434\u0430\u0454 \u0441\u043f\u0456\u043b\u044c\u043d\u0443 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0456\u044e",
+            "afrikaans": "Getroud en gesamentlik ingedien"
           }
         },
         {
@@ -897,6 +933,24 @@
             "y": 230.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Casado(a) que presenta una declaraci\u00f3n por separado (MFS)",
+            "chinese": "\u592b\u59bb\u5206\u522b\u7533\u62a5 (MFS)",
+            "arabic": "\u0645\u062a\u0632\u0648\u062c \u0648\u064a\u0642\u062f\u0645 \u0625\u0642\u0631\u0627\u0631\u064b\u0627 \u0645\u0646\u0641\u0635\u0644\u0627\u064b (MFS)",
+            "tagalog": "Kasal na hiwalay na naghahain (MFS)",
+            "korean": "\ubd80\ubd80 \uac1c\ubcc4 \uc2e0\uace0 (MFS)",
+            "german": "Getrennte Veranlagung (MFS)",
+            "portuguese": "Casado(a), declara\u00e7\u00e3o em separado (MFS)",
+            "french": "Mari\u00e9(e) d\u00e9clarant s\u00e9par\u00e9ment (MDS)",
+            "hindi": "\u0935\u093f\u0935\u093e\u0939\u093f\u0924 \u0905\u0932\u0917 \u0938\u0947 \u0926\u093e\u0916\u093f\u0932 (MFS)",
+            "italian": "Coniugi con dichiarazione separata (MFS)",
+            "persian": "\u0645\u062a\u0627\u0647\u0644\u060c \u062b\u0628\u062a \u062c\u062f\u0627\u06af\u0627\u0646\u0647 (MFS)",
+            "urdu": "\u0634\u0627\u062f\u06cc \u0634\u062f\u06c1 \u0639\u0644\u06cc\u062d\u062f\u06c1 \u0637\u0648\u0631 \u067e\u0631 \u0641\u0627\u0626\u0644\u0646\u06af (MFS)",
+            "dutch": "Gehuwd, afzonderlijke aangifte (MFS)",
+            "swedish": "Gift och deklarerar separat (MFS)",
+            "ukrainian": "\u041f\u043e\u0434\u0440\u0443\u0436\u0436\u044f, \u0449\u043e \u043f\u043e\u0434\u0430\u0454 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0456\u044e \u043e\u043a\u0440\u0435\u043c\u043e (MFS)",
+            "afrikaans": "Getroud en afsonderlik ingedien (MFS)"
           }
         },
         {
@@ -909,6 +963,24 @@
             "y": 206.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Cabeza de familia (HOH)",
+            "chinese": "\u6237\u4e3b (HOH)",
+            "arabic": "\u0631\u0628 \u0623\u0633\u0631\u0629 (HOH)",
+            "tagalog": "Puno ng sambahayan (HOH)",
+            "korean": "\uc138\ub300\uc8fc (HOH)",
+            "german": "Haushaltsvorstand (HOH)",
+            "portuguese": "Chefe de fam\u00edlia (HOH)",
+            "french": "Chef de famille (CDF)",
+            "hindi": "\u0918\u0930 \u0915\u093e \u092e\u0941\u0916\u093f\u092f\u093e (HOH)",
+            "italian": "Capofamiglia (HOH)",
+            "persian": "\u0633\u0631\u067e\u0631\u0633\u062a \u062e\u0627\u0646\u0648\u0627\u0631 (HOH)",
+            "urdu": "\u06af\u06be\u0631 \u06a9\u0627 \u0633\u0631\u0628\u0631\u0627\u06c1 (HOH)",
+            "dutch": "Hoofd van het huishouden (HOH)",
+            "swedish": "Hush\u00e5llsf\u00f6rest\u00e5ndare (HOH)",
+            "ukrainian": "\u0413\u043e\u043b\u043e\u0432\u0430 \u0434\u043e\u043c\u043e\u0433\u043e\u0441\u043f\u043e\u0434\u0430\u0440\u0441\u0442\u0432\u0430 (HOH)",
+            "afrikaans": "Hoof van huishouding (HOH)"
           }
         },
         {
@@ -921,6 +993,24 @@
             "y": 218.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "C\u00f3nyuge sobreviviente calificado(a) (QSS)",
+            "chinese": "\u5408\u683c\u7684\u5728\u4e16\u914d\u5076 (QSS)",
+            "arabic": "\u0632\u0648\u062c/\u0632\u0648\u062c\u0629 \u0639\u0644\u0649 \u0642\u064a\u062f \u0627\u0644\u062d\u064a\u0627\u0629 \u0645\u0624\u0647\u0644 (QSS)",
+            "tagalog": "Kwalipikadong natitirang asawa (QSS)",
+            "korean": "\uc790\uaca9 \uc788\ub294 \uc0dd\uc874 \ubc30\uc6b0\uc790 (QSS)",
+            "german": "Qualifizierter hinterbliebener Ehegatte (QSS)",
+            "portuguese": "C\u00f4njuge sobrevivente qualificado(a) (QSS)",
+            "french": "Conjoint(e) survivant(e) qualifi\u00e9(e) (CSQ)",
+            "hindi": "\u092f\u094b\u0917\u094d\u092f \u0909\u0924\u094d\u0924\u0930\u091c\u0940\u0935\u0940 \u092a\u0924\u093f/\u092a\u0924\u094d\u0928\u0940 (QSS)",
+            "italian": "Coniuge superstite avente diritto (QSS)",
+            "persian": "\u0647\u0645\u0633\u0631 \u0628\u0627\u0632\u0645\u0627\u0646\u062f\u0647 \u0648\u0627\u062c\u062f \u0634\u0631\u0627\u06cc\u0637 (QSS)",
+            "urdu": "\u06a9\u0648\u0627\u0644\u06cc\u0641\u0627\u0626\u0646\u06af \u0633\u0631\u0648\u0627\u0626\u06cc\u0648\u0646\u06af \u0633\u067e\u0627\u0624\u0633 (QSS)",
+            "dutch": "In aanmerking komende achterblijvende echtgenoot (QSS)",
+            "swedish": "Kvalificerad efterlevande make/maka (QSS)",
+            "ukrainian": "\u0412\u0434\u0456\u0432\u0435\u0446\u044c / \u0432\u0434\u043e\u0432\u0430, \u0449\u043e \u043c\u0430\u0454 \u043d\u0430 \u0446\u0435 \u043f\u0440\u0430\u0432\u043e (QSS)",
+            "afrikaans": "Kwalifiserende oorlewende gade (QSS)"
           }
         }
       ],
@@ -1034,6 +1124,24 @@
             "y": 287.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "S\u00ed",
+            "chinese": "\u662f",
+            "arabic": "\u0646\u0639\u0645",
+            "tagalog": "Oo",
+            "korean": "\uc608",
+            "german": "Ja",
+            "portuguese": "Sim",
+            "french": "Oui",
+            "hindi": "\u0939\u093e\u0901",
+            "italian": "S\u00ec",
+            "persian": "\u0628\u0644\u0647",
+            "urdu": "\u06c1\u0627\u06ba",
+            "dutch": "Ja",
+            "swedish": "Ja",
+            "ukrainian": "\u0422\u0430\u043a",
+            "afrikaans": "Ja"
           }
         },
         {
@@ -1046,6 +1154,24 @@
             "y": 287.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "No",
+            "chinese": "\u5426",
+            "arabic": "\u0644\u0627",
+            "tagalog": "Hindi",
+            "korean": "\uc544\ub2c8\uc694",
+            "german": "Nein",
+            "portuguese": "N\u00e3o",
+            "french": "Non",
+            "hindi": "\u0928\u0939\u0940\u0902",
+            "italian": "No",
+            "persian": "\u062e\u06cc\u0631",
+            "urdu": "\u0646\u06c1\u06cc\u06ba",
+            "dutch": "Nee",
+            "swedish": "Nej",
+            "ukrainian": "\u041d\u0456",
+            "afrikaans": "Nee"
           }
         }
       ],
@@ -2080,6 +2206,24 @@
             "y": 596.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "1 L\u00ednea 3a",
+            "chinese": "1 \u7b2c3a\u884c",
+            "arabic": "1 \u0627\u0644\u0633\u0637\u0631 3a",
+            "tagalog": "1 Linya 3a",
+            "korean": "1 \ub77c\uc778 3a",
+            "german": "1 Zeile 3a",
+            "portuguese": "1 Linha 3a",
+            "french": "1 Ligne 3a",
+            "hindi": "1 \u092a\u0902\u0915\u094d\u0924\u093f 3a",
+            "italian": "1 Riga 3a",
+            "persian": "\u06f1 \u0631\u062f\u06cc\u0641 3a",
+            "urdu": "1 \u0644\u0627\u0626\u0646 3a",
+            "dutch": "1 Regel 3a",
+            "swedish": "1 Rad 3a",
+            "ukrainian": "1 \u0420\u044f\u0434\u043e\u043a 3a",
+            "afrikaans": "1 Lyn 3a"
           }
         },
         {
@@ -2092,6 +2236,24 @@
             "y": 596.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "2 L\u00ednea 3b",
+            "chinese": "2 \u7b2c3b\u884c",
+            "arabic": "2 \u0627\u0644\u0633\u0637\u0631 3b",
+            "tagalog": "2 Linya 3b",
+            "korean": "2 \ub77c\uc778 3b",
+            "german": "2 Zeile 3b",
+            "portuguese": "2 Linha 3b",
+            "french": "2 Ligne 3b",
+            "hindi": "2 \u092a\u0902\u0915\u094d\u0924\u093f 3b",
+            "italian": "2 Riga 3b",
+            "persian": "\u06f2 \u0631\u062f\u06cc\u0641 3b",
+            "urdu": "2 \u0644\u0627\u0626\u0646 3b",
+            "dutch": "2 Regel 3b",
+            "swedish": "2 Rad 3b",
+            "ukrainian": "2 \u0420\u044f\u0434\u043e\u043a 3b",
+            "afrikaans": "2 Lyn 3b"
           }
         }
       ],
@@ -2160,6 +2322,24 @@
             "y": 620.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "1 Reinversi\u00f3n",
+            "chinese": "1 \u8f6c\u5b58",
+            "arabic": "1 Rollover",
+            "tagalog": "1 Rollover",
+            "korean": "1 \ub864\uc624\ubc84",
+            "german": "1 Rollover",
+            "portuguese": "1 Rollover",
+            "french": "1 Roulement",
+            "hindi": "1 \u0930\u094b\u0932\u0913\u0935\u0930",
+            "italian": "1 Rollover",
+            "persian": "\u06f1 Rollover",
+            "urdu": "1 \u0631\u0648\u0644 \u0627\u0648\u0648\u0631",
+            "dutch": "1 Rollover",
+            "swedish": "1 Rollover",
+            "ukrainian": "1 Rollover",
+            "afrikaans": "1 Oorrol"
           }
         },
         {
@@ -2172,6 +2352,24 @@
             "y": 620.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "2 QCD",
+            "chinese": "2 QCD",
+            "arabic": "2 QCD",
+            "tagalog": "2 QCD",
+            "korean": "2 QCD",
+            "german": "2 QCD",
+            "portuguese": "2 QCD",
+            "french": "2 QCD",
+            "hindi": "2 QCD",
+            "italian": "2 QCD",
+            "persian": "\u06f2 QCD",
+            "urdu": "2 QCD",
+            "dutch": "2 QCD",
+            "swedish": "2 QCD",
+            "ukrainian": "2 QCD",
+            "afrikaans": "2 QCD"
           }
         },
         {
@@ -2184,6 +2382,24 @@
             "y": 620.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "3",
+            "chinese": "3",
+            "arabic": "3",
+            "tagalog": "3",
+            "korean": "3",
+            "german": "3",
+            "portuguese": "3",
+            "french": "3",
+            "hindi": "3",
+            "italian": "3",
+            "persian": "\u06f3",
+            "urdu": "3",
+            "dutch": "3",
+            "swedish": "3",
+            "ukrainian": "3",
+            "afrikaans": "3"
           }
         }
       ],
@@ -2275,6 +2491,24 @@
             "y": 644.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "1 Reinversi\u00f3n",
+            "chinese": "1 \u8f6c\u5b58",
+            "arabic": "1 Rollover",
+            "tagalog": "1 Rollover",
+            "korean": "1 \ub864\uc624\ubc84",
+            "german": "1 Rollover",
+            "portuguese": "1 Rollover",
+            "french": "1 Roulement",
+            "hindi": "1 \u0930\u094b\u0932\u0913\u0935\u0930",
+            "italian": "1 Rollover",
+            "persian": "\u06f1 Rollover",
+            "urdu": "1 \u0631\u0648\u0644 \u0627\u0648\u0648\u0631",
+            "dutch": "1 Rollover",
+            "swedish": "1 Rollover",
+            "ukrainian": "1 Rollover",
+            "afrikaans": "1 Oorrol"
           }
         },
         {
@@ -2287,6 +2521,24 @@
             "y": 644.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "2 PSO",
+            "chinese": "2 PSO",
+            "arabic": "2 PSO",
+            "tagalog": "2 PSO",
+            "korean": "2 PSO",
+            "german": "2 PSO",
+            "portuguese": "2 PSO",
+            "french": "2 PSO",
+            "hindi": "2 PSO",
+            "italian": "2 PSO",
+            "persian": "\u06f2 PSO",
+            "urdu": "2 PSO",
+            "dutch": "2 PSO",
+            "swedish": "2 PSO",
+            "ukrainian": "2 PSO",
+            "afrikaans": "2 PSO"
           }
         },
         {
@@ -2299,6 +2551,24 @@
             "y": 644.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "3",
+            "chinese": "3",
+            "arabic": "3",
+            "tagalog": "3",
+            "korean": "3",
+            "german": "3",
+            "portuguese": "3",
+            "french": "3",
+            "hindi": "3",
+            "italian": "3",
+            "persian": "\u06f3",
+            "urdu": "3",
+            "dutch": "3",
+            "swedish": "3",
+            "ukrainian": "3",
+            "afrikaans": "3"
           }
         }
       ],
@@ -2444,6 +2714,24 @@
             "y": 704.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "No se requiere el Anexo D",
+            "chinese": "\u65e0\u9700\u9644\u8868D",
+            "arabic": "Schedule D \u063a\u064a\u0631 \u0645\u0637\u0644\u0648\u0628",
+            "tagalog": "Hindi kailangan ang Schedule D",
+            "korean": "Schedule D \ubd88\ud544\uc694",
+            "german": "Anlage D nicht erforderlich",
+            "portuguese": "Anexo D n\u00e3o exigido",
+            "french": "Annexe D non requise",
+            "hindi": "\u0905\u0928\u0941\u0938\u0942\u091a\u0940 D \u0906\u0935\u0936\u094d\u092f\u0915 \u0928\u0939\u0940\u0902 \u0939\u0948",
+            "italian": "Quadro D non richiesto",
+            "persian": "Schedule D \u0644\u0627\u0632\u0645 \u0646\u06cc\u0633\u062a",
+            "urdu": "\u0634\u06cc\u0688\u0648\u0644 D \u06a9\u06cc \u0636\u0631\u0648\u0631\u062a \u0646\u06c1\u06cc\u06ba",
+            "dutch": "Schedule D niet vereist",
+            "swedish": "Schedule D kr\u00e4vs ej",
+            "ukrainian": "\u0414\u043e\u0434\u0430\u0442\u043e\u043a D \u043d\u0435 \u0432\u0438\u043c\u0430\u0433\u0430\u0454\u0442\u044c\u0441\u044f",
+            "afrikaans": "Bylae D nie vereis nie"
           }
         },
         {
@@ -2456,6 +2744,24 @@
             "y": 704.5,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Incluye la ganancia o (p\u00e9rdida) de capital del hijo(a)",
+            "chinese": "\u5305\u62ec\u5b50\u5973\u7684\u8d44\u672c\u6536\u76ca\u6216\uff08\u4e8f\u635f\uff09",
+            "arabic": "\u064a\u0634\u0645\u0644 \u0645\u0643\u0627\u0633\u0628 \u0631\u0623\u0633 \u0627\u0644\u0645\u0627\u0644 \u0623\u0648 (\u062e\u0633\u0627\u0631\u0629) \u0627\u0644\u0637\u0641\u0644",
+            "tagalog": "Kasama ang capital gain o (loss) ng anak",
+            "korean": "\uc790\ub140\uc758 \uc790\ubcf8 \uc774\ub4dd \ub610\ub294 (\uc190\uc2e4) \ud3ec\ud568",
+            "german": "Beinhaltet Kapitalgewinn oder (-verlust) des Kindes",
+            "portuguese": "Inclui ganho ou (perda) de capital de dependente",
+            "french": "Inclut le gain ou la perte en capital de l'enfant",
+            "hindi": "\u092c\u091a\u094d\u091a\u0947 \u0915\u093e \u092a\u0942\u0902\u091c\u0940\u0917\u0924 \u0932\u093e\u092d \u092f\u093e (\u0939\u093e\u0928\u093f) \u0936\u093e\u092e\u093f\u0932 \u0939\u0948",
+            "italian": "Include la plusvalenza o (minusvalenza) del figlio",
+            "persian": "\u0634\u0627\u0645\u0644 \u0633\u0648\u062f \u06cc\u0627 (\u0632\u06cc\u0627\u0646) \u0633\u0631\u0645\u0627\u06cc\u0647 \u0641\u0631\u0632\u0646\u062f \u0627\u0633\u062a",
+            "urdu": "\u0628\u0686\u06d2 \u06a9\u0627 \u06a9\u06cc\u067e\u06cc\u0679\u0644 \u06af\u06cc\u0646 \u06cc\u0627 (\u0646\u0642\u0635\u0627\u0646) \u0634\u0627\u0645\u0644 \u06c1\u06d2",
+            "dutch": "Inclusief vermogenswinst of (-verlies) van kind",
+            "swedish": "Inkluderar barns kapitalvinst eller (f\u00f6rlust)",
+            "ukrainian": "\u0412\u043a\u043b\u044e\u0447\u0430\u0454 \u043f\u0440\u0438\u0440\u0456\u0441\u0442 \u043a\u0430\u043f\u0456\u0442\u0430\u043b\u0443 \u0430\u0431\u043e (\u0437\u0431\u0438\u0442\u043e\u043a) \u0434\u0438\u0442\u0438\u043d\u0438",
+            "afrikaans": "Sluit kind se kapitaalwins of (-verlies) in"
           }
         }
       ],
@@ -2812,6 +3118,24 @@
             "y": 158.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "1 Formulario 8814",
+            "chinese": "1 \u8868\u683c8814",
+            "arabic": "1 Form 8814",
+            "tagalog": "1 Form 8814",
+            "korean": "1 \uc591\uc2dd 8814",
+            "german": "1 Formular 8814",
+            "portuguese": "1 Formul\u00e1rio 8814",
+            "french": "1 Formulaire 8814",
+            "hindi": "1 \u092b\u0949\u0930\u094d\u092e 8814",
+            "italian": "1 Modulo 8814",
+            "persian": "\u06f1 \u0641\u0631\u0645 8814",
+            "urdu": "1 \u0641\u0627\u0631\u0645 8814",
+            "dutch": "1 Formulier 8814",
+            "swedish": "1 Form 8814",
+            "ukrainian": "1 \u0424\u043e\u0440\u043c\u0430 8814",
+            "afrikaans": "1 Vorm 8814"
           }
         },
         {
@@ -2824,6 +3148,24 @@
             "y": 158.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "2 Formulario 4972",
+            "chinese": "2 \u8868\u683c4972",
+            "arabic": "2 Form 4972",
+            "tagalog": "2 Form 4972",
+            "korean": "2 \uc591\uc2dd 4972",
+            "german": "2 Formular 4972",
+            "portuguese": "2 Formul\u00e1rio 4972",
+            "french": "2 Formulaire 4972",
+            "hindi": "2 \u092b\u0949\u0930\u094d\u092e 4972",
+            "italian": "2 Modulo 4972",
+            "persian": "\u06f2 \u0641\u0631\u0645 4972",
+            "urdu": "2 \u0641\u0627\u0631\u0645 4972",
+            "dutch": "2 Formulier 4972",
+            "swedish": "2 Form 4972",
+            "ukrainian": "2 \u0424\u043e\u0440\u043c\u0430 4972",
+            "afrikaans": "2 Vorm 4972"
           }
         },
         {
@@ -2836,6 +3178,24 @@
             "y": 158.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "3",
+            "chinese": "3",
+            "arabic": "3",
+            "tagalog": "3",
+            "korean": "3",
+            "german": "3",
+            "portuguese": "3",
+            "french": "3",
+            "hindi": "3",
+            "italian": "3",
+            "persian": "\u06f3",
+            "urdu": "3",
+            "dutch": "3",
+            "swedish": "3",
+            "ukrainian": "3",
+            "afrikaans": "3"
           }
         }
       ],
@@ -3415,6 +3775,24 @@
             "y": 506.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Cheques",
+            "chinese": "\u652f\u7968\u8d26\u6237",
+            "arabic": "\u062d\u0633\u0627\u0628 \u062c\u0627\u0631\u064a",
+            "tagalog": "Checking",
+            "korean": "\ub2f9\uc88c \uc608\uae08",
+            "german": "Girokonto",
+            "portuguese": "Conta corrente",
+            "french": "Compte ch\u00e8que",
+            "hindi": "\u091a\u093e\u0932\u0942",
+            "italian": "Conto corrente",
+            "persian": "\u062c\u0627\u0631\u06cc",
+            "urdu": "\u0686\u06cc\u06a9\u0646\u06af",
+            "dutch": "Betaalrekening",
+            "swedish": "L\u00f6nekonto",
+            "ukrainian": "\u041f\u043e\u0442\u043e\u0447\u043d\u0438\u0439",
+            "afrikaans": "Tjek"
           }
         },
         {
@@ -3427,6 +3805,24 @@
             "y": 506.0,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "Ahorros",
+            "chinese": "\u50a8\u84c4\u8d26\u6237",
+            "arabic": "\u062d\u0633\u0627\u0628 \u062a\u0648\u0641\u064a\u0631",
+            "tagalog": "Savings",
+            "korean": "\uc800\ucd95 \uc608\uae08",
+            "german": "Sparkonto",
+            "portuguese": "Poupan\u00e7a",
+            "french": "Compte d'\u00e9pargne",
+            "hindi": "\u092c\u091a\u0924",
+            "italian": "Conto di risparmio",
+            "persian": "\u067e\u0633\u200c\u0627\u0646\u062f\u0627\u0632",
+            "urdu": "\u0633\u06cc\u0648\u0646\u06af\u0632",
+            "dutch": "Spaarrekening",
+            "swedish": "Sparkonto",
+            "ukrainian": "\u041e\u0449\u0430\u0434\u043d\u0438\u0439",
+            "afrikaans": "Spaar"
           }
         }
       ],
@@ -3532,6 +3928,24 @@
             "y": 577.75,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "S\u00ed. Complete a continuaci\u00f3n.",
+            "chinese": "\u662f\u3002\u8bf7\u586b\u5199\u4ee5\u4e0b\u90e8\u5206\u3002",
+            "arabic": "\u0646\u0639\u0645. \u0623\u0643\u0645\u0644 \u0623\u062f\u0646\u0627\u0647.",
+            "tagalog": "Oo. Kumpletuhin sa ibaba.",
+            "korean": "\uc608. \uc544\ub798\ub97c \uc791\uc131\ud558\uc2ed\uc2dc\uc624.",
+            "german": "Ja. F\u00fcllen Sie unten aus.",
+            "portuguese": "Sim. Preencha abaixo.",
+            "french": "Oui. Remplir ci-dessous.",
+            "hindi": "\u0939\u093e\u0901\u0964 \u0928\u0940\u091a\u0947 \u092a\u0942\u0930\u093e \u0915\u0930\u0947\u0902\u0964",
+            "italian": "S\u00ec. Compilare di seguito.",
+            "persian": "\u0628\u0644\u0647. \u0642\u0633\u0645\u062a \u0632\u06cc\u0631 \u0631\u0627 \u062a\u06a9\u0645\u06cc\u0644 \u06a9\u0646\u06cc\u062f.",
+            "urdu": "\u06c1\u0627\u06ba\u06d4 \u0646\u06cc\u0686\u06d2 \u0645\u06a9\u0645\u0644 \u06a9\u0631\u06cc\u06ba\u06d4",
+            "dutch": "Ja. Vul hieronder in.",
+            "swedish": "Ja. Fyll i nedan.",
+            "ukrainian": "\u0422\u0430\u043a. \u0417\u0430\u043f\u043e\u0432\u043d\u0456\u0442\u044c \u043d\u0438\u0436\u0447\u0435.",
+            "afrikaans": "Ja. Voltooi hieronder."
           }
         },
         {
@@ -3544,6 +3958,24 @@
             "y": 577.75,
             "width": 8.0,
             "height": 8.0
+          },
+          "label_translations": {
+            "spanish": "No",
+            "chinese": "\u5426",
+            "arabic": "\u0644\u0627",
+            "tagalog": "Hindi",
+            "korean": "\uc544\ub2c8\uc694",
+            "german": "Nein",
+            "portuguese": "N\u00e3o",
+            "french": "Non",
+            "hindi": "\u0928\u0939\u0940\u0902",
+            "italian": "No",
+            "persian": "\u062e\u06cc\u0631",
+            "urdu": "\u0646\u06c1\u06cc\u06ba",
+            "dutch": "Nee",
+            "swedish": "Nej",
+            "ukrainian": "\u041d\u0456",
+            "afrikaans": "Nee"
           }
         }
       ],
