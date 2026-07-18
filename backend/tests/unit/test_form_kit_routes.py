@@ -63,7 +63,8 @@ class _FakeStore:
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # asyncio.run, not get_event_loop -- ordering-robust (bd polyglot-pdf-r8gq).
+    return asyncio.run(coro)
 
 
 def test_custom_schema_path_is_propagated(monkeypatch):
@@ -526,7 +527,7 @@ def test_gcs_non_utf8_manifest_maps_to_502(monkeypatch):
     store._fetch_bytes = _fake_fetch  # type: ignore[assignment]
 
     with pytest.raises(_FKSE):
-        _asyncio.get_event_loop().run_until_complete(store.load_manifest())
+        _asyncio.run(store.load_manifest())
 
 
 # --- round-5: normalize at the store boundary + GCS fail-closed (Codex P1) --

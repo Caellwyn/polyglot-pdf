@@ -31,7 +31,10 @@ from backend.services.form_kits import (
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # asyncio.run (not get_event_loop): the legacy accessor breaks when an
+    # earlier test file (e.g. the translate_option_labels CLI suite) has
+    # closed the main loop via its own asyncio.run (bd polyglot-pdf-r8gq).
+    return asyncio.run(coro)
 
 
 # A minimal schema that validates against the canonical Pydantic FormSchema
