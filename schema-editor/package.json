@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "build:hosted": "tsc && vite build --mode hosted",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
