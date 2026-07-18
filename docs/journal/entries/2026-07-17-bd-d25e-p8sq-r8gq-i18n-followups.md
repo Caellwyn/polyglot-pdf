@@ -47,6 +47,14 @@ while I'm away").
   Verified: the full backend suite passes with the CLI file forced first AND
   in natural order.
 
+- Assess outcome: rubrics 5/5 PASS after one fix. Fresh-eyes round 1 (Sonnet)
+  found ONE correct blocker, adopted: the new test file's `.mock.calls.at(-1)`
+  failed `tsc --noEmit` under schema-editor's ES2020 lib target, silently
+  breaking `npm run build` (the editor deploy path) while vitest stayed green
+  -- rewritten to a length-index. It also filed bd polyglot-pdf-1rgr (the
+  schema-editor CI job runs no typecheck, the systemic gap that let this
+  through). Round 2 (Opus final clearing round) on the fixed diff.
+
 ## Lessons
 
 - `asyncio.get_event_loop().run_until_complete` in sync tests is a landmine

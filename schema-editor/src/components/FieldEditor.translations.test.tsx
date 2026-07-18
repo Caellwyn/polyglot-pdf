@@ -55,7 +55,8 @@ describe('FieldEditor label edit drops stale label_translations (bd d25e)', () =
     fireEvent.change(labelInput, { target: { value: 'Apply now' } });
 
     expect(onUpdateField).toHaveBeenCalled();
-    const updated = onUpdateField.mock.calls.at(-1)![0];
+    const calls = onUpdateField.mock.calls;
+    const updated = calls[calls.length - 1][0];
     const [edited, sibling] = updated.options;
     expect(edited.label).toBe('Apply now');
     expect('label_translations' in edited).toBe(false);
@@ -85,7 +86,8 @@ describe('FieldEditor label edit drops stale label_translations (bd d25e)', () =
     // Editing the SIBLING drops only the sibling's translations.
     const siblingInput = screen.getByDisplayValue('Renew') as HTMLInputElement;
     fireEvent.change(siblingInput, { target: { value: 'Renew it' } });
-    const updated = onUpdateField.mock.calls.at(-1)![0];
+    const calls = onUpdateField.mock.calls;
+    const updated = calls[calls.length - 1][0];
     const [first, edited] = updated.options;
     expect(first.label_translations).toEqual(
       { spanish: 'Solicitar', french: 'Demander' });
