@@ -40,6 +40,7 @@ SPOKEN_LANGUAGE_BCP47 = {
     "persian": "fa-IR",
     "dutch": "nl-NL",
     "ukrainian": "uk-UA",
+    "russian": "ru-RU",
     "swedish": "sv-SE",
     "afrikaans": "af-ZA",
 }

@@ -210,7 +210,8 @@
             "dutch": "Een nieuw ITIN aanvragen",
             "afrikaans": "Doen aansoek vir 'n nuwe ITIN",
             "swedish": "Ans\u00f6k om ett nytt ITIN",
-            "ukrainian": "\u041f\u043e\u0434\u0430\u0442\u0438 \u0437\u0430\u044f\u0432\u043a\u0443 \u043d\u0430 \u043e\u0442\u0440\u0438\u043c\u0430\u043d\u043d\u044f \u043d\u043e\u0432\u043e\u0433\u043e ITIN"
+            "ukrainian": "\u041f\u043e\u0434\u0430\u0442\u0438 \u0437\u0430\u044f\u0432\u043a\u0443 \u043d\u0430 \u043e\u0442\u0440\u0438\u043c\u0430\u043d\u043d\u044f \u043d\u043e\u0432\u043e\u0433\u043e ITIN",
+            "russian": "\u041f\u043e\u0434\u0430\u0442\u044c \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0430 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u043d\u043e\u0432\u043e\u0433\u043e ITIN"
           }
         },
         {
@@ -240,7 +241,8 @@
             "dutch": "Een bestaand ITIN verlengen",
             "afrikaans": "Hernu 'n bestaande ITIN",
             "swedish": "F\u00f6rnya ett befintligt ITIN",
-            "ukrainian": "\u041f\u043e\u043d\u043e\u0432\u0438\u0442\u0438 \u043d\u0430\u044f\u0432\u043d\u0438\u0439 ITIN"
+            "ukrainian": "\u041f\u043e\u043d\u043e\u0432\u0438\u0442\u0438 \u043d\u0430\u044f\u0432\u043d\u0438\u0439 ITIN",
+            "russian": "\u041f\u0440\u043e\u0434\u043b\u0438\u0442\u044c \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0439 ITIN"
           }
         }
       ],
@@ -835,7 +837,8 @@
             "dutch": "Man",
             "afrikaans": "Manlik",
             "swedish": "Man",
-            "ukrainian": "\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430"
+            "ukrainian": "\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430",
+            "russian": "\u041c\u0443\u0436\u0441\u043a\u043e\u0439"
           }
         },
         {
@@ -865,7 +868,8 @@
             "dutch": "Vrouw",
             "afrikaans": "Vroulik",
             "swedish": "Kvinna",
-            "ukrainian": "\u0416\u0456\u043d\u043e\u0447\u0430"
+            "ukrainian": "\u0416\u0456\u043d\u043e\u0447\u0430",
+            "russian": "\u0416\u0435\u043d\u0441\u043a\u0438\u0439"
           }
         }
       ],
@@ -969,7 +973,8 @@
             "dutch": "Paspoort",
             "afrikaans": "Paspoort",
             "swedish": "Pass",
-            "ukrainian": "\u041f\u0430\u0441\u043f\u043e\u0440\u0442"
+            "ukrainian": "\u041f\u0430\u0441\u043f\u043e\u0440\u0442",
+            "russian": "\u041f\u0430\u0441\u043f\u043e\u0440\u0442"
           }
         },
         {
@@ -999,7 +1004,8 @@
             "dutch": "Rijbewijs/identiteitskaart van de staat",
             "afrikaans": "Bestuurderslisensie/Staats-ID",
             "swedish": "K\u00f6rkort/Statligt ID-kort",
-            "ukrainian": "\u0412\u043e\u0434\u0456\u0439\u0441\u044c\u043a\u0435 \u043f\u043e\u0441\u0432\u0456\u0434\u0447\u0435\u043d\u043d\u044f/\u0406\u0434\u0435\u043d\u0442\u0438\u0444\u0456\u043a\u0430\u0446\u0456\u0439\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u0448\u0442\u0430\u0442\u0443"
+            "ukrainian": "\u0412\u043e\u0434\u0456\u0439\u0441\u044c\u043a\u0435 \u043f\u043e\u0441\u0432\u0456\u0434\u0447\u0435\u043d\u043d\u044f/\u0406\u0434\u0435\u043d\u0442\u0438\u0444\u0456\u043a\u0430\u0446\u0456\u0439\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u0448\u0442\u0430\u0442\u0443",
+            "russian": "\u0412\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u043e\u0435 \u0443\u0434\u043e\u0441\u0442\u043e\u0432\u0435\u0440\u0435\u043d\u0438\u0435/\u0443\u0434\u043e\u0441\u0442\u043e\u0432\u0435\u0440\u0435\u043d\u0438\u0435 \u043b\u0438\u0447\u043d\u043e\u0441\u0442\u0438 \u0448\u0442\u0430\u0442\u0430"
           }
         },
         {
@@ -1029,7 +1035,8 @@
             "dutch": "USCIS-documentatie",
             "afrikaans": "USCIS-dokumentasie",
             "swedish": "Dokumentation fr\u00e5n USCIS",
-            "ukrainian": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0456\u044f USCIS"
+            "ukrainian": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0456\u044f USCIS",
+            "russian": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f USCIS"
           }
         },
         {
@@ -1059,7 +1066,8 @@
             "dutch": "Overig",
             "afrikaans": "Ander",
             "swedish": "Annat",
-            "ukrainian": "\u0406\u043d\u0448\u0435"
+            "ukrainian": "\u0406\u043d\u0448\u0435",
+            "russian": "\u0414\u0440\u0443\u0433\u043e\u0435"
           }
         }
       ],
@@ -1183,7 +1191,8 @@
             "dutch": "Nee/weet niet. Sla regel 6f over.",
             "afrikaans": "Nee/Weet nie. Slaan re\u00ebl 6f oor.",
             "swedish": "Nej/Vet inte. Hoppa \u00f6ver rad 6f.",
-            "ukrainian": "\u041d\u0456/\u041d\u0435 \u0437\u043d\u0430\u044e. \u041f\u0440\u043e\u043f\u0443\u0441\u0442\u0456\u0442\u044c \u0440\u044f\u0434\u043e\u043a 6f."
+            "ukrainian": "\u041d\u0456/\u041d\u0435 \u0437\u043d\u0430\u044e. \u041f\u0440\u043e\u043f\u0443\u0441\u0442\u0456\u0442\u044c \u0440\u044f\u0434\u043e\u043a 6f.",
+            "russian": "\u041d\u0435\u0442/\u041d\u0435 \u0437\u043d\u0430\u044e. \u041f\u0440\u043e\u043f\u0443\u0441\u0442\u0438\u0442\u0435 \u0441\u0442\u0440\u043e\u043a\u0443 6f."
           }
         },
         {
@@ -1213,7 +1222,8 @@
             "dutch": "Ja. Vul regel 6f in.",
             "afrikaans": "Ja. Voltooi re\u00ebl 6f.",
             "swedish": "Ja. Fyll i rad 6f.",
-            "ukrainian": "\u0422\u0430\u043a. \u0417\u0430\u043f\u043e\u0432\u043d\u0456\u0442\u044c \u0440\u044f\u0434\u043e\u043a 6f."
+            "ukrainian": "\u0422\u0430\u043a. \u0417\u0430\u043f\u043e\u0432\u043d\u0456\u0442\u044c \u0440\u044f\u0434\u043e\u043a 6f.",
+            "russian": "\u0414\u0430. \u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0441\u0442\u0440\u043e\u043a\u0443 6f."
           }
         }
       ],
@@ -1617,7 +1627,8 @@
             "dutch": "Ouder",
             "afrikaans": "Ouer",
             "swedish": "F\u00f6r\u00e4lder",
-            "ukrainian": "\u041e\u0434\u0438\u043d \u0437 \u0431\u0430\u0442\u044c\u043a\u0456\u0432"
+            "ukrainian": "\u041e\u0434\u0438\u043d \u0437 \u0431\u0430\u0442\u044c\u043a\u0456\u0432",
+            "russian": "\u0420\u043e\u0434\u0438\u0442\u0435\u043b\u044c"
           }
         },
         {
@@ -1647,7 +1658,8 @@
             "dutch": "Volmacht",
             "afrikaans": "Prokurasie",
             "swedish": "Fullmakt",
-            "ukrainian": "\u0414\u043e\u0432\u0456\u0440\u0435\u043d\u0456\u0441\u0442\u044c"
+            "ukrainian": "\u0414\u043e\u0432\u0456\u0440\u0435\u043d\u0456\u0441\u0442\u044c",
+            "russian": "\u0414\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c"
           }
         },
         {
@@ -1677,7 +1689,8 @@
             "dutch": "Door de rechtbank aangestelde voogd",
             "afrikaans": "Hof-aangestelde voog",
             "swedish": "Av domstol utsedd f\u00f6rmyndare",
-            "ukrainian": "\u041f\u0440\u0438\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0439 \u0441\u0443\u0434\u043e\u043c \u043e\u043f\u0456\u043a\u0443\u043d"
+            "ukrainian": "\u041f\u0440\u0438\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0439 \u0441\u0443\u0434\u043e\u043c \u043e\u043f\u0456\u043a\u0443\u043d",
+            "russian": "\u041e\u043f\u0435\u043a\u0443\u043d, \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u043d\u044b\u0439 \u0441\u0443\u0434\u043e\u043c"
           }
         }
       ],

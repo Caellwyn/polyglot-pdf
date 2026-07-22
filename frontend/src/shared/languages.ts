@@ -20,6 +20,7 @@ export const SPOKEN_LANGUAGES = [
 	{ name: "Persian", nativeName: "فارسی (Fārsī)" },
 	{ name: "Dutch", nativeName: "Nederlands" },
 	{ name: "Ukrainian", nativeName: "Українська (Ukrayins'ka)" },
+	{ name: "Russian", nativeName: "Русский (Russkiy)" },
 	{ name: "Swedish", nativeName: "Svenska" },
 	{ name: "Afrikaans", nativeName: "Afrikaans" },
 ] as const;

@@ -51,7 +51,7 @@ def test_map_covers_all_spoken_languages():
     expected = {
         "english", "spanish", "chinese", "tagalog", "arabic", "french",
         "korean", "german", "portuguese", "hindi", "italian", "urdu",
-        "persian", "dutch", "ukrainian", "swedish", "afrikaans",
+        "persian", "dutch", "ukrainian", "russian", "swedish", "afrikaans",
     }
     assert set(SPOKEN_LANGUAGE_BCP47.keys()) == expected
 

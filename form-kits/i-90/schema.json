@@ -726,7 +726,8 @@
             "dutch": "Ja (Ga verder naar itemnummers 5.a. - 5.c.)",
             "ukrainian": "\u0422\u0430\u043a (\u041f\u0435\u0440\u0435\u0439\u0434\u0456\u0442\u044c \u0434\u043e \u043f\u0443\u043d\u043a\u0442\u0456\u0432 5.a. - 5.c.)",
             "swedish": "Ja (Forts\u00e4tt till punkt 5.a. - 5.c.)",
-            "afrikaans": "Ja (Gaan voort na Itemnommers 5.a. - 5.c.)"
+            "afrikaans": "Ja (Gaan voort na Itemnommers 5.a. - 5.c.)",
+            "russian": "\u0414\u0430 (\u041f\u0435\u0440\u0435\u0439\u0434\u0438\u0442\u0435 \u043a \u043f\u0443\u043d\u043a\u0442\u0430\u043c 5.a. - 5.c.)"
           }
         },
         {
@@ -756,7 +757,8 @@
             "dutch": "Nee (Ga verder naar itemnummers 6.a. - 6.c.)",
             "ukrainian": "\u041d\u0456 (\u041f\u0435\u0440\u0435\u0439\u0434\u0456\u0442\u044c \u0434\u043e \u043f\u0443\u043d\u043a\u0442\u0456\u0432 6.a. - 6.c.)",
             "swedish": "Nej (Forts\u00e4tt till punkt 6.a. - 6.c.)",
-            "afrikaans": "Nee (Gaan voort na Itemnommers 6.a. - 6.c.)"
+            "afrikaans": "Nee (Gaan voort na Itemnommers 6.a. - 6.c.)",
+            "russian": "\u041d\u0435\u0442 (\u041f\u0435\u0440\u0435\u0439\u0434\u0438\u0442\u0435 \u043a \u043f\u0443\u043d\u043a\u0442\u0430\u043c 6.a. - 6.c.)"
           }
         },
         {
@@ -786,7 +788,8 @@
             "dutch": "Niet van toepassing - Ik heb mijn vorige kaart nooit ontvangen",
             "ukrainian": "\u041d\u0435 \u0437\u0430\u0441\u0442\u043e\u0441\u043e\u0432\u0443\u0454\u0442\u044c\u0441\u044f - \u044f \u0442\u0430\u043a \u0456 \u043d\u0435 \u043e\u0442\u0440\u0438\u043c\u0430\u0432(-\u043b\u0430) \u0441\u0432\u043e\u044e \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044e \u043a\u0430\u0440\u0442\u043a\u0443",
             "swedish": "Ej till\u00e4mpligt \u2013 Jag fick aldrig mitt tidigare kort",
-            "afrikaans": "Nie van toepassing nie - Ek het nooit my vorige kaart ontvang nie"
+            "afrikaans": "Nie van toepassing nie - Ek het nooit my vorige kaart ontvang nie",
+            "russian": "\u041d\u0435\u043f\u0440\u0438\u043c\u0435\u043d\u0438\u043c\u043e - \u044f \u0442\u0430\u043a \u0438 \u043d\u0435 \u043f\u043e\u043b\u0443\u0447\u0438\u043b(\u0430) \u0441\u0432\u043e\u044e \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0443\u044e \u043a\u0430\u0440\u0442\u0443"
           }
         }
       ],
@@ -1022,7 +1025,8 @@
             "dutch": "Suite",
             "ukrainian": "\u041e\u0444\u0456\u0441",
             "swedish": "Svit",
-            "afrikaans": "Suite"
+            "afrikaans": "Suite",
+            "russian": "\u041e\u0444\u0438\u0441"
           }
         },
         {
@@ -1053,7 +1057,8 @@
             "dutch": "Verdieping",
             "ukrainian": "\u041f\u043e\u0432\u0435\u0440\u0445",
             "swedish": "V\u00e5ning",
-            "afrikaans": "Vloer"
+            "afrikaans": "Vloer",
+            "russian": "\u042d\u0442\u0430\u0436"
           }
         },
         {
@@ -1084,7 +1089,8 @@
             "dutch": "Appartement",
             "ukrainian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430",
             "swedish": "L\u00e4genhet",
-            "afrikaans": "Woonstel"
+            "afrikaans": "Woonstel",
+            "russian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430"
           }
         }
       ],
@@ -1216,7 +1222,8 @@
             "dutch": "Alabama",
             "ukrainian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430",
             "swedish": "Alabama",
-            "afrikaans": "Alabama"
+            "afrikaans": "Alabama",
+            "russian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430"
           }
         },
         {
@@ -1238,7 +1245,8 @@
             "dutch": "Alaska",
             "ukrainian": "\u0410\u043b\u044f\u0441\u043a\u0430",
             "swedish": "Alaska",
-            "afrikaans": "Alaska"
+            "afrikaans": "Alaska",
+            "russian": "\u0410\u043b\u044f\u0441\u043a\u0430"
           }
         },
         {
@@ -1260,7 +1268,8 @@
             "dutch": "Arizona",
             "ukrainian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430",
             "swedish": "Arizona",
-            "afrikaans": "Arizona"
+            "afrikaans": "Arizona",
+            "russian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430"
           }
         },
         {
@@ -1282,7 +1291,8 @@
             "dutch": "Arkansas",
             "ukrainian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Arkansas",
-            "afrikaans": "Arkansas"
+            "afrikaans": "Arkansas",
+            "russian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -1304,7 +1314,8 @@
             "dutch": "Californi\u00eb",
             "ukrainian": "\u041a\u0430\u043b\u0456\u0444\u043e\u0440\u043d\u0456\u044f",
             "swedish": "Kalifornien",
-            "afrikaans": "Kaliforni\u00eb"
+            "afrikaans": "Kaliforni\u00eb",
+            "russian": "\u041a\u0430\u043b\u0438\u0444\u043e\u0440\u043d\u0438\u044f"
           }
         },
         {
@@ -1326,7 +1337,8 @@
             "dutch": "Colorado",
             "ukrainian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e",
             "swedish": "Colorado",
-            "afrikaans": "Colorado"
+            "afrikaans": "Colorado",
+            "russian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e"
           }
         },
         {
@@ -1348,7 +1360,8 @@
             "dutch": "Connecticut",
             "ukrainian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442",
             "swedish": "Connecticut",
-            "afrikaans": "Connecticut"
+            "afrikaans": "Connecticut",
+            "russian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442"
           }
         },
         {
@@ -1370,7 +1383,8 @@
             "dutch": "Delaware",
             "ukrainian": "\u0414\u0435\u043b\u0430\u0432\u0435\u0440",
             "swedish": "Delaware",
-            "afrikaans": "Delaware"
+            "afrikaans": "Delaware",
+            "russian": "\u0414\u0435\u043b\u0430\u0432\u044d\u0440"
           }
         },
         {
@@ -1392,7 +1406,8 @@
             "dutch": "Florida",
             "ukrainian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430",
             "swedish": "Florida",
-            "afrikaans": "Florida"
+            "afrikaans": "Florida",
+            "russian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430"
           }
         },
         {
@@ -1414,7 +1429,8 @@
             "dutch": "Georgia",
             "ukrainian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0456\u044f",
             "swedish": "Georgia",
-            "afrikaans": "Georgia"
+            "afrikaans": "Georgia",
+            "russian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0438\u044f"
           }
         },
         {
@@ -1436,7 +1452,8 @@
             "dutch": "Hawa\u00ef",
             "ukrainian": "\u0413\u0430\u0432\u0430\u0457",
             "swedish": "Hawaii",
-            "afrikaans": "Hawaii"
+            "afrikaans": "Hawaii",
+            "russian": "\u0413\u0430\u0432\u0430\u0439\u0438"
           }
         },
         {
@@ -1458,7 +1475,8 @@
             "dutch": "Idaho",
             "ukrainian": "\u0410\u0439\u0434\u0430\u0445\u043e",
             "swedish": "Idaho",
-            "afrikaans": "Idaho"
+            "afrikaans": "Idaho",
+            "russian": "\u0410\u0439\u0434\u0430\u0445\u043e"
           }
         },
         {
@@ -1480,7 +1498,8 @@
             "dutch": "Illinois",
             "ukrainian": "\u0406\u043b\u043b\u0456\u043d\u043e\u0439\u0441",
             "swedish": "Illinois",
-            "afrikaans": "Illinois"
+            "afrikaans": "Illinois",
+            "russian": "\u0418\u043b\u043b\u0438\u043d\u043e\u0439\u0441"
           }
         },
         {
@@ -1502,7 +1521,8 @@
             "dutch": "Indiana",
             "ukrainian": "\u0406\u043d\u0434\u0456\u0430\u043d\u0430",
             "swedish": "Indiana",
-            "afrikaans": "Indiana"
+            "afrikaans": "Indiana",
+            "russian": "\u0418\u043d\u0434\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -1524,7 +1544,8 @@
             "dutch": "Iowa",
             "ukrainian": "\u0410\u0439\u043e\u0432\u0430",
             "swedish": "Iowa",
-            "afrikaans": "Iowa"
+            "afrikaans": "Iowa",
+            "russian": "\u0410\u0439\u043e\u0432\u0430"
           }
         },
         {
@@ -1546,7 +1567,8 @@
             "dutch": "Kansas",
             "ukrainian": "\u041a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Kansas",
-            "afrikaans": "Kansas"
+            "afrikaans": "Kansas",
+            "russian": "\u041a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -1568,7 +1590,8 @@
             "dutch": "Kentucky",
             "ukrainian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0456",
             "swedish": "Kentucky",
-            "afrikaans": "Kentucky"
+            "afrikaans": "Kentucky",
+            "russian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0438"
           }
         },
         {
@@ -1590,7 +1613,8 @@
             "dutch": "Louisiana",
             "ukrainian": "\u041b\u0443\u0457\u0437\u0456\u0430\u043d\u0430",
             "swedish": "Louisiana",
-            "afrikaans": "Louisiana"
+            "afrikaans": "Louisiana",
+            "russian": "\u041b\u0443\u0438\u0437\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -1612,7 +1636,8 @@
             "dutch": "Maine",
             "ukrainian": "\u041c\u0435\u043d",
             "swedish": "Maine",
-            "afrikaans": "Maine"
+            "afrikaans": "Maine",
+            "russian": "\u041c\u044d\u043d"
           }
         },
         {
@@ -1634,7 +1659,8 @@
             "dutch": "Maryland",
             "ukrainian": "\u041c\u0435\u0440\u0456\u043b\u0435\u043d\u0434",
             "swedish": "Maryland",
-            "afrikaans": "Maryland"
+            "afrikaans": "Maryland",
+            "russian": "\u041c\u044d\u0440\u0438\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -1656,7 +1682,8 @@
             "dutch": "Massachusetts",
             "ukrainian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441",
             "swedish": "Massachusetts",
-            "afrikaans": "Massachusetts"
+            "afrikaans": "Massachusetts",
+            "russian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441"
           }
         },
         {
@@ -1678,7 +1705,8 @@
             "dutch": "Michigan",
             "ukrainian": "\u041c\u0456\u0447\u0438\u0433\u0430\u043d",
             "swedish": "Michigan",
-            "afrikaans": "Michigan"
+            "afrikaans": "Michigan",
+            "russian": "\u041c\u0438\u0447\u0438\u0433\u0430\u043d"
           }
         },
         {
@@ -1700,7 +1728,8 @@
             "dutch": "Minnesota",
             "ukrainian": "\u041c\u0456\u043d\u043d\u0435\u0441\u043e\u0442\u0430",
             "swedish": "Minnesota",
-            "afrikaans": "Minnesota"
+            "afrikaans": "Minnesota",
+            "russian": "\u041c\u0438\u043d\u043d\u0435\u0441\u043e\u0442\u0430"
           }
         },
         {
@@ -1722,7 +1751,8 @@
             "dutch": "Mississippi",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0456\u0441\u0456\u043f\u0456",
             "swedish": "Mississippi",
-            "afrikaans": "Mississippi"
+            "afrikaans": "Mississippi",
+            "russian": "\u041c\u0438\u0441\u0441\u0438\u0441\u0438\u043f\u0438"
           }
         },
         {
@@ -1744,7 +1774,8 @@
             "dutch": "Missouri",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0443\u0440\u0456",
             "swedish": "Missouri",
-            "afrikaans": "Missouri"
+            "afrikaans": "Missouri",
+            "russian": "\u041c\u0438\u0441\u0441\u0443\u0440\u0438"
           }
         },
         {
@@ -1766,7 +1797,8 @@
             "dutch": "Montana",
             "ukrainian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430",
             "swedish": "Montana",
-            "afrikaans": "Montana"
+            "afrikaans": "Montana",
+            "russian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430"
           }
         },
         {
@@ -1788,7 +1820,8 @@
             "dutch": "Nebraska",
             "ukrainian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430",
             "swedish": "Nebraska",
-            "afrikaans": "Nebraska"
+            "afrikaans": "Nebraska",
+            "russian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430"
           }
         },
         {
@@ -1810,7 +1843,8 @@
             "dutch": "Nevada",
             "ukrainian": "\u041d\u0435\u0432\u0430\u0434\u0430",
             "swedish": "Nevada",
-            "afrikaans": "Nevada"
+            "afrikaans": "Nevada",
+            "russian": "\u041d\u0435\u0432\u0430\u0434\u0430"
           }
         },
         {
@@ -1832,7 +1866,8 @@
             "dutch": "New Hampshire",
             "ukrainian": "\u041d\u044c\u044e-\u0413\u0435\u043c\u043f\u0448\u0438\u0440",
             "swedish": "New Hampshire",
-            "afrikaans": "New Hampshire"
+            "afrikaans": "New Hampshire",
+            "russian": "\u041d\u044c\u044e-\u0413\u044d\u043c\u043f\u0448\u0438\u0440"
           }
         },
         {
@@ -1854,7 +1889,8 @@
             "dutch": "New Jersey",
             "ukrainian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0456",
             "swedish": "New Jersey",
-            "afrikaans": "New Jersey"
+            "afrikaans": "New Jersey",
+            "russian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0438"
           }
         },
         {
@@ -1876,7 +1912,8 @@
             "dutch": "New Mexico",
             "ukrainian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e",
             "swedish": "New Mexico",
-            "afrikaans": "Nieu-Meksiko"
+            "afrikaans": "Nieu-Meksiko",
+            "russian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e"
           }
         },
         {
@@ -1898,7 +1935,8 @@
             "dutch": "New York",
             "ukrainian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a",
             "swedish": "New York",
-            "afrikaans": "New York"
+            "afrikaans": "New York",
+            "russian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a"
           }
         },
         {
@@ -1920,7 +1958,8 @@
             "dutch": "North Carolina",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "North Carolina",
-            "afrikaans": "Noord-Carolina"
+            "afrikaans": "Noord-Carolina",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -1942,7 +1981,8 @@
             "dutch": "North Dakota",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "North Dakota",
-            "afrikaans": "Noord-Dakota"
+            "afrikaans": "Noord-Dakota",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -1964,7 +2004,8 @@
             "dutch": "Ohio",
             "ukrainian": "\u041e\u0433\u0430\u0439\u043e",
             "swedish": "Ohio",
-            "afrikaans": "Ohio"
+            "afrikaans": "Ohio",
+            "russian": "\u041e\u0433\u0430\u0439\u043e"
           }
         },
         {
@@ -1986,7 +2027,8 @@
             "dutch": "Oklahoma",
             "ukrainian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430",
             "swedish": "Oklahoma",
-            "afrikaans": "Oklahoma"
+            "afrikaans": "Oklahoma",
+            "russian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430"
           }
         },
         {
@@ -2008,7 +2050,8 @@
             "dutch": "Oregon",
             "ukrainian": "\u041e\u0440\u0435\u0433\u043e\u043d",
             "swedish": "Oregon",
-            "afrikaans": "Oregon"
+            "afrikaans": "Oregon",
+            "russian": "\u041e\u0440\u0435\u0433\u043e\u043d"
           }
         },
         {
@@ -2030,7 +2073,8 @@
             "dutch": "Pennsylvania",
             "ukrainian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0456\u044f",
             "swedish": "Pennsylvania",
-            "afrikaans": "Pennsilvani\u00eb"
+            "afrikaans": "Pennsilvani\u00eb",
+            "russian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0438\u044f"
           }
         },
         {
@@ -2052,7 +2096,8 @@
             "dutch": "Rhode Island",
             "ukrainian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434",
             "swedish": "Rhode Island",
-            "afrikaans": "Rhode Island"
+            "afrikaans": "Rhode Island",
+            "russian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -2074,7 +2119,8 @@
             "dutch": "South Carolina",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "South Carolina",
-            "afrikaans": "Suid-Carolina"
+            "afrikaans": "Suid-Carolina",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -2096,7 +2142,8 @@
             "dutch": "South Dakota",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "South Dakota",
-            "afrikaans": "Suid-Dakota"
+            "afrikaans": "Suid-Dakota",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -2118,7 +2165,8 @@
             "dutch": "Tennessee",
             "ukrainian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0456",
             "swedish": "Tennessee",
-            "afrikaans": "Tennessee"
+            "afrikaans": "Tennessee",
+            "russian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0438"
           }
         },
         {
@@ -2140,7 +2188,8 @@
             "dutch": "Texas",
             "ukrainian": "\u0422\u0435\u0445\u0430\u0441",
             "swedish": "Texas",
-            "afrikaans": "Texas"
+            "afrikaans": "Texas",
+            "russian": "\u0422\u0435\u0445\u0430\u0441"
           }
         },
         {
@@ -2162,7 +2211,8 @@
             "dutch": "Utah",
             "ukrainian": "\u042e\u0442\u0430",
             "swedish": "Utah",
-            "afrikaans": "Utah"
+            "afrikaans": "Utah",
+            "russian": "\u042e\u0442\u0430"
           }
         },
         {
@@ -2184,7 +2234,8 @@
             "dutch": "Vermont",
             "ukrainian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442",
             "swedish": "Vermont",
-            "afrikaans": "Vermont"
+            "afrikaans": "Vermont",
+            "russian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442"
           }
         },
         {
@@ -2206,7 +2257,8 @@
             "dutch": "Virginia",
             "ukrainian": "\u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "Virginia",
-            "afrikaans": "Virgini\u00eb"
+            "afrikaans": "Virgini\u00eb",
+            "russian": "\u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -2228,7 +2280,8 @@
             "dutch": "Washington",
             "ukrainian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d",
             "swedish": "Washington",
-            "afrikaans": "Washington"
+            "afrikaans": "Washington",
+            "russian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d"
           }
         },
         {
@@ -2250,7 +2303,8 @@
             "dutch": "West Virginia",
             "ukrainian": "\u0417\u0430\u0445\u0456\u0434\u043d\u0430 \u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "West Virginia",
-            "afrikaans": "Wes-Virgini\u00eb"
+            "afrikaans": "Wes-Virgini\u00eb",
+            "russian": "\u0417\u0430\u043f\u0430\u0434\u043d\u0430\u044f \u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -2272,7 +2326,8 @@
             "dutch": "Wisconsin",
             "ukrainian": "\u0412\u0456\u0441\u043a\u043e\u043d\u0441\u0438\u043d",
             "swedish": "Wisconsin",
-            "afrikaans": "Wisconsin"
+            "afrikaans": "Wisconsin",
+            "russian": "\u0412\u0438\u0441\u043a\u043e\u043d\u0441\u0438\u043d"
           }
         },
         {
@@ -2294,7 +2349,8 @@
             "dutch": "Wyoming",
             "ukrainian": "\u0412\u0430\u0439\u043e\u043c\u0456\u043d\u0433",
             "swedish": "Wyoming",
-            "afrikaans": "Wyoming"
+            "afrikaans": "Wyoming",
+            "russian": "\u0412\u0430\u0439\u043e\u043c\u0438\u043d\u0433"
           }
         }
       ]
@@ -2487,7 +2543,8 @@
             "dutch": "Appartement",
             "ukrainian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430",
             "swedish": "L\u00e4genhet",
-            "afrikaans": "Woonstel"
+            "afrikaans": "Woonstel",
+            "russian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430"
           }
         },
         {
@@ -2518,7 +2575,8 @@
             "dutch": "Suite",
             "ukrainian": "\u041e\u0444\u0456\u0441",
             "swedish": "Svit",
-            "afrikaans": "Suite"
+            "afrikaans": "Suite",
+            "russian": "\u041e\u0444\u0438\u0441"
           }
         },
         {
@@ -2549,7 +2607,8 @@
             "dutch": "Verdieping",
             "ukrainian": "\u041f\u043e\u0432\u0435\u0440\u0445",
             "swedish": "V\u00e5ning",
-            "afrikaans": "Vloer"
+            "afrikaans": "Vloer",
+            "russian": "\u042d\u0442\u0430\u0436"
           }
         }
       ],
@@ -2681,7 +2740,8 @@
             "dutch": "Alabama",
             "ukrainian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430",
             "swedish": "Alabama",
-            "afrikaans": "Alabama"
+            "afrikaans": "Alabama",
+            "russian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430"
           }
         },
         {
@@ -2703,7 +2763,8 @@
             "dutch": "Alaska",
             "ukrainian": "\u0410\u043b\u044f\u0441\u043a\u0430",
             "swedish": "Alaska",
-            "afrikaans": "Alaska"
+            "afrikaans": "Alaska",
+            "russian": "\u0410\u043b\u044f\u0441\u043a\u0430"
           }
         },
         {
@@ -2725,7 +2786,8 @@
             "dutch": "Arizona",
             "ukrainian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430",
             "swedish": "Arizona",
-            "afrikaans": "Arizona"
+            "afrikaans": "Arizona",
+            "russian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430"
           }
         },
         {
@@ -2747,7 +2809,8 @@
             "dutch": "Arkansas",
             "ukrainian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Arkansas",
-            "afrikaans": "Arkansas"
+            "afrikaans": "Arkansas",
+            "russian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -2769,7 +2832,8 @@
             "dutch": "Californi\u00eb",
             "ukrainian": "\u041a\u0430\u043b\u0456\u0444\u043e\u0440\u043d\u0456\u044f",
             "swedish": "Kalifornien",
-            "afrikaans": "Kaliforni\u00eb"
+            "afrikaans": "Kaliforni\u00eb",
+            "russian": "\u041a\u0430\u043b\u0438\u0444\u043e\u0440\u043d\u0438\u044f"
           }
         },
         {
@@ -2791,7 +2855,8 @@
             "dutch": "Colorado",
             "ukrainian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e",
             "swedish": "Colorado",
-            "afrikaans": "Colorado"
+            "afrikaans": "Colorado",
+            "russian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e"
           }
         },
         {
@@ -2813,7 +2878,8 @@
             "dutch": "Connecticut",
             "ukrainian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442",
             "swedish": "Connecticut",
-            "afrikaans": "Connecticut"
+            "afrikaans": "Connecticut",
+            "russian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442"
           }
         },
         {
@@ -2835,7 +2901,8 @@
             "dutch": "Delaware",
             "ukrainian": "\u0414\u0435\u043b\u0430\u0432\u0435\u0440",
             "swedish": "Delaware",
-            "afrikaans": "Delaware"
+            "afrikaans": "Delaware",
+            "russian": "\u0414\u0435\u043b\u0430\u0432\u044d\u0440"
           }
         },
         {
@@ -2857,7 +2924,8 @@
             "dutch": "Florida",
             "ukrainian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430",
             "swedish": "Florida",
-            "afrikaans": "Florida"
+            "afrikaans": "Florida",
+            "russian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430"
           }
         },
         {
@@ -2879,7 +2947,8 @@
             "dutch": "Georgia",
             "ukrainian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0456\u044f",
             "swedish": "Georgia",
-            "afrikaans": "Georgia"
+            "afrikaans": "Georgia",
+            "russian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0438\u044f"
           }
         },
         {
@@ -2901,7 +2970,8 @@
             "dutch": "Hawa\u00ef",
             "ukrainian": "\u0413\u0430\u0432\u0430\u0457",
             "swedish": "Hawaii",
-            "afrikaans": "Hawaii"
+            "afrikaans": "Hawaii",
+            "russian": "\u0413\u0430\u0432\u0430\u0439\u0438"
           }
         },
         {
@@ -2923,7 +2993,8 @@
             "dutch": "Idaho",
             "ukrainian": "\u0410\u0439\u0434\u0430\u0445\u043e",
             "swedish": "Idaho",
-            "afrikaans": "Idaho"
+            "afrikaans": "Idaho",
+            "russian": "\u0410\u0439\u0434\u0430\u0445\u043e"
           }
         },
         {
@@ -2945,7 +3016,8 @@
             "dutch": "Illinois",
             "ukrainian": "\u0406\u043b\u043b\u0456\u043d\u043e\u0439\u0441",
             "swedish": "Illinois",
-            "afrikaans": "Illinois"
+            "afrikaans": "Illinois",
+            "russian": "\u0418\u043b\u043b\u0438\u043d\u043e\u0439\u0441"
           }
         },
         {
@@ -2967,7 +3039,8 @@
             "dutch": "Indiana",
             "ukrainian": "\u0406\u043d\u0434\u0456\u0430\u043d\u0430",
             "swedish": "Indiana",
-            "afrikaans": "Indiana"
+            "afrikaans": "Indiana",
+            "russian": "\u0418\u043d\u0434\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -2989,7 +3062,8 @@
             "dutch": "Iowa",
             "ukrainian": "\u0410\u0439\u043e\u0432\u0430",
             "swedish": "Iowa",
-            "afrikaans": "Iowa"
+            "afrikaans": "Iowa",
+            "russian": "\u0410\u0439\u043e\u0432\u0430"
           }
         },
         {
@@ -3011,7 +3085,8 @@
             "dutch": "Kansas",
             "ukrainian": "\u041a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Kansas",
-            "afrikaans": "Kansas"
+            "afrikaans": "Kansas",
+            "russian": "\u041a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -3033,7 +3108,8 @@
             "dutch": "Kentucky",
             "ukrainian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0456",
             "swedish": "Kentucky",
-            "afrikaans": "Kentucky"
+            "afrikaans": "Kentucky",
+            "russian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0438"
           }
         },
         {
@@ -3055,7 +3131,8 @@
             "dutch": "Louisiana",
             "ukrainian": "\u041b\u0443\u0457\u0437\u0456\u0430\u043d\u0430",
             "swedish": "Louisiana",
-            "afrikaans": "Louisiana"
+            "afrikaans": "Louisiana",
+            "russian": "\u041b\u0443\u0438\u0437\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -3077,7 +3154,8 @@
             "dutch": "Maine",
             "ukrainian": "\u041c\u0435\u043d",
             "swedish": "Maine",
-            "afrikaans": "Maine"
+            "afrikaans": "Maine",
+            "russian": "\u041c\u044d\u043d"
           }
         },
         {
@@ -3099,7 +3177,8 @@
             "dutch": "Maryland",
             "ukrainian": "\u041c\u0435\u0440\u0456\u043b\u0435\u043d\u0434",
             "swedish": "Maryland",
-            "afrikaans": "Maryland"
+            "afrikaans": "Maryland",
+            "russian": "\u041c\u044d\u0440\u0438\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -3121,7 +3200,8 @@
             "dutch": "Massachusetts",
             "ukrainian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441",
             "swedish": "Massachusetts",
-            "afrikaans": "Massachusetts"
+            "afrikaans": "Massachusetts",
+            "russian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441"
           }
         },
         {
@@ -3143,7 +3223,8 @@
             "dutch": "Michigan",
             "ukrainian": "\u041c\u0456\u0447\u0438\u0433\u0430\u043d",
             "swedish": "Michigan",
-            "afrikaans": "Michigan"
+            "afrikaans": "Michigan",
+            "russian": "\u041c\u0438\u0447\u0438\u0433\u0430\u043d"
           }
         },
         {
@@ -3165,7 +3246,8 @@
             "dutch": "Minnesota",
             "ukrainian": "\u041c\u0456\u043d\u043d\u0435\u0441\u043e\u0442\u0430",
             "swedish": "Minnesota",
-            "afrikaans": "Minnesota"
+            "afrikaans": "Minnesota",
+            "russian": "\u041c\u0438\u043d\u043d\u0435\u0441\u043e\u0442\u0430"
           }
         },
         {
@@ -3187,7 +3269,8 @@
             "dutch": "Mississippi",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0456\u0441\u0456\u043f\u0456",
             "swedish": "Mississippi",
-            "afrikaans": "Mississippi"
+            "afrikaans": "Mississippi",
+            "russian": "\u041c\u0438\u0441\u0441\u0438\u0441\u0438\u043f\u0438"
           }
         },
         {
@@ -3209,7 +3292,8 @@
             "dutch": "Missouri",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0443\u0440\u0456",
             "swedish": "Missouri",
-            "afrikaans": "Missouri"
+            "afrikaans": "Missouri",
+            "russian": "\u041c\u0438\u0441\u0441\u0443\u0440\u0438"
           }
         },
         {
@@ -3231,7 +3315,8 @@
             "dutch": "Montana",
             "ukrainian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430",
             "swedish": "Montana",
-            "afrikaans": "Montana"
+            "afrikaans": "Montana",
+            "russian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430"
           }
         },
         {
@@ -3253,7 +3338,8 @@
             "dutch": "Nebraska",
             "ukrainian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430",
             "swedish": "Nebraska",
-            "afrikaans": "Nebraska"
+            "afrikaans": "Nebraska",
+            "russian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430"
           }
         },
         {
@@ -3275,7 +3361,8 @@
             "dutch": "Nevada",
             "ukrainian": "\u041d\u0435\u0432\u0430\u0434\u0430",
             "swedish": "Nevada",
-            "afrikaans": "Nevada"
+            "afrikaans": "Nevada",
+            "russian": "\u041d\u0435\u0432\u0430\u0434\u0430"
           }
         },
         {
@@ -3297,7 +3384,8 @@
             "dutch": "New Hampshire",
             "ukrainian": "\u041d\u044c\u044e-\u0413\u0435\u043c\u043f\u0448\u0438\u0440",
             "swedish": "New Hampshire",
-            "afrikaans": "New Hampshire"
+            "afrikaans": "New Hampshire",
+            "russian": "\u041d\u044c\u044e-\u0413\u044d\u043c\u043f\u0448\u0438\u0440"
           }
         },
         {
@@ -3319,7 +3407,8 @@
             "dutch": "New Jersey",
             "ukrainian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0456",
             "swedish": "New Jersey",
-            "afrikaans": "New Jersey"
+            "afrikaans": "New Jersey",
+            "russian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0438"
           }
         },
         {
@@ -3341,7 +3430,8 @@
             "dutch": "New Mexico",
             "ukrainian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e",
             "swedish": "New Mexico",
-            "afrikaans": "Nieu-Meksiko"
+            "afrikaans": "Nieu-Meksiko",
+            "russian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e"
           }
         },
         {
@@ -3363,7 +3453,8 @@
             "dutch": "New York",
             "ukrainian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a",
             "swedish": "New York",
-            "afrikaans": "New York"
+            "afrikaans": "New York",
+            "russian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a"
           }
         },
         {
@@ -3385,7 +3476,8 @@
             "dutch": "North Carolina",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "North Carolina",
-            "afrikaans": "Noord-Carolina"
+            "afrikaans": "Noord-Carolina",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -3407,7 +3499,8 @@
             "dutch": "North Dakota",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "North Dakota",
-            "afrikaans": "Noord-Dakota"
+            "afrikaans": "Noord-Dakota",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -3429,7 +3522,8 @@
             "dutch": "Ohio",
             "ukrainian": "\u041e\u0433\u0430\u0439\u043e",
             "swedish": "Ohio",
-            "afrikaans": "Ohio"
+            "afrikaans": "Ohio",
+            "russian": "\u041e\u0433\u0430\u0439\u043e"
           }
         },
         {
@@ -3451,7 +3545,8 @@
             "dutch": "Oklahoma",
             "ukrainian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430",
             "swedish": "Oklahoma",
-            "afrikaans": "Oklahoma"
+            "afrikaans": "Oklahoma",
+            "russian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430"
           }
         },
         {
@@ -3473,7 +3568,8 @@
             "dutch": "Oregon",
             "ukrainian": "\u041e\u0440\u0435\u0433\u043e\u043d",
             "swedish": "Oregon",
-            "afrikaans": "Oregon"
+            "afrikaans": "Oregon",
+            "russian": "\u041e\u0440\u0435\u0433\u043e\u043d"
           }
         },
         {
@@ -3495,7 +3591,8 @@
             "dutch": "Pennsylvania",
             "ukrainian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0456\u044f",
             "swedish": "Pennsylvania",
-            "afrikaans": "Pennsilvani\u00eb"
+            "afrikaans": "Pennsilvani\u00eb",
+            "russian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0438\u044f"
           }
         },
         {
@@ -3517,7 +3614,8 @@
             "dutch": "Rhode Island",
             "ukrainian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434",
             "swedish": "Rhode Island",
-            "afrikaans": "Rhode Island"
+            "afrikaans": "Rhode Island",
+            "russian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -3539,7 +3637,8 @@
             "dutch": "South Carolina",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "South Carolina",
-            "afrikaans": "Suid-Carolina"
+            "afrikaans": "Suid-Carolina",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -3561,7 +3660,8 @@
             "dutch": "South Dakota",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "South Dakota",
-            "afrikaans": "Suid-Dakota"
+            "afrikaans": "Suid-Dakota",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -3583,7 +3683,8 @@
             "dutch": "Tennessee",
             "ukrainian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0456",
             "swedish": "Tennessee",
-            "afrikaans": "Tennessee"
+            "afrikaans": "Tennessee",
+            "russian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0438"
           }
         },
         {
@@ -3605,7 +3706,8 @@
             "dutch": "Texas",
             "ukrainian": "\u0422\u0435\u0445\u0430\u0441",
             "swedish": "Texas",
-            "afrikaans": "Texas"
+            "afrikaans": "Texas",
+            "russian": "\u0422\u0435\u0445\u0430\u0441"
           }
         },
         {
@@ -3627,7 +3729,8 @@
             "dutch": "Utah",
             "ukrainian": "\u042e\u0442\u0430",
             "swedish": "Utah",
-            "afrikaans": "Utah"
+            "afrikaans": "Utah",
+            "russian": "\u042e\u0442\u0430"
           }
         },
         {
@@ -3649,7 +3752,8 @@
             "dutch": "Vermont",
             "ukrainian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442",
             "swedish": "Vermont",
-            "afrikaans": "Vermont"
+            "afrikaans": "Vermont",
+            "russian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442"
           }
         },
         {
@@ -3671,7 +3775,8 @@
             "dutch": "Virginia",
             "ukrainian": "\u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "Virginia",
-            "afrikaans": "Virgini\u00eb"
+            "afrikaans": "Virgini\u00eb",
+            "russian": "\u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -3693,7 +3798,8 @@
             "dutch": "Washington",
             "ukrainian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d",
             "swedish": "Washington",
-            "afrikaans": "Washington"
+            "afrikaans": "Washington",
+            "russian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d"
           }
         },
         {
@@ -3715,7 +3821,8 @@
             "dutch": "West Virginia",
             "ukrainian": "\u0417\u0430\u0445\u0456\u0434\u043d\u0430 \u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "West Virginia",
-            "afrikaans": "Wes-Virgini\u00eb"
+            "afrikaans": "Wes-Virgini\u00eb",
+            "russian": "\u0417\u0430\u043f\u0430\u0434\u043d\u0430\u044f \u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -3737,7 +3844,8 @@
             "dutch": "Wisconsin",
             "ukrainian": "\u0412\u0456\u0441\u043a\u043e\u043d\u0441\u0438\u043d",
             "swedish": "Wisconsin",
-            "afrikaans": "Wisconsin"
+            "afrikaans": "Wisconsin",
+            "russian": "\u0412\u0438\u0441\u043a\u043e\u043d\u0441\u0438\u043d"
           }
         },
         {
@@ -3759,7 +3867,8 @@
             "dutch": "Wyoming",
             "ukrainian": "\u0412\u0430\u0439\u043e\u043c\u0456\u043d\u0433",
             "swedish": "Wyoming",
-            "afrikaans": "Wyoming"
+            "afrikaans": "Wyoming",
+            "russian": "\u0412\u0430\u0439\u043e\u043c\u0438\u043d\u0433"
           }
         }
       ]
@@ -3922,7 +4031,8 @@
             "dutch": "Man",
             "ukrainian": "\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430",
             "swedish": "Man",
-            "afrikaans": "Manlik"
+            "afrikaans": "Manlik",
+            "russian": "\u041c\u0443\u0436\u0441\u043a\u043e\u0439"
           }
         },
         {
@@ -3952,7 +4062,8 @@
             "dutch": "Vrouw",
             "ukrainian": "\u0416\u0456\u043d\u043e\u0447\u0430",
             "swedish": "Kvinna",
-            "afrikaans": "Vroulik"
+            "afrikaans": "Vroulik",
+            "russian": "\u0416\u0435\u043d\u0441\u043a\u0438\u0439"
           }
         }
       ],
@@ -4244,7 +4355,8 @@
             "dutch": "Wettige permanente ingezetene",
             "ukrainian": "\u0417\u0430\u043a\u043e\u043d\u043d\u0438\u0439 \u043f\u043e\u0441\u0442\u0456\u0439\u043d\u0438\u0439 \u043c\u0435\u0448\u043a\u0430\u043d\u0435\u0446\u044c",
             "swedish": "Lagligt permanent bosatt",
-            "afrikaans": "Wettige Permanente Inwoner"
+            "afrikaans": "Wettige Permanente Inwoner",
+            "russian": "\u0417\u0430\u043a\u043e\u043d\u043d\u044b\u0439 \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439 \u0436\u0438\u0442\u0435\u043b\u044c"
           }
         },
         {
@@ -4274,7 +4386,8 @@
             "dutch": "Permanente ingezetene - In forensenstatus",
             "ukrainian": "\u041f\u043e\u0441\u0442\u0456\u0439\u043d\u0438\u0439 \u043c\u0435\u0448\u043a\u0430\u043d\u0435\u0446\u044c - \u0443 \u0441\u0442\u0430\u0442\u0443\u0441\u0456 \u043f\u0440\u0438\u043a\u043e\u0440\u0434\u043e\u043d\u043d\u043e\u0433\u043e \u043f\u0440\u0430\u0446\u0456\u0432\u043d\u0438\u043a\u0430",
             "swedish": "Permanent bosatt \u2013 med pendlarstatus",
-            "afrikaans": "Permanente Inwoner - In Pendelaarstatus"
+            "afrikaans": "Permanente Inwoner - In Pendelaarstatus",
+            "russian": "\u041f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439 \u0436\u0438\u0442\u0435\u043b\u044c - \u0432 \u0441\u0442\u0430\u0442\u0443\u0441\u0435 \u043a\u043e\u043c\u043c\u044c\u044e\u0442\u0435\u0440\u0430"
           }
         },
         {
@@ -4304,7 +4417,8 @@
             "dutch": "Voorwaardelijke permanente ingezetene",
             "ukrainian": "\u0423\u043c\u043e\u0432\u043d\u0438\u0439 \u043f\u043e\u0441\u0442\u0456\u0439\u043d\u0438\u0439 \u043c\u0435\u0448\u043a\u0430\u043d\u0435\u0446\u044c",
             "swedish": "Villkorligt permanent bosatt",
-            "afrikaans": "Voorwaardelike Permanente Inwoner"
+            "afrikaans": "Voorwaardelike Permanente Inwoner",
+            "russian": "\u0423\u0441\u043b\u043e\u0432\u043d\u044b\u0439 \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439 \u0436\u0438\u0442\u0435\u043b\u044c"
           }
         }
       ],
@@ -4418,7 +4532,8 @@
             "dutch": "Mijn naam of andere biografische informatie is wettelijk gewijzigd sinds de uitgifte van mijn bestaande kaart",
             "ukrainian": "\u041c\u043e\u0454 \u0456\u043c'\u044f \u0430\u0431\u043e \u0456\u043d\u0448\u0430 \u0431\u0456\u043e\u0433\u0440\u0430\u0444\u0456\u0447\u043d\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f \u0431\u0443\u043b\u0438 \u044e\u0440\u0438\u0434\u0438\u0447\u043d\u043e \u0437\u043c\u0456\u043d\u0435\u043d\u0456 \u0437 \u043c\u043e\u043c\u0435\u043d\u0442\u0443 \u0432\u0438\u0434\u0430\u0447\u0456 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438",
             "swedish": "Mitt namn eller annan biografisk information har \u00e4ndrats juridiskt sedan mitt befintliga kort utf\u00e4rdades",
-            "afrikaans": "My naam of ander biografiese inligting is wettiglik verander sedert die uitreiking van my bestaande kaart"
+            "afrikaans": "My naam of ander biografiese inligting is wettiglik verander sedert die uitreiking van my bestaande kaart",
+            "russian": "\u041c\u043e\u0435 \u0438\u043c\u044f \u0438\u043b\u0438 \u0434\u0440\u0443\u0433\u0430\u044f \u0431\u0438\u043e\u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u0431\u044b\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u044b \u0432 \u0437\u0430\u043a\u043e\u043d\u043d\u043e\u043c \u043f\u043e\u0440\u044f\u0434\u043a\u0435 \u0441 \u043c\u043e\u043c\u0435\u043d\u0442\u0430 \u0432\u044b\u0434\u0430\u0447\u0438 \u043c\u043e\u0435\u0439 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0439 \u043a\u0430\u0440\u0442\u044b"
           }
         },
         {
@@ -4448,7 +4563,8 @@
             "dutch": "Mijn bestaande kaart is al verlopen of verloopt binnen zes maanden",
             "ukrainian": "\u0422\u0435\u0440\u043c\u0456\u043d \u0434\u0456\u0457 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u0432\u0436\u0435 \u0437\u0430\u043a\u0456\u043d\u0447\u0438\u0432\u0441\u044f \u0430\u0431\u043e \u0437\u0430\u043a\u0456\u043d\u0447\u0438\u0442\u044c\u0441\u044f \u043f\u0440\u043e\u0442\u044f\u0433\u043e\u043c \u0448\u0435\u0441\u0442\u0438 \u043c\u0456\u0441\u044f\u0446\u0456\u0432",
             "swedish": "Mitt befintliga kort har redan g\u00e5tt ut eller kommer att g\u00e5 ut inom sex m\u00e5nader",
-            "afrikaans": "My bestaande kaart het reeds verval of sal binne ses maande verval"
+            "afrikaans": "My bestaande kaart het reeds verval of sal binne ses maande verval",
+            "russian": "\u0421\u0440\u043e\u043a \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043c\u043e\u0435\u0439 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0439 \u043a\u0430\u0440\u0442\u044b \u0443\u0436\u0435 \u0438\u0441\u0442\u0435\u043a \u0438\u043b\u0438 \u0438\u0441\u0442\u0435\u0447\u0435\u0442 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 \u0448\u0435\u0441\u0442\u0438 \u043c\u0435\u0441\u044f\u0446\u0435\u0432"
           }
         },
         {
@@ -4478,7 +4594,8 @@
             "dutch": "Ik ben 14 jaar geworden en registreer me zoals vereist. Mijn bestaande kaart verloopt NA mijn 16e verjaardag.",
             "ukrainian": "\u041c\u0435\u043d\u0456 \u0432\u0438\u043f\u043e\u0432\u043d\u0438\u043b\u043e\u0441\u044f 14 \u0440\u043e\u043a\u0456\u0432, \u0456 \u044f \u0440\u0435\u0454\u0441\u0442\u0440\u0443\u044e\u0441\u044f \u0432\u0456\u0434\u043f\u043e\u0432\u0456\u0434\u043d\u043e \u0434\u043e \u0432\u0438\u043c\u043e\u0433. \u0422\u0435\u0440\u043c\u0456\u043d \u0434\u0456\u0457 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u0437\u0430\u043a\u0456\u043d\u0447\u0438\u0442\u044c\u0441\u044f \u041f\u0406\u0421\u041b\u042f \u043c\u043e\u0433\u043e 16-\u0433\u043e \u0434\u043d\u044f \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u044f.",
             "swedish": "Jag har fyllt 14 \u00e5r och registrerar mig enligt krav. Mitt befintliga kort g\u00e5r ut EFTER min 16-\u00e5rsdag.",
-            "afrikaans": "Ek het my 14de verjaarsdag bereik en registreer soos vereis. My bestaande kaart sal NA my 16de verjaarsdag verval."
+            "afrikaans": "Ek het my 14de verjaarsdag bereik en registreer soos vereis. My bestaande kaart sal NA my 16de verjaarsdag verval.",
+            "russian": "\u041c\u043d\u0435 \u0438\u0441\u043f\u043e\u043b\u043d\u0438\u043b\u043e\u0441\u044c 14 \u043b\u0435\u0442, \u0438 \u044f \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u044e\u0441\u044c \u0432 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0438 \u0441 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c\u0438. \u0421\u0440\u043e\u043a \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043c\u043e\u0435\u0439 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0439 \u043a\u0430\u0440\u0442\u044b \u0438\u0441\u0442\u0435\u0447\u0435\u0442 \u041f\u041e\u0421\u041b\u0415 \u043c\u043e\u0435\u0433\u043e 16-\u043b\u0435\u0442\u0438\u044f."
           }
         },
         {
@@ -4508,7 +4625,8 @@
             "dutch": "Ik ben 14 jaar geworden en registreer me zoals vereist. Mijn bestaande kaart verloopt VOOR mijn 16e verjaardag.",
             "ukrainian": "\u041c\u0435\u043d\u0456 \u0432\u0438\u043f\u043e\u0432\u043d\u0438\u043b\u043e\u0441\u044f 14 \u0440\u043e\u043a\u0456\u0432, \u0456 \u044f \u0440\u0435\u0454\u0441\u0442\u0440\u0443\u044e\u0441\u044f \u0432\u0456\u0434\u043f\u043e\u0432\u0456\u0434\u043d\u043e \u0434\u043e \u0432\u0438\u043c\u043e\u0433. \u0422\u0435\u0440\u043c\u0456\u043d \u0434\u0456\u0457 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u0437\u0430\u043a\u0456\u043d\u0447\u0438\u0442\u044c\u0441\u044f \u0414\u041e \u043c\u043e\u0433\u043e 16-\u0433\u043e \u0434\u043d\u044f \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u044f.",
             "swedish": "Jag har fyllt 14 \u00e5r och registrerar mig enligt krav. Mitt befintliga kort g\u00e5r ut F\u00d6RE min 16-\u00e5rsdag.",
-            "afrikaans": "Ek het my 14de verjaarsdag bereik en registreer soos vereis. My bestaande kaart sal VOOR my 16de verjaarsdag verval."
+            "afrikaans": "Ek het my 14de verjaarsdag bereik en registreer soos vereis. My bestaande kaart sal VOOR my 16de verjaarsdag verval.",
+            "russian": "\u041c\u043d\u0435 \u0438\u0441\u043f\u043e\u043b\u043d\u0438\u043b\u043e\u0441\u044c 14 \u043b\u0435\u0442, \u0438 \u044f \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u0443\u044e\u0441\u044c \u0432 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0438 \u0441 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c\u0438. \u0421\u0440\u043e\u043a \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043c\u043e\u0435\u0439 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0439 \u043a\u0430\u0440\u0442\u044b \u0438\u0441\u0442\u0435\u0447\u0435\u0442 \u0414\u041e \u043c\u043e\u0435\u0433\u043e 16-\u043b\u0435\u0442\u0438\u044f."
           }
         },
         {
@@ -4538,7 +4656,8 @@
             "dutch": "Mijn bestaande kaart bevat onjuiste gegevens vanwege het Department of Homeland Security",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u0442\u043e\u0447\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u043c\u0456\u0441\u0442\u0438\u0442\u044c \u043d\u0435\u0432\u0456\u0440\u043d\u0456 \u0434\u0430\u043d\u0456 \u0447\u0435\u0440\u0435\u0437 \u043f\u043e\u043c\u0438\u043b\u043a\u0443 \u041c\u0456\u043d\u0456\u0441\u0442\u0435\u0440\u0441\u0442\u0432\u0430 \u0432\u043d\u0443\u0442\u0440\u0456\u0448\u043d\u044c\u043e\u0457 \u0431\u0435\u0437\u043f\u0435\u043a\u0438",
             "swedish": "Mitt befintliga kort inneh\u00e5ller felaktiga uppgifter p\u00e5 grund av Department of Homeland Security",
-            "afrikaans": "My bestaande kaart het verkeerde data as gevolg van die Departement van Binnelandse Veiligheid"
+            "afrikaans": "My bestaande kaart het verkeerde data as gevolg van die Departement van Binnelandse Veiligheid",
+            "russian": "\u041c\u043e\u044f \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043d\u0435\u0432\u0435\u0440\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u043f\u043e \u0432\u0438\u043d\u0435 \u041c\u0438\u043d\u0438\u0441\u0442\u0435\u0440\u0441\u0442\u0432\u0430 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0439 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438"
           }
         },
         {
@@ -4568,7 +4687,8 @@
             "dutch": "Mijn vorige kaart is verloren, gestolen of vernietigd",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044f \u043a\u0430\u0440\u0442\u043a\u0430 \u0431\u0443\u043b\u0430 \u0437\u0430\u0433\u0443\u0431\u043b\u0435\u043d\u0430, \u0432\u043a\u0440\u0430\u0434\u0435\u043d\u0430 \u0430\u0431\u043e \u0437\u043d\u0438\u0449\u0435\u043d\u0430",
             "swedish": "Mitt tidigare kort har tappats bort, stulits eller f\u00f6rst\u00f6rts",
-            "afrikaans": "My vorige kaart is verloor, gesteel of vernietig"
+            "afrikaans": "My vorige kaart is verloor, gesteel of vernietig",
+            "russian": "\u041c\u043e\u044f \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0431\u044b\u043b\u0430 \u0443\u0442\u0435\u0440\u044f\u043d\u0430, \u0443\u043a\u0440\u0430\u0434\u0435\u043d\u0430 \u0438\u043b\u0438 \u0443\u043d\u0438\u0447\u0442\u043e\u0436\u0435\u043d\u0430"
           }
         },
         {
@@ -4598,7 +4718,8 @@
             "dutch": "Mijn vorige kaart is uitgegeven maar nooit ontvangen",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044f \u043a\u0430\u0440\u0442\u043a\u0430 \u0431\u0443\u043b\u0430 \u0432\u0438\u043f\u0443\u0449\u0435\u043d\u0430, \u0430\u043b\u0435 \u044f \u0457\u0457 \u0442\u0430\u043a \u0456 \u043d\u0435 \u043e\u0442\u0440\u0438\u043c\u0430\u0432(-\u043b\u0430)",
             "swedish": "Mitt tidigare kort utf\u00e4rdades men mottogs aldrig",
-            "afrikaans": "My vorige kaart is uitgereik maar nooit ontvang nie"
+            "afrikaans": "My vorige kaart is uitgereik maar nooit ontvang nie",
+            "russian": "\u041c\u043e\u044f \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0431\u044b\u043b\u0430 \u0432\u044b\u043f\u0443\u0449\u0435\u043d\u0430, \u043d\u043e \u0442\u0430\u043a \u0438 \u043d\u0435 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0430"
           }
         },
         {
@@ -4628,7 +4749,8 @@
             "dutch": "Mijn bestaande kaart is beschadigd",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u0442\u043e\u0447\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u0431\u0443\u043b\u0430 \u043f\u043e\u0448\u043a\u043e\u0434\u0436\u0435\u043d\u0430",
             "swedish": "Mitt befintliga kort har skadats",
-            "afrikaans": "My bestaande kaart is geskend"
+            "afrikaans": "My bestaande kaart is geskend",
+            "russian": "\u041c\u043e\u044f \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0431\u044b\u043b\u0430 \u0438\u0441\u043f\u043e\u0440\u0447\u0435\u043d\u0430"
           }
         },
         {
@@ -4658,7 +4780,8 @@
             "dutch": "Ik heb een eerdere editie van de Alien Registration Card, of ik vraag vervanging van mijn huidige Permanent Resident Card aan om een reden die hierboven niet is gespecificeerd",
             "ukrainian": "\u042f \u043c\u0430\u044e \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044e \u0432\u0435\u0440\u0441\u0456\u044e \u0420\u0435\u0454\u0441\u0442\u0440\u0430\u0446\u0456\u0439\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u0456\u043d\u043e\u0437\u0435\u043c\u0446\u044f, \u0430\u0431\u043e \u044f \u043f\u043e\u0434\u0430\u044e \u0437\u0430\u044f\u0432\u0443 \u043d\u0430 \u0437\u0430\u043c\u0456\u043d\u0443 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u041a\u0430\u0440\u0442\u043a\u0438 \u043f\u043e\u0441\u0442\u0456\u0439\u043d\u043e\u0433\u043e \u043c\u0435\u0448\u043a\u0430\u043d\u0446\u044f \u0437 \u043f\u0440\u0438\u0447\u0438\u043d\u0438, \u043d\u0435 \u0437\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u043e\u0457 \u0432\u0438\u0449\u0435",
             "swedish": "Jag har en tidigare utg\u00e5va av Alien Registration Card, eller s\u00e5 ans\u00f6ker jag om att ers\u00e4tta mitt nuvarande Permanent Resident Card av en anledning som inte anges ovan",
-            "afrikaans": "Ek het 'n vorige uitgawe van die Vreemdelingregistrasiekaart, of ek doen aansoek om my huidige Permanente Inwonerskaart te vervang vir 'n rede wat nie hierbo gespesifiseer is nie"
+            "afrikaans": "Ek het 'n vorige uitgawe van die Vreemdelingregistrasiekaart, of ek doen aansoek om my huidige Permanente Inwonerskaart te vervang vir 'n rede wat nie hierbo gespesifiseer is nie",
+            "russian": "\u0423 \u043c\u0435\u043d\u044f \u0435\u0441\u0442\u044c \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0430\u044f \u0432\u0435\u0440\u0441\u0438\u044f \u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u043e\u0439 \u043a\u0430\u0440\u0442\u044b \u0438\u043d\u043e\u0441\u0442\u0440\u0430\u043d\u0446\u0430, \u0438\u043b\u0438 \u044f \u043f\u043e\u0434\u0430\u044e \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0430 \u0437\u0430\u043c\u0435\u043d\u0443 \u043c\u043e\u0435\u0439 \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u041a\u0430\u0440\u0442\u044b \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u043e\u0433\u043e \u0436\u0438\u0442\u0435\u043b\u044f \u043f\u043e \u043f\u0440\u0438\u0447\u0438\u043d\u0435, \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u043e\u0439 \u0432\u044b\u0448\u0435"
           }
         },
         {
@@ -4688,7 +4811,8 @@
             "dutch": "Ik ben een forens die daadwerkelijk in de Verenigde Staten gaat wonen",
             "ukrainian": "\u042f \u043f\u0440\u0438\u043a\u043e\u0440\u0434\u043e\u043d\u043d\u0438\u0439 \u043f\u0440\u0430\u0446\u0456\u0432\u043d\u0438\u043a, \u044f\u043a\u0438\u0439 \u043d\u0430\u0431\u0443\u0432\u0430\u0454 \u0444\u0430\u043a\u0442\u0438\u0447\u043d\u043e\u0433\u043e \u043c\u0456\u0441\u0446\u044f \u043f\u0440\u043e\u0436\u0438\u0432\u0430\u043d\u043d\u044f \u0432 \u0421\u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0445 \u0428\u0442\u0430\u0442\u0430\u0445",
             "swedish": "Jag \u00e4r en pendlare som nu bos\u00e4tter mig i USA",
-            "afrikaans": "Ek is 'n pendelaar wat werklike verblyf in die Verenigde State opneem"
+            "afrikaans": "Ek is 'n pendelaar wat werklike verblyf in die Verenigde State opneem",
+            "russian": "\u042f \u043a\u043e\u043c\u043c\u044c\u044e\u0442\u0435\u0440, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0432\u0441\u0442\u0443\u043f\u0430\u0435\u0442 \u0432 \u0444\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u043f\u0440\u043e\u0436\u0438\u0432\u0430\u043d\u0438\u0435 \u0432 \u0421\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u043d\u044b\u0445 \u0428\u0442\u0430\u0442\u0430\u0445"
           }
         },
         {
@@ -4718,7 +4842,8 @@
             "dutch": "Ik ben automatisch omgezet naar de status van wettige permanente ingezetene",
             "ukrainian": "\u041c\u0456\u0439 \u0441\u0442\u0430\u0442\u0443\u0441 \u0431\u0443\u043b\u043e \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u043d\u043e \u0437\u043c\u0456\u043d\u0435\u043d\u043e \u043d\u0430 \u0441\u0442\u0430\u0442\u0443\u0441 \u0437\u0430\u043a\u043e\u043d\u043d\u043e\u0433\u043e \u043f\u043e\u0441\u0442\u0456\u0439\u043d\u043e\u0433\u043e \u043c\u0435\u0448\u043a\u0430\u043d\u0446\u044f",
             "swedish": "Jag har automatiskt omvandlats till status som lagligt permanent bosatt",
-            "afrikaans": "Ek is outomaties omgeskakel na wettige permanente inwonerstatus"
+            "afrikaans": "Ek is outomaties omgeskakel na wettige permanente inwonerstatus",
+            "russian": "\u042f \u0431\u044b\u043b(\u0430) \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u043f\u0435\u0440\u0435\u0432\u0435\u0434\u0435\u043d(\u0430) \u0432 \u0441\u0442\u0430\u0442\u0443\u0441 \u0437\u0430\u043a\u043e\u043d\u043d\u043e\u0433\u043e \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u043e\u0433\u043e \u0436\u0438\u0442\u0435\u043b\u044f"
           }
         },
         {
@@ -4748,7 +4873,8 @@
             "dutch": "Ik ben een permanente ingezetene die de forensenstatus aanneemt",
             "ukrainian": "\u042f \u043f\u043e\u0441\u0442\u0456\u0439\u043d\u0438\u0439 \u043c\u0435\u0448\u043a\u0430\u043d\u0435\u0446\u044c, \u044f\u043a\u0438\u0439 \u043d\u0430\u0431\u0443\u0432\u0430\u0454 \u0441\u0442\u0430\u0442\u0443\u0441\u0443 \u043f\u0440\u0438\u043a\u043e\u0440\u0434\u043e\u043d\u043d\u043e\u0433\u043e \u043f\u0440\u0430\u0446\u0456\u0432\u043d\u0438\u043a\u0430",
             "swedish": "Jag \u00e4r en permanent bosatt som \u00f6verg\u00e5r till pendlarstatus",
-            "afrikaans": "Ek is 'n permanente inwoner wat pendelaarstatus opneem"
+            "afrikaans": "Ek is 'n permanente inwoner wat pendelaarstatus opneem",
+            "russian": "\u042f \u043f\u043e\u0441\u0442\u043e\u044f\u043d\u043d\u044b\u0439 \u0436\u0438\u0442\u0435\u043b\u044c, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0438\u0442 \u0432 \u0441\u0442\u0430\u0442\u0443\u0441 \u043a\u043e\u043c\u043c\u044c\u044e\u0442\u0435\u0440\u0430"
           }
         }
       ],
@@ -4825,7 +4951,8 @@
             "dutch": "Mijn vorige kaart is verloren, gestolen of vernietigd",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044f \u043a\u0430\u0440\u0442\u043a\u0430 \u0431\u0443\u043b\u0430 \u0437\u0430\u0433\u0443\u0431\u043b\u0435\u043d\u0430, \u0432\u043a\u0440\u0430\u0434\u0435\u043d\u0430 \u0430\u0431\u043e \u0437\u043d\u0438\u0449\u0435\u043d\u0430",
             "swedish": "Mitt tidigare kort har tappats bort, stulits eller f\u00f6rst\u00f6rts",
-            "afrikaans": "My vorige kaart is verloor, gesteel of vernietig"
+            "afrikaans": "My vorige kaart is verloor, gesteel of vernietig",
+            "russian": "\u041c\u043e\u044f \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0431\u044b\u043b\u0430 \u0443\u0442\u0435\u0440\u044f\u043d\u0430, \u0443\u043a\u0440\u0430\u0434\u0435\u043d\u0430 \u0438\u043b\u0438 \u0443\u043d\u0438\u0447\u0442\u043e\u0436\u0435\u043d\u0430"
           }
         },
         {
@@ -4855,7 +4982,8 @@
             "dutch": "Mijn vorige kaart is uitgegeven maar nooit ontvangen",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044f \u043a\u0430\u0440\u0442\u043a\u0430 \u0431\u0443\u043b\u0430 \u0432\u0438\u043f\u0443\u0449\u0435\u043d\u0430, \u0430\u043b\u0435 \u044f \u0457\u0457 \u0442\u0430\u043a \u0456 \u043d\u0435 \u043e\u0442\u0440\u0438\u043c\u0430\u0432(-\u043b\u0430)",
             "swedish": "Mitt tidigare kort utf\u00e4rdades men mottogs aldrig",
-            "afrikaans": "My vorige kaart is uitgereik maar nooit ontvang nie"
+            "afrikaans": "My vorige kaart is uitgereik maar nooit ontvang nie",
+            "russian": "\u041c\u043e\u044f \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0431\u044b\u043b\u0430 \u0432\u044b\u043f\u0443\u0449\u0435\u043d\u0430, \u043d\u043e \u0442\u0430\u043a \u0438 \u043d\u0435 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0430"
           }
         },
         {
@@ -4885,7 +5013,8 @@
             "dutch": "Mijn bestaande kaart is beschadigd",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u0442\u043e\u0447\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u0431\u0443\u043b\u0430 \u043f\u043e\u0448\u043a\u043e\u0434\u0436\u0435\u043d\u0430",
             "swedish": "Mitt befintliga kort har skadats",
-            "afrikaans": "My bestaande kaart is geskend"
+            "afrikaans": "My bestaande kaart is geskend",
+            "russian": "\u041c\u043e\u044f \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0431\u044b\u043b\u0430 \u0438\u0441\u043f\u043e\u0440\u0447\u0435\u043d\u0430"
           }
         },
         {
@@ -4915,7 +5044,8 @@
             "dutch": "Mijn bestaande kaart bevat onjuiste gegevens door een fout van DHS",
             "ukrainian": "\u041c\u043e\u044f \u043f\u043e\u0442\u043e\u0447\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u043c\u0456\u0441\u0442\u0438\u0442\u044c \u043d\u0435\u0432\u0456\u0440\u043d\u0456 \u0434\u0430\u043d\u0456 \u0447\u0435\u0440\u0435\u0437 \u043f\u043e\u043c\u0438\u043b\u043a\u0443 DHS",
             "swedish": "Mitt befintliga kort inneh\u00e5ller felaktiga uppgifter p\u00e5 grund av ett fel fr\u00e5n DHS",
-            "afrikaans": "My bestaande kaart het verkeerde data as gevolg van 'n DHS-fout"
+            "afrikaans": "My bestaande kaart het verkeerde data as gevolg van 'n DHS-fout",
+            "russian": "\u041c\u043e\u044f \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043d\u0435\u0432\u0435\u0440\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0438\u0437-\u0437\u0430 \u043e\u0448\u0438\u0431\u043a\u0438 DHS"
           }
         },
         {
@@ -4945,7 +5075,8 @@
             "dutch": "Mijn naam of andere biografische informatie is wettelijk gewijzigd sinds de uitgifte van mijn bestaande kaart",
             "ukrainian": "\u041c\u043e\u0454 \u0456\u043c'\u044f \u0430\u0431\u043e \u0456\u043d\u0448\u0430 \u0431\u0456\u043e\u0433\u0440\u0430\u0444\u0456\u0447\u043d\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f \u0431\u0443\u043b\u0438 \u044e\u0440\u0438\u0434\u0438\u0447\u043d\u043e \u0437\u043c\u0456\u043d\u0435\u043d\u0456 \u0437 \u043c\u043e\u043c\u0435\u043d\u0442\u0443 \u0432\u0438\u0434\u0430\u0447\u0456 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438",
             "swedish": "Mitt namn eller annan biografisk information har \u00e4ndrats juridiskt sedan mitt befintliga kort utf\u00e4rdades",
-            "afrikaans": "My naam of ander biografiese inligting het wettiglik verander sedert die uitreiking van my bestaande kaart"
+            "afrikaans": "My naam of ander biografiese inligting het wettiglik verander sedert die uitreiking van my bestaande kaart",
+            "russian": "\u041c\u043e\u0435 \u0438\u043c\u044f \u0438\u043b\u0438 \u0434\u0440\u0443\u0433\u0430\u044f \u0431\u0438\u043e\u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u0431\u044b\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u044b \u0432 \u0437\u0430\u043a\u043e\u043d\u043d\u043e\u043c \u043f\u043e\u0440\u044f\u0434\u043a\u0435 \u0441 \u043c\u043e\u043c\u0435\u043d\u0442\u0430 \u0432\u044b\u0434\u0430\u0447\u0438 \u043c\u043e\u0435\u0439 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0439 \u043a\u0430\u0440\u0442\u044b"
           }
         }
       ],
@@ -5128,7 +5259,8 @@
             "dutch": "Selecteer Nee",
             "ukrainian": "\u0412\u0438\u0431\u0440\u0430\u0442\u0438 \u041d\u0456",
             "swedish": "V\u00e4lj Nej",
-            "afrikaans": "Kies Nee"
+            "afrikaans": "Kies Nee",
+            "russian": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u00ab\u041d\u0435\u0442\u00bb"
           }
         },
         {
@@ -5158,7 +5290,8 @@
             "dutch": "Selecteer Ja",
             "ukrainian": "\u0412\u0438\u0431\u0440\u0430\u0442\u0438 \u0422\u0430\u043a",
             "swedish": "V\u00e4lj Ja",
-            "afrikaans": "Kies Ja"
+            "afrikaans": "Kies Ja",
+            "russian": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u00ab\u0414\u0430\u00bb"
           }
         }
       ],
@@ -5216,7 +5349,8 @@
             "dutch": "Selecteer Nee",
             "ukrainian": "\u0412\u0438\u0431\u0440\u0430\u0442\u0438 \u041d\u0456",
             "swedish": "V\u00e4lj Nej",
-            "afrikaans": "Kies Nee"
+            "afrikaans": "Kies Nee",
+            "russian": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u00ab\u041d\u0435\u0442\u00bb"
           }
         },
         {
@@ -5246,7 +5380,8 @@
             "dutch": "Selecteer Ja",
             "ukrainian": "\u0412\u0438\u0431\u0440\u0430\u0442\u0438 \u0422\u0430\u043a",
             "swedish": "V\u00e4lj Ja",
-            "afrikaans": "Kies Ja"
+            "afrikaans": "Kies Ja",
+            "russian": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u00ab\u0414\u0430\u00bb"
           }
         }
       ],
@@ -5301,7 +5436,8 @@
             "dutch": "Hispanic of Latino",
             "ukrainian": "\u0406\u0441\u043f\u0430\u043d\u043e\u043c\u043e\u0432\u043d\u0438\u0439 \u0430\u0431\u043e \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446\u044c",
             "swedish": "Spansktalande eller latino",
-            "afrikaans": "Hispanies of Latino"
+            "afrikaans": "Hispanies of Latino",
+            "russian": "\u0418\u0441\u043f\u0430\u043d\u0435\u0446 \u0438\u043b\u0438 \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446"
           }
         },
         {
@@ -5331,7 +5467,8 @@
             "dutch": "Niet Hispanic of Latino",
             "ukrainian": "\u041d\u0435 \u0456\u0441\u043f\u0430\u043d\u043e\u043c\u043e\u0432\u043d\u0438\u0439 \u0456 \u043d\u0435 \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446\u044c",
             "swedish": "Inte spansktalande eller latino",
-            "afrikaans": "Nie Hispanies of Latino nie"
+            "afrikaans": "Nie Hispanies of Latino nie",
+            "russian": "\u041d\u0435 \u0438\u0441\u043f\u0430\u043d\u0435\u0446 \u0438 \u043d\u0435 \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446"
           }
         }
       ],
@@ -5380,7 +5517,8 @@
             "dutch": "Blank",
             "ukrainian": "\u0411\u0456\u043b\u0438\u0439/\u0404\u0432\u0440\u043e\u043f\u0435\u043e\u0457\u0434\u043d\u0430 \u0440\u0430\u0441\u0430",
             "swedish": "Vit",
-            "afrikaans": "Wit"
+            "afrikaans": "Wit",
+            "russian": "\u0411\u0435\u043b\u044b\u0439"
           }
         },
         {
@@ -5410,7 +5548,8 @@
             "dutch": "Aziatisch",
             "ukrainian": "\u0410\u0437\u0456\u0430\u0442/\u0410\u0437\u0456\u0430\u0442\u0441\u044c\u043a\u0430 \u0440\u0430\u0441\u0430",
             "swedish": "Asiatisk",
-            "afrikaans": "Asiaties"
+            "afrikaans": "Asiaties",
+            "russian": "\u0410\u0437\u0438\u0430\u0442"
           }
         },
         {
@@ -5440,7 +5579,8 @@
             "dutch": "Zwart of Afro-Amerikaans",
             "ukrainian": "\u0427\u043e\u0440\u043d\u043e\u0448\u043a\u0456\u0440\u0438\u0439 \u0430\u0431\u043e \u0430\u0444\u0440\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446\u044c",
             "swedish": "Svart eller afroamerikan",
-            "afrikaans": "Swart of Afro-Amerikaner"
+            "afrikaans": "Swart of Afro-Amerikaner",
+            "russian": "\u0427\u0435\u0440\u043d\u043e\u043a\u043e\u0436\u0438\u0439 \u0438\u043b\u0438 \u0430\u0444\u0440\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446"
           }
         },
         {
@@ -5470,7 +5610,8 @@
             "dutch": "Indiaans of Inheems Alaskaans",
             "ukrainian": "\u0410\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0441\u044c\u043a\u0438\u0439 \u0456\u043d\u0434\u0456\u0430\u043d\u0435\u0446\u044c \u0430\u0431\u043e \u043a\u043e\u0440\u0456\u043d\u043d\u0438\u0439 \u0436\u0438\u0442\u0435\u043b\u044c \u0410\u043b\u044f\u0441\u043a\u0438",
             "swedish": "Indian eller ursprungsbefolkning fr\u00e5n Alaska",
-            "afrikaans": "Amerikaanse Indi\u00ebr of Inheemse Alaskaner"
+            "afrikaans": "Amerikaanse Indi\u00ebr of Inheemse Alaskaner",
+            "russian": "\u0410\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0441\u043a\u0438\u0439 \u0438\u043d\u0434\u0435\u0435\u0446 \u0438\u043b\u0438 \u043a\u043e\u0440\u0435\u043d\u043d\u043e\u0439 \u0436\u0438\u0442\u0435\u043b\u044c \u0410\u043b\u044f\u0441\u043a\u0438"
           }
         },
         {
@@ -5500,7 +5641,8 @@
             "dutch": "Inheems Hawa\u00efaans of andere Pacifische Eilander",
             "ukrainian": "\u041a\u043e\u0440\u0456\u043d\u043d\u0438\u0439 \u0433\u0430\u0432\u0430\u0454\u0446\u044c \u0430\u0431\u043e \u0436\u0438\u0442\u0435\u043b\u044c \u0456\u043d\u0448\u0438\u0445 \u043e\u0441\u0442\u0440\u043e\u0432\u0456\u0432 \u0422\u0438\u0445\u043e\u0433\u043e \u043e\u043a\u0435\u0430\u043d\u0443",
             "swedish": "Ursprungsbefolkning fr\u00e5n Hawaii eller annan Stillahavs\u00f6",
-            "afrikaans": "Inheemse Hawaji\u00ebr of Ander Pasifiese Eilander"
+            "afrikaans": "Inheemse Hawaji\u00ebr of Ander Pasifiese Eilander",
+            "russian": "\u041a\u043e\u0440\u0435\u043d\u043d\u043e\u0439 \u0436\u0438\u0442\u0435\u043b\u044c \u0413\u0430\u0432\u0430\u0439\u0441\u043a\u0438\u0445 \u043e\u0441\u0442\u0440\u043e\u0432\u043e\u0432 \u0438\u043b\u0438 \u0434\u0440\u0443\u0433\u0438\u0445 \u043e\u0441\u0442\u0440\u043e\u0432\u043e\u0432 \u0422\u0438\u0445\u043e\u0433\u043e \u043e\u043a\u0435\u0430\u043d\u0430"
           }
         }
       ],
@@ -5562,7 +5704,8 @@
             "dutch": "2",
             "ukrainian": "2",
             "swedish": "2",
-            "afrikaans": "2"
+            "afrikaans": "2",
+            "russian": "2"
           }
         },
         {
@@ -5585,7 +5728,8 @@
             "dutch": "3",
             "ukrainian": "3",
             "swedish": "3",
-            "afrikaans": "3"
+            "afrikaans": "3",
+            "russian": "3"
           }
         },
         {
@@ -5608,7 +5752,8 @@
             "dutch": "4",
             "ukrainian": "4",
             "swedish": "4",
-            "afrikaans": "4"
+            "afrikaans": "4",
+            "russian": "4"
           }
         },
         {
@@ -5631,7 +5776,8 @@
             "dutch": "5",
             "ukrainian": "5",
             "swedish": "5",
-            "afrikaans": "5"
+            "afrikaans": "5",
+            "russian": "5"
           }
         },
         {
@@ -5654,7 +5800,8 @@
             "dutch": "6",
             "ukrainian": "6",
             "swedish": "6",
-            "afrikaans": "6"
+            "afrikaans": "6",
+            "russian": "6"
           }
         },
         {
@@ -5677,7 +5824,8 @@
             "dutch": "7",
             "ukrainian": "7",
             "swedish": "7",
-            "afrikaans": "7"
+            "afrikaans": "7",
+            "russian": "7"
           }
         },
         {
@@ -5700,7 +5848,8 @@
             "dutch": "8",
             "ukrainian": "8",
             "swedish": "8",
-            "afrikaans": "8"
+            "afrikaans": "8",
+            "russian": "8"
           }
         }
       ]
@@ -5752,7 +5901,8 @@
             "dutch": "0",
             "ukrainian": "0",
             "swedish": "0",
-            "afrikaans": "0"
+            "afrikaans": "0",
+            "russian": "0"
           }
         },
         {
@@ -5775,7 +5925,8 @@
             "dutch": "1",
             "ukrainian": "1",
             "swedish": "1",
-            "afrikaans": "1"
+            "afrikaans": "1",
+            "russian": "1"
           }
         },
         {
@@ -5798,7 +5949,8 @@
             "dutch": "2",
             "ukrainian": "2",
             "swedish": "2",
-            "afrikaans": "2"
+            "afrikaans": "2",
+            "russian": "2"
           }
         },
         {
@@ -5821,7 +5973,8 @@
             "dutch": "3",
             "ukrainian": "3",
             "swedish": "3",
-            "afrikaans": "3"
+            "afrikaans": "3",
+            "russian": "3"
           }
         },
         {
@@ -5844,7 +5997,8 @@
             "dutch": "4",
             "ukrainian": "4",
             "swedish": "4",
-            "afrikaans": "4"
+            "afrikaans": "4",
+            "russian": "4"
           }
         },
         {
@@ -5867,7 +6021,8 @@
             "dutch": "5",
             "ukrainian": "5",
             "swedish": "5",
-            "afrikaans": "5"
+            "afrikaans": "5",
+            "russian": "5"
           }
         },
         {
@@ -5890,7 +6045,8 @@
             "dutch": "6",
             "ukrainian": "6",
             "swedish": "6",
-            "afrikaans": "6"
+            "afrikaans": "6",
+            "russian": "6"
           }
         },
         {
@@ -5913,7 +6069,8 @@
             "dutch": "7",
             "ukrainian": "7",
             "swedish": "7",
-            "afrikaans": "7"
+            "afrikaans": "7",
+            "russian": "7"
           }
         },
         {
@@ -5936,7 +6093,8 @@
             "dutch": "8",
             "ukrainian": "8",
             "swedish": "8",
-            "afrikaans": "8"
+            "afrikaans": "8",
+            "russian": "8"
           }
         },
         {
@@ -5959,7 +6117,8 @@
             "dutch": "9",
             "ukrainian": "9",
             "swedish": "9",
-            "afrikaans": "9"
+            "afrikaans": "9",
+            "russian": "9"
           }
         },
         {
@@ -5982,7 +6141,8 @@
             "dutch": "10",
             "ukrainian": "10",
             "swedish": "10",
-            "afrikaans": "10"
+            "afrikaans": "10",
+            "russian": "10"
           }
         },
         {
@@ -6005,7 +6165,8 @@
             "dutch": "11",
             "ukrainian": "11",
             "swedish": "11",
-            "afrikaans": "11"
+            "afrikaans": "11",
+            "russian": "11"
           }
         }
       ]
@@ -6128,7 +6289,8 @@
             "dutch": "Zwart",
             "ukrainian": "\u0427\u043e\u0440\u043d\u0438\u0439",
             "swedish": "Svart",
-            "afrikaans": "Swart"
+            "afrikaans": "Swart",
+            "russian": "\u0427\u0435\u0440\u043d\u044b\u0439"
           }
         },
         {
@@ -6158,7 +6320,8 @@
             "dutch": "Blauw",
             "ukrainian": "\u0421\u0438\u043d\u0456\u0439",
             "swedish": "Bl\u00e5",
-            "afrikaans": "Blou"
+            "afrikaans": "Blou",
+            "russian": "\u0413\u043e\u043b\u0443\u0431\u043e\u0439"
           }
         },
         {
@@ -6188,7 +6351,8 @@
             "dutch": "Bruin",
             "ukrainian": "\u041a\u0430\u0440\u0438\u0439",
             "swedish": "Brun",
-            "afrikaans": "Bruin"
+            "afrikaans": "Bruin",
+            "russian": "\u041a\u0430\u0440\u0438\u0439"
           }
         },
         {
@@ -6218,7 +6382,8 @@
             "dutch": "Grijs",
             "ukrainian": "\u0421\u0456\u0440\u0438\u0439",
             "swedish": "Gr\u00e5",
-            "afrikaans": "Grys"
+            "afrikaans": "Grys",
+            "russian": "\u0421\u0435\u0440\u044b\u0439"
           }
         },
         {
@@ -6248,7 +6413,8 @@
             "dutch": "Groen",
             "ukrainian": "\u0417\u0435\u043b\u0435\u043d\u0438\u0439",
             "swedish": "Gr\u00f6n",
-            "afrikaans": "Groen"
+            "afrikaans": "Groen",
+            "russian": "\u0417\u0435\u043b\u0435\u043d\u044b\u0439"
           }
         },
         {
@@ -6278,7 +6444,8 @@
             "dutch": "Hazelnootbruin",
             "ukrainian": "\u0413\u043e\u0440\u0456\u0445\u043e\u0432\u0438\u0439",
             "swedish": "N\u00f6tbrun",
-            "afrikaans": "Haselneut"
+            "afrikaans": "Haselneut",
+            "russian": "\u041e\u0440\u0435\u0445\u043e\u0432\u044b\u0439"
           }
         },
         {
@@ -6308,7 +6475,8 @@
             "dutch": "Kastanjebruin",
             "ukrainian": "\u0411\u043e\u0440\u0434\u043e\u0432\u0438\u0439",
             "swedish": "R\u00f6dbrun",
-            "afrikaans": "Maroen"
+            "afrikaans": "Maroen",
+            "russian": "\u0411\u043e\u0440\u0434\u043e\u0432\u044b\u0439"
           }
         },
         {
@@ -6338,7 +6506,8 @@
             "dutch": "Roze",
             "ukrainian": "\u0420\u043e\u0436\u0435\u0432\u0438\u0439",
             "swedish": "Rosa",
-            "afrikaans": "Pienk"
+            "afrikaans": "Pienk",
+            "russian": "\u0420\u043e\u0437\u043e\u0432\u044b\u0439"
           }
         },
         {
@@ -6368,7 +6537,8 @@
             "dutch": "Onbekend/Anders",
             "ukrainian": "\u041d\u0435\u0432\u0456\u0434\u043e\u043c\u0438\u0439/\u0406\u043d\u0448\u0438\u0439",
             "swedish": "Ok\u00e4nd/Annan",
-            "afrikaans": "Onbekend/Ander"
+            "afrikaans": "Onbekend/Ander",
+            "russian": "\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439/\u0414\u0440\u0443\u0433\u043e\u0439"
           }
         }
       ],
@@ -6418,7 +6588,8 @@
             "dutch": "Kaal",
             "ukrainian": "\u041b\u0438\u0441\u0438\u0439",
             "swedish": "Skallig",
-            "afrikaans": "Bles"
+            "afrikaans": "Bles",
+            "russian": "\u041b\u044b\u0441\u044b\u0439"
           }
         },
         {
@@ -6448,7 +6619,8 @@
             "dutch": "Zwart",
             "ukrainian": "\u0427\u043e\u0440\u043d\u0438\u0439",
             "swedish": "Svart",
-            "afrikaans": "Swart"
+            "afrikaans": "Swart",
+            "russian": "\u0427\u0435\u0440\u043d\u044b\u0439"
           }
         },
         {
@@ -6478,7 +6650,8 @@
             "dutch": "Blond",
             "ukrainian": "\u0411\u043b\u043e\u043d\u0434",
             "swedish": "Blond",
-            "afrikaans": "Blond"
+            "afrikaans": "Blond",
+            "russian": "\u0411\u043b\u043e\u043d\u0434\u0438\u043d"
           }
         },
         {
@@ -6508,7 +6681,8 @@
             "dutch": "Bruin",
             "ukrainian": "\u041a\u0430\u0440\u0438\u0439",
             "swedish": "Brun",
-            "afrikaans": "Bruin"
+            "afrikaans": "Bruin",
+            "russian": "\u041a\u0430\u0440\u0438\u0439"
           }
         },
         {
@@ -6538,7 +6712,8 @@
             "dutch": "Grijs",
             "ukrainian": "\u0421\u0456\u0440\u0438\u0439",
             "swedish": "Gr\u00e5",
-            "afrikaans": "Grys"
+            "afrikaans": "Grys",
+            "russian": "\u0421\u0435\u0440\u044b\u0439"
           }
         },
         {
@@ -6568,7 +6743,8 @@
             "dutch": "Rood",
             "ukrainian": "\u0420\u0443\u0434\u0438\u0439",
             "swedish": "R\u00f6d",
-            "afrikaans": "Rooi"
+            "afrikaans": "Rooi",
+            "russian": "\u0420\u044b\u0436\u0438\u0439"
           }
         },
         {
@@ -6598,7 +6774,8 @@
             "dutch": "Zandkleurig",
             "ukrainian": "\u041f\u0456\u0441\u043e\u0447\u043d\u0438\u0439",
             "swedish": "Sandf\u00e4rgad",
-            "afrikaans": "Sanderig"
+            "afrikaans": "Sanderig",
+            "russian": "\u041f\u0435\u0441\u043e\u0447\u043d\u044b\u0439"
           }
         },
         {
@@ -6628,7 +6805,8 @@
             "dutch": "Blank",
             "ukrainian": "\u0411\u0456\u043b\u0438\u0439/\u0404\u0432\u0440\u043e\u043f\u0435\u043e\u0457\u0434\u043d\u0430 \u0440\u0430\u0441\u0430",
             "swedish": "Vit",
-            "afrikaans": "Wit"
+            "afrikaans": "Wit",
+            "russian": "\u0411\u0435\u043b\u044b\u0439"
           }
         },
         {
@@ -6658,7 +6836,8 @@
             "dutch": "Onbekend/Anders",
             "ukrainian": "\u041d\u0435\u0432\u0456\u0434\u043e\u043c\u0438\u0439/\u0406\u043d\u0448\u0438\u0439",
             "swedish": "Ok\u00e4nd/Annan",
-            "afrikaans": "Onbekend/Ander"
+            "afrikaans": "Onbekend/Ander",
+            "russian": "\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439/\u0414\u0440\u0443\u0433\u043e\u0439"
           }
         }
       ],
@@ -6711,7 +6890,8 @@
             "dutch": "Selecteer Nee",
             "ukrainian": "\u0412\u0438\u0431\u0440\u0430\u0442\u0438 \u041d\u0456",
             "swedish": "V\u00e4lj Nej",
-            "afrikaans": "Kies Nee"
+            "afrikaans": "Kies Nee",
+            "russian": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u00ab\u041d\u0435\u0442\u00bb"
           }
         },
         {
@@ -6741,7 +6921,8 @@
             "dutch": "Selecteer Ja",
             "ukrainian": "\u0412\u0438\u0431\u0440\u0430\u0442\u0438 \u0422\u0430\u043a",
             "swedish": "V\u00e4lj Ja",
-            "afrikaans": "Kies Ja"
+            "afrikaans": "Kies Ja",
+            "russian": "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u00ab\u0414\u0430\u00bb"
           }
         }
       ],
@@ -7037,7 +7218,8 @@
             "dutch": "Ik kan Engels lezen en begrijpen, en ik heb elke vraag en instructie op dit formulier gelezen en begrepen, en mijn antwoord op elke vraag",
             "ukrainian": "\u042f \u0432\u043c\u0456\u044e \u0447\u0438\u0442\u0430\u0442\u0438 \u0442\u0430 \u0440\u043e\u0437\u0443\u043c\u0456\u0442\u0438 \u0430\u043d\u0433\u043b\u0456\u0439\u0441\u044c\u043a\u0443 \u043c\u043e\u0432\u0443, \u044f \u043f\u0440\u043e\u0447\u0438\u0442\u0430\u0432(-\u043b\u0430) \u0456 \u0437\u0440\u043e\u0437\u0443\u043c\u0456\u0432(-\u043b\u0430) \u043a\u043e\u0436\u043d\u0435 \u0437\u0430\u043f\u0438\u0442\u0430\u043d\u043d\u044f \u0442\u0430 \u0456\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0456\u044e \u0432 \u0446\u0456\u0439 \u0437\u0430\u044f\u0432\u0456, \u0430 \u0442\u0430\u043a\u043e\u0436 \u0441\u0432\u043e\u044e \u0432\u0456\u0434\u043f\u043e\u0432\u0456\u0434\u044c \u043d\u0430 \u043a\u043e\u0436\u043d\u0435 \u0437\u0430\u043f\u0438\u0442\u0430\u043d\u043d\u044f",
             "swedish": "Jag kan l\u00e4sa och f\u00f6rst\u00e5 engelska, och jag har l\u00e4st och f\u00f6rst\u00e5tt varje fr\u00e5ga och instruktion i denna ans\u00f6kan, och mitt svar p\u00e5 varje fr\u00e5ga",
-            "afrikaans": "Ek kan Engels lees en verstaan, en ek het elke vraag en instruksie op hierdie aansoek gelees en verstaan, en my antwoord op elke vraag"
+            "afrikaans": "Ek kan Engels lees en verstaan, en ek het elke vraag en instruksie op hierdie aansoek gelees en verstaan, en my antwoord op elke vraag",
+            "russian": "\u042f \u0443\u043c\u0435\u044e \u0447\u0438\u0442\u0430\u0442\u044c \u0438 \u043f\u043e\u043d\u0438\u043c\u0430\u0442\u044c \u043f\u043e-\u0430\u043d\u0433\u043b\u0438\u0439\u0441\u043a\u0438, \u0438 \u044f \u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043b(\u0430) \u0438 \u043f\u043e\u043d\u044f\u043b(\u0430) \u043a\u0430\u0436\u0434\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441 \u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044e \u0432 \u044d\u0442\u043e\u043c \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0438, \u0430 \u0442\u0430\u043a\u0436\u0435 \u043c\u043e\u0439 \u043e\u0442\u0432\u0435\u0442 \u043d\u0430 \u043a\u0430\u0436\u0434\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441"
           }
         },
         {
@@ -7067,7 +7249,8 @@
             "dutch": "De tolk genoemd in Deel 6. heeft mij elke vraag en instructie op dit formulier en mijn antwoord op elke vraag voorgelezen in een taal die ik vloeiend spreek en ik heb alles begrepen",
             "ukrainian": "\u041f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447, \u0437\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0439 \u0443 \u0427\u0430\u0441\u0442\u0438\u043d\u0456 6, \u043f\u0440\u043e\u0447\u0438\u0442\u0430\u0432 \u043c\u0435\u043d\u0456 \u043a\u043e\u0436\u043d\u0435 \u0437\u0430\u043f\u0438\u0442\u0430\u043d\u043d\u044f \u0442\u0430 \u0456\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0456\u044e \u0432 \u0446\u0456\u0439 \u0437\u0430\u044f\u0432\u0456, \u0430 \u0442\u0430\u043a\u043e\u0436 \u043c\u043e\u044e \u0432\u0456\u0434\u043f\u043e\u0432\u0456\u0434\u044c \u043d\u0430 \u043a\u043e\u0436\u043d\u0435 \u0437\u0430\u043f\u0438\u0442\u0430\u043d\u043d\u044f \u043c\u043e\u0432\u043e\u044e, \u044f\u043a\u043e\u044e \u044f \u0432\u0456\u043b\u044c\u043d\u043e \u0432\u043e\u043b\u043e\u0434\u0456\u044e, \u0456 \u044f \u0432\u0441\u0435 \u0437\u0440\u043e\u0437\u0443\u043c\u0456\u0432(-\u043b\u0430)",
             "swedish": "Tolken som namnges i del 6 har l\u00e4st upp varje fr\u00e5ga och instruktion i denna ans\u00f6kan och mitt svar p\u00e5 varje fr\u00e5ga f\u00f6r mig p\u00e5 ett spr\u00e5k som jag talar flytande och jag f\u00f6rstod allt",
-            "afrikaans": "Die tolk genoem in Deel 6. het elke vraag en instruksie op hierdie aansoek en my antwoord op elke vraag aan my voorgelees in 'n taal wat ek vlot praat en ek het alles verstaan"
+            "afrikaans": "Die tolk genoem in Deel 6. het elke vraag en instruksie op hierdie aansoek en my antwoord op elke vraag aan my voorgelees in 'n taal wat ek vlot praat en ek het alles verstaan",
+            "russian": "\u041f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a, \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0439 \u0432 \u0427\u0430\u0441\u0442\u0438 6, \u043f\u0440\u043e\u0447\u0438\u0442\u0430\u043b \u043c\u043d\u0435 \u043a\u0430\u0436\u0434\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441 \u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044e \u0432 \u044d\u0442\u043e\u043c \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0438, \u0430 \u0442\u0430\u043a\u0436\u0435 \u043c\u043e\u0439 \u043e\u0442\u0432\u0435\u0442 \u043d\u0430 \u043a\u0430\u0436\u0434\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441 \u043d\u0430 \u044f\u0437\u044b\u043a\u0435, \u043a\u043e\u0442\u043e\u0440\u044b\u043c \u044f \u0441\u0432\u043e\u0431\u043e\u0434\u043d\u043e \u0432\u043b\u0430\u0434\u0435\u044e, \u0438 \u044f \u0432\u0441\u0435 \u043f\u043e\u043d\u044f\u043b(\u0430)"
           }
         },
         {
@@ -7097,7 +7280,8 @@
             "dutch": "Op mijn verzoek heeft de voorbereider genoemd in Deel 7",
             "ukrainian": "\u041d\u0430 \u043c\u043e\u0454 \u043f\u0440\u043e\u0445\u0430\u043d\u043d\u044f, \u0443\u043a\u043b\u0430\u0434\u0430\u0447, \u0437\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0439 \u0443 \u0427\u0430\u0441\u0442\u0438\u043d\u0456 7",
             "swedish": "P\u00e5 min beg\u00e4ran har den f\u00f6rberedare som namnges i del 7",
-            "afrikaans": "Op my versoek, het die voorbereider genoem in Deel 7"
+            "afrikaans": "Op my versoek, het die voorbereider genoem in Deel 7",
+            "russian": "\u041f\u043e \u043c\u043e\u0435\u0439 \u043f\u0440\u043e\u0441\u044c\u0431\u0435 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442 \u043f\u043e \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u043a\u0435 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u043e\u0432, \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0439 \u0432 \u0427\u0430\u0441\u0442\u0438 7"
           }
         }
       ],
@@ -7497,7 +7681,8 @@
             "dutch": "Suite",
             "ukrainian": "\u041e\u0444\u0456\u0441",
             "swedish": "Svit",
-            "afrikaans": "Suite"
+            "afrikaans": "Suite",
+            "russian": "\u041e\u0444\u0438\u0441"
           }
         },
         {
@@ -7528,7 +7713,8 @@
             "dutch": "Verdieping",
             "ukrainian": "\u041f\u043e\u0432\u0435\u0440\u0445",
             "swedish": "V\u00e5ning",
-            "afrikaans": "Vloer"
+            "afrikaans": "Vloer",
+            "russian": "\u042d\u0442\u0430\u0436"
           }
         },
         {
@@ -7559,7 +7745,8 @@
             "dutch": "Appartement",
             "ukrainian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430",
             "swedish": "L\u00e4genhet",
-            "afrikaans": "Woonstel"
+            "afrikaans": "Woonstel",
+            "russian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430"
           }
         }
       ],
@@ -7690,7 +7877,8 @@
             "dutch": "Alabama",
             "ukrainian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430",
             "swedish": "Alabama",
-            "afrikaans": "Alabama"
+            "afrikaans": "Alabama",
+            "russian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430"
           }
         },
         {
@@ -7712,7 +7900,8 @@
             "dutch": "Alaska",
             "ukrainian": "\u0410\u043b\u044f\u0441\u043a\u0430",
             "swedish": "Alaska",
-            "afrikaans": "Alaska"
+            "afrikaans": "Alaska",
+            "russian": "\u0410\u043b\u044f\u0441\u043a\u0430"
           }
         },
         {
@@ -7734,7 +7923,8 @@
             "dutch": "Arizona",
             "ukrainian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430",
             "swedish": "Arizona",
-            "afrikaans": "Arizona"
+            "afrikaans": "Arizona",
+            "russian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430"
           }
         },
         {
@@ -7756,7 +7946,8 @@
             "dutch": "Arkansas",
             "ukrainian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Arkansas",
-            "afrikaans": "Arkansas"
+            "afrikaans": "Arkansas",
+            "russian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -7778,7 +7969,8 @@
             "dutch": "Californi\u00eb",
             "ukrainian": "\u041a\u0430\u043b\u0456\u0444\u043e\u0440\u043d\u0456\u044f",
             "swedish": "Kalifornien",
-            "afrikaans": "Kaliforni\u00eb"
+            "afrikaans": "Kaliforni\u00eb",
+            "russian": "\u041a\u0430\u043b\u0438\u0444\u043e\u0440\u043d\u0438\u044f"
           }
         },
         {
@@ -7800,7 +7992,8 @@
             "dutch": "Colorado",
             "ukrainian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e",
             "swedish": "Colorado",
-            "afrikaans": "Colorado"
+            "afrikaans": "Colorado",
+            "russian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e"
           }
         },
         {
@@ -7822,7 +8015,8 @@
             "dutch": "Connecticut",
             "ukrainian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442",
             "swedish": "Connecticut",
-            "afrikaans": "Connecticut"
+            "afrikaans": "Connecticut",
+            "russian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442"
           }
         },
         {
@@ -7844,7 +8038,8 @@
             "dutch": "Delaware",
             "ukrainian": "\u0414\u0435\u043b\u0430\u0432\u0435\u0440",
             "swedish": "Delaware",
-            "afrikaans": "Delaware"
+            "afrikaans": "Delaware",
+            "russian": "\u0414\u0435\u043b\u0430\u0432\u044d\u0440"
           }
         },
         {
@@ -7866,7 +8061,8 @@
             "dutch": "Florida",
             "ukrainian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430",
             "swedish": "Florida",
-            "afrikaans": "Florida"
+            "afrikaans": "Florida",
+            "russian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430"
           }
         },
         {
@@ -7888,7 +8084,8 @@
             "dutch": "Georgia",
             "ukrainian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0456\u044f",
             "swedish": "Georgia",
-            "afrikaans": "Georgia"
+            "afrikaans": "Georgia",
+            "russian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0438\u044f"
           }
         },
         {
@@ -7910,7 +8107,8 @@
             "dutch": "Hawa\u00ef",
             "ukrainian": "\u0413\u0430\u0432\u0430\u0457",
             "swedish": "Hawaii",
-            "afrikaans": "Hawaii"
+            "afrikaans": "Hawaii",
+            "russian": "\u0413\u0430\u0432\u0430\u0439\u0438"
           }
         },
         {
@@ -7932,7 +8130,8 @@
             "dutch": "Idaho",
             "ukrainian": "\u0410\u0439\u0434\u0430\u0445\u043e",
             "swedish": "Idaho",
-            "afrikaans": "Idaho"
+            "afrikaans": "Idaho",
+            "russian": "\u0410\u0439\u0434\u0430\u0445\u043e"
           }
         },
         {
@@ -7954,7 +8153,8 @@
             "dutch": "Illinois",
             "ukrainian": "\u0406\u043b\u043b\u0456\u043d\u043e\u0439\u0441",
             "swedish": "Illinois",
-            "afrikaans": "Illinois"
+            "afrikaans": "Illinois",
+            "russian": "\u0418\u043b\u043b\u0438\u043d\u043e\u0439\u0441"
           }
         },
         {
@@ -7976,7 +8176,8 @@
             "dutch": "Indiana",
             "ukrainian": "\u0406\u043d\u0434\u0456\u0430\u043d\u0430",
             "swedish": "Indiana",
-            "afrikaans": "Indiana"
+            "afrikaans": "Indiana",
+            "russian": "\u0418\u043d\u0434\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -7998,7 +8199,8 @@
             "dutch": "Iowa",
             "ukrainian": "\u0410\u0439\u043e\u0432\u0430",
             "swedish": "Iowa",
-            "afrikaans": "Iowa"
+            "afrikaans": "Iowa",
+            "russian": "\u0410\u0439\u043e\u0432\u0430"
           }
         },
         {
@@ -8020,7 +8222,8 @@
             "dutch": "Kansas",
             "ukrainian": "\u041a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Kansas",
-            "afrikaans": "Kansas"
+            "afrikaans": "Kansas",
+            "russian": "\u041a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -8042,7 +8245,8 @@
             "dutch": "Kentucky",
             "ukrainian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0456",
             "swedish": "Kentucky",
-            "afrikaans": "Kentucky"
+            "afrikaans": "Kentucky",
+            "russian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0438"
           }
         },
         {
@@ -8064,7 +8268,8 @@
             "dutch": "Louisiana",
             "ukrainian": "\u041b\u0443\u0457\u0437\u0456\u0430\u043d\u0430",
             "swedish": "Louisiana",
-            "afrikaans": "Louisiana"
+            "afrikaans": "Louisiana",
+            "russian": "\u041b\u0443\u0438\u0437\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -8086,7 +8291,8 @@
             "dutch": "Maine",
             "ukrainian": "\u041c\u0435\u043d",
             "swedish": "Maine",
-            "afrikaans": "Maine"
+            "afrikaans": "Maine",
+            "russian": "\u041c\u044d\u043d"
           }
         },
         {
@@ -8108,7 +8314,8 @@
             "dutch": "Maryland",
             "ukrainian": "\u041c\u0435\u0440\u0456\u043b\u0435\u043d\u0434",
             "swedish": "Maryland",
-            "afrikaans": "Maryland"
+            "afrikaans": "Maryland",
+            "russian": "\u041c\u044d\u0440\u0438\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -8130,7 +8337,8 @@
             "dutch": "Massachusetts",
             "ukrainian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441",
             "swedish": "Massachusetts",
-            "afrikaans": "Massachusetts"
+            "afrikaans": "Massachusetts",
+            "russian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441"
           }
         },
         {
@@ -8152,7 +8360,8 @@
             "dutch": "Michigan",
             "ukrainian": "\u041c\u0456\u0447\u0438\u0433\u0430\u043d",
             "swedish": "Michigan",
-            "afrikaans": "Michigan"
+            "afrikaans": "Michigan",
+            "russian": "\u041c\u0438\u0447\u0438\u0433\u0430\u043d"
           }
         },
         {
@@ -8174,7 +8383,8 @@
             "dutch": "Minnesota",
             "ukrainian": "\u041c\u0456\u043d\u043d\u0435\u0441\u043e\u0442\u0430",
             "swedish": "Minnesota",
-            "afrikaans": "Minnesota"
+            "afrikaans": "Minnesota",
+            "russian": "\u041c\u0438\u043d\u043d\u0435\u0441\u043e\u0442\u0430"
           }
         },
         {
@@ -8196,7 +8406,8 @@
             "dutch": "Mississippi",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0456\u0441\u0456\u043f\u0456",
             "swedish": "Mississippi",
-            "afrikaans": "Mississippi"
+            "afrikaans": "Mississippi",
+            "russian": "\u041c\u0438\u0441\u0441\u0438\u0441\u0438\u043f\u0438"
           }
         },
         {
@@ -8218,7 +8429,8 @@
             "dutch": "Missouri",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0443\u0440\u0456",
             "swedish": "Missouri",
-            "afrikaans": "Missouri"
+            "afrikaans": "Missouri",
+            "russian": "\u041c\u0438\u0441\u0441\u0443\u0440\u0438"
           }
         },
         {
@@ -8240,7 +8452,8 @@
             "dutch": "Montana",
             "ukrainian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430",
             "swedish": "Montana",
-            "afrikaans": "Montana"
+            "afrikaans": "Montana",
+            "russian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430"
           }
         },
         {
@@ -8262,7 +8475,8 @@
             "dutch": "Nebraska",
             "ukrainian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430",
             "swedish": "Nebraska",
-            "afrikaans": "Nebraska"
+            "afrikaans": "Nebraska",
+            "russian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430"
           }
         },
         {
@@ -8284,7 +8498,8 @@
             "dutch": "Nevada",
             "ukrainian": "\u041d\u0435\u0432\u0430\u0434\u0430",
             "swedish": "Nevada",
-            "afrikaans": "Nevada"
+            "afrikaans": "Nevada",
+            "russian": "\u041d\u0435\u0432\u0430\u0434\u0430"
           }
         },
         {
@@ -8306,7 +8521,8 @@
             "dutch": "New Hampshire",
             "ukrainian": "\u041d\u044c\u044e-\u0413\u0435\u043c\u043f\u0448\u0438\u0440",
             "swedish": "New Hampshire",
-            "afrikaans": "New Hampshire"
+            "afrikaans": "New Hampshire",
+            "russian": "\u041d\u044c\u044e-\u0413\u044d\u043c\u043f\u0448\u0438\u0440"
           }
         },
         {
@@ -8328,7 +8544,8 @@
             "dutch": "New Jersey",
             "ukrainian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0456",
             "swedish": "New Jersey",
-            "afrikaans": "New Jersey"
+            "afrikaans": "New Jersey",
+            "russian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0438"
           }
         },
         {
@@ -8350,7 +8567,8 @@
             "dutch": "New Mexico",
             "ukrainian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e",
             "swedish": "New Mexico",
-            "afrikaans": "Nieu-Meksiko"
+            "afrikaans": "Nieu-Meksiko",
+            "russian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e"
           }
         },
         {
@@ -8372,7 +8590,8 @@
             "dutch": "New York",
             "ukrainian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a",
             "swedish": "New York",
-            "afrikaans": "New York"
+            "afrikaans": "New York",
+            "russian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a"
           }
         },
         {
@@ -8394,7 +8613,8 @@
             "dutch": "North Carolina",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "North Carolina",
-            "afrikaans": "Noord-Carolina"
+            "afrikaans": "Noord-Carolina",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -8416,7 +8636,8 @@
             "dutch": "North Dakota",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "North Dakota",
-            "afrikaans": "Noord-Dakota"
+            "afrikaans": "Noord-Dakota",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -8438,7 +8659,8 @@
             "dutch": "Ohio",
             "ukrainian": "\u041e\u0433\u0430\u0439\u043e",
             "swedish": "Ohio",
-            "afrikaans": "Ohio"
+            "afrikaans": "Ohio",
+            "russian": "\u041e\u0433\u0430\u0439\u043e"
           }
         },
         {
@@ -8460,7 +8682,8 @@
             "dutch": "Oklahoma",
             "ukrainian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430",
             "swedish": "Oklahoma",
-            "afrikaans": "Oklahoma"
+            "afrikaans": "Oklahoma",
+            "russian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430"
           }
         },
         {
@@ -8482,7 +8705,8 @@
             "dutch": "Oregon",
             "ukrainian": "\u041e\u0440\u0435\u0433\u043e\u043d",
             "swedish": "Oregon",
-            "afrikaans": "Oregon"
+            "afrikaans": "Oregon",
+            "russian": "\u041e\u0440\u0435\u0433\u043e\u043d"
           }
         },
         {
@@ -8504,7 +8728,8 @@
             "dutch": "Pennsylvania",
             "ukrainian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0456\u044f",
             "swedish": "Pennsylvania",
-            "afrikaans": "Pennsilvani\u00eb"
+            "afrikaans": "Pennsilvani\u00eb",
+            "russian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0438\u044f"
           }
         },
         {
@@ -8526,7 +8751,8 @@
             "dutch": "Rhode Island",
             "ukrainian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434",
             "swedish": "Rhode Island",
-            "afrikaans": "Rhode Island"
+            "afrikaans": "Rhode Island",
+            "russian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -8548,7 +8774,8 @@
             "dutch": "South Carolina",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "South Carolina",
-            "afrikaans": "Suid-Carolina"
+            "afrikaans": "Suid-Carolina",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -8570,7 +8797,8 @@
             "dutch": "South Dakota",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "South Dakota",
-            "afrikaans": "Suid-Dakota"
+            "afrikaans": "Suid-Dakota",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -8592,7 +8820,8 @@
             "dutch": "Tennessee",
             "ukrainian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0456",
             "swedish": "Tennessee",
-            "afrikaans": "Tennessee"
+            "afrikaans": "Tennessee",
+            "russian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0438"
           }
         },
         {
@@ -8614,7 +8843,8 @@
             "dutch": "Texas",
             "ukrainian": "\u0422\u0435\u0445\u0430\u0441",
             "swedish": "Texas",
-            "afrikaans": "Texas"
+            "afrikaans": "Texas",
+            "russian": "\u0422\u0435\u0445\u0430\u0441"
           }
         },
         {
@@ -8636,7 +8866,8 @@
             "dutch": "Utah",
             "ukrainian": "\u042e\u0442\u0430",
             "swedish": "Utah",
-            "afrikaans": "Utah"
+            "afrikaans": "Utah",
+            "russian": "\u042e\u0442\u0430"
           }
         },
         {
@@ -8658,7 +8889,8 @@
             "dutch": "Vermont",
             "ukrainian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442",
             "swedish": "Vermont",
-            "afrikaans": "Vermont"
+            "afrikaans": "Vermont",
+            "russian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442"
           }
         },
         {
@@ -8680,7 +8912,8 @@
             "dutch": "Virginia",
             "ukrainian": "\u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "Virginia",
-            "afrikaans": "Virgini\u00eb"
+            "afrikaans": "Virgini\u00eb",
+            "russian": "\u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -8702,7 +8935,8 @@
             "dutch": "Washington",
             "ukrainian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d",
             "swedish": "Washington",
-            "afrikaans": "Washington"
+            "afrikaans": "Washington",
+            "russian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d"
           }
         },
         {
@@ -8724,7 +8958,8 @@
             "dutch": "West Virginia",
             "ukrainian": "\u0417\u0430\u0445\u0456\u0434\u043d\u0430 \u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "West Virginia",
-            "afrikaans": "Wes-Virgini\u00eb"
+            "afrikaans": "Wes-Virgini\u00eb",
+            "russian": "\u0417\u0430\u043f\u0430\u0434\u043d\u0430\u044f \u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -8746,7 +8981,8 @@
             "dutch": "Wisconsin",
             "ukrainian": "\u0412\u0456\u0441\u043a\u043e\u043d\u0441\u0438\u043d",
             "swedish": "Wisconsin",
-            "afrikaans": "Wisconsin"
+            "afrikaans": "Wisconsin",
+            "russian": "\u0412\u0438\u0441\u043a\u043e\u043d\u0441\u0438\u043d"
           }
         },
         {
@@ -8768,7 +9004,8 @@
             "dutch": "Wyoming",
             "ukrainian": "\u0412\u0430\u0439\u043e\u043c\u0456\u043d\u0433",
             "swedish": "Wyoming",
-            "afrikaans": "Wyoming"
+            "afrikaans": "Wyoming",
+            "russian": "\u0412\u0430\u0439\u043e\u043c\u0438\u043d\u0433"
           }
         }
       ]
@@ -9227,7 +9464,8 @@
             "dutch": "Suite",
             "ukrainian": "\u041e\u0444\u0456\u0441",
             "swedish": "Svit",
-            "afrikaans": "Suite"
+            "afrikaans": "Suite",
+            "russian": "\u041e\u0444\u0438\u0441"
           }
         },
         {
@@ -9258,7 +9496,8 @@
             "dutch": "Verdieping",
             "ukrainian": "\u041f\u043e\u0432\u0435\u0440\u0445",
             "swedish": "V\u00e5ning",
-            "afrikaans": "Vloer"
+            "afrikaans": "Vloer",
+            "russian": "\u042d\u0442\u0430\u0436"
           }
         },
         {
@@ -9289,7 +9528,8 @@
             "dutch": "Appartement",
             "ukrainian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430",
             "swedish": "L\u00e4genhet",
-            "afrikaans": "Woonstel"
+            "afrikaans": "Woonstel",
+            "russian": "\u041a\u0432\u0430\u0440\u0442\u0438\u0440\u0430"
           }
         }
       ],
@@ -9420,7 +9660,8 @@
             "dutch": "Alabama",
             "ukrainian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430",
             "swedish": "Alabama",
-            "afrikaans": "Alabama"
+            "afrikaans": "Alabama",
+            "russian": "\u0410\u043b\u0430\u0431\u0430\u043c\u0430"
           }
         },
         {
@@ -9442,7 +9683,8 @@
             "dutch": "Alaska",
             "ukrainian": "\u0410\u043b\u044f\u0441\u043a\u0430",
             "swedish": "Alaska",
-            "afrikaans": "Alaska"
+            "afrikaans": "Alaska",
+            "russian": "\u0410\u043b\u044f\u0441\u043a\u0430"
           }
         },
         {
@@ -9464,7 +9706,8 @@
             "dutch": "Arizona",
             "ukrainian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430",
             "swedish": "Arizona",
-            "afrikaans": "Arizona"
+            "afrikaans": "Arizona",
+            "russian": "\u0410\u0440\u0438\u0437\u043e\u043d\u0430"
           }
         },
         {
@@ -9486,7 +9729,8 @@
             "dutch": "Arkansas",
             "ukrainian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Arkansas",
-            "afrikaans": "Arkansas"
+            "afrikaans": "Arkansas",
+            "russian": "\u0410\u0440\u043a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -9508,7 +9752,8 @@
             "dutch": "Californi\u00eb",
             "ukrainian": "\u041a\u0430\u043b\u0456\u0444\u043e\u0440\u043d\u0456\u044f",
             "swedish": "Kalifornien",
-            "afrikaans": "Kaliforni\u00eb"
+            "afrikaans": "Kaliforni\u00eb",
+            "russian": "\u041a\u0430\u043b\u0438\u0444\u043e\u0440\u043d\u0438\u044f"
           }
         },
         {
@@ -9530,7 +9775,8 @@
             "dutch": "Colorado",
             "ukrainian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e",
             "swedish": "Colorado",
-            "afrikaans": "Colorado"
+            "afrikaans": "Colorado",
+            "russian": "\u041a\u043e\u043b\u043e\u0440\u0430\u0434\u043e"
           }
         },
         {
@@ -9552,7 +9798,8 @@
             "dutch": "Connecticut",
             "ukrainian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442",
             "swedish": "Connecticut",
-            "afrikaans": "Connecticut"
+            "afrikaans": "Connecticut",
+            "russian": "\u041a\u043e\u043d\u043d\u0435\u043a\u0442\u0438\u043a\u0443\u0442"
           }
         },
         {
@@ -9574,7 +9821,8 @@
             "dutch": "Delaware",
             "ukrainian": "\u0414\u0435\u043b\u0430\u0432\u0435\u0440",
             "swedish": "Delaware",
-            "afrikaans": "Delaware"
+            "afrikaans": "Delaware",
+            "russian": "\u0414\u0435\u043b\u0430\u0432\u044d\u0440"
           }
         },
         {
@@ -9596,7 +9844,8 @@
             "dutch": "Florida",
             "ukrainian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430",
             "swedish": "Florida",
-            "afrikaans": "Florida"
+            "afrikaans": "Florida",
+            "russian": "\u0424\u043b\u043e\u0440\u0438\u0434\u0430"
           }
         },
         {
@@ -9618,7 +9867,8 @@
             "dutch": "Georgia",
             "ukrainian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0456\u044f",
             "swedish": "Georgia",
-            "afrikaans": "Georgia"
+            "afrikaans": "Georgia",
+            "russian": "\u0414\u0436\u043e\u0440\u0434\u0436\u0438\u044f"
           }
         },
         {
@@ -9640,7 +9890,8 @@
             "dutch": "Hawa\u00ef",
             "ukrainian": "\u0413\u0430\u0432\u0430\u0457",
             "swedish": "Hawaii",
-            "afrikaans": "Hawaii"
+            "afrikaans": "Hawaii",
+            "russian": "\u0413\u0430\u0432\u0430\u0439\u0438"
           }
         },
         {
@@ -9662,7 +9913,8 @@
             "dutch": "Idaho",
             "ukrainian": "\u0410\u0439\u0434\u0430\u0445\u043e",
             "swedish": "Idaho",
-            "afrikaans": "Idaho"
+            "afrikaans": "Idaho",
+            "russian": "\u0410\u0439\u0434\u0430\u0445\u043e"
           }
         },
         {
@@ -9684,7 +9936,8 @@
             "dutch": "Illinois",
             "ukrainian": "\u0406\u043b\u043b\u0456\u043d\u043e\u0439\u0441",
             "swedish": "Illinois",
-            "afrikaans": "Illinois"
+            "afrikaans": "Illinois",
+            "russian": "\u0418\u043b\u043b\u0438\u043d\u043e\u0439\u0441"
           }
         },
         {
@@ -9706,7 +9959,8 @@
             "dutch": "Indiana",
             "ukrainian": "\u0406\u043d\u0434\u0456\u0430\u043d\u0430",
             "swedish": "Indiana",
-            "afrikaans": "Indiana"
+            "afrikaans": "Indiana",
+            "russian": "\u0418\u043d\u0434\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -9728,7 +9982,8 @@
             "dutch": "Iowa",
             "ukrainian": "\u0410\u0439\u043e\u0432\u0430",
             "swedish": "Iowa",
-            "afrikaans": "Iowa"
+            "afrikaans": "Iowa",
+            "russian": "\u0410\u0439\u043e\u0432\u0430"
           }
         },
         {
@@ -9750,7 +10005,8 @@
             "dutch": "Kansas",
             "ukrainian": "\u041a\u0430\u043d\u0437\u0430\u0441",
             "swedish": "Kansas",
-            "afrikaans": "Kansas"
+            "afrikaans": "Kansas",
+            "russian": "\u041a\u0430\u043d\u0437\u0430\u0441"
           }
         },
         {
@@ -9772,7 +10028,8 @@
             "dutch": "Kentucky",
             "ukrainian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0456",
             "swedish": "Kentucky",
-            "afrikaans": "Kentucky"
+            "afrikaans": "Kentucky",
+            "russian": "\u041a\u0435\u043d\u0442\u0443\u043a\u043a\u0438"
           }
         },
         {
@@ -9794,7 +10051,8 @@
             "dutch": "Louisiana",
             "ukrainian": "\u041b\u0443\u0457\u0437\u0456\u0430\u043d\u0430",
             "swedish": "Louisiana",
-            "afrikaans": "Louisiana"
+            "afrikaans": "Louisiana",
+            "russian": "\u041b\u0443\u0438\u0437\u0438\u0430\u043d\u0430"
           }
         },
         {
@@ -9816,7 +10074,8 @@
             "dutch": "Maine",
             "ukrainian": "\u041c\u0435\u043d",
             "swedish": "Maine",
-            "afrikaans": "Maine"
+            "afrikaans": "Maine",
+            "russian": "\u041c\u044d\u043d"
           }
         },
         {
@@ -9838,7 +10097,8 @@
             "dutch": "Maryland",
             "ukrainian": "\u041c\u0435\u0440\u0456\u043b\u0435\u043d\u0434",
             "swedish": "Maryland",
-            "afrikaans": "Maryland"
+            "afrikaans": "Maryland",
+            "russian": "\u041c\u044d\u0440\u0438\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -9860,7 +10120,8 @@
             "dutch": "Massachusetts",
             "ukrainian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441",
             "swedish": "Massachusetts",
-            "afrikaans": "Massachusetts"
+            "afrikaans": "Massachusetts",
+            "russian": "\u041c\u0430\u0441\u0441\u0430\u0447\u0443\u0441\u0435\u0442\u0441"
           }
         },
         {
@@ -9882,7 +10143,8 @@
             "dutch": "Michigan",
             "ukrainian": "\u041c\u0456\u0447\u0438\u0433\u0430\u043d",
             "swedish": "Michigan",
-            "afrikaans": "Michigan"
+            "afrikaans": "Michigan",
+            "russian": "\u041c\u0438\u0447\u0438\u0433\u0430\u043d"
           }
         },
         {
@@ -9904,7 +10166,8 @@
             "dutch": "Minnesota",
             "ukrainian": "\u041c\u0456\u043d\u043d\u0435\u0441\u043e\u0442\u0430",
             "swedish": "Minnesota",
-            "afrikaans": "Minnesota"
+            "afrikaans": "Minnesota",
+            "russian": "\u041c\u0438\u043d\u043d\u0435\u0441\u043e\u0442\u0430"
           }
         },
         {
@@ -9926,7 +10189,8 @@
             "dutch": "Mississippi",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0456\u0441\u0456\u043f\u0456",
             "swedish": "Mississippi",
-            "afrikaans": "Mississippi"
+            "afrikaans": "Mississippi",
+            "russian": "\u041c\u0438\u0441\u0441\u0438\u0441\u0438\u043f\u0438"
           }
         },
         {
@@ -9948,7 +10212,8 @@
             "dutch": "Missouri",
             "ukrainian": "\u041c\u0456\u0441\u0441\u0443\u0440\u0456",
             "swedish": "Missouri",
-            "afrikaans": "Missouri"
+            "afrikaans": "Missouri",
+            "russian": "\u041c\u0438\u0441\u0441\u0443\u0440\u0438"
           }
         },
         {
@@ -9970,7 +10235,8 @@
             "dutch": "Montana",
             "ukrainian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430",
             "swedish": "Montana",
-            "afrikaans": "Montana"
+            "afrikaans": "Montana",
+            "russian": "\u041c\u043e\u043d\u0442\u0430\u043d\u0430"
           }
         },
         {
@@ -9992,7 +10258,8 @@
             "dutch": "Nebraska",
             "ukrainian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430",
             "swedish": "Nebraska",
-            "afrikaans": "Nebraska"
+            "afrikaans": "Nebraska",
+            "russian": "\u041d\u0435\u0431\u0440\u0430\u0441\u043a\u0430"
           }
         },
         {
@@ -10014,7 +10281,8 @@
             "dutch": "Nevada",
             "ukrainian": "\u041d\u0435\u0432\u0430\u0434\u0430",
             "swedish": "Nevada",
-            "afrikaans": "Nevada"
+            "afrikaans": "Nevada",
+            "russian": "\u041d\u0435\u0432\u0430\u0434\u0430"
           }
         },
         {
@@ -10036,7 +10304,8 @@
             "dutch": "New Hampshire",
             "ukrainian": "\u041d\u044c\u044e-\u0413\u0435\u043c\u043f\u0448\u0438\u0440",
             "swedish": "New Hampshire",
-            "afrikaans": "New Hampshire"
+            "afrikaans": "New Hampshire",
+            "russian": "\u041d\u044c\u044e-\u0413\u044d\u043c\u043f\u0448\u0438\u0440"
           }
         },
         {
@@ -10058,7 +10327,8 @@
             "dutch": "New Jersey",
             "ukrainian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0456",
             "swedish": "New Jersey",
-            "afrikaans": "New Jersey"
+            "afrikaans": "New Jersey",
+            "russian": "\u041d\u044c\u044e-\u0414\u0436\u0435\u0440\u0441\u0438"
           }
         },
         {
@@ -10080,7 +10350,8 @@
             "dutch": "New Mexico",
             "ukrainian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e",
             "swedish": "New Mexico",
-            "afrikaans": "Nieu-Meksiko"
+            "afrikaans": "Nieu-Meksiko",
+            "russian": "\u041d\u044c\u044e-\u041c\u0435\u043a\u0441\u0438\u043a\u043e"
           }
         },
         {
@@ -10102,7 +10373,8 @@
             "dutch": "New York",
             "ukrainian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a",
             "swedish": "New York",
-            "afrikaans": "New York"
+            "afrikaans": "New York",
+            "russian": "\u041d\u044c\u044e-\u0419\u043e\u0440\u043a"
           }
         },
         {
@@ -10124,7 +10396,8 @@
             "dutch": "North Carolina",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "North Carolina",
-            "afrikaans": "Noord-Carolina"
+            "afrikaans": "Noord-Carolina",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -10146,7 +10419,8 @@
             "dutch": "North Dakota",
             "ukrainian": "\u041f\u0456\u0432\u043d\u0456\u0447\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "North Dakota",
-            "afrikaans": "Noord-Dakota"
+            "afrikaans": "Noord-Dakota",
+            "russian": "\u0421\u0435\u0432\u0435\u0440\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -10168,7 +10442,8 @@
             "dutch": "Ohio",
             "ukrainian": "\u041e\u0433\u0430\u0439\u043e",
             "swedish": "Ohio",
-            "afrikaans": "Ohio"
+            "afrikaans": "Ohio",
+            "russian": "\u041e\u0433\u0430\u0439\u043e"
           }
         },
         {
@@ -10190,7 +10465,8 @@
             "dutch": "Oklahoma",
             "ukrainian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430",
             "swedish": "Oklahoma",
-            "afrikaans": "Oklahoma"
+            "afrikaans": "Oklahoma",
+            "russian": "\u041e\u043a\u043b\u0430\u0445\u043e\u043c\u0430"
           }
         },
         {
@@ -10212,7 +10488,8 @@
             "dutch": "Oregon",
             "ukrainian": "\u041e\u0440\u0435\u0433\u043e\u043d",
             "swedish": "Oregon",
-            "afrikaans": "Oregon"
+            "afrikaans": "Oregon",
+            "russian": "\u041e\u0440\u0435\u0433\u043e\u043d"
           }
         },
         {
@@ -10234,7 +10511,8 @@
             "dutch": "Pennsylvania",
             "ukrainian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0456\u044f",
             "swedish": "Pennsylvania",
-            "afrikaans": "Pennsilvani\u00eb"
+            "afrikaans": "Pennsilvani\u00eb",
+            "russian": "\u041f\u0435\u043d\u0441\u0438\u043b\u044c\u0432\u0430\u043d\u0438\u044f"
           }
         },
         {
@@ -10256,7 +10534,8 @@
             "dutch": "Rhode Island",
             "ukrainian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434",
             "swedish": "Rhode Island",
-            "afrikaans": "Rhode Island"
+            "afrikaans": "Rhode Island",
+            "russian": "\u0420\u043e\u0434-\u0410\u0439\u043b\u0435\u043d\u0434"
           }
         },
         {
@@ -10278,7 +10557,8 @@
             "dutch": "South Carolina",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u041a\u0430\u0440\u043e\u043b\u0456\u043d\u0430",
             "swedish": "South Carolina",
-            "afrikaans": "Suid-Carolina"
+            "afrikaans": "Suid-Carolina",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u041a\u0430\u0440\u043e\u043b\u0438\u043d\u0430"
           }
         },
         {
@@ -10300,7 +10580,8 @@
             "dutch": "South Dakota",
             "ukrainian": "\u041f\u0456\u0432\u0434\u0435\u043d\u043d\u0430 \u0414\u0430\u043a\u043e\u0442\u0430",
             "swedish": "South Dakota",
-            "afrikaans": "Suid-Dakota"
+            "afrikaans": "Suid-Dakota",
+            "russian": "\u042e\u0436\u043d\u0430\u044f \u0414\u0430\u043a\u043e\u0442\u0430"
           }
         },
         {
@@ -10322,7 +10603,8 @@
             "dutch": "Tennessee",
             "ukrainian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0456",
             "swedish": "Tennessee",
-            "afrikaans": "Tennessee"
+            "afrikaans": "Tennessee",
+            "russian": "\u0422\u0435\u043d\u043d\u0435\u0441\u0441\u0438"
           }
         },
         {
@@ -10344,7 +10626,8 @@
             "dutch": "Texas",
             "ukrainian": "\u0422\u0435\u0445\u0430\u0441",
             "swedish": "Texas",
-            "afrikaans": "Texas"
+            "afrikaans": "Texas",
+            "russian": "\u0422\u0435\u0445\u0430\u0441"
           }
         },
         {
@@ -10366,7 +10649,8 @@
             "dutch": "Utah",
             "ukrainian": "\u042e\u0442\u0430",
             "swedish": "Utah",
-            "afrikaans": "Utah"
+            "afrikaans": "Utah",
+            "russian": "\u042e\u0442\u0430"
           }
         },
         {
@@ -10388,7 +10672,8 @@
             "dutch": "Vermont",
             "ukrainian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442",
             "swedish": "Vermont",
-            "afrikaans": "Vermont"
+            "afrikaans": "Vermont",
+            "russian": "\u0412\u0435\u0440\u043c\u043e\u043d\u0442"
           }
         },
         {
@@ -10410,7 +10695,8 @@
             "dutch": "Virginia",
             "ukrainian": "\u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "Virginia",
-            "afrikaans": "Virgini\u00eb"
+            "afrikaans": "Virgini\u00eb",
+            "russian": "\u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -10432,7 +10718,8 @@
             "dutch": "Washington",
             "ukrainian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d",
             "swedish": "Washington",
-            "afrikaans": "Washington"
+            "afrikaans": "Washington",
+            "russian": "\u0412\u0430\u0448\u0438\u043d\u0433\u0442\u043e\u043d"
           }
         },
         {
@@ -10454,7 +10741,8 @@
             "dutch": "West Virginia",
             "ukrainian": "\u0417\u0430\u0445\u0456\u0434\u043d\u0430 \u0412\u0456\u0440\u0434\u0436\u0438\u043d\u0456\u044f",
             "swedish": "West Virginia",
-            "afrikaans": "Wes-Virgini\u00eb"
+            "afrikaans": "Wes-Virgini\u00eb",
+            "russian": "\u0417\u0430\u043f\u0430\u0434\u043d\u0430\u044f \u0412\u0438\u0440\u0434\u0436\u0438\u043d\u0438\u044f"
           }
         },
         {
@@ -10476,7 +10764,8 @@
             "dutch": "Wisconsin",
             "ukrainian": "\u0412\u0456\u0441\u043a\u043e\u043d\u0441\u0438\u043d",
             "swedish": "Wisconsin",
-            "afrikaans": "Wisconsin"
+            "afrikaans": "Wisconsin",
+            "russian": "\u0412\u0438\u0441\u043a\u043e\u043d\u0441\u0438\u043d"
           }
         },
         {
@@ -10498,7 +10787,8 @@
             "dutch": "Wyoming",
             "ukrainian": "\u0412\u0430\u0439\u043e\u043c\u0456\u043d\u0433",
             "swedish": "Wyoming",
-            "afrikaans": "Wyoming"
+            "afrikaans": "Wyoming",
+            "russian": "\u0412\u0430\u0439\u043e\u043c\u0438\u043d\u0433"
           }
         }
       ]
@@ -10760,7 +11050,8 @@
             "dutch": "Ik ben geen advocaat of geaccrediteerde vertegenwoordiger, maar heb dit formulier voorbereid namens de aanvrager en met diens toestemming",
             "ukrainian": "\u042f \u043d\u0435 \u0454 \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0430\u0431\u043e \u0430\u043a\u0440\u0435\u0434\u0438\u0442\u043e\u0432\u0430\u043d\u0438\u043c \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u043e\u043c, \u0430\u043b\u0435 \u044f \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u0432(-\u043b\u0430) \u0446\u044e \u0437\u0430\u044f\u0432\u0443 \u0432\u0456\u0434 \u0456\u043c\u0435\u043d\u0456 \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u0430 \u0442\u0430 \u0437\u0430 \u0439\u043e\u0433\u043e \u0437\u0433\u043e\u0434\u043e\u044e",
             "swedish": "Jag \u00e4r inte en advokat eller ackrediterad representant men har f\u00f6rberett denna ans\u00f6kan p\u00e5 den s\u00f6kandes v\u00e4gnar och med den s\u00f6kandes samtycke",
-            "afrikaans": "Ek is nie 'n prokureur of geakkrediteerde verteenwoordiger nie, maar het hierdie aansoek namens die aansoeker en met die aansoeker se toestemming voorberei"
+            "afrikaans": "Ek is nie 'n prokureur of geakkrediteerde verteenwoordiger nie, maar het hierdie aansoek namens die aansoeker en met die aansoeker se toestemming voorberei",
+            "russian": "\u042f \u043d\u0435 \u044f\u0432\u043b\u044f\u044e\u0441\u044c \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0438\u043b\u0438 \u0430\u043a\u043a\u0440\u0435\u0434\u0438\u0442\u043e\u0432\u0430\u043d\u043d\u044b\u043c \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u0435\u043c, \u043d\u043e \u044f \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u0438\u043b(\u0430) \u044d\u0442\u043e \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043e\u0442 \u0438\u043c\u0435\u043d\u0438 \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044f \u0438 \u0441 \u0435\u0433\u043e \u0441\u043e\u0433\u043b\u0430\u0441\u0438\u044f"
           }
         },
         {
@@ -10790,7 +11081,8 @@
             "dutch": "Ik ben een advocaat of geaccrediteerde vertegenwoordiger en mijn vertegenwoordiging van de aanvrager in deze zaak strekt zich wel / niet uit tot na de voorbereiding van dit formulier",
             "ukrainian": "\u042f \u0454 \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0430\u0431\u043e \u0430\u043a\u0440\u0435\u0434\u0438\u0442\u043e\u0432\u0430\u043d\u0438\u043c \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u043e\u043c, \u0456 \u043c\u043e\u0454 \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u0446\u0442\u0432\u043e \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u0430 \u0432 \u0446\u0456\u0439 \u0441\u043f\u0440\u0430\u0432\u0456 \u043f\u043e\u0448\u0438\u0440\u044e\u0454\u0442\u044c\u0441\u044f / \u043d\u0435 \u043f\u043e\u0448\u0438\u0440\u044e\u0454\u0442\u044c\u0441\u044f \u0437\u0430 \u043c\u0435\u0436\u0456 \u043f\u0456\u0434\u0433\u043e\u0442\u043e\u0432\u043a\u0438 \u0446\u0456\u0454\u0457 \u0437\u0430\u044f\u0432\u0438",
             "swedish": "Jag \u00e4r en advokat eller ackrediterad representant och min representation av den s\u00f6kande i detta fall str\u00e4cker sig / str\u00e4cker sig inte ut\u00f6ver f\u00f6rberedelsen av denna ans\u00f6kan",
-            "afrikaans": "Ek is 'n prokureur of geakkrediteerde verteenwoordiger en my verteenwoordiging van die aansoeker in hierdie saak strek / strek nie verder as die voorbereiding van hierdie aansoek nie"
+            "afrikaans": "Ek is 'n prokureur of geakkrediteerde verteenwoordiger en my verteenwoordiging van die aansoeker in hierdie saak strek / strek nie verder as die voorbereiding van hierdie aansoek nie",
+            "russian": "\u042f \u044f\u0432\u043b\u044f\u044e\u0441\u044c \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0438\u043b\u0438 \u0430\u043a\u043a\u0440\u0435\u0434\u0438\u0442\u043e\u0432\u0430\u043d\u043d\u044b\u043c \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u0435\u043c, \u0438 \u043c\u043e\u0435 \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u044c\u0441\u0442\u0432\u043e \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044f \u043f\u043e \u044d\u0442\u043e\u043c\u0443 \u0434\u0435\u043b\u0443 \u0440\u0430\u0441\u043f\u0440\u043e\u0441\u0442\u0440\u0430\u043d\u044f\u0435\u0442\u0441\u044f / \u043d\u0435 \u0440\u0430\u0441\u043f\u0440\u043e\u0441\u0442\u0440\u0430\u043d\u044f\u0435\u0442\u0441\u044f \u0437\u0430 \u043f\u0440\u0435\u0434\u0435\u043b\u044b \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u043a\u0438 \u044d\u0442\u043e\u0433\u043e \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u044f"
           }
         }
       ],
@@ -10850,7 +11142,8 @@
             "dutch": "Ja",
             "ukrainian": "\u0422\u0430\u043a",
             "swedish": "Ja",
-            "afrikaans": "Ja"
+            "afrikaans": "Ja",
+            "russian": "\u0414\u0430"
           }
         },
         {
@@ -10880,7 +11173,8 @@
             "dutch": "Nee",
             "ukrainian": "\u041d\u0456",
             "swedish": "Nej",
-            "afrikaans": "Nee"
+            "afrikaans": "Nee",
+            "russian": "\u041d\u0435\u0442"
           }
         }
       ],

@@ -11,14 +11,14 @@ import { SPOKEN_LANGUAGES } from './languages'
 const CODE_BACKED_LANGUAGES = [
 	'English', 'Spanish', 'Chinese', 'Tagalog', 'Arabic', 'French',
 	'Korean', 'German', 'Portuguese', 'Hindi', 'Italian', 'Urdu',
-	'Persian', 'Dutch', 'Ukrainian', 'Swedish', 'Afrikaans',
+	'Persian', 'Dutch', 'Ukrainian', 'Russian', 'Swedish', 'Afrikaans',
 ]
 
 describe('SPOKEN_LANGUAGES (bd polyglot-pdf-ow1e: supported == code-backed)', () => {
-	it('contains exactly the 17 code-backed languages, no Quechua', () => {
+	it('contains exactly the 18 code-backed languages, no Quechua', () => {
 		const names = SPOKEN_LANGUAGES.map((l) => l.name)
 		expect(names).toEqual(CODE_BACKED_LANGUAGES)
 		expect(names).not.toContain('Quechua')
-		expect(names).toHaveLength(17)
+		expect(names).toHaveLength(18)
 	})
 })
