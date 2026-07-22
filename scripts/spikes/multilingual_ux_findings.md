@@ -141,6 +141,17 @@ of its questions was faithful in all five.
   field ASSIGNMENT, not spelling).
 - French and Spanish sessions are demo-ready today on this evidence.
 
+## Bundle C verification (2026-07-22, post-fix reruns)
+
+Sprint-13 Bundle C (mccl add-Russian + nb2c decline rule + s39z Latin
+spell-back + djnk discard rule + lo37 localized confirms) was verified with
+one rerun each of the two most affected languages:
+
+| run | lang | fill acc | verdict vs baseline |
+|---|---|---|---|
+| 20260722T215056Z | ru | 12/14 | Input transcription now predominantly RUSSIAN (de/es garble gone -- the ru-RU bias works); confirms transcribed as Russian (lo37); spell-back in LATIN letter names and all three names filled correctly incl. LINH (s39z; baseline mis-filled LIN); greeting translated the section title. Kit-baked Russian option labels covered 100% (text cost $0 -- kit precedence). Two misses: a street transcription typo ("Westhheimer") and apt "12" filled as "19" -- the ww9y short-numeric class AGAIN, second language, recorded on the bead. |
+| 20260722T215331Z | zh | **14/14** | No name-block desync this run (baseline: 9/14 with 3 shifted names); declines stored EMPTY, no literal "N/A" (nb2c); Latin spell-backs; confirms transcribed as Chinese (lo37). Single run -- desync non-recurrence is NOT proven (that is A1's n>=3 job, bd 66ek.1). |
+
 ## Caveats
 
 - One run per language; D2/D3-class events are known to be intermittent.
