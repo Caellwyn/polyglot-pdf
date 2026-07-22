@@ -1,0 +1,123 @@
+{
+  "_note": "Per-language spoken-phrasing data for full_form_script._phrase_generic (bd polyglot-pdf-6mzi). Native-script text lives HERE (UTF-8 data file), never in .py source (CLAUDE.md scar #6 ASCII-only). Scheme mirrors the E6 Spanish arm: value-forward templates; option labels read back in ENGLISH verbatim unless a say_override supplies a native answer; personal names spelled out letter by letter (bd 5roy). 'gtts' is the gTTS language code; 'spoken_language' is the SPOKEN_LANGUAGES-style name sent as the session language ('Russian' is deliberately NOT in the app's 17 supported languages -- the ru arm probes the unsupported-language path).",
+  "zh": {
+    "gtts": "zh-CN",
+    "spoken_language": "Chinese",
+    "digit_words": ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"],
+    "months": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
+    "templates": {
+      "value": "是{value}。",
+      "digits": "是{digits}。",
+      "date": "是{year}年{month}月{day}日。",
+      "option": "我选择{label}。",
+      "decline": "我没有这个。",
+      "decline_na": "这个不适用于我。",
+      "wrong_option": "其实是{label}。",
+      "wrong_value": "其实是{value}。"
+    },
+    "say_overrides": {
+      "p1_line1_aliennumber": ["我的外国人登记号码是A一二三四五六七八九。", "我的外国人登记号码是A九八七六五四三二一。"],
+      "p1_line3a_familyname": ["我现在的姓是Nguyen，拼写是N G U Y E N。", "我现在的姓是Tran，拼写是T R A N。"],
+      "p1_line3b_givenname": ["我现在的名字是Linh，拼写是L I N H。", "我现在的名字是Lan，拼写是L A N。"],
+      "p1_line3c_middlename": ["我的中间名是Thi，拼写是T H I。", "我的中间名是Van，拼写是V A N。"],
+      "p1_checkbox4": ["没有，我的名字没有改过。", "是的，我的名字合法地改过。"],
+      "p1_line6b_streetnumbername": ["我的地址是四二零零 Westheimer Road。", "我的地址是九九零零 Richmond Avenue。"],
+      "p1_line6c_aptsteflrnumber": ["公寓号是十二。", "公寓号是十四。"],
+      "p1_line6d_cityortown": ["我的邮寄城市是休斯顿。", null],
+      "p1_line6f_zipcode": ["我的邮政编码是七七零二七。", null]
+    },
+    "decline_overrides": {
+      "p1_line6a_incareofname": "没有转交人，邮件直接寄给我。"
+    }
+  },
+  "fr": {
+    "gtts": "fr",
+    "spoken_language": "French",
+    "digit_words": ["zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf"],
+    "months": ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
+    "templates": {
+      "value": "C'est {value}.",
+      "digits": "C'est {digits}.",
+      "date": "C'est le {day} {month} {year}.",
+      "option": "Je choisis {label}.",
+      "decline": "Je n'ai pas cela.",
+      "decline_na": "Cela ne s'applique pas à mon cas.",
+      "wrong_option": "En fait, {label}.",
+      "wrong_value": "En fait, c'est {value}."
+    },
+    "say_overrides": {
+      "p1_line1_aliennumber": ["Mon numéro d'enregistrement d'étranger est A un deux trois quatre cinq six sept huit neuf.", "Mon numéro d'enregistrement d'étranger est A neuf huit sept six cinq quatre trois deux un."],
+      "p1_line3a_familyname": ["Mon nom de famille actuel est Nguyen, qui s'épelle N G U Y E N.", "Mon nom de famille actuel est Tran, qui s'épelle T R A N."],
+      "p1_line3b_givenname": ["Mon prénom actuel est Linh, qui s'épelle L I N H.", "Mon prénom actuel est Lan, qui s'épelle L A N."],
+      "p1_line3c_middlename": ["Mon deuxième prénom est Thi, qui s'épelle T H I.", "Mon deuxième prénom est Van, qui s'épelle V A N."],
+      "p1_checkbox4": ["Non, mon nom n'a pas changé.", "Oui, mon nom a changé légalement."],
+      "p1_line6b_streetnumbername": ["Mon adresse est quatre deux zéro zéro Westheimer Road.", "Mon adresse est neuf neuf zéro zéro Richmond Avenue."],
+      "p1_line6c_aptsteflrnumber": ["C'est l'appartement numéro douze.", "C'est l'appartement numéro quatorze."],
+      "p1_line6d_cityortown": ["Ma ville est Houston.", null],
+      "p1_line6f_zipcode": ["Mon code postal est sept sept zéro deux sept.", null]
+    },
+    "decline_overrides": {
+      "p1_line6a_incareofname": "Il n'y a pas de nom aux bons soins de, mon courrier m'arrive directement."
+    }
+  },
+  "hi": {
+    "gtts": "hi",
+    "spoken_language": "Hindi",
+    "digit_words": ["शून्य", "एक", "दो", "तीन", "चार", "पाँच", "छह", "सात", "आठ", "नौ"],
+    "months": ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"],
+    "templates": {
+      "value": "यह {value} है।",
+      "digits": "यह {digits} है।",
+      "date": "यह {day} {month} {year} है।",
+      "option": "मैं {label} चुनता हूँ।",
+      "decline": "मेरे पास यह नहीं है।",
+      "decline_na": "यह मुझ पर लागू नहीं होता।",
+      "wrong_option": "असल में {label}।",
+      "wrong_value": "असल में यह {value} है।"
+    },
+    "say_overrides": {
+      "p1_line1_aliennumber": ["मेरा एलियन रजिस्ट्रेशन नंबर A एक दो तीन चार पाँच छह सात आठ नौ है।", "मेरा एलियन रजिस्ट्रेशन नंबर A नौ आठ सात छह पाँच चार तीन दो एक है।"],
+      "p1_line3a_familyname": ["मेरा उपनाम Nguyen है, स्पेलिंग है N G U Y E N।", "मेरा उपनाम Tran है, स्पेलिंग है T R A N।"],
+      "p1_line3b_givenname": ["मेरा नाम Linh है, स्पेलिंग है L I N H।", "मेरा नाम Lan है, स्पेलिंग है L A N।"],
+      "p1_line3c_middlename": ["मेरा मध्य नाम Thi है, स्पेलिंग है T H I।", "मेरा मध्य नाम Van है, स्पेलिंग है V A N।"],
+      "p1_checkbox4": ["नहीं, मेरा नाम नहीं बदला है।", "हाँ, मेरा नाम कानूनी रूप से बदला है।"],
+      "p1_line6b_streetnumbername": ["मेरा पता है चार दो शून्य शून्य Westheimer Road।", "मेरा पता है नौ नौ शून्य शून्य Richmond Avenue।"],
+      "p1_line6c_aptsteflrnumber": ["अपार्टमेंट नंबर बारह है।", "अपार्टमेंट नंबर चौदह है।"],
+      "p1_line6d_cityortown": ["मेरा शहर Houston है।", null],
+      "p1_line6f_zipcode": ["मेरा ज़िप कोड सात सात शून्य दो सात है।", null]
+    },
+    "decline_overrides": {
+      "p1_line6a_incareofname": "कोई केयर-ऑफ नाम नहीं है, मेरी डाक सीधे मुझे आती है।"
+    }
+  },
+  "ru": {
+    "gtts": "ru",
+    "spoken_language": "Russian",
+    "digit_words": ["ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"],
+    "months": ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"],
+    "templates": {
+      "value": "Это {value}.",
+      "digits": "Это {digits}.",
+      "date": "Это {day} {month} {year} года.",
+      "option": "Я выбираю {label}.",
+      "decline": "У меня этого нет.",
+      "decline_na": "Это ко мне не относится.",
+      "wrong_option": "На самом деле {label}.",
+      "wrong_value": "На самом деле это {value}."
+    },
+    "say_overrides": {
+      "p1_line1_aliennumber": ["Мой регистрационный номер иностранца A один два три четыре пять шесть семь восемь девять.", "Мой регистрационный номер иностранца A девять восемь семь шесть пять четыре три два один."],
+      "p1_line3a_familyname": ["Моя фамилия Nguyen, по буквам N G U Y E N.", "Моя фамилия Tran, по буквам T R A N."],
+      "p1_line3b_givenname": ["Моё имя Linh, по буквам L I N H.", "Моё имя Lan, по буквам L A N."],
+      "p1_line3c_middlename": ["Моё среднее имя Thi, по буквам T H I.", "Моё среднее имя Van, по буквам V A N."],
+      "p1_checkbox4": ["Нет, моё имя не менялось.", "Да, моё имя было официально изменено."],
+      "p1_line6b_streetnumbername": ["Мой адрес четыре два ноль ноль Westheimer Road.", "Мой адрес девять девять ноль ноль Richmond Avenue."],
+      "p1_line6c_aptsteflrnumber": ["Квартира номер двенадцать.", "Квартира номер четырнадцать."],
+      "p1_line6d_cityortown": ["Мой город Хьюстон.", null],
+      "p1_line6f_zipcode": ["Мой почтовый индекс семь семь ноль два семь.", null]
+    },
+    "decline_overrides": {
+      "p1_line6a_incareofname": "Нет имени для передачи, почта приходит прямо мне."
+    }
+  }
+}

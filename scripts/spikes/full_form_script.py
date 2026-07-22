@@ -61,6 +61,27 @@ import g1b_answer_key  # noqa: E402  (backend/scripts, no package __init__)
 
 I90_SCHEMA_PATH = os.path.join(_REPO_ROOT, "form-kits", "i-90", "schema.json")
 
+# Data-driven phrasing for languages beyond en/es (bd polyglot-pdf-6mzi).
+# Native-script strings live in the UTF-8 JSON fixture, never in this file
+# (ASCII-only source rule, CLAUDE.md scar #6).
+MULTILANG_PHRASES_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fixtures",
+    "multilang_phrases.json")
+_multilang_cache: dict | None = None
+
+
+def multilang_phrases() -> dict:
+    """Lazy-load the per-language phrase data ({lang: {...}}); {} if absent."""
+    global _multilang_cache
+    if _multilang_cache is None:
+        try:
+            with open(MULTILANG_PHRASES_PATH, encoding="utf-8") as f:
+                _multilang_cache = json.load(f)
+        except FileNotFoundError:
+            _multilang_cache = {}
+        _multilang_cache.pop("_note", None)
+    return _multilang_cache
+
 MULTI_SEP = g1b_answer_key.MULTI_SEP
 
 
@@ -198,7 +219,10 @@ _ORDINALS_EN = {
 
 
 def _spell_digits(s: str, lang: str = "en") -> str:
-    words = _DIGIT_WORDS[lang]
+    words = _DIGIT_WORDS.get(lang)
+    if words is None:
+        # JSON-fixture languages (bd polyglot-pdf-6mzi): digit_words[0..9].
+        words = multilang_phrases()[lang]["digit_words"]
     return " ".join(words[int(c)] for c in s if c.isdigit())
 
 
@@ -713,19 +737,103 @@ def _phrase_es(field: dict, answer) -> tuple:
     return say, _wrong_for(field, say, answer, "es")
 
 
+def _date_spoken_generic(iso: str, lang: str) -> str:
+    """Spoken date for a JSON-fixture language: numerals for day/year (gTTS
+    reads numerals in the target language), month from the months table."""
+    data = multilang_phrases()[lang]
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    return data["templates"]["date"].format(
+        day=d.day, month=data["months"][d.month - 1], year=d.year)
+
+
+def _wrong_generic(field: dict, say: str, answer, lang: str) -> str:
+    """Mechanical unhappy-path mutation for JSON-fixture languages; mirrors
+    _wrong_for shape-for-shape (option swap / month shift / digit reverse)."""
+    t = multilang_phrases()[lang]["templates"]
+    opts = field.get("options") or []
+    if opts and answer is not None:
+        others = [o for o in opts
+                  if isinstance(o, dict) and str(o.get("value")) != str(answer)]
+        if others:
+            return t["wrong_option"].format(
+                label=_option_label(field, others[0].get("value")))
+    if answer and _is_date_field(field):
+        d = datetime.strptime(str(answer), "%Y-%m-%d")
+        month = (d.month % 12) + 1
+        year = d.year + (1 if d.month == 12 else 0)
+        alt = d.replace(year=year, month=month, day=min(d.day, 28))
+        return _date_spoken_generic(alt.strftime("%Y-%m-%d"), lang)
+    digits = re.sub(r"\D", "", str(answer or ""))
+    if digits and len(digits) >= 5:
+        spelled = _spell_digits(digits, lang)
+        reversed_spelled = _spell_digits(digits[::-1], lang)
+        if spelled in say:
+            return say.replace(spelled, reversed_spelled)
+        if digits in say:
+            return say.replace(digits, digits[::-1])
+    if answer is not None and str(answer):
+        # Always a REAL mutation (reversed value) -- the plan builder aborts on
+        # a degenerate wrong == say, and unlike the en/es arms there are no
+        # per-field override tables to fall back on here.
+        return t["wrong_value"].format(value=str(answer)[::-1].title())
+    return say
+
+
+def _phrase_generic(field: dict, answer, lang: str) -> tuple:
+    """Value-forward phrasing for a JSON-fixture language (bd polyglot-pdf-6mzi).
+    Mirrors _phrase_es: never embeds the English spoken_name in the generic
+    sentence; option labels are read back in ENGLISH verbatim (the printed-form
+    bilingual answer pattern) unless a say_override supplies a native answer."""
+    data = multilang_phrases()[lang]
+    t = data["templates"]
+    fid = field.get("id", "")
+
+    if answer is None:
+        say = (data.get("decline_overrides") or {}).get(fid)
+        if say is None:
+            say = (t["decline_na"] if _NA_STYLE_FIELDS.match(fid)
+                   else t["decline"])
+        return say, say  # a decline has no distinct unhappy variant
+
+    ov = (data.get("say_overrides") or {}).get(fid)
+    if ov:
+        say, wrong = ov[0], (ov[1] if len(ov) > 1 else None)
+        return say, (wrong if wrong is not None
+                     else _wrong_generic(field, say, answer, lang))
+
+    if field.get("options"):
+        say = t["option"].format(label=_option_label(field, answer))
+        return say, _wrong_generic(field, say, answer, lang)
+
+    if _is_date_field(field):
+        say = _date_spoken_generic(str(answer), lang)
+        return say, _wrong_generic(field, say, answer, lang)
+
+    digits = re.sub(r"\D", "", str(answer))
+    if _is_digit_field(field) and digits:
+        say = t["digits"].format(digits=_spell_digits(digits, lang))
+        return say, _wrong_generic(field, say, answer, lang)
+
+    say = t["value"].format(value=answer)
+    return say, _wrong_generic(field, say, answer, lang)
+
+
 def phrase(field: dict, answer, lang: str = "en") -> tuple:
     """(say, wrong) spoken phrasings for a field + its persona answer.
     answer=None means a visible field the persona declines (expect-empty).
-    Dispatches by lang ('en'/'es'); the expected-canon path (expected_canon)
-    is unchanged by lang -- the form fills in English regardless of the
-    spoken input language."""
+    Dispatches by lang: 'en'/'es' are code-native; any other lang must have an
+    entry in fixtures/multilang_phrases.json (bd polyglot-pdf-6mzi). The
+    expected-canon path (expected_canon) is unchanged by lang -- the form fills
+    in English regardless of the spoken input language."""
     if lang == "es":
         return _phrase_es(field, answer)
-    if lang != "en":
-        raise NotImplementedError(
-            f"lang={lang!r} is not implemented; only 'en' and 'es' are "
-            "supported.")
-    return _phrase_en(field, answer)
+    if lang == "en":
+        return _phrase_en(field, answer)
+    if lang in multilang_phrases():
+        return _phrase_generic(field, answer, lang)
+    raise NotImplementedError(
+        f"lang={lang!r} is not implemented; use 'en', 'es', or add an entry "
+        "to fixtures/multilang_phrases.json.")
 
 
 # --------------------------------------------------------------------------

@@ -587,8 +587,11 @@ def synth_cached(text: str, lang: str = "en") -> bytes:
     from gtts import gTTS
     import soundfile as sf
 
+    # Harness --lang values are full_form_script phrase keys; a few differ from
+    # gTTS's code ("zh" -> "zh-CN"). Cache key stays on the harness lang.
+    gtts_lang = {"zh": "zh-CN"}.get(lang, lang)
     buf = io.BytesIO()
-    gTTS(text, lang=lang).write_to_fp(buf)
+    gTTS(text, lang=gtts_lang).write_to_fp(buf)
     buf.seek(0)
     y, sr = sf.read(buf, dtype="float32")
     if y.ndim > 1:
@@ -1998,6 +2001,7 @@ async def run(args) -> int:
     meta["events_mode"] = getattr(args, "events", "none")
     meta["reactivity"] = getattr(args, "reactivity", None)
     meta["lang"] = getattr(args, "lang", "en")
+    meta["spoken_language"] = getattr(args, "spoken_language", None) or "English"
     meta["planted_groups"] = [sorted(g) for g in planted_groups]
     meta["step_kinds"] = [
         (s.get("event") or ("skip" if s.get("skip") else
@@ -2160,6 +2164,14 @@ async def run(args) -> int:
 
         si = service.build_form_context_message(arm_schema, {}, **si_kwargs)
         meta["system_instruction_chars"] = len(si)
+        # Session SPOKEN language (bd polyglot-pdf-6mzi): mirror websocket_routes'
+        # handshake seeding -- set BEFORE start_session so the per-connect ASR
+        # language bias (bd y25o) and the ow1e option-label translation task both
+        # see it, exactly as production does. Defaults to English so historical
+        # arms (incl. E6, which measured Spanish AUDIO against an English-speaking
+        # model) are unchanged unless --spoken-language is passed.
+        spoken_language = getattr(args, "spoken_language", None) or "English"
+        service._spoken_language = spoken_language
         await service.start_session(
             websocket=client, session_id=f"4loz-{stamp}",
             accept_connection=True, schema=arm_schema, current_values={},
@@ -2264,7 +2276,7 @@ async def run(args) -> int:
         last_total = 0
 
         # Production greeting: initiating message, then the greeting turn.
-        await service.send_initiating_message("English", client.next_hint() or "")
+        await service.send_initiating_message(spoken_language, client.next_hint() or "")
         last_total = await _wait_turn(adapter, last=last_total)
         meta["greeting_tokens"] = tracker.snapshot()["_session_total_tokens"]
         tracker.base = tracker.snapshot()
@@ -2846,12 +2858,25 @@ def _write_debug_artifact(path, q_windows, tool_io, transcript_chunks,
     out_of_window = [{"tool": r["tool"], "args": r["args"],
                       "response": r["response"], "q_at_call": r["q_at_call"]}
                      for r in by_q.get("0", [])]
+    # The GREETING turn's speech falls before q1's window and would otherwise be
+    # dropped -- but it is the single richest register/language sample of the
+    # session (bd polyglot-pdf-6mzi multilingual assessment reads it).
+    greeting_said = ""
+    greeting_heard = ""
+    if q_windows:
+        t0 = q_windows[0]["t_start"]
+        greeting_said = "".join(
+            c["text"] for c in transcript_chunks if c["ts"] < t0).strip()
+        greeting_heard = "".join(
+            c["text"] for c in input_transcript if c["ts"] < t0).strip()
     artifact = {
         "note": ("bd polyglot-pdf-jnjj.39 debug artifact. LOCAL-ONLY -- holds "
                  "transcripts + field values (user data). Per question: model_heard "
                  "(input transcript), model_said (output speech), tool_io (exact args "
                  "sent + response received), and tools_reliable (timestamp-window "
                  "attribution) vs tools_legacy (the old mutable-counter attribution)."),
+        "greeting_model_said": greeting_said,
+        "greeting_model_heard": greeting_heard,
         "questions": questions,
         "out_of_window_tool_io": out_of_window,
     }
@@ -2902,7 +2927,17 @@ def main() -> int:
     ap.add_argument("--lang", default="en",
                     help="spoken-answer language for fixture synthesis (E6 "
                          "Spanish arm: 'es'; phrasing templates must exist in "
-                         "full_form_script for non-'en')")
+                         "full_form_script for non-'en' -- code-native es, or "
+                         "a fixtures/multilang_phrases.json entry: zh/fr/hi/ru)")
+    ap.add_argument("--spoken-language", default=None,
+                    help="session SPOKEN language NAME sent to the model (e.g. "
+                         "'Spanish', 'Chinese') -- the language Gemini SPEAKS, "
+                         "seeded pre-connect exactly as the production handshake "
+                         "does (ASR bias + option-label translation follow). "
+                         "Default English, preserving historical arms: the E6 "
+                         "run measured Spanish USER audio against an English-"
+                         "speaking model. Pass BOTH --lang and --spoken-language "
+                         "for a fully in-language session (bd polyglot-pdf-6mzi).")
     ap.add_argument("--text-ai", action="store_true",
                     help="wire the REAL TextAIGemini sidecar (secretary + "
                          "validator) into the run. Default ON for --schema "
