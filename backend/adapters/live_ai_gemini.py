@@ -1660,6 +1660,18 @@ class LiveAIGemini(ILiveAI):
             self._log.info("[lang] Transcription language bias applied",
                           language_codes=list(lang_codes))
 
+        # API-level speech language (bd polyglot-pdf-m1lg): Google's Live docs
+        # recommend speech_config.language_code match the user's language.
+        # Endpoint-verified ACCEPTED on the production native-audio tier
+        # (probe_transcription_lang_codes.py --arm speech-lang, 2026-07-22).
+        # Reuses the SAME per-session bias codes as the block above (seeded
+        # from the handshake spoken language); never set for an unmapped
+        # language. Kill-switch mirrors the y25o hint flag pattern.
+        if lang_codes and getattr(settings, "SPEECH_LANGUAGE_CODE_ENABLED", False):
+            config['speech_config'] = {'language_code': list(lang_codes)[0]}
+            self._log.info("[lang] speech_config.language_code applied",
+                          language_code=list(lang_codes)[0])
+
         # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
         # sliding window bounds the live context so per-turn re-billing stops compounding
         # (quadratic -> linear cumulative cost) and audio sessions can run past the 15-min

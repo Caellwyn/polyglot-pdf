@@ -282,6 +282,14 @@ class Settings(BaseModel):
 	# scripts/spikes/transcription_lang_codes_findings.md); the premium tier
 	# (AI Studio 3.1) is unverified, so this kill-switch reverts to unbiased
 	# multilingual ASR if a model tier rejects it (1007 at connect).
+	# API-level speech language on the Live connect config (bd polyglot-pdf-m1lg):
+	# speech_config.language_code from the session's spoken-language bias code.
+	# Google's Live docs recommend it; endpoint-verified accepted on the
+	# production native-audio tier. Default ON with this env kill-switch,
+	# mirroring the transcription-hint flag below.
+	SPEECH_LANGUAGE_CODE_ENABLED: bool = (
+		os.getenv("SPEECH_LANGUAGE_CODE_ENABLED", "true").lower() == "true"
+	)
 	TRANSCRIPTION_LANGUAGE_HINT_ENABLED: bool = (
 		os.getenv("TRANSCRIPTION_LANGUAGE_HINT_ENABLED", "true").lower() == "true"
 	)
