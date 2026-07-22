@@ -1906,8 +1906,20 @@ async def run(args) -> int:
 
     secs = sections_in_plan(schema, plan)
 
+    # Localized confirmation/decline utterances (bd polyglot-pdf-lo37): the
+    # persona says yes/no in the session language, not English-with-an-accent
+    # (the English fixtures transcribed as Devanagari phonetics in hi and as
+    # German/Spanish garbage in the unbiased ru run, confounding the input-
+    # transcription evidence). English keeps the module defaults so the
+    # committed en fixture cache stays valid. Distinct local names on purpose:
+    # shadowing CONFIRM_YES here would UnboundLocalError every earlier read
+    # (the websocket_routes local-shadow trap).
+    _lang_phrases = (_ffs.multilang_phrases().get(args.lang) or {}) if args.lang != "en" else {}
+    confirm_utt = _lang_phrases.get("confirm_yes", CONFIRM_YES)
+    reject_utt = _lang_phrases.get("reject", REJECT)
+
     # Pre-synth all audio (cache-aware).
-    utterances = {CONFIRM_YES, REJECT}
+    utterances = {confirm_utt, reject_utt}
     for q in steps:
         for key in ("say", "wrong", "skip_say", "planted_say",
                     "correction_say"):
@@ -2386,7 +2398,7 @@ async def run(args) -> int:
                 rec["hit_target"] = sw.get("field_id") == ev["target_field_id"]
                 rec["seam_latency_s"] = round(sw["ts"] - t_end, 3)
             await speak(ev["correction_say"], "navigate-correct")
-            await speak(CONFIRM_YES, "confirm")
+            await speak(confirm_utt, "confirm")
             event_records.append(rec)
 
         async def check_steers():
@@ -2467,13 +2479,13 @@ async def run(args) -> int:
                     if organic is not None:
                         await speak(f"No, that is wrong. {say_by_fid[organic]}",
                                     "steer-organic-correct")
-                        await speak(CONFIRM_YES, "steer-confirm")
+                        await speak(confirm_utt, "steer-confirm")
                         rec["outcome"] = "corrected_organic"
                         rec["organic_field"] = organic
                         continue
                 if plant is not None:
                     await speak(plant["correct_say"], "steer-correct")
-                    await speak(CONFIRM_YES, "steer-confirm")
+                    await speak(confirm_utt, "steer-confirm")
                     rec["outcome"] = ("corrected" if target is not None
                                       else "corrected_no_switch")
                 else:
@@ -2620,7 +2632,7 @@ async def run(args) -> int:
                 if not recorded:
                     # The model may verify before skipping -- allow one yes turn
                     # (mirrors probe_confirm_field's documented variance).
-                    await speak(CONFIRM_YES, "skip-confirm")
+                    await speak(confirm_utt, "skip-confirm")
                     recorded = any(e.get("outcome") == "recorded"
                                    and e.get("field_id") == fid
                                    for e in client.skip_events[n_skips0:])
@@ -2631,15 +2643,15 @@ async def run(args) -> int:
                 # and confirm; detection is the VALIDATOR's job at a later
                 # boundary (check_steers drives the correction rail then).
                 await speak(q["planted_say"], "plant-value")
-                await speak(CONFIRM_YES, "confirm")
+                await speak(confirm_utt, "confirm")
             elif (q.get("path") or args.path) == "happy":
                 await speak(q["say"], "value")
-                await speak(CONFIRM_YES, "confirm")
+                await speak(confirm_utt, "confirm")
             else:
                 await speak(q["wrong"], "wrong-value")
-                await speak(REJECT, "reject")
+                await speak(reject_utt, "reject")
                 await speak(q["say"], "corrected-value")
-                await speak(CONFIRM_YES, "confirm")
+                await speak(confirm_utt, "confirm")
             # End the window at the LAST user activity_end (set by speak), NOT now:
             # Gemini's confirm response after it carries the NEXT field's prompt, which
             # must fall into the next window's model_said (Codex PR #246 round 2).
