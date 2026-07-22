@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py backend/services/request_coordinator.py backend/config.py
 
-*Last updated: 2026-07-16 (bd polyglot-pdf-f7h7: the stored-value echo is success-branch-only -- the error branch, incl. a collapsed multi-field call, carries no `stored_values`. Same-day bd polyglot-pdf-h7wx: update_form_fields success responses carry the stored-value echo (`stored_values` + message line) the model reads its confirmation back from; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is deprecated section-reset-fallback, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool
+*Last updated: 2026-07-22 (bd polyglot-pdf-djnk: validation-error responses carry an explicit DISCARD-the-rejected-value instruction so a rejected value is never re-used on the next field; see [../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md](../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md)). Prior: 2026-07-16 (bd polyglot-pdf-f7h7: the stored-value echo is success-branch-only -- the error branch, incl. a collapsed multi-field call, carries no `stored_values`. Same-day bd polyglot-pdf-h7wx: update_form_fields success responses carry the stored-value echo (`stored_values` + message line) the model reads its confirmation back from; see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is deprecated section-reset-fallback, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool
 `skip_field` to the tool table + count -- a voice skip of a required field the
 user cannot answer, distinct from N/A; it mirrors confirm_field's round-trip).
 Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth
@@ -105,7 +105,11 @@ callbacks.
    client stored nothing), so an error response -- including a collapsed
    multi-field call whose first field validated but was never delivered to the
    client -- carries NO `stored_values`, or the model would read back a value
-   client and model never agreed on. The adapter sends it back via
+   client and model never agreed on. A validation-error response additionally
+   carries an explicit **DISCARD instruction** (bd polyglot-pdf-djnk): a
+   rejected value is dead and must not be re-used on another/the next field
+   (observed live: a rejected invented value re-surfaced as the next field's
+   fill over the user's real answer). The adapter sends it back via
    `send_tool_response`. dev-log: `tool_callback_result` (the body the callback
    produced) then `tool_response` (the body actually sent on the wire).
 4. Gemini reads the ECHOED stored value back to the user (the DTI SI directs

@@ -59,9 +59,14 @@ class in a second language, recorded on the bead.
 
 ## Doc freshness
 
-Sprint plan + INDEX row added. The pre-existing stale docs flagged by the
-checker track files earlier branches touched (2026-07-12..17), none changed
-here; left per the stale-before-you rule (same note as the 6mzi entry).
+Sprint plan + INDEX row added. BUMPED (this branch changed their tracked
+files with content effect): tool-call-flow.md (the djnk DISCARD rule on
+validation-error responses), voice-ai.md (the nb2c/s39z SI rules + djnk).
+REVIEWED-AND-LEFT (tracked-file mtime only, content unaffected by this
+branch's SI-text/message edits): config-deployment.md, ai-models.md,
+context-compression.md, jit-schema.md, confirmation-and-audit.md (its
+confirmation-LOGGING content is untouched by the response-message change),
+plus the pre-existing stale set from earlier branches (2026-07-12..17).
 
 ## Files touched
 
