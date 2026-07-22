@@ -1634,7 +1634,20 @@ class CallbackHandler:
                     parts.append(f"valid={opts_sample}")
                 
                 error_lines.append(" | ".join(parts))
-            
+
+            # A rejected value must DIE with its rejection (bd polyglot-pdf-djnk):
+            # observed live (6mzi hi run), a value that failed options-validation
+            # on the current field was silently re-used as the fill for the NEXT
+            # field, overriding what the user actually said there. Tell the model
+            # explicitly to discard it and re-ask.
+            if validation_errors:
+                error_lines.append(
+                    "DISCARD the rejected value(s) above -- they are not pending "
+                    "answers. Never reuse a rejected value on another field or on "
+                    "the next field. Ask the user again for the current field and "
+                    "fill exactly what THEY say."
+                )
+
             # Format unknown fields. Two distinct failure modes with distinct
             # recoveries (bd polyglot-pdf-b1gj):
             # - a REAL field that is not the active one -> the exit ramp is
