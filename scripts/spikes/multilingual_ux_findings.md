@@ -152,6 +152,26 @@ one rerun each of the two most affected languages:
 | 20260722T215056Z | ru | 12/14 | Input transcription now predominantly RUSSIAN (de/es garble gone -- the ru-RU bias works); confirms transcribed as Russian (lo37); spell-back in LATIN letter names and all three names filled correctly incl. LINH (s39z; baseline mis-filled LIN); greeting translated the section title. Kit-baked Russian option labels covered 100% (text cost $0 -- kit precedence). Two misses: a street transcription typo ("Westhheimer") and apt "12" filled as "19" -- the ww9y short-numeric class AGAIN, second language, recorded on the bead. |
 | 20260722T215331Z | zh | **14/14** | No name-block desync this run (baseline: 9/14 with 3 shifted names); declines stored EMPTY, no literal "N/A" (nb2c); Latin spell-backs; confirms transcribed as Chinese (lo37). Single run -- desync non-recurrence is NOT proven (that is A1's n>=3 job, bd 66ek.1). |
 
+## Register-guidance A/B (bd polyglot-pdf-zmlo, 2026-07-22)
+
+Language-agnostic REGISTER rule (+ title translation) added to both SIs and
+A/B'd on ru (n=3 per arm; baseline = the m1lg flag-ON runs, identical config
+except the rule) then checked on es (n=3, rule on):
+
+| arm | fills | mean words/turn | notes |
+|---|---|---|---|
+| ru baseline (231520/231732/231941Z) | 38/42 | 7.7 | short-question sentences incl. bare field asks ("Номер квартиры?") |
+| ru + register rule (232428/232637/232852Z) | 37/42 | 8.5 | fuller courteous asks ("Не могли бы вы назвать..."); remaining short sentences are almost all "Верно?" confirm tags (desirable brevity) |
+| es + register rule (233334/233604/233836Z) | 40/42 | -- | register stays warm; NO regression |
+
+Verdict: SHIPPED (the general rule, per maintainer preference; no
+per-language register controls needed on this evidence). Honest residuals:
+(a) the effect is modest and n=3; (b) title translation is IMPROVED but not
+eliminated -- 1 of 3 es greetings still read the section title in English
+("Application Information"); the structural fix is delivering TRANSLATED
+section labels, noted on bd polyglot-pdf-tupu.2 (the spoken-name delivery
+pass touches the same metadata channel).
+
 ## Caveats
 
 - One run per language; D2/D3-class events are known to be intermittent.

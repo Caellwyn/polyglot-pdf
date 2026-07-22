@@ -345,6 +345,19 @@ def test_dti_and_legacy_si_spell_back_uses_english_letter_names():
         assert "another alphabet" in lowered
 
 
+def test_dti_and_legacy_si_carry_register_and_title_translation_guidance():
+    """Register must not depend on the session language (the 6mzi ru run got
+    telegraphic two-word questions and an untranslated English form title while
+    fr got full courteous sentences); both SIs pin the language-agnostic
+    register rule + title translation (bd polyglot-pdf-zmlo / h1me)."""
+    for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
+        lowered = si.lower()
+        assert "register (how you speak" in lowered
+        assert "never a bare two-word demand" in lowered
+        assert "do not become terse or formal" in lowered
+        assert "never read an english title aloud" in lowered
+
+
 def test_dti_and_legacy_si_pin_declines_to_empty_never_literal_na():
     """A decline/not-applicable stores the EMPTY value, never the literal text
     'N/A' -- the 6mzi zh run wrote literal 'N/A' into in-care-of-name and middle
