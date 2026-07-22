@@ -156,6 +156,14 @@ export const CONNECTION_TIMEOUT_TRANSLATIONS: Record<string, ConnectionTimeoutCo
     reconnectingTitle: 'Повторне підключення...',
     reconnectingMessage: 'Будь ласка, зачекайте -- у нас виникли труднощі зі звʼязком з AI-помічником. Ваш прогрес збережено, і ми автоматично підключимо вас знову.',
   },
+  'Russian': {
+    title: 'Время Ожидания Соединения Истекло',
+    message: 'Соединение потеряно. Ваш прогресс сохранён. Нажмите ниже, чтобы переподключиться и продолжить с того места, где вы остановились.',
+    reconnectButton: 'Подключиться Снова',
+    cancelButton: 'Не Сейчас',
+    reconnectingTitle: 'Переподключение...',
+    reconnectingMessage: 'Пожалуйста, подождите -- у нас возникли трудности со связью с ИИ-помощником. Ваш прогресс сохранён, и мы автоматически подключим вас снова.',
+  },
   'Swedish': {
     title: 'Anslutningen Tog Slut',
     message: 'Anslutningen förlorades. Dina framsteg är sparade. Klicka nedan för att återansluta och fortsätta där du slutade.',

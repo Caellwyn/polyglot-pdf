@@ -890,7 +890,8 @@
             "dutch": "Alleenstaand",
             "swedish": "Ensamst\u00e5ende",
             "ukrainian": "\u041e\u0441\u043e\u0431\u0430, \u044f\u043a\u0430 \u043d\u0435 \u043f\u0435\u0440\u0435\u0431\u0443\u0432\u0430\u0454 \u0443 \u0448\u043b\u044e\u0431\u0456",
-            "afrikaans": "Enkel"
+            "afrikaans": "Enkel",
+            "russian": "\u041b\u0438\u0446\u043e, \u043d\u0435 \u0441\u043e\u0441\u0442\u043e\u044f\u0449\u0435\u0435 \u0432 \u0431\u0440\u0430\u043a\u0435"
           }
         },
         {
@@ -920,7 +921,8 @@
             "dutch": "Gehuwd, gezamenlijke aangifte",
             "swedish": "Gift och deklarerar gemensamt",
             "ukrainian": "\u041f\u043e\u0434\u0440\u0443\u0436\u0436\u044f, \u0449\u043e \u043f\u043e\u0434\u0430\u0454 \u0441\u043f\u0456\u043b\u044c\u043d\u0443 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0456\u044e",
-            "afrikaans": "Getroud en gesamentlik ingedien"
+            "afrikaans": "Getroud en gesamentlik ingedien",
+            "russian": "\u0412 \u0431\u0440\u0430\u043a\u0435, \u0441\u043e\u0432\u043c\u0435\u0441\u0442\u043d\u0430\u044f \u043f\u043e\u0434\u0430\u0447\u0430 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u0438"
           }
         },
         {
@@ -950,7 +952,8 @@
             "dutch": "Gehuwd, afzonderlijke aangifte (MFS)",
             "swedish": "Gift och deklarerar separat (MFS)",
             "ukrainian": "\u041f\u043e\u0434\u0440\u0443\u0436\u0436\u044f, \u0449\u043e \u043f\u043e\u0434\u0430\u0454 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0456\u044e \u043e\u043a\u0440\u0435\u043c\u043e (MFS)",
-            "afrikaans": "Getroud en afsonderlik ingedien (MFS)"
+            "afrikaans": "Getroud en afsonderlik ingedien (MFS)",
+            "russian": "\u0412 \u0431\u0440\u0430\u043a\u0435, \u0440\u0430\u0437\u0434\u0435\u043b\u044c\u043d\u0430\u044f \u043f\u043e\u0434\u0430\u0447\u0430 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u0438 (MFS)"
           }
         },
         {
@@ -980,7 +983,8 @@
             "dutch": "Hoofd van het huishouden (HOH)",
             "swedish": "Hush\u00e5llsf\u00f6rest\u00e5ndare (HOH)",
             "ukrainian": "\u0413\u043e\u043b\u043e\u0432\u0430 \u0434\u043e\u043c\u043e\u0433\u043e\u0441\u043f\u043e\u0434\u0430\u0440\u0441\u0442\u0432\u0430 (HOH)",
-            "afrikaans": "Hoof van huishouding (HOH)"
+            "afrikaans": "Hoof van huishouding (HOH)",
+            "russian": "\u0413\u043b\u0430\u0432\u0430 \u0441\u0435\u043c\u044c\u0438 (HOH)"
           }
         },
         {
@@ -1010,7 +1014,8 @@
             "dutch": "In aanmerking komende achterblijvende echtgenoot (QSS)",
             "swedish": "Kvalificerad efterlevande make/maka (QSS)",
             "ukrainian": "\u0412\u0434\u0456\u0432\u0435\u0446\u044c / \u0432\u0434\u043e\u0432\u0430, \u0449\u043e \u043c\u0430\u0454 \u043d\u0430 \u0446\u0435 \u043f\u0440\u0430\u0432\u043e (QSS)",
-            "afrikaans": "Kwalifiserende oorlewende gade (QSS)"
+            "afrikaans": "Kwalifiserende oorlewende gade (QSS)",
+            "russian": "\u041e\u0442\u0432\u0435\u0447\u0430\u044e\u0449\u0438\u0439 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c \u0432\u0434\u043e\u0432\u0435\u0446 / \u0432\u0434\u043e\u0432\u0430 (QSS)"
           }
         }
       ],
@@ -1141,7 +1146,8 @@
             "dutch": "Ja",
             "swedish": "Ja",
             "ukrainian": "\u0422\u0430\u043a",
-            "afrikaans": "Ja"
+            "afrikaans": "Ja",
+            "russian": "\u0414\u0430"
           }
         },
         {
@@ -1171,7 +1177,8 @@
             "dutch": "Nee",
             "swedish": "Nej",
             "ukrainian": "\u041d\u0456",
-            "afrikaans": "Nee"
+            "afrikaans": "Nee",
+            "russian": "\u041d\u0435\u0442"
           }
         }
       ],
@@ -2223,7 +2230,8 @@
             "dutch": "1 Regel 3a",
             "swedish": "1 Rad 3a",
             "ukrainian": "1 \u0420\u044f\u0434\u043e\u043a 3a",
-            "afrikaans": "1 Lyn 3a"
+            "afrikaans": "1 Lyn 3a",
+            "russian": "1 \u0421\u0442\u0440\u043e\u043a\u0430 3a"
           }
         },
         {
@@ -2253,7 +2261,8 @@
             "dutch": "2 Regel 3b",
             "swedish": "2 Rad 3b",
             "ukrainian": "2 \u0420\u044f\u0434\u043e\u043a 3b",
-            "afrikaans": "2 Lyn 3b"
+            "afrikaans": "2 Lyn 3b",
+            "russian": "2 \u0421\u0442\u0440\u043e\u043a\u0430 3b"
           }
         }
       ],
@@ -2339,7 +2348,8 @@
             "dutch": "1 Rollover",
             "swedish": "1 Rollover",
             "ukrainian": "1 Rollover",
-            "afrikaans": "1 Oorrol"
+            "afrikaans": "1 Oorrol",
+            "russian": "1 \u0420\u043e\u043b\u043b\u043e\u0432\u0435\u0440"
           }
         },
         {
@@ -2369,7 +2379,8 @@
             "dutch": "2 QCD",
             "swedish": "2 QCD",
             "ukrainian": "2 QCD",
-            "afrikaans": "2 QCD"
+            "afrikaans": "2 QCD",
+            "russian": "2 QCD"
           }
         },
         {
@@ -2399,7 +2410,8 @@
             "dutch": "3",
             "swedish": "3",
             "ukrainian": "3",
-            "afrikaans": "3"
+            "afrikaans": "3",
+            "russian": "3"
           }
         }
       ],
@@ -2508,7 +2520,8 @@
             "dutch": "1 Rollover",
             "swedish": "1 Rollover",
             "ukrainian": "1 Rollover",
-            "afrikaans": "1 Oorrol"
+            "afrikaans": "1 Oorrol",
+            "russian": "1 \u0420\u043e\u043b\u043b\u043e\u0432\u0435\u0440"
           }
         },
         {
@@ -2538,7 +2551,8 @@
             "dutch": "2 PSO",
             "swedish": "2 PSO",
             "ukrainian": "2 PSO",
-            "afrikaans": "2 PSO"
+            "afrikaans": "2 PSO",
+            "russian": "2 PSO"
           }
         },
         {
@@ -2568,7 +2582,8 @@
             "dutch": "3",
             "swedish": "3",
             "ukrainian": "3",
-            "afrikaans": "3"
+            "afrikaans": "3",
+            "russian": "3"
           }
         }
       ],
@@ -2731,7 +2746,8 @@
             "dutch": "Schedule D niet vereist",
             "swedish": "Schedule D kr\u00e4vs ej",
             "ukrainian": "\u0414\u043e\u0434\u0430\u0442\u043e\u043a D \u043d\u0435 \u0432\u0438\u043c\u0430\u0433\u0430\u0454\u0442\u044c\u0441\u044f",
-            "afrikaans": "Bylae D nie vereis nie"
+            "afrikaans": "Bylae D nie vereis nie",
+            "russian": "\u041f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435 D \u043d\u0435 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f"
           }
         },
         {
@@ -2761,7 +2777,8 @@
             "dutch": "Inclusief vermogenswinst of (-verlies) van kind",
             "swedish": "Inkluderar barns kapitalvinst eller (f\u00f6rlust)",
             "ukrainian": "\u0412\u043a\u043b\u044e\u0447\u0430\u0454 \u043f\u0440\u0438\u0440\u0456\u0441\u0442 \u043a\u0430\u043f\u0456\u0442\u0430\u043b\u0443 \u0430\u0431\u043e (\u0437\u0431\u0438\u0442\u043e\u043a) \u0434\u0438\u0442\u0438\u043d\u0438",
-            "afrikaans": "Sluit kind se kapitaalwins of (-verlies) in"
+            "afrikaans": "Sluit kind se kapitaalwins of (-verlies) in",
+            "russian": "\u0412\u043a\u043b\u044e\u0447\u0430\u0435\u0442 \u043f\u0440\u0438\u0440\u043e\u0441\u0442 \u043a\u0430\u043f\u0438\u0442\u0430\u043b\u0430 \u0438\u043b\u0438 \u0443\u0431\u044b\u0442\u043e\u043a \u0440\u0435\u0431\u0435\u043d\u043a\u0430"
           }
         }
       ],
@@ -3135,7 +3152,8 @@
             "dutch": "1 Formulier 8814",
             "swedish": "1 Form 8814",
             "ukrainian": "1 \u0424\u043e\u0440\u043c\u0430 8814",
-            "afrikaans": "1 Vorm 8814"
+            "afrikaans": "1 Vorm 8814",
+            "russian": "1 \u0424\u043e\u0440\u043c\u0430 8814"
           }
         },
         {
@@ -3165,7 +3183,8 @@
             "dutch": "2 Formulier 4972",
             "swedish": "2 Form 4972",
             "ukrainian": "2 \u0424\u043e\u0440\u043c\u0430 4972",
-            "afrikaans": "2 Vorm 4972"
+            "afrikaans": "2 Vorm 4972",
+            "russian": "2 \u0424\u043e\u0440\u043c\u0430 4972"
           }
         },
         {
@@ -3195,7 +3214,8 @@
             "dutch": "3",
             "swedish": "3",
             "ukrainian": "3",
-            "afrikaans": "3"
+            "afrikaans": "3",
+            "russian": "3"
           }
         }
       ],
@@ -3792,7 +3812,8 @@
             "dutch": "Betaalrekening",
             "swedish": "L\u00f6nekonto",
             "ukrainian": "\u041f\u043e\u0442\u043e\u0447\u043d\u0438\u0439",
-            "afrikaans": "Tjek"
+            "afrikaans": "Tjek",
+            "russian": "\u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u0441\u0447\u0435\u0442"
           }
         },
         {
@@ -3822,7 +3843,8 @@
             "dutch": "Spaarrekening",
             "swedish": "Sparkonto",
             "ukrainian": "\u041e\u0449\u0430\u0434\u043d\u0438\u0439",
-            "afrikaans": "Spaar"
+            "afrikaans": "Spaar",
+            "russian": "\u0421\u0431\u0435\u0440\u0435\u0433\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u0441\u0447\u0435\u0442"
           }
         }
       ],
@@ -3945,7 +3967,8 @@
             "dutch": "Ja. Vul hieronder in.",
             "swedish": "Ja. Fyll i nedan.",
             "ukrainian": "\u0422\u0430\u043a. \u0417\u0430\u043f\u043e\u0432\u043d\u0456\u0442\u044c \u043d\u0438\u0436\u0447\u0435.",
-            "afrikaans": "Ja. Voltooi hieronder."
+            "afrikaans": "Ja. Voltooi hieronder.",
+            "russian": "\u0414\u0430. \u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u043d\u0438\u0436\u0435."
           }
         },
         {
@@ -3975,7 +3998,8 @@
             "dutch": "Nee",
             "swedish": "Nej",
             "ukrainian": "\u041d\u0456",
-            "afrikaans": "Nee"
+            "afrikaans": "Nee",
+            "russian": "\u041d\u0435\u0442"
           }
         }
       ],

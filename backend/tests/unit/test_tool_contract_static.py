@@ -331,6 +331,32 @@ def test_dti_and_legacy_si_ask_names_by_spelling_and_verify_by_spelling():
         assert "spelling back" in lowered
 
 
+def test_dti_and_legacy_si_spell_back_uses_english_letter_names():
+    """The spell-back must use ENGLISH letter names in every session language --
+    the 6mzi ru run read NGUYEN back as Cyrillic letter names, a transliteration
+    that verifies nothing about the Latin spelling the form receives, and the
+    run's one mis-fill (LIN vs LINH) sailed through exactly that readback
+    (bd polyglot-pdf-s39z)."""
+    for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
+        lowered = si.lower()
+        assert "english letter names" in lowered
+        assert "every session language" in lowered
+        # It must forbid translating the spelling into another alphabet.
+        assert "another alphabet" in lowered
+
+
+def test_dti_and_legacy_si_pin_declines_to_empty_never_literal_na():
+    """A decline/not-applicable stores the EMPTY value, never the literal text
+    'N/A' -- the 6mzi zh run wrote literal 'N/A' into in-care-of-name and middle
+    name while every other language correctly stored empty; what prints on the
+    PDF must not depend on the session language (bd polyglot-pdf-nb2c)."""
+    for si in (Settings().DTI_SYSTEM_INSTRUCTION, Settings().SYSTEM_INSTRUCTION):
+        lowered = si.lower()
+        assert 'never the literal text "n/a"' in lowered
+        assert "any equivalent in any language" in lowered
+        assert "same in every session language" in lowered
+
+
 def test_dti_and_legacy_si_forbid_checking_a_declined_optional_checkbox():
     """Declining an optional checkbox must map to value \"\" (unchecked), never
     \"true\"/\"false\" -- writing \"true\" wrongly checks a box the user declined, a
