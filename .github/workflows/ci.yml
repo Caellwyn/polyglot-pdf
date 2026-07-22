@@ -66,8 +66,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install + test (schema-editor)
+      - name: Install (schema-editor)
         working-directory: schema-editor
-        run: |
-          npm ci
-          npm run test:run
+        run: npm ci
+      - name: Type-check (schema-editor)
+        # tsc --noEmit gates the type-error class that vitest (transpile-only)
+        # cannot catch -- this job used to run vitest only, which let a
+        # build-breaking-but-test-green change (an ES2020-incompatible
+        # Array.prototype.at call) reach review (bd polyglot-pdf-1rgr).
+        working-directory: schema-editor
+        run: npm run typecheck
+      - name: Test (schema-editor)
+        working-directory: schema-editor
+        run: npm run test:run

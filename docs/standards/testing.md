@@ -2,7 +2,7 @@
 
 **Tracks:** pytest.ini backend/tests/conftest.py backend/requirements.txt frontend/package.json frontend/vite.config.ts .github/workflows/ci.yml
 
-*Last updated: 2026-07-12 (bd polyglot-pdf-w5fz: added a pointer to the new `experimentation` skill above the deploy-fidelity section).*
+*Last updated: 2026-07-17 (bd polyglot-pdf-1rgr: schema-editor CI job now runs a `tsc --noEmit` typecheck step, mirroring frontend's).*
 
 Where tests live, how to run them on this repo's split-venv layout, and what the
 suite does and doesn't cover today. Two test stacks: **pytest** for the
@@ -195,7 +195,8 @@ number is not a closeout blocker. Coverage artifacts (`.coverage`, `coverage/`)
 are gitignored.
 
 **CI is informational and non-blocking.** `.github/workflows/ci.yml` runs the
-backend pytest suite (`-m "not external"`) plus both vitest suites on every PR.
+backend pytest suite (`-m "not external"`) plus both vitest suites (each preceded
+by its own `tsc --noEmit` typecheck step) on every PR.
 It is **not** a required status check: the merge gate is the closeout merge
 decision (auto-merge a routine low-risk PR that reviewed CLEAN, else a maintainer
 merge -- see [review-flow.md](../doctrine/review-flow.md) and CLAUDE.md "Auto-merge
@@ -232,8 +233,8 @@ three runtime bugs blocked the actual PDF render, all invisible to jsdom.
 (esbuild) without full type-checking, so type errors -- including ones that mask
 real bugs, like a duplicate local type that let `field.required`/`field.options`
 resolve wrong -- pass the suite. The standalone `npm run typecheck`
-(`tsc --noEmit`) gate in CI's frontend job is the only thing that catches this
-class; keep it green (`polyglot-pdf-uov.17`).
+(`tsc --noEmit`) gate in CI's frontend and schema-editor jobs is the thing that
+catches this class; keep both green (`polyglot-pdf-uov.17`, `polyglot-pdf-1rgr`).
 
 **Beware the self-fulfilling mock test.** A test that constructs the expected
 payload, calls a mock with it, and then asserts the mock was called with it
