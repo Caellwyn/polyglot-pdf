@@ -714,9 +714,13 @@ class FormFillingService:
         if task is not None and not task.done():
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
-            except (asyncio.TimeoutError, Exception):  # noqa: BLE001 -- fail-open
+            except Exception:  # noqa: BLE001 -- fail-open (TimeoutError included;
+                # CancelledError still propagates: BaseException, not Exception)
                 pass
 
+        # Reset BEFORE resolution so an unresolved-field call never echoes a
+        # stale value into the hint_translated log (fresh-eyes, this PR).
+        self._hint_translated = False
         section_metadata_block = ""
         if getattr(self._settings, "USE_DTI", False):
             field = self._resolve_hint_field_schema(next_field_hint)
@@ -747,7 +751,6 @@ class FormFillingService:
                 # translated spoken name so the templated ask does not leak
                 # English into a non-English greeting. Quoted-name-only
                 # replacement -- a miss leaves the hint untouched.
-                self._hint_translated = False
                 if self._spoken_name_translations:
                     _en_name = field.get("name") or ""
                     _translated = self._spoken_name_translations.get(

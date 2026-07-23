@@ -48,6 +48,62 @@ def test_translate_hint_miss_or_no_schema_leaves_hint_untouched():
     assert CallbackHandler._translate_hint(h, None, schema) is None
 
 
+# --- Integration: the echo channels through the REAL handler -------------------
+
+import pytest
+from unittest.mock import AsyncMock
+
+OVERRIDES = {"first name": "nombre de pila", "family name": "apellido"}
+
+
+def _real_handler():
+    """A real CallbackHandler with the spoken-name override getter wired via
+    set_tool_handlers -- so the echo-channel substitutions are exercised at
+    the on_tool_call integration level, not just the helper level
+    (fresh-eyes round-1 gap, this PR)."""
+    coordinator = MagicMock()
+    coordinator.request_switch_field = AsyncMock(return_value={
+        "found": True, "field_id": "p1_first_name",
+        "spoken_name": "first name", "next_field_hint": None})
+    handler = CallbackHandler(
+        websocket=MagicMock(), session_id="tupu2-test",
+        request_coordinator=coordinator,
+    )
+    handler.set_tool_handlers(
+        handle_update_fields=MagicMock(return_value={
+            "applied_fields": [], "validation_errors": [],
+            "unknown_fields": [], "form_state": {}}),
+        handle_switch_section=AsyncMock(return_value={"success": True}),
+        request_form_state_from_client=AsyncMock(return_value={}),
+        handle_ask_secretary=AsyncMock(return_value={
+            "status": "ok", "answer": "they said Jane",
+            "sources": [{"field_id": "p1_first_name",
+                         "spoken_name": "first name"}]}),
+        get_spoken_name_overrides=lambda: OVERRIDES,
+    )
+    handler.send_form_update = AsyncMock()
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_switch_success_message_speaks_translated_name():
+    handler = _real_handler()
+    resp = await handler.on_tool_call("switch_to_field", {"field": "first name"})
+    assert resp.get("success") is True
+    assert "nombre de pila" in resp.get("message", "")
+    assert "first name" not in resp.get("message", "")
+
+
+@pytest.mark.asyncio
+async def test_ask_secretary_fields_array_carries_translated_names():
+    handler = _real_handler()
+    resp = await handler.on_tool_call("ask_secretary", {"query": "first name?"})
+    fields = resp.get("fields") or []
+    assert fields and fields[0]["spoken_name"] == "nombre de pila"
+    # The field_id is never translated (tool-call matching).
+    assert fields[0]["field_id"] == "p1_first_name"
+
+
 def test_dti_and_legacy_si_pin_field_names_aloud_rule():
     """Both SIs must tell the model the guidance name is already localized and
     forbid reading English names/labels aloud in a non-English session (bd

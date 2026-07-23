@@ -190,7 +190,9 @@ class CallbackHandler:
         en_name = field_schema.get("name") or ""
         translated = overrides.get(field_schema.get("spoken_name") or en_name)
         if en_name and translated and f"'{en_name}'" in hint:
-            return hint.replace(f"'{en_name}'", f"'{translated}'")
+            # First occurrence only: the frontend embeds the quoted name once;
+            # free-form instruction text later in the hint must not be touched.
+            return hint.replace(f"'{en_name}'", f"'{translated}'", 1)
         return hint
 
     async def send_form_update(
