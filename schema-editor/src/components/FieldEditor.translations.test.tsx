@@ -115,7 +115,8 @@ describe('FieldEditor spoken-name edit drops stale spoken_name_translations (bd 
     fireEvent.change(spokenInput, { target: { value: 'application kind' } });
 
     expect(onUpdateField).toHaveBeenCalled();
-    const updated = onUpdateField.mock.calls.at(-1)![0];
+    const calls = onUpdateField.mock.calls;
+    const updated = calls[calls.length - 1][0];
     expect(updated.spoken_name).toBe('application kind');
     expect('spoken_name_translations' in updated).toBe(false);
     // Option-level translations are untouched by a field-level spoken-name edit.
