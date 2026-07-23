@@ -1,0 +1,4 @@
+question number,audio in tokens,audio in token cost,audio out tokens,audio out token cost,text in tokens,text in token cost,text out tokens,text out token cost,total tokens,total cost
+1,1156,0.003468,50,0.0006,8561,0.00428,76,0.000152,9843,0.0085
+2,3036,0.009108,105,0.00126,16222,0.008111,112,0.000224,19475,0.018703
+3,4535,0.013605,132,0.001584,18072,0.009036,97,0.000194,22836,0.024419

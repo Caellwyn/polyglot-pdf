@@ -109,6 +109,9 @@ async def test_bake_one_call_per_language_over_deduped_missing():
         # carry no name/spoken_name, so the name half is a no-op here.
         "spoken_names": 0, "names_missing": 0, "names_translated": 0,
         "fields_updated": 0,
+        # Section-label bake keys (bd tupu.2); fixture has no sections.
+        "section_labels": 0, "sections_missing": 0,
+        "sections_translated": 0, "sections_updated": 0,
     }
 
 

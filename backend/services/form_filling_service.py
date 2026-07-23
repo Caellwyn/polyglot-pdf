@@ -703,6 +703,20 @@ class FormFillingService:
         # field schema, render NOTHING rather than a wrong field. Non-DTI modes leave
         # it empty so legacy/JIT output is unchanged (their SI still carries field data).
         current_field_guidance = ""
+        # Give the translation build a short, bounded head start (bd tupu.2):
+        # the greeting + field-1 guidance render RIGHT NOW, and the async build
+        # publishing a moment later left field 1 English (observed live: the
+        # greeting spoke the English section title). With the kits fully baked
+        # the build is kit-covered and resolves in milliseconds -- await it up
+        # to 2s and fail open (English + the SI translate-yourself rule) on a
+        # slow/failed build, preserving the never-blocks contract.
+        task = self._option_translation_task
+        if task is not None and not task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+            except (asyncio.TimeoutError, Exception):  # noqa: BLE001 -- fail-open
+                pass
+
         section_metadata_block = ""
         if getattr(self._settings, "USE_DTI", False):
             field = self._resolve_hint_field_schema(next_field_hint)
@@ -733,6 +747,7 @@ class FormFillingService:
                 # translated spoken name so the templated ask does not leak
                 # English into a non-English greeting. Quoted-name-only
                 # replacement -- a miss leaves the hint untouched.
+                self._hint_translated = False
                 if self._spoken_name_translations:
                     _en_name = field.get("name") or ""
                     _translated = self._spoken_name_translations.get(
@@ -740,6 +755,7 @@ class FormFillingService:
                     if _en_name and _translated and f"'{_en_name}'" in spoken_hint:
                         spoken_hint = spoken_hint.replace(
                             f"'{_en_name}'", f"'{_translated}'")
+                        self._hint_translated = True
 
             # DTI form/section metadata channel (bd polyglot-pdf-uogm): the static SI
             # carries no form/session state, so the title/section/progress/previous-
@@ -800,7 +816,11 @@ class FormFillingService:
                  session_id=self._session_id,
                  spoken_language=spoken_language,
                  is_resume=use_resume_template,
-                 message_length=len(message))
+                 message_length=len(message),
+                 # Observability only (bd tupu.2): did the quoted-name hint
+                 # substitution fire? Boolean, never the text (no-PII).
+                 hint_translated=getattr(self, "_hint_translated", None),
+                 spoken_name_override_count=len(self._spoken_name_translations))
 
         # Send to Gemini via session.send_client_content()
         await self._live_ai.send_client_content(message)
