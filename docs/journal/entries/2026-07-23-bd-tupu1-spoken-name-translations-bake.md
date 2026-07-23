@@ -31,9 +31,17 @@ schemas, mirroring the proven option label_translations pipeline (ow1e/2h9j).
 - Backfill: all 4 kits x all code-backed languages -- f1040 176 names, i-90
   132, w7 59, w7-2 59, each x17 languages. Verify pass: "fully covered" on
   all four; a second run makes zero model calls (idempotency proven live).
-- Tests: 3 new bake pins (union single call + fan-out incl. name-fallback
-  fields; idempotency + alternate-key coverage; failure-skip + gap re-fill).
-  Full backend suite 1175 passed; frontend 1032; editor tsc clean.
+- Tests: 4 new bake pins (union single call + fan-out incl. name-fallback
+  fields; idempotency + alternate-key coverage; failure-skip + gap re-fill;
+  shared label/name string translates once, lands in both maps -- a
+  fresh-eyes round-1 pin). Full backend suite 1175 passed; frontend 1032;
+  editor tsc clean.
+- **bd tupu.3 folded in** (fresh-eyes round 1 caught the hazard going live
+  with the data): editing a field's Spoken Name in the editor now DROPS its
+  baked spoken_name_translations (the d25e stale-drop rule at the field
+  level) + FieldEditor test; the editor bake trigger was already inherited
+  via the shared function on the existing route. This PR closes tupu.1 AND
+  tupu.3.
 
 ## Lessons
 
