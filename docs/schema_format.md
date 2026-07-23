@@ -602,10 +602,29 @@ spoken-language NAME** ("spanish", "chinese") -- settled by bd polyglot-pdf-2h9j
   from the BCP-47 stem do NOT resolve** -- Chinese is "cmn" (from cmn-CN), not
   "zh"; Tagalog is "fil" (from fil-PH), not "tl". Write lowercase names.
 - **Supported languages**: the canonical list is
-  `backend/utils/language_codes.py::SPOKEN_LANGUAGE_BCP47` (17 code-backed
+  `backend/utils/language_codes.py::SPOKEN_LANGUAGE_BCP47` (18 code-backed
   spoken languages, mirrored by `frontend/src/shared/languages.ts`
   SPOKEN_LANGUAGES). Never hardcode the list; when it grows, re-running the
   patch tool fills only the missing languages.
+
+**spoken_name_translations** (on FormField, bd polyglot-pdf-tupu.1): the
+field-level counterpart -- session-language translations of the field's
+`spoken_name`, same canonical lowercase-name keys, baked by the SAME
+authoring pass/CLI/editor route as the option labels (labels + spoken names
+ride one batched translate call per language). All 4 kits are fully baked
+for every code-backed language. Runtime delivery to the voice model is epic
+polyglot-pdf-tupu step 2.
+
+```json
+{
+  "id": "p1_line3a_familyname",
+  "spoken_name": "current family name",
+  "spoken_name_translations": {
+    "spanish": "Apellido actual",
+    "chinese": "当前姓氏"
+  }
+}
+```
 
 **name_translations** (on FormField) is documented-but-dormant: the model field
 is commented out in `backend/models/form_models.py` and nothing populates or
