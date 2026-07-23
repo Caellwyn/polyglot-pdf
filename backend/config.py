@@ -631,8 +631,8 @@ class Settings(BaseModel):
 	# that bakes FieldOption.label_translations into kit JSON. Pro over lite on
 	# the same one-off-per-form rationale as EXTRACTOR_MODEL -- these are legal-
 	# form answer labels shipped as permanent artifacts. The RUNTIME secretary
-	# path (option_translation.build_option_label_overrides) stays lite-tier and
-	# is untouched; it is only the fallback for unbaked labels.
+	# path (option_translation.build_translation_overrides) stays lite-tier and
+	# is untouched; it is only the fallback for unbaked strings.
 	OPTION_TRANSLATION_MODEL: str = os.getenv(
 		"OPTION_TRANSLATION_MODEL", "gemini-2.5-pro")
 

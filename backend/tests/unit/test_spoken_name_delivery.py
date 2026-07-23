@@ -104,6 +104,41 @@ async def test_ask_secretary_fields_array_carries_translated_names():
     assert fields[0]["field_id"] == "p1_first_name"
 
 
+@pytest.mark.asyncio
+async def test_secretary_candidates_are_translated_exactly_once():
+    """Regression pin for the round-2 double-translation fix: secretary-resolved
+    candidates are translated inside _resolve_field_via_secretary and must NOT
+    be re-translated by _switch_degrade_response. The trap map translates the
+    English name to X and X to a WRONG string -- a double pass would surface
+    the wrong string in the did-you-mean message."""
+    trap = {"first name": "nombre de pila", "nombre de pila": "DOUBLE-PASS-BUG"}
+    coordinator = MagicMock()
+    # The client cannot resolve; the secretary offers candidates.
+    coordinator.request_switch_field = AsyncMock(return_value={
+        "found": False, "candidates": []})
+    handler = CallbackHandler(
+        websocket=MagicMock(), session_id="tupu2-test",
+        request_coordinator=coordinator,
+    )
+    handler.set_tool_handlers(
+        handle_update_fields=MagicMock(return_value={}),
+        handle_switch_section=AsyncMock(return_value={}),
+        request_form_state_from_client=AsyncMock(return_value={}),
+        handle_ask_secretary=AsyncMock(return_value={
+            "status": "ok", "answer": "ambiguous", "resolved": True,
+            "sources": [
+                {"field_id": "a", "spoken_name": "first name"},
+                {"field_id": "b", "spoken_name": "family name"},
+            ]}),
+        get_spoken_name_overrides=lambda: trap,
+    )
+    handler.send_form_update = AsyncMock()
+    resp = await handler.on_tool_call("switch_to_field", {"field": "the name"})
+    msg = (resp or {}).get("message", "")
+    assert "nombre de pila" in msg
+    assert "DOUBLE-PASS-BUG" not in msg
+
+
 def test_dti_and_legacy_si_pin_field_names_aloud_rule():
     """Both SIs must tell the model the guidance name is already localized and
     forbid reading English names/labels aloud in a non-English session (bd

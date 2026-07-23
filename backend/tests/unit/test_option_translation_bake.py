@@ -17,7 +17,7 @@ Pins:
   4. A per-language failure (None or exception) skips that language, reports
      it in failed_languages, and does not disturb the others; a re-run with a
      healthy adapter fills exactly the gap.
-  5. End to end: build_option_label_overrides on a baked schema makes ZERO
+  5. End to end: build_translation_overrides on a baked schema makes ZERO
      translate_labels calls (the precedence no-op the design promises).
 
 ASCII only (scar #6): non-ASCII fixture strings use unicode escapes.
