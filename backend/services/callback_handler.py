@@ -1424,9 +1424,11 @@ class CallbackHandler:
 
         # 2. Secretary candidates the switch could not land on directly.
         if isinstance(resolved, dict) and resolved.get("candidates"):
+            # NOT re-translated: _resolve_field_via_secretary already translated
+            # these candidates' spoken names (fresh-eyes round 2 -- a double
+            # pass is a latent collision trap, never a correct second mapping).
             names = _did_you_mean(
-                [self._translate_spoken(c.get("spoken_name"))
-                 for c in resolved["candidates"]])
+                [c.get("spoken_name") for c in resolved["candidates"]])
             if names:
                 return self._switch_miss_log("secretary_candidates", {
                     "success": False,

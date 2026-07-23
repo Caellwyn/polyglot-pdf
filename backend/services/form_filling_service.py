@@ -756,8 +756,11 @@ class FormFillingService:
                     _translated = self._spoken_name_translations.get(
                         field.get("spoken_name") or _en_name)
                     if _en_name and _translated and f"'{_en_name}'" in spoken_hint:
+                        # First occurrence only (parity with _translate_hint):
+                        # free-form instruction text later in the hint may echo
+                        # the field's own quoted name and must not be touched.
                         spoken_hint = spoken_hint.replace(
-                            f"'{_en_name}'", f"'{_translated}'")
+                            f"'{_en_name}'", f"'{_translated}'", 1)
                         self._hint_translated = True
 
             # DTI form/section metadata channel (bd polyglot-pdf-uogm): the static SI
