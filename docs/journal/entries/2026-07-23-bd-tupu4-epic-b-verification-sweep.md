@@ -14,7 +14,7 @@ the epic rubric requires, run at the tupu.2 PR head (#466) against the
 ## What shipped
 
 - 12 committed run sets (es/zh/hi/fr x3, stamps 20260723T043827Z..050312Z,
-  ~$7.9) + the findings-doc sweep section scoring the epic rubric.
+  $6.04 committed) + the findings-doc sweep section scoring the epic rubric.
 - Headline: ZERO spoken-name secretary queries in 12/12 runs (baseline: fr
   asked on 14/14 questions); zero raw-English field-name readouts; greetings
   and guidance fully in-language; hi 42/42 fills. Residuals recorded: one

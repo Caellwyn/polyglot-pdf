@@ -156,7 +156,10 @@ one rerun each of the two most affected languages:
 
 12 runs (es/zh/hi/fr x3, 14q DTI slices) at the tupu.2 PR head (#466 --
 spoken-name + section-label runtime delivery), stamps 20260723T043827Z..
-050312Z, ~$7.9. Scored against the epic rubric:
+050312Z, $6.04 summed across the 12 committed runs (four additional
+committed es triples with 022943Z..024244Z stamps are interim tupu.2
+development sanity/debug runs, NOT part of this sweep). Scored against the
+epic rubric:
 
 | lang | fills (3 runs) | secretary calls/run | spoken-name queries | English field-name readouts |
 |---|---|---|---|---|
