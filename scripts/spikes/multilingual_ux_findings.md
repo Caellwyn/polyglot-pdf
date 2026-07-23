@@ -162,10 +162,12 @@ except the rule) then checked on es (n=3, rule on):
 |---|---|---|---|
 | ru baseline (231520/231732/231941Z) | 38/42 | 7.7 | short-question sentences incl. bare field asks ("Номер квартиры?") |
 | ru + register rule (232428/232637/232852Z) | 37/42 | 8.5 | fuller courteous asks ("Не могли бы вы назвать..."); remaining short sentences are almost all "Верно?" confirm tags (desirable brevity) |
-| es + register rule (233334/233604/233836Z) | 40/42 | -- | register stays warm; NO regression |
+| es baseline (20260723T000401/000612/000822Z, run at the pre-rule commit via a scratch worktree) | 40/42 | 7.3 | warm but brief |
+| es + register rule (233334/233604/233836Z) | 40/42 | 10.2 | +40% fuller turns, same fills; register stays warm |
 
 Verdict: SHIPPED (the general rule, per maintainer preference; no
-per-language register controls needed on this evidence). Honest residuals:
+per-language register controls needed on this evidence -- both languages
+show fuller turns at identical fill accuracy). Honest residuals:
 (a) the effect is modest and n=3; (b) title translation is IMPROVED but not
 eliminated -- 1 of 3 es greetings still read the section title in English
 ("Application Information"); the structural fix is delivering TRANSLATED

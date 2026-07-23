@@ -286,7 +286,9 @@ class Settings(BaseModel):
 	# speech_config.language_code from the session's spoken-language bias code.
 	# Google's Live docs recommend it; endpoint-verified accepted on the
 	# production native-audio tier. Default ON with this env kill-switch,
-	# mirroring the transcription-hint flag below.
+	# mirroring the transcription-hint flag below -- including its caveat: NOT
+	# verified on the premium AI-Studio 3.1 tier; set this false for a
+	# USE_PREMIUM_MODEL deploy unless verified there first.
 	SPEECH_LANGUAGE_CODE_ENABLED: bool = (
 		os.getenv("SPEECH_LANGUAGE_CODE_ENABLED", "true").lower() == "true"
 	)

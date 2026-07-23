@@ -37,7 +37,9 @@ $0.05 acceptance probe + 6 ru m1lg A/B runs + 3 ru + 3 es zmlo runs).
   section labels) noted on bd tupu.2. Per the maintainer's direction the
   GENERAL rule suffices; no per-language register controls. Findings:
   `multilingual_ux_findings.md` register-A/B section.
-- 9 + 6 run data sets committed; SI pin test
+- 15 run data sets committed (6 m1lg ru A/B + 3 ru register-arm + 3 es
+  register-arm + 3 es baseline from a scratch worktree pinned at the
+  pre-rule commit); SI pin test
   `test_dti_and_legacy_si_carry_register_and_title_translation_guidance` and
   speech-config unit pins added.
 
