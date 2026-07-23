@@ -309,11 +309,11 @@ async def test_baked_schema_makes_runtime_secretary_a_noop():
 
     runtime_ai = MagicMock()
     runtime_ai.translate_labels = AsyncMock(return_value={})
-    overrides = await ot.build_option_label_overrides(
+    overrides = await ot.build_translation_overrides(
         schema, "Spanish", runtime_ai)
 
     runtime_ai.translate_labels.assert_not_awaited()
-    assert overrides == {
+    assert overrides.option_labels == {
         "Male": ESPANOL_MASCULINO, "Female": ESPANOL_FEMENINO,
         "Yes": ESPANOL_SI, "No": "No"}
 

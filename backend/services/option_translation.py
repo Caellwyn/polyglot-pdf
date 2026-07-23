@@ -24,6 +24,7 @@ retries. ASCII only (CLAUDE.md scar #6) -- translated strings are runtime data.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
@@ -322,64 +323,121 @@ async def bake_label_translations(
     return report
 
 
-async def build_option_label_overrides(
+def _collect_section_labels(
+    full_schema: Optional[Dict[str, Any]]
+) -> List[str]:
+    """Unique section labels in order. Sections carry no kit translation
+    structure (unlike options/fields), so every label rides the batched call
+    (bd polyglot-pdf-tupu.2 -- closes the zmlo residual where a greeting read
+    a section title in English)."""
+    labels: List[str] = []
+    seen: set = set()
+    for section in (full_schema or {}).get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        label = section.get("label")
+        if isinstance(label, str) and label.strip() and label not in seen:
+            seen.add(label)
+            labels.append(label)
+    return labels
+
+
+@dataclass(frozen=True)
+class TranslationOverrides:
+    """The session-language translation maps, all keyed by ENGLISH source
+    string (bd polyglot-pdf-tupu.2). One shared cached build produces all
+    three; consumers fail open to the English string on any missing key."""
+    option_labels: Dict[str, str]
+    spoken_names: Dict[str, str]
+    section_labels: Dict[str, str]
+
+    def __bool__(self) -> bool:
+        return bool(self.option_labels or self.spoken_names
+                    or self.section_labels)
+
+
+EMPTY_OVERRIDES = TranslationOverrides({}, {}, {})
+
+
+async def build_translation_overrides(
     full_schema: Optional[Dict[str, Any]],
     language_name: str,
     text_ai: Any,
-) -> Dict[str, str]:
-    """Build {english_label: translated_label} for the session language.
+) -> TranslationOverrides:
+    """Build the session-language TranslationOverrides (bd tupu.2; supersedes
+    the label-only build_option_label_overrides, the named ow1e contract
+    change).
 
-    Kit label_translations win; the remainder goes through ONE batched
-    translate_labels call. Raises OptionTranslationError when that call fails,
-    so the cache layer does not keep a failed build.
+    Kit translations win (option label_translations + field
+    spoken_name_translations); the remainder -- including section labels,
+    which have no kit structure -- goes through ONE batched translate_labels
+    call over the deduped union. Raises OptionTranslationError when that call
+    fails, so the cache layer does not keep a failed build.
     """
-    labels, overrides = _collect_labels(full_schema, language_name)
-    if not labels:
-        return {}
+    labels, label_overrides = _collect_labels(full_schema, language_name)
+    spoken_names, name_overrides = _collect_spoken_names(
+        full_schema, language_name)
+    section_labels = _collect_section_labels(full_schema)
+    if not labels and not spoken_names and not section_labels:
+        return EMPTY_OVERRIDES
 
-    remaining = [label for label in labels if label not in overrides]
-    if remaining:
+    remaining_labels = [s for s in labels if s not in label_overrides]
+    remaining_names = [s for s in spoken_names if s not in name_overrides]
+    section_overrides: Dict[str, str] = {}
+    union = list(dict.fromkeys(
+        [*remaining_labels, *remaining_names, *section_labels]))
+    if union:
         codes = bcp47_codes_for_spoken_language(language_name)
         language_code = codes[0] if codes else ""
         translated = await text_ai.translate_labels(
-            remaining, language_name, language_code
+            union, language_name, language_code
         )
         if translated is None:
             raise OptionTranslationError("translate_labels failed")
-        # Kit precedence is absolute: only labels actually sent to the
+        # Kit precedence is absolute: only strings actually sent to the
         # secretary may land, so a stray response entry can never overwrite a
-        # kit-provided translation (translate_labels filters to its request
-        # set too -- this keeps the invariant local).
-        remaining_set = set(remaining)
-        overrides.update(
-            {k: v for k, v in translated.items()
-             if k in remaining_set and isinstance(v, str) and v}
-        )
-    return overrides
+        # kit-provided translation. Membership splits the union back into its
+        # three maps (a shared string legitimately lands in several).
+        clean = {k: v for k, v in translated.items()
+                 if isinstance(v, str) and v.strip()}
+        label_set = set(remaining_labels)
+        name_set = set(remaining_names)
+        section_set = set(section_labels)
+        label_overrides.update(
+            {k: v for k, v in clean.items() if k in label_set})
+        name_overrides.update(
+            {k: v for k, v in clean.items() if k in name_set})
+        section_overrides.update(
+            {k: v for k, v in clean.items() if k in section_set})
+    return TranslationOverrides(
+        option_labels=label_overrides,
+        spoken_names=name_overrides,
+        section_labels=section_overrides,
+    )
 
 
 async def _build_bounded(
     full_schema: Optional[Dict[str, Any]], language_name: str, text_ai: Any
-) -> Dict[str, str]:
+) -> TranslationOverrides:
     return await asyncio.wait_for(
-        build_option_label_overrides(full_schema, language_name, text_ai),
+        build_translation_overrides(full_schema, language_name, text_ai),
         timeout=OPTION_TRANSLATION_TIMEOUT_S,
     )
 
 
-async def get_option_label_overrides(
+async def get_translation_overrides(
     form_id: str,
     full_schema: Optional[Dict[str, Any]],
     language_name: str,
     text_ai: Any,
-) -> Dict[str, str]:
+) -> TranslationOverrides:
     """Cached entry point: one build per (form, language) per process.
 
     Concurrent callers share the in-flight task (shielded, so one session's
     teardown never cancels the shared build). On build failure -- secretary
-    error or the 20s timeout -- returns {} and DROPS the cache entry so the
-    next session retries. Never raises (except CancelledError propagation for
-    the awaiting session's own teardown).
+    error or the 20s timeout -- returns EMPTY_OVERRIDES and DROPS the cache
+    entry so the next session retries. Never raises (except CancelledError
+    propagation for the awaiting session's own teardown).
     """
     key = (str(form_id), (language_name or "").strip().lower())
     task = _build_tasks.get(key)
@@ -396,7 +454,7 @@ async def get_option_label_overrides(
             # running for other sessions -- leave it cached and propagate.
             raise
         _build_tasks.pop(key, None)
-        return {}
+        return EMPTY_OVERRIDES
     except Exception as exc:  # noqa: BLE001 -- fail-open by design
         if _build_tasks.get(key) is task:
             _build_tasks.pop(key, None)
@@ -406,11 +464,13 @@ async def get_option_label_overrides(
             language=key[1],
             exc_type=type(exc).__name__,
         )
-        return {}
+        return EMPTY_OVERRIDES
     _log.info(
         "option_translation_ready",
         form_id=str(form_id),
         language=key[1],
-        override_count=len(result),
+        override_count=len(result.option_labels),
+        spoken_name_count=len(result.spoken_names),
+        section_label_count=len(result.section_labels),
     )
     return result

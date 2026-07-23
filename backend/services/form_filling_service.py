@@ -17,7 +17,7 @@ from .field_utils import (
     strip_field_id_from_hint,
 )
 from .ai_context import render_field_guidance, render_section_metadata
-from .option_translation import get_option_label_overrides
+from .option_translation import get_translation_overrides
 from .validation_handler import ValidationHandler
 from .audio_handler import AudioHandler
 from .request_coordinator import RequestCoordinator
@@ -81,6 +81,11 @@ class FormFillingService:
         # to English labels, covered by the SI's translate-on-the-fly rule.
         # Schema data only (labels, no user values); the stateless invariant holds.
         self._option_translations: Dict[str, str] = {}
+        # Field spoken-name + section-label translations (bd polyglot-pdf-tupu.2),
+        # same build/publish/fallback contract as the option labels above:
+        # {english_spoken_name: translated} / {english_section_label: translated}.
+        self._spoken_name_translations: Dict[str, str] = {}
+        self._section_label_translations: Dict[str, str] = {}
         # Strong ref to the in-flight translation task so it isn't GC'd and can
         # be cancelled on end_session (the shared per-process build it awaits is
         # shielded and keeps running for other sessions).
@@ -340,6 +345,8 @@ class FormFillingService:
             # option labels once the background translation lands (bd
             # polyglot-pdf-ow1e). Empty dict -> render falls back to English.
             get_option_label_overrides=lambda: self._option_translations,
+            # Same live-getter contract for field spoken names (bd tupu.2).
+            get_spoken_name_overrides=lambda: self._spoken_name_translations,
         )
 
         # Runtime option-label translation (bd polyglot-pdf-ow1e): fire the
@@ -613,12 +620,13 @@ class FormFillingService:
     async def _run_option_translation(
         self, form_id: str, schema: Dict[str, Any], language: str
     ) -> None:
-        """Await the (process-cached) label-translation build and publish the
-        result. Fail-open by construction: get_option_label_overrides returns {}
-        on any failure/timeout, and this wrapper never lets an exception escape
-        the task -- the session simply keeps English labels."""
+        """Await the (process-cached) translation build and publish the result
+        (bd tupu.2: option labels + field spoken names + section labels in one
+        build). Fail-open by construction: get_translation_overrides returns
+        EMPTY_OVERRIDES on any failure/timeout, and this wrapper never lets an
+        exception escape the task -- the session simply keeps English text."""
         try:
-            overrides = await get_option_label_overrides(
+            overrides = await get_translation_overrides(
                 form_id, schema, language, self._text_ai
             )
         except asyncio.CancelledError:
@@ -629,11 +637,15 @@ class FormFillingService:
                          exc_type=type(exc).__name__)
             return
         if overrides:
-            self._option_translations = overrides
+            self._option_translations = overrides.option_labels
+            self._spoken_name_translations = overrides.spoken_names
+            self._section_label_translations = overrides.section_labels
             _log.info("option_translation_applied",
                       session_id=self._session_id,
                       language=language,
-                      override_count=len(overrides))
+                      override_count=len(overrides.option_labels),
+                      spoken_name_count=len(overrides.spoken_names),
+                      section_label_count=len(overrides.section_labels))
 
     async def send_initiating_message(
         self,
@@ -712,8 +724,22 @@ class FormFillingService:
                         # translation has landed (bd polyglot-pdf-ow1e); empty
                         # -> None -> English labels, byte-identical render.
                         option_label_overrides=self._option_translations or None,
+                        # Session-language field name (bd tupu.2), same contract.
+                        spoken_name_overrides=self._spoken_name_translations or None,
                     )
                 )
+                # Session-language hint (bd tupu.2): the frontend-built hint
+                # embeds the ENGLISH field name in quotes; substitute the
+                # translated spoken name so the templated ask does not leak
+                # English into a non-English greeting. Quoted-name-only
+                # replacement -- a miss leaves the hint untouched.
+                if self._spoken_name_translations:
+                    _en_name = field.get("name") or ""
+                    _translated = self._spoken_name_translations.get(
+                        field.get("spoken_name") or _en_name)
+                    if _en_name and _translated and f"'{_en_name}'" in spoken_hint:
+                        spoken_hint = spoken_hint.replace(
+                            f"'{_en_name}'", f"'{_translated}'")
 
             # DTI form/section metadata channel (bd polyglot-pdf-uogm): the static SI
             # carries no form/session state, so the title/section/progress/previous-
@@ -739,6 +765,10 @@ class FormFillingService:
                 total_sections=None if continuous else sm.get("total_sections"),
                 section_label=None if continuous else sm.get("section_label"),
                 previous_spoken_names=sm.get("previous_spoken_names"),
+                # Session-language section label + completed-field names
+                # (bd tupu.2); empty -> None -> English, byte-identical.
+                section_label_overrides=self._section_label_translations or None,
+                spoken_name_overrides=self._spoken_name_translations or None,
             )
             if block:
                 section_metadata_block = "\n\n" + block

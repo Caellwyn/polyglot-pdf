@@ -92,6 +92,8 @@ class CallbackHandler:
         # translation task publishes them AFTER session start -- renders before
         # that see an empty dict and fall back to English labels.
         self._get_option_label_overrides = None
+        # Same live-getter contract for field spoken-name overrides (bd tupu.2).
+        self._get_spoken_name_overrides = None
         # Live getter for the current field id (bd polyglot-pdf-h1bn): so confirm_field
         # can be coerced onto the current field when the model confirms a hallucinated /
         # drifted id (mirrors the update_form_fields coercion). Getter, not snapshot.
@@ -135,6 +137,7 @@ class CallbackHandler:
         clear_current_field=None,
         is_known_field=None,
         get_option_label_overrides=None,
+        get_spoken_name_overrides=None,
     ):
         """Inject tool handler methods from FormFillingService."""
         self._handle_update_fields = handle_update_fields
@@ -145,6 +148,7 @@ class CallbackHandler:
         self._get_fill_language = get_fill_language
         self._get_spoken_language = get_spoken_language
         self._get_option_label_overrides = get_option_label_overrides
+        self._get_spoken_name_overrides = get_spoken_name_overrides
         self._get_current_field_id = get_current_field_id
         self._get_use_dti = get_use_dti
         self._clear_current_field = clear_current_field
@@ -157,6 +161,37 @@ class CallbackHandler:
         overrides = (self._get_option_label_overrides()
                      if self._get_option_label_overrides else None)
         return overrides or None
+
+    def _spoken_overrides(self):
+        """The current session-language spoken-name overrides, or None (bd
+        tupu.2; same contract as _option_overrides)."""
+        overrides = (self._get_spoken_name_overrides()
+                     if self._get_spoken_name_overrides else None)
+        return overrides or None
+
+    def _translate_spoken(self, name):
+        """A single spoken name in the session language; miss/None -> as-is.
+        For the direct echo channels (switch success/candidates, secretary
+        fields) that speak a field name without going through
+        render_field_guidance (bd tupu.2)."""
+        overrides = self._spoken_overrides()
+        if overrides and isinstance(name, str):
+            return overrides.get(name) or name
+        return name
+
+    def _translate_hint(self, hint, field_schema=None):
+        """Substitute the quoted ENGLISH field name inside a next-field hint
+        with the session-language spoken name (bd tupu.2). The hint is built by
+        the frontend around field.name in single quotes; a translation miss or
+        absent schema leaves the hint untouched."""
+        overrides = self._spoken_overrides()
+        if not (overrides and hint and isinstance(field_schema, dict)):
+            return hint
+        en_name = field_schema.get("name") or ""
+        translated = overrides.get(field_schema.get("spoken_name") or en_name)
+        if en_name and translated and f"'{en_name}'" in hint:
+            return hint.replace(f"'{en_name}'", f"'{translated}'")
+        return hint
 
     async def send_form_update(
         self,
@@ -752,7 +787,8 @@ class CallbackHandler:
             sources = result.get("sources", [])
             if isinstance(sources, list) and sources:
                 clean_sources = [
-                    {"field_id": str(s["field_id"]), "spoken_name": str(s["spoken_name"])}
+                    {"field_id": str(s["field_id"]),
+                     "spoken_name": self._translate_spoken(str(s["spoken_name"]))}
                     for s in sources
                     if isinstance(s, dict) and s.get("field_id") and s.get("spoken_name")
                 ]
@@ -933,6 +969,7 @@ class CallbackHandler:
                 self._clear_current_field()
             next_hint = None
             next_field_guidance = None
+            client_next_schema = None
             message = (
                 f"Field '{field_id}' confirmed -- that completes this section. The "
                 f"form is advancing to the next section; wait for the next field."
@@ -988,6 +1025,7 @@ class CallbackHandler:
             # reintroducing the unknown_fields bug the coercion fixes (Opus fallback,
             # PR #264). The clear and the re-set MUST read the same settings source.
             next_field_guidance = None
+            client_next_schema = None
             use_dti_next = self._get_use_dti() if self._get_use_dti else False
             if use_dti_next and next_hint and self._request_coordinator:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
@@ -997,7 +1035,7 @@ class CallbackHandler:
                     next_field_guidance = render_field_guidance(
                         client_next_schema, fill_language=fill_language,
                         spoken_language=spoken_language,
-                        option_label_overrides=self._option_overrides()
+                        option_label_overrides=self._option_overrides(), spoken_name_overrides=self._spoken_overrides()
                     )
                     # Merge the field into the backend's validation schema so the
                     # SUBSEQUENT update_form_fields for this field is not rejected as
@@ -1023,7 +1061,10 @@ class CallbackHandler:
         response = {
             "success": True,
             "field_confirmed": field_id,
-            "next_field_hint": next_hint,
+            # Session-language hint (bd tupu.2): the quoted English field name
+            # inside the client-built hint is substituted when a translation
+            # exists; miss -> untouched.
+            "next_field_hint": self._translate_hint(next_hint, client_next_schema),
             "message": message,
         }
 
@@ -1123,6 +1164,7 @@ class CallbackHandler:
                 self._clear_current_field()
             next_hint = None
             next_field_guidance = None
+            client_next_schema = None
             message = (
                 f"Field '{field_id}' skipped -- that completes this section. The "
                 f"form is advancing to the next section; wait for the next field."
@@ -1141,6 +1183,7 @@ class CallbackHandler:
                 self._clear_current_field()
 
             next_field_guidance = None
+            client_next_schema = None
             use_dti_next = self._get_use_dti() if self._get_use_dti else False
             if use_dti_next and next_hint and self._request_coordinator:
                 client_next_schema = self._request_coordinator.consume_pending_next_field_schema()
@@ -1150,7 +1193,7 @@ class CallbackHandler:
                     next_field_guidance = render_field_guidance(
                         client_next_schema, fill_language=fill_language,
                         spoken_language=spoken_language,
-                        option_label_overrides=self._option_overrides()
+                        option_label_overrides=self._option_overrides(), spoken_name_overrides=self._spoken_overrides()
                     )
                     if self._merge_field_schema:
                         self._merge_field_schema(client_next_schema)
@@ -1169,7 +1212,8 @@ class CallbackHandler:
         response = {
             "success": True,
             "field_skipped": field_id,
-            "next_field_hint": next_hint,
+            # Session-language hint (bd tupu.2), same substitution as confirm.
+            "next_field_hint": self._translate_hint(next_hint, client_next_schema),
             "message": message,
         }
         if next_field_guidance:
@@ -1322,7 +1366,8 @@ class CallbackHandler:
             return {"pushback": str(result.get("answer") or "")}
         sources = result.get("sources")
         clean = [
-            {"field_id": str(s["field_id"]), "spoken_name": str(s["spoken_name"])}
+            {"field_id": str(s["field_id"]),
+             "spoken_name": self._translate_spoken(str(s["spoken_name"]))}
             for s in sources
             if isinstance(s, dict) and s.get("field_id") and s.get("spoken_name")
         ] if isinstance(sources, list) else []
@@ -1378,7 +1423,8 @@ class CallbackHandler:
         # 2. Secretary candidates the switch could not land on directly.
         if isinstance(resolved, dict) and resolved.get("candidates"):
             names = _did_you_mean(
-                [c.get("spoken_name") for c in resolved["candidates"]])
+                [self._translate_spoken(c.get("spoken_name"))
+                 for c in resolved["candidates"]])
             if names:
                 return self._switch_miss_log("secretary_candidates", {
                     "success": False,
@@ -1389,7 +1435,8 @@ class CallbackHandler:
         candidates = ack.get("candidates") if isinstance(ack, dict) else None
         if isinstance(candidates, list) and candidates:
             names = _did_you_mean(
-                [c.get("spoken_name") for c in candidates
+                [self._translate_spoken(c.get("spoken_name"))
+                 for c in candidates
                  if isinstance(c, dict)])
             if names:
                 return self._switch_miss_log("algorithmic_candidates", {
@@ -1414,7 +1461,8 @@ class CallbackHandler:
         rides the response (same Gemini trust boundary as ask_secretary) but is
         never logged."""
         field_id = ack.get("field_id")
-        spoken_name = ack.get("spoken_name") or field_id
+        # Session-language name for the "Now on field ..." message (bd tupu.2).
+        spoken_name = self._translate_spoken(ack.get("spoken_name")) or field_id
 
         # DTI: the ack carries the target's full schema -- record it for validation
         # AND re-point the current-field coercion pointer at the target
@@ -1429,7 +1477,7 @@ class CallbackHandler:
             field_guidance = render_field_guidance(
                 field_schema, fill_language=fill_language,
                 spoken_language=spoken_language,
-                option_label_overrides=self._option_overrides()
+                option_label_overrides=self._option_overrides(), spoken_name_overrides=self._spoken_overrides()
             )
 
         if ack.get("already_confirmed"):

@@ -10,6 +10,7 @@ def render_field_guidance(
     field: Optional[Dict[str, Any]], fill_language: Optional[str] = None,
     spoken_language: Optional[str] = None,
     option_label_overrides: Optional[Dict[str, str]] = None,
+    spoken_name_overrides: Optional[Dict[str, str]] = None,
 ) -> str:
     """Render a single field's guidance as the readable text block the model reads
     (bd polyglot-pdf-jnjj.22, Dynamic Turn Injection).
@@ -39,9 +40,14 @@ def render_field_guidance(
     on overridden options; values untouched) so the rendered Options list is
     already in the language the model speaks. Omitted/None/empty -> the render
     is byte-identical to before.
+
+    spoken_name_overrides (bd polyglot-pdf-tupu.2): when set, the Spoken: line
+    carries the field name in the session language (the field-level analog of
+    the option-label override). Omitted/None/miss -> English, byte-identical.
     """
     guidance = (
-        get_field_guidance(field, option_label_overrides=option_label_overrides)
+        get_field_guidance(field, option_label_overrides=option_label_overrides,
+                           spoken_name_overrides=spoken_name_overrides)
         if field else None
     )
     if not guidance:
@@ -109,6 +115,8 @@ def render_section_metadata(
     section_label: Optional[str] = None,
     previous_spoken_names: Optional[List[str]] = None,
     confirmation_policy: Optional[str] = None,
+    section_label_overrides: Optional[Dict[str, str]] = None,
+    spoken_name_overrides: Optional[Dict[str, str]] = None,
 ) -> str:
     """Render the form/section metadata block carried by the DTI initiating message
     (bd polyglot-pdf-uogm). The static DTI SI no longer carries form/session state,
@@ -133,6 +141,10 @@ def render_section_metadata(
     # "nothing to render -> return ''" guard below actually fire (so the caller's
     # `if block:` skip works on a metadata-less session) rather than always emitting
     # a useless "FORM CONTEXT:\nForm" line (fresh-eyes finding on this PR).
+    # Session-language section label (bd tupu.2 -- closes the zmlo residual
+    # where a greeting read a section title in English). Miss -> English.
+    if section_label and section_label_overrides:
+        section_label = section_label_overrides.get(section_label) or section_label
     has_position = section_number is not None and total_sections is not None
     if has_position or section_label or form_title:
         title = form_title or "Form"
@@ -146,6 +158,13 @@ def render_section_metadata(
             lines.append(title)
 
     if previous_spoken_names:
+        # Session-language names (bd tupu.2); miss -> English, same fallback
+        # as every other override consumer.
+        if spoken_name_overrides:
+            previous_spoken_names = [
+                spoken_name_overrides.get(n) or n
+                for n in previous_spoken_names
+            ]
         # These names are given to you HERE -- do not fetch them from the
         # secretary (bd polyglot-pdf-2af7). The current field's own id + spoken
         # name are always in the latest guidance block too; ask_secretary is for

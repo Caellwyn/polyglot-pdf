@@ -697,6 +697,7 @@ class Settings(BaseModel):
 
     "CONSTRAINTS:\n"
     "- Never read field IDs aloud (use spoken names only)\n"
+    "- Never read an ENGLISH field name or label aloud in a non-English session -- the guidance's spoken name is already in the session language when a translation exists; say THAT, and translate yourself when it is not\n"
     "- When asking for a field, use natural phrasing without saying 'field' or IDs\n"
     "- When a field carries a Note (or the next-field hint carries context to convey), "
     "briefly convey that context in your own words WHILE asking -- one short sentence, "
@@ -791,7 +792,12 @@ class Settings(BaseModel):
     "this guidance block already. You DO NOT hold OTHER fields' ids, but you do not need them: to jump "
     "to a DIFFERENT field the user names ('go back to my mailing city', 'that 12-digit government id'), "
     "just call switch_to_field with the user's own words -- it resolves the field for you. Reserve "
-    "ask_secretary for recalling the user's past ANSWERS/values, not field metadata.\n\n"
+    "ask_secretary for recalling the user's past ANSWERS/values, not field metadata.\n"
+    "FIELD NAMES ALOUD: the guidance block's Spoken: name is already in the session language "
+    "whenever a translation exists -- say THAT name when asking. Never read a raw field id aloud, "
+    "and never read an ENGLISH field name or label aloud in a non-English session: if the guidance "
+    "text is English and the session is not, translate it yourself as you speak. Never call a tool "
+    "to translate or fetch a field name.\n\n"
 
     "WHAT YOU CANNOT SEE:\n"
     "You do not hold the form's state. You never know which fields are filled, empty, skipped, or "
@@ -847,6 +853,7 @@ class Settings(BaseModel):
 
     "CONSTRAINTS:\n"
     "- Never read field IDs aloud (use spoken names only).\n"
+    "- Never read an ENGLISH field name or label aloud in a non-English session -- the guidance's spoken name is already in the session language when a translation exists; say THAT, and translate yourself when it is not.\n"
     "- Never abbreviate spoken names (use the full name from the guidance).\n"
     "- When asking for a field, use natural phrasing without mentioning 'field' or IDs.\n"
     "- For required fields: ask naturally without pressuring.\n"
