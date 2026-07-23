@@ -2094,6 +2094,12 @@ def test_translate_options_bakes_stores_and_is_idempotent(client, translate_ai):
     male = stored["fields"][0]["options"][0]
     assert male["label_translations"]["spanish"] == "Male (Spanish)"
     assert (male["value"], male["label"]) == ("M", "Male")
+    # Field spoken names bake through the SAME route call (bd tupu.3 "editor
+    # bake round-trips"): the stored field carries spoken_name_translations
+    # under the canonical key, with the spoken_name itself untouched.
+    sex_field = stored["fields"][0]
+    assert sex_field["spoken_name_translations"]["spanish"] == "sex (Spanish)"
+    assert sex_field["spoken_name"] == "sex"
 
     # Idempotent: a second run translates nothing and stores nothing.
     r2 = c.post(

@@ -255,7 +255,26 @@
             "russian": "\u041f\u0440\u043e\u0434\u043b\u0438\u0442\u044c \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0439 ITIN"
           }
         }
-      ]
+      ],
+      "spoken_name_translations": {
+        "spanish": "Tipo de solicitud",
+        "tagalog": "Uri ng aplikasyon",
+        "chinese": "\u7533\u8bf7\u7c7b\u578b",
+        "arabic": "\u0646\u0648\u0639 \u0627\u0644\u0637\u0644\u0628",
+        "french": "Type de demande",
+        "korean": "\uc2e0\uccad \uc720\ud615",
+        "german": "Antragsart",
+        "portuguese": "Tipo de solicita\u00e7\u00e3o",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u06a9\u06cc \u0642\u0633\u0645",
+        "hindi": "\u0906\u0935\u0947\u0926\u0928 \u0915\u093e \u092a\u094d\u0930\u0915\u093e\u0930",
+        "persian": "\u0646\u0648\u0639 \u062f\u0631\u062e\u0648\u0627\u0633\u062a",
+        "italian": "Tipo di domanda",
+        "russian": "\u0422\u0438\u043f \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u044f",
+        "ukrainian": "\u0422\u0438\u043f \u0437\u0430\u044f\u0432\u0438",
+        "dutch": "Type aanvraag",
+        "swedish": "Ans\u00f6kningstyp",
+        "afrikaans": "Aansoektipe"
+      }
     },
     {
       "id": "reason_a",
@@ -273,6 +292,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo a, beneficio de un tratado tributario",
+        "tagalog": "Dahilan a, benepisyo sa kasunduan sa buwis",
+        "chinese": "\u539f\u56e0 a\uff0c\u7a0e\u6536\u534f\u5b9a\u4f18\u60e0",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 a\u060c \u0627\u0644\u0627\u0633\u062a\u0641\u0627\u062f\u0629 \u0645\u0646 \u0645\u0639\u0627\u0647\u062f\u0629 \u0636\u0631\u064a\u0628\u064a\u0629",
+        "french": "Raison a, avantage d\u00e9coulant d'une convention fiscale",
+        "korean": "\uc0ac\uc720 a, \uc870\uc138 \uc870\uc57d \ud61c\ud0dd",
+        "german": "Grund a, Vorteil aus Steuerabkommen",
+        "portuguese": "Motivo a, benef\u00edcio de acordo tribut\u00e1rio",
+        "urdu": "\u0648\u062c\u06c1 a\u060c \u0679\u06cc\u06a9\u0633 \u0645\u0639\u0627\u06c1\u062f\u06d2 \u06a9\u0627 \u0641\u0627\u0626\u062f\u06c1",
+        "hindi": "\u0915\u093e\u0930\u0923 a, \u0915\u0930 \u0938\u0902\u0927\u093f \u0932\u093e\u092d",
+        "persian": "\u062f\u0644\u06cc\u0644 a\u060c \u0645\u0632\u0627\u06cc\u0627\u06cc \u0645\u0639\u0627\u0647\u062f\u0647 \u0645\u0627\u0644\u06cc\u0627\u062a\u06cc",
+        "italian": "Motivo a, beneficio del trattato fiscale",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 a, \u043b\u044c\u0433\u043e\u0442\u044b \u043f\u043e \u043d\u0430\u043b\u043e\u0433\u043e\u0432\u043e\u043c\u0443 \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u044e",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 a, \u043f\u0456\u043b\u044c\u0433\u0438 \u0437\u0430 \u0443\u0433\u043e\u0434\u043e\u044e \u043f\u0440\u043e \u0443\u043d\u0438\u043a\u043d\u0435\u043d\u043d\u044f \u043f\u043e\u0434\u0432\u0456\u0439\u043d\u043e\u0433\u043e \u043e\u043f\u043e\u0434\u0430\u0442\u043a\u0443\u0432\u0430\u043d\u043d\u044f",
+        "dutch": "Reden a, voordeel belastingverdrag",
+        "swedish": "Anledning a, f\u00f6rm\u00e5n enligt skatteavtal",
+        "afrikaans": "Rede a, belastingverdragvoordeel"
       }
     },
     {
@@ -291,6 +329,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo b, extranjero no residente que presenta una declaraci\u00f3n",
+        "tagalog": "Dahilan b, dayuhang hindi residente na naghahain ng return",
+        "chinese": "\u539f\u56e0 b\uff0c\u975e\u5c45\u6c11\u5916\u56fd\u4eba\u63d0\u4ea4\u62a5\u7a0e\u8868",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 b\u060c \u0623\u062c\u0646\u0628\u064a \u063a\u064a\u0631 \u0645\u0642\u064a\u0645 \u064a\u0642\u062f\u0645 \u0625\u0642\u0631\u0627\u0631\u064b\u0627 \u0636\u0631\u064a\u0628\u064a\u064b\u0627",
+        "french": "Raison b, \u00e9tranger non-r\u00e9sident produisant une d\u00e9claration",
+        "korean": "\uc0ac\uc720 b, \ube44\uac70\uc8fc \uc678\uad6d\uc778 \uc138\uae08 \ubcf4\uace0",
+        "german": "Grund b, Steuererkl\u00e4rung eines nichtans\u00e4ssigen Ausl\u00e4nders",
+        "portuguese": "Motivo b, estrangeiro n\u00e3o residente declarando imposto de renda",
+        "urdu": "\u0648\u062c\u06c1 b\u060c \u063a\u06cc\u0631 \u0645\u0642\u06cc\u0645 \u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u06a9\u0627 \u0631\u06cc\u0679\u0631\u0646 \u0641\u0627\u0626\u0644 \u06a9\u0631\u0646\u0627",
+        "hindi": "\u0915\u093e\u0930\u0923 b, \u0905\u0928\u093f\u0935\u093e\u0938\u0940 \u0935\u093f\u0926\u0947\u0936\u0940 \u0926\u094d\u0935\u093e\u0930\u093e \u0930\u093f\u091f\u0930\u094d\u0928 \u0926\u093e\u0916\u093f\u0932 \u0915\u0930\u0928\u093e",
+        "persian": "\u062f\u0644\u06cc\u0644 b\u060c \u062a\u0628\u0639\u0647 \u062e\u0627\u0631\u062c\u06cc \u063a\u06cc\u0631\u0645\u0642\u06cc\u0645 \u06a9\u0647 \u0627\u0638\u0647\u0627\u0631\u0646\u0627\u0645\u0647 \u0627\u0631\u0627\u0626\u0647 \u0645\u06cc\u200c\u062f\u0647\u062f",
+        "italian": "Motivo b, straniero non residente che presenta la dichiarazione",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 b, \u0438\u043d\u043e\u0441\u0442\u0440\u0430\u043d\u0435\u0446-\u043d\u0435\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442, \u043f\u043e\u0434\u0430\u044e\u0449\u0438\u0439 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u044e",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 b, \u0456\u043d\u043e\u0437\u0435\u043c\u0435\u0446\u044c-\u043d\u0435\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442, \u0449\u043e \u043f\u043e\u0434\u0430\u0454 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0456\u044e",
+        "dutch": "Reden b, niet-ingezeten vreemdeling die aangifte doet",
+        "swedish": "Anledning b, utl\u00e4ndsk medborgare som inte \u00e4r bosatt i USA och som l\u00e4mnar in deklaration",
+        "afrikaans": "Rede b, nie-inwonende buitelander wat opgawe indien"
       }
     },
     {
@@ -309,6 +366,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo c, extranjero residente que presenta una declaraci\u00f3n",
+        "tagalog": "Dahilan c, dayuhang residente na naghahain ng return",
+        "chinese": "\u539f\u56e0 c\uff0c\u5c45\u6c11\u5916\u56fd\u4eba\u63d0\u4ea4\u62a5\u7a0e\u8868",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 c\u060c \u0623\u062c\u0646\u0628\u064a \u0645\u0642\u064a\u0645 \u064a\u0642\u062f\u0645 \u0625\u0642\u0631\u0627\u0631\u064b\u0627 \u0636\u0631\u064a\u0628\u064a\u064b\u0627",
+        "french": "Raison c, \u00e9tranger r\u00e9sident produisant une d\u00e9claration",
+        "korean": "\uc0ac\uc720 c, \uac70\uc8fc \uc678\uad6d\uc778 \uc138\uae08 \ubcf4\uace0",
+        "german": "Grund c, Steuererkl\u00e4rung eines ans\u00e4ssigen Ausl\u00e4nders",
+        "portuguese": "Motivo c, estrangeiro residente declarando imposto de renda",
+        "urdu": "\u0648\u062c\u06c1 c\u060c \u0645\u0642\u06cc\u0645 \u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u06a9\u0627 \u0631\u06cc\u0679\u0631\u0646 \u0641\u0627\u0626\u0644 \u06a9\u0631\u0646\u0627",
+        "hindi": "\u0915\u093e\u0930\u0923 c, \u0928\u093f\u0935\u093e\u0938\u0940 \u0935\u093f\u0926\u0947\u0936\u0940 \u0926\u094d\u0935\u093e\u0930\u093e \u0930\u093f\u091f\u0930\u094d\u0928 \u0926\u093e\u0916\u093f\u0932 \u0915\u0930\u0928\u093e",
+        "persian": "\u062f\u0644\u06cc\u0644 c\u060c \u062a\u0628\u0639\u0647 \u062e\u0627\u0631\u062c\u06cc \u0645\u0642\u06cc\u0645 \u06a9\u0647 \u0627\u0638\u0647\u0627\u0631\u0646\u0627\u0645\u0647 \u0627\u0631\u0627\u0626\u0647 \u0645\u06cc\u200c\u062f\u0647\u062f",
+        "italian": "Motivo c, straniero residente che presenta la dichiarazione",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 c, \u0438\u043d\u043e\u0441\u0442\u0440\u0430\u043d\u0435\u0446-\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442, \u043f\u043e\u0434\u0430\u044e\u0449\u0438\u0439 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0438\u044e",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 c, \u0456\u043d\u043e\u0437\u0435\u043c\u0435\u0446\u044c-\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442, \u0449\u043e \u043f\u043e\u0434\u0430\u0454 \u0434\u0435\u043a\u043b\u0430\u0440\u0430\u0446\u0456\u044e",
+        "dutch": "Reden c, ingezeten vreemdeling die aangifte doet",
+        "swedish": "Anledning c, utl\u00e4ndsk medborgare som \u00e4r bosatt i USA och som l\u00e4mnar in deklaration",
+        "afrikaans": "Rede c, inwonende buitelander wat opgawe indien"
       }
     },
     {
@@ -327,6 +403,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo d, dependiente",
+        "tagalog": "Dahilan d, dependent",
+        "chinese": "\u539f\u56e0 d\uff0c\u53d7\u629a\u517b\u4eba",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 d\u060c \u0645\u064f\u0639\u0627\u0644",
+        "french": "Raison d, personne \u00e0 charge",
+        "korean": "\uc0ac\uc720 d, \ubd80\uc591\uac00\uc871",
+        "german": "Grund d, unterhaltsberechtigte Person",
+        "portuguese": "Motivo d, dependente",
+        "urdu": "\u0648\u062c\u06c1 d\u060c \u0632\u06cc\u0631 \u06a9\u0641\u0627\u0644\u062a",
+        "hindi": "\u0915\u093e\u0930\u0923 d, \u0906\u0936\u094d\u0930\u093f\u0924",
+        "persian": "\u062f\u0644\u06cc\u0644 d\u060c \u0641\u0631\u062f \u062a\u062d\u062a \u062a\u06a9\u0641\u0644",
+        "italian": "Motivo d, persona a carico",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 d, \u0438\u0436\u0434\u0438\u0432\u0435\u043d\u0435\u0446",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 d, \u0443\u0442\u0440\u0438\u043c\u0430\u043d\u0435\u0446\u044c",
+        "dutch": "Reden d, afhankelijke",
+        "swedish": "Anledning d, beroende person",
+        "afrikaans": "Rede d, afhanklike"
       }
     },
     {
@@ -353,6 +448,25 @@
       "require_if": {
         "field": "reason_d",
         "operator": "is_checked"
+      },
+      "spoken_name_translations": {
+        "spanish": "Relaci\u00f3n con el ciudadano estadounidense o extranjero residente",
+        "tagalog": "Relasyon sa U.S. citizen o dayuhang residente",
+        "chinese": "\u4e0e\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u5916\u56fd\u4eba\u7684\u5173\u7cfb",
+        "arabic": "\u0635\u0644\u0629 \u0627\u0644\u0642\u0631\u0627\u0628\u0629 \u0628\u0645\u0648\u0627\u0637\u0646 \u0623\u0645\u0631\u064a\u0643\u064a \u0623\u0648 \u0623\u062c\u0646\u0628\u064a \u0645\u0642\u064a\u0645",
+        "french": "Lien de parent\u00e9 avec le citoyen am\u00e9ricain ou l'\u00e9tranger r\u00e9sident",
+        "korean": "\ubbf8\uad6d \uc2dc\ubbfc\uad8c\uc790 \ub610\ub294 \uac70\uc8fc \uc678\uad6d\uc778\uacfc\uc758 \uad00\uacc4",
+        "german": "Verh\u00e4ltnis zu US-B\u00fcrger oder ans\u00e4ssigem Ausl\u00e4nder",
+        "portuguese": "Rela\u00e7\u00e3o com cidad\u00e3o americano ou estrangeiro residente",
+        "urdu": "\u0627\u0645\u0631\u06cc\u06a9\u06cc \u0634\u06c1\u0631\u06cc \u06cc\u0627 \u0645\u0642\u06cc\u0645 \u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u0633\u06d2 \u0631\u0634\u062a\u06c1",
+        "hindi": "U.S. \u0928\u093e\u0917\u0930\u093f\u0915 \u092f\u093e \u0928\u093f\u0935\u093e\u0938\u0940 \u0935\u093f\u0926\u0947\u0936\u0940 \u0938\u0947 \u0938\u0902\u092c\u0902\u0927",
+        "persian": "\u0646\u0633\u0628\u062a \u0628\u0627 \u0634\u0647\u0631\u0648\u0646\u062f \u06cc\u0627 \u062a\u0628\u0639\u0647 \u062e\u0627\u0631\u062c\u06cc \u0645\u0642\u06cc\u0645 \u0627\u06cc\u0627\u0644\u0627\u062a \u0645\u062a\u062d\u062f\u0647",
+        "italian": "Rapporto di parentela con il cittadino statunitense o lo straniero residente",
+        "russian": "\u041e\u0442\u043d\u043e\u0448\u0435\u043d\u0438\u0435 \u043a \u0433\u0440\u0430\u0436\u0434\u0430\u043d\u0438\u043d\u0443 \u0438\u043b\u0438 \u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0443 \u0421\u0428\u0410",
+        "ukrainian": "\u0421\u0442\u0443\u043f\u0456\u043d\u044c \u0441\u043f\u043e\u0440\u0456\u0434\u043d\u0435\u043d\u043d\u044f \u0437 \u0433\u0440\u043e\u043c\u0430\u0434\u044f\u043d\u0438\u043d\u043e\u043c \u0421\u0428\u0410 \u0430\u0431\u043e \u0456\u043d\u043e\u0437\u0435\u043c\u0446\u0435\u043c-\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u043e\u043c",
+        "dutch": "Relatie tot U.S. staatsburger of ingezeten vreemdeling",
+        "swedish": "Relation till amerikansk medborgare eller i USA bosatt utl\u00e4ndsk medborgare",
+        "afrikaans": "Verhouding tot V.S.-burger of inwonende buitelander"
       }
     },
     {
@@ -371,6 +485,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo e, c\u00f3nyuge",
+        "tagalog": "Dahilan e, asawa",
+        "chinese": "\u539f\u56e0 e\uff0c\u914d\u5076",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 e\u060c \u0632\u0648\u062c/\u0632\u0648\u062c\u0629",
+        "french": "Raison e, conjoint",
+        "korean": "\uc0ac\uc720 e, \ubc30\uc6b0\uc790",
+        "german": "Grund e, Ehepartner",
+        "portuguese": "Motivo e, c\u00f4njuge",
+        "urdu": "\u0648\u062c\u06c1 e\u060c \u0634\u0631\u06cc\u06a9 \u062d\u06cc\u0627\u062a",
+        "hindi": "\u0915\u093e\u0930\u0923 e, \u091c\u0940\u0935\u0928\u0938\u093e\u0925\u0940",
+        "persian": "\u062f\u0644\u06cc\u0644 e\u060c \u0647\u0645\u0633\u0631",
+        "italian": "Motivo e, coniuge",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 e, \u0441\u0443\u043f\u0440\u0443\u0433(\u0430)",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 e, \u0447\u043e\u043b\u043e\u0432\u0456\u043a/\u0434\u0440\u0443\u0436\u0438\u043d\u0430",
+        "dutch": "Reden e, echtgenoot/echtgenote",
+        "swedish": "Anledning e, make/maka",
+        "afrikaans": "Rede e, gade"
       }
     },
     {
@@ -401,6 +534,25 @@
             "operator": "is_checked"
           }
         ]
+      },
+      "spoken_name_translations": {
+        "spanish": "Nombre del ciudadano estadounidense o extranjero residente",
+        "tagalog": "Pangalan ng U.S. citizen o dayuhang residente",
+        "chinese": "\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u5916\u56fd\u4eba\u7684\u59d3\u540d",
+        "arabic": "\u0627\u0633\u0645 \u0627\u0644\u0645\u0648\u0627\u0637\u0646 \u0627\u0644\u0623\u0645\u0631\u064a\u0643\u064a \u0623\u0648 \u0627\u0644\u0623\u062c\u0646\u0628\u064a \u0627\u0644\u0645\u0642\u064a\u0645",
+        "french": "Nom du citoyen am\u00e9ricain ou de l'\u00e9tranger r\u00e9sident",
+        "korean": "\ubbf8\uad6d \uc2dc\ubbfc\uad8c\uc790 \ub610\ub294 \uac70\uc8fc \uc678\uad6d\uc778\uc758 \uc774\ub984",
+        "german": "Name des US-B\u00fcrgers oder ans\u00e4ssigen Ausl\u00e4nders",
+        "portuguese": "Nome do cidad\u00e3o americano ou estrangeiro residente",
+        "urdu": "\u0627\u0645\u0631\u06cc\u06a9\u06cc \u0634\u06c1\u0631\u06cc \u06cc\u0627 \u0645\u0642\u06cc\u0645 \u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u06a9\u0627 \u0646\u0627\u0645",
+        "hindi": "U.S. \u0928\u093e\u0917\u0930\u093f\u0915 \u092f\u093e \u0928\u093f\u0935\u093e\u0938\u0940 \u0935\u093f\u0926\u0947\u0936\u0940 \u0915\u093e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u0634\u0647\u0631\u0648\u0646\u062f \u06cc\u0627 \u062a\u0628\u0639\u0647 \u062e\u0627\u0631\u062c\u06cc \u0645\u0642\u06cc\u0645 \u0627\u06cc\u0627\u0644\u0627\u062a \u0645\u062a\u062d\u062f\u0647",
+        "italian": "Nome del cittadino statunitense o dello straniero residente",
+        "russian": "\u0418\u043c\u044f \u0433\u0440\u0430\u0436\u0434\u0430\u043d\u0438\u043d\u0430 \u0438\u043b\u0438 \u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430 \u0421\u0428\u0410",
+        "ukrainian": "\u0406\u043c'\u044f \u0433\u0440\u043e\u043c\u0430\u0434\u044f\u043d\u0438\u043d\u0430 \u0421\u0428\u0410 \u0430\u0431\u043e \u0456\u043d\u043e\u0437\u0435\u043c\u0446\u044f-\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430",
+        "dutch": "Naam van U.S. staatsburger of ingezeten vreemdeling",
+        "swedish": "Namn p\u00e5 amerikansk medborgare eller i USA bosatt utl\u00e4ndsk medborgare",
+        "afrikaans": "Naam van V.S.-burger of inwonende buitelander"
       }
     },
     {
@@ -431,6 +583,25 @@
             "operator": "is_checked"
           }
         ]
+      },
+      "spoken_name_translations": {
+        "spanish": "SSN o ITIN del ciudadano estadounidense o extranjero residente",
+        "tagalog": "SSN o ITIN ng U.S. citizen o dayuhang residente",
+        "chinese": "\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u5916\u56fd\u4eba\u7684 SSN \u6216 ITIN",
+        "arabic": "SSN \u0623\u0648 ITIN \u0627\u0644\u062e\u0627\u0635 \u0628\u0627\u0644\u0645\u0648\u0627\u0637\u0646 \u0627\u0644\u0623\u0645\u0631\u064a\u0643\u064a \u0623\u0648 \u0627\u0644\u0623\u062c\u0646\u0628\u064a \u0627\u0644\u0645\u0642\u064a\u0645",
+        "french": "SSN ou ITIN du citoyen am\u00e9ricain ou de l'\u00e9tranger r\u00e9sident",
+        "korean": "\ubbf8\uad6d \uc2dc\ubbfc\uad8c\uc790 \ub610\ub294 \uac70\uc8fc \uc678\uad6d\uc778\uc758 SSN \ub610\ub294 ITIN",
+        "german": "SSN oder ITIN des US-B\u00fcrgers oder ans\u00e4ssigen Ausl\u00e4nders",
+        "portuguese": "SSN ou ITIN do cidad\u00e3o americano ou estrangeiro residente",
+        "urdu": "\u0627\u0645\u0631\u06cc\u06a9\u06cc \u0634\u06c1\u0631\u06cc \u06cc\u0627 \u0645\u0642\u06cc\u0645 \u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u06a9\u0627 SSN \u06cc\u0627 ITIN",
+        "hindi": "U.S. \u0928\u093e\u0917\u0930\u093f\u0915 \u092f\u093e \u0928\u093f\u0935\u093e\u0938\u0940 \u0935\u093f\u0926\u0947\u0936\u0940 \u0915\u093e SSN \u092f\u093e ITIN",
+        "persian": "SSN \u06cc\u0627 ITIN \u0634\u0647\u0631\u0648\u0646\u062f \u06cc\u0627 \u062a\u0628\u0639\u0647 \u062e\u0627\u0631\u062c\u06cc \u0645\u0642\u06cc\u0645 \u0627\u06cc\u0627\u0644\u0627\u062a \u0645\u062a\u062d\u062f\u0647",
+        "italian": "SSN o ITIN del cittadino statunitense o dello straniero residente",
+        "russian": "SSN \u0438\u043b\u0438 ITIN \u0433\u0440\u0430\u0436\u0434\u0430\u043d\u0438\u043d\u0430 \u0438\u043b\u0438 \u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430 \u0421\u0428\u0410",
+        "ukrainian": "SSN \u0430\u0431\u043e ITIN \u0433\u0440\u043e\u043c\u0430\u0434\u044f\u043d\u0438\u043d\u0430 \u0421\u0428\u0410 \u0430\u0431\u043e \u0456\u043d\u043e\u0437\u0435\u043c\u0446\u044f-\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430",
+        "dutch": "SSN of ITIN van U.S. staatsburger of ingezeten vreemdeling",
+        "swedish": "SSN eller ITIN f\u00f6r amerikansk medborgare eller i USA bosatt utl\u00e4ndsk medborgare",
+        "afrikaans": "SSN of ITIN van V.S.-burger of inwonende buitelander"
       }
     },
     {
@@ -449,6 +620,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo f, estudiante, profesor o investigador",
+        "tagalog": "Dahilan f, estudyante, propesor, o mananaliksik",
+        "chinese": "\u539f\u56e0 f\uff0c\u5b66\u751f\u3001\u6559\u6388\u6216\u7814\u7a76\u5458",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 f\u060c \u0637\u0627\u0644\u0628 \u0623\u0648 \u0623\u0633\u062a\u0627\u0630 \u0623\u0648 \u0628\u0627\u062d\u062b",
+        "french": "Raison f, \u00e9tudiant, professeur ou chercheur",
+        "korean": "\uc0ac\uc720 f, \ud559\uc0dd, \uad50\uc218 \ub610\ub294 \uc5f0\uad6c\uc6d0",
+        "german": "Grund f, Student, Professor oder Forscher",
+        "portuguese": "Motivo f, estudante, professor ou pesquisador",
+        "urdu": "\u0648\u062c\u06c1 f\u060c \u0637\u0627\u0644\u0628 \u0639\u0644\u0645\u060c \u067e\u0631\u0648\u0641\u06cc\u0633\u0631 \u06cc\u0627 \u0645\u062d\u0642\u0642",
+        "hindi": "\u0915\u093e\u0930\u0923 f, \u091b\u093e\u0924\u094d\u0930, \u092a\u094d\u0930\u094b\u092b\u0947\u0938\u0930 \u092f\u093e \u0936\u094b\u0927\u0915\u0930\u094d\u0924\u093e",
+        "persian": "\u062f\u0644\u06cc\u0644 f\u060c \u062f\u0627\u0646\u0634\u062c\u0648\u060c \u0627\u0633\u062a\u0627\u062f \u06cc\u0627 \u067e\u0698\u0648\u0647\u0634\u06af\u0631",
+        "italian": "Motivo f, studente, professore o ricercatore",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 f, \u0441\u0442\u0443\u0434\u0435\u043d\u0442, \u043f\u0440\u0435\u043f\u043e\u0434\u0430\u0432\u0430\u0442\u0435\u043b\u044c \u0438\u043b\u0438 \u0438\u0441\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u044c",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 f, \u0441\u0442\u0443\u0434\u0435\u043d\u0442, \u043f\u0440\u043e\u0444\u0435\u0441\u043e\u0440 \u0430\u0431\u043e \u0434\u043e\u0441\u043b\u0456\u0434\u043d\u0438\u043a",
+        "dutch": "Reden f, student, professor of onderzoeker",
+        "swedish": "Anledning f, student, professor eller forskare",
+        "afrikaans": "Rede f, student, professor of navorser"
       }
     },
     {
@@ -467,6 +657,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo g, dependiente o c\u00f3nyuge de un extranjero no residente con visa",
+        "tagalog": "Dahilan g, dependent o asawa ng dayuhang hindi residente na may visa",
+        "chinese": "\u539f\u56e0 g\uff0c\u6301\u6709\u7b7e\u8bc1\u7684\u975e\u5c45\u6c11\u5916\u56fd\u4eba\u7684\u53d7\u629a\u517b\u4eba\u6216\u914d\u5076",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 g\u060c \u0645\u064f\u0639\u0627\u0644 \u0623\u0648 \u0632\u0648\u062c/\u0632\u0648\u062c\u0629 \u0644\u0623\u062c\u0646\u0628\u064a \u063a\u064a\u0631 \u0645\u0642\u064a\u0645 \u064a\u062d\u0645\u0644 \u062a\u0623\u0634\u064a\u0631\u0629",
+        "french": "Raison g, personne \u00e0 charge ou conjoint d'un \u00e9tranger non-r\u00e9sident titulaire d'un visa",
+        "korean": "\uc0ac\uc720 g, \ube44\uc790\ub97c \uc18c\uc9c0\ud55c \ube44\uac70\uc8fc \uc678\uad6d\uc778\uc758 \ubd80\uc591\uac00\uc871 \ub610\ub294 \ubc30\uc6b0\uc790",
+        "german": "Grund g, unterhaltsberechtigte Person oder Ehepartner eines nichtans\u00e4ssigen Ausl\u00e4nders mit Visum",
+        "portuguese": "Motivo g, dependente ou c\u00f4njuge de estrangeiro n\u00e3o residente com visto",
+        "urdu": "\u0648\u062c\u06c1 g\u060c \u0648\u06cc\u0632\u0627 \u06a9\u06d2 \u0633\u0627\u062a\u06be \u063a\u06cc\u0631 \u0645\u0642\u06cc\u0645 \u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u06a9\u0627 \u0632\u06cc\u0631 \u06a9\u0641\u0627\u0644\u062a \u06cc\u0627 \u0634\u0631\u06cc\u06a9 \u062d\u06cc\u0627\u062a",
+        "hindi": "\u0915\u093e\u0930\u0923 g, \u0935\u0940\u091c\u093c\u093e \u0935\u093e\u0932\u0947 \u0905\u0928\u093f\u0935\u093e\u0938\u0940 \u0935\u093f\u0926\u0947\u0936\u0940 \u0915\u093e \u0906\u0936\u094d\u0930\u093f\u0924 \u092f\u093e \u091c\u0940\u0935\u0928\u0938\u093e\u0925\u0940",
+        "persian": "\u062f\u0644\u06cc\u0644 g\u060c \u0641\u0631\u062f \u062a\u062d\u062a \u062a\u06a9\u0641\u0644 \u06cc\u0627 \u0647\u0645\u0633\u0631 \u062a\u0628\u0639\u0647 \u062e\u0627\u0631\u062c\u06cc \u063a\u06cc\u0631\u0645\u0642\u06cc\u0645 \u062f\u0627\u0631\u0627\u06cc \u0648\u06cc\u0632\u0627",
+        "italian": "Motivo g, persona a carico o coniuge di straniero non residente con visto",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 g, \u0438\u0436\u0434\u0438\u0432\u0435\u043d\u0435\u0446 \u0438\u043b\u0438 \u0441\u0443\u043f\u0440\u0443\u0433(\u0430) \u0438\u043d\u043e\u0441\u0442\u0440\u0430\u043d\u0446\u0430-\u043d\u0435\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430 \u0441 \u0432\u0438\u0437\u043e\u0439",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 g, \u0443\u0442\u0440\u0438\u043c\u0430\u043d\u0435\u0446\u044c \u0430\u0431\u043e \u0447\u043e\u043b\u043e\u0432\u0456\u043a/\u0434\u0440\u0443\u0436\u0438\u043d\u0430 \u0456\u043d\u043e\u0437\u0435\u043c\u0446\u044f-\u043d\u0435\u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430 \u0437 \u0432\u0456\u0437\u043e\u044e",
+        "dutch": "Reden g, afhankelijke of echtgenoot/echtgenote van niet-ingezeten vreemdeling met visum",
+        "swedish": "Anledning g, beroende person eller make/maka till utl\u00e4ndsk medborgare som inte \u00e4r bosatt i USA och som har visum",
+        "afrikaans": "Rede g, afhanklike of gade van nie-inwonende buitelander met visum"
       }
     },
     {
@@ -497,6 +706,25 @@
             "operator": "is_checked"
           }
         ]
+      },
+      "spoken_name_translations": {
+        "spanish": "Motivo h, otro",
+        "tagalog": "Dahilan h, iba pa",
+        "chinese": "\u539f\u56e0 h\uff0c\u5176\u4ed6",
+        "arabic": "\u0627\u0644\u0633\u0628\u0628 h\u060c \u0623\u062e\u0631\u0649",
+        "french": "Raison h, autre",
+        "korean": "\uc0ac\uc720 h, \uae30\ud0c0",
+        "german": "Grund h, Sonstiges",
+        "portuguese": "Motivo h, outro",
+        "urdu": "\u0648\u062c\u06c1 h\u060c \u062f\u06cc\u06af\u0631",
+        "hindi": "\u0915\u093e\u0930\u0923 h, \u0905\u0928\u094d\u092f",
+        "persian": "\u062f\u0644\u06cc\u0644 h\u060c \u0633\u0627\u06cc\u0631 \u0645\u0648\u0627\u0631\u062f",
+        "italian": "Motivo h, altro",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 h, \u0434\u0440\u0443\u0433\u043e\u0435",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 h, \u0456\u043d\u0448\u0435",
+        "dutch": "Reden h, overig",
+        "swedish": "Anledning h, \u00f6vrigt",
+        "afrikaans": "Rede h, ander"
       }
     },
     {
@@ -527,6 +755,25 @@
             "operator": "is_checked"
           }
         ]
+      },
+      "spoken_name_translations": {
+        "spanish": "Pa\u00eds del tratado",
+        "tagalog": "Bansang sakop ng kasunduan",
+        "chinese": "\u534f\u5b9a\u56fd\u5bb6",
+        "arabic": "\u0628\u0644\u062f \u0627\u0644\u0645\u0639\u0627\u0647\u062f\u0629",
+        "french": "Pays de la convention",
+        "korean": "\uc870\uc57d \uad6d\uac00",
+        "german": "Vertragsstaat",
+        "portuguese": "Pa\u00eds do acordo",
+        "urdu": "\u0645\u0639\u0627\u06c1\u062f\u06d2 \u06a9\u0627 \u0645\u0644\u06a9",
+        "hindi": "\u0938\u0902\u0927\u093f \u0935\u093e\u0932\u093e \u0926\u0947\u0936",
+        "persian": "\u06a9\u0634\u0648\u0631 \u0637\u0631\u0641 \u0645\u0639\u0627\u0647\u062f\u0647",
+        "italian": "Paese del trattato",
+        "russian": "\u0421\u0442\u0440\u0430\u043d\u0430, \u0441 \u043a\u043e\u0442\u043e\u0440\u043e\u0439 \u0437\u0430\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0435",
+        "ukrainian": "\u041a\u0440\u0430\u0457\u043d\u0430, \u0437 \u044f\u043a\u043e\u044e \u0443\u043a\u043b\u0430\u0434\u0435\u043d\u043e \u0443\u0433\u043e\u0434\u0443",
+        "dutch": "Verdragsland",
+        "swedish": "Avtalsland",
+        "afrikaans": "Verdragland"
       }
     },
     {
@@ -557,6 +804,25 @@
             "operator": "is_checked"
           }
         ]
+      },
+      "spoken_name_translations": {
+        "spanish": "N\u00famero del art\u00edculo del tratado",
+        "tagalog": "Numero ng artikulo ng kasunduan",
+        "chinese": "\u534f\u5b9a\u6761\u6b3e\u7f16\u53f7",
+        "arabic": "\u0631\u0642\u0645 \u0645\u0627\u062f\u0629 \u0627\u0644\u0645\u0639\u0627\u0647\u062f\u0629",
+        "french": "Num\u00e9ro d'article de la convention",
+        "korean": "\uc870\uc57d \uc870\ud56d \ubc88\ud638",
+        "german": "Artikelnummer des Abkommens",
+        "portuguese": "N\u00famero do artigo do acordo",
+        "urdu": "\u0645\u0639\u0627\u06c1\u062f\u06d2 \u06a9\u0627 \u0622\u0631\u0679\u06cc\u06a9\u0644 \u0646\u0645\u0628\u0631",
+        "hindi": "\u0938\u0902\u0927\u093f \u0905\u0928\u0941\u091a\u094d\u091b\u0947\u0926 \u0938\u0902\u0916\u094d\u092f\u093e",
+        "persian": "\u0634\u0645\u0627\u0631\u0647 \u0645\u0627\u062f\u0647 \u0645\u0639\u0627\u0647\u062f\u0647",
+        "italian": "Numero dell'articolo del trattato",
+        "russian": "\u041d\u043e\u043c\u0435\u0440 \u0441\u0442\u0430\u0442\u044c\u0438 \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u044f",
+        "ukrainian": "\u041d\u043e\u043c\u0435\u0440 \u0441\u0442\u0430\u0442\u0442\u0456 \u0443\u0433\u043e\u0434\u0438",
+        "dutch": "Verdragsartikelnummer",
+        "swedish": "Artikelnummer i avtalet",
+        "afrikaans": "Verdragartikelnommer"
       }
     },
     {
@@ -575,6 +841,25 @@
       },
       "validation": {
         "required": true
+      },
+      "spoken_name_translations": {
+        "spanish": "Primer nombre",
+        "tagalog": "Unang pangalan",
+        "chinese": "\u540d",
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0623\u0648\u0644",
+        "french": "Pr\u00e9nom",
+        "korean": "\uc774\ub984 (First name)",
+        "german": "Vorname",
+        "portuguese": "Primeiro nome",
+        "urdu": "\u067e\u06c1\u0644\u0627 \u0646\u0627\u0645",
+        "hindi": "\u092a\u0939\u0932\u093e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645",
+        "italian": "Nome",
+        "russian": "\u0418\u043c\u044f",
+        "ukrainian": "\u0406\u043c'\u044f",
+        "dutch": "Voornaam",
+        "swedish": "F\u00f6rnamn",
+        "afrikaans": "Voornaam"
       }
     },
     {
@@ -593,6 +878,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Segundo nombre",
+        "tagalog": "Gitnang pangalan",
+        "chinese": "\u4e2d\u95f4\u540d",
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0623\u0648\u0633\u0637",
+        "french": "Deuxi\u00e8me pr\u00e9nom",
+        "korean": "\uc911\uac04 \uc774\ub984 (Middle name)",
+        "german": "Zweiter Vorname",
+        "portuguese": "Nome do meio",
+        "urdu": "\u062f\u0631\u0645\u06cc\u0627\u0646\u06cc \u0646\u0627\u0645",
+        "hindi": "\u092e\u0927\u094d\u092f \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u0645\u06cc\u0627\u0646\u06cc",
+        "italian": "Secondo nome",
+        "russian": "\u041e\u0442\u0447\u0435\u0441\u0442\u0432\u043e",
+        "ukrainian": "\u041f\u043e \u0431\u0430\u0442\u044c\u043a\u043e\u0432\u0456",
+        "dutch": "Tweede naam",
+        "swedish": "Mellannamn",
+        "afrikaans": "Middelnaam"
       }
     },
     {
@@ -611,6 +915,25 @@
       },
       "validation": {
         "required": true
+      },
+      "spoken_name_translations": {
+        "spanish": "Apellido",
+        "tagalog": "Apelyido",
+        "chinese": "\u59d3",
+        "arabic": "\u0627\u0633\u0645 \u0627\u0644\u0639\u0627\u0626\u0644\u0629",
+        "french": "Nom de famille",
+        "korean": "\uc131 (Last name)",
+        "german": "Nachname",
+        "portuguese": "Sobrenome",
+        "urdu": "\u0622\u062e\u0631\u06cc \u0646\u0627\u0645",
+        "hindi": "\u0905\u0902\u0924\u093f\u092e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc",
+        "italian": "Cognome",
+        "russian": "\u0424\u0430\u043c\u0438\u043b\u0438\u044f",
+        "ukrainian": "\u041f\u0440\u0456\u0437\u0432\u0438\u0449\u0435",
+        "dutch": "Achternaam",
+        "swedish": "Efternamn",
+        "afrikaans": "Van"
       }
     },
     {
@@ -629,6 +952,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Primer nombre de nacimiento",
+        "tagalog": "Unang pangalan sa kapanganakan",
+        "chinese": "\u51fa\u751f\u65f6\u540d",
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0623\u0648\u0644 \u0639\u0646\u062f \u0627\u0644\u0648\u0644\u0627\u062f\u0629",
+        "french": "Pr\u00e9nom de naissance",
+        "korean": "\ucd9c\uc0dd \uc2dc \uc774\ub984 (First name)",
+        "german": "Geburtsvorname",
+        "portuguese": "Primeiro nome de nascimento",
+        "urdu": "\u067e\u06cc\u062f\u0627\u0626\u0634\u06cc \u067e\u06c1\u0644\u0627 \u0646\u0627\u0645",
+        "hindi": "\u091c\u0928\u094d\u092e \u0915\u093e \u092a\u0939\u0932\u093e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u0632\u0645\u0627\u0646 \u062a\u0648\u0644\u062f",
+        "italian": "Nome di nascita",
+        "russian": "\u0418\u043c\u044f \u043f\u0440\u0438 \u0440\u043e\u0436\u0434\u0435\u043d\u0438\u0438",
+        "ukrainian": "\u0406\u043c'\u044f \u043f\u0440\u0438 \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u0456",
+        "dutch": "Geboortevoornaam",
+        "swedish": "F\u00f6rnamn vid f\u00f6dseln",
+        "afrikaans": "Geboortevoornaam"
       }
     },
     {
@@ -647,6 +989,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Segundo nombre de nacimiento",
+        "tagalog": "Gitnang pangalan sa kapanganakan",
+        "chinese": "\u51fa\u751f\u65f6\u4e2d\u95f4\u540d",
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0623\u0648\u0633\u0637 \u0639\u0646\u062f \u0627\u0644\u0648\u0644\u0627\u062f\u0629",
+        "french": "Deuxi\u00e8me pr\u00e9nom de naissance",
+        "korean": "\ucd9c\uc0dd \uc2dc \uc911\uac04 \uc774\ub984 (Middle name)",
+        "german": "Zweiter Geburtsvorname",
+        "portuguese": "Nome do meio de nascimento",
+        "urdu": "\u067e\u06cc\u062f\u0627\u0626\u0634\u06cc \u062f\u0631\u0645\u06cc\u0627\u0646\u06cc \u0646\u0627\u0645",
+        "hindi": "\u091c\u0928\u094d\u092e \u0915\u093e \u092e\u0927\u094d\u092f \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u0645\u06cc\u0627\u0646\u06cc \u0632\u0645\u0627\u0646 \u062a\u0648\u0644\u062f",
+        "italian": "Secondo nome di nascita",
+        "russian": "\u041e\u0442\u0447\u0435\u0441\u0442\u0432\u043e \u043f\u0440\u0438 \u0440\u043e\u0436\u0434\u0435\u043d\u0438\u0438",
+        "ukrainian": "\u041f\u043e \u0431\u0430\u0442\u044c\u043a\u043e\u0432\u0456 \u043f\u0440\u0438 \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u0456",
+        "dutch": "Geboorte tweede naam",
+        "swedish": "Mellannamn vid f\u00f6dseln",
+        "afrikaans": "Geboortemiddelnaam"
       }
     },
     {
@@ -665,6 +1026,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Apellido de nacimiento",
+        "tagalog": "Apelyido sa kapanganakan",
+        "chinese": "\u51fa\u751f\u65f6\u59d3",
+        "arabic": "\u0627\u0633\u0645 \u0627\u0644\u0639\u0627\u0626\u0644\u0629 \u0639\u0646\u062f \u0627\u0644\u0648\u0644\u0627\u062f\u0629",
+        "french": "Nom de famille de naissance",
+        "korean": "\ucd9c\uc0dd \uc2dc \uc131 (Last name)",
+        "german": "Geburtsnachname",
+        "portuguese": "Sobrenome de nascimento",
+        "urdu": "\u067e\u06cc\u062f\u0627\u0626\u0634\u06cc \u0622\u062e\u0631\u06cc \u0646\u0627\u0645",
+        "hindi": "\u091c\u0928\u094d\u092e \u0915\u093e \u0905\u0902\u0924\u093f\u092e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc \u0632\u0645\u0627\u0646 \u062a\u0648\u0644\u062f",
+        "italian": "Cognome di nascita",
+        "russian": "\u0424\u0430\u043c\u0438\u043b\u0438\u044f \u043f\u0440\u0438 \u0440\u043e\u0436\u0434\u0435\u043d\u0438\u0438",
+        "ukrainian": "\u041f\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u043f\u0440\u0438 \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u0456",
+        "dutch": "Geboorteachternaam",
+        "swedish": "Efternamn vid f\u00f6dseln",
+        "afrikaans": "Geboortevan"
       }
     },
     {
@@ -683,6 +1063,25 @@
       },
       "validation": {
         "required": true
+      },
+      "spoken_name_translations": {
+        "spanish": "Direcci\u00f3n postal (calle)",
+        "tagalog": "Address ng kalye para sa sulat",
+        "chinese": "\u90ae\u5bc4\u8857\u9053\u5730\u5740",
+        "arabic": "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0634\u0627\u0631\u0639 \u0627\u0644\u0628\u0631\u064a\u062f\u064a",
+        "french": "Adresse postale (rue)",
+        "korean": "\uc6b0\ud3b8\ubb3c \uc218\ub839 \uc8fc\uc18c (\ub3c4\ub85c\uba85)",
+        "german": "Postanschrift (Stra\u00dfe)",
+        "portuguese": "Endere\u00e7o de correspond\u00eancia (rua)",
+        "urdu": "\u0688\u0627\u06a9 \u06a9\u0627 \u06af\u0644\u06cc \u06a9\u0627 \u067e\u062a\u06c1",
+        "hindi": "\u0921\u093e\u0915 \u0915\u093e \u0938\u0921\u093c\u0915 \u092a\u0924\u093e",
+        "persian": "\u0646\u0634\u0627\u0646\u06cc \u067e\u0633\u062a\u06cc \u062e\u06cc\u0627\u0628\u0627\u0646",
+        "italian": "Indirizzo postale (via e numero civico)",
+        "russian": "\u041f\u043e\u0447\u0442\u043e\u0432\u044b\u0439 \u0430\u0434\u0440\u0435\u0441 (\u0443\u043b\u0438\u0446\u0430, \u0434\u043e\u043c)",
+        "ukrainian": "\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430: \u0432\u0443\u043b\u0438\u0446\u044f, \u0431\u0443\u0434\u0438\u043d\u043e\u043a",
+        "dutch": "Postadres straat",
+        "swedish": "Postadress, gata",
+        "afrikaans": "Posstraatadres"
       }
     },
     {
@@ -701,6 +1100,25 @@
       },
       "validation": {
         "required": true
+      },
+      "spoken_name_translations": {
+        "spanish": "Direcci\u00f3n postal (ciudad, estado y pa\u00eds)",
+        "tagalog": "Lungsod, estado, at bansa para sa sulat",
+        "chinese": "\u90ae\u5bc4\u57ce\u5e02\u3001\u5dde\u548c\u56fd\u5bb6",
+        "arabic": "\u0627\u0644\u0645\u062f\u064a\u0646\u0629 \u0648\u0627\u0644\u0648\u0644\u0627\u064a\u0629 \u0648\u0627\u0644\u0628\u0644\u062f \u0644\u0644\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0628\u0631\u064a\u062f\u064a",
+        "french": "Adresse postale (ville, \u00c9tat et pays)",
+        "korean": "\uc6b0\ud3b8\ubb3c \uc218\ub839 \uc8fc\uc18c (\ub3c4\uc2dc, \uc8fc, \uad6d\uac00)",
+        "german": "Postanschrift (Stadt, Bundesstaat und Land)",
+        "portuguese": "Endere\u00e7o de correspond\u00eancia (cidade, estado e pa\u00eds)",
+        "urdu": "\u0688\u0627\u06a9 \u06a9\u0627 \u0634\u06c1\u0631\u060c \u0631\u06cc\u0627\u0633\u062a\u060c \u0627\u0648\u0631 \u0645\u0644\u06a9",
+        "hindi": "\u0921\u093e\u0915 \u0915\u093e \u0936\u0939\u0930, \u0930\u093e\u091c\u094d\u092f \u0914\u0930 \u0926\u0947\u0936",
+        "persian": "\u0634\u0647\u0631\u060c \u0627\u06cc\u0627\u0644\u062a \u0648 \u06a9\u0634\u0648\u0631 \u067e\u0633\u062a\u06cc",
+        "italian": "Indirizzo postale (citt\u00e0, stato e paese)",
+        "russian": "\u041f\u043e\u0447\u0442\u043e\u0432\u044b\u0439 \u0430\u0434\u0440\u0435\u0441 (\u0433\u043e\u0440\u043e\u0434, \u0448\u0442\u0430\u0442, \u0441\u0442\u0440\u0430\u043d\u0430)",
+        "ukrainian": "\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430: \u043c\u0456\u0441\u0442\u043e, \u0448\u0442\u0430\u0442/\u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0442\u0430 \u043a\u0440\u0430\u0457\u043d\u0430",
+        "dutch": "Postadres stad, staat en land",
+        "swedish": "Postadress, stad, delstat och land",
+        "afrikaans": "Posstad, staat en land"
       }
     },
     {
@@ -719,6 +1137,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Direcci\u00f3n en el extranjero (calle)",
+        "tagalog": "Address ng kalye sa ibang bansa",
+        "chinese": "\u5916\u56fd\u8857\u9053\u5730\u5740",
+        "arabic": "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0634\u0627\u0631\u0639 \u0627\u0644\u0623\u062c\u0646\u0628\u064a",
+        "french": "Adresse \u00e0 l'\u00e9tranger (rue)",
+        "korean": "\ud574\uc678 \uc8fc\uc18c (\ub3c4\ub85c\uba85)",
+        "german": "Ausl\u00e4ndische Anschrift (Stra\u00dfe)",
+        "portuguese": "Endere\u00e7o no exterior (rua)",
+        "urdu": "\u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u06af\u0644\u06cc \u06a9\u0627 \u067e\u062a\u06c1",
+        "hindi": "\u0935\u093f\u0926\u0947\u0936\u0940 \u0938\u0921\u093c\u0915 \u092a\u0924\u093e",
+        "persian": "\u0646\u0634\u0627\u0646\u06cc \u062e\u06cc\u0627\u0628\u0627\u0646 \u062e\u0627\u0631\u062c\u06cc",
+        "italian": "Indirizzo estero (via e numero civico)",
+        "russian": "\u0410\u0434\u0440\u0435\u0441 \u0437\u0430 \u0440\u0443\u0431\u0435\u0436\u043e\u043c (\u0443\u043b\u0438\u0446\u0430, \u0434\u043e\u043c)",
+        "ukrainian": "\u0406\u043d\u043e\u0437\u0435\u043c\u043d\u0430 \u0430\u0434\u0440\u0435\u0441\u0430: \u0432\u0443\u043b\u0438\u0446\u044f, \u0431\u0443\u0434\u0438\u043d\u043e\u043a",
+        "dutch": "Buitenlands straatadres",
+        "swedish": "Utl\u00e4ndsk gatuadress",
+        "afrikaans": "Buitelandse straatadres"
       }
     },
     {
@@ -737,6 +1174,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Direcci\u00f3n en el extranjero (ciudad, estado y pa\u00eds)",
+        "tagalog": "Lungsod, estado, at bansa sa ibang bansa",
+        "chinese": "\u5916\u56fd\u57ce\u5e02\u3001\u5dde\u548c\u56fd\u5bb6",
+        "arabic": "\u0627\u0644\u0645\u062f\u064a\u0646\u0629 \u0648\u0627\u0644\u0648\u0644\u0627\u064a\u0629 \u0648\u0627\u0644\u0628\u0644\u062f \u0644\u0644\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0623\u062c\u0646\u0628\u064a",
+        "french": "Adresse \u00e0 l'\u00e9tranger (ville, \u00c9tat et pays)",
+        "korean": "\ud574\uc678 \uc8fc\uc18c (\ub3c4\uc2dc, \uc8fc, \uad6d\uac00)",
+        "german": "Ausl\u00e4ndische Anschrift (Stadt, Bundesstaat und Land)",
+        "portuguese": "Endere\u00e7o no exterior (cidade, estado e pa\u00eds)",
+        "urdu": "\u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u0634\u06c1\u0631\u060c \u0631\u06cc\u0627\u0633\u062a\u060c \u0627\u0648\u0631 \u0645\u0644\u06a9",
+        "hindi": "\u0935\u093f\u0926\u0947\u0936\u0940 \u0936\u0939\u0930, \u0930\u093e\u091c\u094d\u092f \u0914\u0930 \u0926\u0947\u0936",
+        "persian": "\u0634\u0647\u0631\u060c \u0627\u06cc\u0627\u0644\u062a \u0648 \u06a9\u0634\u0648\u0631 \u062e\u0627\u0631\u062c\u06cc",
+        "italian": "Indirizzo estero (citt\u00e0, stato e paese)",
+        "russian": "\u0410\u0434\u0440\u0435\u0441 \u0437\u0430 \u0440\u0443\u0431\u0435\u0436\u043e\u043c (\u0433\u043e\u0440\u043e\u0434, \u0448\u0442\u0430\u0442, \u0441\u0442\u0440\u0430\u043d\u0430)",
+        "ukrainian": "\u0406\u043d\u043e\u0437\u0435\u043c\u043d\u0430 \u0430\u0434\u0440\u0435\u0441\u0430: \u043c\u0456\u0441\u0442\u043e, \u0448\u0442\u0430\u0442/\u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0442\u0430 \u043a\u0440\u0430\u0457\u043d\u0430",
+        "dutch": "Buitenlandse stad, staat en land",
+        "swedish": "Utl\u00e4ndsk stad, delstat och land",
+        "afrikaans": "Buitelandse stad, staat en land"
       }
     },
     {
@@ -755,6 +1211,25 @@
       },
       "validation": {
         "required": true
+      },
+      "spoken_name_translations": {
+        "spanish": "Fecha de nacimiento",
+        "tagalog": "Petsa ng kapanganakan",
+        "chinese": "\u51fa\u751f\u65e5\u671f",
+        "arabic": "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0645\u064a\u0644\u0627\u062f",
+        "french": "Date de naissance",
+        "korean": "\uc0dd\ub144\uc6d4\uc77c",
+        "german": "Geburtsdatum",
+        "portuguese": "Data de nascimento",
+        "urdu": "\u062a\u0627\u0631\u06cc\u062e \u067e\u06cc\u062f\u0627\u0626\u0634",
+        "hindi": "\u091c\u0928\u094d\u092e \u0915\u0940 \u0924\u093e\u0930\u0940\u0916",
+        "persian": "\u062a\u0627\u0631\u06cc\u062e \u062a\u0648\u0644\u062f",
+        "italian": "Data di nascita",
+        "russian": "\u0414\u0430\u0442\u0430 \u0440\u043e\u0436\u0434\u0435\u043d\u0438\u044f",
+        "ukrainian": "\u0414\u0430\u0442\u0430 \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u044f",
+        "dutch": "Geboortedatum",
+        "swedish": "F\u00f6delsedatum",
+        "afrikaans": "Geboortedatum"
       }
     },
     {
@@ -774,7 +1249,26 @@
       "validation": {
         "required": true
       },
-      "max_length": 8
+      "max_length": 8,
+      "spoken_name_translations": {
+        "spanish": "Pa\u00eds de nacimiento",
+        "tagalog": "Bansa ng kapanganakan",
+        "chinese": "\u51fa\u751f\u56fd\u5bb6",
+        "arabic": "\u0628\u0644\u062f \u0627\u0644\u0645\u064a\u0644\u0627\u062f",
+        "french": "Pays de naissance",
+        "korean": "\ucd9c\uc0dd \uad6d\uac00",
+        "german": "Geburtsland",
+        "portuguese": "Pa\u00eds de nascimento",
+        "urdu": "\u067e\u06cc\u062f\u0627\u0626\u0634 \u06a9\u0627 \u0645\u0644\u06a9",
+        "hindi": "\u091c\u0928\u094d\u092e \u0915\u093e \u0926\u0947\u0936",
+        "persian": "\u06a9\u0634\u0648\u0631 \u0645\u062d\u0644 \u062a\u0648\u0644\u062f",
+        "italian": "Paese di nascita",
+        "russian": "\u0421\u0442\u0440\u0430\u043d\u0430 \u0440\u043e\u0436\u0434\u0435\u043d\u0438\u044f",
+        "ukrainian": "\u041a\u0440\u0430\u0457\u043d\u0430 \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u044f",
+        "dutch": "Geboorteland",
+        "swedish": "F\u00f6delseland",
+        "afrikaans": "Geboorteland"
+      }
     },
     {
       "id": "birth_city_state",
@@ -792,6 +1286,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Ciudad y estado o provincia de nacimiento",
+        "tagalog": "Lungsod at estado o probinsya ng kapanganakan",
+        "chinese": "\u51fa\u751f\u57ce\u5e02\u548c\u5dde\u6216\u7701",
+        "arabic": "\u0645\u062f\u064a\u0646\u0629 \u0648\u0648\u0644\u0627\u064a\u0629 \u0623\u0648 \u0645\u0642\u0627\u0637\u0639\u0629 \u0627\u0644\u0645\u064a\u0644\u0627\u062f",
+        "french": "Ville et \u00c9tat ou province de naissance",
+        "korean": "\ucd9c\uc0dd \ub3c4\uc2dc \ubc0f \uc8fc \ub610\ub294 \ub3c4",
+        "german": "Geburtsort (Stadt und Bundesstaat oder Provinz)",
+        "portuguese": "Cidade e estado ou prov\u00edncia de nascimento",
+        "urdu": "\u067e\u06cc\u062f\u0627\u0626\u0634\u06cc \u0634\u06c1\u0631 \u0627\u0648\u0631 \u0631\u06cc\u0627\u0633\u062a \u06cc\u0627 \u0635\u0648\u0628\u06c1",
+        "hindi": "\u091c\u0928\u094d\u092e \u0915\u093e \u0936\u0939\u0930 \u0914\u0930 \u0930\u093e\u091c\u094d\u092f \u092f\u093e \u092a\u094d\u0930\u093e\u0902\u0924",
+        "persian": "\u0634\u0647\u0631 \u0648 \u0627\u06cc\u0627\u0644\u062a \u06cc\u0627 \u0627\u0633\u062a\u0627\u0646 \u0645\u062d\u0644 \u062a\u0648\u0644\u062f",
+        "italian": "Citt\u00e0 e stato o provincia di nascita",
+        "russian": "\u0413\u043e\u0440\u043e\u0434 \u0438 \u0448\u0442\u0430\u0442 \u0438\u043b\u0438 \u043f\u0440\u043e\u0432\u0438\u043d\u0446\u0438\u044f \u0440\u043e\u0436\u0434\u0435\u043d\u0438\u044f",
+        "ukrainian": "\u041c\u0456\u0441\u0442\u043e \u0442\u0430 \u0448\u0442\u0430\u0442/\u043f\u0440\u043e\u0432\u0456\u043d\u0446\u0456\u044f \u043d\u0430\u0440\u043e\u0434\u0436\u0435\u043d\u043d\u044f",
+        "dutch": "Geboorteplaats en staat of provincie",
+        "swedish": "F\u00f6delsestad och delstat eller provins",
+        "afrikaans": "Geboortestad en -staat of -provinsie"
       }
     },
     {
@@ -874,7 +1387,26 @@
             "russian": "\u0416\u0435\u043d\u0441\u043a\u0438\u0439"
           }
         }
-      ]
+      ],
+      "spoken_name_translations": {
+        "spanish": "Sexo",
+        "tagalog": "Kasarian",
+        "chinese": "\u6027\u522b",
+        "arabic": "\u0627\u0644\u062c\u0646\u0633",
+        "french": "Sexe",
+        "korean": "\uc131\ubcc4",
+        "german": "Geschlecht",
+        "portuguese": "Sexo",
+        "urdu": "\u062c\u0646\u0633",
+        "hindi": "\u0932\u093f\u0902\u0917",
+        "persian": "\u062c\u0646\u0633\u06cc\u062a",
+        "italian": "Sesso",
+        "russian": "\u041f\u043e\u043b",
+        "ukrainian": "\u0421\u0442\u0430\u0442\u044c",
+        "dutch": "Geslacht",
+        "swedish": "K\u00f6n",
+        "afrikaans": "Geslag"
+      }
     },
     {
       "id": "citizenship_country",
@@ -892,6 +1424,25 @@
       },
       "validation": {
         "required": true
+      },
+      "spoken_name_translations": {
+        "spanish": "Pa\u00eds de ciudadan\u00eda",
+        "tagalog": "Bansa ng pagkamamamayan",
+        "chinese": "\u56fd\u7c4d\u6240\u5728\u56fd\u5bb6",
+        "arabic": "\u0628\u0644\u062f \u0627\u0644\u0645\u0648\u0627\u0637\u0646\u0629",
+        "french": "Pays de citoyennet\u00e9",
+        "korean": "\uad6d\uc801",
+        "german": "Staatsangeh\u00f6rigkeit (Land)",
+        "portuguese": "Pa\u00eds de cidadania",
+        "urdu": "\u0634\u06c1\u0631\u06cc\u062a \u06a9\u0627 \u0645\u0644\u06a9",
+        "hindi": "\u0928\u093e\u0917\u0930\u093f\u0915\u0924\u093e \u0915\u093e \u0926\u0947\u0936",
+        "persian": "\u06a9\u0634\u0648\u0631 \u062a\u0627\u0628\u0639\u06cc\u062a",
+        "italian": "Paese di cittadinanza",
+        "russian": "\u0421\u0442\u0440\u0430\u043d\u0430 \u0433\u0440\u0430\u0436\u0434\u0430\u043d\u0441\u0442\u0432\u0430",
+        "ukrainian": "\u041a\u0440\u0430\u0457\u043d\u0430 \u0433\u0440\u043e\u043c\u0430\u0434\u044f\u043d\u0441\u0442\u0432\u0430",
+        "dutch": "Land van staatsburgerschap",
+        "swedish": "Medborgarskapsland",
+        "afrikaans": "Land van burgerskap"
       }
     },
     {
@@ -910,6 +1461,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "N\u00famero de identificaci\u00f3n tributaria del extranjero",
+        "tagalog": "Numero ng foreign tax ID",
+        "chinese": "\u5916\u56fd\u7a0e\u52a1\u8bc6\u522b\u53f7",
+        "arabic": "\u0631\u0642\u0645 \u0627\u0644\u062a\u0639\u0631\u064a\u0641 \u0627\u0644\u0636\u0631\u064a\u0628\u064a \u0627\u0644\u0623\u062c\u0646\u0628\u064a",
+        "french": "Num\u00e9ro d'identification fiscale \u00e9tranger",
+        "korean": "\ud574\uc678 \ub0a9\uc138\uc790 \ubc88\ud638",
+        "german": "Ausl\u00e4ndische Steueridentifikationsnummer",
+        "portuguese": "N\u00famero de identifica\u00e7\u00e3o fiscal estrangeiro",
+        "urdu": "\u063a\u06cc\u0631 \u0645\u0644\u06a9\u06cc \u0679\u06cc\u06a9\u0633 \u0634\u0646\u0627\u062e\u062a\u06cc \u0646\u0645\u0628\u0631",
+        "hindi": "\u0935\u093f\u0926\u0947\u0936\u0940 \u0915\u0930 \u092a\u0939\u091a\u093e\u0928 \u0938\u0902\u0916\u094d\u092f\u093e",
+        "persian": "\u0634\u0645\u0627\u0631\u0647 \u0634\u0646\u0627\u0633\u0627\u06cc\u06cc \u0645\u0627\u0644\u06cc\u0627\u062a\u06cc \u062e\u0627\u0631\u062c\u06cc",
+        "italian": "Numero di identificazione fiscale estero",
+        "russian": "\u0418\u043d\u043e\u0441\u0442\u0440\u0430\u043d\u043d\u044b\u0439 \u0438\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u043d\u0430\u043b\u043e\u0433\u043e\u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430",
+        "ukrainian": "\u0406\u043d\u043e\u0437\u0435\u043c\u043d\u0438\u0439 \u0456\u0434\u0435\u043d\u0442\u0438\u0444\u0456\u043a\u0430\u0446\u0456\u0439\u043d\u0438\u0439 \u043d\u043e\u043c\u0435\u0440 \u043f\u043b\u0430\u0442\u043d\u0438\u043a\u0430 \u043f\u043e\u0434\u0430\u0442\u043a\u0456\u0432",
+        "dutch": "Buitenlands fiscaal identificatienummer",
+        "swedish": "Utl\u00e4ndskt skatteregistreringsnummer",
+        "afrikaans": "Buitelandse belasting-ID-nommer"
       }
     },
     {
@@ -928,6 +1498,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Tipo de visa estadounidense, n\u00famero y vencimiento",
+        "tagalog": "Uri ng U.S. visa, numero, at pagkapaso",
+        "chinese": "\u7f8e\u56fd\u7b7e\u8bc1\u7c7b\u578b\u3001\u53f7\u7801\u548c\u5230\u671f\u65e5",
+        "arabic": "\u0646\u0648\u0639 \u062a\u0623\u0634\u064a\u0631\u0629 U.S. \u0648\u0631\u0642\u0645\u0647\u0627 \u0648\u062a\u0627\u0631\u064a\u062e \u0627\u0646\u062a\u0647\u0627\u0621 \u0635\u0644\u0627\u062d\u064a\u062a\u0647\u0627",
+        "french": "Type de visa am\u00e9ricain, num\u00e9ro et expiration",
+        "korean": "\ubbf8\uad6d \ube44\uc790 \uc885\ub958, \ubc88\ud638 \ubc0f \ub9cc\ub8cc\uc77c",
+        "german": "Art des US-Visums, Nummer und Ablaufdatum",
+        "portuguese": "Tipo de visto americano, n\u00famero e validade",
+        "urdu": "\u0627\u0645\u0631\u06cc\u06a9\u06cc \u0648\u06cc\u0632\u0627 \u06a9\u06cc \u0642\u0633\u0645\u060c \u0646\u0645\u0628\u0631\u060c \u0627\u0648\u0631 \u0645\u06cc\u0639\u0627\u062f \u062e\u062a\u0645 \u06c1\u0648\u0646\u06d2 \u06a9\u06cc \u062a\u0627\u0631\u06cc\u062e",
+        "hindi": "U.S. \u0935\u0940\u091c\u093c\u093e \u0915\u093e \u092a\u094d\u0930\u0915\u093e\u0930, \u0938\u0902\u0916\u094d\u092f\u093e \u0914\u0930 \u0938\u092e\u093e\u092a\u094d\u0924\u093f \u0924\u093f\u0925\u093f",
+        "persian": "\u0646\u0648\u0639 \u0648\u06cc\u0632\u0627\u06cc \u0627\u06cc\u0627\u0644\u0627\u062a \u0645\u062a\u062d\u062f\u0647\u060c \u0634\u0645\u0627\u0631\u0647 \u0648 \u062a\u0627\u0631\u06cc\u062e \u0627\u0646\u0642\u0636\u0627",
+        "italian": "Tipo di visto U.S., numero e scadenza",
+        "russian": "\u0422\u0438\u043f \u0432\u0438\u0437\u044b \u0421\u0428\u0410, \u043d\u043e\u043c\u0435\u0440 \u0438 \u0441\u0440\u043e\u043a \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f",
+        "ukrainian": "\u0422\u0438\u043f \u0432\u0456\u0437\u0438 \u0421\u0428\u0410, \u043d\u043e\u043c\u0435\u0440 \u0442\u0430 \u0442\u0435\u0440\u043c\u0456\u043d \u0434\u0456\u0457",
+        "dutch": "Type U.S. visum, nummer en vervaldatum",
+        "swedish": "Typ av amerikanskt visum, nummer och utg\u00e5ngsdatum",
+        "afrikaans": "Tipe V.S.-visum, nommer en vervaldatum"
       }
     },
     {
@@ -1071,7 +1660,26 @@
             "russian": "\u0414\u0440\u0443\u0433\u043e\u0435"
           }
         }
-      ]
+      ],
+      "spoken_name_translations": {
+        "spanish": "Tipo de documento de identificaci\u00f3n",
+        "tagalog": "Uri ng dokumento ng pagkakakilanlan",
+        "chinese": "\u8eab\u4efd\u8bc1\u660e\u6587\u4ef6\u7c7b\u578b",
+        "arabic": "\u0646\u0648\u0639 \u0648\u062b\u064a\u0642\u0629 \u0625\u062b\u0628\u0627\u062a \u0627\u0644\u0647\u0648\u064a\u0629",
+        "french": "Type de document d'identification",
+        "korean": "\uc2e0\ubd84\uc99d \uc885\ub958",
+        "german": "Art des Ausweisdokuments",
+        "portuguese": "Tipo de documento de identifica\u00e7\u00e3o",
+        "urdu": "\u0634\u0646\u0627\u062e\u062a\u06cc \u062f\u0633\u062a\u0627\u0648\u06cc\u0632 \u06a9\u06cc \u0642\u0633\u0645",
+        "hindi": "\u092a\u0939\u091a\u093e\u0928 \u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u0915\u093e \u092a\u094d\u0930\u0915\u093e\u0930",
+        "persian": "\u0646\u0648\u0639 \u0645\u062f\u0631\u06a9 \u0634\u0646\u0627\u0633\u0627\u06cc\u06cc",
+        "italian": "Tipo di documento di identificazione",
+        "russian": "\u0422\u0438\u043f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430, \u0443\u0434\u043e\u0441\u0442\u043e\u0432\u0435\u0440\u044f\u044e\u0449\u0435\u0433\u043e \u043b\u0438\u0447\u043d\u043e\u0441\u0442\u044c",
+        "ukrainian": "\u0422\u0438\u043f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430, \u0449\u043e \u043f\u043e\u0441\u0432\u0456\u0434\u0447\u0443\u0454 \u043e\u0441\u043e\u0431\u0443",
+        "dutch": "Type identificatiedocument",
+        "swedish": "Typ av identifieringshandling",
+        "afrikaans": "Tipe identifikasiedokument"
+      }
     },
     {
       "id": "id_issued_by",
@@ -1089,6 +1697,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Documento emitido por",
+        "tagalog": "Inisyu ng dokumento",
+        "chinese": "\u6587\u4ef6\u7b7e\u53d1\u673a\u6784",
+        "arabic": "\u062c\u0647\u0629 \u0625\u0635\u062f\u0627\u0631 \u0627\u0644\u0648\u062b\u064a\u0642\u0629",
+        "french": "Document d\u00e9livr\u00e9 par",
+        "korean": "\uc11c\ub958 \ubc1c\uae09 \uae30\uad00",
+        "german": "Ausgestellt von",
+        "portuguese": "Documento emitido por",
+        "urdu": "\u062f\u0633\u062a\u0627\u0648\u06cc\u0632 \u062c\u0627\u0631\u06cc \u06a9\u0646\u0646\u062f\u06c1",
+        "hindi": "\u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u0915\u093f\u0938\u0915\u0947 \u0926\u094d\u0935\u093e\u0930\u093e \u091c\u093e\u0930\u0940 \u0915\u093f\u092f\u093e \u0917\u092f\u093e",
+        "persian": "\u0635\u0627\u062f\u0631\u06a9\u0646\u0646\u062f\u0647 \u0645\u062f\u0631\u06a9",
+        "italian": "Documento rilasciato da",
+        "russian": "\u041a\u0435\u043c \u0432\u044b\u0434\u0430\u043d \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "ukrainian": "\u041e\u0440\u0433\u0430\u043d, \u0449\u043e \u0432\u0438\u0434\u0430\u0432 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "dutch": "Document afgegeven door",
+        "swedish": "Handling utf\u00e4rdad av",
+        "afrikaans": "Dokument uitgereik deur"
       }
     },
     {
@@ -1107,6 +1734,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "N\u00famero del documento",
+        "tagalog": "Numero ng dokumento",
+        "chinese": "\u6587\u4ef6\u53f7\u7801",
+        "arabic": "\u0631\u0642\u0645 \u0627\u0644\u0648\u062b\u064a\u0642\u0629",
+        "french": "Num\u00e9ro du document",
+        "korean": "\uc11c\ub958 \ubc88\ud638",
+        "german": "Dokumentennummer",
+        "portuguese": "N\u00famero do documento",
+        "urdu": "\u062f\u0633\u062a\u0627\u0648\u06cc\u0632 \u0646\u0645\u0628\u0631",
+        "hindi": "\u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u0938\u0902\u0916\u094d\u092f\u093e",
+        "persian": "\u0634\u0645\u0627\u0631\u0647 \u0645\u062f\u0631\u06a9",
+        "italian": "Numero del documento",
+        "russian": "\u041d\u043e\u043c\u0435\u0440 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+        "ukrainian": "\u041d\u043e\u043c\u0435\u0440 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+        "dutch": "Documentnummer",
+        "swedish": "Handlingsnummer",
+        "afrikaans": "Dokumentnommer"
       }
     },
     {
@@ -1125,6 +1771,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Fecha de vencimiento del documento",
+        "tagalog": "Petsa ng pagkapaso ng dokumento",
+        "chinese": "\u6587\u4ef6\u5230\u671f\u65e5",
+        "arabic": "\u062a\u0627\u0631\u064a\u062e \u0627\u0646\u062a\u0647\u0627\u0621 \u0635\u0644\u0627\u062d\u064a\u0629 \u0627\u0644\u0648\u062b\u064a\u0642\u0629",
+        "french": "Date d'expiration du document",
+        "korean": "\uc11c\ub958 \ub9cc\ub8cc\uc77c",
+        "german": "Ablaufdatum des Dokuments",
+        "portuguese": "Data de validade do documento",
+        "urdu": "\u062f\u0633\u062a\u0627\u0648\u06cc\u0632 \u06a9\u06cc \u0645\u06cc\u0639\u0627\u062f \u062e\u062a\u0645 \u06c1\u0648\u0646\u06d2 \u06a9\u06cc \u062a\u0627\u0631\u06cc\u062e",
+        "hindi": "\u0926\u0938\u094d\u0924\u093e\u0935\u0947\u091c\u093c \u0915\u0940 \u0938\u092e\u093e\u092a\u094d\u0924\u093f \u0924\u093f\u0925\u093f",
+        "persian": "\u062a\u0627\u0631\u06cc\u062e \u0627\u0646\u0642\u0636\u0627\u06cc \u0645\u062f\u0631\u06a9",
+        "italian": "Data di scadenza del documento",
+        "russian": "\u0421\u0440\u043e\u043a \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+        "ukrainian": "\u0414\u0430\u0442\u0430 \u0437\u0430\u043a\u0456\u043d\u0447\u0435\u043d\u043d\u044f \u0442\u0435\u0440\u043c\u0456\u043d\u0443 \u0434\u0456\u0457 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+        "dutch": "Vervaldatum document",
+        "swedish": "Handlingens utg\u00e5ngsdatum",
+        "afrikaans": "Dokumentvervaldatum"
       }
     },
     {
@@ -1143,6 +1808,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Fecha de entrada a los Estados Unidos",
+        "tagalog": "Petsa ng pagpasok sa United States",
+        "chinese": "\u8fdb\u5165\u7f8e\u56fd\u65e5\u671f",
+        "arabic": "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u062f\u062e\u0648\u0644 \u0625\u0644\u0649 \u0627\u0644\u0648\u0644\u0627\u064a\u0627\u062a \u0627\u0644\u0645\u062a\u062d\u062f\u0629",
+        "french": "Date d'entr\u00e9e aux \u00c9tats-Unis",
+        "korean": "\ubbf8\uad6d \uc785\uad6d\uc77c",
+        "german": "Datum der Einreise in die Vereinigten Staaten",
+        "portuguese": "Data de entrada nos Estados Unidos",
+        "urdu": "\u0631\u06cc\u0627\u0633\u062a\u06c1\u0627\u0626\u06d2 \u0645\u062a\u062d\u062f\u06c1 \u0645\u06cc\u06ba \u062f\u0627\u062e\u0644\u06d2 \u06a9\u06cc \u062a\u0627\u0631\u06cc\u062e",
+        "hindi": "\u0938\u0902\u092f\u0941\u0915\u094d\u0924 \u0930\u093e\u091c\u094d\u092f \u0905\u092e\u0947\u0930\u093f\u0915\u093e \u092e\u0947\u0902 \u092a\u094d\u0930\u0935\u0947\u0936 \u0915\u0940 \u0924\u093e\u0930\u0940\u0916",
+        "persian": "\u062a\u0627\u0631\u06cc\u062e \u0648\u0631\u0648\u062f \u0628\u0647 \u0627\u06cc\u0627\u0644\u0627\u062a \u0645\u062a\u062d\u062f\u0647",
+        "italian": "Data di ingresso negli Stati Uniti",
+        "russian": "\u0414\u0430\u0442\u0430 \u0432\u044a\u0435\u0437\u0434\u0430 \u0432 \u0421\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u043d\u044b\u0435 \u0428\u0442\u0430\u0442\u044b",
+        "ukrainian": "\u0414\u0430\u0442\u0430 \u0432'\u0457\u0437\u0434\u0443 \u0434\u043e \u0421\u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0445 \u0428\u0442\u0430\u0442\u0456\u0432",
+        "dutch": "Datum van binnenkomst in de Verenigde Staten",
+        "swedish": "Datum f\u00f6r inresa till USA",
+        "afrikaans": "Datum van toetrede tot die Verenigde State"
       }
     },
     {
@@ -1225,7 +1909,26 @@
             "russian": "\u0414\u0430. \u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0441\u0442\u0440\u043e\u043a\u0443 6f."
           }
         }
-      ]
+      ],
+      "spoken_name_translations": {
+        "spanish": "ITIN o IRSN recibido anteriormente",
+        "tagalog": "Nakatanggap dati ng ITIN o IRSN",
+        "chinese": "\u4e4b\u524d\u662f\u5426\u6536\u5230\u8fc7 ITIN \u6216 IRSN",
+        "arabic": "ITIN \u0623\u0648 IRSN \u062a\u0645 \u0627\u0633\u062a\u0644\u0627\u0645\u0647 \u0645\u0633\u0628\u0642\u064b\u0627",
+        "french": "ITIN ou IRSN d\u00e9j\u00e0 re\u00e7u",
+        "korean": "\uc774\uc804\uc5d0 \ubc1b\uc740 ITIN \ub610\ub294 IRSN",
+        "german": "Zuvor erhaltene ITIN oder IRSN",
+        "portuguese": "ITIN ou IRSN recebido anteriormente",
+        "urdu": "\u067e\u06c1\u0644\u06d2 \u0645\u0648\u0635\u0648\u0644 \u0634\u062f\u06c1 ITIN \u06cc\u0627 IRSN",
+        "hindi": "\u092a\u0939\u0932\u0947 \u092a\u094d\u0930\u093e\u092a\u094d\u0924 ITIN \u092f\u093e IRSN",
+        "persian": "ITIN \u06cc\u0627 IRSN \u0642\u0628\u0644\u0627\u064b \u062f\u0631\u06cc\u0627\u0641\u062a \u0634\u062f\u0647",
+        "italian": "ITIN o IRSN ricevuto in precedenza",
+        "russian": "\u0420\u0430\u043d\u0435\u0435 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u043d\u044b\u0439 ITIN \u0438\u043b\u0438 IRSN",
+        "ukrainian": "\u0420\u0430\u043d\u0456\u0448\u0435 \u043e\u0442\u0440\u0438\u043c\u0430\u043d\u0438\u0439 ITIN \u0430\u0431\u043e IRSN",
+        "dutch": "Eerder een ITIN of IRSN ontvangen",
+        "swedish": "Tidigare erh\u00e5llet ITIN eller IRSN",
+        "afrikaans": "Voorheen ITIN of IRSN ontvang"
+      }
     },
     {
       "id": "itin_1",
@@ -1254,6 +1957,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "Primeros tres d\u00edgitos del ITIN",
+        "tagalog": "Unang tatlong digit ng ITIN",
+        "chinese": "ITIN \u524d\u4e09\u4f4d\u6570\u5b57",
+        "arabic": "\u0623\u0648\u0644 \u062b\u0644\u0627\u062b\u0629 \u0623\u0631\u0642\u0627\u0645 \u0645\u0646 ITIN",
+        "french": "Trois premiers chiffres de l'ITIN",
+        "korean": "ITIN \uccab \uc138 \uc790\ub9ac",
+        "german": "ITIN erste drei Ziffern",
+        "portuguese": "ITIN tr\u00eas primeiros d\u00edgitos",
+        "urdu": "ITIN \u06a9\u06d2 \u067e\u06c1\u0644\u06d2 \u062a\u06cc\u0646 \u06c1\u0646\u062f\u0633\u06d2",
+        "hindi": "ITIN \u0915\u0947 \u092a\u0939\u0932\u0947 \u0924\u0940\u0928 \u0905\u0902\u0915",
+        "persian": "\u0633\u0647 \u0631\u0642\u0645 \u0627\u0648\u0644 ITIN",
+        "italian": "Prime tre cifre dell'ITIN",
+        "russian": "ITIN \u043f\u0435\u0440\u0432\u044b\u0435 \u0442\u0440\u0438 \u0446\u0438\u0444\u0440\u044b",
+        "ukrainian": "ITIN: \u043f\u0435\u0440\u0448\u0456 \u0442\u0440\u0438 \u0446\u0438\u0444\u0440\u0438",
+        "dutch": "ITIN eerste drie cijfers",
+        "swedish": "ITIN, de f\u00f6rsta tre siffrorna",
+        "afrikaans": "ITIN eerste drie syfers"
       }
     },
     {
@@ -1283,6 +2005,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "Dos d\u00edgitos del medio del ITIN",
+        "tagalog": "Gitnang dalawang digit ng ITIN",
+        "chinese": "ITIN \u4e2d\u95f4\u4e24\u4f4d\u6570\u5b57",
+        "arabic": "\u0627\u0644\u0631\u0642\u0645\u0627\u0646 \u0627\u0644\u0623\u0648\u0633\u0637\u0627\u0646 \u0645\u0646 ITIN",
+        "french": "Deux chiffres du milieu de l'ITIN",
+        "korean": "ITIN \uc911\uac04 \ub450 \uc790\ub9ac",
+        "german": "ITIN mittlere zwei Ziffern",
+        "portuguese": "ITIN dois d\u00edgitos do meio",
+        "urdu": "ITIN \u06a9\u06d2 \u062f\u0631\u0645\u06cc\u0627\u0646\u06cc \u062f\u0648 \u06c1\u0646\u062f\u0633\u06d2",
+        "hindi": "ITIN \u0915\u0947 \u092c\u0940\u091a \u0915\u0947 \u0926\u094b \u0905\u0902\u0915",
+        "persian": "\u062f\u0648 \u0631\u0642\u0645 \u0645\u06cc\u0627\u0646\u06cc ITIN",
+        "italian": "Due cifre centrali dell'ITIN",
+        "russian": "ITIN \u0441\u0440\u0435\u0434\u043d\u0438\u0435 \u0434\u0432\u0435 \u0446\u0438\u0444\u0440\u044b",
+        "ukrainian": "ITIN: \u0441\u0435\u0440\u0435\u0434\u043d\u0456 \u0434\u0432\u0456 \u0446\u0438\u0444\u0440\u0438",
+        "dutch": "ITIN middelste twee cijfers",
+        "swedish": "ITIN, de mellersta tv\u00e5 siffrorna",
+        "afrikaans": "ITIN middelste twee syfers"
       }
     },
     {
@@ -1312,6 +2053,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "\u00daltimos cuatro d\u00edgitos del ITIN",
+        "tagalog": "Huling apat na digit ng ITIN",
+        "chinese": "ITIN \u540e\u56db\u4f4d\u6570\u5b57",
+        "arabic": "\u0622\u062e\u0631 \u0623\u0631\u0628\u0639\u0629 \u0623\u0631\u0642\u0627\u0645 \u0645\u0646 ITIN",
+        "french": "Quatre derniers chiffres de l'ITIN",
+        "korean": "ITIN \ub9c8\uc9c0\ub9c9 \ub124 \uc790\ub9ac",
+        "german": "ITIN letzte vier Ziffern",
+        "portuguese": "ITIN quatro \u00faltimos d\u00edgitos",
+        "urdu": "ITIN \u06a9\u06d2 \u0622\u062e\u0631\u06cc \u0686\u0627\u0631 \u06c1\u0646\u062f\u0633\u06d2",
+        "hindi": "ITIN \u0915\u0947 \u0905\u0902\u0924\u093f\u092e \u091a\u093e\u0930 \u0905\u0902\u0915",
+        "persian": "\u0686\u0647\u0627\u0631 \u0631\u0642\u0645 \u0622\u062e\u0631 ITIN",
+        "italian": "Ultime quattro cifre dell'ITIN",
+        "russian": "ITIN \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u0447\u0435\u0442\u044b\u0440\u0435 \u0446\u0438\u0444\u0440\u044b",
+        "ukrainian": "ITIN: \u043e\u0441\u0442\u0430\u043d\u043d\u0456 \u0447\u043e\u0442\u0438\u0440\u0438 \u0446\u0438\u0444\u0440\u0438",
+        "dutch": "ITIN laatste vier cijfers",
+        "swedish": "ITIN, de sista fyra siffrorna",
+        "afrikaans": "ITIN laaste vier syfers"
       }
     },
     {
@@ -1341,6 +2101,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "Primeros tres d\u00edgitos del IRSN",
+        "tagalog": "Unang tatlong digit ng IRSN",
+        "chinese": "IRSN \u524d\u4e09\u4f4d\u6570\u5b57",
+        "arabic": "\u0623\u0648\u0644 \u062b\u0644\u0627\u062b\u0629 \u0623\u0631\u0642\u0627\u0645 \u0645\u0646 IRSN",
+        "french": "Trois premiers chiffres de l'IRSN",
+        "korean": "IRSN \uccab \uc138 \uc790\ub9ac",
+        "german": "IRSN erste drei Ziffern",
+        "portuguese": "IRSN tr\u00eas primeiros d\u00edgitos",
+        "urdu": "IRSN \u06a9\u06d2 \u067e\u06c1\u0644\u06d2 \u062a\u06cc\u0646 \u06c1\u0646\u062f\u0633\u06d2",
+        "hindi": "IRSN \u0915\u0947 \u092a\u0939\u0932\u0947 \u0924\u0940\u0928 \u0905\u0902\u0915",
+        "persian": "\u0633\u0647 \u0631\u0642\u0645 \u0627\u0648\u0644 IRSN",
+        "italian": "Prime tre cifre dell'IRSN",
+        "russian": "IRSN \u043f\u0435\u0440\u0432\u044b\u0435 \u0442\u0440\u0438 \u0446\u0438\u0444\u0440\u044b",
+        "ukrainian": "IRSN: \u043f\u0435\u0440\u0448\u0456 \u0442\u0440\u0438 \u0446\u0438\u0444\u0440\u0438",
+        "dutch": "IRSN eerste drie cijfers",
+        "swedish": "IRSN, de f\u00f6rsta tre siffrorna",
+        "afrikaans": "IRSN eerste drie syfers"
       }
     },
     {
@@ -1370,6 +2149,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "Dos d\u00edgitos del medio del IRSN",
+        "tagalog": "Gitnang dalawang digit ng IRSN",
+        "chinese": "IRSN \u4e2d\u95f4\u4e24\u4f4d\u6570\u5b57",
+        "arabic": "\u0627\u0644\u0631\u0642\u0645\u0627\u0646 \u0627\u0644\u0623\u0648\u0633\u0637\u0627\u0646 \u0645\u0646 IRSN",
+        "french": "Deux chiffres du milieu de l'IRSN",
+        "korean": "IRSN \uc911\uac04 \ub450 \uc790\ub9ac",
+        "german": "IRSN mittlere zwei Ziffern",
+        "portuguese": "IRSN dois d\u00edgitos do meio",
+        "urdu": "IRSN \u06a9\u06d2 \u062f\u0631\u0645\u06cc\u0627\u0646\u06cc \u062f\u0648 \u06c1\u0646\u062f\u0633\u06d2",
+        "hindi": "IRSN \u0915\u0947 \u092c\u0940\u091a \u0915\u0947 \u0926\u094b \u0905\u0902\u0915",
+        "persian": "\u062f\u0648 \u0631\u0642\u0645 \u0645\u06cc\u0627\u0646\u06cc IRSN",
+        "italian": "Due cifre centrali dell'IRSN",
+        "russian": "IRSN \u0441\u0440\u0435\u0434\u043d\u0438\u0435 \u0434\u0432\u0435 \u0446\u0438\u0444\u0440\u044b",
+        "ukrainian": "IRSN: \u0441\u0435\u0440\u0435\u0434\u043d\u0456 \u0434\u0432\u0456 \u0446\u0438\u0444\u0440\u0438",
+        "dutch": "IRSN middelste twee cijfers",
+        "swedish": "IRSN, de mellersta tv\u00e5 siffrorna",
+        "afrikaans": "IRSN middelste twee syfers"
       }
     },
     {
@@ -1399,6 +2197,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "\u00daltimos cuatro d\u00edgitos del IRSN",
+        "tagalog": "Huling apat na digit ng IRSN",
+        "chinese": "IRSN \u540e\u56db\u4f4d\u6570\u5b57",
+        "arabic": "\u0622\u062e\u0631 \u0623\u0631\u0628\u0639\u0629 \u0623\u0631\u0642\u0627\u0645 \u0645\u0646 IRSN",
+        "french": "Quatre derniers chiffres de l'IRSN",
+        "korean": "IRSN \ub9c8\uc9c0\ub9c9 \ub124 \uc790\ub9ac",
+        "german": "IRSN letzte vier Ziffern",
+        "portuguese": "IRSN quatro \u00faltimos d\u00edgitos",
+        "urdu": "IRSN \u06a9\u06d2 \u0622\u062e\u0631\u06cc \u0686\u0627\u0631 \u06c1\u0646\u062f\u0633\u06d2",
+        "hindi": "IRSN \u0915\u0947 \u0905\u0902\u0924\u093f\u092e \u091a\u093e\u0930 \u0905\u0902\u0915",
+        "persian": "\u0686\u0647\u0627\u0631 \u0631\u0642\u0645 \u0622\u062e\u0631 IRSN",
+        "italian": "Ultime quattro cifre dell'IRSN",
+        "russian": "IRSN \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u0447\u0435\u0442\u044b\u0440\u0435 \u0446\u0438\u0444\u0440\u044b",
+        "ukrainian": "IRSN: \u043e\u0441\u0442\u0430\u043d\u043d\u0456 \u0447\u043e\u0442\u0438\u0440\u0438 \u0446\u0438\u0444\u0440\u0438",
+        "dutch": "IRSN laatste vier cijfers",
+        "swedish": "IRSN, de sista fyra siffrorna",
+        "afrikaans": "IRSN laaste vier syfers"
       }
     },
     {
@@ -1427,6 +2244,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "Primer nombre del ITIN anterior",
+        "tagalog": "Dating unang pangalan sa ITIN",
+        "chinese": "\u4e4b\u524d ITIN \u4e0a\u7684\u540d",
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0623\u0648\u0644 \u0641\u064a ITIN \u0627\u0644\u0633\u0627\u0628\u0642",
+        "french": "Pr\u00e9nom de l'ITIN pr\u00e9c\u00e9dent",
+        "korean": "\uc774\uc804 ITIN \uc774\ub984 (First name)",
+        "german": "Vorname der fr\u00fcheren ITIN",
+        "portuguese": "Primeiro nome do ITIN anterior",
+        "urdu": "\u0633\u0627\u0628\u0642\u06c1 ITIN \u06a9\u0627 \u067e\u06c1\u0644\u0627 \u0646\u0627\u0645",
+        "hindi": "\u092a\u093f\u091b\u0932\u093e ITIN \u092a\u0939\u0932\u093e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u062f\u0631 ITIN \u0642\u0628\u0644\u06cc",
+        "italian": "Nome associato all'ITIN precedente",
+        "russian": "\u0418\u043c\u044f \u0432 \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u043c ITIN",
+        "ukrainian": "\u0406\u043c'\u044f \u0432 \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044c\u043e\u043c\u0443 ITIN",
+        "dutch": "Vorige ITIN voornaam",
+        "swedish": "Tidigare f\u00f6rnamn enligt ITIN",
+        "afrikaans": "Vorige ITIN-voornaam"
       }
     },
     {
@@ -1450,6 +2286,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "Segundo nombre del ITIN anterior",
+        "tagalog": "Dating gitnang pangalan sa ITIN",
+        "chinese": "\u4e4b\u524d ITIN \u4e0a\u7684\u4e2d\u95f4\u540d",
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0623\u0648\u0633\u0637 \u0641\u064a ITIN \u0627\u0644\u0633\u0627\u0628\u0642",
+        "french": "Deuxi\u00e8me pr\u00e9nom de l'ITIN pr\u00e9c\u00e9dent",
+        "korean": "\uc774\uc804 ITIN \uc911\uac04 \uc774\ub984 (Middle name)",
+        "german": "Zweiter Vorname der fr\u00fcheren ITIN",
+        "portuguese": "Nome do meio do ITIN anterior",
+        "urdu": "\u0633\u0627\u0628\u0642\u06c1 ITIN \u06a9\u0627 \u062f\u0631\u0645\u06cc\u0627\u0646\u06cc \u0646\u0627\u0645",
+        "hindi": "\u092a\u093f\u091b\u0932\u093e ITIN \u092e\u0927\u094d\u092f \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u0645\u06cc\u0627\u0646\u06cc \u062f\u0631 ITIN \u0642\u0628\u0644\u06cc",
+        "italian": "Secondo nome associato all'ITIN precedente",
+        "russian": "\u041e\u0442\u0447\u0435\u0441\u0442\u0432\u043e \u0432 \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u043c ITIN",
+        "ukrainian": "\u041f\u043e \u0431\u0430\u0442\u044c\u043a\u043e\u0432\u0456 \u0432 \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044c\u043e\u043c\u0443 ITIN",
+        "dutch": "Vorige ITIN tweede naam",
+        "swedish": "Tidigare mellannamn enligt ITIN",
+        "afrikaans": "Vorige ITIN-middelnaam"
       }
     },
     {
@@ -1478,6 +2333,25 @@
         "field": "prior_itin_irsn",
         "operator": "equals",
         "value": "yes_complete_line_6f"
+      },
+      "spoken_name_translations": {
+        "spanish": "Apellido del ITIN anterior",
+        "tagalog": "Dating apelyido sa ITIN",
+        "chinese": "\u4e4b\u524d ITIN \u4e0a\u7684\u59d3",
+        "arabic": "\u0627\u0633\u0645 \u0627\u0644\u0639\u0627\u0626\u0644\u0629 \u0641\u064a ITIN \u0627\u0644\u0633\u0627\u0628\u0642",
+        "french": "Nom de famille de l'ITIN pr\u00e9c\u00e9dent",
+        "korean": "\uc774\uc804 ITIN \uc131 (Last name)",
+        "german": "Nachname der fr\u00fcheren ITIN",
+        "portuguese": "Sobrenome do ITIN anterior",
+        "urdu": "\u0633\u0627\u0628\u0642\u06c1 ITIN \u06a9\u0627 \u0622\u062e\u0631\u06cc \u0646\u0627\u0645",
+        "hindi": "\u092a\u093f\u091b\u0932\u093e ITIN \u0905\u0902\u0924\u093f\u092e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc \u062f\u0631 ITIN \u0642\u0628\u0644\u06cc",
+        "italian": "Cognome associato all'ITIN precedente",
+        "russian": "\u0424\u0430\u043c\u0438\u043b\u0438\u044f \u0432 \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u043c ITIN",
+        "ukrainian": "\u041f\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u0432 \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044c\u043e\u043c\u0443 ITIN",
+        "dutch": "Vorige ITIN achternaam",
+        "swedish": "Tidigare efternamn enligt ITIN",
+        "afrikaans": "Vorige ITIN-van"
       }
     },
     {
@@ -1496,6 +2370,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Nombre del colegio, universidad o compa\u00f1\u00eda",
+        "tagalog": "Pangalan ng kolehiyo, unibersidad, o kumpanya",
+        "chinese": "\u5b66\u9662\u3001\u5927\u5b66\u6216\u516c\u53f8\u540d\u79f0",
+        "arabic": "\u0627\u0633\u0645 \u0627\u0644\u0643\u0644\u064a\u0629 \u0623\u0648 \u0627\u0644\u062c\u0627\u0645\u0639\u0629 \u0623\u0648 \u0627\u0644\u0634\u0631\u0643\u0629",
+        "french": "Nom de l'\u00e9tablissement d'enseignement sup\u00e9rieur, de l'universit\u00e9 ou de l'entreprise",
+        "korean": "\ub300\ud559 \ub610\ub294 \ud68c\uc0ac \uc774\ub984",
+        "german": "Name der Hochschule, Universit\u00e4t oder Firma",
+        "portuguese": "Nome da faculdade, universidade ou empresa",
+        "urdu": "\u06a9\u0627\u0644\u062c\u060c \u06cc\u0648\u0646\u06cc\u0648\u0631\u0633\u0679\u06cc\u060c \u06cc\u0627 \u06a9\u0645\u067e\u0646\u06cc \u06a9\u0627 \u0646\u0627\u0645",
+        "hindi": "\u0915\u0949\u0932\u0947\u091c, \u0935\u093f\u0936\u094d\u0935\u0935\u093f\u0926\u094d\u092f\u093e\u0932\u092f \u092f\u093e \u0915\u0902\u092a\u0928\u0940 \u0915\u093e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u06a9\u0627\u0644\u062c\u060c \u062f\u0627\u0646\u0634\u06af\u0627\u0647 \u06cc\u0627 \u0634\u0631\u06a9\u062a",
+        "italian": "Nome del college, dell'universit\u00e0 o dell'azienda",
+        "russian": "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043a\u043e\u043b\u043b\u0435\u0434\u0436\u0430, \u0443\u043d\u0438\u0432\u0435\u0440\u0441\u0438\u0442\u0435\u0442\u0430 \u0438\u043b\u0438 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438",
+        "ukrainian": "\u041d\u0430\u0437\u0432\u0430 \u043a\u043e\u043b\u0435\u0434\u0436\u0443, \u0443\u043d\u0456\u0432\u0435\u0440\u0441\u0438\u0442\u0435\u0442\u0443 \u0430\u0431\u043e \u043a\u043e\u043c\u043f\u0430\u043d\u0456\u0457",
+        "dutch": "Naam van hogeschool, universiteit of bedrijf",
+        "swedish": "Namn p\u00e5 college, universitet eller f\u00f6retag",
+        "afrikaans": "Naam van kollege, universiteit of maatskappy"
       }
     },
     {
@@ -1514,6 +2407,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Ciudad y estado del colegio",
+        "tagalog": "Lungsod at estado ng kolehiyo",
+        "chinese": "\u5b66\u9662\u6240\u5728\u57ce\u5e02\u548c\u5dde",
+        "arabic": "\u0645\u062f\u064a\u0646\u0629 \u0648\u0648\u0644\u0627\u064a\u0629 \u0627\u0644\u0643\u0644\u064a\u0629",
+        "french": "Ville et \u00c9tat de l'\u00e9tablissement d'enseignement sup\u00e9rieur",
+        "korean": "\ub300\ud559 \uc18c\uc7ac \ub3c4\uc2dc \ubc0f \uc8fc",
+        "german": "Stadt und Bundesstaat der Hochschule",
+        "portuguese": "Cidade e estado da faculdade",
+        "urdu": "\u06a9\u0627\u0644\u062c \u06a9\u0627 \u0634\u06c1\u0631 \u0627\u0648\u0631 \u0631\u06cc\u0627\u0633\u062a",
+        "hindi": "\u0915\u0949\u0932\u0947\u091c \u0915\u093e \u0936\u0939\u0930 \u0914\u0930 \u0930\u093e\u091c\u094d\u092f",
+        "persian": "\u0634\u0647\u0631 \u0648 \u0627\u06cc\u0627\u0644\u062a \u06a9\u0627\u0644\u062c",
+        "italian": "Citt\u00e0 e stato del college",
+        "russian": "\u0413\u043e\u0440\u043e\u0434 \u0438 \u0448\u0442\u0430\u0442 \u043a\u043e\u043b\u043b\u0435\u0434\u0436\u0430",
+        "ukrainian": "\u041c\u0456\u0441\u0442\u043e \u0442\u0430 \u0448\u0442\u0430\u0442 \u043a\u043e\u043b\u0435\u0434\u0436\u0443",
+        "dutch": "Stad en staat van hogeschool",
+        "swedish": "College, stad och delstat",
+        "afrikaans": "Kollegestad en -staat"
       }
     },
     {
@@ -1532,6 +2444,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Duraci\u00f3n de la estad\u00eda",
+        "tagalog": "Tagal ng pananatili",
+        "chinese": "\u505c\u7559\u65f6\u95f4",
+        "arabic": "\u0645\u062f\u0629 \u0627\u0644\u0625\u0642\u0627\u0645\u0629",
+        "french": "Dur\u00e9e du s\u00e9jour",
+        "korean": "\uccb4\ub958 \uae30\uac04",
+        "german": "Aufenthaltsdauer",
+        "portuguese": "Dura\u00e7\u00e3o da estadia",
+        "urdu": "\u0642\u06cc\u0627\u0645 \u06a9\u06cc \u0645\u062f\u062a",
+        "hindi": "\u0930\u0939\u0928\u0947 \u0915\u0940 \u0905\u0935\u0927\u093f",
+        "persian": "\u0645\u062f\u062a \u0627\u0642\u0627\u0645\u062a",
+        "italian": "Durata del soggiorno",
+        "russian": "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0431\u044b\u0432\u0430\u043d\u0438\u044f",
+        "ukrainian": "\u0422\u0440\u0438\u0432\u0430\u043b\u0456\u0441\u0442\u044c \u043f\u0435\u0440\u0435\u0431\u0443\u0432\u0430\u043d\u043d\u044f",
+        "dutch": "Verblijfsduur",
+        "swedish": "Vistelsens l\u00e4ngd",
+        "afrikaans": "Verblysduur"
       }
     },
     {
@@ -1550,6 +2481,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Firma del solicitante",
+        "tagalog": "Lagda ng aplikante",
+        "chinese": "\u7533\u8bf7\u4eba\u7b7e\u540d",
+        "arabic": "\u062a\u0648\u0642\u064a\u0639 \u0645\u0642\u062f\u0645 \u0627\u0644\u0637\u0644\u0628",
+        "french": "Signature du demandeur",
+        "korean": "\uc2e0\uccad\uc778 \uc11c\uba85",
+        "german": "Unterschrift des Antragstellers",
+        "portuguese": "Assinatura do solicitante",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u062f\u06c1\u0646\u062f\u06c1 \u06a9\u06d2 \u062f\u0633\u062a\u062e\u0637",
+        "hindi": "\u0906\u0935\u0947\u0926\u0915 \u0915\u093e \u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930",
+        "persian": "\u0627\u0645\u0636\u0627\u06cc \u0645\u062a\u0642\u0627\u0636\u06cc",
+        "italian": "Firma del richiedente",
+        "russian": "\u041f\u043e\u0434\u043f\u0438\u0441\u044c \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044f",
+        "ukrainian": "\u041f\u0456\u0434\u043f\u0438\u0441 \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u0430",
+        "dutch": "Handtekening aanvrager",
+        "swedish": "Den s\u00f6kandes underskrift",
+        "afrikaans": "Aansoeker se handtekening"
       }
     },
     {
@@ -1568,6 +2518,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Fecha de la firma",
+        "tagalog": "Petsa ng paglagda",
+        "chinese": "\u7b7e\u540d\u65e5\u671f",
+        "arabic": "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u062a\u0648\u0642\u064a\u0639",
+        "french": "Date de la signature",
+        "korean": "\uc11c\uba85\uc77c",
+        "german": "Datum der Unterschrift",
+        "portuguese": "Data da assinatura",
+        "urdu": "\u062f\u0633\u062a\u062e\u0637 \u06a9\u06cc \u062a\u0627\u0631\u06cc\u062e",
+        "hindi": "\u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930 \u0915\u0940 \u0924\u093e\u0930\u0940\u0916",
+        "persian": "\u062a\u0627\u0631\u06cc\u062e \u0627\u0645\u0636\u0627",
+        "italian": "Data della firma",
+        "russian": "\u0414\u0430\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u0438",
+        "ukrainian": "\u0414\u0430\u0442\u0430 \u043f\u0456\u0434\u043f\u0438\u0441\u0443",
+        "dutch": "Datum handtekening",
+        "swedish": "Datum f\u00f6r underskrift",
+        "afrikaans": "Handtekeningdatum"
       }
     },
     {
@@ -1586,6 +2555,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "N\u00famero de tel\u00e9fono del solicitante",
+        "tagalog": "Numero ng telepono ng aplikante",
+        "chinese": "\u7533\u8bf7\u4eba\u7535\u8bdd\u53f7\u7801",
+        "arabic": "\u0631\u0642\u0645 \u0647\u0627\u062a\u0641 \u0645\u0642\u062f\u0645 \u0627\u0644\u0637\u0644\u0628",
+        "french": "Num\u00e9ro de t\u00e9l\u00e9phone du demandeur",
+        "korean": "\uc2e0\uccad\uc778 \uc804\ud654\ubc88\ud638",
+        "german": "Telefonnummer des Antragstellers",
+        "portuguese": "N\u00famero de telefone do solicitante",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u062f\u06c1\u0646\u062f\u06c1 \u06a9\u0627 \u0641\u0648\u0646 \u0646\u0645\u0628\u0631",
+        "hindi": "\u0906\u0935\u0947\u0926\u0915 \u0915\u093e \u092b\u093c\u094b\u0928 \u0928\u0902\u092c\u0930",
+        "persian": "\u0634\u0645\u0627\u0631\u0647 \u062a\u0644\u0641\u0646 \u0645\u062a\u0642\u0627\u0636\u06cc",
+        "italian": "Numero di telefono del richiedente",
+        "russian": "\u041d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430 \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044f",
+        "ukrainian": "\u041d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0443 \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u0430",
+        "dutch": "Telefoonnummer aanvrager",
+        "swedish": "Den s\u00f6kandes telefonnummer",
+        "afrikaans": "Aansoeker se telefoonnommer"
       }
     },
     {
@@ -1604,6 +2592,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Nombre del delegado",
+        "tagalog": "Pangalan ng delegado",
+        "chinese": "\u4ee3\u7406\u4eba\u59d3\u540d",
+        "arabic": "\u0627\u0633\u0645 \u0627\u0644\u0645\u0641\u0648\u064e\u0651\u0636",
+        "french": "Nom du d\u00e9l\u00e9gu\u00e9",
+        "korean": "\ub300\ub9ac\uc778 \uc774\ub984",
+        "german": "Name des Bevollm\u00e4chtigten",
+        "portuguese": "Nome do representante",
+        "urdu": "\u0646\u0645\u0627\u0626\u0646\u062f\u06d2 \u06a9\u0627 \u0646\u0627\u0645",
+        "hindi": "\u092a\u094d\u0930\u0924\u093f\u0928\u093f\u0927\u093f \u0915\u093e \u0928\u093e\u092e",
+        "persian": "\u0646\u0627\u0645 \u0646\u0645\u0627\u06cc\u0646\u062f\u0647",
+        "italian": "Nome del delegato",
+        "russian": "\u0418\u043c\u044f \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u044f",
+        "ukrainian": "\u0406\u043c'\u044f \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u0430",
+        "dutch": "Naam van gemachtigde",
+        "swedish": "Ombudets namn",
+        "afrikaans": "Naam van afgevaardigde"
       }
     },
     {
@@ -1717,7 +2724,26 @@
             "russian": "\u041e\u043f\u0435\u043a\u0443\u043d, \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u043d\u044b\u0439 \u0441\u0443\u0434\u043e\u043c"
           }
         }
-      ]
+      ],
+      "spoken_name_translations": {
+        "spanish": "Relaci\u00f3n del delegado con el solicitante",
+        "tagalog": "Relasyon ng delegado sa aplikante",
+        "chinese": "\u4ee3\u7406\u4eba\u4e0e\u7533\u8bf7\u4eba\u7684\u5173\u7cfb",
+        "arabic": "\u0635\u0644\u0629 \u0627\u0644\u0645\u0641\u0648\u064e\u0651\u0636 \u0628\u0645\u0642\u062f\u0645 \u0627\u0644\u0637\u0644\u0628",
+        "french": "Lien du d\u00e9l\u00e9gu\u00e9 avec le demandeur",
+        "korean": "\ub300\ub9ac\uc778\uacfc \uc2e0\uccad\uc778\uc758 \uad00\uacc4",
+        "german": "Verh\u00e4ltnis des Bevollm\u00e4chtigten zum Antragsteller",
+        "portuguese": "Rela\u00e7\u00e3o do representante com o solicitante",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u062f\u06c1\u0646\u062f\u06c1 \u0633\u06d2 \u0646\u0645\u0627\u0626\u0646\u062f\u06d2 \u06a9\u0627 \u0631\u0634\u062a\u06c1",
+        "hindi": "\u0906\u0935\u0947\u0926\u0915 \u0938\u0947 \u092a\u094d\u0930\u0924\u093f\u0928\u093f\u0927\u093f \u0915\u093e \u0938\u0902\u092c\u0902\u0927",
+        "persian": "\u0646\u0633\u0628\u062a \u0646\u0645\u0627\u06cc\u0646\u062f\u0647 \u0628\u0627 \u0645\u062a\u0642\u0627\u0636\u06cc",
+        "italian": "Rapporto del delegato con il richiedente",
+        "russian": "\u041e\u0442\u043d\u043e\u0448\u0435\u043d\u0438\u0435 \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u044f \u043a \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044e",
+        "ukrainian": "\u0421\u0442\u0443\u043f\u0456\u043d\u044c \u0441\u043f\u043e\u0440\u0456\u0434\u043d\u0435\u043d\u043d\u044f \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u0430 \u0456\u0437 \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u043e\u043c",
+        "dutch": "Relatie van gemachtigde tot aanvrager",
+        "swedish": "Ombudets relation till den s\u00f6kande",
+        "afrikaans": "Afgevaardigde se verhouding tot aansoeker"
+      }
     },
     {
       "id": "agent_signature",
@@ -1735,6 +2761,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Firma del agente",
+        "tagalog": "Lagda ng ahente",
+        "chinese": "\u7ecf\u529e\u4eba\u7b7e\u540d",
+        "arabic": "\u062a\u0648\u0642\u064a\u0639 \u0627\u0644\u0648\u0643\u064a\u0644",
+        "french": "Signature de l'agent",
+        "korean": "\ub300\ub9ac\uc778 \uc11c\uba85",
+        "german": "Unterschrift des Vertreters",
+        "portuguese": "Assinatura do agente",
+        "urdu": "\u0627\u06cc\u062c\u0646\u0679 \u06a9\u06d2 \u062f\u0633\u062a\u062e\u0637",
+        "hindi": "\u090f\u091c\u0947\u0902\u091f \u0915\u093e \u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930",
+        "persian": "\u0627\u0645\u0636\u0627\u06cc \u06a9\u0627\u0631\u06af\u0632\u0627\u0631",
+        "italian": "Firma dell'agente",
+        "russian": "\u041f\u043e\u0434\u043f\u0438\u0441\u044c \u0430\u0433\u0435\u043d\u0442\u0430",
+        "ukrainian": "\u041f\u0456\u0434\u043f\u0438\u0441 \u0430\u0433\u0435\u043d\u0442\u0430",
+        "dutch": "Handtekening agent",
+        "swedish": "Agentens underskrift",
+        "afrikaans": "Agent se handtekening"
       }
     },
     {
@@ -1753,6 +2798,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Fecha de la firma del agente",
+        "tagalog": "Petsa ng paglagda ng ahente",
+        "chinese": "\u7ecf\u529e\u4eba\u7b7e\u540d\u65e5\u671f",
+        "arabic": "\u062a\u0627\u0631\u064a\u062e \u062a\u0648\u0642\u064a\u0639 \u0627\u0644\u0648\u0643\u064a\u0644",
+        "french": "Date de signature de l'agent",
+        "korean": "\ub300\ub9ac\uc778 \uc11c\uba85\uc77c",
+        "german": "Datum der Unterschrift des Vertreters",
+        "portuguese": "Data da assinatura do agente",
+        "urdu": "\u0627\u06cc\u062c\u0646\u0679 \u06a9\u06d2 \u062f\u0633\u062a\u062e\u0637 \u06a9\u06cc \u062a\u0627\u0631\u06cc\u062e",
+        "hindi": "\u090f\u091c\u0947\u0902\u091f \u0915\u0947 \u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930 \u0915\u0940 \u0924\u093e\u0930\u0940\u0916",
+        "persian": "\u062a\u0627\u0631\u06cc\u062e \u0627\u0645\u0636\u0627\u06cc \u06a9\u0627\u0631\u06af\u0632\u0627\u0631",
+        "italian": "Data della firma dell'agente",
+        "russian": "\u0414\u0430\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u0438 \u0430\u0433\u0435\u043d\u0442\u0430",
+        "ukrainian": "\u0414\u0430\u0442\u0430 \u043f\u0456\u0434\u043f\u0438\u0441\u0443 \u0430\u0433\u0435\u043d\u0442\u0430",
+        "dutch": "Datum handtekening agent",
+        "swedish": "Datum f\u00f6r agentens underskrift",
+        "afrikaans": "Agent se handtekeningdatum"
       }
     },
     {
@@ -1772,7 +2836,26 @@
       "validation": {
         "required": false
       },
-      "max_length": 10
+      "max_length": 10,
+      "spoken_name_translations": {
+        "spanish": "Tel\u00e9fono del agente",
+        "tagalog": "Telepono ng ahente",
+        "chinese": "\u7ecf\u529e\u4eba\u7535\u8bdd",
+        "arabic": "\u0647\u0627\u062a\u0641 \u0627\u0644\u0648\u0643\u064a\u0644",
+        "french": "T\u00e9l\u00e9phone de l'agent",
+        "korean": "\ub300\ub9ac\uc778 \uc804\ud654\ubc88\ud638",
+        "german": "Telefon des Vertreters",
+        "portuguese": "Telefone do agente",
+        "urdu": "\u0627\u06cc\u062c\u0646\u0679 \u06a9\u0627 \u0641\u0648\u0646",
+        "hindi": "\u090f\u091c\u0947\u0902\u091f \u0915\u093e \u092b\u093c\u094b\u0928",
+        "persian": "\u062a\u0644\u0641\u0646 \u06a9\u0627\u0631\u06af\u0632\u0627\u0631",
+        "italian": "Telefono dell'agente",
+        "russian": "\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u0430\u0433\u0435\u043d\u0442\u0430",
+        "ukrainian": "\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u0430\u0433\u0435\u043d\u0442\u0430",
+        "dutch": "Telefoonnummer agent",
+        "swedish": "Agentens telefonnummer",
+        "afrikaans": "Agent se telefoon"
+      }
     },
     {
       "id": "agent_fax",
@@ -1791,7 +2874,26 @@
       "validation": {
         "required": false
       },
-      "max_length": 11
+      "max_length": 11,
+      "spoken_name_translations": {
+        "spanish": "Fax del agente",
+        "tagalog": "Fax ng ahente",
+        "chinese": "\u7ecf\u529e\u4eba\u4f20\u771f",
+        "arabic": "\u0641\u0627\u0643\u0633 \u0627\u0644\u0648\u0643\u064a\u0644",
+        "french": "Fax de l'agent",
+        "korean": "\ub300\ub9ac\uc778 \ud329\uc2a4 \ubc88\ud638",
+        "german": "Fax des Vertreters",
+        "portuguese": "Fax do agente",
+        "urdu": "\u0627\u06cc\u062c\u0646\u0679 \u06a9\u0627 \u0641\u06cc\u06a9\u0633",
+        "hindi": "\u090f\u091c\u0947\u0902\u091f \u0915\u093e \u092b\u0948\u0915\u094d\u0938",
+        "persian": "\u0641\u06a9\u0633 \u06a9\u0627\u0631\u06af\u0632\u0627\u0631",
+        "italian": "Fax dell'agente",
+        "russian": "\u0424\u0430\u043a\u0441 \u0430\u0433\u0435\u043d\u0442\u0430",
+        "ukrainian": "\u0424\u0430\u043a\u0441 \u0430\u0433\u0435\u043d\u0442\u0430",
+        "dutch": "Faxnummer agent",
+        "swedish": "Agentens faxnummer",
+        "afrikaans": "Agent se faks"
+      }
     },
     {
       "id": "agent_name_title",
@@ -1809,6 +2911,25 @@
       },
       "validation": {
         "required": false
+      },
+      "spoken_name_translations": {
+        "spanish": "Nombre y t\u00edtulo del agente",
+        "tagalog": "Pangalan at titulo ng ahente",
+        "chinese": "\u7ecf\u529e\u4eba\u59d3\u540d\u548c\u5934\u8854",
+        "arabic": "\u0627\u0633\u0645 \u0627\u0644\u0648\u0643\u064a\u0644 \u0648\u0644\u0642\u0628\u0647",
+        "french": "Nom et titre de l'agent",
+        "korean": "\ub300\ub9ac\uc778 \uc774\ub984 \ubc0f \uc9c1\ucc45",
+        "german": "Name und Titel des Vertreters",
+        "portuguese": "Nome e cargo do agente",
+        "urdu": "\u0627\u06cc\u062c\u0646\u0679 \u06a9\u0627 \u0646\u0627\u0645 \u0627\u0648\u0631 \u0639\u06c1\u062f\u06c1",
+        "hindi": "\u090f\u091c\u0947\u0902\u091f \u0915\u093e \u0928\u093e\u092e \u0914\u0930 \u092a\u0926",
+        "persian": "\u0646\u0627\u0645 \u0648 \u0639\u0646\u0648\u0627\u0646 \u06a9\u0627\u0631\u06af\u0632\u0627\u0631",
+        "italian": "Nome e titolo dell'agente",
+        "russian": "\u0418\u043c\u044f \u0438 \u0434\u043e\u043b\u0436\u043d\u043e\u0441\u0442\u044c \u0430\u0433\u0435\u043d\u0442\u0430",
+        "ukrainian": "\u0406\u043c'\u044f \u0442\u0430 \u043f\u043e\u0441\u0430\u0434\u0430 \u0430\u0433\u0435\u043d\u0442\u0430",
+        "dutch": "Naam en titel van agent",
+        "swedish": "Agentens namn och titel",
+        "afrikaans": "Agent se naam en titel"
       }
     }
   ],

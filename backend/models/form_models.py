@@ -470,6 +470,12 @@ class FormField(BaseModel):
     id: str = Field(description="Unique field identifier")
     name: str = Field(description="Display label")
     spoken_name: str = Field(description="Name for voice interaction")
+    spoken_name_translations: Optional[Dict[str, str]] = Field(
+        None,
+        description="Session-language translations of spoken_name, keyed by "
+                    "lowercase English language name ('spanish') -- same "
+                    "convention as option label_translations "
+                    "(bd polyglot-pdf-tupu.1)")
     spoken_aliases: Optional[List[str]] = Field(None, description="Alternative names for voice input")
 
     # Type and behavior

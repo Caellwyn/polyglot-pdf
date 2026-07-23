@@ -120,6 +120,44 @@ def _collect_labels(
     return labels, kit
 
 
+def _collect_spoken_names(
+    full_schema: Optional[Dict[str, Any]], language_name: str
+) -> Tuple[List[str], Dict[str, str]]:
+    """Field-level counterpart of _collect_labels (bd polyglot-pdf-tupu.1):
+    walk the flat fields[] array and return (unique_spoken_names_in_order,
+    kit_translations) from each field's spoken_name / spoken_name_translations.
+    Falls back to field name when spoken_name is absent -- the SAME fallback
+    get_field_guidance renders (manifest_service.py), so the bake covers
+    exactly the strings the model would otherwise hear in English."""
+    keys = _kit_translation_keys(language_name)
+    names: List[str] = []
+    seen: set = set()
+    kit: Dict[str, str] = {}
+    for field in (full_schema or {}).get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        spoken = field.get("spoken_name") or field.get("name")
+        if not isinstance(spoken, str) or not spoken.strip():
+            continue
+        if spoken not in seen:
+            seen.add(spoken)
+            names.append(spoken)
+        if spoken not in kit:
+            translated = _kit_translation(
+                field.get("spoken_name_translations"), keys)
+            if translated:
+                kit[spoken] = translated
+    return names, kit
+
+
+def _iter_field_dicts(schema: Optional[Dict[str, Any]]):
+    """Yield every field dict the spoken-name bake covers (flat fields[]),
+    parity with _collect_spoken_names."""
+    for field in (schema or {}).get("fields") or []:
+        if isinstance(field, dict):
+            yield field
+
+
 def _iter_option_dicts(schema: Optional[Dict[str, Any]]):
     """Yield every option dict bake/collect traversal covers: the flat
     fields[] array's options / dict-shaped allowed_values. TableColumn.options
@@ -174,6 +212,11 @@ async def bake_label_translations(
         entry: Dict[str, Any] = {
             "labels": 0, "missing": 0, "translated": 0,
             "options_updated": 0, "failed": False,
+            # Field spoken-name bake (bd polyglot-pdf-tupu.1) -- additive report
+            # keys so existing CLI/route consumers of the label keys are
+            # untouched.
+            "spoken_names": 0, "names_missing": 0, "names_translated": 0,
+            "fields_updated": 0,
         }
         report["languages"][name] = entry
         if name == "english":  # labels are already English; nothing to bake
@@ -181,18 +224,31 @@ async def bake_label_translations(
         keys = _kit_translation_keys(name)
         labels, existing = _collect_labels(schema, name)
         entry["labels"] = len(labels)
-        if not labels:
+        # Field spoken names ride the SAME batched call as the option labels
+        # (bd tupu.1): both are plain strings; the union preserves the
+        # one-translate-call-per-language invariant the bake tests pin.
+        spoken_names, existing_names = _collect_spoken_names(schema, name)
+        entry["spoken_names"] = len(spoken_names)
+        if not labels and not spoken_names:
             return
         missing = labels if not only_missing else [
             label for label in labels if label not in existing
         ]
         entry["missing"] = len(missing)
+        names_missing = spoken_names if not only_missing else [
+            n for n in spoken_names if n not in existing_names
+        ]
+        entry["names_missing"] = len(names_missing)
         overrides = dict(existing)
-        if missing:
+        name_overrides = dict(existing_names)
+        # Union of both string sets, deduped, labels first (a string that is
+        # BOTH a label and a spoken name translates once and serves both).
+        union_missing = list(dict.fromkeys([*missing, *names_missing]))
+        if union_missing:
             try:
                 async with semaphore:
                     translated = await text_ai.translate_labels(
-                        missing, name.capitalize(), code
+                        union_missing, name.capitalize(), code
                     )
             except Exception as exc:  # noqa: BLE001 -- skip-and-report by design
                 _log.warning(
@@ -206,12 +262,40 @@ async def bake_label_translations(
                 # Existing kit entries can still fan out to uncovered twins.
                 translated = {}
             missing_set = set(missing)
+            names_missing_set = set(names_missing)
             fresh = {
                 k: v for k, v in translated.items()
                 if k in missing_set and isinstance(v, str) and v.strip()
             }
             entry["translated"] = len(fresh)
             overrides.update(fresh)
+            fresh_names = {
+                k: v for k, v in translated.items()
+                if k in names_missing_set and isinstance(v, str) and v.strip()
+            }
+            entry["names_translated"] = len(fresh_names)
+            name_overrides.update(fresh_names)
+        # Fan spoken-name translations out to the fields (canonical lowercase-
+        # name key; only_missing semantics identical to the option path).
+        for field in _iter_field_dicts(schema):
+            spoken = field.get("spoken_name") or field.get("name")
+            if not isinstance(spoken, str) or not spoken.strip():
+                continue
+            value = name_overrides.get(spoken)
+            if not value:
+                continue
+            if only_missing and _kit_translation(
+                    field.get("spoken_name_translations"), keys):
+                continue  # covered under an accepted key -- no rewrite
+            translations = field.get("spoken_name_translations")
+            if not isinstance(translations, dict):
+                translations = {}
+                field["spoken_name_translations"] = translations
+            if translations.get(name) == value:
+                continue
+            translations[name] = value
+            entry["fields_updated"] += 1
+            report["changed"] = True
         for opt in _iter_option_dicts(schema):
             label = opt.get("label")
             if not isinstance(label, str) or not label.strip():

@@ -129,10 +129,16 @@ def translate_kit(
     missing_total = 0
     for name in sorted(report["languages"]):
         entry = report["languages"][name]
-        missing_total += entry["missing"]
+        # Spoken-name gaps count toward the --check exit code too (bd tupu.1);
+        # .get keeps the CLI tolerant of an older bake report shape.
+        missing_total += entry["missing"] + entry.get("names_missing", 0)
         print(f"[{mode}] {schema_path} {name}: labels={entry['labels']} "
               f"missing={entry['missing']} translated={entry['translated']} "
-              f"options_updated={entry['options_updated']}"
+              f"options_updated={entry['options_updated']} "
+              f"names={entry.get('spoken_names', 0)} "
+              f"names_missing={entry.get('names_missing', 0)} "
+              f"names_translated={entry.get('names_translated', 0)} "
+              f"fields_updated={entry.get('fields_updated', 0)}"
               + (" FAILED" if entry["failed"] else ""))
 
     if check:

@@ -193,6 +193,10 @@ export interface FormField {
   id: string;
   name: string;
   spoken_name: string;
+  // Session-language translations of spoken_name, keyed by lowercase English
+  // language name -- same convention as option label_translations
+  // (bd polyglot-pdf-tupu.1).
+  spoken_name_translations?: Record<string, string>;
   spoken_aliases?: string[];
 
   // Type and behavior
