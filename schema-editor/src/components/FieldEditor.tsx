@@ -565,7 +565,19 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               type="text"
               className="input"
               value={field.spoken_name || ''}
-              onChange={(e) => updateField({ spoken_name: e.target.value })}
+              onChange={(e) => {
+                // A spoken-name edit invalidates the field's baked
+                // spoken_name_translations -- they translate the OLD text, so
+                // a renamed field would be SPOKEN in the old wording in every
+                // non-English session (bd polyglot-pdf-tupu.3; same rule as
+                // the option label_translations drop, bd d25e). Drop the key
+                // entirely on the first real change; the editor's
+                // Translate-options action or translate_option_labels.py
+                // re-bakes on demand.
+                const edited = { ...field, spoken_name: e.target.value };
+                delete edited.spoken_name_translations;
+                onUpdateField(edited);
+              }}
               placeholder="e.g., alien registration number"
             />
             <p className="text-xs text-gray-500 mt-1">

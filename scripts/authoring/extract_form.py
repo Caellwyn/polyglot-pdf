@@ -1115,8 +1115,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     else:
         langs = translation_report.get("languages", {})
         updated = sum(e.get("options_updated", 0) for e in langs.values())
+        # Field spoken names ride the same bake (bd polyglot-pdf-tupu.1).
+        names_updated = sum(e.get("fields_updated", 0) for e in langs.values())
         failed = translation_report.get("failed_languages") or []
-        print(f"option translations: {updated} option-language entries across "
+        print(f"option translations: {updated} option-language entries + "
+              f"{names_updated} spoken-name entries across "
               f"{len(langs)} language(s), model {translation_report.get('model')}"
               + (f"; FAILED: {', '.join(failed)} -- re-run "
                  "translate_option_labels.py to fill the gap" if failed else ""))

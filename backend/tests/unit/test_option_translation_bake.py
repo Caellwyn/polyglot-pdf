@@ -414,3 +414,24 @@ async def test_spoken_name_failure_skips_language_and_rerun_fills_gap():
     assert report2["failed_languages"] == []
     assert schema["fields"][0]["spoken_name_translations"] == {
         "spanish": "apellido"}
+
+
+@pytest.mark.asyncio
+async def test_shared_string_translates_once_and_lands_in_both_places():
+    """A string that is BOTH an option label and a field spoken name rides the
+    union once (single call, single deduped entry) and fans out to
+    label_translations AND spoken_name_translations (fresh-eyes pin, tupu.1)."""
+    schema = {"fields": [
+        {"id": "confirm", "type": "radio", "spoken_name": "Yes", "options": [
+            {"value": "y", "label": "Yes"},
+        ]},
+    ]}
+    ai = MagicMock()
+    ai.translate_labels = AsyncMock(return_value={"Yes": ESPANOL_SI})
+    await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
+
+    ai.translate_labels.assert_awaited_once()
+    assert ai.translate_labels.await_args.args[0] == ["Yes"]  # deduped union
+    field = schema["fields"][0]
+    assert field["options"][0]["label_translations"] == {"spanish": ESPANOL_SI}
+    assert field["spoken_name_translations"] == {"spanish": ESPANOL_SI}

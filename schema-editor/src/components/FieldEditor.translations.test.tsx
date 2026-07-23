@@ -94,3 +94,32 @@ describe('FieldEditor label edit drops stale label_translations (bd d25e)', () =
     expect('label_translations' in edited).toBe(false);
   });
 });
+
+describe('FieldEditor spoken-name edit drops stale spoken_name_translations (bd tupu.3)', () => {
+  it('editing the Spoken Name removes the field translations, keeps everything else', () => {
+    const onUpdateField = vi.fn();
+    const field = {
+      ...radioField(),
+      spoken_name: 'application type',
+      spoken_name_translations: { spanish: 'tipo de solicitud', french: 'type de demande' },
+    } as unknown as FormField;
+    render(
+      <FieldEditor
+        field={field}
+        schema={schemaWith(field)}
+        onUpdateField={onUpdateField}
+      />,
+    );
+
+    const spokenInput = screen.getByDisplayValue('application type') as HTMLInputElement;
+    fireEvent.change(spokenInput, { target: { value: 'application kind' } });
+
+    expect(onUpdateField).toHaveBeenCalled();
+    const updated = onUpdateField.mock.calls.at(-1)![0];
+    expect(updated.spoken_name).toBe('application kind');
+    expect('spoken_name_translations' in updated).toBe(false);
+    // Option-level translations are untouched by a field-level spoken-name edit.
+    expect(updated.options[0].label_translations).toEqual(
+      { spanish: 'Solicitar', french: 'Demander' });
+  });
+});

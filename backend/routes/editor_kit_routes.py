@@ -227,7 +227,9 @@ class TranslateOptionsResponse(BaseModel):
     model: str                        # the Gemini model that translated
     failedLanguages: list[str]        # languages whose batch call failed (re-run)
     languages: dict[str, dict]        # per-language {labels, missing, translated,
-                                      # options_updated, failed}
+                                      # options_updated, failed, spoken_names,
+                                      # names_missing, names_translated,
+                                      # fields_updated} (bd tupu.1)
     errorCount: int                   # lint ERRORs after the bake
     warningCount: int                 # lint WARNINGs after the bake
 
