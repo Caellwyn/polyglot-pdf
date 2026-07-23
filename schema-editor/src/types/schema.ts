@@ -70,6 +70,10 @@ export interface FormField {
   hidden?: boolean;
   max_length?: number;
   spoken_name?: string;
+  // Session-language translations of spoken_name, keyed by lowercase English
+  // language name ("spanish", "chinese") -- same convention as option
+  // label_translations (bd polyglot-pdf-tupu.1).
+  spoken_name_translations?: Record<string, string>;
   help?: FieldHelp;
   validation?: ValidationRules;
   options?: FieldOption[];

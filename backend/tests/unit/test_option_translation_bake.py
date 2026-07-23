@@ -105,6 +105,10 @@ async def test_bake_one_call_per_language_over_deduped_missing():
     assert report["languages"]["spanish"] == {
         "labels": 4, "missing": 4, "translated": 4,
         "options_updated": 6, "failed": False,
+        # Spoken-name bake keys (bd polyglot-pdf-tupu.1); this fixture's fields
+        # carry no name/spoken_name, so the name half is a no-op here.
+        "spoken_names": 0, "names_missing": 0, "names_translated": 0,
+        "fields_updated": 0,
     }
 
 
@@ -312,3 +316,101 @@ async def test_baked_schema_makes_runtime_secretary_a_noop():
     assert overrides == {
         "Male": ESPANOL_MASCULINO, "Female": ESPANOL_FEMENINO,
         "Yes": ESPANOL_SI, "No": "No"}
+
+
+# --- 6. Field spoken-name bake (bd polyglot-pdf-tupu.1) ------------------------
+
+_NAME_TRANSLATIONS = {
+    "spanish": {"family name": "apellido", "given name": "nombre",
+                "Male": ESPANOL_MASCULINO, "Female": ESPANOL_FEMENINO},
+}
+
+
+def _named_schema():
+    return {"fields": [
+        {"id": "f1", "type": "text", "spoken_name": "family name"},
+        {"id": "f2", "type": "text", "spoken_name": "given name"},
+        # Duplicate spoken name across fields -- dedupe + fan-out target.
+        {"id": "f3", "type": "text", "spoken_name": "family name"},
+        # No spoken_name: falls back to name (the get_field_guidance fallback).
+        {"id": "f4", "type": "text", "name": "given name"},
+        {"id": "sex", "type": "radio", "spoken_name": "family name", "options": [
+            {"value": "M", "label": "Male"},
+            {"value": "F", "label": "Female"},
+        ]},
+    ]}
+
+
+def _name_text_ai():
+    ai = MagicMock()
+
+    async def _translate(labels, language_name, language_code):
+        table = _NAME_TRANSLATIONS[language_name.lower()]
+        return {s: table[s] for s in labels if s in table}
+
+    ai.translate_labels = AsyncMock(side_effect=_translate)
+    return ai
+
+
+@pytest.mark.asyncio
+async def test_bake_translates_spoken_names_in_the_same_single_call():
+    """Labels + spoken names ride ONE batched call (the union), and the name
+    results fan out to every field sharing the spoken name, under the
+    canonical lowercase-language-name key."""
+    schema = _named_schema()
+    ai = _name_text_ai()
+    report = await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
+
+    assert ai.translate_labels.await_count == 1  # ONE call for the union
+    sent = ai.translate_labels.await_args.args[0]
+    assert sent == ["Male", "Female", "family name", "given name"]
+
+    fields = {f["id"]: f for f in schema["fields"]}
+    for fid in ("f1", "f3", "sex"):
+        assert fields[fid]["spoken_name_translations"] == {"spanish": "apellido"}
+    for fid in ("f2", "f4"):
+        assert fields[fid]["spoken_name_translations"] == {"spanish": "nombre"}
+    entry = report["languages"]["spanish"]
+    assert entry["spoken_names"] == 2       # deduped unique names
+    assert entry["names_missing"] == 2
+    assert entry["names_translated"] == 2
+    assert entry["fields_updated"] == 5
+
+
+@pytest.mark.asyncio
+async def test_spoken_name_bake_is_idempotent_and_respects_existing_keys():
+    """Second run: zero calls, schema byte-identical. A field covered under an
+    accepted alternate key (full BCP-47) is not rewritten."""
+    schema = _named_schema()
+    schema["fields"][1]["spoken_name_translations"] = {"es-US": "nombre de pila"}
+    ai = _name_text_ai()
+    await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
+
+    # f2 was covered under the es-US key: untouched, no canonical rewrite.
+    assert schema["fields"][1]["spoken_name_translations"] == {
+        "es-US": "nombre de pila"}
+
+    before = json.dumps(schema, sort_keys=True)
+    ai2 = _name_text_ai()
+    report2 = await ot.bake_label_translations(schema, ai2, {"spanish": "es-US"})
+    ai2.translate_labels.assert_not_awaited()
+    assert json.dumps(schema, sort_keys=True) == before
+    assert report2["changed"] is False
+
+
+@pytest.mark.asyncio
+async def test_spoken_name_failure_skips_language_and_rerun_fills_gap():
+    """A failed language leaves spoken names unbaked and reported; a healthy
+    re-run fills exactly the gap (mirrors the option-label pin)."""
+    schema = _named_schema()
+    failing = MagicMock()
+    failing.translate_labels = AsyncMock(return_value=None)
+    report = await ot.bake_label_translations(schema, failing, {"spanish": "es-US"})
+    assert report["failed_languages"] == ["spanish"]
+    assert "spoken_name_translations" not in schema["fields"][0]
+
+    report2 = await ot.bake_label_translations(
+        schema, _name_text_ai(), {"spanish": "es-US"})
+    assert report2["failed_languages"] == []
+    assert schema["fields"][0]["spoken_name_translations"] == {
+        "spanish": "apellido"}
