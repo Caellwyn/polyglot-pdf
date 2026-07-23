@@ -152,6 +152,39 @@ one rerun each of the two most affected languages:
 | 20260722T215056Z | ru | 12/14 | Input transcription now predominantly RUSSIAN (de/es garble gone -- the ru-RU bias works); confirms transcribed as Russian (lo37); spell-back in LATIN letter names and all three names filled correctly incl. LINH (s39z; baseline mis-filled LIN); greeting translated the section title. Kit-baked Russian option labels covered 100% (text cost $0 -- kit precedence). Two misses: a street transcription typo ("Westhheimer") and apt "12" filled as "19" -- the ww9y short-numeric class AGAIN, second language, recorded on the bead. |
 | 20260722T215331Z | zh | **14/14** | No name-block desync this run (baseline: 9/14 with 3 shifted names); declines stored EMPTY, no literal "N/A" (nb2c); Latin spell-backs; confirms transcribed as Chinese (lo37). Single run -- desync non-recurrence is NOT proven (that is A1's n>=3 job, bd 66ek.1). |
 
+## Epic B verification sweep (bd polyglot-pdf-tupu.4, 2026-07-23)
+
+12 runs (es/zh/hi/fr x3, 14q DTI slices) at the tupu.2 PR head (#466 --
+spoken-name + section-label runtime delivery), stamps 20260723T043827Z..
+050312Z, ~$7.9. Scored against the epic rubric:
+
+| lang | fills (3 runs) | secretary calls/run | spoken-name queries | English field-name readouts |
+|---|---|---|---|---|
+| es | 13/14, 14/14, 13/14 | 5, 14, 0 | **0** | **0** |
+| zh | 6/14*, 13/14, 13/14 | 1, 4, 0 | **0** | **0** |
+| hi | 14/14, 14/14, 14/14 | 0, 0, 5 | **0** | 0 field names; one "Let me check" filler in 1 run |
+| fr | 14/14, 13/14, 14/14 | 2, 0, 0 | **0** | **0** |
+
+- **Rubric criterion 3 PASS (mechanism-tied): ZERO spoken-name secretary
+  queries across all 12 runs** -- the baseline's defining symptom ("what is
+  the spoken name for p1_line2_acctidentifier", fr at 14/14 questions) is
+  gone. Overall secretary volume collapsed (fr 14 -> 2/0/0); the one es run
+  at 14 calls was recall/status traffic, not name lookups (tracked as the
+  known chatty-secretary diagnostic, not this epic's surface).
+- **Rubric criterion 2 PASS: field names spoken in-language everywhere**
+  (greetings incl. section titles; guidance; hints) with zero raw-English
+  field-name readouts in 12/12 runs. Residual: one 3-word English filler
+  phrase ("Let me check") in one hi run -- a register slip, not a field name.
+- Fills: hi a perfect 42/42 (baseline 13/14 with the invented-value
+  incident); es 40/42; fr 41/42. *The one bad zh run (6/14) was a mid-run
+  STALL -- 7 consecutive unfilled fields after a spelled-name mishear
+  (LYNH), all scored missing; notably NOT the wrong-field desync (zero
+  wrong-field fills in all 3 zh runs). Stall/desync-class investigation
+  remains bd 66ek.1's n>=3 A/B (r5m7).
+- Criterion 1 (kit coverage) and 4 (English byte-identity) were verified in
+  the tupu.1/tupu.2 reviews (bake --check fully covered x4 kits; no-override
+  snapshot pins).
+
 ## Caveats
 
 - One run per language; D2/D3-class events are known to be intermittent.
