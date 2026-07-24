@@ -408,6 +408,36 @@ async def test_bake_default_on_reads_settings(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_bake_default_construction_path(monkeypatch):
+    """The production-default path (fresh-eyes coverage finding): with NO
+    lite adapter or glossary passed, the bake constructs the lite adapter
+    itself (settings-driven, credential-less here -> client None ->
+    fail-open) and loads the REAL committed glossary file. Exercises
+    _build_verify_lite_ai + load_glossary end to end without live calls."""
+    from backend import config
+    monkeypatch.setattr(
+        config, "get_settings",
+        lambda: SimpleNamespace(
+            TRANSLATION_VERIFY_ENABLED=True,
+            TRANSLATION_VERIFY_BT_MODEL="gemini-2.5-flash-lite",
+            GEMINI_API_KEY=None,
+            VERTEXAI=False,
+        ))
+    schema = _schema()
+    report = await ot.bake_label_translations(
+        schema, _bake_text_ai(), {"spanish": "es-US"})
+    # Construction succeeded, the real glossary loaded, and the
+    # credential-less lite adapter fail-opened the verify pass -- values
+    # baked, verify reported unavailable, flags key present (gate ran).
+    verify = report["languages"]["spanish"]["verify"]
+    assert verify["available"] is False
+    assert "flags" in report
+    options = next(f for f in schema["fields"]
+                   if f["id"] == "status")["options"]
+    assert options[0]["label_translations"]["spanish"] == "Unico"
+
+
+@pytest.mark.asyncio
 async def test_bake_verify_outage_leaves_kit_byte_identical():
     schema_off = _schema()
     await ot.bake_label_translations(

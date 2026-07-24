@@ -332,20 +332,25 @@ async def bake_label_translations(
             # re-runs stay call-free. Corrections land in the override maps
             # BEFORE fan-out; a verify outage changes nothing (fail-open).
             if verify_enabled and (fresh or fresh_names or fresh_sections):
+                # Deliberately OUTSIDE the semaphore (fresh-eyes finding on
+                # this bead): the verify loop makes several SEQUENTIAL model
+                # calls per language, and holding a translate-concurrency
+                # slot across all of them starves other languages' translate
+                # calls. Verify concurrency is naturally bounded by the
+                # language count, and each language's loop is serial inside.
                 try:
-                    async with semaphore:
-                        result = await verify_fresh_translations(
-                            language_name=name,
-                            language_code=code,
-                            fresh={
-                                "option-label": fresh,
-                                "field-name": fresh_names,
-                                "section-title": fresh_sections,
-                            },
-                            pro_ai=text_ai,
-                            lite_ai=verify_lite_ai,
-                            glossary=verify_glossary,
-                        )
+                    result = await verify_fresh_translations(
+                        language_name=name,
+                        language_code=code,
+                        fresh={
+                            "option-label": fresh,
+                            "field-name": fresh_names,
+                            "section-title": fresh_sections,
+                        },
+                        pro_ai=text_ai,
+                        lite_ai=verify_lite_ai,
+                        glossary=verify_glossary,
+                    )
                 except Exception as exc:  # noqa: BLE001 -- fail-open
                     _log.warning(
                         "option_translation_verify_failed",
@@ -455,6 +460,11 @@ def _build_verify_lite_ai() -> Any:
     from backend.config import get_settings
 
     settings = get_settings()
+    # The DEFAULT fallback chain is kept ON PURPOSE (unlike the pro-tier
+    # authoring constructions, which pass fallback_models=() to fail loud):
+    # this leg is deliberately LITE, and a within-lite-tier fallback on a
+    # transient outage is harmless -- failing it instead would cost the
+    # whole verify pass (fail-open) for nothing.
     return TextAIGemini(
         api_key=settings.GEMINI_API_KEY,
         model=settings.TRANSLATION_VERIFY_BT_MODEL,
