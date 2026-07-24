@@ -146,7 +146,9 @@ surface with zero per-site plumbing. **Batch per LANGUAGE, never per string.**
    (the collision materialized live -- keep-original would have shipped a
    provably wrong digit); judge-origin unresolved keeps the ORIGINAL.**
    Both still flag UNRESOLVED. V3 also inherits: a flip-flop detector
-   (rectify output == previously-rejected value -> UNRESOLVED early),
+   keyed on REJECTION RECURRENCE (the judge re-flags a value already
+   flagged earlier in the item's trace -> UNRESOLVED early; never value
+   identity alone -- the ur trace converged on a re-proposed value),
    judge-prompt hardening against back-translation anchoring and
    never-flag-your-own-proposal, and chunk size 50.
 4. **Fail-open throughout**: missing client / failed back-translate / judge

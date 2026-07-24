@@ -27,7 +27,8 @@ gold translations while NOT flagging the gold?
   0 lint failures on live forward output -- the ASCII-digit pin and script
   check held on real Perso-Arabic text.
 - **Cost: $0.2145 measured** (19 pro + 8 lite calls; 26.2k in / 9.2k out /
-  8.9k thinking pro tokens) vs the $0.43 pre-run estimate and the plan's
+  8.9k thinking pro tokens) vs the ~$0.45 pre-run estimate (the probe
+  docstring's number; Gate-2 derivation range $0.40-0.50) and the plan's
   ~$0.25 authorization.
 
 ## Plants table (measure a)
@@ -59,9 +60,15 @@ from the original-vs-translation comparison, not the round-trip.
 2. **zh-g11 ("Dependent 1 first name" -> mingzi): unsatisfiable-criterion
    FP.** The judge rejected BOTH plausible renderings across two rectify
    rounds (mingzi -> ming -> mingzi), each time proposing the other. No zh
-   rendering satisfies it. Mitigation (V3): the loop detects a FLIP-FLOP
-   (rectify output equals a previously-rejected value -> stop, UNRESOLVED,
-   one attempt saved) and the precision block gains "never flag a rendering
+   rendering satisfies it. Mitigation (V3): the loop detects a FLIP-FLOP,
+   defined precisely as REJECTION RECURRENCE -- **the judge flags a value
+   that already appears as a flagged value earlier in this item's trace ->
+   stop, UNRESOLVED** (zh-g11's attempt-2 re-flagged the originally-flagged
+   mingzi: fires correctly). NOT value recurrence alone: the ur trace is
+   the counterexample the Opus review surfaced -- attempt 2 re-proposed the
+   originally-rejected rendering and the judge ACCEPTED it (converged), so
+   a value-identity detector would have converted a clean accept into a
+   false UNRESOLVED. The precision block also gains "never flag a rendering
    you would yourself propose as the fix; do not flag conventional renderings
    as under-specific when no strictly better form exists."
 
@@ -101,11 +108,18 @@ judge's reason, but that does not reclassify the item's origin.
 ## Chunk A/B (measure d)
 
 Verdicts were IDENTICAL between the 25- and 50-item arms for every plant and
-every gold string in both languages. At this corpus size (52 items/language)
-chunking does not change judgment quality. **Pin chunk size 50 for V3** (half
-the judge calls); revisit only if V5's full-kit batches (up to ~300 uniques
-per language on i-90) surface arm divergence -- V5 can A/B once at full scale
-if flag rates look odd.
+every gold string in both languages -- the VALIDATED set shows zero
+divergence. **Full disclosure (Opus-review catch on this doc's first
+draft): 5 of the ~54 unvalidated FILLER strings flipped verdict between
+arms** (es kit012/kit015, zh kit024/kit028/kit029). Filler has no answer
+key, so those divergences cannot be scored right-or-wrong -- they show
+chunking perturbs borderline judgments on exactly the kind of ambiguous
+string the filler contains, while leaving clear-cut cases (all 44 validated
+items) stable. **Pin chunk size 50 for V3** (half the judge calls; the
+validated evidence supports it and the perturbed cases are the borderline
+class the judge is noisy on regardless of arm); V5 re-A/Bs once at full
+kit scale (up to ~300 uniques per language) if flag rates look odd --
+that run, with more data, is the right place to revisit.
 
 ## ur observational arm (the tail-language stress)
 
@@ -131,8 +145,10 @@ if flag rates look odd.
 1. Judge prompt: NOT-drift bullet hardening on back-translation anchoring
    (zh-g07) + never-flag-your-own-proposal / conventional-rendering clauses
    (zh-g11, ur).
-2. Loop: flip-flop detector (rectify output == previously rejected value ->
-   UNRESOLVED early).
+2. Loop: flip-flop detector keyed on REJECTION RECURRENCE (the judge flags
+   a value already flagged earlier in the item's trace -> UNRESOLVED
+   early); never on value identity alone (the ur convergence
+   counterexample).
 3. Keep rule: mechanical-origin unresolved -> latest lint-clean rectify;
    judge-origin unresolved -> original. Both UNRESOLVED-flagged.
 4. Chunk size 50.

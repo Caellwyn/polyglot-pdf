@@ -12,7 +12,7 @@ V1 of the translation-quality-gate epic (`polyglot-pdf-sekc`) -- the probe
 gate the plan requires before V3 builds the production verify/rectify loop.
 The Gate-1 prior-work audit confirmed the question was unmeasured (W5/g1/g1c
 measured contradiction judges, never translation drift); Gate-2 estimate
-$0.43 against the plan's ~$0.25 pre-authorization -- measured actual
+~$0.45 against the plan's ~$0.25 pre-authorization -- measured actual
 **$0.2145**.
 
 ## What shipped
@@ -57,9 +57,12 @@ doc updated in place; V3's bead notes carry the readout.
   refused); ur showed the weaker cousin, a cross-pass verdict inversion
   that CONVERGED on attempt 2 (the first draft mislabeled it a flip-flop
   -- fresh-eyes corrected it; the flip-flop detector rests on zh-g11
-  alone). A rectify-equals-previously-rejected-value check is a one-line
-  loop guard that saves a pro call and converts thrash into an honest
-  UNRESOLVED.
+  alone, and the ur convergence is the COUNTEREXAMPLE that fixed the
+  detector's spec: it fires on REJECTION RECURRENCE -- the judge re-flags
+  an already-flagged value -- never on value identity alone, or it would
+  have converted ur's clean accept into a false UNRESOLVED (Opus-review
+  catch). A one-line loop guard that saves a pro call and converts thrash
+  into an honest UNRESOLVED.
 - **FP risk concentrates where gold confidence is lowest** (the g1b corpus
   lesson transposed): the es slice (agency-verifiable) was spotless; both
   zh flags sat on the two renderings seeded with least confidence. For V5,
