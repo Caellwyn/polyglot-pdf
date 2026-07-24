@@ -4,8 +4,11 @@
 judge/rectify/ur-forward `gemini-2.5-pro` (thinking bounded 512), back-translate
 `gemini-2.5-flash-lite`. Vertex (ADC). **Runner:**
 `scripts/spikes/translation_gate_probe.py`; corpus
-`scripts/spikes/data/translation-gate/gold.json`; raw run
-`scripts/spikes/data/translation_gate_20260724T205304Z.{csv,meta.json}`.
+`scripts/spikes/data/translation-gate/gold.json`; raw runs
+`scripts/spikes/data/translation_gate_20260724T205304Z.{csv,meta.json}`
+(run 1) + `..._20260724T212414Z.{csv,meta.json}` (run 2 -- the
+per-language-accounting run, which doubles as a verdict-stability
+replicate; see the Run 2 section).
 
 **The question** (epic `polyglot-pdf-sekc` exit criterion 1; unanswered per the
 Gate-1 audit -- W5/g1/g1c measured contradiction judges, never translation):
@@ -26,10 +29,15 @@ gold translations while NOT flagging the gold?
   diagnosed below and drive the V3 mitigations. ur (observational, no gold):
   0 lint failures on live forward output -- the ASCII-digit pin and script
   check held on real Perso-Arabic text.
-- **Cost: $0.2145 measured** (19 pro + 8 lite calls; 26.2k in / 9.2k out /
-  8.9k thinking pro tokens) vs the ~$0.45 pre-run estimate (the probe
-  docstring's number; Gate-2 derivation range $0.40-0.50) and the plan's
-  ~$0.25 authorization.
+- **Cost, measured per language (measure e; run 2, the accounting run):
+  es $0.0698, zh $0.0882, ur $0.0523 -- total $0.2102** (19 pro + 8 lite
+  calls; run 1, whose accumulator was per-model only, totaled $0.2145).
+  ur's cost is dominated by the extra forward-translation pro call +
+  thinking -- the per-language unit figures V5's 4-kit x 17-language
+  projection needs. Pre-run estimate: ~$0.45 (this bead's own Gate-2
+  derivation, recorded in the probe docstring -- NOT a plan figure; the
+  plan's authorization line is ~$0.25). Two runs total $0.4247, inside
+  the derivation envelope.
 
 ## Plants table (measure a)
 
@@ -139,6 +147,25 @@ that run, with more data, is the right place to revisit.
   oscillation (the flip-flop detector rests on zh-g11 alone), but real
   tail-language verdict noise, supporting the plan's low-resource-first
   review ordering for V5.
+
+## Run 2 (the accounting replicate)
+
+Run 1's accumulator was per-model only; criterion 3 requires MEASURED
+per-language cost (Opus-review catch), so the probe re-ran with a
+per-(language, model) split -- and the second run is a free
+verdict-stability sample:
+
+- **Discrimination REPLICATED: 14/14 plants caught again, at the same
+  layers, in both arms; es gold 15/15 clean again.**
+- **zh-g07 (back-translation anchoring) REPRODUCED in both arms** --
+  strengthening that diagnosis and its V3 prompt mitigation.
+- **zh-g11 did NOT recur** (zh gold FPs 2 -> 1): the
+  unsatisfiable-criterion case is borderline run-to-run judge noise, which
+  is consistent with its diagnosis -- and exactly why the flip-flop
+  detector converts that thrash into an honest UNRESOLVED rather than
+  trusting any single verdict.
+- **ur-o08 ("Single") flagged again** -- the tail-language forward
+  weakness is stable, not a one-off.
 
 ## What V3 inherits (the actionable list)
 

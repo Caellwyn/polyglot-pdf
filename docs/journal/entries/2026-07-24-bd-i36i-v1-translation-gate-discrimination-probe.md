@@ -13,7 +13,13 @@ gate the plan requires before V3 builds the production verify/rectify loop.
 The Gate-1 prior-work audit confirmed the question was unmeasured (W5/g1/g1c
 measured contradiction judges, never translation drift); Gate-2 estimate
 ~$0.45 against the plan's ~$0.25 pre-authorization -- measured actual
-**$0.2145**.
+**$0.4247 across two runs** (run 1 $0.2145; run 2 $0.2102, the
+per-language-accounting run added after the Opus review caught that
+criterion 3's "per-language token cost" was unmet by run 1's per-model
+accumulator: es $0.0698 / zh $0.0882 / ur $0.0523). Run 2 doubled as a
+verdict-stability replicate: 14/14 plants + clean es gold REPLICATED;
+zh-g07 reproduced (hardening its diagnosis); zh-g11 did not recur
+(borderline judge noise, consistent with its diagnosis).
 
 ## What shipped
 
@@ -82,6 +88,7 @@ doc updated in place; V3's bead notes carry the readout.
 - `scripts/spikes/translation_gate_probe.py` -- NEW (the spike).
 - `scripts/spikes/data/translation-gate/gold.json` -- NEW (corpus).
 - `scripts/spikes/translation_gate_findings.md` -- NEW (findings).
-- `scripts/spikes/data/translation_gate_20260724T205304Z.csv` /
-  `.meta.json` -- NEW (raw run artifacts).
+- `scripts/spikes/data/translation_gate_20260724T205304Z.{csv,meta.json}`
+  + `..._20260724T212414Z.{csv,meta.json}` -- NEW (raw artifacts, runs
+  1 + 2).
 - `docs/sprint_14_translation-quality-gate_plan.md` -- keep-rule readout.

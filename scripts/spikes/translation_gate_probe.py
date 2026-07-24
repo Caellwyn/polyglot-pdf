@@ -109,15 +109,20 @@ def _client() -> genai.Client:
 
 
 class Usage:
-    """Per-model token + cost accumulator (thinking billed at output rate)."""
+    """Per-(language, model) token + cost accumulator (thinking billed at
+    the output rate). The caller sets .language before each language's run
+    -- exit criterion 3 requires MEASURED PER-LANGUAGE cost (the first run
+    accumulated per-model only; Opus review caught the gap)."""
 
     def __init__(self) -> None:
-        self.by_model: Dict[str, Dict[str, int]] = {}
+        self.language: str = "?"
+        self.by_key: Dict[Tuple[str, str], Dict[str, int]] = {}
 
     def add(self, model: str, response: Any) -> None:
         meta = getattr(response, "usage_metadata", None)
-        entry = self.by_model.setdefault(
-            model, {"calls": 0, "in": 0, "out": 0, "think": 0})
+        entry = self.by_key.setdefault(
+            (self.language, model),
+            {"calls": 0, "in": 0, "out": 0, "think": 0})
         entry["calls"] += 1
         if meta is not None:
             entry["in"] += int(getattr(meta, "prompt_token_count", 0) or 0)
@@ -126,14 +131,28 @@ class Usage:
             entry["think"] += int(
                 getattr(meta, "thoughts_token_count", 0) or 0)
 
+    @staticmethod
+    def _usd(entry: Dict[str, int], model: str) -> float:
+        rates = RATES.get(model, {"in": 0.0, "out": 0.0})
+        return (entry["in"] * rates["in"]
+                + (entry["out"] + entry["think"]) * rates["out"]) / 1e6
+
     def cost(self) -> Dict[str, Any]:
-        out: Dict[str, Any] = {"models": {}, "total_usd": 0.0}
-        for model, entry in self.by_model.items():
-            rates = RATES.get(model, {"in": 0.0, "out": 0.0})
-            usd = (entry["in"] * rates["in"]
-                   + (entry["out"] + entry["think"]) * rates["out"]) / 1e6
-            out["models"][model] = {**entry, "usd": round(usd, 4)}
+        out: Dict[str, Any] = {"by_language": {}, "models": {},
+                               "total_usd": 0.0}
+        for (language, model), entry in self.by_key.items():
+            usd = self._usd(entry, model)
+            lang_block = out["by_language"].setdefault(
+                language, {"models": {}, "usd": 0.0})
+            lang_block["models"][model] = {**entry, "usd": round(usd, 4)}
+            lang_block["usd"] = round(lang_block["usd"] + usd, 4)
+            agg = out["models"].setdefault(
+                model, {"calls": 0, "in": 0, "out": 0, "think": 0})
+            for key in ("calls", "in", "out", "think"):
+                agg[key] += entry[key]
             out["total_usd"] += usd
+        for model, agg in out["models"].items():
+            agg["usd"] = round(self._usd(agg, model), 4)
         out["total_usd"] = round(out["total_usd"], 4)
         return out
 
@@ -643,6 +662,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     started = datetime.now(timezone.utc)
 
     for language in langs:
+        usage.language = language
         if language == "urdu":
             if client is None:
                 print("== urdu skipped in --dry-run (needs live forward "
