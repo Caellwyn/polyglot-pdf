@@ -44,6 +44,22 @@ def _fresh_cache():
     ot._reset_cache_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def _verify_gate_off(monkeypatch):
+    """These are the BAKE-mechanics pins; the verify/rectify gate (bd
+    polyglot-pdf-9ikj) has its own spec in test_translation_verify.py. With
+    the gate off the report is pinned byte-identical to its pre-gate shape
+    (no `flags` / `verify` keys), which is itself part of the 9ikj
+    contract. The default-ON resolution reads get_settings() at call time,
+    so patching the config module covers every call here."""
+    from types import SimpleNamespace
+
+    from backend import config
+    monkeypatch.setattr(
+        config, "get_settings",
+        lambda: SimpleNamespace(TRANSLATION_VERIFY_ENABLED=False))
+
+
 def _schema(fields=None):
     return {"fields": fields if fields is not None else [
         {"id": "sex", "type": "radio", "options": [
