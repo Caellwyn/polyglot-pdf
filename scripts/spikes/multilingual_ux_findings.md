@@ -174,6 +174,45 @@ eliminated -- 1 of 3 es greetings still read the section title in English
 section labels, noted on bd polyglot-pdf-tupu.2 (the spoken-name delivery
 pass touches the same metadata channel).
 
+## Epic B verification sweep (bd polyglot-pdf-tupu.4, 2026-07-23)
+
+12 runs (es/zh/hi/fr x3, 14q DTI slices) at the tupu.2 PR head (#466 --
+spoken-name + section-label runtime delivery), stamps 20260723T043827Z..
+050312Z, $6.04 summed across the 12 committed runs (four additional
+committed es triples with 022943Z..024244Z stamps are interim tupu.2
+development sanity/debug runs, NOT part of this sweep). Scored against the
+epic rubric:
+
+| lang | fills (3 runs) | secretary calls/run | spoken-name queries | English field-name readouts |
+|---|---|---|---|---|
+| es | 13/14, 14/14, 13/14 | 5, 14, 0 | **0** | **0** |
+| zh | 6/14*, 13/14, 13/14 | 1, 4, 0 | **0** | **0** |
+| hi | 14/14, 14/14, 14/14 | 0, 0, 5 | **0** | 0 field names; one "Let me check" filler in 1 run |
+| fr | 14/14, 13/14, 14/14 | 2, 0, 0 | **0** | **0** |
+
+- **Rubric criterion 3 PASS (mechanism-tied): ZERO spoken-name secretary
+  queries across all 12 runs** -- the baseline's defining symptom ("what is
+  the spoken name for p1_line2_acctidentifier", fr at 14/14 questions) is
+  gone. Overall secretary volume collapsed (fr 14 -> 2/0/0); the one es run
+  at 14 calls was recall/status traffic, not name lookups (tracked as the
+  known chatty-secretary diagnostic, not this epic's surface). This closes
+  the D7 register residual too: the zmlo A/B above left 1/3 es greetings
+  reading an English section title; with section labels now baked +
+  delivered (tupu.2), all 12 sweep greetings speak the title in-language.
+- **Rubric criterion 2 PASS: field names spoken in-language everywhere**
+  (greetings incl. section titles; guidance; hints) with zero raw-English
+  field-name readouts in 12/12 runs. Residual: one 3-word English filler
+  phrase ("Let me check") in one hi run -- a register slip, not a field name.
+- Fills: hi a perfect 42/42 (baseline 13/14 with the invented-value
+  incident); es 40/42; fr 41/42. *The one bad zh run (6/14) was a mid-run
+  STALL -- 7 consecutive unfilled fields after a spelled-name mishear
+  (LYNH), all scored missing; notably NOT the wrong-field desync (zero
+  wrong-field fills in all 3 zh runs). Stall/desync-class investigation
+  remains bd 66ek.1's n>=3 A/B (r5m7).
+- Criterion 1 (kit coverage) and 4 (English byte-identity) were verified in
+  the tupu.1/tupu.2 reviews (bake --check fully covered x4 kits; no-override
+  snapshot pins).
+
 ## Caveats
 
 - One run per language; D2/D3-class events are known to be intermittent.
