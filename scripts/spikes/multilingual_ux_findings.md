@@ -152,6 +152,28 @@ one rerun each of the two most affected languages:
 | 20260722T215056Z | ru | 12/14 | Input transcription now predominantly RUSSIAN (de/es garble gone -- the ru-RU bias works); confirms transcribed as Russian (lo37); spell-back in LATIN letter names and all three names filled correctly incl. LINH (s39z; baseline mis-filled LIN); greeting translated the section title. Kit-baked Russian option labels covered 100% (text cost $0 -- kit precedence). Two misses: a street transcription typo ("Westhheimer") and apt "12" filled as "19" -- the ww9y short-numeric class AGAIN, second language, recorded on the bead. |
 | 20260722T215331Z | zh | **14/14** | No name-block desync this run (baseline: 9/14 with 3 shifted names); declines stored EMPTY, no literal "N/A" (nb2c); Latin spell-backs; confirms transcribed as Chinese (lo37). Single run -- desync non-recurrence is NOT proven (that is A1's n>=3 job, bd 66ek.1). |
 
+## Register-guidance A/B (bd polyglot-pdf-zmlo, 2026-07-22)
+
+Language-agnostic REGISTER rule (+ title translation) added to both SIs and
+A/B'd on ru (n=3 per arm; baseline = the m1lg flag-ON runs, identical config
+except the rule) then checked on es (n=3, rule on):
+
+| arm | fills | mean words/turn | notes |
+|---|---|---|---|
+| ru baseline (231520/231732/231941Z) | 38/42 | 7.7 | short-question sentences incl. bare field asks ("Номер квартиры?") |
+| ru + register rule (232428/232637/232852Z) | 37/42 | 8.5 | fuller courteous asks ("Не могли бы вы назвать..."); remaining short sentences are almost all "Верно?" confirm tags (desirable brevity) |
+| es baseline (20260723T000401/000612/000822Z, run at the pre-rule commit via a scratch worktree) | 40/42 | 7.3 | warm but brief |
+| es + register rule (233334/233604/233836Z) | 40/42 | 10.2 | +40% fuller turns, same fills; register stays warm |
+
+Verdict: SHIPPED (the general rule, per maintainer preference; no
+per-language register controls needed on this evidence -- both languages
+show fuller turns at identical fill accuracy). Honest residuals:
+(a) the effect is modest and n=3; (b) title translation is IMPROVED but not
+eliminated -- 1 of 3 es greetings still read the section title in English
+("Application Information"); the structural fix is delivering TRANSLATED
+section labels, noted on bd polyglot-pdf-tupu.2 (the spoken-name delivery
+pass touches the same metadata channel).
+
 ## Epic B verification sweep (bd polyglot-pdf-tupu.4, 2026-07-23)
 
 12 runs (es/zh/hi/fr x3, 14q DTI slices) at the tupu.2 PR head (#466 --
@@ -173,7 +195,10 @@ epic rubric:
   the spoken name for p1_line2_acctidentifier", fr at 14/14 questions) is
   gone. Overall secretary volume collapsed (fr 14 -> 2/0/0); the one es run
   at 14 calls was recall/status traffic, not name lookups (tracked as the
-  known chatty-secretary diagnostic, not this epic's surface).
+  known chatty-secretary diagnostic, not this epic's surface). This closes
+  the D7 register residual too: the zmlo A/B above left 1/3 es greetings
+  reading an English section title; with section labels now baked +
+  delivered (tupu.2), all 12 sweep greetings speak the title in-language.
 - **Rubric criterion 2 PASS: field names spoken in-language everywhere**
   (greetings incl. section titles; guidance; hints) with zero raw-English
   field-name readouts in 12/12 runs. Residual: one 3-word English filler

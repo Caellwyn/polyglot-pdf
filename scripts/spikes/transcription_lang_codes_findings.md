@@ -44,3 +44,33 @@ connects x 1 short text turn (< $0.05 total; Gate-2 trivial-pilot).
   session-language transcription accuracy (the "distrito quintal" class). That
   is a behavioral question for the voice-harness / live testers, not a config
   acceptance question.
+
+## Addendum -- speech_config.language_code (bd polyglot-pdf-m1lg, 2026-07-22)
+
+**Question:** Google's Live docs recommend the API-level
+`speech_config.language_code` match the user's language (framed for the
+cascaded model). The adapter never set it. Does the production NATIVE-AUDIO
+tier accept it, and does it reduce output-language slips?
+
+**Acceptance (same deploy-fidelity probe, `--arm speech-lang`):** ACCEPTED --
+`speech_config={'language_code':'es-US'}` on the full deploy config connected
+and streamed audio cleanly on Vertex `gemini-live-2.5-flash-native-audio`
+(one connect, <$0.05).
+
+**Behavioral A/B (ru 14q DTI slices, n=3 per arm, ~$3.3; runs
+20260722T230852Z/231100Z/231312Z off vs 231520Z/231732Z/231941Z on):**
+
+| arm | fills | Latin-word intrusions in model speech (per run) |
+|---|---|---|
+| flag OFF | 38/42 | 0 / 1 ("legally") / 5 ("Form, In Care Of Name") |
+| flag ON | 38/42 | 1 ("legally") / 4 ("In Care Of Name") / 0 |
+
+No reliability regression; no measurable slip reduction at n=3. The dominant
+"intrusion" class is the ENGLISH FIELD NAME read aloud -- the untranslated
+spoken-name problem (epic polyglot-pdf-tupu), which no speech-level setting
+can fix; the residual single-word slip ("legally") appears once per arm.
+
+**Verdict: SHIPPED default ON** (`SPEECH_LANGUAGE_CODE_ENABLED`, kill-switch
+mirroring the transcription-hint flag): it is Google's documented
+recommendation, endpoint-accepted, free, and regression-clean. Claimed on the
+honest basis of "recommended + harmless", NOT on a measured slip win.

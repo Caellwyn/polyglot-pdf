@@ -17,7 +17,7 @@ Pins:
   4. A per-language failure (None or exception) skips that language, reports
      it in failed_languages, and does not disturb the others; a re-run with a
      healthy adapter fills exactly the gap.
-  5. End to end: build_option_label_overrides on a baked schema makes ZERO
+  5. End to end: build_translation_overrides on a baked schema makes ZERO
      translate_labels calls (the precedence no-op the design promises).
 
 ASCII only (scar #6): non-ASCII fixture strings use unicode escapes.
@@ -109,6 +109,9 @@ async def test_bake_one_call_per_language_over_deduped_missing():
         # carry no name/spoken_name, so the name half is a no-op here.
         "spoken_names": 0, "names_missing": 0, "names_translated": 0,
         "fields_updated": 0,
+        # Section-label bake keys (bd tupu.2); fixture has no sections.
+        "section_labels": 0, "sections_missing": 0,
+        "sections_translated": 0, "sections_updated": 0,
     }
 
 
@@ -309,11 +312,11 @@ async def test_baked_schema_makes_runtime_secretary_a_noop():
 
     runtime_ai = MagicMock()
     runtime_ai.translate_labels = AsyncMock(return_value={})
-    overrides = await ot.build_option_label_overrides(
+    overrides = await ot.build_translation_overrides(
         schema, "Spanish", runtime_ai)
 
     runtime_ai.translate_labels.assert_not_awaited()
-    assert overrides == {
+    assert overrides.option_labels == {
         "Male": ESPANOL_MASCULINO, "Female": ESPANOL_FEMENINO,
         "Yes": ESPANOL_SI, "No": "No"}
 

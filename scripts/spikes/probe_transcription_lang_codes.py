@@ -54,7 +54,7 @@ async def _wait_for_audio(session, timeout: float = 30.0):
         return None
 
 
-async def run_arm(label: str, codes) -> bool:
+async def run_arm(label: str, codes, speech_language_code: str | None = None) -> bool:
     settings = get_settings()
     model = os.getenv("GEMINI_LIVE_MODEL", settings.MODEL_NATIVE)
     api_key = os.getenv("GEMINI_API_KEY")
@@ -75,9 +75,17 @@ async def run_arm(label: str, codes) -> bool:
     settings.TRANSCRIPTION_LANGUAGE_HINT_ENABLED = True
 
     config = adapter._build_live_config(settings)
+    # bd polyglot-pdf-m1lg: second endpoint-verification delta -- Google's Live
+    # docs recommend the API-level speech_config.language_code match the user's
+    # language (framed for the cascaded model; native-audio acceptance is
+    # unverified). The adapter never sets speech_config today, so this is a
+    # pure additive delta on the deploy-shaped config.
+    if speech_language_code:
+        config["speech_config"] = {"language_code": speech_language_code}
     print(f"[{label}] model={model} vertexai={settings.VERTEXAI}")
     print(f"[{label}] input_audio_transcription={config.get('input_audio_transcription')}")
     print(f"[{label}] output_audio_transcription={config.get('output_audio_transcription')}")
+    print(f"[{label}] speech_config={config.get('speech_config')}")
 
     try:
         async with adapter.connect(model=model, config=config) as session:
@@ -95,6 +103,20 @@ async def run_arm(label: str, codes) -> bool:
 
 
 async def main():
+    # bd m1lg: --arm speech-lang probes speech_config.language_code instead of
+    # the (already-verified, y25o) transcription language_codes arm.
+    if "--arm" in sys.argv and "speech-lang" in sys.argv:
+        ok = await run_arm("speech-lang-on", ["es-US"], speech_language_code="es-US")
+        if not ok:
+            print("speech-lang-on failed; running control (no speech_config) to isolate...")
+            control = await run_arm("speech-lang-off", ["es-US"])
+            print(f"CONTROL (no speech_config): "
+                  f"{'OK -- the endpoint REJECTS speech_config.language_code' if control else 'ALSO FAILED (endpoint/model issue, not the field)'}")
+            sys.exit(1)
+        print("VERDICT: speech_config.language_code ACCEPTED by the endpoint "
+              "(speech-lang-on arm clean)")
+        return
+
     ok = await run_arm("hint-on", ["es-US"])
     if not ok:
         print("hint-on failed; running hint-off control to isolate the cause...")

@@ -628,6 +628,11 @@ class FormSection(BaseModel):
     """Form section definition"""
     id: str
     label: str
+    # Session-language translations of label, keyed by lowercase English
+    # language name -- same convention as option label_translations / field
+    # spoken_name_translations (bd polyglot-pdf-tupu.2; kit coverage keeps
+    # session start free of a live translate call).
+    label_translations: Optional[Dict[str, str]] = None
     description: Optional[str] = None
     order: int = Field(description="Display order")
     fields: List[str] = Field(description="Field IDs in this section")
