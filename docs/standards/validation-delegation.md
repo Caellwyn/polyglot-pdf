@@ -455,8 +455,10 @@ class ITextAI(ABC):
   glossary/register/DNT/digits prompt injection
   (`backend/services/translation_lint.py::glossary_prompt_context`),
   temperature 0.0, an `ambiguous` self-flag list in the response. Same
-  `None` fail-open signal and non-abstract-default convention. Consumers
-  land with the forward-path migration (bd polyglot-pdf-alry).
+  `None` fail-open signal and non-abstract-default convention. Its
+  consumers are the bake AND the runtime session-start fallback
+  (`bake_label_translations` / `build_translation_overrides`, bd
+  polyglot-pdf-alry -- the forward paths are unified on this call).
 - The verify/rectify trio (bd polyglot-pdf-9ikj) completes the port:
   `back_translate(items, ...)` ({id: foreign} -> {id: english}; meant to
   run on a separate LITE-tier instance for independence),

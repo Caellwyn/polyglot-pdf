@@ -342,11 +342,20 @@ def _bake_text_ai():
     ai = make_pro(
         judge_rules={"Unico": (True, "wrong sense for filing status")},
         rectify_rules={"Unico": "Soltero"})
+    table = {"Single": "Unico", "Married": "Casado"}
 
-    async def _translate(labels, language_name, language_code):
-        return {"Single": "Unico", "Married": "Casado"}
+    async def _translate(items, language_name, language_code, *,
+                         form_name=None, glossary_context=None):
+        result = {}
+        for item in items:
+            if item["kind"] == "option-set":
+                result[item["id"]] = {"options": {
+                    s: table[s] for s in item["options"] if s in table}}
+            elif item.get("text") in table:
+                result[item["id"]] = {"translation": table[item["text"]]}
+        return {"items": result, "ambiguous": []}
 
-    ai.translate_labels = AsyncMock(side_effect=_translate)
+    ai.translate_items = AsyncMock(side_effect=_translate)
     return ai
 
 
@@ -362,7 +371,7 @@ async def test_bake_verify_corrects_before_fanout_and_reports_flags():
     schema = _schema()
     report = await ot.bake_label_translations(
         schema, _bake_text_ai(), {"spanish": "es-US"},
-        verify=True, verify_lite_ai=make_lite(), verify_glossary=_G)
+        verify=True, verify_lite_ai=make_lite(), glossary=_G)
 
     # The corrected value fanned out to EVERY location of the source label.
     for field_id, value in (("status", "single"), ("status2", "single2")):
@@ -403,7 +412,7 @@ async def test_bake_default_on_reads_settings(monkeypatch):
     schema = _schema()
     report = await ot.bake_label_translations(
         schema, _bake_text_ai(), {"spanish": "es-US"},
-        verify_lite_ai=make_lite(), verify_glossary=_G)
+        verify_lite_ai=make_lite(), glossary=_G)
     assert "flags" in report  # the gate ran without an explicit verify=True
 
 
@@ -446,7 +455,7 @@ async def test_bake_verify_outage_leaves_kit_byte_identical():
     report = await ot.bake_label_translations(
         schema_broken, _bake_text_ai(), {"spanish": "es-US"},
         verify=True, verify_lite_ai=make_lite(fail=True),
-        verify_glossary=_G)
+        glossary=_G)
     assert json.dumps(schema_broken, sort_keys=True) \
         == json.dumps(schema_off, sort_keys=True)
     assert report["languages"]["spanish"]["verify"]["available"] is False

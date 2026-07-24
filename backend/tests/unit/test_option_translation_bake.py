@@ -5,9 +5,12 @@ so the runtime secretary translation (bd ow1e) short-circuits via the kit
 precedence rule and translations become deterministic, reviewable artifacts.
 
 Pins:
-  1. One translate_labels call per language over the DEDUPED missing set; the
-     result fans out to every option carrying that label, under the CANONICAL
-     key (the lowercase spoken-language name).
+  1. One translate_items call per language (bd polyglot-pdf-alry: the
+     context-carrying payload -- option labels ride as SETS with their
+     parent question, field names / section titles as single items; sets
+     dedupe by their ordered label tuple); the result fans out to every
+     option carrying that label, under the CANONICAL key (the lowercase
+     spoken-language name).
   2. only_missing=True is idempotent: a second run makes zero calls and leaves
      the schema byte-identical; an option covered under ANY accepted key form
      (name / short code / full BCP-47) counts as covered and is not rewritten;
@@ -87,16 +90,44 @@ _TRANSLATIONS = {
 }
 
 
-def _text_ai():
-    """Healthy stub: answers from _TRANSLATIONS by language name."""
+def _items_response(items, table):
+    """A translate_items-shaped response answering from a flat table."""
+    result = {}
+    for item in items:
+        if item["kind"] == "option-set":
+            options = {src: table[src] for src in item["options"]
+                       if src in table}
+            if options:
+                result[item["id"]] = {"options": options}
+        elif item.get("text") in table:
+            result[item["id"]] = {"translation": table[item["text"]]}
+    return {"items": result, "ambiguous": []}
+
+
+def _items_ai(tables):
+    """Healthy stub: answers translate_items from `tables` by language."""
     ai = MagicMock()
 
-    async def _translate(labels, language_name, language_code):
-        table = _TRANSLATIONS[language_name.lower()]
-        return {label: table[label] for label in labels if label in table}
+    async def _translate(items, language_name, language_code, *,
+                         form_name=None, glossary_context=None):
+        return _items_response(items, tables[language_name.lower()])
 
-    ai.translate_labels = AsyncMock(side_effect=_translate)
+    ai.translate_items = AsyncMock(side_effect=_translate)
     return ai
+
+
+def _text_ai():
+    return _items_ai(_TRANSLATIONS)
+
+
+def _payload_kinds(call):
+    """(kinds, option_set_tuples, single_texts) of one translate_items call."""
+    items = call.args[0]
+    kinds = sorted(i["kind"] for i in items)
+    sets = sorted(tuple(i["options"]) for i in items
+                  if i["kind"] == "option-set")
+    texts = sorted(i["text"] for i in items if i["kind"] != "option-set")
+    return kinds, sets, texts
 
 
 def _options(schema, field_id):
@@ -111,10 +142,15 @@ async def test_bake_one_call_per_language_over_deduped_missing():
     ai = _text_ai()
     report = await ot.bake_label_translations(schema, ai, LANGS)
 
-    assert ai.translate_labels.await_count == 2
-    for call in ai.translate_labels.await_args_list:
-        assert call.args[0] == ["Male", "Female", "Yes", "No"]
-    names = sorted(call.args[1] for call in ai.translate_labels.await_args_list)
+    assert ai.translate_items.await_count == 2
+    for call in ai.translate_items.await_args_list:
+        kinds, sets, texts = _payload_kinds(call)
+        # The context payload: two DEDUPED option sets (sex; the identical
+        # Yes/No twins collapse to one set), no field names/sections here.
+        assert kinds == ["option-set", "option-set"]
+        assert sets == [("Male", "Female"), ("Yes", "No")]
+        assert texts == []
+    names = sorted(call.args[1] for call in ai.translate_items.await_args_list)
     assert names == ["French", "Spanish"]
     assert report["changed"] is True
     assert report["failed_languages"] == []
@@ -162,7 +198,7 @@ async def test_bake_only_missing_is_idempotent():
     ai2 = _text_ai()
     report = await ot.bake_label_translations(schema, ai2, LANGS)
 
-    ai2.translate_labels.assert_not_awaited()
+    ai2.translate_items.assert_not_awaited()
     assert report["changed"] is False
     assert json.dumps(schema, sort_keys=True) == baked
 
@@ -177,7 +213,7 @@ async def test_bake_existing_any_accepted_key_counts_as_covered(key):
     ai = _text_ai()
     report = await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
 
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
     assert report["changed"] is False
     # No rewrite to the canonical key -- minimal diffs.
     assert _options(schema, "sex")[0]["label_translations"] == {
@@ -198,7 +234,7 @@ async def test_bake_reuses_existing_translation_for_uncovered_duplicate():
     ai = _text_ai()
     report = await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
 
-    ai.translate_labels.assert_not_awaited()  # "Yes" is kit-covered
+    ai.translate_items.assert_not_awaited()  # "Yes" is kit-covered
     assert _options(schema, "confirm2")[0]["label_translations"] == {
         "spanish": ESPANOL_SI}
     assert report["changed"] is True
@@ -239,7 +275,7 @@ async def test_bake_no_options_schema_is_noop():
     ai = _text_ai()
     report = await ot.bake_label_translations(schema, ai, LANGS)
 
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
     assert report["changed"] is False
 
 
@@ -253,7 +289,7 @@ async def test_bake_skips_table_column_options():
     ai = _text_ai()
     report = await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
 
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
     assert report["changed"] is False
 
 
@@ -263,7 +299,7 @@ async def test_bake_skips_english():
     ai = _text_ai()
     report = await ot.bake_label_translations(schema, ai, {"english": "en-US"})
 
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
     assert report["changed"] is False
     assert report["languages"]["english"]["labels"] == 0
 
@@ -276,14 +312,15 @@ async def test_bake_per_language_failure_skips_and_reports(mode):
     schema = _schema()
     ai = MagicMock()
 
-    async def _flaky(labels, language_name, language_code):
+    async def _flaky(items, language_name, language_code, *,
+                     form_name=None, glossary_context=None):
         if language_name.lower() == "french":
             if mode == "raise":
                 raise RuntimeError("boom")
             return None
-        return {label: _TRANSLATIONS["spanish"].get(label, "") for label in labels}
+        return _items_response(items, _TRANSLATIONS["spanish"])
 
-    ai.translate_labels = AsyncMock(side_effect=_flaky)
+    ai.translate_items = AsyncMock(side_effect=_flaky)
     report = await ot.bake_label_translations(schema, ai, LANGS)
 
     assert report["failed_languages"] == ["french"]
@@ -296,8 +333,8 @@ async def test_bake_per_language_failure_skips_and_reports(mode):
     # Re-run with a healthy adapter fills exactly the french gap.
     ai2 = _text_ai()
     report2 = await ot.bake_label_translations(schema, ai2, LANGS)
-    assert ai2.translate_labels.await_count == 1
-    assert ai2.translate_labels.await_args.args[1] == "French"
+    assert ai2.translate_items.await_count == 1
+    assert ai2.translate_items.await_args.args[1] == "French"
     assert report2["failed_languages"] == []
     assert _options(schema, "sex")[0]["label_translations"] == {
         "spanish": ESPANOL_MASCULINO, "french": "Homme"}
@@ -310,7 +347,12 @@ async def test_bake_partial_response_leaves_label_missing_not_failed():
         {"value": "F", "label": "Female"},
     ]}])
     ai = MagicMock()
-    ai.translate_labels = AsyncMock(return_value={"Male": ESPANOL_MASCULINO})
+
+    async def _partial(items, language_name, language_code, *,
+                       form_name=None, glossary_context=None):
+        return _items_response(items, {"Male": ESPANOL_MASCULINO})
+
+    ai.translate_items = AsyncMock(side_effect=_partial)
     report = await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
 
     assert report["failed_languages"] == []
@@ -327,11 +369,11 @@ async def test_baked_schema_makes_runtime_secretary_a_noop():
     await ot.bake_label_translations(schema, _text_ai(), {"spanish": "es-US"})
 
     runtime_ai = MagicMock()
-    runtime_ai.translate_labels = AsyncMock(return_value={})
+    runtime_ai.translate_items = AsyncMock(return_value={"items": {}})
     overrides = await ot.build_translation_overrides(
         schema, "Spanish", runtime_ai)
 
-    runtime_ai.translate_labels.assert_not_awaited()
+    runtime_ai.translate_items.assert_not_awaited()
     assert overrides.option_labels == {
         "Male": ESPANOL_MASCULINO, "Female": ESPANOL_FEMENINO,
         "Yes": ESPANOL_SI, "No": "No"}
@@ -361,14 +403,7 @@ def _named_schema():
 
 
 def _name_text_ai():
-    ai = MagicMock()
-
-    async def _translate(labels, language_name, language_code):
-        table = _NAME_TRANSLATIONS[language_name.lower()]
-        return {s: table[s] for s in labels if s in table}
-
-    ai.translate_labels = AsyncMock(side_effect=_translate)
-    return ai
+    return _items_ai(_NAME_TRANSLATIONS)
 
 
 @pytest.mark.asyncio
@@ -380,9 +415,15 @@ async def test_bake_translates_spoken_names_in_the_same_single_call():
     ai = _name_text_ai()
     report = await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
 
-    assert ai.translate_labels.await_count == 1  # ONE call for the union
-    sent = ai.translate_labels.await_args.args[0]
-    assert sent == ["Male", "Female", "family name", "given name"]
+    assert ai.translate_items.await_count == 1  # ONE call for everything
+    kinds, sets, texts = _payload_kinds(ai.translate_items.await_args)
+    assert kinds == ["field-name", "field-name", "option-set"]
+    assert sets == [("Male", "Female")]
+    assert texts == ["family name", "given name"]
+    # The option set carries its field's spoken name as the parent question.
+    set_item = next(i for i in ai.translate_items.await_args.args[0]
+                    if i["kind"] == "option-set")
+    assert set_item["parent_question"] == "family name"
 
     fields = {f["id"]: f for f in schema["fields"]}
     for fid in ("f1", "f3", "sex"):
@@ -412,7 +453,7 @@ async def test_spoken_name_bake_is_idempotent_and_respects_existing_keys():
     before = json.dumps(schema, sort_keys=True)
     ai2 = _name_text_ai()
     report2 = await ot.bake_label_translations(schema, ai2, {"spanish": "es-US"})
-    ai2.translate_labels.assert_not_awaited()
+    ai2.translate_items.assert_not_awaited()
     assert json.dumps(schema, sort_keys=True) == before
     assert report2["changed"] is False
 
@@ -423,7 +464,7 @@ async def test_spoken_name_failure_skips_language_and_rerun_fills_gap():
     re-run fills exactly the gap (mirrors the option-label pin)."""
     schema = _named_schema()
     failing = MagicMock()
-    failing.translate_labels = AsyncMock(return_value=None)
+    failing.translate_items = AsyncMock(return_value=None)
     report = await ot.bake_label_translations(schema, failing, {"spanish": "es-US"})
     assert report["failed_languages"] == ["spanish"]
     assert "spoken_name_translations" not in schema["fields"][0]
@@ -436,21 +477,60 @@ async def test_spoken_name_failure_skips_language_and_rerun_fills_gap():
 
 
 @pytest.mark.asyncio
-async def test_shared_string_translates_once_and_lands_in_both_places():
-    """A string that is BOTH an option label and a field spoken name rides the
-    union once (single call, single deduped entry) and fans out to
-    label_translations AND spoken_name_translations (fresh-eyes pin, tupu.1)."""
+async def test_ambiguous_self_flags_surface_as_warning_findings():
+    """The translator's `ambiguous` self-flag (bd alry, exit criterion 3)
+    becomes a translation-ambiguous-source WARNING finding in the report,
+    path-resolved to the kit location -- even with the verify gate OFF
+    (the flag comes from the FORWARD call, not the verify loop)."""
+    schema = {"fields": [
+        {"id": "status", "type": "radio", "spoken_name": "marital status",
+         "options": [{"value": "single", "label": "Single"}]},
+    ]}
+    ai = MagicMock()
+
+    async def _translate(items, language_name, language_code, *,
+                         form_name=None, glossary_context=None):
+        response = _items_response(items, {"Single": "Soltero(a)"})
+        # The translator flags the option-set item as under-determined.
+        response["ambiguous"] = [
+            i["id"] for i in items if i["kind"] == "option-set"]
+        return response
+
+    ai.translate_items = AsyncMock(side_effect=_translate)
+    report = await ot.bake_label_translations(
+        schema, ai, {"spanish": "es-US"})
+
+    flags = report["flags"]
+    assert len(flags) == 1
+    assert flags[0]["rule"] == "translation-ambiguous-source"
+    assert flags[0]["severity"] == "WARNING"
+    assert flags[0]["field_id"] == "status"
+    assert flags[0]["path"].endswith(
+        ".options[single].label_translations.spanish")
+    # The translation itself still baked (the flag is advisory).
+    opt = schema["fields"][0]["options"][0]
+    assert opt["label_translations"]["spanish"] == "Soltero(a)"
+
+
+@pytest.mark.asyncio
+async def test_shared_string_rides_one_call_and_lands_in_both_places():
+    """A string that is BOTH an option label and a field spoken name rides
+    ONE translate_items call -- once per KIND (an option-set entry + a
+    field-name entry; same text, different context, deliberately -- bd
+    alry) -- and the results fan out to label_translations AND
+    spoken_name_translations."""
     schema = {"fields": [
         {"id": "confirm", "type": "radio", "spoken_name": "Yes", "options": [
             {"value": "y", "label": "Yes"},
         ]},
     ]}
-    ai = MagicMock()
-    ai.translate_labels = AsyncMock(return_value={"Yes": ESPANOL_SI})
+    ai = _items_ai({"spanish": {"Yes": ESPANOL_SI}})
     await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
 
-    ai.translate_labels.assert_awaited_once()
-    assert ai.translate_labels.await_args.args[0] == ["Yes"]  # deduped union
+    ai.translate_items.assert_awaited_once()
+    kinds, sets, texts = _payload_kinds(ai.translate_items.await_args)
+    assert kinds == ["field-name", "option-set"]
+    assert sets == [("Yes",)] and texts == ["Yes"]
     field = schema["fields"][0]
     assert field["options"][0]["label_translations"] == {"spanish": ESPANOL_SI}
     assert field["spoken_name_translations"] == {"spanish": ESPANOL_SI}

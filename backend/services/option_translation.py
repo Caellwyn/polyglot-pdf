@@ -30,11 +30,19 @@ from typing import Any, Dict, List, Optional, Tuple
 import structlog
 
 from backend.services.schema_lint import SEVERITY_WARNING, LintFinding
-from backend.services.translation_lint import load_glossary
+from backend.services.translation_lint import (
+    glossary_prompt_context,
+    load_glossary,
+)
 from backend.services.translation_verify import (
     VerifyFlag,
     verify_fresh_translations,
 )
+
+# The translator's own under-determined-source self-flag (bd polyglot-pdf-alry;
+# the flag taxonomy's fourth kind -- usually fixed by enriching context or the
+# glossary, not by editing the string).
+FLAG_AMBIGUOUS = "translation-ambiguous-source"
 from backend.utils.language_codes import bcp47_codes_for_spoken_language
 
 _log = structlog.get_logger(__name__)
@@ -188,7 +196,7 @@ async def bake_label_translations(
     concurrency: int = 4,
     verify: Optional[bool] = None,
     verify_lite_ai: Any = None,
-    verify_glossary: Optional[Dict[str, Any]] = None,
+    glossary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Bake label_translations into a kit schema, in place (bd polyglot-pdf-2h9j).
 
@@ -233,11 +241,14 @@ async def bake_label_translations(
     if verify_enabled is None:
         from backend.config import get_settings
         verify_enabled = get_settings().TRANSLATION_VERIFY_ENABLED
-    if verify_enabled and verify_glossary is None:
-        verify_glossary = load_glossary()
+    if glossary is None:
+        # Loaded UNCONDITIONALLY (bd alry): the glossary injects into the
+        # FORWARD translate_items prompt too, not just the verify loop.
+        glossary = load_glossary()
     if verify_enabled and verify_lite_ai is None:
         verify_lite_ai = _build_verify_lite_ai()
     verify_flags: List[Tuple[str, VerifyFlag]] = []
+    form_name = _form_name(schema)
 
     async def _bake_one(name: str, code: str) -> None:
         name = name.strip().lower()
@@ -290,17 +301,52 @@ async def bake_label_translations(
         union_missing = list(dict.fromkeys(
             [*missing, *names_missing, *sections_missing]))
         if union_missing:
+            # Context-carrying forward path (bd alry, plan Part A.1): ONE
+            # translate_items call per language -- kinds, form name, parent
+            # questions, and option sets as units, glossary injected.
+            payload_items = _build_context_items(
+                schema, missing, names_missing, sections_missing)
             try:
                 async with semaphore:
-                    translated = await text_ai.translate_labels(
-                        union_missing, name.capitalize(), code
+                    raw = await text_ai.translate_items(
+                        payload_items, name.capitalize(), code,
+                        form_name=form_name,
+                        glossary_context=glossary_prompt_context(
+                            glossary, name),
                     )
             except Exception as exc:  # noqa: BLE001 -- skip-and-report by design
                 _log.warning(
                     "option_translation_bake_language_failed",
                     language=name, exc_type=type(exc).__name__,
                 )
-                translated = None
+                raw = None
+            translated, ambiguous_sources = _flatten_items_result(
+                payload_items, raw)
+            # Ambiguous self-flags ride the same report channel as verify
+            # flags (kind resolved by membership; a source in several kinds
+            # flags each).
+            for source in set(ambiguous_sources):
+                if source in set(missing):
+                    verify_flags.append((name, VerifyFlag(
+                        taxonomy=FLAG_AMBIGUOUS, kind="option-label",
+                        source=source,
+                        message="translator self-flagged the source as "
+                                "under-determined; enrich context/glossary "
+                                "rather than editing the string")))
+                if source in set(names_missing):
+                    verify_flags.append((name, VerifyFlag(
+                        taxonomy=FLAG_AMBIGUOUS, kind="field-name",
+                        source=source,
+                        message="translator self-flagged the source as "
+                                "under-determined; enrich context/glossary "
+                                "rather than editing the string")))
+                if source in set(sections_missing):
+                    verify_flags.append((name, VerifyFlag(
+                        taxonomy=FLAG_AMBIGUOUS, kind="section-title",
+                        source=source,
+                        message="translator self-flagged the source as "
+                                "under-determined; enrich context/glossary "
+                                "rather than editing the string")))
             if translated is None:
                 entry["failed"] = True
                 report["failed_languages"].append(name)
@@ -349,7 +395,7 @@ async def bake_label_translations(
                         },
                         pro_ai=text_ai,
                         lite_ai=verify_lite_ai,
-                        glossary=verify_glossary,
+                        glossary=glossary,
                     )
                 except Exception as exc:  # noqa: BLE001 -- fail-open
                     _log.warning(
@@ -431,7 +477,9 @@ async def bake_label_translations(
         _bake_one(name, code) for name, code in languages.items()
     ))
     report["failed_languages"].sort()
-    if verify_enabled:
+    if verify_enabled or verify_flags:
+        # (verify_flags may carry translator ambiguous-source flags even
+        # with the verify loop off -- they come from the forward call.)
         # Resolve each flag's SOURCE string to its kit path(s) post-fan-out
         # (one WARNING finding per location, parent-carrying so
         # schema_lint.field_id_of derives a clickable field id). The flags
@@ -543,6 +591,121 @@ def _iter_section_dicts(schema: Optional[Dict[str, Any]]):
             yield section
 
 
+def _form_name(schema: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Human form reference for the translate_items context payload, from
+    form_metadata the kit already carries."""
+    meta = (schema or {}).get("form_metadata")
+    if not isinstance(meta, dict):
+        return None
+    title = meta.get("title")
+    number = meta.get("form_number")
+    if isinstance(title, str) and title.strip():
+        if isinstance(number, str) and number.strip():
+            return "%s (Form %s)" % (title.strip(), number.strip())
+        return title.strip()
+    if isinstance(number, str) and number.strip():
+        return "Form %s" % number.strip()
+    return None
+
+
+def _build_context_items(
+    schema: Optional[Dict[str, Any]],
+    missing_labels: List[str],
+    missing_names: List[str],
+    missing_sections: List[str],
+) -> List[Dict[str, Any]]:
+    """The structured translate_items payload, built from data the schema
+    already holds (bd polyglot-pdf-alry, plan Part A.1): field names and
+    section titles as single items; option labels grouped into their SETS
+    (with the field's spoken name as parent_question) so the choices
+    translate as a coherent, mutually distinguishable group. Sets dedupe by
+    their ordered label tuple (identical Yes/No sets translate once); a set
+    is included whenever ANY of its labels is missing -- the whole set goes
+    into the payload for context, and the caller's membership filtering
+    keeps kit precedence intact for the covered labels."""
+    items: List[Dict[str, Any]] = []
+    for index, text in enumerate(missing_names):
+        items.append({"id": "fn:%d" % index, "kind": "field-name",
+                      "text": text})
+    for index, text in enumerate(missing_sections):
+        items.append({"id": "st:%d" % index, "kind": "section-title",
+                      "text": text})
+    missing_set = set(missing_labels)
+    seen_sets: set = set()
+    set_index = 0
+    for field in (schema or {}).get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        options = field.get("options") or field.get("allowed_values")
+        labels = [
+            opt.get("label") for opt in options or []
+            if isinstance(opt, dict) and isinstance(opt.get("label"), str)
+            and opt.get("label").strip()
+        ]
+        if not labels or not (set(labels) & missing_set):
+            continue
+        key = tuple(labels)
+        if key in seen_sets:
+            continue
+        seen_sets.add(key)
+        entry: Dict[str, Any] = {
+            "id": "os:%d" % set_index, "kind": "option-set",
+            "options": labels,
+        }
+        parent = field.get("spoken_name") or field.get("name")
+        if isinstance(parent, str) and parent.strip():
+            entry["parent_question"] = parent
+        items.append(entry)
+        set_index += 1
+    return items
+
+
+def _flatten_items_result(
+    payload_items: List[Dict[str, Any]],
+    raw: Optional[Dict[str, Any]],
+) -> Tuple[Optional[Dict[str, str]], List[str]]:
+    """(flat {source: translation}, ambiguous source strings) from a
+    translate_items result. None raw (the adapter's fail-open signal)
+    passes through as (None, []). A string that is both an option label
+    and a field name translates once per kind; the field-name rendering
+    wins in the flat map (applied last) -- both kinds' consumers filter by
+    their own membership sets, so kit precedence is unaffected."""
+    if raw is None:
+        return None, []
+    by_id = {item["id"]: item for item in payload_items}
+    flat: Dict[str, str] = {}
+    results = raw.get("items") if isinstance(raw, dict) else None
+    results = results if isinstance(results, dict) else {}
+    for item_id, value in results.items():
+        request = by_id.get(item_id)
+        if request is None or not isinstance(value, dict):
+            continue
+        if request["kind"] == "option-set":
+            for source, translated in (value.get("options") or {}).items():
+                if isinstance(source, str) and isinstance(translated, str) \
+                        and translated.strip():
+                    flat[source] = translated.strip()
+    for item_id, value in results.items():
+        request = by_id.get(item_id)
+        if request is None or not isinstance(value, dict):
+            continue
+        if request["kind"] != "option-set":
+            translated = value.get("translation")
+            if isinstance(translated, str) and translated.strip():
+                flat[request["text"]] = translated.strip()
+    ambiguous_sources: List[str] = []
+    raw_ambiguous = raw.get("ambiguous") if isinstance(raw, dict) else None
+    for item_id in raw_ambiguous or []:
+        request = by_id.get(item_id) if isinstance(item_id, str) else None
+        if request is None:
+            continue
+        if request["kind"] == "option-set":
+            ambiguous_sources.extend(request["options"])
+        else:
+            ambiguous_sources.append(request["text"])
+    return flat, ambiguous_sources
+
+
 @dataclass(frozen=True)
 class TranslationOverrides:
     """The session-language translation maps, all keyed by ENGLISH source
@@ -592,11 +755,25 @@ async def build_translation_overrides(
     if union:
         codes = bcp47_codes_for_spoken_language(language_name)
         language_code = codes[0] if codes else ""
-        translated = await text_ai.translate_labels(
-            union, language_name, language_code
+        # The SAME context-carrying call the bake makes (bd alry, plan A.5:
+        # the runtime path is unified, not silently diverged) -- the full
+        # schema is in hand, so the context payload is free. HONEST
+        # RESIDUAL, stated not hidden: runtime translations remain
+        # UNVERIFIED (no judge loop at session start -- the bounded
+        # greeting await cannot absorb a judge round-trip); after the V5
+        # re-bake this path fires only for new/edited kits pre-bake.
+        payload_items = _build_context_items(
+            full_schema, remaining_labels, remaining_names,
+            remaining_sections)
+        raw = await text_ai.translate_items(
+            payload_items, language_name, language_code,
+            form_name=_form_name(full_schema),
+            glossary_context=glossary_prompt_context(
+                load_glossary(), language_name),
         )
-        if translated is None:
-            raise OptionTranslationError("translate_labels failed")
+        if raw is None:
+            raise OptionTranslationError("translate_items failed")
+        translated, _ambiguous = _flatten_items_result(payload_items, raw)
         # Kit precedence is absolute: only strings actually sent to the
         # secretary may land, so a stray response entry can never overwrite a
         # kit-provided translation. Membership splits the union back into its
