@@ -62,6 +62,15 @@ include the following as part of your system instructions:
 
     RESPOND IN {OUTPUT_LANGUAGE}. YOU MUST RESPOND UNMISTAKABLY IN {OUTPUT_LANGUAGE}.
 
+> **Endpoint-verified in this repo (bd polyglot-pdf-m1lg, 2026-07-22):** the
+> Live connect config accepts `speech_config` in dict form on the Vertex
+> native-audio tier: `config["speech_config"] = {"language_code": "es-US"}`
+> (SDK type `types.SpeechConfig`: fields `language_code`, `voice_config`,
+> `multi_speaker_voice_config`). The adapter sets it from the session's
+> BCP-47 bias code behind `SPEECH_LANGUAGE_CODE_ENABLED`. NOT verified on the
+> premium AI-Studio 3.1 tier (same caveat as the transcription
+> `language_codes` hint).
+
 ## Streaming
 
 When implementing real-time audio, follow these best practices:

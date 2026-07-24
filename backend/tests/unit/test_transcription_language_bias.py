@@ -149,3 +149,28 @@ def test_no_codes_leaves_plain_blocks():
     cfg = adapter._build_live_config(_settings_with_flag(True))
     assert cfg["input_audio_transcription"] == {}
     assert cfg["output_audio_transcription"] == {}
+
+
+# --- 4. speech_config.language_code (bd polyglot-pdf-m1lg) ---------------------
+
+def _settings_with_speech_flag(enabled: bool) -> Settings:
+    s = Settings()
+    s.SPEECH_LANGUAGE_CODE_ENABLED = enabled
+    return s
+
+
+def test_speech_config_carries_primary_bias_code():
+    adapter = _adapter_with(["ru-RU"], transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(True))
+    assert cfg["speech_config"] == {"language_code": "ru-RU"}
+
+
+def test_speech_config_absent_without_codes_or_with_kill_switch_off():
+    # Unmapped language (no bias codes): never set.
+    adapter = _adapter_with(None, transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(True))
+    assert "speech_config" not in cfg
+    # Kill-switch off: never set even with codes.
+    adapter = _adapter_with(["es-US"], transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(False))
+    assert "speech_config" not in cfg
