@@ -1,0 +1,85 @@
+{
+  "_meta": {
+    "bead": "polyglot-pdf-i36i",
+    "description": "Gold translations + deterministic planted corruptions for the translation-gate discrimination probe (V1). Gold es/zh renderings follow IRS Pub 850 (EN-ES / EN-CN-S) and irs.gov/USCIS official multilingual usage as known to the authoring model (2026-07-24); 'certified-good' is relative to this seeding -- the V5 audit re-verifies the es slice against Pub 850 directly. Plants are MECHANICAL CORRUPTIONS OF THIS GOLD, stored explicitly for reviewability with their derivation class. UTF-8 data file (scar #6 covers source files, not data).",
+    "corruption_classes": {
+      "negation-flip": "judge-only: the negation token is removed; lint-clean, meaning inverted",
+      "near-synonym-swap": "judge-only + the CLEAN-ROUND-TRIP TRAP: a form-term swapped for a fluent near-synonym (box->line); the back-translation reads as plausible English and only comparison against the original wording catches it",
+      "sibling-swap": "judge-only: two option labels in one set exchange translations; each string is individually fluent",
+      "numeral-alteration": "mechanically caught: a digit changed so a source digit run vanishes (digit-run-missing)",
+      "dnt-violation": "mechanically caught: a do-not-translate token (USCIS) translated away",
+      "mechanical-plus-semantic": "THE measure-(c) half-success plant: a broken form number (mechanical, W-7 -> W7) AND a flipped negation (semantic) in one string. Rectify is given ONLY the mechanical failure reason, so a faithful rectify restores the form number (lint-clean) while leaving the inverted meaning (judge-flagged). This is the keep-rule collision case from plan review round 3."
+    }
+  },
+  "languages": {
+    "spanish": {
+      "gold": [
+        {"id": "es-g01", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Head of household", "gold": "Cabeza de familia"},
+        {"id": "es-g02", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Single", "gold": "Soltero(a)"},
+        {"id": "es-g03", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Married filing jointly", "gold": "Casado que presenta una declaración conjunta"},
+        {"id": "es-g04", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Married filing separately", "gold": "Casado que presenta la declaración por separado"},
+        {"id": "es-g05", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Qualifying surviving spouse", "gold": "Cónyuge sobreviviente que reúne los requisitos"},
+        {"id": "es-g06", "kind": "field-name", "form": "Form 1040", "en": "Social security number", "gold": "Número de Seguro Social"},
+        {"id": "es-g07", "kind": "field-name", "form": "Form 1040", "en": "Date of birth (mm/dd/yyyy)", "gold": "Fecha de nacimiento (mm/dd/yyyy)"},
+        {"id": "es-g08", "kind": "field-name", "form": "Form W-7", "en": "Individual Taxpayer Identification Number (ITIN)", "gold": "Número de identificación personal del contribuyente (ITIN)"},
+        {"id": "es-g09", "kind": "field-name", "form": "Form 1040", "en": "Wages from Form W-2, box 1", "gold": "Salarios del Formulario W-2, casilla 1"},
+        {"id": "es-g10", "kind": "field-name", "form": "Form 1040", "en": "Adjusted gross income", "gold": "Ingreso bruto ajustado"},
+        {"id": "es-g11", "kind": "field-name", "form": "Form 1040", "en": "Standard deduction", "gold": "Deducción estándar"},
+        {"id": "es-g12", "kind": "section-title", "form": "Form W-7", "en": "Do not file Form W-7 if you have a social security number", "gold": "No presente el Formulario W-7 si tiene un número de Seguro Social"},
+        {"id": "es-g13", "kind": "field-name", "form": "Form 1040", "en": "Dependent 1 first name", "gold": "Primer nombre del dependiente 1"},
+        {"id": "es-g14", "kind": "field-name", "form": "Form I-90", "en": "Country of birth", "gold": "País de nacimiento"},
+        {"id": "es-g15", "kind": "field-name", "form": "Form I-90", "en": "Alien registration number (USCIS number)", "gold": "Número de registro de extranjero (número de USCIS)"}
+      ],
+      "plants": [
+        {"id": "es-p1", "class": "negation-flip", "gold_id": "es-g12", "corrupted": "Presente el Formulario W-7 si tiene un número de Seguro Social", "derivation": "removed the leading 'No'"},
+        {"id": "es-p2", "class": "near-synonym-swap", "gold_id": "es-g09", "corrupted": "Salarios del Formulario W-2, línea 1", "derivation": "'casilla' (box) -> 'línea' (line); back-translates to the fluent-but-wrong 'Wages from Form W-2, line 1'"},
+        {"id": "es-p3", "class": "sibling-swap", "gold_id": "es-g02", "corrupted": "Casado que presenta la declaración por separado", "derivation": "Single's slot carries Married-filing-separately's translation (swap within the option set)", "swap_partner": {"gold_id": "es-g04", "corrupted": "Soltero(a)"}},
+        {"id": "es-p4", "class": "numeral-alteration", "gold_id": "es-g13", "corrupted": "Primer nombre del dependiente 2", "derivation": "digit 1 -> 2; source digit run '1' vanishes"},
+        {"id": "es-p5", "class": "dnt-violation", "gold_id": "es-g15", "corrupted": "Número de registro de extranjero (número del Servicio de Ciudadanía e Inmigración)", "derivation": "USCIS translated away"},
+        {"id": "es-p6", "class": "mechanical-plus-semantic", "gold_id": "es-g12", "corrupted": "Presente el Formulario W7 si tiene un número de Seguro Social", "derivation": "W-7 -> W7 (mechanical) AND 'No' removed (semantic); rectify gets only the mechanical reason"}
+      ]
+    },
+    "chinese": {
+      "gold": [
+        {"id": "zh-g01", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Head of household", "gold": "户主"},
+        {"id": "zh-g02", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Single", "gold": "单身"},
+        {"id": "zh-g03", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Married filing jointly", "gold": "已婚联合申报"},
+        {"id": "zh-g04", "kind": "option-label", "parent_question": "Filing status", "form": "Form 1040", "en": "Married filing separately", "gold": "已婚分别申报"},
+        {"id": "zh-g05", "kind": "field-name", "form": "Form 1040", "en": "Social security number", "gold": "社会安全号码"},
+        {"id": "zh-g06", "kind": "field-name", "form": "Form 1040", "en": "Date of birth (mm/dd/yyyy)", "gold": "出生日期 (mm/dd/yyyy)"},
+        {"id": "zh-g07", "kind": "field-name", "form": "Form 1040", "en": "Wages from Form W-2, box 1", "gold": "W-2表第1栏的工资"},
+        {"id": "zh-g08", "kind": "field-name", "form": "Form 1040", "en": "Adjusted gross income", "gold": "调整后总收入"},
+        {"id": "zh-g09", "kind": "field-name", "form": "Form 1040", "en": "Standard deduction", "gold": "标准扣除额"},
+        {"id": "zh-g10", "kind": "section-title", "form": "Form W-7", "en": "Do not file Form W-7 if you have a social security number", "gold": "如果您有社会安全号码，请勿提交W-7表"},
+        {"id": "zh-g11", "kind": "field-name", "form": "Form 1040", "en": "Dependent 1 first name", "gold": "被抚养人1的名字"},
+        {"id": "zh-g12", "kind": "field-name", "form": "Form I-90", "en": "Country of birth", "gold": "出生国家"},
+        {"id": "zh-g13", "kind": "field-name", "form": "Form I-90", "en": "Alien registration number (USCIS number)", "gold": "外国人登记号码（USCIS号码）"},
+        {"id": "zh-g14", "kind": "field-name", "form": "Form 1040", "en": "Taxpayer", "gold": "纳税人"},
+        {"id": "zh-g15", "kind": "field-name", "form": "Form 1040", "en": "Refund", "gold": "退税"}
+      ],
+      "plants": [
+        {"id": "zh-p1", "class": "negation-flip", "gold_id": "zh-g10", "corrupted": "如果您有社会安全号码，请提交W-7表", "derivation": "请勿 (do not) -> 请 (please do)"},
+        {"id": "zh-p2", "class": "near-synonym-swap", "gold_id": "zh-g07", "corrupted": "W-2表第1行的工资", "derivation": "栏 (box/column) -> 行 (line/row); back-translates fluently as 'line 1'"},
+        {"id": "zh-p3", "class": "sibling-swap", "gold_id": "zh-g02", "corrupted": "已婚分别申报", "derivation": "Single's slot carries Married-filing-separately's translation", "swap_partner": {"gold_id": "zh-g04", "corrupted": "单身"}},
+        {"id": "zh-p4", "class": "numeral-alteration", "gold_id": "zh-g11", "corrupted": "被抚养人2的名字", "derivation": "digit 1 -> 2; source digit run '1' vanishes"},
+        {"id": "zh-p5", "class": "dnt-violation", "gold_id": "zh-g13", "corrupted": "外国人登记号码（移民局号码）", "derivation": "USCIS translated to 移民局 (immigration bureau)"},
+        {"id": "zh-p6", "class": "mechanical-plus-semantic", "gold_id": "zh-g10", "corrupted": "如果您有社会安全号码，请提交W7表", "derivation": "W-7 -> W7 (mechanical) AND 请勿 -> 请 (semantic); rectify gets only the mechanical reason"}
+      ]
+    },
+    "urdu": {
+      "observational_note": "No verified gold exists for ur (plan review round 3: Urdu chosen over Afrikaans as the real script/register stress -- Perso-Arabic, RTL, formal address, native-numeral convention vs the ASCII-digit pin). The probe FORWARD-translates these English strings live via translate_items + glossary, then runs lint + back-translate + judge and records flag behavior / FP feel. No plants.",
+      "items": [
+        {"id": "ur-o01", "kind": "field-name", "form": "Form 1040", "en": "Social security number"},
+        {"id": "ur-o02", "kind": "field-name", "form": "Form 1040", "en": "Date of birth (mm/dd/yyyy)"},
+        {"id": "ur-o03", "kind": "field-name", "form": "Form 1040", "en": "Wages from Form W-2, box 1"},
+        {"id": "ur-o04", "kind": "field-name", "form": "Form 1040", "en": "Dependent 1 first name"},
+        {"id": "ur-o05", "kind": "field-name", "form": "Form I-90", "en": "Country of birth"},
+        {"id": "ur-o06", "kind": "field-name", "form": "Form I-90", "en": "Alien registration number (USCIS number)"},
+        {"id": "ur-o07", "kind": "section-title", "form": "Form W-7", "en": "Do not file Form W-7 if you have a social security number"},
+        {"id": "ur-o08", "kind": "option-set", "parent_question": "Filing status", "form": "Form 1040", "options": ["Single", "Married filing jointly", "Married filing separately", "Head of household", "Qualifying surviving spouse"]},
+        {"id": "ur-o09", "kind": "field-name", "form": "Form 1040", "en": "Adjusted gross income"},
+        {"id": "ur-o10", "kind": "field-name", "form": "Form 1040", "en": "Standard deduction"}
+      ]
+    }
+  }
+}

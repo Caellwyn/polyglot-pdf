@@ -140,8 +140,17 @@ surface with zero per-site plumbing. **Batch per LANGUAGE, never per string.**
    drift. **Known collision, decided on V1 evidence (review round 3):** for
    MECHANICAL-origin flags the original is PROVEN wrong, so a rectify
    attempt that passes the lint but gets judge-flagged is plausibly the
-   better keep. V1 measure (c) plants exactly this case; until that readout
-   the default for ALL flag kinds is keep-original + UNRESOLVED.
+   better keep. **DECIDED by V1's readout (2026-07-24, bd i36i,
+   `scripts/spikes/translation_gate_findings.md`): mechanical-origin
+   unresolved keeps the latest LINT-CLEAN rectify attempt when one exists
+   (the collision materialized live -- keep-original would have shipped a
+   provably wrong digit); judge-origin unresolved keeps the ORIGINAL.**
+   Both still flag UNRESOLVED. V3 also inherits: a flip-flop detector
+   keyed on REJECTION RECURRENCE (the judge re-flags a value already
+   flagged earlier in the item's trace -> UNRESOLVED early; never value
+   identity alone -- the ur trace converged on a re-proposed value),
+   judge-prompt hardening against back-translation anchoring and
+   never-flag-your-own-proposal, and chunk size 50.
 4. **Fail-open throughout**: missing client / failed back-translate / judge
    or rectify error leaves the original baked translation in place with a
    "verification unavailable" note -- the gate can never make a kit worse
