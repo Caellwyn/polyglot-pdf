@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/adapters/text_ai_gemini.py backend/ports/live_ai_port.py backend/ports/text_ai_port.py backend/dependencies.py backend/utils/field_validator.py backend/services/validator_service.py backend/config.py
 
-*Last updated: 2026-07-17 (bd polyglot-pdf-ow1e: the `ITextAI` port grew a third method, `translate_labels()` -- runtime option-label translation; see the contract-5 note and [../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md](../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md)). Prior: 2026-07-13 (bd polyglot-pdf-gbus (W6, async validator): `form_complete` now runs the whole-form gemini-2.5-pro pass (`handle_form_complete_pro`, thinking bounded 512) as the SOLE end-of-form report -- catching cross-page far pairs the lite windows miss (W5 recall 1.000), report-only through the same drain path, fed + deduped against already-steered fields, with an anti-over-flag prompt for the Part 5/6 cert block; gated by `FORM_COMPLETE_PRO_VALIDATOR` default-off. See the W6 note.). Prior: 2026-07-13 (bd polyglot-pdf-pr3i (W3, async validator): the async-validator path's `validation_result` is now REPORT-ONLY -- contract 1's "conflicts -> validation_result with a steer" is the legacy synchronous path; the async path enqueues the conflicts client-side and injects the steer via a finding-driven `drain_findings` round-trip. See the contract-1 note.). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-24 (bd polyglot-pdf-ch7j: the `ITextAI` port grew a fourth method, `translate_items()` -- context-carrying translation for the translation-gate epic -- and `translate_labels`' temperature moved 0.1 -> 0.0; see the contract-5 note and [../journal/entries/2026-07-24-bd-ch7j-v2-context-carrying-translate-items-glossary.md](../journal/entries/2026-07-24-bd-ch7j-v2-context-carrying-translate-items-glossary.md)). Prior: 2026-07-17 (bd polyglot-pdf-ow1e: the `ITextAI` port grew a third method, `translate_labels()` -- runtime option-label translation; see the contract-5 note and [../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md](../journal/entries/2026-07-17-bd-ow1e-runtime-option-label-translation.md)). Prior: 2026-07-13 (bd polyglot-pdf-gbus (W6, async validator): `form_complete` now runs the whole-form gemini-2.5-pro pass (`handle_form_complete_pro`, thinking bounded 512) as the SOLE end-of-form report -- catching cross-page far pairs the lite windows miss (W5 recall 1.000), report-only through the same drain path, fed + deduped against already-steered fields, with an anti-over-flag prompt for the Part 5/6 cert block; gated by `FORM_COMPLETE_PRO_VALIDATOR` default-off. See the W6 note.). Prior: 2026-07-13 (bd polyglot-pdf-pr3i (W3, async validator): the async-validator path's `validation_result` is now REPORT-ONLY -- contract 1's "conflicts -> validation_result with a steer" is the legacy synchronous path; the async path enqueues the conflicts client-side and injects the steer via a finding-driven `drain_findings` round-trip. See the contract-1 note.). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: contract 5 now shows `ITextAI.ask()` alongside `validate()` -- the port grew a second method for the A-pillar secretary and the doc's "single method is enough" line was stale; also refreshed stale line-number pointers into `webFormConnection.ts` / `form_filling_service.py` / `config.py` that had drifted from later commits; added `backend/ports/text_ai_port.py` to Tracks). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 
 This is the FROZEN interface for pillar B of the SI-reduction epic: a separate,
@@ -438,13 +438,25 @@ class ITextAI(ABC):
 - The port's third method is `async translate_labels(labels, language_name,
   language_code) -> dict | None` (bd polyglot-pdf-ow1e, runtime option-label
   translation): one batched JSON call translating option labels into the
-  session language, temperature 0.1 + name-and-code prompt pinning as the
-  determinism levers. Its fail-open SIGNAL is `None` (not `{}`) so the caller
+  session language, temperature 0.0 + name-and-code prompt pinning as the
+  determinism levers (0.0 since bd polyglot-pdf-ch7j -- deterministic legal
+  translation, the translation-gate epic's Part A). Its fail-open SIGNAL is
+  `None` (not `{}`) so the caller
   (`backend/services/option_translation.py`, a process-level per-form+language
   cache) can distinguish "call failed, do not cache" from a valid empty result.
   Same non-abstract-default convention as `ask()`. The optional `temperature`
   param on `_generate` is `None` everywhere else, so the validator/secretary
   request bytes (and their implicit-cache prefixes) are unchanged.
+- The port's fourth method is `async translate_items(items, language_name,
+  language_code, *, form_name, glossary_context) -> dict | None` (bd
+  polyglot-pdf-ch7j, the translation-gate epic): the context-carrying
+  successor to `translate_labels`' bare string list -- structured items
+  (kinds, option sets translated as units, parent question), optional
+  glossary/register/DNT/digits prompt injection
+  (`backend/services/translation_lint.py::glossary_prompt_context`),
+  temperature 0.0, an `ambiguous` self-flag list in the response. Same
+  `None` fail-open signal and non-abstract-default convention. Consumers
+  land with the verify/rectify loop (V3, bd polyglot-pdf-9ikj).
 - Adapter: `backend/adapters/text_ai_gemini.py::TextAIGemini`, mirroring
   `LiveAIGemini`'s constructor convention --
   `TextAIGemini(api_key=..., model=..., vertexai=...)`, constructing a

@@ -88,15 +88,26 @@ Deferred/next: V1 probe (`polyglot-pdf-i36i`) now unblocked; V3
 
 - `docs/sprint_14_translation-quality-gate_plan.md` NEW (the epic's plan of
   record) + its row in `docs/INDEX.md`'s Active sprint plans.
+- `docs/standards/validation-delegation.md` BUMPED: the `ITextAI` port grew
+  a fourth method (`translate_items`, added to
+  `backend/ports/text_ai_port.py` with the house non-abstract fail-loud
+  default), and the `translate_labels` temperature line updated 0.1 -> 0.0.
 - `docs/standards/ai-models.md` reviewed, left as-is (no model/config knob
   changed; `OPTION_TRANSLATION_MODEL` untouched).
 - `docs/components/config-deployment.md` reviewed, left as-is (no new env
   var in this bead; `TRANSLATION_VERIFY_ENABLED` lands with V3).
+- Other STALE flags from the freshness checker (stateless-architecture,
+  terminology, testing, voice-and-vad, ws-protocol, technical_guide) track
+  files this branch did NOT touch -- pre-existing staleness, left as-is.
 
 ## Files touched
 
 - `backend/adapters/text_ai_gemini.py` -- translate_items; translate_labels
   temperature 0.1 -> 0.0.
+- `backend/ports/text_ai_port.py` -- translate_items on the ITextAI port
+  (non-abstract fail-loud default, house convention).
+- `docs/standards/validation-delegation.md` -- fourth-method bullet + temp
+  line + stamp bump.
 - `backend/services/translation_lint.py` -- NEW: mechanical lint + glossary
   loader + kit sweep CLI.
 - `form-kits/_translation/glossary.json` -- NEW: the glossary/style data

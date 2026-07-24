@@ -43,3 +43,24 @@ class ITextAI(ABC):
         raise NotImplementedError(
             "translate_labels() is not implemented by this text-AI adapter."
         )
+
+    async def translate_items(
+        self,
+        items: list,
+        language_name: str,
+        language_code: str,
+        *,
+        form_name: str | None = None,
+        glossary_context: dict | None = None,
+    ) -> dict | None:
+        """Context-carrying batch translation (bd polyglot-pdf-ch7j, the
+        translation-gate epic): structured items {id, kind, text | options +
+        parent_question}, option sets translated as units, optional
+        glossary/register injection. Returns {"items": {id: {"translation":
+        str} | {"options": {source: str}}}, "ambiguous": [id, ...]} on
+        success, or None on any error (the same do-not-cache fail-open
+        SIGNAL as translate_labels). Non-abstract default raises so
+        implementations without the feature fail loudly."""
+        raise NotImplementedError(
+            "translate_items() is not implemented by this text-AI adapter."
+        )
