@@ -52,11 +52,14 @@ doc updated in place; V3's bead notes carry the readout.
   semantic corruption too -- the planted half-success case cannot easily be
   forced when the rectifier sees the source. The real collision came from
   judge perfectionism instead.
-- **Judge appeasement loops are real and detectable.** Two independent
-  instances (zh, ur) of the judge rejecting rendering A proposing B, then
-  rejecting B proposing A. A rectify-equals-previously-rejected-value check
-  is a one-line loop guard that saves a pro call and converts thrash into
-  an honest UNRESOLVED.
+- **Judge appeasement loops are real and detectable.** zh-g11 is a true
+  rejected-both oscillation (mingzi -> ming -> mingzi, every rendering
+  refused); ur showed the weaker cousin, a cross-pass verdict inversion
+  that CONVERGED on attempt 2 (the first draft mislabeled it a flip-flop
+  -- fresh-eyes corrected it; the flip-flop detector rests on zh-g11
+  alone). A rectify-equals-previously-rejected-value check is a one-line
+  loop guard that saves a pro call and converts thrash into an honest
+  UNRESOLVED.
 - **FP risk concentrates where gold confidence is lowest** (the g1b corpus
   lesson transposed): the es slice (agency-verifiable) was spotless; both
   zh flags sat on the two renderings seeded with least confidence. For V5,

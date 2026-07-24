@@ -93,6 +93,10 @@ UNRESOLVED, keep the latest LINT-CLEAN rectify attempt when one exists;
 otherwise keep the original. Judge-origin flags keep the ORIGINAL (unchanged
 -- the original is merely suspected, and the twice-rejected rectify may be
 appeasement drift).** Both cases still flag UNRESOLVED for human review.
+Definition for V3 (fresh-eyes precision note): "origin" = how the item FIRST
+entered the flag set (its initial lint result), tracked for the item's whole
+multi-attempt trace -- the probe's attempt-2 `problem` field carries the
+judge's reason, but that does not reclassify the item's origin.
 
 ## Chunk A/B (measure d)
 
@@ -109,12 +113,18 @@ if flag rates look odd.
   **0 mechanical lint failures** -- ASCII digits held despite Urdu's
   native-numeral convention (the A.2(d) policy line worked), script check
   clean, DNT tokens intact.
-- The judge caught a REAL forward-translation error: "Single" (filing status)
-  rendered as a generic term; and then judge<->rectify FLIP-FLOPPED
-  (each rejecting the other's rendering: ghair shadi shuda <-> wahid) -- the
-  same instability class as zh-g11, stronger in the tail language. Validates
-  BOTH the plan's low-resource-first review ordering for V5 AND the
-  flip-flop detector mitigation.
+- The judge caught a REAL forward-translation error on "Single" (filing
+  status), and the loop CONVERGED in two attempts (attempt 1 "wahid"
+  rejected; attempt 2 "ghair shadi shuda" accepted clean). The instability
+  here is a CROSS-PASS VERDICT INVERSION, precisely stated (fresh-eyes
+  correction on this bead's first draft, which mislabeled it a flip-flop):
+  the initial judge pass argued "ghair shadi shuda" was the wrong sense and
+  preferred "wahid"; the rectify-loop judge then demanded the opposite and
+  accepted "ghair shadi shuda". Same-judge-different-pass disagreement on
+  the same pair -- weaker evidence than zh-g11's true rejected-both
+  oscillation (the flip-flop detector rests on zh-g11 alone), but real
+  tail-language verdict noise, supporting the plan's low-resource-first
+  review ordering for V5.
 
 ## What V3 inherits (the actionable list)
 
