@@ -11,7 +11,8 @@ Precedence per label (maintainer 2026-07-16):
      (bake_label_translations below -- bd polyglot-pdf-2h9j -- populates them
      at authoring time, making the secretary call a natural no-op on baked
      kits);
-  2. else ONE batched secretary call (TextAIGemini.translate_labels, lite tier)
+  2. else ONE batched context-carrying secretary call
+     (TextAIGemini.translate_items -- bd polyglot-pdf-alry)
      over the remaining unique labels;
   3. else (failure/timeout) English fallback -- the DTI SI's translate-on-the-fly
      rule still covers that window.
@@ -203,7 +204,7 @@ async def bake_label_translations(
     The authoring-time counterpart of build_option_label_overrides: for each
     language in `languages` ({lowercase-name: bcp47-code}, normally
     SPOKEN_LANGUAGE_BCP47 minus english), collect the unique option labels,
-    batch-translate the ones the kit lacks (ONE translate_labels call per
+    batch-translate the ones the kit lacks (ONE translate_items call per
     language), and fan the results out to every option carrying that label --
     written under the CANONICAL key, the lowercase language name. Option
     value / label / spoken_label are never touched.
@@ -215,7 +216,7 @@ async def bake_label_translations(
     model call. only_missing=False retranslates everything and overwrites the
     canonical key (the stale-after-rename remedy).
 
-    Per-language failures (translate_labels -> None, or an adapter exception)
+    Per-language failures (translate_items -> None, or an adapter exception)
     skip that language and continue -- one flaky language must not cost the
     rest; the report's failed_languages drives the caller's exit code and an
     idempotent re-run fills the gap. Returns a JSON-ready report:
@@ -669,7 +670,10 @@ def _flatten_items_result(
     passes through as (None, []). A string that is both an option label
     and a field name translates once per kind; the field-name rendering
     wins in the flat map (applied last) -- both kinds' consumers filter by
-    their own membership sets, so kit precedence is unaffected."""
+    their own membership sets, so kit precedence is unaffected, but the
+    option-label consumer of such a collision string receives the
+    field-name (out-of-set) rendering -- a value-quality tradeoff of the
+    flat map, no worse than the pre-migration union path."""
     if raw is None:
         return None, []
     by_id = {item["id"]: item for item in payload_items}
@@ -734,7 +738,7 @@ async def build_translation_overrides(
 
     Kit translations win (option label_translations + field
     spoken_name_translations); the remainder -- including section labels,
-    which have no kit structure -- goes through ONE batched translate_labels
+    which have no kit structure -- goes through ONE batched translate_items
     call over the deduped union. Raises OptionTranslationError when that call
     fails, so the cache layer does not keep a failed build.
     """

@@ -477,6 +477,28 @@ async def test_spoken_name_failure_skips_language_and_rerun_fills_gap():
 
 
 @pytest.mark.asyncio
+async def test_bake_payload_carries_form_name_from_form_metadata():
+    """Criterion-1 form-name clause (outer-review catch: previously no test
+    exercised _form_name, so a broken derivation would have passed): the
+    bake passes the form_metadata-derived reference as the form_name kwarg."""
+    schema = _schema() | {"form_metadata": {
+        "title": "U.S. Individual Income Tax Return", "form_number": "1040"}}
+    ai = _text_ai()
+    await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
+    call = ai.translate_items.await_args
+    assert call.kwargs["form_name"] \
+        == "U.S. Individual Income Tax Return (Form 1040)"
+
+
+@pytest.mark.asyncio
+async def test_bake_form_name_absent_metadata_is_none():
+    schema = _schema()  # no form_metadata
+    ai = _text_ai()
+    await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
+    assert ai.translate_items.await_args.kwargs["form_name"] is None
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_self_flags_surface_as_warning_findings():
     """The translator's `ambiguous` self-flag (bd alry, exit criterion 3)
     becomes a translation-ambiguous-source WARNING finding in the report,
