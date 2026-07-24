@@ -1,0 +1,142 @@
+{
+  "_meta": {
+    "description": "Per-language translation glossary + style file for the translation quality gate (bd polyglot-pdf-ch7j, epic polyglot-pdf-sekc). Injected into the translate, judge, and rectify prompts, and consumed by the deterministic mechanical lint (backend/services/translation_lint.py). UTF-8 DATA file -- non-ASCII is deliberate and allowed here (CLAUDE.md scar #6 covers source files, not data).",
+    "provenance": "Term pins seeded 2026-07-23 from IRS Publication 850 (EN-ES and EN-CN-S editions) and USCIS's own multilingual renderings, as known to the authoring model. HONEST SCOPE: real term pins exist for es + zh only; the other languages carry register/script/digit guidance only. The V5 audit re-verifies the es slice directly against Pub 850, and confirmed-good renderings get promoted into this file (the lightweight termbase pattern -- plan: docs/sprint_14_translation-quality-gate_plan.md).",
+    "pin_matching_caveat": "Pin checks are exact-substring (case-insensitive). Sound for zh (no inflection) and es (mild inflection; pinned phrases are stable in IRS usage). When pins expand to inflecting languages (ru/ur/pl-class), the pin check needs lemma normalization or demotion to advisory -- do NOT copy the exact-match rule as-is (plan review round 3).",
+    "version": 1
+  },
+  "digits_policy": "Always render numerals with ASCII digits 0-9. Never use native or localized digit characters (for example Arabic-Indic or Devanagari digits), even in languages that conventionally use them: these strings guide entry into a US government form, and the values users see and type must match the form's ASCII digits.",
+  "do_not_translate": [
+    "USCIS",
+    "IRS",
+    "ITIN",
+    "SSN",
+    "SSA",
+    "EIN",
+    "IRS.gov",
+    "uscis.gov"
+  ],
+  "form_number_pattern": "\\b[A-Z]{1,3}-\\d+[A-Z]{0,3}\\b",
+  "format_mask_pattern": "(?i)\\b(?:mm|dd|yy|yyyy)(?:[/\\-.](?:mm|dd|yy|yyyy))+\\b",
+  "languages": {
+    "spanish": {
+      "register": "Formal 'usted' throughout; never 'tu'. Polite, clear, everyday vocabulary (not academic or legalistic beyond the pinned official terms).",
+      "script": "latin",
+      "pins": {
+        "head of household": "cabeza de familia",
+        "filing status": "estado civil para efectos de la declaración",
+        "taxpayer": "contribuyente",
+        "dependent": "dependiente",
+        "withholding": "retención",
+        "gross income": "ingreso bruto",
+        "adjusted gross income": "ingreso bruto ajustado",
+        "standard deduction": "deducción estándar",
+        "wages": "salario",
+        "refund": "reembolso",
+        "social security number": "número de Seguro Social",
+        "individual taxpayer identification number": "número de identificación personal del contribuyente",
+        "married filing jointly": "casado que presenta una declaración conjunta",
+        "married filing separately": "casado que presenta la declaración por separado",
+        "lawful permanent resident": "residente permanente legal",
+        "alien registration number": "número de registro de extranjero",
+        "naturalization": "naturalización",
+        "date of birth": "fecha de nacimiento",
+        "country of birth": "país de nacimiento"
+      }
+    },
+    "chinese": {
+      "register": "Simplified Chinese characters. Formal polite address ('您' for direct address). Plain, clear phrasing.",
+      "script": "han",
+      "pins": {
+        "head of household": "户主",
+        "taxpayer": "纳税人",
+        "dependent": "被抚养人",
+        "filing status": "报税身份",
+        "withholding": "预扣",
+        "gross income": "总收入",
+        "wages": "工资",
+        "refund": "退税",
+        "social security number": "社会安全号码",
+        "lawful permanent resident": "合法永久居民",
+        "alien registration number": "外国人登记号码",
+        "naturalization": "入籍",
+        "date of birth": "出生日期"
+      }
+    },
+    "tagalog": {
+      "register": "Formal address: 'kayo'/'ninyo' with 'po' politeness markers. Common conversational Filipino; English loanwords for US-form terms are acceptable where they are the everyday usage.",
+      "script": "latin",
+      "pins": {}
+    },
+    "arabic": {
+      "register": "Modern Standard Arabic; formal polite address. Plain phrasing, not literary.",
+      "script": "arabic",
+      "pins": {}
+    },
+    "french": {
+      "register": "Formal 'vous' throughout; never 'tu'. Polite, clear, everyday vocabulary.",
+      "script": "latin",
+      "pins": {}
+    },
+    "korean": {
+      "register": "Formal polite style (-습니다 / -세요 endings); honorific address throughout.",
+      "script": "hangul",
+      "pins": {}
+    },
+    "german": {
+      "register": "Formal 'Sie' throughout; never 'du'. Polite, clear, everyday vocabulary.",
+      "script": "latin",
+      "pins": {}
+    },
+    "portuguese": {
+      "register": "Brazilian Portuguese. Polite 'voce' with formal, courteous phrasing; avoid 'tu'.",
+      "script": "latin",
+      "pins": {}
+    },
+    "hindi": {
+      "register": "Formal 'आप' throughout; never 'तुम'/'तू'. Polite, clear, everyday vocabulary.",
+      "script": "devanagari",
+      "pins": {}
+    },
+    "italian": {
+      "register": "Formal 'Lei' throughout; never 'tu'. Polite, clear, everyday vocabulary.",
+      "script": "latin",
+      "pins": {}
+    },
+    "urdu": {
+      "register": "Formal 'آپ' throughout; never 'تم'/'تو'. Polite, clear, everyday vocabulary. Note: Urdu conventionally uses Arabic-Indic numerals -- the ASCII digits policy still applies (US form guidance).",
+      "script": "arabic",
+      "pins": {}
+    },
+    "persian": {
+      "register": "Formal 'شما' throughout; never 'تو'. Polite, clear, everyday vocabulary. The ASCII digits policy applies despite Persian's conventional Extended Arabic-Indic numerals.",
+      "script": "arabic",
+      "pins": {}
+    },
+    "dutch": {
+      "register": "Formal 'u' throughout; never 'je'/'jij'. Polite, clear, everyday vocabulary.",
+      "script": "latin",
+      "pins": {}
+    },
+    "ukrainian": {
+      "register": "Formal 'ви' throughout; never 'ти'. Polite, clear, everyday vocabulary.",
+      "script": "cyrillic",
+      "pins": {}
+    },
+    "russian": {
+      "register": "Formal 'вы' throughout; never 'ты'. Polite, clear, everyday vocabulary.",
+      "script": "cyrillic",
+      "pins": {}
+    },
+    "swedish": {
+      "register": "Standard 'du' (modern Swedish official usage -- formal 'ni' reads as dated/distancing). Plain, polite phrasing.",
+      "script": "latin",
+      "pins": {}
+    },
+    "afrikaans": {
+      "register": "Formal 'u' throughout; never 'jy'/'jou'. Polite, clear, everyday vocabulary.",
+      "script": "latin",
+      "pins": {}
+    }
+  }
+}

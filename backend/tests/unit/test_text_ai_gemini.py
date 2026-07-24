@@ -483,8 +483,9 @@ async def test_translate_labels_happy_path_sets_temperature_and_json(adapter_wit
 
     call = adapter._client.aio.models.generate_content.await_args
     config = call.kwargs["config"]
-    # Determinism levers: temperature 0.1 + JSON mime; name AND code in the prompt.
-    assert config.temperature == pytest.approx(0.1)
+    # Determinism levers: temperature 0.0 (deterministic legal translation,
+    # bd polyglot-pdf-ch7j) + JSON mime; name AND code in the prompt.
+    assert config.temperature == pytest.approx(0.0)
     assert config.response_mime_type == "application/json"
     prompt = call.kwargs["contents"][0]
     assert "Spanish (es-US)" in prompt
