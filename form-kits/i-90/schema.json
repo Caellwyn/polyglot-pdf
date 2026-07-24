@@ -106,7 +106,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u062c\u0632\u0621 1. \u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0639\u0646\u0643",
+        "chinese": "\u7b2c1\u90e8\u5206\uff1a\u5173\u4e8e\u60a8\u7684\u4fe1\u606f",
+        "spanish": "Parte 1. Informaci\u00f3n sobre usted",
+        "tagalog": "Bahagi 1. Impormasyon Tungkol sa Iyo",
+        "korean": "\uc81c1\ubd80. \uc2e0\uccad\uc778 \uc815\ubcf4",
+        "french": "Partie 1. Informations vous concernant",
+        "german": "Teil 1. Angaben zu Ihrer Person",
+        "portuguese": "Parte 1. Informa\u00e7\u00f5es Sobre Voc\u00ea",
+        "hindi": "\u092d\u093e\u0917 1. \u0906\u092a\u0915\u0947 \u092c\u093e\u0930\u0947 \u092e\u0947\u0902 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Parte 1. Informazioni su di Lei",
+        "persian": "\u0628\u062e\u0634 \u06f1. \u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062f\u0631\u0628\u0627\u0631\u0647 \u0634\u0645\u0627",
+        "urdu": "\u062d\u0635\u06c1 1. \u0622\u067e \u06a9\u06d2 \u0628\u0627\u0631\u06d2 \u0645\u06cc\u06ba \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Deel 1. Informatie over u",
+        "ukrainian": "\u0427\u0430\u0441\u0442\u0438\u043d\u0430 1. \u0406\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f \u043f\u0440\u043e \u0432\u0430\u0441",
+        "russian": "\u0427\u0430\u0441\u0442\u044c 1. \u0418\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u043e \u0432\u0430\u0441",
+        "swedish": "Del 1. Information om dig",
+        "afrikaans": "Deel 1. Inligting Oor U"
+      }
     },
     {
       "id": "sec_your_full_name_p1",
@@ -124,7 +143,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0633\u0645\u0643 \u0627\u0644\u0643\u0627\u0645\u0644",
+        "chinese": "\u60a8\u7684\u5168\u540d",
+        "spanish": "Su nombre completo",
+        "tagalog": "Ang Iyong Buong Pangalan",
+        "korean": "\uc131\uba85",
+        "french": "Votre nom complet",
+        "german": "Ihr vollst\u00e4ndiger Name",
+        "portuguese": "Seu Nome Completo",
+        "hindi": "\u0906\u092a\u0915\u093e \u092a\u0942\u0930\u093e \u0928\u093e\u092e",
+        "italian": "Nome e cognome",
+        "persian": "\u0646\u0627\u0645 \u06a9\u0627\u0645\u0644 \u0634\u0645\u0627",
+        "urdu": "\u0622\u067e \u06a9\u0627 \u067e\u0648\u0631\u0627 \u0646\u0627\u0645",
+        "dutch": "Uw volledige naam",
+        "ukrainian": "\u0412\u0430\u0448\u0435 \u043f\u043e\u0432\u043d\u0435 \u0456\u043c'\u044f",
+        "russian": "\u0412\u0430\u0448\u0435 \u043f\u043e\u043b\u043d\u043e\u0435 \u0438\u043c\u044f",
+        "swedish": "Ditt fullst\u00e4ndiga namn",
+        "afrikaans": "U Volle Naam"
+      }
     },
     {
       "id": "sec_mailing_address_p1",
@@ -145,7 +183,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0645\u0631\u0627\u0633\u0644\u0629",
+        "chinese": "\u90ae\u5bc4\u5730\u5740",
+        "spanish": "Direcci\u00f3n postal",
+        "tagalog": "Address na Pagpapadalhan ng Sulat",
+        "korean": "\uc6b0\ud3b8 \uc8fc\uc18c",
+        "french": "Adresse postale",
+        "german": "Postanschrift",
+        "portuguese": "Endere\u00e7o de Correspond\u00eancia",
+        "hindi": "\u0921\u093e\u0915 \u0915\u093e \u092a\u0924\u093e",
+        "italian": "Indirizzo di corrispondenza",
+        "persian": "\u0622\u062f\u0631\u0633 \u067e\u0633\u062a\u06cc",
+        "urdu": "\u062e\u0637 \u0648 \u06a9\u062a\u0627\u0628\u062a \u06a9\u0627 \u067e\u062a\u06c1",
+        "dutch": "Postadres",
+        "ukrainian": "\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430",
+        "russian": "\u041f\u043e\u0447\u0442\u043e\u0432\u044b\u0439 \u0430\u0434\u0440\u0435\u0441",
+        "swedish": "Postadress",
+        "afrikaans": "Posadres"
+      }
     },
     {
       "id": "sec_physical_address_p1",
@@ -165,7 +222,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0641\u0639\u0644\u064a",
+        "chinese": "\u5b9e\u9645\u5730\u5740",
+        "spanish": "Direcci\u00f3n f\u00edsica",
+        "tagalog": "Pisikal na Address",
+        "korean": "\uac70\uc8fc\uc9c0 \uc8fc\uc18c",
+        "french": "Adresse physique",
+        "german": "Wohnanschrift",
+        "portuguese": "Endere\u00e7o F\u00edsico",
+        "hindi": "\u092d\u094c\u0924\u093f\u0915 \u092a\u0924\u093e",
+        "italian": "Indirizzo di residenza",
+        "persian": "\u0622\u062f\u0631\u0633 \u0645\u062d\u0644 \u0633\u06a9\u0648\u0646\u062a",
+        "urdu": "\u0631\u06c1\u0627\u0626\u0634\u06cc \u067e\u062a\u06c1",
+        "dutch": "Woonadres",
+        "ukrainian": "\u0424\u0456\u0437\u0438\u0447\u043d\u0430 \u0430\u0434\u0440\u0435\u0441\u0430",
+        "russian": "\u0424\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u0434\u0440\u0435\u0441 \u043f\u0440\u043e\u0436\u0438\u0432\u0430\u043d\u0438\u044f",
+        "swedish": "Fysisk adress",
+        "afrikaans": "Fisiese Adres"
+      }
     },
     {
       "id": "sec_additional_information_p2",
@@ -185,7 +261,26 @@
       "page_number": 2,
       "page_numbers": [
         2
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0625\u0636\u0627\u0641\u064a\u0629",
+        "chinese": "\u8865\u5145\u4fe1\u606f",
+        "spanish": "Informaci\u00f3n adicional",
+        "tagalog": "Karagdagang Impormasyon",
+        "korean": "\ucd94\uac00 \uc815\ubcf4",
+        "french": "Informations suppl\u00e9mentaires",
+        "german": "Weitere Angaben",
+        "portuguese": "Informa\u00e7\u00f5es Adicionais",
+        "hindi": "\u0905\u0924\u093f\u0930\u093f\u0915\u094d\u0924 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Informazioni aggiuntive",
+        "persian": "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062a\u06a9\u0645\u06cc\u0644\u06cc",
+        "urdu": "\u0627\u0636\u0627\u0641\u06cc \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Aanvullende informatie",
+        "ukrainian": "\u0414\u043e\u0434\u0430\u0442\u043a\u043e\u0432\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f",
+        "russian": "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f",
+        "swedish": "Ytterligare information",
+        "afrikaans": "Bykomende Inligting"
+      }
     },
     {
       "id": "sec_part_2_application_type_p2",
@@ -197,7 +292,26 @@
       "page_number": 2,
       "page_numbers": [
         2
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u062c\u0632\u0621 2. \u0646\u0648\u0639 \u0627\u0644\u0637\u0644\u0628",
+        "chinese": "\u7b2c2\u90e8\u5206\uff1a\u7533\u8bf7\u7c7b\u578b",
+        "spanish": "Parte 2. Tipo de solicitud",
+        "tagalog": "Bahagi 2. Uri ng Aplikasyon",
+        "korean": "\uc81c2\ubd80. \uc2e0\uccad \uc720\ud615",
+        "french": "Partie 2. Type de demande",
+        "german": "Teil 2. Art des Antrags",
+        "portuguese": "Parte 2. Tipo de Solicita\u00e7\u00e3o",
+        "hindi": "\u092d\u093e\u0917 2. \u0906\u0935\u0947\u0926\u0928 \u0915\u093e \u092a\u094d\u0930\u0915\u093e\u0930",
+        "italian": "Parte 2. Tipo di domanda",
+        "persian": "\u0628\u062e\u0634 \u06f2. \u0646\u0648\u0639 \u062f\u0631\u062e\u0648\u0627\u0633\u062a",
+        "urdu": "\u062d\u0635\u06c1 2. \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u06a9\u06cc \u0642\u0633\u0645",
+        "dutch": "Deel 2. Type aanvraag",
+        "ukrainian": "\u0427\u0430\u0441\u0442\u0438\u043d\u0430 2. \u0422\u0438\u043f \u0437\u0430\u044f\u0432\u0438",
+        "russian": "\u0427\u0430\u0441\u0442\u044c 2. \u0422\u0438\u043f \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u044f",
+        "swedish": "Del 2. Ans\u00f6kningstyp",
+        "afrikaans": "Deel 2. Tipe Aansoek"
+      }
     },
     {
       "id": "sec_reason_for_application_select_only_one_box_p2",
@@ -210,7 +324,26 @@
       "page_number": 2,
       "page_numbers": [
         2
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0633\u0628\u0628 \u062a\u0642\u062f\u064a\u0645 \u0627\u0644\u0637\u0644\u0628 (\u0627\u062e\u062a\u0631 \u0645\u0631\u0628\u0639\u064b\u0627 \u0648\u0627\u062d\u062f\u064b\u0627 \u0641\u0642\u0637)",
+        "chinese": "\u7533\u8bf7\u539f\u56e0\uff08\u4ec5\u9009\u4e00\u9879\uff09",
+        "spanish": "Motivo de la solicitud (Seleccione solo una casilla)",
+        "tagalog": "Dahilan ng Pag-aaplay (Pumili lamang ng isang kahon)",
+        "korean": "\uc2e0\uccad \uc0ac\uc720 (\ud558\ub098\ub9cc \uc120\ud0dd)",
+        "french": "Motif de la demande (Cochez une seule case)",
+        "german": "Grund f\u00fcr den Antrag (W\u00e4hlen Sie nur ein Feld aus)",
+        "portuguese": "Motivo da Solicita\u00e7\u00e3o (Selecione apenas uma op\u00e7\u00e3o)",
+        "hindi": "\u0906\u0935\u0947\u0926\u0928 \u0915\u093e \u0915\u093e\u0930\u0923 (\u0915\u0947\u0935\u0932 \u090f\u0915 \u092c\u0949\u0915\u094d\u0938 \u091a\u0941\u0928\u0947\u0902)",
+        "italian": "Motivo della domanda (selezionare una sola casella)",
+        "persian": "\u062f\u0644\u06cc\u0644 \u062f\u0631\u062e\u0648\u0627\u0633\u062a (\u0641\u0642\u0637 \u06cc\u06a9 \u06af\u0632\u06cc\u0646\u0647 \u0631\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0646\u06cc\u062f)",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u06a9\u06cc \u0648\u062c\u06c1 (\u0635\u0631\u0641 \u0627\u06cc\u06a9 \u062e\u0627\u0646\u06d2 \u06a9\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0631\u06cc\u06ba)",
+        "dutch": "Reden voor aanvraag (selecteer slechts \u00e9\u00e9n vakje)",
+        "ukrainian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 \u043f\u043e\u0434\u0430\u043d\u043d\u044f \u0437\u0430\u044f\u0432\u0438 (\u0432\u0438\u0431\u0435\u0440\u0456\u0442\u044c \u043b\u0438\u0448\u0435 \u043e\u0434\u0438\u043d \u0432\u0430\u0440\u0456\u0430\u043d\u0442)",
+        "russian": "\u041f\u0440\u0438\u0447\u0438\u043d\u0430 \u043f\u043e\u0434\u0430\u0447\u0438 \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u044f (\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0442\u043e\u043b\u044c\u043a\u043e \u043e\u0434\u0438\u043d \u0432\u0430\u0440\u0438\u0430\u043d\u0442)",
+        "swedish": "Anledning till ans\u00f6kan (v\u00e4lj endast en ruta)",
+        "afrikaans": "Rede vir Aansoek (Merk slegs een blokkie)"
+      }
     },
     {
       "id": "sec_part_2_application_type_continued_p3",
@@ -222,7 +355,26 @@
       "page_number": 3,
       "page_numbers": [
         3
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u062c\u0632\u0621 2. \u0646\u0648\u0639 \u0627\u0644\u0637\u0644\u0628 (\u062a\u0627\u0628\u0639)",
+        "chinese": "\u7b2c2\u90e8\u5206\uff1a\u7533\u8bf7\u7c7b\u578b\uff08\u7eed\uff09",
+        "spanish": "Parte 2. Tipo de solicitud (continuaci\u00f3n)",
+        "tagalog": "Bahagi 2. Uri ng Aplikasyon (karugtong)",
+        "korean": "\uc81c2\ubd80. \uc2e0\uccad \uc720\ud615 (\uacc4\uc18d)",
+        "french": "Partie 2. Type de demande (suite)",
+        "german": "Teil 2. Art des Antrags (Fortsetzung)",
+        "portuguese": "Parte 2. Tipo de Solicita\u00e7\u00e3o (continua\u00e7\u00e3o)",
+        "hindi": "\u092d\u093e\u0917 2. \u0906\u0935\u0947\u0926\u0928 \u0915\u093e \u092a\u094d\u0930\u0915\u093e\u0930 (\u091c\u093e\u0930\u0940)",
+        "italian": "Parte 2. Tipo di domanda (continua)",
+        "persian": "\u0628\u062e\u0634 \u06f2. \u0646\u0648\u0639 \u062f\u0631\u062e\u0648\u0627\u0633\u062a (\u0627\u062f\u0627\u0645\u0647)",
+        "urdu": "\u062d\u0635\u06c1 2. \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u06a9\u06cc \u0642\u0633\u0645 (\u062c\u0627\u0631\u06cc \u06c1\u06d2)",
+        "dutch": "Deel 2. Type aanvraag (vervolg)",
+        "ukrainian": "\u0427\u0430\u0441\u0442\u0438\u043d\u0430 2. \u0422\u0438\u043f \u0437\u0430\u044f\u0432\u0438 (\u043f\u0440\u043e\u0434\u043e\u0432\u0436\u0435\u043d\u043d\u044f)",
+        "russian": "\u0427\u0430\u0441\u0442\u044c 2. \u0422\u0438\u043f \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u044f (\u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0435\u043d\u0438\u0435)",
+        "swedish": "Del 2. Ans\u00f6kningstyp (forts\u00e4ttning)",
+        "afrikaans": "Deel 2. Tipe Aansoek (vervolg)"
+      }
     },
     {
       "id": "sec_part_3_processing_information_p3",
@@ -239,7 +391,26 @@
       "page_number": 3,
       "page_numbers": [
         3
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u062c\u0632\u0621 3. \u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0645\u0639\u0627\u0644\u062c\u0629",
+        "chinese": "\u7b2c3\u90e8\u5206\uff1a\u5904\u7406\u4fe1\u606f",
+        "spanish": "Parte 3. Informaci\u00f3n de procesamiento",
+        "tagalog": "Bahagi 3. Impormasyon sa Pagproseso",
+        "korean": "\uc81c3\ubd80. \ucc98\ub9ac \uc815\ubcf4",
+        "french": "Partie 3. Informations sur le traitement",
+        "german": "Teil 3. Bearbeitungsinformationen",
+        "portuguese": "Parte 3. Informa\u00e7\u00f5es de Processamento",
+        "hindi": "\u092d\u093e\u0917 3. \u092a\u094d\u0930\u0938\u0902\u0938\u094d\u0915\u0930\u0923 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Parte 3. Informazioni sull'elaborazione",
+        "persian": "\u0628\u062e\u0634 \u06f3. \u0627\u0637\u0644\u0627\u0639\u0627\u062a \u067e\u0631\u062f\u0627\u0632\u0634",
+        "urdu": "\u062d\u0635\u06c1 3. \u06a9\u0627\u0631\u0631\u0648\u0627\u0626\u06cc \u0633\u06d2 \u0645\u062a\u0639\u0644\u0642 \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Deel 3. Verwerkingsinformatie",
+        "ukrainian": "\u0427\u0430\u0441\u0442\u0438\u043d\u0430 3. \u0406\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f \u0434\u043b\u044f \u043e\u0431\u0440\u043e\u0431\u043a\u0438",
+        "russian": "\u0427\u0430\u0441\u0442\u044c 3. \u0418\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0438",
+        "swedish": "Del 3. Behandlingsinformation",
+        "afrikaans": "Deel 3. Verwerkingsinligting"
+      }
     },
     {
       "id": "sec_biographic_information_p3",
@@ -259,7 +430,26 @@
       "page_number": 3,
       "page_numbers": [
         3
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0633\u064a\u0631\u0629 \u0627\u0644\u0630\u0627\u062a\u064a\u0629",
+        "chinese": "\u4e2a\u4eba\u751f\u5e73\u4fe1\u606f",
+        "spanish": "Informaci\u00f3n biogr\u00e1fica",
+        "tagalog": "Impormasyong Biograpikal",
+        "korean": "\uc778\uc801 \uc0ac\ud56d \uc815\ubcf4",
+        "french": "Informations biographiques",
+        "german": "Biografische Angaben",
+        "portuguese": "Informa\u00e7\u00f5es Biogr\u00e1ficas",
+        "hindi": "\u091c\u0940\u0935\u0928\u0940 \u0938\u0902\u092c\u0902\u0927\u0940 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Informazioni biografiche",
+        "persian": "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u0628\u06cc\u0648\u06af\u0631\u0627\u0641\u06cc\u06a9",
+        "urdu": "\u0633\u0648\u0627\u0646\u062d\u06cc \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Biografische informatie",
+        "ukrainian": "\u0411\u0456\u043e\u0433\u0440\u0430\u0444\u0456\u0447\u043d\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f",
+        "russian": "\u0411\u0438\u043e\u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u0434\u0430\u043d\u043d\u044b\u0435",
+        "swedish": "Biografisk information",
+        "afrikaans": "Biografiese Inligting"
+      }
     },
     {
       "id": "sec_part_4_accommodations_for_individuals_with_disab_p3",
@@ -273,7 +463,26 @@
       "page_number": 3,
       "page_numbers": [
         3
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u062c\u0632\u0621 4. \u0627\u0644\u062a\u0633\u0647\u064a\u0644\u0627\u062a \u0644\u0644\u0623\u0641\u0631\u0627\u062f \u0630\u0648\u064a \u0627\u0644\u0625\u0639\u0627\u0642\u0627\u062a \u0648/\u0623\u0648 \u0627\u0644\u0639\u062c\u0632",
+        "chinese": "\u7b2c4\u90e8\u5206\uff1a\u4e3a\u6b8b\u969c\u548c/\u6216\u529f\u80fd\u969c\u788d\u4eba\u58eb\u63d0\u4f9b\u7684\u4fbf\u5229\u63aa\u65bd",
+        "spanish": "Parte 4. Adaptaciones para personas con discapacidades y/o impedimentos",
+        "tagalog": "Bahagi 4. Mga Akomodasyon para sa mga Indibidwal na may mga Kapansanan at/o Pinsala",
+        "korean": "\uc81c4\ubd80. \uc7a5\uc560 \ubc0f/\ub610\ub294 \uc190\uc0c1\uc774 \uc788\ub294 \uac1c\uc778\uc744 \uc704\ud55c \ud3b8\uc758 \uc81c\uacf5",
+        "french": "Partie 4. Am\u00e9nagements pour les personnes handicap\u00e9es et/ou \u00e0 mobilit\u00e9 r\u00e9duite",
+        "german": "Teil 4. Vorkehrungen f\u00fcr Personen mit Behinderungen und/oder Beeintr\u00e4chtigungen",
+        "portuguese": "Parte 4. Adapta\u00e7\u00f5es para Indiv\u00edduos com Defici\u00eancias e/ou Limita\u00e7\u00f5es",
+        "hindi": "\u092d\u093e\u0917 4. \u0935\u093f\u0915\u0932\u093e\u0902\u0917 \u0914\u0930/\u092f\u093e \u0905\u0936\u0915\u094d\u0924 \u0935\u094d\u092f\u0915\u094d\u0924\u093f\u092f\u094b\u0902 \u0915\u0947 \u0932\u093f\u090f \u0906\u0935\u093e\u0938",
+        "italian": "Parte 4. Misure di accessibilit\u00e0 per persone con disabilit\u00e0 e/o invalidit\u00e0",
+        "persian": "\u0628\u062e\u0634 \u06f4. \u062a\u0633\u0647\u06cc\u0644\u0627\u062a \u0628\u0631\u0627\u06cc \u0627\u0641\u0631\u0627\u062f \u062f\u0627\u0631\u0627\u06cc \u0645\u0639\u0644\u0648\u0644\u06cc\u062a \u0648/\u06cc\u0627 \u0646\u0627\u062a\u0648\u0627\u0646\u06cc",
+        "urdu": "\u062d\u0635\u06c1 4. \u0645\u0639\u0630\u0648\u0631 \u0627\u0648\u0631/\u06cc\u0627 \u0646\u0642\u0635 \u0648\u0627\u0644\u06d2 \u0627\u0641\u0631\u0627\u062f \u06a9\u06d2 \u0644\u06cc\u06d2 \u0633\u06c1\u0648\u0644\u06cc\u0627\u062a",
+        "dutch": "Deel 4. Voorzieningen voor personen met een handicap en/of beperking",
+        "ukrainian": "\u0427\u0430\u0441\u0442\u0438\u043d\u0430 4. \u0421\u043f\u0435\u0446\u0456\u0430\u043b\u044c\u043d\u0456 \u0443\u043c\u043e\u0432\u0438 \u0434\u043b\u044f \u043e\u0441\u0456\u0431 \u0437 \u0456\u043d\u0432\u0430\u043b\u0456\u0434\u043d\u0456\u0441\u0442\u044e \u0442\u0430/\u0430\u0431\u043e \u043e\u0431\u043c\u0435\u0436\u0435\u043d\u0438\u043c\u0438 \u043c\u043e\u0436\u043b\u0438\u0432\u043e\u0441\u0442\u044f\u043c\u0438",
+        "russian": "\u0427\u0430\u0441\u0442\u044c 4. \u0421\u043f\u0435\u0446\u0438\u0430\u043b\u044c\u043d\u044b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u0434\u043b\u044f \u043b\u0438\u0446 \u0441 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u043d\u044b\u043c\u0438 \u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0441\u0442\u044f\u043c\u0438 \u0438/\u0438\u043b\u0438 \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u044f\u043c\u0438",
+        "swedish": "Del 4. Anpassningar f\u00f6r personer med funktionsneds\u00e4ttning och/eller funktionshinder",
+        "afrikaans": "Deel 4. Akkommodasie vir Individue met Gestremdhede en/of Gebreke"
+      }
     },
     {
       "id": "sec_part_4_accommodations_for_individuals_with_disab_p4",
@@ -288,7 +497,26 @@
       "page_number": 4,
       "page_numbers": [
         4
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u062c\u0632\u0621 4. \u0627\u0644\u062a\u0633\u0647\u064a\u0644\u0627\u062a \u0644\u0644\u0623\u0641\u0631\u0627\u062f \u0630\u0648\u064a \u0627\u0644\u0625\u0639\u0627\u0642\u0627\u062a \u0648/\u0623\u0648 \u0627\u0644\u0639\u062c\u0632 (\u062a\u0627\u0628\u0639)",
+        "chinese": "\u7b2c4\u90e8\u5206\uff1a\u4e3a\u6b8b\u969c\u548c/\u6216\u529f\u80fd\u969c\u788d\u4eba\u58eb\u63d0\u4f9b\u7684\u4fbf\u5229\u63aa\u65bd\uff08\u7eed\uff09",
+        "spanish": "Parte 4. Adaptaciones para personas con discapacidades y/o impedimentos (continuaci\u00f3n)",
+        "tagalog": "Bahagi 4. Mga Akomodasyon para sa mga Indibidwal na may mga Kapansanan at/o Pinsala (karugtong)",
+        "korean": "\uc81c4\ubd80. \uc7a5\uc560 \ubc0f/\ub610\ub294 \uc190\uc0c1\uc774 \uc788\ub294 \uac1c\uc778\uc744 \uc704\ud55c \ud3b8\uc758 \uc81c\uacf5 (\uacc4\uc18d)",
+        "french": "Partie 4. Am\u00e9nagements pour les personnes handicap\u00e9es et/ou \u00e0 mobilit\u00e9 r\u00e9duite (suite)",
+        "german": "Teil 4. Vorkehrungen f\u00fcr Personen mit Behinderungen und/oder Beeintr\u00e4chtigungen (Fortsetzung)",
+        "portuguese": "Parte 4. Adapta\u00e7\u00f5es para Indiv\u00edduos com Defici\u00eancias e/ou Limita\u00e7\u00f5es (continua\u00e7\u00e3o)",
+        "hindi": "\u092d\u093e\u0917 4. \u0935\u093f\u0915\u0932\u093e\u0902\u0917 \u0914\u0930/\u092f\u093e \u0905\u0936\u0915\u094d\u0924 \u0935\u094d\u092f\u0915\u094d\u0924\u093f\u092f\u094b\u0902 \u0915\u0947 \u0932\u093f\u090f \u0906\u0935\u093e\u0938 (\u091c\u093e\u0930\u0940)",
+        "italian": "Parte 4. Misure di accessibilit\u00e0 per persone con disabilit\u00e0 e/o invalidit\u00e0 (continua)",
+        "persian": "\u0628\u062e\u0634 \u06f4. \u062a\u0633\u0647\u06cc\u0644\u0627\u062a \u0628\u0631\u0627\u06cc \u0627\u0641\u0631\u0627\u062f \u062f\u0627\u0631\u0627\u06cc \u0645\u0639\u0644\u0648\u0644\u06cc\u062a \u0648/\u06cc\u0627 \u0646\u0627\u062a\u0648\u0627\u0646\u06cc (\u0627\u062f\u0627\u0645\u0647)",
+        "urdu": "\u062d\u0635\u06c1 4. \u0645\u0639\u0630\u0648\u0631 \u0627\u0648\u0631/\u06cc\u0627 \u0646\u0642\u0635 \u0648\u0627\u0644\u06d2 \u0627\u0641\u0631\u0627\u062f \u06a9\u06d2 \u0644\u06cc\u06d2 \u0633\u06c1\u0648\u0644\u06cc\u0627\u062a (\u062c\u0627\u0631\u06cc \u06c1\u06d2)",
+        "dutch": "Deel 4. Voorzieningen voor personen met een handicap en/of beperking (vervolg)",
+        "ukrainian": "\u0427\u0430\u0441\u0442\u0438\u043d\u0430 4. \u0421\u043f\u0435\u0446\u0456\u0430\u043b\u044c\u043d\u0456 \u0443\u043c\u043e\u0432\u0438 \u0434\u043b\u044f \u043e\u0441\u0456\u0431 \u0437 \u0456\u043d\u0432\u0430\u043b\u0456\u0434\u043d\u0456\u0441\u0442\u044e \u0442\u0430/\u0430\u0431\u043e \u043e\u0431\u043c\u0435\u0436\u0435\u043d\u0438\u043c\u0438 \u043c\u043e\u0436\u043b\u0438\u0432\u043e\u0441\u0442\u044f\u043c\u0438 (\u043f\u0440\u043e\u0434\u043e\u0432\u0436\u0435\u043d\u043d\u044f)",
+        "russian": "\u0427\u0430\u0441\u0442\u044c 4. \u0421\u043f\u0435\u0446\u0438\u0430\u043b\u044c\u043d\u044b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u0434\u043b\u044f \u043b\u0438\u0446 \u0441 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u043d\u044b\u043c\u0438 \u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0441\u0442\u044f\u043c\u0438 \u0438/\u0438\u043b\u0438 \u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u044f\u043c\u0438 (\u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0435\u043d\u0438\u0435)",
+        "swedish": "Del 4. Anpassningar f\u00f6r personer med funktionsneds\u00e4ttning och/eller funktionshinder (forts\u00e4ttning)",
+        "afrikaans": "Deel 4. Akkommodasie vir Individue met Gestremdhede en/of Gebreke (vervolg)"
+      }
     },
     {
       "id": "sec_applicant_s_statement_p4",
@@ -302,7 +530,26 @@
       "page_number": 4,
       "page_numbers": [
         4
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0625\u0642\u0631\u0627\u0631 \u0645\u0642\u062f\u0645 \u0627\u0644\u0637\u0644\u0628",
+        "chinese": "\u7533\u8bf7\u4eba\u58f0\u660e",
+        "spanish": "Declaraci\u00f3n del solicitante",
+        "tagalog": "Pahayag ng Aplikante",
+        "korean": "\uc2e0\uccad\uc778 \uc9c4\uc220",
+        "french": "D\u00e9claration du demandeur",
+        "german": "Erkl\u00e4rung des Antragstellers",
+        "portuguese": "Declara\u00e7\u00e3o do Solicitante",
+        "hindi": "\u0906\u0935\u0947\u0926\u0915 \u0915\u093e \u0915\u0925\u0928",
+        "italian": "Dichiarazione del richiedente",
+        "persian": "\u0627\u0638\u0647\u0627\u0631\u0646\u0627\u0645\u0647 \u0645\u062a\u0642\u0627\u0636\u06cc",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u062f\u06c1\u0646\u062f\u06c1 \u06a9\u0627 \u0628\u06cc\u0627\u0646",
+        "dutch": "Verklaring van de aanvrager",
+        "ukrainian": "\u0417\u0430\u044f\u0432\u0430 \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u0430",
+        "russian": "\u0417\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044f",
+        "swedish": "S\u00f6kandens utl\u00e5tande",
+        "afrikaans": "Aansoeker se Verklaring"
+      }
     },
     {
       "id": "sec_applicant_s_contact_information_p4",
@@ -316,7 +563,26 @@
       "page_number": 4,
       "page_numbers": [
         4
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0627\u0644\u062e\u0627\u0635\u0629 \u0628\u0645\u0642\u062f\u0645 \u0627\u0644\u0637\u0644\u0628",
+        "chinese": "\u7533\u8bf7\u4eba\u8054\u7cfb\u4fe1\u606f",
+        "spanish": "Informaci\u00f3n de contacto del solicitante",
+        "tagalog": "Impormasyon sa Pakikipag-ugnayan ng Aplikante",
+        "korean": "\uc2e0\uccad\uc778 \uc5f0\ub77d\ucc98 \uc815\ubcf4",
+        "french": "Coordonn\u00e9es du demandeur",
+        "german": "Kontaktdaten des Antragstellers",
+        "portuguese": "Informa\u00e7\u00f5es de Contato do Solicitante",
+        "hindi": "\u0906\u0935\u0947\u0926\u0915 \u0915\u0940 \u0938\u0902\u092a\u0930\u094d\u0915 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Informazioni di contatto del richiedente",
+        "persian": "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062a\u0645\u0627\u0633 \u0645\u062a\u0642\u0627\u0636\u06cc",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u062f\u06c1\u0646\u062f\u06c1 \u06a9\u06cc \u0631\u0627\u0628\u0637\u06c1 \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Contactgegevens van de aanvrager",
+        "ukrainian": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u0430",
+        "russian": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044f",
+        "swedish": "S\u00f6kandens kontaktuppgifter",
+        "afrikaans": "Aansoeker se Kontakbesonderhede"
+      }
     },
     {
       "id": "sec_applicant_s_signature_p4",
@@ -329,7 +595,26 @@
       "page_number": 4,
       "page_numbers": [
         4
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u062a\u0648\u0642\u064a\u0639 \u0645\u0642\u062f\u0645 \u0627\u0644\u0637\u0644\u0628",
+        "chinese": "\u7533\u8bf7\u4eba\u7b7e\u540d",
+        "spanish": "Firma del solicitante",
+        "tagalog": "Lagda ng Aplikante",
+        "korean": "\uc2e0\uccad\uc778 \uc11c\uba85",
+        "french": "Signature du demandeur",
+        "german": "Unterschrift des Antragstellers",
+        "portuguese": "Assinatura do Solicitante",
+        "hindi": "\u0906\u0935\u0947\u0926\u0915 \u0915\u0947 \u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930",
+        "italian": "Firma del richiedente",
+        "persian": "\u0627\u0645\u0636\u0627\u06cc \u0645\u062a\u0642\u0627\u0636\u06cc",
+        "urdu": "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u062f\u06c1\u0646\u062f\u06c1 \u06a9\u06d2 \u062f\u0633\u062a\u062e\u0637",
+        "dutch": "Handtekening van de aanvrager",
+        "ukrainian": "\u041f\u0456\u0434\u043f\u0438\u0441 \u0437\u0430\u044f\u0432\u043d\u0438\u043a\u0430",
+        "russian": "\u041f\u043e\u0434\u043f\u0438\u0441\u044c \u0437\u0430\u044f\u0432\u0438\u0442\u0435\u043b\u044f",
+        "swedish": "S\u00f6kandens underskrift",
+        "afrikaans": "Aansoeker se Handtekening"
+      }
     },
     {
       "id": "sec_interpreter_s_full_name_p5",
@@ -343,7 +628,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0643\u0627\u0645\u0644 \u0644\u0644\u0645\u062a\u0631\u062c\u0645 \u0627\u0644\u0641\u0648\u0631\u064a",
+        "chinese": "\u53e3\u8bd1\u5458\u5168\u540d",
+        "spanish": "Nombre completo del int\u00e9rprete",
+        "tagalog": "Buong Pangalan ng Tagasalin",
+        "korean": "\ud1b5\uc5ed\uc0ac \uc131\uba85",
+        "french": "Nom complet de l'interpr\u00e8te",
+        "german": "Vollst\u00e4ndiger Name des Dolmetschers",
+        "portuguese": "Nome Completo do Int\u00e9rprete",
+        "hindi": "\u0926\u0941\u092d\u093e\u0937\u093f\u090f \u0915\u093e \u092a\u0942\u0930\u093e \u0928\u093e\u092e",
+        "italian": "Nome e cognome dell'interprete",
+        "persian": "\u0646\u0627\u0645 \u06a9\u0627\u0645\u0644 \u0645\u062a\u0631\u062c\u0645",
+        "urdu": "\u0645\u062a\u0631\u062c\u0645 \u06a9\u0627 \u067e\u0648\u0631\u0627 \u0646\u0627\u0645",
+        "dutch": "Volledige naam van de tolk",
+        "ukrainian": "\u041f\u043e\u0432\u043d\u0435 \u0456\u043c'\u044f \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447\u0430",
+        "russian": "\u041f\u043e\u043b\u043d\u043e\u0435 \u0438\u043c\u044f \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430",
+        "swedish": "Tolkens fullst\u00e4ndiga namn",
+        "afrikaans": "Tolk se Volle Naam"
+      }
     },
     {
       "id": "sec_interpreter_s_mailing_address_p5",
@@ -363,7 +667,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0645\u0631\u0627\u0633\u0644\u0629 \u0627\u0644\u062e\u0627\u0635 \u0628\u0627\u0644\u0645\u062a\u0631\u062c\u0645 \u0627\u0644\u0641\u0648\u0631\u064a",
+        "chinese": "\u53e3\u8bd1\u5458\u90ae\u5bc4\u5730\u5740",
+        "spanish": "Direcci\u00f3n postal del int\u00e9rprete",
+        "tagalog": "Address na Pagpapadalhan ng Sulat ng Tagasalin",
+        "korean": "\ud1b5\uc5ed\uc0ac \uc6b0\ud3b8 \uc8fc\uc18c",
+        "french": "Adresse postale de l'interpr\u00e8te",
+        "german": "Postanschrift des Dolmetschers",
+        "portuguese": "Endere\u00e7o de Correspond\u00eancia do Int\u00e9rprete",
+        "hindi": "\u0926\u0941\u092d\u093e\u0937\u093f\u090f \u0915\u093e \u0921\u093e\u0915 \u092a\u0924\u093e",
+        "italian": "Indirizzo di corrispondenza dell'interprete",
+        "persian": "\u0622\u062f\u0631\u0633 \u067e\u0633\u062a\u06cc \u0645\u062a\u0631\u062c\u0645",
+        "urdu": "\u0645\u062a\u0631\u062c\u0645 \u06a9\u0627 \u062e\u0637 \u0648 \u06a9\u062a\u0627\u0628\u062a \u06a9\u0627 \u067e\u062a\u06c1",
+        "dutch": "Postadres van de tolk",
+        "ukrainian": "\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447\u0430",
+        "russian": "\u041f\u043e\u0447\u0442\u043e\u0432\u044b\u0439 \u0430\u0434\u0440\u0435\u0441 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430",
+        "swedish": "Tolkens postadress",
+        "afrikaans": "Tolk se Posadres"
+      }
     },
     {
       "id": "sec_interpreter_s_contact_information_p5",
@@ -377,7 +700,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0627\u0644\u062e\u0627\u0635\u0629 \u0628\u0627\u0644\u0645\u062a\u0631\u062c\u0645 \u0627\u0644\u0641\u0648\u0631\u064a",
+        "chinese": "\u53e3\u8bd1\u5458\u8054\u7cfb\u4fe1\u606f",
+        "spanish": "Informaci\u00f3n de contacto del int\u00e9rprete",
+        "tagalog": "Impormasyon sa Pakikipag-ugnayan ng Tagasalin",
+        "korean": "\ud1b5\uc5ed\uc0ac \uc5f0\ub77d\ucc98 \uc815\ubcf4",
+        "french": "Coordonn\u00e9es de l'interpr\u00e8te",
+        "german": "Kontaktdaten des Dolmetschers",
+        "portuguese": "Informa\u00e7\u00f5es de Contato do Int\u00e9rprete",
+        "hindi": "\u0926\u0941\u092d\u093e\u0937\u093f\u090f \u0915\u0940 \u0938\u0902\u092a\u0930\u094d\u0915 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Informazioni di contatto dell'interprete",
+        "persian": "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062a\u0645\u0627\u0633 \u0645\u062a\u0631\u062c\u0645",
+        "urdu": "\u0645\u062a\u0631\u062c\u0645 \u06a9\u06cc \u0631\u0627\u0628\u0637\u06c1 \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Contactgegevens van de tolk",
+        "ukrainian": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447\u0430",
+        "russian": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430",
+        "swedish": "Tolkens kontaktuppgifter",
+        "afrikaans": "Tolk se Kontakbesonderhede"
+      }
     },
     {
       "id": "sec_interpreter_s_signature_p5",
@@ -390,7 +732,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u062a\u0648\u0642\u064a\u0639 \u0627\u0644\u0645\u062a\u0631\u062c\u0645 \u0627\u0644\u0641\u0648\u0631\u064a",
+        "chinese": "\u53e3\u8bd1\u5458\u7b7e\u540d",
+        "spanish": "Firma del int\u00e9rprete",
+        "tagalog": "Lagda ng Tagasalin",
+        "korean": "\ud1b5\uc5ed\uc0ac \uc11c\uba85",
+        "french": "Signature de l'interpr\u00e8te",
+        "german": "Unterschrift des Dolmetschers",
+        "portuguese": "Assinatura do Int\u00e9rprete",
+        "hindi": "\u0926\u0941\u092d\u093e\u0937\u093f\u090f \u0915\u0947 \u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930",
+        "italian": "Firma dell'interprete",
+        "persian": "\u0627\u0645\u0636\u0627\u06cc \u0645\u062a\u0631\u062c\u0645",
+        "urdu": "\u0645\u062a\u0631\u062c\u0645 \u06a9\u06d2 \u062f\u0633\u062a\u062e\u0637",
+        "dutch": "Handtekening van de tolk",
+        "ukrainian": "\u041f\u0456\u0434\u043f\u0438\u0441 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447\u0430",
+        "russian": "\u041f\u043e\u0434\u043f\u0438\u0441\u044c \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430",
+        "swedish": "Tolkens underskrift",
+        "afrikaans": "Tolk se Handtekening"
+      }
     },
     {
       "id": "sec_interpreter_s_certification_p5",
@@ -402,7 +763,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0634\u0647\u0627\u062f\u0629 \u0627\u0644\u0645\u062a\u0631\u062c\u0645 \u0627\u0644\u0641\u0648\u0631\u064a",
+        "chinese": "\u53e3\u8bd1\u5458\u8ba4\u8bc1",
+        "spanish": "Certificaci\u00f3n del int\u00e9rprete",
+        "tagalog": "Sertipikasyon ng Tagasalin",
+        "korean": "\ud1b5\uc5ed\uc0ac \uc99d\uba85",
+        "french": "Attestation de l'interpr\u00e8te",
+        "german": "Bescheinigung des Dolmetschers",
+        "portuguese": "Certifica\u00e7\u00e3o do Int\u00e9rprete",
+        "hindi": "\u0926\u0941\u092d\u093e\u0937\u093f\u090f \u0915\u093e \u092a\u094d\u0930\u092e\u093e\u0923\u0928",
+        "italian": "Certificazione dell'interprete",
+        "persian": "\u06af\u0648\u0627\u0647\u06cc \u0645\u062a\u0631\u062c\u0645",
+        "urdu": "\u0645\u062a\u0631\u062c\u0645 \u06a9\u06cc \u062a\u0635\u062f\u06cc\u0642",
+        "dutch": "Certificering van de tolk",
+        "ukrainian": "\u0421\u0435\u0440\u0442\u0438\u0444\u0456\u043a\u0430\u0446\u0456\u044f \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447\u0430",
+        "russian": "\u0421\u0435\u0440\u0442\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430",
+        "swedish": "Tolkens certifiering",
+        "afrikaans": "Tolk se Sertifisering"
+      }
     },
     {
       "id": "sec_preparer_s_full_name_p5",
@@ -416,7 +796,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0643\u0627\u0645\u0644 \u0644\u0644\u0645\u064f\u0639\u0650\u062f\u0651",
+        "chinese": "\u4ee3\u5199\u4eba\u5168\u540d",
+        "spanish": "Nombre completo del preparador",
+        "tagalog": "Buong Pangalan ng Tagapaghanda",
+        "korean": "\uc791\uc131 \ub300\ub9ac\uc778 \uc131\uba85",
+        "french": "Nom complet du pr\u00e9parateur",
+        "german": "Vollst\u00e4ndiger Name des Erstellers",
+        "portuguese": "Nome Completo do Preparador",
+        "hindi": "\u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u093e \u092a\u0942\u0930\u093e \u0928\u093e\u092e",
+        "italian": "Nome e cognome del preparatore",
+        "persian": "\u0646\u0627\u0645 \u06a9\u0627\u0645\u0644 \u062a\u0646\u0638\u06cc\u0645\u200c\u06a9\u0646\u0646\u062f\u0647",
+        "urdu": "\u062a\u06cc\u0627\u0631 \u06a9\u0646\u0646\u062f\u06c1 \u06a9\u0627 \u067e\u0648\u0631\u0627 \u0646\u0627\u0645",
+        "dutch": "Volledige naam van de voorbereider",
+        "ukrainian": "\u041f\u043e\u0432\u043d\u0435 \u0456\u043c'\u044f \u043e\u0441\u043e\u0431\u0438, \u044f\u043a\u0430 \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "russian": "\u041f\u043e\u043b\u043d\u043e\u0435 \u0438\u043c\u044f \u043b\u0438\u0446\u0430, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0433\u043e \u0430\u043d\u043a\u0435\u0442\u0443",
+        "swedish": "Handl\u00e4ggarens fullst\u00e4ndiga namn",
+        "afrikaans": "Voorbereider se Volle Naam"
+      }
     },
     {
       "id": "sec_preparer_s_mailing_address_p5",
@@ -436,7 +835,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0645\u0631\u0627\u0633\u0644\u0629 \u0627\u0644\u062e\u0627\u0635 \u0628\u0627\u0644\u0645\u064f\u0639\u0650\u062f\u0651",
+        "chinese": "\u4ee3\u5199\u4eba\u90ae\u5bc4\u5730\u5740",
+        "spanish": "Direcci\u00f3n postal del preparador",
+        "tagalog": "Address na Pagpapadalhan ng Sulat ng Tagapaghanda",
+        "korean": "\uc791\uc131 \ub300\ub9ac\uc778 \uc6b0\ud3b8 \uc8fc\uc18c",
+        "french": "Adresse postale du pr\u00e9parateur",
+        "german": "Postanschrift des Erstellers",
+        "portuguese": "Endere\u00e7o de Correspond\u00eancia do Preparador",
+        "hindi": "\u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u093e \u0921\u093e\u0915 \u092a\u0924\u093e",
+        "italian": "Indirizzo di corrispondenza del preparatore",
+        "persian": "\u0622\u062f\u0631\u0633 \u067e\u0633\u062a\u06cc \u062a\u0646\u0638\u06cc\u0645\u200c\u06a9\u0646\u0646\u062f\u0647",
+        "urdu": "\u062a\u06cc\u0627\u0631 \u06a9\u0646\u0646\u062f\u06c1 \u06a9\u0627 \u062e\u0637 \u0648 \u06a9\u062a\u0627\u0628\u062a \u06a9\u0627 \u067e\u062a\u06c1",
+        "dutch": "Postadres van de voorbereider",
+        "ukrainian": "\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430 \u043e\u0441\u043e\u0431\u0438, \u044f\u043a\u0430 \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "russian": "\u041f\u043e\u0447\u0442\u043e\u0432\u044b\u0439 \u0430\u0434\u0440\u0435\u0441 \u043b\u0438\u0446\u0430, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0433\u043e \u0430\u043d\u043a\u0435\u0442\u0443",
+        "swedish": "Handl\u00e4ggarens postadress",
+        "afrikaans": "Voorbereider se Posadres"
+      }
     },
     {
       "id": "sec_preparer_s_contact_information_p5",
@@ -450,7 +868,26 @@
       "page_number": 5,
       "page_numbers": [
         5
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0627\u0644\u062e\u0627\u0635\u0629 \u0628\u0627\u0644\u0645\u064f\u0639\u0650\u062f\u0651",
+        "chinese": "\u4ee3\u5199\u4eba\u8054\u7cfb\u4fe1\u606f",
+        "spanish": "Informaci\u00f3n de contacto del preparador",
+        "tagalog": "Impormasyon sa Pakikipag-ugnayan ng Tagapaghanda",
+        "korean": "\uc791\uc131 \ub300\ub9ac\uc778 \uc5f0\ub77d\ucc98 \uc815\ubcf4",
+        "french": "Coordonn\u00e9es du pr\u00e9parateur",
+        "german": "Kontaktdaten des Erstellers",
+        "portuguese": "Informa\u00e7\u00f5es de Contato do Preparador",
+        "hindi": "\u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u0940 \u0938\u0902\u092a\u0930\u094d\u0915 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Informazioni di contatto del preparatore",
+        "persian": "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062a\u0645\u0627\u0633 \u062a\u0646\u0638\u06cc\u0645\u200c\u06a9\u0646\u0646\u062f\u0647",
+        "urdu": "\u062a\u06cc\u0627\u0631 \u06a9\u0646\u0646\u062f\u06c1 \u06a9\u06cc \u0631\u0627\u0628\u0637\u06c1 \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Contactgegevens van de voorbereider",
+        "ukrainian": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f \u043e\u0441\u043e\u0431\u0438, \u044f\u043a\u0430 \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "russian": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u043b\u0438\u0446\u0430, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0433\u043e \u0430\u043d\u043a\u0435\u0442\u0443",
+        "swedish": "Handl\u00e4ggarens kontaktuppgifter",
+        "afrikaans": "Voorbereider se Kontakbesonderhede"
+      }
     },
     {
       "id": "sec_preparer_s_statement_p6",
@@ -463,7 +900,26 @@
       "page_number": 6,
       "page_numbers": [
         6
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0625\u0642\u0631\u0627\u0631 \u0627\u0644\u0645\u064f\u0639\u0650\u062f\u0651",
+        "chinese": "\u4ee3\u5199\u4eba\u58f0\u660e",
+        "spanish": "Declaraci\u00f3n del preparador",
+        "tagalog": "Pahayag ng Tagapaghanda",
+        "korean": "\uc791\uc131 \ub300\ub9ac\uc778 \uc9c4\uc220",
+        "french": "D\u00e9claration du pr\u00e9parateur",
+        "german": "Erkl\u00e4rung des Erstellers",
+        "portuguese": "Declara\u00e7\u00e3o do Preparador",
+        "hindi": "\u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u093e \u0915\u0925\u0928",
+        "italian": "Dichiarazione del preparatore",
+        "persian": "\u0627\u0638\u0647\u0627\u0631\u0646\u0627\u0645\u0647 \u062a\u0646\u0638\u06cc\u0645\u200c\u06a9\u0646\u0646\u062f\u0647",
+        "urdu": "\u062a\u06cc\u0627\u0631 \u06a9\u0646\u0646\u062f\u06c1 \u06a9\u0627 \u0628\u06cc\u0627\u0646",
+        "dutch": "Verklaring van de voorbereider",
+        "ukrainian": "\u0417\u0430\u044f\u0432\u0430 \u043e\u0441\u043e\u0431\u0438, \u044f\u043a\u0430 \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "russian": "\u0417\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043b\u0438\u0446\u0430, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0433\u043e \u0430\u043d\u043a\u0435\u0442\u0443",
+        "swedish": "Handl\u00e4ggarens utl\u00e5tande",
+        "afrikaans": "Voorbereider se Verklaring"
+      }
     },
     {
       "id": "sec_preparer_s_signature_p6",
@@ -476,7 +932,26 @@
       "page_number": 6,
       "page_numbers": [
         6
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u062a\u0648\u0642\u064a\u0639 \u0627\u0644\u0645\u064f\u0639\u0650\u062f\u0651",
+        "chinese": "\u4ee3\u5199\u4eba\u7b7e\u540d",
+        "spanish": "Firma del preparador",
+        "tagalog": "Lagda ng Tagapaghanda",
+        "korean": "\uc791\uc131 \ub300\ub9ac\uc778 \uc11c\uba85",
+        "french": "Signature du pr\u00e9parateur",
+        "german": "Unterschrift des Erstellers",
+        "portuguese": "Assinatura do Preparador",
+        "hindi": "\u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u0947 \u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930",
+        "italian": "Firma del preparatore",
+        "persian": "\u0627\u0645\u0636\u0627\u06cc \u062a\u0646\u0638\u06cc\u0645\u200c\u06a9\u0646\u0646\u062f\u0647",
+        "urdu": "\u062a\u06cc\u0627\u0631 \u06a9\u0646\u0646\u062f\u06c1 \u06a9\u06d2 \u062f\u0633\u062a\u062e\u0637",
+        "dutch": "Handtekening van de voorbereider",
+        "ukrainian": "\u041f\u0456\u0434\u043f\u0438\u0441 \u043e\u0441\u043e\u0431\u0438, \u044f\u043a\u0430 \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+        "russian": "\u041f\u043e\u0434\u043f\u0438\u0441\u044c \u043b\u0438\u0446\u0430, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0433\u043e \u0430\u043d\u043a\u0435\u0442\u0443",
+        "swedish": "Handl\u00e4ggarens underskrift",
+        "afrikaans": "Voorbereider se Handtekening"
+      }
     },
     {
       "id": "sec_your_full_name_p7",
@@ -491,7 +966,26 @@
       "page_number": 7,
       "page_numbers": [
         7
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0633\u0645\u0643 \u0627\u0644\u0643\u0627\u0645\u0644",
+        "chinese": "\u60a8\u7684\u5168\u540d",
+        "spanish": "Su nombre completo",
+        "tagalog": "Ang Iyong Buong Pangalan",
+        "korean": "\uc131\uba85",
+        "french": "Votre nom complet",
+        "german": "Ihr vollst\u00e4ndiger Name",
+        "portuguese": "Seu Nome Completo",
+        "hindi": "\u0906\u092a\u0915\u093e \u092a\u0942\u0930\u093e \u0928\u093e\u092e",
+        "italian": "Nome e cognome",
+        "persian": "\u0646\u0627\u0645 \u06a9\u0627\u0645\u0644 \u0634\u0645\u0627",
+        "urdu": "\u0622\u067e \u06a9\u0627 \u067e\u0648\u0631\u0627 \u0646\u0627\u0645",
+        "dutch": "Uw volledige naam",
+        "ukrainian": "\u0412\u0430\u0448\u0435 \u043f\u043e\u0432\u043d\u0435 \u0456\u043c'\u044f",
+        "russian": "\u0412\u0430\u0448\u0435 \u043f\u043e\u043b\u043d\u043e\u0435 \u0438\u043c\u044f",
+        "swedish": "Ditt fullst\u00e4ndiga namn",
+        "afrikaans": "U Volle Naam"
+      }
     },
     {
       "id": "sec_part_8_additional_information_p7",
@@ -522,7 +1016,26 @@
       "page_number": 7,
       "page_numbers": [
         7
-      ]
+      ],
+      "label_translations": {
+        "arabic": "\u0627\u0644\u062c\u0632\u0621 8. \u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0625\u0636\u0627\u0641\u064a\u0629",
+        "chinese": "\u7b2c8\u90e8\u5206\uff1a\u8865\u5145\u4fe1\u606f",
+        "spanish": "Parte 8. Informaci\u00f3n adicional",
+        "tagalog": "Bahagi 8. Karagdagang Impormasyon",
+        "korean": "\uc81c8\ubd80. \ucd94\uac00 \uc815\ubcf4",
+        "french": "Partie 8. Informations suppl\u00e9mentaires",
+        "german": "Teil 8. Weitere Angaben",
+        "portuguese": "Parte 8. Informa\u00e7\u00f5es Adicionais",
+        "hindi": "\u092d\u093e\u0917 8. \u0905\u0924\u093f\u0930\u093f\u0915\u094d\u0924 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        "italian": "Parte 8. Informazioni aggiuntive",
+        "persian": "\u0628\u062e\u0634 \u06f8. \u0627\u0637\u0644\u0627\u0639\u0627\u062a \u062a\u06a9\u0645\u06cc\u0644\u06cc",
+        "urdu": "\u062d\u0635\u06c1 8. \u0627\u0636\u0627\u0641\u06cc \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+        "dutch": "Deel 8. Aanvullende informatie",
+        "ukrainian": "\u0427\u0430\u0441\u0442\u0438\u043d\u0430 8. \u0414\u043e\u0434\u0430\u0442\u043a\u043e\u0432\u0430 \u0456\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0456\u044f",
+        "russian": "\u0427\u0430\u0441\u0442\u044c 8. \u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f",
+        "swedish": "Del 8. Ytterligare information",
+        "afrikaans": "Deel 8. Bykomende Inligting"
+      }
     }
   ],
   "fields": [

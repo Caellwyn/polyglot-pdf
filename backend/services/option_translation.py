@@ -24,6 +24,7 @@ retries. ASCII only (CLAUDE.md scar #6) -- translated strings are runtime data.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
@@ -217,6 +218,11 @@ async def bake_label_translations(
             # untouched.
             "spoken_names": 0, "names_missing": 0, "names_translated": 0,
             "fields_updated": 0,
+            # Section-label bake (bd polyglot-pdf-tupu.2): kit coverage keeps
+            # session start call-free (the greeting's bounded await depends
+            # on it).
+            "section_labels": 0, "sections_missing": 0,
+            "sections_translated": 0, "sections_updated": 0,
         }
         report["languages"][name] = entry
         if name == "english":  # labels are already English; nothing to bake
@@ -229,7 +235,9 @@ async def bake_label_translations(
         # one-translate-call-per-language invariant the bake tests pin.
         spoken_names, existing_names = _collect_spoken_names(schema, name)
         entry["spoken_names"] = len(spoken_names)
-        if not labels and not spoken_names:
+        section_labels, existing_sections = _collect_section_labels(schema, name)
+        entry["section_labels"] = len(section_labels)
+        if not labels and not spoken_names and not section_labels:
             return
         missing = labels if not only_missing else [
             label for label in labels if label not in existing
@@ -239,11 +247,17 @@ async def bake_label_translations(
             n for n in spoken_names if n not in existing_names
         ]
         entry["names_missing"] = len(names_missing)
+        sections_missing = section_labels if not only_missing else [
+            s for s in section_labels if s not in existing_sections
+        ]
+        entry["sections_missing"] = len(sections_missing)
         overrides = dict(existing)
         name_overrides = dict(existing_names)
-        # Union of both string sets, deduped, labels first (a string that is
-        # BOTH a label and a spoken name translates once and serves both).
-        union_missing = list(dict.fromkeys([*missing, *names_missing]))
+        section_overrides = dict(existing_sections)
+        # Union of the string sets, deduped, labels first (a string appearing
+        # in several classes translates once and serves all of them).
+        union_missing = list(dict.fromkeys(
+            [*missing, *names_missing, *sections_missing]))
         if union_missing:
             try:
                 async with semaphore:
@@ -275,6 +289,13 @@ async def bake_label_translations(
             }
             entry["names_translated"] = len(fresh_names)
             name_overrides.update(fresh_names)
+            sections_missing_set = set(sections_missing)
+            fresh_sections = {
+                k: v for k, v in translated.items()
+                if k in sections_missing_set and isinstance(v, str) and v.strip()
+            }
+            entry["sections_translated"] = len(fresh_sections)
+            section_overrides.update(fresh_sections)
         # Fan spoken-name translations out to the fields (canonical lowercase-
         # name key; only_missing semantics identical to the option path).
         for field in _iter_field_dicts(schema):
@@ -295,6 +316,26 @@ async def bake_label_translations(
                 continue
             translations[name] = value
             entry["fields_updated"] += 1
+            report["changed"] = True
+        # Fan section-label translations out to the sections (same semantics).
+        for section in _iter_section_dicts(schema):
+            label = section.get("label")
+            if not isinstance(label, str) or not label.strip():
+                continue
+            value = section_overrides.get(label)
+            if not value:
+                continue
+            if only_missing and _kit_translation(
+                    section.get("label_translations"), keys):
+                continue
+            translations = section.get("label_translations")
+            if not isinstance(translations, dict):
+                translations = {}
+                section["label_translations"] = translations
+            if translations.get(name) == value:
+                continue
+            translations[name] = value
+            entry["sections_updated"] += 1
             report["changed"] = True
         for opt in _iter_option_dicts(schema):
             label = opt.get("label")
@@ -322,64 +363,140 @@ async def bake_label_translations(
     return report
 
 
-async def build_option_label_overrides(
+def _collect_section_labels(
+    full_schema: Optional[Dict[str, Any]], language_name: str
+) -> Tuple[List[str], Dict[str, str]]:
+    """Unique section labels in order + kit translations from each section's
+    label_translations (bd polyglot-pdf-tupu.2 -- closes the zmlo residual
+    where a greeting read a section title in English). Kit coverage matters
+    here for LATENCY, not just cost: an uncovered section label forces a live
+    translate call at session start, which outruns the greeting's bounded
+    await and leaves the first turn English."""
+    keys = _kit_translation_keys(language_name)
+    labels: List[str] = []
+    seen: set = set()
+    kit: Dict[str, str] = {}
+    for section in (full_schema or {}).get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        label = section.get("label")
+        if not isinstance(label, str) or not label.strip():
+            continue
+        if label not in seen:
+            seen.add(label)
+            labels.append(label)
+        if label not in kit:
+            translated = _kit_translation(section.get("label_translations"), keys)
+            if translated:
+                kit[label] = translated
+    return labels, kit
+
+
+def _iter_section_dicts(schema: Optional[Dict[str, Any]]):
+    """Yield every section dict the section-label bake covers."""
+    for section in (schema or {}).get("sections") or []:
+        if isinstance(section, dict):
+            yield section
+
+
+@dataclass(frozen=True)
+class TranslationOverrides:
+    """The session-language translation maps, all keyed by ENGLISH source
+    string (bd polyglot-pdf-tupu.2). One shared cached build produces all
+    three; consumers fail open to the English string on any missing key."""
+    option_labels: Dict[str, str]
+    spoken_names: Dict[str, str]
+    section_labels: Dict[str, str]
+
+    def __bool__(self) -> bool:
+        return bool(self.option_labels or self.spoken_names
+                    or self.section_labels)
+
+
+EMPTY_OVERRIDES = TranslationOverrides({}, {}, {})
+
+
+async def build_translation_overrides(
     full_schema: Optional[Dict[str, Any]],
     language_name: str,
     text_ai: Any,
-) -> Dict[str, str]:
-    """Build {english_label: translated_label} for the session language.
+) -> TranslationOverrides:
+    """Build the session-language TranslationOverrides (bd tupu.2; supersedes
+    the label-only build_option_label_overrides, the named ow1e contract
+    change).
 
-    Kit label_translations win; the remainder goes through ONE batched
-    translate_labels call. Raises OptionTranslationError when that call fails,
-    so the cache layer does not keep a failed build.
+    Kit translations win (option label_translations + field
+    spoken_name_translations); the remainder -- including section labels,
+    which have no kit structure -- goes through ONE batched translate_labels
+    call over the deduped union. Raises OptionTranslationError when that call
+    fails, so the cache layer does not keep a failed build.
     """
-    labels, overrides = _collect_labels(full_schema, language_name)
-    if not labels:
-        return {}
+    labels, label_overrides = _collect_labels(full_schema, language_name)
+    spoken_names, name_overrides = _collect_spoken_names(
+        full_schema, language_name)
+    section_labels, section_overrides = _collect_section_labels(
+        full_schema, language_name)
+    if not labels and not spoken_names and not section_labels:
+        return EMPTY_OVERRIDES
 
-    remaining = [label for label in labels if label not in overrides]
-    if remaining:
+    remaining_labels = [s for s in labels if s not in label_overrides]
+    remaining_names = [s for s in spoken_names if s not in name_overrides]
+    remaining_sections = [s for s in section_labels
+                          if s not in section_overrides]
+    union = list(dict.fromkeys(
+        [*remaining_labels, *remaining_names, *remaining_sections]))
+    if union:
         codes = bcp47_codes_for_spoken_language(language_name)
         language_code = codes[0] if codes else ""
         translated = await text_ai.translate_labels(
-            remaining, language_name, language_code
+            union, language_name, language_code
         )
         if translated is None:
             raise OptionTranslationError("translate_labels failed")
-        # Kit precedence is absolute: only labels actually sent to the
+        # Kit precedence is absolute: only strings actually sent to the
         # secretary may land, so a stray response entry can never overwrite a
-        # kit-provided translation (translate_labels filters to its request
-        # set too -- this keeps the invariant local).
-        remaining_set = set(remaining)
-        overrides.update(
-            {k: v for k, v in translated.items()
-             if k in remaining_set and isinstance(v, str) and v}
-        )
-    return overrides
+        # kit-provided translation. Membership splits the union back into its
+        # three maps (a shared string legitimately lands in several).
+        clean = {k: v for k, v in translated.items()
+                 if isinstance(v, str) and v.strip()}
+        label_set = set(remaining_labels)
+        name_set = set(remaining_names)
+        section_set = set(remaining_sections)
+        label_overrides.update(
+            {k: v for k, v in clean.items() if k in label_set})
+        name_overrides.update(
+            {k: v for k, v in clean.items() if k in name_set})
+        section_overrides.update(
+            {k: v for k, v in clean.items() if k in section_set})
+    return TranslationOverrides(
+        option_labels=label_overrides,
+        spoken_names=name_overrides,
+        section_labels=section_overrides,
+    )
 
 
 async def _build_bounded(
     full_schema: Optional[Dict[str, Any]], language_name: str, text_ai: Any
-) -> Dict[str, str]:
+) -> TranslationOverrides:
     return await asyncio.wait_for(
-        build_option_label_overrides(full_schema, language_name, text_ai),
+        build_translation_overrides(full_schema, language_name, text_ai),
         timeout=OPTION_TRANSLATION_TIMEOUT_S,
     )
 
 
-async def get_option_label_overrides(
+async def get_translation_overrides(
     form_id: str,
     full_schema: Optional[Dict[str, Any]],
     language_name: str,
     text_ai: Any,
-) -> Dict[str, str]:
+) -> TranslationOverrides:
     """Cached entry point: one build per (form, language) per process.
 
     Concurrent callers share the in-flight task (shielded, so one session's
     teardown never cancels the shared build). On build failure -- secretary
-    error or the 20s timeout -- returns {} and DROPS the cache entry so the
-    next session retries. Never raises (except CancelledError propagation for
-    the awaiting session's own teardown).
+    error or the 20s timeout -- returns EMPTY_OVERRIDES and DROPS the cache
+    entry so the next session retries. Never raises (except CancelledError
+    propagation for the awaiting session's own teardown).
     """
     key = (str(form_id), (language_name or "").strip().lower())
     task = _build_tasks.get(key)
@@ -396,7 +513,7 @@ async def get_option_label_overrides(
             # running for other sessions -- leave it cached and propagate.
             raise
         _build_tasks.pop(key, None)
-        return {}
+        return EMPTY_OVERRIDES
     except Exception as exc:  # noqa: BLE001 -- fail-open by design
         if _build_tasks.get(key) is task:
             _build_tasks.pop(key, None)
@@ -406,11 +523,13 @@ async def get_option_label_overrides(
             language=key[1],
             exc_type=type(exc).__name__,
         )
-        return {}
+        return EMPTY_OVERRIDES
     _log.info(
         "option_translation_ready",
         form_id=str(form_id),
         language=key[1],
-        override_count=len(result),
+        override_count=len(result.option_labels),
+        spoken_name_count=len(result.spoken_names),
+        section_label_count=len(result.section_labels),
     )
     return result

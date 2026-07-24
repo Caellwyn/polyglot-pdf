@@ -274,6 +274,9 @@ export interface FormField {
 export interface FormSection {
   id: string;
   label: string;
+  // Session-language translations of label (lowercase language-name keys) --
+  // same convention as option label_translations (bd polyglot-pdf-tupu.2).
+  label_translations?: Record<string, string>;
   description?: string;
   order: number;
   fields: string[]; // Field IDs

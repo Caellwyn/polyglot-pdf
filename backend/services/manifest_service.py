@@ -69,7 +69,8 @@ def _apply_label_overrides(options: list, overrides: dict) -> list:
 
 
 def get_field_guidance(
-    field: dict, option_label_overrides: dict | None = None
+    field: dict, option_label_overrides: dict | None = None,
+    spoken_name_overrides: dict | None = None,
 ) -> dict | None:
     """Build the per-field guidance block for Dynamic Turn Injection (bd
     polyglot-pdf-jnjj.22).
@@ -91,6 +92,11 @@ def get_field_guidance(
             (bd polyglot-pdf-ow1e). Applied AFTER _sanitize_options: overridden
             options carry the translated label and no spoken_label; values are
             untouched. None/empty -> byte-identical output to the no-arg call.
+        spoken_name_overrides: Optional {english_spoken_name: translated} map
+            (bd polyglot-pdf-tupu.2). Substitutes the guidance's spoken_name
+            (keyed by the SAME spoken_name-or-name fallback string the bake
+            collects) so the model reads the field's name in the session
+            language. None/empty/miss -> English, byte-identical.
 
     Returns:
         A guidance dict, or None if no field. Keys: field_id, spoken_name, name,
@@ -111,9 +117,15 @@ def get_field_guidance(
     # format_hint: nested help.format_hint (canonical) -> flat format.
     format_hint = help_block.get("format_hint") or field.get("format")
 
+    # Session-language spoken name (bd tupu.2): the override map keys on the
+    # spoken_name-or-name string (the id fallback below was never collected by
+    # the bake, so it correctly stays untranslated).
+    spoken = field.get("spoken_name") or field.get("name") or field.get("id")
+    if spoken_name_overrides:
+        spoken = spoken_name_overrides.get(spoken) or spoken
     guidance: dict = {
         "field_id": field.get("id"),
-        "spoken_name": field.get("spoken_name") or field.get("name") or field.get("id"),
+        "spoken_name": spoken,
         "type": field.get("type", "text"),
     }
     if field.get("name"):

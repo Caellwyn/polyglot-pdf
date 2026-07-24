@@ -40,6 +40,11 @@ export interface FormPart {
 export interface FormSection {
   id: string;
   label: string;
+  // Session-language translations of label (lowercase language-name keys) --
+  // same convention as option label_translations (bd polyglot-pdf-tupu.2).
+  // Kept on the editor type so a load -> edit -> save round-trip does not
+  // strip them.
+  label_translations?: Record<string, string>;
   order: number;
   fields: string[];
   // The backend only accepts the LEGACY single-atom shape on a section
