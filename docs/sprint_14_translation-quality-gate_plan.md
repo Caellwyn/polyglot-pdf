@@ -155,10 +155,13 @@ surface with zero per-site plumbing. **Batch per LANGUAGE, never per string.**
 LintFinding-shaped (`severity/rule/path/message`), ALL severity=WARNING --
 never ERROR, so no flag can block kit publish (publish-blocking would
 contradict fail-open; shipping decisions on flags stay human). Path
-convention carries the parent so `field_id` derivation works:
-`fields[<field_id>].spoken_name_translations.<lang>` /
-`fields[<field_id>].options[<value>].label_translations.<lang>` /
-`sections[<section_id>].label_translations.<lang>`.
+convention carries the parent in the exact shape
+`schema_lint.field_id_of()` parses, so `field_id` derivation works
+(V2 build note -- the plan's original prettier format parsed to None):
+`fields[<idx>] (id=<field_id>).spoken_name_translations.<lang>` /
+`fields[<idx>] (id=<field_id>).options[<value>].label_translations.<lang>` /
+`sections[<section_id>].label_translations.<lang>` (sections carry no
+`(id=...)` -- no field to focus).
 - `translation-drift-rectified`: judge flagged it, rectify cleared it on
   re-judge; message = drift reason + old->new note. Informational.
 - `translation-drift-unresolved`: no attempt cleared; ORIGINAL kept; message

@@ -68,6 +68,19 @@ ahead of the V1 probe and the V3 verify/rectify loop.
 Deferred/next: V1 probe (`polyglot-pdf-i36i`) now unblocked; V3
 (`polyglot-pdf-9ikj`) consumes the lint + `translate_items` in the bake.
 
+**Fresh-eyes triage (round 1, Sonnet -- GAPS-FOUND (2) + 2 advisories):**
+- ADOPTED (blocker): the lint's finding paths used a prettier
+  `fields[<id>].` format that `schema_lint.field_id_of()` cannot parse --
+  every finding would have carried `field_id=None` into V4's editor
+  surfacing. Paths now emit the house `fields[<idx>] (id=<id>)` shape,
+  round-trip pinned in tests.
+- ADOPTED (already fixed pre-verdict, independently): stale
+  validation-delegation.md temperature line + the missing `translate_items`
+  port declaration -- both landed in the port/doc commit while the review
+  ran.
+- DEFERRED (true nit -> bd polyglot-pdf-qwex): deploy-script `--all` loops
+  now log a spurious skip warning for `form-kits/_translation/`.
+
 ## Lessons
 
 - **Lint tolerances need measurement, not intuition.** Two rounds of

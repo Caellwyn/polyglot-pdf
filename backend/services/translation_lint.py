@@ -404,20 +404,27 @@ def iter_translation_entries(
 ) -> Iterator[Tuple[str, str, str, str]]:
     """Yield (path, language_key, source, translation) for every baked
     translation in a kit schema: field spoken_name_translations, option
-    label_translations, section label_translations. Paths follow the flag-
-    taxonomy convention (parent-carrying, so field_id derivation works)."""
-    for field in (schema or {}).get("fields") or []:
+    label_translations, section label_translations.
+
+    Field-level paths carry `(id=<field_id>)` in the exact shape
+    `schema_lint.field_id_of()` parses (`fields[3] (id=x).show_if`), so
+    `LintFinding.as_dict()` derives a clickable field_id for the editor
+    UI (fresh-eyes finding on this bead: the first cut used a prettier
+    `fields[<id>].` format the parser could not read, which would have
+    shipped field_id=None into V4's surfacing). Section paths carry no
+    `(id=...)` on purpose -- there is no field to focus for a section
+    label, so field_id=None is correct there."""
+    for index, field in enumerate((schema or {}).get("fields") or []):
         if not isinstance(field, dict):
             continue
-        field_id = field.get("id")
+        field_ref = "fields[%d] (id=%s)" % (index, field.get("id"))
         spoken = field.get("spoken_name") or field.get("name")
         translations = field.get("spoken_name_translations")
         if isinstance(spoken, str) and spoken.strip() \
                 and isinstance(translations, dict):
             for lang, value in translations.items():
                 yield (
-                    "fields[%s].spoken_name_translations.%s"
-                    % (field_id, lang),
+                    "%s.spoken_name_translations.%s" % (field_ref, lang),
                     str(lang), spoken, value if isinstance(value, str) else "",
                 )
         options = field.get("options") or field.get("allowed_values")
@@ -431,8 +438,8 @@ def iter_translation_entries(
                 continue
             for lang, value in opt_translations.items():
                 yield (
-                    "fields[%s].options[%s].label_translations.%s"
-                    % (field_id, opt.get("value"), lang),
+                    "%s.options[%s].label_translations.%s"
+                    % (field_ref, opt.get("value"), lang),
                     str(lang), label, value if isinstance(value, str) else "",
                 )
     for section in (schema or {}).get("sections") or []:

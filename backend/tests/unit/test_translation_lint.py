@@ -301,15 +301,24 @@ _SCHEMA = {
 
 
 def test_iter_translation_entries_paths_and_coverage():
+    from backend.services.schema_lint import field_id_of
+
     entries = list(iter_translation_entries(_SCHEMA))
     paths = [e[0] for e in entries]
-    assert "fields[f_name].spoken_name_translations.russian" in paths
-    assert "fields[f_name].options[opt_a].label_translations.russian" in paths
+    assert "fields[0] (id=f_name).spoken_name_translations.russian" in paths
+    assert "fields[0] (id=f_name).options[opt_a].label_translations.russian" \
+        in paths
     assert "sections[sec_1].label_translations.russian" in paths
-    # Every entry carries (path, lang, source, translation).
+    # Field-level paths round-trip through schema_lint.field_id_of so the
+    # editor can focus the offending field (fresh-eyes finding: the first
+    # cut's format parsed to None); section paths deliberately do not.
     for path, lang, source, translation in entries:
         assert isinstance(path, str) and isinstance(lang, str)
         assert isinstance(source, str) and isinstance(translation, str)
+        if path.startswith("fields["):
+            assert field_id_of(path) == "f_name", path
+        else:
+            assert field_id_of(path) is None, path
 
 
 def test_lint_kit_schema_flags_and_skips():
@@ -318,11 +327,12 @@ def test_lint_kit_schema_flags_and_skips():
     for finding in findings:
         assert finding.severity == SEVERITY_WARNING
         assert finding.rule == RULE_MECHANICAL
+        assert finding.as_dict()["field_id"] in ("f_name", None)
         by_path.setdefault(finding.path, []).append(finding.message)
-    assert "fields[f_name].spoken_name_translations.russian" in by_path
-    assert any("wrong-script" in m for m in
-               by_path["fields[f_name].spoken_name_translations.russian"])
-    assert "fields[f_name].options[opt_a].label_translations.russian" \
+    spoken_path = "fields[0] (id=f_name).spoken_name_translations.russian"
+    assert spoken_path in by_path
+    assert any("wrong-script" in m for m in by_path[spoken_path])
+    assert "fields[0] (id=f_name).options[opt_a].label_translations.russian" \
         in by_path
     # The es alias entry, the english entry, the unknown key, and the clean
     # section entry produce no findings.
