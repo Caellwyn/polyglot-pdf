@@ -548,3 +548,134 @@ async def test_validate_sends_no_temperature(adapter_with_client):
     await adapter.validate({"stable_prefix": ["si"], "fresh_tail": ["state"]})
     call = adapter._client.aio.models.generate_content.await_args
     assert getattr(call.kwargs["config"], "temperature", None) is None
+
+
+# --- verify-loop methods (bd polyglot-pdf-9ikj) -------------------------------
+
+_GLOSSARY_CONTEXT = {
+    "register": "Formal 'usted' throughout.",
+    "pins": {"head of household": "cabeza de familia"},
+    "do_not_translate": ["USCIS"],
+    "digits_policy": "ASCII digits only.",
+}
+
+
+@pytest.mark.asyncio
+async def test_back_translate_happy_path_and_filtering(adapter_with_client):
+    response = _make_response(
+        text='{"translations": {"a": "Name", "ghost": "X", "b": 3}}')
+    adapter = adapter_with_client(response)
+    result = await adapter.back_translate(
+        {"a": "Nombre", "b": "Apellido", "empty": "  "}, "Spanish", "es-US")
+    # Unknown ids and non-str values dropped; empty inputs never requested.
+    assert result == {"a": "Name"}
+    call = adapter._client.aio.models.generate_content.await_args
+    assert call.kwargs["config"].temperature == pytest.approx(0.0)
+    prompt = call.kwargs["contents"][0]
+    assert "Spanish (es-US)" in prompt and "Nombre" in prompt
+    assert "empty" not in json.loads(
+        prompt.split("Strings:\n", 1)[1])
+
+
+@pytest.mark.asyncio
+async def test_back_translate_fail_open_paths(adapter_with_client):
+    adapter = adapter_with_client(_make_response(text="not json"))
+    assert await adapter.back_translate({"a": "X"}, "Spanish", "es-US") is None
+    adapter = adapter_with_client(_make_response(text='{"no": 1}'))
+    assert await adapter.back_translate({"a": "X"}, "Spanish", "es-US") is None
+    adapter = adapter_with_client(_make_response(text="{}"))
+    assert await adapter.back_translate({}, "Spanish", "es-US") == {}
+    adapter._client.aio.models.generate_content.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_judge_translations_verdicts_and_prompt(adapter_with_client):
+    response = _make_response(text=json.dumps({"verdicts": [
+        {"id": "a", "drift": True, "reason": "negation lost"},
+        {"id": "b", "drift": False},
+        {"id": "ghost", "drift": True, "reason": "x"},
+    ]}))
+    adapter = adapter_with_client(response)
+    items = [
+        {"id": "a", "en": "Do not file", "translation": "Presente",
+         "back_translation": "File it"},
+        {"id": "b", "en": "Name", "translation": "Nombre",
+         "back_translation": "Name"},
+    ]
+    result = await adapter.judge_translations(
+        items, "Spanish", "es-US", glossary_context=_GLOSSARY_CONTEXT)
+    assert result == {
+        "a": {"drift": True, "reason": "negation lost"},
+        "b": {"drift": False, "reason": ""},
+    }
+    call = adapter._client.aio.models.generate_content.await_args
+    assert call.kwargs["config"].temperature == pytest.approx(0.0)
+    prompt = call.kwargs["contents"][0]
+    # The V1-hardened rules block + glossary injection reach the prompt.
+    assert "SUPPORTING evidence ONLY" in prompt
+    assert "Never flag a rendering you would yourself propose" in prompt
+    assert "Formal 'usted' throughout." in prompt
+    assert "cabeza de familia" in prompt
+    assert "USCIS" in prompt
+
+
+@pytest.mark.asyncio
+async def test_judge_translations_fail_open_paths(adapter_with_client):
+    items = [{"id": "a", "en": "X", "translation": "Y",
+              "back_translation": ""}]
+    adapter = adapter_with_client(_make_response(text="not json"))
+    assert await adapter.judge_translations(items, "Spanish", "es") is None
+    adapter = adapter_with_client(_make_response(text='{"verdicts": {}}'))
+    assert await adapter.judge_translations(items, "Spanish", "es") is None
+    adapter = adapter_with_client(_make_response(text="{}"))
+    assert await adapter.judge_translations([], "Spanish", "es") == {}
+    adapter._client.aio.models.generate_content.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rectify_translations_corrections_and_prompt(adapter_with_client):
+    response = _make_response(text=json.dumps({"corrections": {
+        "a": "  No presente  ", "ghost": "X", "b": "",
+    }}))
+    adapter = adapter_with_client(response)
+    items = [
+        {"id": "a", "en": "Do not file", "translation": "Presente",
+         "back_translation": "File it", "problem": "negation lost"},
+        {"id": "b", "en": "Name", "translation": "Nombre",
+         "back_translation": "", "problem": "x"},
+    ]
+    result = await adapter.rectify_translations(
+        items, "Spanish", "es-US", glossary_context=_GLOSSARY_CONTEXT)
+    # Trimmed; unknown ids and empty corrections dropped.
+    assert result == {"a": "No presente"}
+    prompt = adapter._client.aio.models.generate_content \
+        .await_args.kwargs["contents"][0]
+    assert "FIXES the stated problem" in prompt
+    assert "negation lost" in prompt
+    assert "Formal 'usted' throughout." in prompt
+
+
+@pytest.mark.asyncio
+async def test_rectify_translations_fail_open_paths(adapter_with_client):
+    items = [{"id": "a", "en": "X", "translation": "Y",
+              "back_translation": "", "problem": "p"}]
+    adapter = adapter_with_client(_make_response(text="not json"))
+    assert await adapter.rectify_translations(items, "Spanish", "es") is None
+    adapter = adapter_with_client(_make_response(text='{"corrections": []}'))
+    assert await adapter.rectify_translations(items, "Spanish", "es") is None
+    adapter = adapter_with_client(_make_response(text="{}"))
+    assert await adapter.rectify_translations([], "Spanish", "es") == {}
+    adapter._client.aio.models.generate_content.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_verify_methods_none_when_no_client():
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    with patch("backend.adapters.text_ai_gemini.genai") as mock_genai:
+        mock_genai.Client.side_effect = Exception("no creds")
+        adapter = TextAIGemini(api_key=None, vertexai=False)
+    assert await adapter.back_translate({"a": "X"}, "Spanish", "es") is None
+    assert await adapter.judge_translations(
+        [{"id": "a"}], "Spanish", "es") is None
+    assert await adapter.rectify_translations(
+        [{"id": "a"}], "Spanish", "es") is None

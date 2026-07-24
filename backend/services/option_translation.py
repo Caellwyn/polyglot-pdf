@@ -29,6 +29,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
 
+from backend.services.schema_lint import SEVERITY_WARNING, LintFinding
+from backend.services.translation_lint import load_glossary
+from backend.services.translation_verify import (
+    VerifyFlag,
+    verify_fresh_translations,
+)
 from backend.utils.language_codes import bcp47_codes_for_spoken_language
 
 _log = structlog.get_logger(__name__)
@@ -180,6 +186,9 @@ async def bake_label_translations(
     *,
     only_missing: bool = True,
     concurrency: int = 4,
+    verify: Optional[bool] = None,
+    verify_lite_ai: Any = None,
+    verify_glossary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Bake label_translations into a kit schema, in place (bd polyglot-pdf-2h9j).
 
@@ -204,9 +213,31 @@ async def bake_label_translations(
     idempotent re-run fills the gap. Returns a JSON-ready report:
     {"changed": bool, "failed_languages": [...],
      "languages": {name: {labels, missing, translated, options_updated, failed}}}.
+
+    VERIFY GATE (bd polyglot-pdf-9ikj, default-ON via
+    TRANSLATION_VERIFY_ENABLED; `verify` overrides): freshly translated
+    strings run through the verify/rectify loop
+    (backend/services/translation_verify.py) BEFORE fan-out -- corrected
+    values replace flagged ones only on a verified-clean re-judge; the keep
+    rules and flip-flop detector are the V1-probe-decided ones. When the
+    gate runs, the report additionally carries `flags` (a list of
+    LintFinding dicts, ALL severity=WARNING -- flags never block publish)
+    and per-language `verify` counts; a verify outage leaves every baked
+    value byte-identical to the no-verify bake (fail-open) with
+    verify.available=false. With verify disabled the report is
+    byte-identical to the pre-gate shape.
     """
     semaphore = asyncio.Semaphore(max(1, concurrency))
     report: Dict[str, Any] = {"changed": False, "failed_languages": [], "languages": {}}
+    verify_enabled = verify
+    if verify_enabled is None:
+        from backend.config import get_settings
+        verify_enabled = get_settings().TRANSLATION_VERIFY_ENABLED
+    if verify_enabled and verify_glossary is None:
+        verify_glossary = load_glossary()
+    if verify_enabled and verify_lite_ai is None:
+        verify_lite_ai = _build_verify_lite_ai()
+    verify_flags: List[Tuple[str, VerifyFlag]] = []
 
     async def _bake_one(name: str, code: str) -> None:
         name = name.strip().lower()
@@ -296,6 +327,41 @@ async def bake_label_translations(
             }
             entry["sections_translated"] = len(fresh_sections)
             section_overrides.update(fresh_sections)
+            # VERIFY GATE (bd 9ikj): freshly translated strings only --
+            # already-covered kit strings are not re-verified, so idempotent
+            # re-runs stay call-free. Corrections land in the override maps
+            # BEFORE fan-out; a verify outage changes nothing (fail-open).
+            if verify_enabled and (fresh or fresh_names or fresh_sections):
+                try:
+                    async with semaphore:
+                        result = await verify_fresh_translations(
+                            language_name=name,
+                            language_code=code,
+                            fresh={
+                                "option-label": fresh,
+                                "field-name": fresh_names,
+                                "section-title": fresh_sections,
+                            },
+                            pro_ai=text_ai,
+                            lite_ai=verify_lite_ai,
+                            glossary=verify_glossary,
+                        )
+                except Exception as exc:  # noqa: BLE001 -- fail-open
+                    _log.warning(
+                        "option_translation_verify_failed",
+                        language=name, exc_type=type(exc).__name__,
+                    )
+                    entry["verify"] = {"available": False}
+                else:
+                    entry["verify"] = {
+                        "available": result.available, **result.counts}
+                    overrides.update(result.final.get("option-label", {}))
+                    name_overrides.update(
+                        result.final.get("field-name", {}))
+                    section_overrides.update(
+                        result.final.get("section-title", {}))
+                    verify_flags.extend(
+                        (name, flag) for flag in result.flags)
         # Fan spoken-name translations out to the fields (canonical lowercase-
         # name key; only_missing semantics identical to the option path).
         for field in _iter_field_dicts(schema):
@@ -360,7 +426,75 @@ async def bake_label_translations(
         _bake_one(name, code) for name, code in languages.items()
     ))
     report["failed_languages"].sort()
+    if verify_enabled:
+        # Resolve each flag's SOURCE string to its kit path(s) post-fan-out
+        # (one WARNING finding per location, parent-carrying so
+        # schema_lint.field_id_of derives a clickable field id). The flags
+        # key exists whenever the gate ran -- presence == verify ran.
+        findings: List[Dict[str, Any]] = []
+        for language, flag in verify_flags:
+            paths = _resolve_flag_paths(
+                schema, flag.kind, flag.source, language)
+            for path in paths or ["(unresolved path) %s" % flag.source]:
+                findings.append(LintFinding(
+                    severity=SEVERITY_WARNING,
+                    rule=flag.taxonomy,
+                    path=path,
+                    message=flag.message,
+                ).as_dict())
+        report["flags"] = findings
     return report
+
+
+def _build_verify_lite_ai() -> Any:
+    """The verify loop's independent LITE back-translation adapter.
+    Lazy import: the adapter module must not become an option_translation
+    import-time dependency (test stubs replace this via the
+    verify_lite_ai param)."""
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    from backend.config import get_settings
+
+    settings = get_settings()
+    return TextAIGemini(
+        api_key=settings.GEMINI_API_KEY,
+        model=settings.TRANSLATION_VERIFY_BT_MODEL,
+        vertexai=settings.VERTEXAI,
+    )
+
+
+def _resolve_flag_paths(
+    schema: Optional[Dict[str, Any]],
+    kind: str,
+    source: str,
+    language: str,
+) -> List[str]:
+    """Every kit location a verified source string fans out to, in the
+    exact shape schema_lint.field_id_of parses for field-level paths
+    (sections carry no (id=...) -- nothing to focus)."""
+    paths: List[str] = []
+    if kind == "section-title":
+        for section in (schema or {}).get("sections") or []:
+            if isinstance(section, dict) and section.get("label") == source:
+                paths.append("sections[%s].label_translations.%s"
+                             % (section.get("id"), language))
+        return paths
+    for index, field in enumerate((schema or {}).get("fields") or []):
+        if not isinstance(field, dict):
+            continue
+        field_ref = "fields[%d] (id=%s)" % (index, field.get("id"))
+        if kind == "field-name":
+            spoken = field.get("spoken_name") or field.get("name")
+            if spoken == source:
+                paths.append("%s.spoken_name_translations.%s"
+                             % (field_ref, language))
+        elif kind == "option-label":
+            options = field.get("options") or field.get("allowed_values")
+            for opt in options or []:
+                if isinstance(opt, dict) and opt.get("label") == source:
+                    paths.append(
+                        "%s.options[%s].label_translations.%s"
+                        % (field_ref, opt.get("value"), language))
+    return paths
 
 
 def _collect_section_labels(

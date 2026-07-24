@@ -645,6 +645,21 @@ class Settings(BaseModel):
 	# is untouched; it is only the fallback for unbaked strings.
 	OPTION_TRANSLATION_MODEL: str = os.getenv(
 		"OPTION_TRANSLATION_MODEL", "gemini-2.5-pro")
+	# Translation quality gate (epic polyglot-pdf-sekc, V3): the verify/rectify
+	# loop that runs inside bake_label_translations on freshly baked strings.
+	# DEFAULT-ON, opt-out (maintainer decision 2026-07-23) -- this does NOT
+	# contradict the wire-pro-passes-dark pattern (FORM_COMPLETE_PRO_VALIDATOR
+	# default-false): that guards RUNTIME per-session cost; this gate runs at
+	# AUTHORING time only (a deliberate per-bake spend of ~cents). Fail-open:
+	# a verify outage leaves the baked kit byte-untouched.
+	TRANSLATION_VERIFY_ENABLED: bool = (
+		os.getenv("TRANSLATION_VERIFY_ENABLED", "true").lower() == "true"
+	)
+	# The independent back-translation leg runs on the LITE tier (deliberate:
+	# independence from the pro forward/judge path; V1 measured its noise as
+	# the main FP driver and the judge prompt guards against anchoring on it).
+	TRANSLATION_VERIFY_BT_MODEL: str = os.getenv(
+		"TRANSLATION_VERIFY_BT_MODEL", "gemini-2.5-flash-lite")
 
 	# Form kit storage (schema/PDF pairs)
 	FORM_KITS_MODE: str = os.getenv("FORM_KITS_MODE", "local")

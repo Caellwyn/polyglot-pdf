@@ -64,3 +64,54 @@ class ITextAI(ABC):
         raise NotImplementedError(
             "translate_items() is not implemented by this text-AI adapter."
         )
+
+    async def back_translate(
+        self, items: dict, language_name: str, language_code: str
+    ) -> dict | None:
+        """Independent literal back-translation for the verify loop (bd
+        polyglot-pdf-9ikj): {id: foreign_string} in, {id: english} out, or
+        None on any error (the do-not-trust fail-open signal). Runs on the
+        LITE tier for independence from the pro forward/judge path.
+        Non-abstract default raises so implementations without the feature
+        fail loudly."""
+        raise NotImplementedError(
+            "back_translate() is not implemented by this text-AI adapter."
+        )
+
+    async def judge_translations(
+        self,
+        items: list,
+        language_name: str,
+        language_code: str,
+        *,
+        glossary_context: dict | None = None,
+    ) -> dict | None:
+        """Bilingual drift judge for the verify loop (bd polyglot-pdf-9ikj):
+        items [{id, en, translation, back_translation}] in, verdicts
+        {id: {"drift": bool, "reason": str}} out, or None on any error.
+        The back-translation is SUPPORTING evidence only; the judge scores
+        the foreign string against the English original directly. Callers
+        chunk (the service pins chunk size 50 per the V1 A/B).
+        Non-abstract default raises (fail loud)."""
+        raise NotImplementedError(
+            "judge_translations() is not implemented by this text-AI adapter."
+        )
+
+    async def rectify_translations(
+        self,
+        items: list,
+        language_name: str,
+        language_code: str,
+        *,
+        glossary_context: dict | None = None,
+    ) -> dict | None:
+        """Bounded correction pass for the verify loop (bd polyglot-pdf-9ikj):
+        items [{id, en, translation, back_translation, problem}] in,
+        corrections {id: corrected_string} out, or None on any error.
+        Corrections re-enter the FULL loop (re-lint + fresh back-translate +
+        provenance-stripped re-judge) -- the caller owns that cycle.
+        Non-abstract default raises (fail loud)."""
+        raise NotImplementedError(
+            "rectify_translations() is not implemented by this text-AI "
+            "adapter."
+        )
