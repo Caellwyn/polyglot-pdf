@@ -34,10 +34,15 @@ gold translations while NOT flagging the gold?
   calls; run 1, whose accumulator was per-model only, totaled $0.2145).
   ur's cost is dominated by the extra forward-translation pro call +
   thinking -- the per-language unit figures V5's 4-kit x 17-language
-  projection needs. Pre-run estimate: ~$0.45 (this bead's own Gate-2
-  derivation, recorded in the probe docstring -- NOT a plan figure; the
-  plan's authorization line is ~$0.25). Two runs total $0.4247, inside
-  the derivation envelope.
+  projection needs. Pre-run estimate: ~$0.45 per run (this bead's own
+  Gate-2 derivation, recorded in the probe docstring -- NOT a plan figure).
+  **Spend disclosure vs the plan:** the plan's pre-authorization line
+  reads "~$0.25"; the two-run total is **$0.4247, ~1.7x that figure**
+  (run 2 was required to meet exit criterion 3's per-language measurement
+  after run 1's accumulator proved per-model only). Each run individually
+  sits under both Gate-2 ask anchors (a few dollars; ~50 live calls --
+  27 calls/run), and the overage is surfaced to the maintainer in the PR
+  merge report rather than silently absorbed.
 
 ## Plants table (measure a)
 

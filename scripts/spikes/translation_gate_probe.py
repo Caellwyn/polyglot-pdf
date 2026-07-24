@@ -23,8 +23,10 @@ Measures: (a) plants caught per class+layer; (b) gold false positives;
 thinking, budget bounded 512 per the W5 config).
 
 Vertex only (ADC + GOOGLE_CLOUD_PROJECT; VERTEXAI=false escape hatch for a
-deliberate AI Studio run). Estimated spend ~$0.45 (pre-authorized in the
-sprint-14 plan). Run:
+deliberate AI Studio run). Estimated spend ~$0.45 per run -- THIS PROBE'S
+Gate-2 derivation, NOT a plan figure; the sprint-14 plan's V1
+pre-authorization line is ~$0.25 (the findings doc's cost paragraph is the
+audit trail, incl. the two-run total vs that line). Run:
 
     PYTHONPATH=<repo> python scripts/spikes/translation_gate_probe.py
     # --dry-run for the zero-API lint-only pass; --langs es,zh to skip ur.
