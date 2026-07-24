@@ -58,6 +58,20 @@ downstream maps; same as the pre-migration behavior, now with strictly
 more context). Distinct per-set renderings for a shared label would need
 per-option keying end-to-end -- not worth it at current scale.
 
+**Fresh-eyes round-1 catches (both fixed in-loop):** (1) the authoring
+CLI's `--check` `_Probe` and its test suite's `FakeTextAI` still spoke
+`translate_labels` -- the CLI's check mode silently reported languages as
+FAILED (AttributeError masked by the bake's per-language try/except) and
+2 of its 5 tests failed; both migrated to translate_items, and check mode
+now documents that an empty result keeps the verify gate dormant. (2) The
+same live-call test hazard fixed in the editor-route tests existed in the
+CLI test suite too -- its `_inject` now patches `_build_verify_lite_ai`
+offline. This ALSO exposed a session-process gap: the pre-PR "full suite"
+runs all night targeted `backend/tests` only; the CLI tests live in the
+top-level `tests/` harness suite (the closeout skill's note says
+backend/tests is named "for speed, not to exclude the harness suite").
+This PR's pre-PR run covers BOTH suites.
+
 ## Lessons
 
 - **A stubbed-adapter patch does not reach internally constructed
@@ -65,7 +79,12 @@ per-option keying end-to-end -- not worth it at current scale.
   verify gate built its lite adapter from a different import site --
   live-credential machines would have made real calls from unit tests.
   When a service constructs its own adapters, give tests a seam
-  (patchable builder) and CHECK for construction behind patches.
+  (patchable builder) and CHECK for construction behind patches -- in
+  EVERY test suite that reaches the gate, not just the first one found.
+- **"Full suite" must mean both suites.** `backend/tests` alone missed
+  the top-level `tests/` harness-suite consumers of the migrated
+  function; the breakage was real and pre-existing tests caught it only
+  when the reviewer ran them.
 
 ## Doc freshness
 

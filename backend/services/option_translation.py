@@ -38,12 +38,12 @@ from backend.services.translation_verify import (
     VerifyFlag,
     verify_fresh_translations,
 )
+from backend.utils.language_codes import bcp47_codes_for_spoken_language
 
 # The translator's own under-determined-source self-flag (bd polyglot-pdf-alry;
 # the flag taxonomy's fourth kind -- usually fixed by enriching context or the
 # glossary, not by editing the string).
 FLAG_AMBIGUOUS = "translation-ambiguous-source"
-from backend.utils.language_codes import bcp47_codes_for_spoken_language
 
 _log = structlog.get_logger(__name__)
 
