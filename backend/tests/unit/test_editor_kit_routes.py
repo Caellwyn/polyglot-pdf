@@ -2045,7 +2045,8 @@ _TRANSLATABLE_DRAFT = {
 
 class _FakeTranslateAI:
     """Stands in for TextAIGemini in the translate-options route: records the
-    constructor kwargs (tier-discipline pins) and answers every language."""
+    constructor kwargs (tier-discipline pins) and answers every language via
+    the context-carrying translate_items call (bd alry)."""
 
     instances: list = []
 
@@ -2054,15 +2055,42 @@ class _FakeTranslateAI:
         self.calls = []
         type(self).instances.append(self)
 
-    async def translate_labels(self, labels, language_name, language_code):
-        self.calls.append((tuple(labels), language_name))
-        return {label: f"{label} ({language_name})" for label in labels}
+    async def translate_items(self, items, language_name, language_code, *,
+                              form_name=None, glossary_context=None):
+        sent = []
+        result = {}
+        for item in items:
+            if item["kind"] == "option-set":
+                sent.extend(item["options"])
+                result[item["id"]] = {"options": {
+                    s: f"{s} ({language_name})" for s in item["options"]}}
+            else:
+                sent.append(item["text"])
+                result[item["id"]] = {
+                    "translation": f"{item['text']} ({language_name})"}
+        self.calls.append((tuple(sent), language_name))
+        return {"items": result, "ambiguous": []}
+
+
+class _OfflineLiteAI:
+    """The verify loop's lite leg, forced offline: back_translate returns
+    None (the fail-open signal), so the default-ON verify gate (bd 9ikj)
+    exercises its unavailable path with ZERO live calls. Without this
+    patch, option_translation._build_verify_lite_ai constructs a REAL
+    adapter behind the route's TextAIGemini patch -- on a machine with live
+    credentials that would make unit tests hit the real endpoint."""
+
+    async def back_translate(self, items, language_name, language_code):
+        return None
 
 
 @pytest.fixture()
 def translate_ai(monkeypatch):
+    import backend.services.option_translation as _ot
     _FakeTranslateAI.instances = []
     monkeypatch.setattr(ekr, "TextAIGemini", _FakeTranslateAI)
+    monkeypatch.setattr(
+        _ot, "_build_verify_lite_ai", lambda: _OfflineLiteAI())
     return _FakeTranslateAI
 
 
@@ -2132,13 +2160,26 @@ def test_translate_options_partial_failure_stores_and_reports(
     c, store, root = client
     _make_kit(root, "fresh", status="draft", schema=_TRANSLATABLE_DRAFT)
 
-    async def _flaky(self, labels, language_name, language_code):
-        self.calls.append((tuple(labels), language_name))
+    async def _flaky(self, items, language_name, language_code, *,
+                     form_name=None, glossary_context=None):
         if language_name.lower() == "french":
+            self.calls.append(((), language_name))
             return None
-        return {label: f"{label} ({language_name})" for label in labels}
+        result = {}
+        sent = []
+        for item in items:
+            if item["kind"] == "option-set":
+                sent.extend(item["options"])
+                result[item["id"]] = {"options": {
+                    s: f"{s} ({language_name})" for s in item["options"]}}
+            else:
+                sent.append(item["text"])
+                result[item["id"]] = {
+                    "translation": f"{item['text']} ({language_name})"}
+        self.calls.append((tuple(sent), language_name))
+        return {"items": result, "ambiguous": []}
 
-    monkeypatch.setattr(_FakeTranslateAI, "translate_labels", _flaky)
+    monkeypatch.setattr(_FakeTranslateAI, "translate_items", _flaky)
     r = c.post(
         "/api/editor/kits/fresh/translate-options",
         headers={"X-Editor-Token": "auth-tok"},

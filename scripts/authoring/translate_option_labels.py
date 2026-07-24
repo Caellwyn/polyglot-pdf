@@ -114,10 +114,13 @@ def translate_kit(
 
     if check:
         # Report-only: a stub adapter that translates nothing tells us exactly
-        # what a write run WOULD request, with zero API calls.
+        # what a write run WOULD request, with zero API calls (the bake's
+        # forward path is translate_items -- bd polyglot-pdf-alry -- and an
+        # empty result also keeps the verify gate dormant: no fresh strings).
         class _Probe:
-            async def translate_labels(self, labels, name, code):
-                return {}
+            async def translate_items(self, items, name, code, *,
+                                      form_name=None, glossary_context=None):
+                return {"items": {}, "ambiguous": []}
         text_ai = _Probe()
     else:
         text_ai = _build_text_ai(model, project, location)

@@ -82,9 +82,36 @@ _DEFAULT_TABLE = {"Male": ESPANOL_MASCULINO, "Female": ESPANOL_FEMENINO,
 
 
 def _text_ai(result):
+    """translate_items stub answering from a flat {source: translation}
+    table; None -> the adapter's fail-open signal (bd alry: the runtime
+    path rides the same context-carrying call as the bake)."""
     ai = MagicMock()
-    ai.translate_labels = AsyncMock(return_value=result)
+
+    async def _translate(items, language_name, language_code, *,
+                         form_name=None, glossary_context=None):
+        if result is None:
+            return None
+        out = {}
+        for item in items:
+            if item["kind"] == "option-set":
+                opts = {s: result[s] for s in item["options"] if s in result}
+                if opts:
+                    out[item["id"]] = {"options": opts}
+            elif item.get("text") in result:
+                out[item["id"]] = {"translation": result[item["text"]]}
+        return {"items": out, "ambiguous": []}
+
+    ai.translate_items = AsyncMock(side_effect=_translate)
     return ai
+
+
+def _payload(call):
+    """(option_set_tuples, single_texts) of one translate_items call."""
+    items = call.args[0]
+    sets = sorted(tuple(i["options"]) for i in items
+                  if i["kind"] == "option-set")
+    texts = sorted(i["text"] for i in items if i["kind"] != "option-set")
+    return sets, texts
 
 
 # --- 1. Collection, dedupe, kit precedence ------------------------------------
@@ -94,11 +121,12 @@ async def test_build_dedupes_and_batches_one_call():
     ai = _text_ai(dict(_DEFAULT_TABLE))
     overrides = await ot.build_translation_overrides(_schema(), "Spanish", ai)
 
-    ai.translate_labels.assert_awaited_once()
-    labels_arg = ai.translate_labels.await_args.args[0]
-    # Unique labels only, order preserved; the bare text field contributes
-    # nothing (no name/spoken_name keys, no options).
-    assert labels_arg == ["Male", "Female", "Yes", "No"]
+    ai.translate_items.assert_awaited_once()
+    sets, texts = _payload(ai.translate_items.await_args)
+    # Deduped option SETS (the identical Yes/No twins collapse); the bare
+    # text field contributes nothing (no name/spoken_name keys, no options).
+    assert sets == [("Male", "Female"), ("Yes", "No")]
+    assert texts == []
     assert overrides.option_labels["Male"] == ESPANOL_MASCULINO
     assert overrides.option_labels["Yes"] == "Si"
     assert overrides.spoken_names == {}
@@ -121,9 +149,10 @@ async def test_build_unions_spoken_names_and_section_labels_in_one_call():
     overrides = await ot.build_translation_overrides(
         _schema(fields, sections=sections), "Spanish", ai)
 
-    ai.translate_labels.assert_awaited_once()
-    assert ai.translate_labels.await_args.args[0] == [
-        "Male", "sex", "family name", "Applicant Information"]
+    ai.translate_items.assert_awaited_once()
+    sets, texts = _payload(ai.translate_items.await_args)
+    assert sets == [("Male",)]
+    assert texts == ["Applicant Information", "family name", "sex"]
     assert overrides.option_labels == {"Male": ESPANOL_MASCULINO}
     assert overrides.spoken_names == {"sex": ESPANOL_SEXO,
                                       "family name": "apellido"}
@@ -137,7 +166,7 @@ async def test_build_pins_language_name_and_code():
     await ot.build_translation_overrides(
         _schema([{"id": "sex", "options": [{"value": "M", "label": "Male"}]}]),
         "Spanish", ai)
-    args = ai.translate_labels.await_args.args
+    args = ai.translate_items.await_args.args
     assert args[1] == "Spanish"
     assert args[2] == "es-US"
 
@@ -158,8 +187,11 @@ async def test_kit_translations_win_over_secretary(key):
 
     assert overrides.option_labels["Male"] == ESPANOL_MASCULINO
     assert overrides.option_labels["Female"] == ESPANOL_FEMENINO
-    # Only the non-kit-covered remainder goes to the secretary.
-    assert ai.translate_labels.await_args.args[0] == ["Female"]
+    # The WHOLE set rides the payload for context (bd alry), but kit
+    # precedence is absolute: the stub's conflicting "Male" answer was
+    # dropped by membership filtering (only the uncovered remainder lands).
+    sets, _ = _payload(ai.translate_items.await_args)
+    assert sets == [("Male", "Female")]
 
 
 @pytest.mark.asyncio
@@ -175,7 +207,8 @@ async def test_kit_spoken_name_translations_win_over_secretary():
 
     assert overrides.spoken_names == {"family name": "apellido",
                                       "given name": "nombre"}
-    assert ai.translate_labels.await_args.args[0] == ["given name"]
+    _, texts = _payload(ai.translate_items.await_args)
+    assert texts == ["given name"]  # only the uncovered name rides
 
 
 @pytest.mark.asyncio
@@ -191,7 +224,7 @@ async def test_secretary_not_called_when_everything_kit_covered():
         _schema(fields), "Spanish", ai)
     assert overrides.option_labels == {"Male": ESPANOL_MASCULINO}
     assert overrides.spoken_names == {"sex": ESPANOL_SEXO}
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -201,14 +234,14 @@ async def test_empty_schema_returns_empty_without_call():
         _schema([{"id": "x", "type": "text"}]), "Spanish", ai)
     assert overrides == ot.EMPTY_OVERRIDES
     assert not overrides
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
 
 
 # --- 2. Fail-open, timeout, cache ---------------------------------------------
 
 @pytest.mark.asyncio
 async def test_translate_failure_fails_open_and_is_not_cached():
-    ai = _text_ai(None)  # translate_labels' fail-open signal
+    ai = _text_ai(None)  # translate_items' fail-open signal
     result = await ot.get_translation_overrides("i-90", _schema(), "Spanish", ai)
     assert result == ot.EMPTY_OVERRIDES
 
@@ -216,7 +249,7 @@ async def test_translate_failure_fails_open_and_is_not_cached():
     ai2 = _text_ai(dict(_DEFAULT_TABLE))
     result2 = await ot.get_translation_overrides("i-90", _schema(), "Spanish", ai2)
     assert result2.option_labels["Male"] == ESPANOL_MASCULINO
-    ai2.translate_labels.assert_awaited_once()
+    ai2.translate_items.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -227,7 +260,7 @@ async def test_timeout_fails_open_and_is_not_cached(monkeypatch):
         await asyncio.sleep(1.0)
 
     ai = MagicMock()
-    ai.translate_labels = _slow
+    ai.translate_items = _slow
     result = await ot.get_translation_overrides("i-90", _schema(), "Spanish", ai)
     assert result == ot.EMPTY_OVERRIDES
     assert ("i-90", "spanish") not in ot._build_tasks
@@ -244,14 +277,14 @@ async def test_success_is_cached_one_call_per_form_language():
     # ...and a later session hits the completed result.
     r3 = await ot.get_translation_overrides("i-90", _schema(), "Spanish", ai)
     assert r1 == r2 == r3
-    ai.translate_labels.assert_awaited_once()
+    ai.translate_items.assert_awaited_once()
 
     # A DIFFERENT language is its own cache entry.
     ai_fr = _text_ai({"Male": "Homme", "Female": "Femme",
                       "Yes": "Oui", "No": "Non"})
     r_fr = await ot.get_translation_overrides("i-90", _schema(), "French", ai_fr)
     assert r_fr.option_labels["Male"] == "Homme"
-    ai_fr.translate_labels.assert_awaited_once()
+    ai_fr.translate_items.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -259,13 +292,19 @@ async def test_awaiter_cancellation_leaves_shared_build_running():
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def _gated(*_a, **_k):
+    async def _gated(items, *_a, **_k):
         started.set()
         await release.wait()
-        return dict(_DEFAULT_TABLE)
+        out = {}
+        for item in items:
+            if item["kind"] == "option-set":
+                out[item["id"]] = {"options": {
+                    s: _DEFAULT_TABLE[s] for s in item["options"]
+                    if s in _DEFAULT_TABLE}}
+        return {"items": out, "ambiguous": []}
 
     ai = MagicMock()
-    ai.translate_labels = _gated
+    ai.translate_items = _gated
 
     waiter = asyncio.ensure_future(
         ot.get_translation_overrides("i-90", _schema(), "Spanish", ai))
@@ -402,7 +441,7 @@ async def test_start_session_fires_translation_and_publishes_all_maps():
     assert service._spoken_name_translations["sex"] == ESPANOL_SEXO
     assert service._section_label_translations[
         "Applicant Information"] == ESPANOL_SECCION
-    ai.translate_labels.assert_awaited_once()
+    ai.translate_items.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -434,7 +473,7 @@ async def test_english_session_makes_no_translation_call():
     service._spoken_language = "English"
     await _start(service)
     assert service._option_translation_task is None
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -446,7 +485,7 @@ async def test_flag_off_makes_no_translation_call():
     service._spoken_language = "Spanish"
     await _start(service)
     assert service._option_translation_task is None
-    ai.translate_labels.assert_not_awaited()
+    ai.translate_items.assert_not_awaited()
 
 
 @pytest.mark.asyncio

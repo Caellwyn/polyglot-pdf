@@ -36,16 +36,41 @@ FRANCAIS = {"Yes": "Oui", "No": "Non", "Male": "Homme"}
 
 
 class FakeTextAI:
+    """Answers the bake's context-carrying translate_items call (bd alry)."""
+
     def __init__(self, fail_languages=()):
         self.fail_languages = {f.lower() for f in fail_languages}
         self.calls = []
 
-    async def translate_labels(self, labels, language_name, language_code):
-        self.calls.append((tuple(labels), language_name))
+    async def translate_items(self, items, language_name, language_code, *,
+                              form_name=None, glossary_context=None):
+        sent = []
+        for item in items:
+            sent.extend(item["options"] if item["kind"] == "option-set"
+                        else [item["text"]])
+        self.calls.append((tuple(sent), language_name))
         if language_name.lower() in self.fail_languages:
             return None
         table = {"spanish": ESPANOL, "french": FRANCAIS}[language_name.lower()]
-        return {label: table[label] for label in labels if label in table}
+        result = {}
+        for item in items:
+            if item["kind"] == "option-set":
+                options = {s: table[s] for s in item["options"] if s in table}
+                if options:
+                    result[item["id"]] = {"options": options}
+            elif item.get("text") in table:
+                result[item["id"]] = {"translation": table[item["text"]]}
+        return {"items": result, "ambiguous": []}
+
+
+class OfflineLiteAI:
+    """Keeps the default-ON verify gate (bd 9ikj) hermetic: back_translate
+    fails open, so no test here can construct a REAL lite adapter and hit a
+    live endpoint on a credentialed machine (the hazard bd alry closed in
+    the editor-route tests -- same fix, this suite)."""
+
+    async def back_translate(self, items, language_name, language_code):
+        return None
 
 
 @pytest.fixture()
@@ -68,6 +93,9 @@ def kit(tmp_path):
 
 def _inject(monkeypatch, fake):
     monkeypatch.setattr(tol, "_build_text_ai", lambda *a, **k: fake)
+    import backend.services.option_translation as _ot
+    monkeypatch.setattr(
+        _ot, "_build_verify_lite_ai", lambda: OfflineLiteAI())
     return fake
 
 
