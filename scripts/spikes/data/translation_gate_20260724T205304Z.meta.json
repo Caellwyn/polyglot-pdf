@@ -1,0 +1,468 @@
+{
+  "bead": "polyglot-pdf-i36i",
+  "started_utc": "2026-07-24T20:53:04.535390+00:00",
+  "langs": [
+    "spanish",
+    "chinese",
+    "urdu"
+  ],
+  "dry_run": false,
+  "chunk_arms": [
+    25,
+    50
+  ],
+  "models": {
+    "judge": "gemini-2.5-pro",
+    "rectify": "gemini-2.5-pro",
+    "back_translate": "gemini-2.5-flash-lite",
+    "ur_forward": "gemini-2.5-pro"
+  },
+  "thinking_budget": {
+    "gemini-2.5-pro": 512
+  },
+  "gold_corpus": "scripts\\spikes\\data\\translation-gate\\gold.json",
+  "summaries": {
+    "spanish": {
+      "items": 52,
+      "mechanical_failures": 4,
+      "plants": {
+        "es-p1": {
+          "class": "negation-flip",
+          "mechanical": false,
+          "judge": {
+            "25": true,
+            "50": true
+          },
+          "caught_any": true
+        },
+        "es-p2": {
+          "class": "near-synonym-swap",
+          "mechanical": false,
+          "judge": {
+            "25": true,
+            "50": true
+          },
+          "caught_any": true
+        },
+        "es-p3": {
+          "class": "sibling-swap",
+          "mechanical": false,
+          "judge": {
+            "25": true,
+            "50": true
+          },
+          "caught_any": true
+        },
+        "es-p3-partner": {
+          "class": "sibling-swap",
+          "mechanical": true,
+          "judge": {
+            "25": false,
+            "50": false
+          },
+          "caught_any": true
+        },
+        "es-p4": {
+          "class": "numeral-alteration",
+          "mechanical": true,
+          "judge": {
+            "25": false,
+            "50": false
+          },
+          "caught_any": true
+        },
+        "es-p5": {
+          "class": "dnt-violation",
+          "mechanical": true,
+          "judge": {
+            "25": false,
+            "50": false
+          },
+          "caught_any": true
+        },
+        "es-p6": {
+          "class": "mechanical-plus-semantic",
+          "mechanical": true,
+          "judge": {
+            "25": false,
+            "50": false
+          },
+          "caught_any": true
+        }
+      },
+      "plants_caught": 7,
+      "plants_total": 7,
+      "gold_false_positives": {
+        "25": [],
+        "50": []
+      },
+      "rectify_trace": {
+        "es-p3-partner": [
+          {
+            "attempt": 1,
+            "corrected": "casado que presenta la declaración por separado",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "es-p4": [
+          {
+            "attempt": 1,
+            "corrected": "Primer nombre del dependiente 1",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "es-p5": [
+          {
+            "attempt": 1,
+            "corrected": "Número de registro de extranjero (número de USCIS)",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "es-p6": [
+          {
+            "attempt": 1,
+            "corrected": "No presente el Formulario W-7 si tiene un número de Seguro Social",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "es-p1": [
+          {
+            "attempt": 1,
+            "corrected": "No presente el Formulario W-7 si tiene un número de Seguro Social",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "es-p2": [
+          {
+            "attempt": 1,
+            "corrected": "Salario del Formulario W-2, casilla 1",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "es-p3": [
+          {
+            "attempt": 1,
+            "corrected": "Soltero(a)",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "kit024": [
+          {
+            "attempt": 1,
+            "corrected": "Vivienda principal en los EE. UU.",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ]
+      }
+    },
+    "chinese": {
+      "items": 52,
+      "mechanical_failures": 3,
+      "plants": {
+        "zh-p1": {
+          "class": "negation-flip",
+          "mechanical": false,
+          "judge": {
+            "25": true,
+            "50": true
+          },
+          "caught_any": true
+        },
+        "zh-p2": {
+          "class": "near-synonym-swap",
+          "mechanical": false,
+          "judge": {
+            "25": true,
+            "50": true
+          },
+          "caught_any": true
+        },
+        "zh-p3": {
+          "class": "sibling-swap",
+          "mechanical": false,
+          "judge": {
+            "25": true,
+            "50": true
+          },
+          "caught_any": true
+        },
+        "zh-p3-partner": {
+          "class": "sibling-swap",
+          "mechanical": false,
+          "judge": {
+            "25": true,
+            "50": true
+          },
+          "caught_any": true
+        },
+        "zh-p4": {
+          "class": "numeral-alteration",
+          "mechanical": true,
+          "judge": {
+            "25": false,
+            "50": false
+          },
+          "caught_any": true
+        },
+        "zh-p5": {
+          "class": "dnt-violation",
+          "mechanical": true,
+          "judge": {
+            "25": false,
+            "50": false
+          },
+          "caught_any": true
+        },
+        "zh-p6": {
+          "class": "mechanical-plus-semantic",
+          "mechanical": true,
+          "judge": {
+            "25": false,
+            "50": false
+          },
+          "caught_any": true
+        }
+      },
+      "plants_caught": 7,
+      "plants_total": 7,
+      "gold_false_positives": {
+        "25": [
+          "zh-g07",
+          "zh-g11"
+        ],
+        "50": [
+          "zh-g07",
+          "zh-g11"
+        ]
+      },
+      "rectify_trace": {
+        "zh-p4": [
+          {
+            "attempt": 1,
+            "corrected": "被抚养人1的名",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation omits the word 'first'. The original specifies 'first name', but the translation '名' just means 'name', which is too general and could be confused with full name or last name.",
+            "outcome": "judge-flagged"
+          },
+          {
+            "attempt": 2,
+            "corrected": "被抚养人1的名字",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation omits the word 'first'. The English specifies 'first name', but the translation '名字' just means 'name', which is less specific and could be interpreted as full name.",
+            "outcome": "judge-flagged"
+          }
+        ],
+        "zh-p5": [
+          {
+            "attempt": 1,
+            "corrected": "外国人登记号码 (USCIS 号码)",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "zh-p6": [
+          {
+            "attempt": 1,
+            "corrected": "如果您有社会安全号码，请勿提交 Form W-7",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "zh-g07": [
+          {
+            "attempt": 1,
+            "corrected": "W-2 表第 1 格的工资",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "zh-g11": [
+          {
+            "attempt": 1,
+            "corrected": "被抚养人1的名",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation omits the word 'first'. The original specifies 'first name', but the translation '名' just means 'name', which is too general and could be confused with full name or last name.",
+            "outcome": "judge-flagged"
+          },
+          {
+            "attempt": 2,
+            "corrected": "被抚养人1的名字",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation omits the word 'first'. The English specifies 'first name', but the translation '名字' just means 'name', which is less specific and could be interpreted as full name.",
+            "outcome": "judge-flagged"
+          }
+        ],
+        "zh-p1": [
+          {
+            "attempt": 1,
+            "corrected": "如果您有社会安全号码，请勿提交 Form W-7",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "zh-p2": [
+          {
+            "attempt": 1,
+            "corrected": "W-2 表第 1 格的工资",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "zh-p3": [
+          {
+            "attempt": 1,
+            "corrected": "单身",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "zh-p3-partner": [
+          {
+            "attempt": 1,
+            "corrected": "已婚单独申报",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "kit024": [
+          {
+            "attempt": 1,
+            "corrected": "在美国的主要住所",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ],
+        "kit025": [
+          {
+            "attempt": 1,
+            "corrected": "竞选活动（您）",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation '竞选活动' means 'campaign activities', which is a drift from the original 'Election campaign'. The standard term for 'election campaign' is '总统竞选活动' in this context, referring to the Presidential Election Campaign Fund.",
+            "outcome": "judge-flagged"
+          },
+          {
+            "attempt": 2,
+            "corrected": "总统竞选活动（您）",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation adds 'Presidential' (总统) which is not present in the original English 'Election campaign'. This changes the meaning by making it more specific than the source text.",
+            "outcome": "judge-flagged"
+          }
+        ],
+        "kit026": [
+          {
+            "attempt": 1,
+            "corrected": "竞选活动（配偶）",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation '竞选活动' means 'campaign activities', which is a drift from the original 'Election campaign'. The standard term for 'election campaign' is '总统竞选活动' in this context, referring to the Presidential Election Campaign Fund.",
+            "outcome": "judge-flagged"
+          },
+          {
+            "attempt": 2,
+            "corrected": "总统竞选活动（配偶）",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation adds 'Presidential' (总统) which is not present in the original English 'Election campaign'. This changes the meaning by making it more specific than the source text.",
+            "outcome": "judge-flagged"
+          }
+        ]
+      }
+    },
+    "urdu": {
+      "items": 14,
+      "mechanical_failures": 0,
+      "plants": {},
+      "plants_caught": 0,
+      "plants_total": 0,
+      "gold_false_positives": {
+        "25": [],
+        "50": []
+      },
+      "rectify_trace": {
+        "ur-o08-single": [
+          {
+            "attempt": 1,
+            "corrected": "واحد",
+            "lint": [],
+            "rejudge_drift": true,
+            "rejudge_reason": "The translation 'واحد' (wahid) means 'single' in the sense of 'one' or 'sole'. In the context of marital filing status, the correct Urdu term is 'غیر شادی شدہ' (ghair shadi shuda), which means 'unmarried'. Using 'واحد' is incorrect and confusing for this specific form-filling context.",
+            "outcome": "judge-flagged"
+          },
+          {
+            "attempt": 2,
+            "corrected": "غیر شادی شدہ",
+            "lint": [],
+            "rejudge_drift": false,
+            "rejudge_reason": "",
+            "outcome": "clean"
+          }
+        ]
+      }
+    }
+  },
+  "usage": {
+    "models": {
+      "gemini-2.5-flash-lite": {
+        "calls": 8,
+        "in": 2544,
+        "out": 2174,
+        "think": 0,
+        "usd": 0.0011
+      },
+      "gemini-2.5-pro": {
+        "calls": 19,
+        "in": 26240,
+        "out": 9159,
+        "think": 8894,
+        "usd": 0.2133
+      }
+    },
+    "total_usd": 0.2145
+  }
+}
