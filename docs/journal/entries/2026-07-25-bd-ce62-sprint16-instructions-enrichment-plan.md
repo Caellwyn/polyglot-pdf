@@ -50,6 +50,10 @@ engine is built.
   content (eligibility, documents, where-to-mail) unless something holds the
   whole booklet; and a "no provenance record => human-owned" no-clobber rule
   makes any legacy-kit refresh a silent no-op without a bootstrap pass.
+- Closeout doc-freshness reported stale standards docs (si-reduction,
+  terminology, voice-and-vad, etc.) -- reviewed: all trace to OTHER sessions'
+  recent code churn, none to this docs-only diff; left for their owning
+  sessions.
 - Sprint-15 (relationship extraction, epic o2bs) and this epic share the
   W-7 box-h interlock territory: machine-actionable conditionality is o2bs;
   spoken guidance is wsao. Both plans cross-reference.
