@@ -120,3 +120,142 @@ def test_rel_keys_reflect_v2_vocabulary():
     assert conds["require_if"]["total"] == 1
     # show_if likewise recovered -- the pre-existing key still works.
     assert conds["show_if"]["recovered"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Trigger-correctness of condition-shaped keys (bd polyglot-pdf-eprg)
+# --------------------------------------------------------------------------- #
+
+def test_trigger_correctness_requires_the_right_resolved_trigger():
+    """Presence is not correctness: a recovered show_if only counts
+    trigger-correct when its (extractor-invented) trigger id RESOLVES, via the
+    field match, to the same truth field the gold condition points at."""
+    truth = {"fields": [
+        {"id": "trig", "pdf_field_name": "T[0]"},
+        {"id": "dep_ok", "pdf_field_name": "A[0]",
+         "show_if": {"field": "trig", "operator": "is_checked"}},
+        {"id": "dep_wrong", "pdf_field_name": "B[0]",
+         "show_if": {"field": "trig", "operator": "is_checked"}},
+    ]}
+    draft = {"fields": [
+        {"id": "x1", "pdf_field_name": "T[0]"},
+        # Right trigger (x1 resolves to trig) -- correct.
+        {"id": "x2", "pdf_field_name": "A[0]",
+         "show_if": {"field": "x1", "operator": "is_checked"}},
+        # Wrong trigger (points at itself) -- present but NOT correct.
+        {"id": "x3", "pdf_field_name": "B[0]",
+         "show_if": {"field": "x2", "operator": "is_checked"}},
+    ]}
+    match = schema_score.match_fields(truth["fields"], draft["fields"])
+    conds = schema_score.score_relationships(truth, draft, match)["conditionals"]
+    assert conds["show_if"]["total"] == 2
+    assert conds["show_if"]["recovered"] == 2       # both PRESENT
+    assert conds["show_if"]["trigger_correct"] == 1  # only one CORRECT
+    # Non-condition-shaped keys carry no trigger_correct entry.
+    assert "trigger_correct" not in conds["conditional_behavior"]
+
+
+def test_trigger_correctness_handles_combinator_trees():
+    """all_of/any_of trees flatten to their atom triggers; the full resolved
+    trigger SET must match."""
+    truth = {"fields": [
+        {"id": "t1", "pdf_field_name": "T1[0]"},
+        {"id": "t2", "pdf_field_name": "T2[0]"},
+        {"id": "dep", "pdf_field_name": "D[0]",
+         "show_if": {"all_of": [
+             {"field": "t1", "operator": "is_checked"},
+             {"field": "t2", "operator": "is_checked"}]}},
+    ]}
+    draft = {"fields": [
+        {"id": "a", "pdf_field_name": "T1[0]"},
+        {"id": "b", "pdf_field_name": "T2[0]"},
+        {"id": "c", "pdf_field_name": "D[0]",
+         "show_if": {"all_of": [
+             {"field": "a", "operator": "is_checked"},
+             {"field": "b", "operator": "is_checked"}]}},
+    ]}
+    match = schema_score.match_fields(truth["fields"], draft["fields"])
+    conds = schema_score.score_relationships(truth, draft, match)["conditionals"]
+    assert conds["show_if"]["trigger_correct"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Trigger-side harvest-residue accounting (bd polyglot-pdf-eprg)
+# --------------------------------------------------------------------------- #
+
+def _rels(truth, draft):
+    match = schema_score.MatchResult(
+        pairs=[], unmatched_truth=truth["fields"],
+        unmatched_draft=draft["fields"])
+    return schema_score.score_relationships(truth, draft, match)
+
+
+def test_trigger_action_vocab_stays_in_sync_with_the_mirror_contract():
+    """schema_score stays standalone (no backend import), so its local copy of
+    the trigger-side action vocabulary must be pinned against the real contract
+    in backend/services/controls_fields_mirror.py -- if the R4 harvest bead
+    (polyglot-pdf-xbfm) moves an action between the mirrorable and
+    unconvertible sets, this test forces the scorer's copy to follow."""
+    from backend.services import controls_fields_mirror as cfm
+
+    assert set(schema_score._TRIGGER_ACTIONS) == set(cfm.ACTION_KEYS)
+    assert (set(schema_score._TRIGGER_MIRRORABLE)
+            == {k for k, _ in cfm.MIRRORABLE_ACTIONS})
+    assert (set(schema_score._TRIGGER_UNCONVERTIBLE)
+            == set(cfm.UNCONVERTIBLE_ACTIONS))
+
+
+def test_trigger_side_residue_counts_unharvested_edges():
+    """A draft still carrying legacy trigger-side keys after the harvest is
+    residue -- counted per action kind, split mirrorable vs unconvertible,
+    never silently ignored."""
+    truth = {"fields": [{"id": "t1"}]}
+    draft = {"fields": [
+        {"id": "d1", "controls_fields": [
+            {"field": "x", "operator": "is_checked",
+             "shows": ["a", "b"], "hides": ["c"], "locks": ["d"]}]},
+        {"id": "d2", "conditional_fields": ["e"]},
+    ]}
+    t = _rels(truth, draft)["trigger_side_residue"]
+    assert t["mirrorable"] == 2      # shows: a, b
+    assert t["unconvertible"] == 2   # hides: c; locks: d
+    assert t["total"] == 4
+    assert t["per_action"]["shows"] == 2
+    assert t["per_action"]["hides"] == 1
+    assert t["per_action"]["locks"] == 1
+    assert t["per_action"]["makes_required"] == 0
+    assert t["fields_with_trigger_keys"] == 1
+    assert t["legacy_conditional_fields"] == 1
+
+
+def test_trigger_side_residue_zero_on_a_clean_v2_draft():
+    truth = {"fields": [{"id": "t1"}]}
+    draft = {"fields": [
+        {"id": "d1", "show_if": {"field": "x", "operator": "is_checked"}}]}
+    t = _rels(truth, draft)["trigger_side_residue"]
+    assert t["total"] == 0
+    assert t["mirrorable"] == 0 and t["unconvertible"] == 0
+    assert t["fields_with_trigger_keys"] == 0
+    assert t["legacy_conditional_fields"] == 0
+
+
+def test_render_report_names_the_trigger_residue():
+    """The human-readable report must surface residue when present and say
+    'none' when clean -- residue is the zero-silent-drops audit line."""
+    truth = {"fields": [{"id": "t1"}]}
+    dirty = {"fields": [{"id": "d1", "controls_fields": [
+        {"field": "x", "shows": ["a"], "unlocks": ["b"]}]}]}
+    clean = {"fields": [{"id": "d1"}]}
+
+    b_dirty = _rels(truth, dirty)
+    a_stub = {"detection": {"precision": float("nan"), "recall": float("nan"),
+                            "f1": float("nan"), "true_positive": 0,
+                            "false_negative": 0, "false_positive": 0},
+              "attributes": {}}
+    report = schema_score.render_report("x", a_stub, b_dirty)
+    assert "trigger-side residue" in report
+    assert "unconvertible 1" in report and "shows=1" in report
+
+    b_clean = _rels(truth, clean)
+    report_clean = schema_score.render_report("x", a_stub, b_clean)
+    assert "trigger-side residue: none" in report_clean

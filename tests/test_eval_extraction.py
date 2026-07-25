@@ -202,6 +202,71 @@ def test_gold_w7_scores_ok_with_structural_pass():
 
 
 # --------------------------------------------------------------------------- #
+# Relationship columns + trigger-side harvest accounting (bd polyglot-pdf-eprg)
+# --------------------------------------------------------------------------- #
+
+@needs_w7
+def test_scored_draft_carries_relationship_summaries():
+    """A scored (non-baseline) row must summarize the sprint-15 headline
+    relationship metrics: sh/rq (show_if + require_if, combined) and logic
+    (conditional_logic + conditional_behavior). Totals come from the GOLD, so
+    they pin the w7 ground truth: 12 show_if + 9 require_if, 0 logic keys."""
+    form = next(f for f in ev._FORMS if f["name"] == "w7")
+    row = ev.evaluate_form(form, str(_BROKEN_DRAFT), extract=False, model="-")
+    assert row["rel_show_require"]["total"] == 21
+    assert 0 <= row["rel_show_require"]["recovered"] <= 21
+    assert row["rel_logic"]["total"] == 0
+    assert row["rel_logic"]["pct"] is None  # nothing to recover -> n/a, not 0%
+
+
+def test_harvest_counts_bucket_the_mirror_actions():
+    """_harvest_counts maps the repair report's controls_fields action names
+    into mirrored vs unconverted -- the zero-silent-drops accounting."""
+    repairs = [
+        {"action": "mirror-controls-fields"},
+        {"action": "mirror-controls-fields"},
+        {"action": "controls-fields-unmirrored"},
+        {"action": "controls-fields-dangling"},
+        {"action": "drop-conditional-fields"},
+        {"action": "alias-operator"},  # unrelated repair: counted in neither
+    ]
+    h = ev._harvest_counts(repairs)
+    assert h == {"mirrored": 2, "unconverted": 3}
+
+
+def test_table_renders_relationship_columns_and_harvest_note():
+    rows = [{
+        "form": "x", "verdict": "OK", "lint_errors": 0, "lint_warnings": 0,
+        "value_convention": {"pct": 100.0}, "choice_fill": {"pct": 100.0},
+        "text_fill": {"pct": 100.0}, "field_f1": 96.0,
+        "rel_show_require": {"recovered": 9, "total": 20, "pct": 45.0},
+        "rel_logic": {"recovered": 0, "total": 19, "pct": 0.0},
+        "trigger_harvest": {"mirrored": 3, "unconverted": 1},
+        "repair": "4 repair(s)",
+    }]
+    table = ev.render_table(rows)
+    assert "sh/rq%" in table and "logic%" in table
+    assert "45.0" in table
+    assert "[ts 3m/1u]" in table
+    # A baseline-style row WITHOUT the new keys still renders ("-" cells:
+    # metric absent), and a scored row whose gold has nothing to recover
+    # (pct None) renders "n/a" -- the two blank shapes stay distinct.
+    rows.append({"form": "y", "verdict": "OK", "lint_errors": 0,
+                 "lint_warnings": 0, "value_convention": {"pct": 100.0},
+                 "choice_fill": {"pct": 100.0}, "text_fill": {"pct": 100.0},
+                 "field_f1": None, "repair": "-"})
+    rows.append({"form": "z", "verdict": "OK", "lint_errors": 0,
+                 "lint_warnings": 0, "value_convention": {"pct": 100.0},
+                 "choice_fill": {"pct": 100.0}, "text_fill": {"pct": 100.0},
+                 "field_f1": 96.0,
+                 "rel_show_require": {"recovered": 0, "total": 0, "pct": None},
+                 "rel_logic": {"recovered": 0, "total": 0, "pct": None},
+                 "repair": "-"})
+    table2 = ev.render_table(rows)
+    assert "n/a" in table2
+
+
+# --------------------------------------------------------------------------- #
 # Exit criterion 2: one command emits the multi-form table.
 # --------------------------------------------------------------------------- #
 
