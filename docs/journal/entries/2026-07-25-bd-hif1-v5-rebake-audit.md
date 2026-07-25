@@ -45,7 +45,14 @@ maintainer 2026-07-25).
   a follow-up content-fix bead together with pinning IRSN as
   do-not-translate (the w7 IRSN judge-noise cluster, ~24 false flags
   across 8 languages).
-- Fresh-eyes triage: (filled at closeout -- see PR.)
+- Fresh-eyes triage: Sonnet round 1 -- 0 rubric gaps, 1 out-of-scope
+  pre-existing bug filed by the reviewer (`polyglot-pdf-kpar`, the
+  artifact's verify_counts block undercounts vs the flags array). Opus
+  round 2 -- NO-GAPS with 2 provenance caveats, both adopted (the
+  committed cross-family-comparison.md artifact + the 81-triple dedup
+  definition). Opus round 3 (delta re-confirm) -- 2 correct cost-rounding
+  gaps found and fixed ($0.06 flash-lite / $4.26 displayed total,
+  consistent across all three docs), then cleared. Rejected: none.
 
 ## Lessons
 
