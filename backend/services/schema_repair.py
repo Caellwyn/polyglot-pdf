@@ -152,9 +152,20 @@ def _strip_spoken_name_disambiguation(
 
     A stripped spoken_name may now equal a sibling's -- that is CORRECT and
     intended (duplicate spoken_names are fine; the voice model never sees two
-    at once). Callers that translated the old suffixed value must re-bake the
-    affected fields' spoken_name_translations (the stale digit rides the
-    translation too)."""
+    at once).
+
+    Stale-translation safety (fresh-eyes on this bead): the old suffixed
+    value was translated with the digit riding along
+    (spoken_name_translations['spanish'] = 'numero ... 1'). Stripping only
+    the English spoken_name would leave those digits in every language until
+    a re-bake -- an unenforced coupling that a repair-only caller (no bake
+    step) would ship. So the pass ALSO drops the field's now-stale
+    spoken_name_translations, forcing the standard only-missing bake to
+    re-translate the corrected value. The bake is idempotent and covers
+    exactly the cleared fields; a caller that does not re-bake simply ships
+    the (correct, digit-free) English spoken_name with no translations,
+    which the runtime handles via its live-translation fallback -- never a
+    digit-suffixed translation."""
     clusters: Dict[str, List[int]] = {}
     parsed: List[Optional[tuple]] = []
     for f in fields:
@@ -177,11 +188,17 @@ def _strip_spoken_name_disambiguation(
             continue
         old = f.get("spoken_name")
         f["spoken_name"] = base
+        # Drop the now-stale suffixed translations (see docstring): a
+        # re-bake refills them; without one the runtime live-translates.
+        dropped_translations = bool(f.pop("spoken_name_translations", None))
+        detail = f"{old!r} -> {base!r} (voice-facing spoken_name needs no " \
+                 "disambiguation counter)"
+        if dropped_translations:
+            detail += "; cleared stale spoken_name_translations for re-bake"
         repairs.append({
             "action": "strip-spoken-name-disambiguation",
             "path": f"fields[{i}] (id={f.get('id')})",
-            "detail": f"{old!r} -> {base!r} (voice-facing spoken_name needs "
-                      "no disambiguation counter)",
+            "detail": detail,
             "error": False,
         })
 

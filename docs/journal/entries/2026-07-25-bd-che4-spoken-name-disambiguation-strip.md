@@ -44,10 +44,18 @@ disambiguation into instructions waits for the instructions-improvement work.
   full before/after field diff confirms the repair touched ONLY those two
   fields (nothing else in the shipped kit moved -- it was already
   normalized).
-- Tests: 4 pins (cluster strip, semantic-number spared, lone-counter spared,
-  idempotency). Full backend + scripts suites green; i-90 translation lint
-  sweep 0.
-- Fresh-eyes triage: (filled at closeout -- see PR.)
+- **Stale-translation hardening** (fresh-eyes on this bead): the pass also
+  DROPS a stripped field's now-stale `spoken_name_translations` (the digit
+  rode the translation too), so a repair-only caller with no bake step can
+  never ship a digit-bearing translation -- the re-bake refills them, and
+  absent a re-bake the runtime live-translates. Idempotent on the shipped
+  i-90 (cluster already gone -> no strip -> 17 translations preserved).
+- Tests: 6 pins (cluster strip, semantic-number spared, lone-counter spared,
+  idempotency, stale-translation clear, untouched-field translations kept).
+  Full backend + scripts suites green; i-90 translation lint sweep 0.
+- Fresh-eyes triage: Opus round 1 NO-GAPS with one low-confidence note (the
+  repair/re-bake coupling was unenforced) -- ADOPTED as the hardening above,
+  turning a documented caller-obligation into an automatic guarantee.
 
 ## Lessons
 

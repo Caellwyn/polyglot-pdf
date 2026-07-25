@@ -1074,3 +1074,36 @@ def test_spoken_name_strip_is_idempotent():
         "alien registration number", "alien registration number"]
     assert not any(r["action"] == "strip-spoken-name-disambiguation"
                    for r in repairs2)
+
+
+def test_strip_clears_stale_translations_for_rebake():
+    # fresh-eyes hardening: stripping the counter also drops the now-stale
+    # suffixed translations so a repair-only caller can never ship a
+    # digit-bearing translation (the re-bake refills them).
+    schema = _schema([
+        _text_field("a1", spoken_name="alien registration number 1",
+                    spoken_name_translations={"spanish":
+                                              "numero de registro 1"}),
+        _text_field("a2", spoken_name="alien registration number 2",
+                    spoken_name_translations={"spanish":
+                                              "numero de registro 2"}),
+    ])
+    repaired, repairs = repair(schema)
+    for f in repaired["fields"]:
+        assert f["spoken_name"] == "alien registration number"
+        assert "spoken_name_translations" not in f  # cleared for re-bake
+    assert all("cleared stale spoken_name_translations" in r["detail"]
+               for r in repairs
+               if r["action"] == "strip-spoken-name-disambiguation")
+
+
+def test_strip_leaves_untouched_field_translations_intact():
+    # A semantic-number field (not stripped) keeps its translations.
+    schema = _schema([
+        _text_field("y1", spoken_name="born before 1961",
+                    spoken_name_translations={"spanish": "nacido antes de 1961"}),
+    ])
+    repaired, _ = repair(schema)
+    f = repaired["fields"][0]
+    assert f["spoken_name"] == "born before 1961"
+    assert f["spoken_name_translations"] == {"spanish": "nacido antes de 1961"}
