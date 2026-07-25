@@ -100,3 +100,60 @@ def test_dump_reaches_the_widget_claim_rule():
     assert without_dump["errors"] == 0  # the rule is dump-only
     assert with_dump["errors"] == 1
     assert with_dump["findings"][0]["rule"] == "dump-widget-multiclaim"
+
+
+# --- Translation flag surfacing at extraction (bd polyglot-pdf-9djc) --------
+# The bake report -- flags included -- rides the draft verbatim at
+# _bakeoff.authoring.option_translation (the extract() provenance write);
+# these pin the extract_form-side adapter: the report passes through
+# _bake_option_translations intact, and the console gets a count-only
+# summary line (messages can carry foreign script -- cp1252 rule).
+
+
+def test_bake_option_translations_report_passes_through_flags(monkeypatch):
+    planted = {
+        "changed": True,
+        "failed_languages": [],
+        "languages": {"spanish": {"labels": 1, "missing": 1, "translated": 1,
+                                  "options_updated": 1, "failed": False}},
+        "flags": [{"severity": "WARNING",
+                   "rule": "translation-drift-unresolved",
+                   "path": "fields[0] (id=sex).options[m]"
+                           ".label_translations.spanish",
+                   "message": "judge: drift", "field_id": "sex"}],
+    }
+
+    async def _fake_bake(schema, text_ai, languages, **kwargs):
+        return dict(planted)
+
+    import backend.adapters.text_ai_gemini as tag
+    import backend.services.option_translation as ot
+    monkeypatch.setattr(ot, "bake_label_translations", _fake_bake)
+    monkeypatch.setattr(tag, "TextAIGemini", lambda **kw: object())
+    monkeypatch.setenv("VERTEXAI", "true")
+
+    report = ef._bake_option_translations({"fields": []}, "gemini-2.5-pro")
+    assert report["flags"] == planted["flags"]
+    assert report["model"] == "gemini-2.5-pro"
+
+
+def test_translation_flag_summary_counts_by_rule():
+    report = {"flags": [
+        {"rule": "translation-drift-unresolved", "path": "p1", "message": "m"},
+        {"rule": "translation-drift-unresolved", "path": "p2", "message": "m"},
+        {"rule": "translation-ambiguous-source", "path": "p3", "message": "m"},
+    ]}
+    line = ef._translation_flag_summary(report)
+    assert line.startswith("translation flags: 3 (")
+    assert "translation-drift-unresolved=2" in line
+    assert "translation-ambiguous-source=1" in line
+    assert "_bakeoff.authoring.option_translation.flags" in line
+    # Count-only: no flag message text reaches the console line.
+    assert "m" != line  # (sanity) and specifically:
+    assert "judge" not in line
+
+
+def test_translation_flag_summary_is_none_when_flag_free():
+    assert ef._translation_flag_summary({}) is None
+    assert ef._translation_flag_summary({"flags": []}) is None
+    assert ef._translation_flag_summary({"skipped": "disabled"}) is None

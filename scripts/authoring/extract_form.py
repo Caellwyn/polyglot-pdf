@@ -931,6 +931,26 @@ def _bake_option_translations(schema: dict, model: str | None = None) -> dict:
         return {"failed": f"{type(exc).__name__}: {exc}"}
 
 
+def _translation_flag_summary(report: dict) -> str | None:
+    """The console flag-count line for a bake report, or None when flag-free
+    (bd polyglot-pdf-9djc). The full findings ride the draft verbatim (the
+    report is stored at _bakeoff.authoring.option_translation, flags included)
+    and the editor ValidationPanel re-renders them from there; the console
+    gets counts only -- flag messages can quote foreign-script strings, which
+    the cp1252 console rule bars from printing."""
+    flags = report.get("flags") or []
+    if not flags:
+        return None
+    by_rule: dict = {}
+    for f in flags:
+        rule = str(f.get("rule", "?")) if isinstance(f, dict) else "?"
+        by_rule[rule] = by_rule.get(rule, 0) + 1
+    summary = ", ".join(f"{r}={n}" for r, n in sorted(by_rule.items()))
+    return (f"translation flags: {len(flags)} ({summary}) -- recorded in "
+            f"_bakeoff.authoring.option_translation.flags (WARNINGs, "
+            f"human-review worklist)")
+
+
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             model: str = "claude-opus-4-8", keep_dump: bool = False,
             instructions_pdf: str | None = None,
@@ -1123,6 +1143,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
               f"{len(langs)} language(s), model {translation_report.get('model')}"
               + (f"; FAILED: {', '.join(failed)} -- re-run "
                  "translate_option_labels.py to fill the gap" if failed else ""))
+        flag_line = _translation_flag_summary(translation_report)
+        if flag_line:
+            print(flag_line)
     if lint_report.get("skipped"):
         print(f"lint: skipped ({lint_report['skipped']})", file=sys.stderr)
     else:

@@ -56,6 +56,10 @@ Rules (stable ids; one finding per violation site):
                                 validation.required (read by every kit + the
                                 frontend) so a top-level true is silently ignored
                                 and the field is treated as optional
+- translation-*          WARNING the translation verify/rectify gate's flag
+                                taxonomy (TRANSLATION_FLAG_RULES below), re-
+                                emitted verbatim from the persisted bake report
+                                at _bakeoff.authoring.option_translation.flags
 
 ASCII only.
 """
@@ -77,6 +81,22 @@ SEVERITY_WARNING = "WARNING"
 TO_REVIEW_PREFIX = "sec_to_review"
 
 _ATOM_KEYS = frozenset({"field", "operator"})
+
+# The translation verify/rectify gate's flag taxonomy (bd polyglot-pdf-9djc;
+# produced by backend/services/option_translation.py::bake_label_translations).
+# Both bake surfaces persist the report -- flags included -- under
+# _bakeoff.authoring.option_translation (extraction step 3f and the editor
+# translate-options route), and lint RE-EMITS those flags as findings so the
+# editor ValidationPanel shows the translation worklist on every lint pass
+# with zero extra plumbing. Severity is pinned WARNING regardless of what the
+# stored dict claims: flags inform, they never block publish (plan sprint 14,
+# fail-open contract).
+TRANSLATION_FLAG_RULES = frozenset({
+    "translation-drift-rectified",
+    "translation-drift-unresolved",
+    "translation-ambiguous-source",
+    "translation-mechanical",
+})
 
 # Every field-anchored finding path embeds its field id as "(id=X)" (see the
 # _walk/_check helpers below); the editor's ValidationPanel focuses a finding by
@@ -753,7 +773,38 @@ def lint_schema(
                 f"form can be marked complete",
             ))
 
+    _emit_translation_flags(schema, out)
+
     if dump is not None:
         _check_dump_claims(fields, dump, out)
 
     return out
+
+
+def _emit_translation_flags(schema: Dict[str, Any], out: List[LintFinding]) -> None:
+    """Re-emit the persisted translation verify/rectify flags as findings.
+
+    The bake stores LintFinding-shaped dicts at
+    _bakeoff.authoring.option_translation.flags; anything malformed (non-dict
+    entries, unknown rules, missing path/message) is silently skipped -- lint
+    never throws on malformed input, and a stale/hand-edited provenance slot
+    must not break linting. field_id derivation happens downstream via
+    as_dict()/field_id_of on the stored path, same as native findings.
+    """
+    authoring = schema.get("_bakeoff")
+    authoring = authoring.get("authoring") if isinstance(authoring, dict) else None
+    translation = authoring.get("option_translation") if isinstance(authoring, dict) else None
+    flags = translation.get("flags") if isinstance(translation, dict) else None
+    if not isinstance(flags, list):
+        return
+    for flag in flags:
+        if not isinstance(flag, dict):
+            continue
+        rule = flag.get("rule")
+        path = flag.get("path")
+        message = flag.get("message")
+        if rule not in TRANSLATION_FLAG_RULES:
+            continue
+        if not isinstance(path, str) or not isinstance(message, str):
+            continue
+        out.append(LintFinding(SEVERITY_WARNING, rule, path, message))

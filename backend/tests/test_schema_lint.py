@@ -796,3 +796,81 @@ def test_ordinary_sections_never_trip_to_review():
         {"id": "sec_normal", "label": "Normal", "order": 1, "fields": ["f1"]},
     ]
     assert [f for f in lint_schema(s) if f.rule == "to-review-pending"] == []
+
+
+# ---------------------------------------------------------------------------
+# Translation verify/rectify flags (bd polyglot-pdf-9djc): the bake persists
+# LintFinding-shaped flags at _bakeoff.authoring.option_translation.flags and
+# lint RE-EMITS them, so the editor ValidationPanel shows the translation
+# worklist on every lint pass.
+# ---------------------------------------------------------------------------
+
+
+def _with_translation_flags(flags):
+    s = _schema([_select("sex", ("m", "f"))])
+    s["_bakeoff"] = {"authoring": {"option_translation": {
+        "changed": True, "failed_languages": [], "flags": flags,
+    }}}
+    return s
+
+
+def test_translation_flags_reemitted_as_warning_findings():
+    flag = {
+        "severity": "WARNING",
+        "rule": "translation-drift-unresolved",
+        "path": "fields[0] (id=sex).options[m].label_translations.spanish",
+        "message": "judge: meaning drift; kept the original",
+        "field_id": "sex",
+    }
+    findings = lint_schema(_with_translation_flags([flag]))
+    assert _rules(findings) == ["translation-drift-unresolved"]
+    assert findings[0].severity == SEVERITY_WARNING
+    assert findings[0].message == flag["message"]
+    # The stored path round-trips through the SAME field-focus derivation as
+    # native findings, so the panel can jump to the flagged field.
+    assert findings[0].as_dict()["field_id"] == "sex"
+
+
+def test_translation_flags_all_four_rules_pass_through():
+    flags = [
+        {"rule": rule, "path": "sections[s1].label_translations.urdu",
+         "message": "m"}
+        for rule in (
+            "translation-drift-rectified", "translation-drift-unresolved",
+            "translation-ambiguous-source", "translation-mechanical",
+        )
+    ]
+    findings = lint_schema(_with_translation_flags(flags))
+    assert sorted(_rules(findings)) == sorted(f["rule"] for f in flags)
+    assert all(f.severity == SEVERITY_WARNING for f in findings)
+
+
+def test_translation_flags_severity_is_pinned_warning():
+    # A stored severity of ERROR must NOT block publish: flags inform, never
+    # gate (the fail-open contract). Lint pins WARNING regardless.
+    flag = {"severity": "ERROR", "rule": "translation-mechanical",
+            "path": "p", "message": "m"}
+    findings = lint_schema(_with_translation_flags([flag]))
+    assert [f.severity for f in findings] == [SEVERITY_WARNING]
+    assert not has_errors(findings)
+
+
+def test_translation_flags_malformed_slots_are_ignored():
+    # Lint never throws on malformed input; a stale or hand-edited provenance
+    # slot must not break linting -- junk entries are skipped, valid ones kept.
+    flags = [
+        "not-a-dict",
+        {"rule": "translation-drift-unresolved"},              # no path/message
+        {"rule": "some-other-rule", "path": "p", "message": "m"},  # unknown rule
+        {"rule": "translation-mechanical", "path": "p", "message": "m"},
+    ]
+    findings = lint_schema(_with_translation_flags(flags))
+    assert _rules(findings) == ["translation-mechanical"]
+    # Malformed containers at every level: no crash, no findings.
+    for bakeoff in (None, "junk", {"authoring": "junk"},
+                    {"authoring": {"option_translation": "junk"}},
+                    {"authoring": {"option_translation": {"flags": "junk"}}}):
+        s = _schema([_select()])
+        if bakeoff is not None:
+            s["_bakeoff"] = bakeoff
+        assert lint_schema(s) == []

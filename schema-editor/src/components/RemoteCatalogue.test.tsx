@@ -468,7 +468,7 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
       spanish: { labels: 3, missing: 3, translated: 3, options_updated: 4, failed: false },
       french: { labels: 3, missing: 3, translated: 3, options_updated: 4, failed: false },
     },
-    errorCount: 0, warningCount: 0,
+    flags: [], errorCount: 0, warningCount: 0,
   };
 
   it('author bakes translations for an OPEN draft kit -> call + notice + reopen', async () => {
@@ -499,6 +499,51 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     await waitFor(() => expect(
       screen.getByText(/already fully translated/)).toBeInTheDocument());
     expect(onOpenKit).not.toHaveBeenCalled();
+  });
+
+  it('points the author at the validation panel when the bake flags translations (bd 9djc)', async () => {
+    vi.mocked(translateRemoteKitOptions).mockResolvedValue({
+      ...REPORT,
+      flags: [
+        { severity: 'WARNING', rule: 'translation-drift-unresolved',
+          path: 'fields[0] (id=x).options[m].label_translations.spanish',
+          field_id: 'x', message: 'judge: drift' },
+        { severity: 'WARNING', rule: 'translation-ambiguous-source',
+          path: 'fields[1] (id=y).options[s].label_translations.french',
+          field_id: 'y', message: 'under-determined' },
+      ],
+    });
+    render(<RemoteCatalogue onOpenKit={() => {}} selectedKitId="draft-kit" role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Translate options')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Translate options'));
+    await waitFor(() => expect(
+      screen.getByText(/2 translation flags to review/)).toBeInTheDocument());
+    expect(screen.getByText(/validation panel/)).toBeInTheDocument();
+  });
+
+  it('still points at the panel and reloads when flags arrive without label changes (bd 9djc)', async () => {
+    // Reachable on a force re-bake that reproduces identical values: the
+    // backend persists the flags (changed=false, flags non-empty), so the
+    // notice must not read as a pure no-op and the open kit must reload.
+    vi.mocked(translateRemoteKitOptions).mockResolvedValue({
+      ...REPORT,
+      changed: false,
+      flags: [
+        { severity: 'WARNING', rule: 'translation-drift-unresolved',
+          path: 'fields[0] (id=x).options[m].label_translations.spanish',
+          field_id: 'x', message: 'judge: drift' },
+      ],
+    });
+    const onOpenKit = vi.fn();
+    render(<RemoteCatalogue onOpenKit={onOpenKit} selectedKitId="draft-kit" role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Translate options')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Translate options'));
+    await waitFor(() => expect(
+      screen.getByText(/1 translation flag to review/)).toBeInTheDocument());
+    expect(onOpenKit).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'draft-kit' }));
   });
 
   it('surfaces failed languages in the notice', async () => {

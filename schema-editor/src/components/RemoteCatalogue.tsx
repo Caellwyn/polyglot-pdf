@@ -336,15 +336,33 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       const updated = Object.values(report.languages)
         .reduce((n, e) => n + e.options_updated, 0);
       const failed = report.failedLanguages;
-      if (!report.changed) {
+      // Verify/rectify gate flags (bd 9djc): persisted server-side, so after
+      // the reload below the ValidationPanel lists them -- the notice just
+      // points the author there.
+      const flagCount = report.flags?.length ?? 0;
+      const flagNote = flagCount
+        ? `; ${flagCount} translation flag${flagCount === 1 ? '' : 's'} to ` +
+          'review (open the kit -- the validation panel lists them)'
+        : '';
+      if (!report.changed && flagCount === 0) {
         setNotice(`"${kit.id}" option labels are already fully translated.`);
+      } else if (!report.changed) {
+        // No label changed, but the verify gate still flagged translations
+        // (reachable on a force re-bake that reproduces identical values):
+        // the backend persisted the flags into provenance, so point at the
+        // panel and reload the stored schema like any other change.
+        setNotice(
+          `"${kit.id}" option labels are already fully translated` +
+          flagNote + '.',
+        );
+        if (kit.id === selectedKitId) onOpenKit(kit);
       } else {
         setNotice(
           `Translated option labels for "${kit.id}" -- ${updated} ` +
           `option-language entr${updated === 1 ? 'y' : 'ies'} baked` +
           (failed.length
             ? `; FAILED: ${failed.join(', ')} (run again to fill the gap)`
-            : '') + '.',
+            : '') + flagNote + '.',
         );
         // Reload the stored schema when this kit is open (safe: the button is
         // disabled while the open kit has unsaved edits).

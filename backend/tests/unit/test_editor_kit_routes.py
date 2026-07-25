@@ -2231,6 +2231,79 @@ def test_translate_options_schemaless_kit_is_404(client, translate_ai):
     ).status_code == 404
 
 
+def test_translate_options_surfaces_and_persists_flags(
+        client, translate_ai, monkeypatch):
+    """bd polyglot-pdf-9djc: the route must READ the bake report's flags, not
+    drop them (the V3 review note) -- returning them on the response AND
+    persisting them into the stored schema's _bakeoff provenance slot, where
+    lint_schema re-emits them so the ValidationPanel lists the worklist on
+    every later lint pass. Planted via the translator's `ambiguous` self-flag
+    (a real report-channel flag that needs no judge stub -- zero live calls)."""
+    c, store, root = client
+    _make_kit(root, "fresh", status="draft", schema=_TRANSLATABLE_DRAFT)
+
+    async def _ambiguous(self, items, language_name, language_code, *,
+                         form_name=None, glossary_context=None):
+        result = {}
+        for item in items:
+            if item["kind"] == "option-set":
+                result[item["id"]] = {"options": {
+                    s: f"{s} ({language_name})" for s in item["options"]}}
+            else:
+                result[item["id"]] = {
+                    "translation": f"{item['text']} ({language_name})"}
+        # Self-flag every option-set as under-determined source text.
+        ambiguous = [i["id"] for i in items if i["kind"] == "option-set"]
+        return {"items": result, "ambiguous": ambiguous}
+
+    monkeypatch.setattr(_FakeTranslateAI, "translate_items", _ambiguous)
+    r = c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    flags = body["flags"]
+    assert flags, "the planted ambiguity flags must reach the response"
+    # Two planted flag classes flow with zero live calls: the translator's
+    # ambiguity self-flag, plus the deterministic mechanical lint tripping on
+    # the fake "X (Language)" Latin strings for non-Latin-script languages
+    # (wrong expected script) -- the offline verify leg keeps those lint
+    # flags (fail-open keeps deterministic evidence).
+    rules = {f["rule"] for f in flags}
+    assert "translation-ambiguous-source" in rules
+    assert rules <= {"translation-ambiguous-source", "translation-mechanical"}
+    assert all(f["severity"] == "WARNING" for f in flags)
+    # Field-focus works: option flags anchor to their field ids.
+    assert {"sex", "confirm"} <= {
+        f["field_id"] for f in flags
+        if f["rule"] == "translation-ambiguous-source"}
+    # The lint counts on the SAME response already include the persisted
+    # flags (lint_schema re-emits them from provenance).
+    assert body["warningCount"] >= len(flags)
+
+    # Persisted verbatim in the extraction-parity provenance slot.
+    stored = _run(store.load_schema("fresh"))
+    slot = stored["_bakeoff"]["authoring"]["option_translation"]
+    assert slot["flags"] == flags
+    assert slot["model"] == "gemini-2.5-pro"
+
+    # An idempotent re-run (nothing fresh -> no new flags) must NOT erase the
+    # persisted worklist.
+    r2 = c.post(
+        "/api/editor/kits/fresh/translate-options",
+        headers={"X-Editor-Token": "auth-tok"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["changed"] is False
+    assert r2.json()["flags"] == []
+    stored2 = _run(store.load_schema("fresh"))
+    assert stored2["_bakeoff"]["authoring"]["option_translation"]["flags"] \
+        == flags
+    # And the re-run's lint counts still carry the persisted flags.
+    assert r2.json()["warningCount"] >= len(flags)
+
+
 def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     # The extract route passes --translation-model (settings-resolved) when the
     # checkbox is on (the default) and --no-translate-options when it is off.

@@ -109,6 +109,35 @@ describe('ValidationPanel load-time lint display', () => {
     expect(screen.queryByRole('button', { name: /claimed by/ })).toBeNull();
   });
 
+  it('renders translation verify flags as focusable warnings (bd 9djc)', async () => {
+    // The backend linter re-emits the bake's persisted verify/rectify flags
+    // (rule translation-*, WARNING) from _bakeoff provenance; the panel must
+    // show the friendly label, count them as warnings, and focus the field.
+    const onSelectField = vi.fn();
+    lintSchema.mockResolvedValue(
+      report([
+        {
+          severity: 'WARNING', rule: 'translation-drift-unresolved',
+          path: 'fields[0] (id=picker).options[m].label_translations.spanish',
+          field_id: 'picker',
+          message: 'judge: meaning drift; kept the original',
+        },
+      ]),
+    );
+    render(<ValidationPanel schema={SCHEMA} onSelectField={onSelectField} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/kept the original/)).toBeInTheDocument(),
+    );
+    expect(screen.getByText('1 warning')).toBeInTheDocument();
+    expect(
+      screen.getByText('Translation drift (needs human review)'),
+    ).toBeInTheDocument();
+    const row = await screen.findByRole('button', { name: /kept the original/ });
+    fireEvent.click(row);
+    expect(onSelectField).toHaveBeenCalledWith('picker');
+  });
+
   it('shows the clean state when there are no findings', async () => {
     lintSchema.mockResolvedValue(report([]));
     render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);

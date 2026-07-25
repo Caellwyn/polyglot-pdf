@@ -5,9 +5,10 @@
     "pin_matching_caveat": "Pin checks are exact-substring (case-insensitive). Sound for zh (no inflection) and es (mild inflection; pinned phrases are stable in IRS usage). When pins expand to inflecting languages (ru/ur/pl-class), the pin check needs lemma normalization or demotion to advisory -- do NOT copy the exact-match rule as-is (plan review round 3).",
     "version": 1
   },
-  "digits_policy": "Always render numerals with ASCII digits 0-9. Never use native or localized digit characters (for example Arabic-Indic or Devanagari digits), even in languages that conventionally use them: these strings guide entry into a US government form, and the values users see and type must match the form's ASCII digits.",
+  "digits_policy": "Always render numerals with ASCII digits 0-9. Never use native or localized digit characters (for example Arabic-Indic or Devanagari digits), even in languages that conventionally use them. These translations are MODEL-FACING: they steer the voice model's spoken-language consistency while it fills a US government form (there is no user-facing display translation), and any digits the model reads back or writes into the form must stay byte-identical to the form's ASCII digits.",
   "do_not_translate": [
     "USCIS",
+    "DHS",
     "IRS",
     "ITIN",
     "SSN",

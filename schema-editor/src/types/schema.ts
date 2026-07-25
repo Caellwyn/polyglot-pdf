@@ -7,6 +7,12 @@ export interface FormSchema {
   sections: FormSection[];
   fields: FormField[];
   extraction_notes?: any;
+  // Authoring provenance written by extraction/translation bakes (opaque to the
+  // editor). Kept on the type so a load -> edit -> save round-trip visibly
+  // preserves it: the backend linter re-emits the translation verify flags
+  // stored at _bakeoff.authoring.option_translation.flags (bd polyglot-pdf-9djc),
+  // so dropping this key would silently erase the human-review worklist.
+  _bakeoff?: Record<string, any>;
 }
 
 export interface FormMetadata {
