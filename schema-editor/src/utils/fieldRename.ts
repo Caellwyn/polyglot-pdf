@@ -185,3 +185,33 @@ export function renameFieldId(
 
   return out;
 }
+
+/**
+ * Decide how selection should recover when the selected field id no longer
+ * resolves in the schema (bd polyglot-pdf-6hhc nit 2). Selection is not part of
+ * the undo/redo history, so undoing a field-id RENAME orphans the selection; a
+ * rename keeps the field's position AND the total field count, so we re-point
+ * to the field now at the last-known index. A structural change (reload,
+ * regenerate, delete) changes the count and returns null (deselect) rather than
+ * re-pointing to an unrelated field at a reused index.
+ *
+ * Returns the field id to select, or null to deselect. `prevIndex`/`prevCount`
+ * are the selection's index and the field count as of the LAST render where the
+ * selection still resolved.
+ */
+export function recoverSelectionAfterVanish(
+  fields: { id: string }[],
+  prevIndex: number | null,
+  prevCount: number | null,
+): string | null {
+  const count = fields.length;
+  if (
+    prevIndex !== null &&
+    prevCount !== null &&
+    prevCount === count &&
+    prevIndex < count
+  ) {
+    return fields[prevIndex].id;
+  }
+  return null;
+}

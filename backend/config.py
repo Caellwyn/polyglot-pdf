@@ -284,8 +284,10 @@ class Settings(BaseModel):
 	# multilingual ASR if a model tier rejects it (1007 at connect).
 	# API-level speech language on the Live connect config (bd polyglot-pdf-m1lg):
 	# speech_config.language_code from the session's spoken-language bias code.
-	# Google's Live docs recommend it; endpoint-verified accepted on the
-	# production native-audio tier. Default ON with this env kill-switch,
+	# Google's Live docs recommend it for the CASCADED gemini-live-2.5-flash
+	# tier (docs/genai_docs/live-api-best-practices.md:56); on this repo's
+	# native-audio tier it is endpoint-VERIFIED accepted rather than
+	# doc-recommended. Default ON with this env kill-switch,
 	# mirroring the transcription-hint flag below -- including its caveat: NOT
 	# verified on the premium AI-Studio 3.1 tier; set this false for a
 	# USE_PREMIUM_MODEL deploy unless verified there first.

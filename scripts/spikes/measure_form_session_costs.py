@@ -2014,6 +2014,14 @@ async def run(args) -> int:
     meta["reactivity"] = getattr(args, "reactivity", None)
     meta["lang"] = getattr(args, "lang", "en")
     meta["spoken_language"] = getattr(args, "spoken_language", None) or "English"
+    # Language-bias flag states (bd kcia note 3): capture the m1lg
+    # speech-language and the y25o transcription-hint kill-switches so an A/B
+    # run's arm is machine-readable from the meta, not distinguishable only by
+    # findings prose. Read off the same settings object the run patched in.
+    meta["speech_language_code_enabled"] = getattr(
+        settings, "SPEECH_LANGUAGE_CODE_ENABLED", None)
+    meta["transcription_language_hint_enabled"] = getattr(
+        settings, "TRANSCRIPTION_LANGUAGE_HINT_ENABLED", None)
     meta["planted_groups"] = [sorted(g) for g in planted_groups]
     meta["step_kinds"] = [
         (s.get("event") or ("skip" if s.get("skip") else

@@ -115,6 +115,11 @@ describe('App field-id rename (bd 0x10.1)', () => {
     expect(screen.getByTestId('list-dep-showif').textContent).toContain('"old_name"');
     expect(screen.getByTestId('list-section-fields').textContent)
       .toBe('old_name,dep,copier');
+    // ...and selection is recovered to the RESTORED id, not dropped to the
+    // metadata panel (bd polyglot-pdf-6hhc nit 2): the rename moved selection
+    // to 'new_name', undo restored 'old_name' at the same position, so the
+    // position-preserving re-point re-selects it.
+    expect(screen.getByTestId('editor-field-id').textContent).toBe('old_name');
   });
 
   it('a blocked rename (duplicate id) mutates nothing', async () => {
