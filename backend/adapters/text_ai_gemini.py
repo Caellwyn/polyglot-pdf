@@ -622,29 +622,44 @@ class TextAIGemini(ITextAI):
             return None
 
     # The judge's precision rules are a byte-stable module-level block.
-    # Every clause is V1-evidence-backed (bd polyglot-pdf-i36i,
+    # Purpose framing (bd polyglot-pdf-g0ka, maintainer 2026-07-25; memory
+    # translations-are-drift-anchors-not-display): the consumer of these
+    # strings is the VOICE MODEL itself -- a fluent speaker -- and they exist
+    # to keep it locked to the session language. The bar is INTELLIGIBLE AND
+    # IN-LANGUAGE, not perfect; the deadly failures are wrong-language /
+    # mixed-language / unintelligible strings, not imperfect word choice.
+    # The V1-evidence-backed clauses stay (bd polyglot-pdf-i36i,
     # scripts/spikes/translation_gate_findings.md): the NOT-drift bullets are
     # the W5/g1c anti-over-flag lesson; the back-translation clause guards the
     # anchoring FP that reproduced across both V1 runs (zh-g07); the
     # never-flag-your-own-proposal + conventional-rendering clauses guard the
     # unsatisfiable-criterion FP (zh-g11).
     _JUDGE_RULES = (
-        "NOT drift (do NOT flag): idiomatic but faithful phrasing; official "
-        "glossary renderings; proper nouns, codes and form numbers kept in "
-        "English (a deliberate convention); regional variants; a "
-        "back_translation whose WORDING differs while the translation itself "
-        "is faithful. The back_translation is an independent machine "
-        "rendering supplied as SUPPORTING evidence ONLY -- NEVER flag a "
-        "translation because its back_translation reads differently; judge "
-        "the translation itself against the English original. Never flag a "
-        "rendering you would yourself propose as the fix, and do not flag a "
-        "conventional rendering as under-specific when no strictly better "
-        "form exists. "
-        "DRIFT (flag): changed or inverted meaning (especially negation); a "
-        "different form-domain term (line vs box, a different filing "
-        "status); an option label that does not correspond to its English "
-        "option; wrong register per the stated register rule; numbers or "
-        "identifiers that disagree with the original."
+        "Purpose: these strings are consumed by a VOICE MODEL (itself a "
+        "fluent speaker) to keep it anchored to the session language while "
+        "it helps fill a US government form; they are never displayed as a "
+        "translated form. The bar is INTELLIGIBLE AND IN-LANGUAGE, not "
+        "stylistic perfection. "
+        "NOT drift (do NOT flag): imperfect-but-intelligible word choice a "
+        "fluent speaker would still understand correctly in this form "
+        "context; idiomatic but faithful phrasing; official glossary "
+        "renderings; proper nouns, codes and form numbers kept in English "
+        "(a deliberate convention); regional variants; a back_translation "
+        "whose WORDING differs while the translation itself is faithful. "
+        "The back_translation is an independent machine rendering supplied "
+        "as SUPPORTING evidence ONLY -- NEVER flag a translation because "
+        "its back_translation reads differently; judge the translation "
+        "itself against the English original. Never flag a rendering you "
+        "would yourself propose as the fix, and do not flag a conventional "
+        "rendering as under-specific when no strictly better form exists. "
+        "DRIFT (flag): a string in the WRONG LANGUAGE or mixing languages "
+        "mid-string (beyond the kept-English conventions above); an "
+        "unintelligible or garbled rendering; changed or inverted meaning "
+        "(especially negation); a different form-domain term (line vs box, "
+        "a different filing status); an option label that does not "
+        "correspond to its English option; wrong register per the stated "
+        "register rule; numbers or identifiers that disagree with the "
+        "original."
     )
 
     async def back_translate(

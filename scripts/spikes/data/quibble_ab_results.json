@@ -1,0 +1,135 @@
+{
+ "bead": "polyglot-pdf-g0ka",
+ "judge_rules_sha": "cb6d8f817fc4d4a2",
+ "old_prompt_baseline": "14/14 flagged (V5 run, docs/research/v5-rebake artifacts)",
+ "results": [
+  {
+   "language": "swedish",
+   "id": "i-90:p1_line5a_familyname",
+   "en": "previous family name as printed on green card",
+   "translation": "Tidigare efternamn som det st\u00e5r p\u00e5 ditt Green Card",
+   "back_translation": "Previous last name as it appears on your Green Card",
+   "drift": false,
+   "reason": ""
+  },
+  {
+   "language": "swedish",
+   "id": "i-90:p1_line5b_givenname",
+   "en": "previous given name as printed on green card",
+   "translation": "Tidigare f\u00f6rnamn som det st\u00e5r p\u00e5 ditt Green Card",
+   "back_translation": "Previous first name as it appears on your Green Card",
+   "drift": false,
+   "reason": ""
+  },
+  {
+   "language": "swedish",
+   "id": "i-90:p1_line5c_middlename",
+   "en": "previous middle name as printed on green card",
+   "translation": "Tidigare mellannamn som det st\u00e5r p\u00e5 ditt Green Card",
+   "back_translation": "Previous middle name as it appears on your Green Card",
+   "drift": false,
+   "reason": ""
+  },
+  {
+   "language": "swedish",
+   "id": "i-90:p7_line3a_streetnumbername",
+   "en": "preparer's street number and name",
+   "translation": "Handl\u00e4ggarens gatuadress och nummer",
+   "back_translation": "Officer's street address and number",
+   "drift": true,
+   "reason": "The translation uses 'Handl\u00e4ggarens' which means 'The case officer's' or 'The processor's', not 'preparer's'. A more accurate term would be 'F\u00f6rberedarens'."
+  },
+  {
+   "language": "swedish",
+   "id": "w7:previously_received_itin",
+   "en": "Previously received ITIN or IRSN",
+   "translation": "Tidigare mottaget ITIN eller IRSN",
+   "back_translation": "Previously received ITIN or IRSN",
+   "drift": false,
+   "reason": ""
+  },
+  {
+   "language": "ukrainian",
+   "id": "i-90:p1_unit_type6c_unit",
+   "en": "Suite",
+   "translation": "\u041e\u0444\u0456\u0441",
+   "back_translation": "Postal address: housing type",
+   "drift": true,
+   "reason": "The translation '\u041e\u0444\u0456\u0441' (Office) is too specific and does not cover the broader meaning of 'Suite', which can refer to a set of rooms in a residential building as well as a business context. A more general term like '\u041d\u043e\u043c\u0435\u0440' or '\u041f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' would be more accurate."
+  },
+  {
+   "language": "ukrainian",
+   "id": "i-90:p1_unit_type6c_unit",
+   "en": "mailing unit type",
+   "translation": "\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430: \u0442\u0438\u043f \u0436\u0438\u0442\u043b\u0430",
+   "back_translation": "Postal address: housing type",
+   "drift": true,
+   "reason": "The translation '\u041e\u0444\u0456\u0441' (Office) is too specific and does not cover the broader meaning of 'Suite', which can refer to a set of rooms in a residential building as well as a business context. A more general term like '\u041d\u043e\u043c\u0435\u0440' or '\u041f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' would be more accurate."
+  },
+  {
+   "language": "ukrainian",
+   "id": "w7:prior_name_first",
+   "en": "Prior name first name",
+   "translation": "\u041f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0454 \u0456\u043c'\u044f",
+   "back_translation": "Previous name",
+   "drift": true,
+   "reason": "The translation '\u041f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0454 \u0456\u043c'\u044f' means 'Previous name' and omits the crucial detail 'first name'. The correct translation should specify 'first name', for example, '\u041f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0454 \u0456\u043c'\u044f (first name)' or '\u0406\u043c'\u044f \u0437 \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044c\u043e\u0433\u043e \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0430'."
+  },
+  {
+   "language": "russian",
+   "id": "i-90:p1_unit_type6c_unit",
+   "en": "Suite",
+   "translation": "\u041e\u0444\u0438\u0441",
+   "back_translation": "Office",
+   "drift": true,
+   "reason": "The translation '\u041e\u0444\u0438\u0441' (Office) is too specific and changes the meaning. The English 'Suite' can refer to a set of rooms in either a residential or commercial building, whereas '\u041e\u0444\u0438\u0441' is exclusively commercial. A more neutral and accurate translation would be '\u041e\u0444\u0438\u0441/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430' or simply '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435'."
+  },
+  {
+   "language": "russian",
+   "id": "w7:prior_name_first",
+   "en": "Prior name first name",
+   "translation": "\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u0438\u043c\u044f",
+   "back_translation": "Previous name",
+   "drift": true,
+   "reason": "The translation '\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u0438\u043c\u044f' (Previous name) is incomplete. It omits the 'first name' part of the original English 'Prior name first name'. The correct translation should specify that it is the first name, such as '\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u0438\u043c\u044f (first name)' or '\u0418\u043c\u044f \u0432 \u043f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u043c \u0431\u0440\u0430\u043a\u0435/\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0445'."
+  },
+  {
+   "language": "korean",
+   "id": "w7:prior_name_first",
+   "en": "Prior name first name",
+   "translation": "\uc774\uc804 \uc774\ub984",
+   "back_translation": "Previous name",
+   "drift": true,
+   "reason": "The translation omits the concept of 'first name'. The English 'Prior name first name' specifies the first name part of a prior name, but the translation '\uc774\uc804 \uc774\ub984' just means 'Prior name' in general."
+  },
+  {
+   "language": "italian",
+   "id": "w7:name_1b_first",
+   "en": "Name at birth first name",
+   "translation": "Nome alla nascita",
+   "back_translation": "Name at birth",
+   "drift": true,
+   "reason": "The translation is incomplete. The English original specifies 'first name', but the Italian translation 'Nome alla nascita' only means 'Name at birth', omitting the 'first name' part. A more complete translation would be 'Nome di battesimo alla nascita' or 'Nome proprio alla nascita'."
+  },
+  {
+   "language": "german",
+   "id": "i-90:p6_line3e_zipcode",
+   "en": "interpreter's zip code",
+   "translation": "Postleitzahl (ZIP Code) des Dolmetschers",
+   "back_translation": "Interpreter's Postal Code (ZIP Code)",
+   "drift": false,
+   "reason": ""
+  },
+  {
+   "language": "dutch",
+   "id": "w7:irsn_part1",
+   "en": "IRSN first group",
+   "translation": "IRSN eerste groep",
+   "back_translation": "IRSN first group",
+   "drift": false,
+   "reason": ""
+  }
+ ],
+ "flagged": 8,
+ "total": 14
+}

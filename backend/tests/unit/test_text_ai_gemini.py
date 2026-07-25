@@ -679,3 +679,56 @@ async def test_verify_methods_none_when_no_client():
         [{"id": "a"}], "Spanish", "es") is None
     assert await adapter.rectify_translations(
         [{"id": "a"}], "Spanish", "es") is None
+
+
+def test_judge_rules_carry_the_language_lock_framing():
+    """bd polyglot-pdf-g0ka: the judge prompt is reframed to the language-
+    lock bar (memory translations-are-drift-anchors-not-display) -- the
+    strings' consumer is the voice model, the bar is intelligible-and-in-
+    language, and wrong/mixed language leads the DRIFT list. The V1-
+    evidence clauses (anti-anchoring, never-flag-own-proposal) must
+    survive the rewrite."""
+    from backend.adapters.text_ai_gemini import TextAIGemini
+
+    rules = TextAIGemini._JUDGE_RULES
+    # Purpose + bar.
+    assert "VOICE MODEL" in rules
+    assert "INTELLIGIBLE AND IN-LANGUAGE" in rules
+    # Reweighted NOT-drift: imperfect word choice is explicitly tolerated.
+    assert "imperfect-but-intelligible word choice" in rules
+    # Reprioritized DRIFT: wrong/mixed language leads the list.
+    assert "WRONG LANGUAGE" in rules
+    assert rules.index("WRONG LANGUAGE") < rules.index("inverted meaning")
+    # V1-evidence clauses survive (zh-g07 anchoring, zh-g11 own-proposal +
+    # conventional-rendering).
+    assert "NEVER flag a translation because its back_translation" in rules
+    assert "Never flag a rendering you would yourself propose" in rules
+    assert "conventional rendering as under-specific" in rules
+    # NOT-drift conventions retained.
+    assert "proper nouns, codes and form numbers kept in English" in rules
+    assert "official glossary" in rules
+    # DRIFT criteria retained: register, negation, option-mismatch,
+    # form-domain terms, numbers.
+    assert "register rule" in rules
+    assert "especially negation" in rules
+    assert "does not correspond to its English option" in rules
+    assert "different form-domain term" in rules
+    assert "numbers or identifiers that disagree" in rules
+
+
+def test_probe_judges_with_the_production_rules():
+    """The V1 probe must exercise the SHIPPED judge prompt -- a stale local
+    copy silently measured the old prompt (bd g0ka fresh-eyes gap). The
+    probe now imports the adapter constant; pin the aliasing so the copies
+    can never diverge again."""
+    import importlib.util
+    from pathlib import Path
+
+    from backend.adapters.text_ai_gemini import TextAIGemini
+
+    probe_path = (Path(__file__).resolve().parents[3] / "scripts" / "spikes"
+                  / "translation_gate_probe.py")
+    spec = importlib.util.spec_from_file_location("tg_probe", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    assert probe._JUDGE_RULES is TextAIGemini._JUDGE_RULES

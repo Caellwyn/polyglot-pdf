@@ -313,16 +313,11 @@ def stage_back_translate(client, items, language, usage) -> None:
         item["back_translation"] = value if isinstance(value, str) else ""
 
 
-_JUDGE_RULES = (
-    "NOT drift (do NOT flag): idiomatic but faithful phrasing; official "
-    "glossary renderings; proper nouns, codes and form numbers kept in "
-    "English (a deliberate convention); a back_translation whose WORDING "
-    "differs while the translation itself is faithful; regional variants. "
-    "DRIFT (flag): changed or inverted meaning (especially negation); a "
-    "different form-domain term (line vs box, a different filing status); "
-    "an option label that does not correspond to its English option; wrong "
-    "register; numbers or identifiers that disagree with the original."
-)
+# The judge rules come from the PRODUCTION adapter constant -- the probe
+# must exercise the prompt the app ships (bd polyglot-pdf-g0ka fresh-eyes:
+# a stale local copy here made Run 3 silently measure the OLD prompt).
+from backend.adapters.text_ai_gemini import TextAIGemini as _TAG  # noqa: E402
+_JUDGE_RULES = _TAG._JUDGE_RULES
 
 
 def stage_judge(client, items, language, glossary, usage,

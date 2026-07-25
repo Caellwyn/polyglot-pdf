@@ -192,3 +192,35 @@ Verdict recorded per the epic rubric: criterion 1's probe evidence stands --
 discrimination works in both directions on the verifiable slice; the FP class
 found is diagnosed, mitigable, and concentrated where gold confidence was
 lowest.
+
+## Run 3 (2026-07-25) -- INVALID as a reframe check; kept as an old-prompt replicate
+
+Intended as the g0ka judge-reframe regression check, but the probe carried
+its OWN stale copy of the judge rules, so this run silently exercised the
+OLD prompt (caught by fresh-eyes on the g0ka closeout). Its numbers stand
+only as a third old-prompt replicate: 14/14 plants, es gold 15/15 clean,
+zh gold FP 1. Cost $0.21. The probe now IMPORTS the production adapter's
+`_JUDGE_RULES` (aliasing pinned by unit test), so this divergence class is
+closed.
+
+## Run 4 (2026-07-25, the REAL g0ka reframe check)
+
+Re-run with the probe reading the production LANGUAGE-LOCK prompt (bd
+polyglot-pdf-g0ka: voice-model consumer, intelligible-and-in-language bar,
+wrong/mixed language leads DRIFT, imperfect-but-intelligible word choice
+explicitly NOT drift):
+
+- **Discrimination PRESERVED under the reframe: 14/14 plants caught (7/7
+  es + 7/7 zh), same layers.** es gold 15/15 clean; zh gold FP 2 at
+  chunk 25 / 1 at chunk 50 (within the 1-2 old-prompt range). Cost $0.20.
+- The Pub-850 gold set is a FLOOR-FP corpus (0-2 FPs under either prompt),
+  so it cannot show the over-flag reduction the reframe targets. That is
+  measured directly by the V5 QUIBBLE SET
+  (`translation_judge_quibble_ab.py`): 14 V5 judge-origin unresolved keeps
+  that the cross-family Claude audit certified acceptable -- old prompt
+  14/14 flagged, reframed prompt **9/14 and 8/14 across two runs
+  (-36% to -43%; committed artifact
+  `scripts/spikes/data/quibble_ab_results.json`)**, and the residual flags
+  are substantive (omitted 'first name' concepts in uk/ru/ko/it renderings,
+  Suite->Office narrowing, the IRSN DNT case bd c6td retires) rather than
+  stylistic. Spend ~$0.02.
