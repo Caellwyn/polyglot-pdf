@@ -307,8 +307,15 @@ def evaluate_form(form: dict, draft_path: Optional[str],
         def _combined(keys: tuple[str, ...]) -> dict:
             rec = sum(conds[k]["recovered"] for k in keys if k in conds)
             tot = sum(conds[k]["total"] for k in keys if k in conds)
-            return {"recovered": rec, "total": tot,
-                    "pct": (100.0 * rec / tot) if tot else None}
+            out = {"recovered": rec, "total": tot,
+                   "pct": (100.0 * rec / tot) if tot else None}
+            tc = [conds[k]["trigger_correct"] for k in keys
+                  if k in conds and "trigger_correct" in conds[k]]
+            if tc:
+                out["trigger_correct"] = sum(tc)
+                out["trigger_correct_pct"] = (
+                    100.0 * sum(tc) / tot) if tot else None
+            return out
 
         row["rel_show_require"] = _combined(("show_if", "require_if"))
         row["rel_logic"] = _combined(("conditional_logic",

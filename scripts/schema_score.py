@@ -495,6 +495,9 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
     draft field. We score by COUNT recovered, per type.
     """
     t_to_d = _resolve_to_truth(match)
+    # Draft field id -> truth field id, for resolving condition TRIGGER
+    # references across the two schemas' independent id vocabularies.
+    d_id_to_t_id = {str(d.get("id")): str(t.get("id")) for t, d in match.pairs}
 
     def field_has_rel(t_field: dict, key: str) -> bool:
         """Did the draft field matched to this truth field carry the same rel kind?"""
@@ -502,6 +505,34 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
         if not d_field:
             return False
         return bool(d_field.get(key))
+
+    def _condition_atoms(cond: Any) -> list[dict]:
+        """Flatten a v2 condition tree (all_of/any_of/none_of) to its atoms."""
+        if not isinstance(cond, dict):
+            return []
+        if "field" in cond:
+            return [cond]
+        out: list[dict] = []
+        for combinator in ("all_of", "any_of", "none_of"):
+            for sub in cond.get(combinator) or []:
+                out.extend(_condition_atoms(sub))
+        return out
+
+    def rel_trigger_correct(t_field: dict, key: str) -> bool:
+        """PRESENCE is not CORRECTNESS (bd polyglot-pdf-eprg): a recovered
+        condition must also point at the right TRIGGER field(s). Draft trigger
+        ids are extractor-invented, so they resolve to truth ids through the
+        field match before comparing. Operator/value fidelity is deliberately
+        NOT scored here (slug dialects differ); the trigger set is the
+        dialect-stable core of a condition's meaning."""
+        d_field = t_to_d.get(t_field.get("id"))
+        if not d_field or not d_field.get(key):
+            return False
+        t_trigs = {str(a.get("field"))
+                   for a in _condition_atoms(t_field.get(key)) if a.get("field")}
+        d_trigs = {d_id_to_t_id.get(str(a.get("field")), f"?{a.get('field')}")
+                   for a in _condition_atoms(d_field.get(key)) if a.get("field")}
+        return bool(t_trigs) and t_trigs == d_trigs
 
     # v2 relationship vocabulary (bd polyglot-pdf-d9lz). Dropped BOTH v1-legacy
     # trigger-side keys `conditional_fields` and `controls_fields`: neither is a
@@ -514,13 +545,21 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
     # overflow_to_supplement) are all live v2 model fields / tolerated aliases.
     rel_keys = ["show_if", "require_if", "conditional_logic",
                 "conditional_behavior", "copy_to", "overflow_to_supplement"]
-    field_rels: dict[str, list[int]] = {k: [0, 0] for k in rel_keys}  # [recovered, total]
+    # Trigger-correctness applies to the CONDITION-shaped keys only: show_if /
+    # require_if carry {field, operator, value} trees. conditional_behavior is
+    # a behavior descriptor with no trigger of its own (the trigger rides the
+    # field's show_if), and copy_to/overflow are id references -- presence is
+    # the honest metric for those.
+    _CONDITION_SHAPED = ("show_if", "require_if")
+    field_rels: dict[str, list[int]] = {k: [0, 0, 0] for k in rel_keys}  # [recovered, total, trigger_correct]
     for t in truth.get("fields", []):
         for k in rel_keys:
             if t.get(k):
                 field_rels[k][1] += 1
                 if field_has_rel(t, k):
                     field_rels[k][0] += 1
+                    if k in _CONDITION_SHAPED and rel_trigger_correct(t, k):
+                        field_rels[k][2] += 1
 
     # Structural: parts, sections, tables, supplements (schema-level counts).
     struct = {}
@@ -535,8 +574,13 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
                    if f.get("type") == "table" or f.get("multi_entry"))
     struct["tables/multi_entry"] = [d_tables, t_tables]
 
-    rel_scores = {k: {"recovered": c, "total": n, "pct": _pct(c, n)}
-                  for k, (c, n) in field_rels.items()}
+    rel_scores = {}
+    for k, (c, n, tc) in field_rels.items():
+        entry = {"recovered": c, "total": n, "pct": _pct(c, n)}
+        if k in _CONDITION_SHAPED:
+            entry["trigger_correct"] = tc
+            entry["trigger_correct_pct"] = _pct(tc, n)
+        rel_scores[k] = entry
     struct_scores = {k: {"draft": d, "truth": n,
                          "pct": _pct(min(d, n), n) if n else float("nan")}
                      for k, (d, n) in struct.items()}
@@ -619,8 +663,12 @@ def render_report(name: str, a: dict, b: dict) -> str:
         if v["total"] == 0:
             L.append(f"    {k:22s}   n/a   (0 in ground truth)")
         else:
-            L.append(f"    {k:22s} {_fmt_pct(v['pct'])}  "
-                     f"({v['recovered']}/{v['total']})")
+            line = (f"    {k:22s} {_fmt_pct(v['pct'])}  "
+                    f"({v['recovered']}/{v['total']})")
+            if "trigger_correct" in v:
+                line += (f"  trigger-correct {v['trigger_correct']}"
+                         f"/{v['total']}")
+            L.append(line)
     L.append("  structure (draft vs truth count):")
     for k, v in b["structure"].items():
         L.append(f"    {k:22s} {_fmt_pct(v['pct'])}  "

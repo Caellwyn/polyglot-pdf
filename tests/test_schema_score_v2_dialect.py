@@ -123,6 +123,63 @@ def test_rel_keys_reflect_v2_vocabulary():
 
 
 # --------------------------------------------------------------------------- #
+# Trigger-correctness of condition-shaped keys (bd polyglot-pdf-eprg)
+# --------------------------------------------------------------------------- #
+
+def test_trigger_correctness_requires_the_right_resolved_trigger():
+    """Presence is not correctness: a recovered show_if only counts
+    trigger-correct when its (extractor-invented) trigger id RESOLVES, via the
+    field match, to the same truth field the gold condition points at."""
+    truth = {"fields": [
+        {"id": "trig", "pdf_field_name": "T[0]"},
+        {"id": "dep_ok", "pdf_field_name": "A[0]",
+         "show_if": {"field": "trig", "operator": "is_checked"}},
+        {"id": "dep_wrong", "pdf_field_name": "B[0]",
+         "show_if": {"field": "trig", "operator": "is_checked"}},
+    ]}
+    draft = {"fields": [
+        {"id": "x1", "pdf_field_name": "T[0]"},
+        # Right trigger (x1 resolves to trig) -- correct.
+        {"id": "x2", "pdf_field_name": "A[0]",
+         "show_if": {"field": "x1", "operator": "is_checked"}},
+        # Wrong trigger (points at itself) -- present but NOT correct.
+        {"id": "x3", "pdf_field_name": "B[0]",
+         "show_if": {"field": "x2", "operator": "is_checked"}},
+    ]}
+    match = schema_score.match_fields(truth["fields"], draft["fields"])
+    conds = schema_score.score_relationships(truth, draft, match)["conditionals"]
+    assert conds["show_if"]["total"] == 2
+    assert conds["show_if"]["recovered"] == 2       # both PRESENT
+    assert conds["show_if"]["trigger_correct"] == 1  # only one CORRECT
+    # Non-condition-shaped keys carry no trigger_correct entry.
+    assert "trigger_correct" not in conds["conditional_behavior"]
+
+
+def test_trigger_correctness_handles_combinator_trees():
+    """all_of/any_of trees flatten to their atom triggers; the full resolved
+    trigger SET must match."""
+    truth = {"fields": [
+        {"id": "t1", "pdf_field_name": "T1[0]"},
+        {"id": "t2", "pdf_field_name": "T2[0]"},
+        {"id": "dep", "pdf_field_name": "D[0]",
+         "show_if": {"all_of": [
+             {"field": "t1", "operator": "is_checked"},
+             {"field": "t2", "operator": "is_checked"}]}},
+    ]}
+    draft = {"fields": [
+        {"id": "a", "pdf_field_name": "T1[0]"},
+        {"id": "b", "pdf_field_name": "T2[0]"},
+        {"id": "c", "pdf_field_name": "D[0]",
+         "show_if": {"all_of": [
+             {"field": "a", "operator": "is_checked"},
+             {"field": "b", "operator": "is_checked"}]}},
+    ]}
+    match = schema_score.match_fields(truth["fields"], draft["fields"])
+    conds = schema_score.score_relationships(truth, draft, match)["conditionals"]
+    assert conds["show_if"]["trigger_correct"] == 1
+
+
+# --------------------------------------------------------------------------- #
 # Trigger-side harvest-residue accounting (bd polyglot-pdf-eprg)
 # --------------------------------------------------------------------------- #
 
