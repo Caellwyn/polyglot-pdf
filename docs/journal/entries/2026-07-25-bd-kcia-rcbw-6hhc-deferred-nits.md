@@ -47,9 +47,17 @@ JSON is UTF-8 data, accents allowed).
    holding the vanished NEW id (editor fell back to the metadata panel). Added
    a position-preserving re-point -- when the selected id vanishes, re-select
    the field now at its last-known index (a rename keeps the field's slot).
-   Guarded so it never fires on load/clear or a delete (delete resets selection
-   to null first). Pinned in App.rename.test.tsx (the existing undo test now
-   also asserts selection recovery).
+   The recovery decision is a pure, unit-tested helper
+   (`recoverSelectionAfterVanish` in utils/fieldRename.ts) gated on an
+   UNCHANGED field count: a rename is the only mutation that changes an id
+   while keeping the count + position, so a structural RELOAD (Repair-all,
+   Regenerate-divisions) or a delete deselects rather than re-pointing to an
+   unrelated field at a reused index (fresh-eyes gap: those two reload
+   handlers previously skipped the null-reset that every other loadSchemaState
+   caller does). Belt-and-suspenders: both reload handlers now ALSO null the
+   selection before loadSchemaState (parity), and a deliberate deselect clears
+   the position ref. Pinned in App.rename.test.tsx (rename-undo recovery) +
+   fieldRename.test.ts (5 helper cases incl. the reload/delete deselect).
 
 - Tests: FieldEditor.severity (4 new) + the rename-undo-selection assertion;
   full schema-editor suite 763 green + tsc clean; full backend + scripts

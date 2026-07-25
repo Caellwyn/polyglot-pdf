@@ -36,7 +36,9 @@ import {
 } from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
-import { renameBlockReason, renameFieldId } from './utils/fieldRename';
+import {
+  recoverSelectionAfterVanish, renameBlockReason, renameFieldId,
+} from './utils/fieldRename';
 import { SectionManager } from './components/SectionManager';
 import type { DivisionsPatch } from './utils/sectionOps';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
@@ -634,7 +636,15 @@ export const App: React.FC = () => {
       if (seq !== openSeqRef.current) return; // superseded while repairing
       const repaired = await loadRemoteSchema(selectedKitId);
       if (seq !== openSeqRef.current) return; // superseded while reloading
-      if (repaired) loadSchemaState(repaired); // fresh baseline -> history cleared
+      if (repaired) {
+        // Reset selection BEFORE the fresh baseline (parity with every other
+        // loadSchemaState caller): repair can drop/rename the selected field,
+        // and a stale selectedFieldId must fall back to the metadata panel,
+        // not be position-re-pointed to an unrelated field (bd 6hhc
+        // fresh-eyes).
+        setSelectedFieldId(null);
+        loadSchemaState(repaired); // fresh baseline -> history cleared
+      }
       setSaveError(null);
     } catch (err) {
       if (seq !== openSeqRef.current) return; // a stale repair's failure is moot
@@ -688,7 +698,13 @@ export const App: React.FC = () => {
       if (seq !== openSeqRef.current) return; // superseded while deriving
       const derived = await loadRemoteSchema(selectedKitId);
       if (seq !== openSeqRef.current) return; // superseded while reloading
-      if (derived) loadSchemaState(derived); // fresh baseline -> history cleared
+      if (derived) {
+        // Reset selection before the fresh baseline (bd 6hhc fresh-eyes):
+        // regenerate-divisions re-files fields and can change the selected
+        // id, so a stale selection must deselect, not re-point by position.
+        setSelectedFieldId(null);
+        loadSchemaState(derived); // fresh baseline -> history cleared
+      }
       setSaveError(null);
     } catch (err) {
       if (seq !== openSeqRef.current) return;
@@ -731,12 +747,29 @@ export const App: React.FC = () => {
   // back to the metadata panel. A rename keeps the field at its position, so
   // re-select the field now occupying the index the vanished selection held --
   // recovering the exact field the author was editing (under its restored id).
-  // Guards: only fires when a field WAS selected and its id truly vanished (not
-  // on load/clear, where selection is reset elsewhere), and only when the old
-  // index still exists in the new field list.
+  //
+  // Guards (the third is the load-safety gate, bd 6hhc fresh-eyes):
+  //  - a field WAS selected and its id truly vanished (a deliberate deselect
+  //    sets selectedFieldId=null, which short-circuits and clears the ref);
+  //  - the old index still exists in the new field list;
+  //  - the field COUNT is unchanged. A rename is the only mutation that
+  //    changes a field's id while keeping the count and position; a
+  //    structural RELOAD (Repair-all, Regenerate-divisions, extraction) or a
+  //    delete changes the count, so it deselects rather than re-pointing to
+  //    an unrelated field at the reused index. Reload handlers ALSO null the
+  //    selection before loadSchemaState (parity with the other callers), so
+  //    this gate is belt-and-suspenders against a future forgetful caller.
   const prevSelectedIndexRef = React.useRef<number | null>(null);
+  const prevFieldCountRef = React.useRef<number | null>(null);
   React.useEffect(() => {
-    if (!schema) { prevSelectedIndexRef.current = null; return; }
+    if (!schema) {
+      prevSelectedIndexRef.current = null;
+      prevFieldCountRef.current = null;
+      return;
+    }
+    const count = schema.fields.length;
+    const prevCount = prevFieldCountRef.current;
+    prevFieldCountRef.current = count;
     const idx = selectedFieldId
       ? schema.fields.findIndex(f => f.id === selectedFieldId)
       : -1;
@@ -745,12 +778,21 @@ export const App: React.FC = () => {
       prevSelectedIndexRef.current = idx;
       return;
     }
-    // Selected id no longer resolves. Re-point to the field at the last-known
-    // index, if that slot still exists (a rename preserves the slot; a delete
-    // legitimately leaves nothing to recover -> fall through to metadata).
-    const prevIdx = prevSelectedIndexRef.current;
-    if (selectedFieldId && prevIdx !== null && prevIdx < schema.fields.length) {
-      setSelectedFieldId(schema.fields[prevIdx].id);
+    if (!selectedFieldId) {
+      // Deliberate deselect -- forget the last position so a subsequent
+      // schema change can never resurrect a stale selection.
+      prevSelectedIndexRef.current = null;
+      return;
+    }
+    // Selected id no longer resolves. Recover ONLY on an in-place rename
+    // (same field count) whose slot still exists -- otherwise deselect
+    // (recoverSelectionAfterVanish encodes that decision + is unit-tested).
+    const recovered = recoverSelectionAfterVanish(
+      schema.fields, prevSelectedIndexRef.current, prevCount);
+    if (recovered !== null) {
+      setSelectedFieldId(recovered);
+    } else {
+      prevSelectedIndexRef.current = null;
     }
   }, [schema, selectedFieldId]);
 

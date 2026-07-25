@@ -8,7 +8,9 @@
  * carry no trace of the old id.
  */
 import { describe, it, expect } from 'vitest';
-import { renameBlockReason, renameFieldId } from './fieldRename';
+import {
+  recoverSelectionAfterVanish, renameBlockReason, renameFieldId,
+} from './fieldRename';
 import { stripEditorState } from './fieldGrouping';
 import type { FormSchema, FormField } from '../types/schema';
 
@@ -180,5 +182,41 @@ describe('renameFieldId retargets every reference (bd 0x10.1)', () => {
     expect(renameFieldId(schema, 'a', 'a')).toBe(schema);
     expect(renameFieldId(schema, 'a', 'b')).toBe(schema); // duplicate -> untouched
     expect(renameFieldId(schema, 'a', 'Not A Slug')).toBe(schema);
+  });
+});
+
+
+describe('recoverSelectionAfterVanish (bd 6hhc nit 2)', () => {
+  const fields = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+
+  it('recovers by position on a rename (same count, slot exists)', () => {
+    // 'b' was selected at index 1 with count 3; an undo renamed it back, so
+    // index 1 now holds the restored field -> re-select it.
+    expect(recoverSelectionAfterVanish(fields, 1, 3)).toBe('b');
+    expect(recoverSelectionAfterVanish(
+      [{ id: 'a' }, { id: 'b2' }, { id: 'c' }], 1, 3)).toBe('b2');
+  });
+
+  it('DESELECTS on a structural change that dropped a field (count fell)', () => {
+    // The fresh-eyes case: a Repair-all / delete reload removed the selected
+    // field; count changed, so do NOT re-point to an unrelated field.
+    expect(recoverSelectionAfterVanish([{ id: 'a' }, { id: 'c' }], 1, 3))
+      .toBeNull();
+  });
+
+  it('DESELECTS when a field was added (count rose)', () => {
+    expect(recoverSelectionAfterVanish(
+      [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }], 1, 3)).toBeNull();
+  });
+
+  it('DESELECTS when the last-known index no longer exists', () => {
+    // Same count is required, so a shrink can never leave a valid prevIndex;
+    // but guard the bound explicitly.
+    expect(recoverSelectionAfterVanish([{ id: 'a' }], 2, 1)).toBeNull();
+  });
+
+  it('DESELECTS with no prior index/count (nothing to recover from)', () => {
+    expect(recoverSelectionAfterVanish(fields, null, 3)).toBeNull();
+    expect(recoverSelectionAfterVanish(fields, 1, null)).toBeNull();
   });
 });
