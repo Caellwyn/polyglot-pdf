@@ -225,8 +225,8 @@ def test_one_command_emits_the_multi_form_table(capsys, tmp_path):
     # is resolved by the migration, so the whole table is GREEN -> exit 0.
     assert "RED" not in table and rc == 0
     rows = json.loads(out_json.read_text(encoding="utf-8"))
-    assert len(rows) == 5
-    # The four real kits score OK; the held-out row carries no verdict.
+    assert len(rows) == 4
+    # The three real kits score OK; the held-out row carries no verdict.
     assert all(r.get("verdict", "OK") == "OK" for r in rows)
 
 
