@@ -344,8 +344,18 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         ? `; ${flagCount} translation flag${flagCount === 1 ? '' : 's'} to ` +
           'review (open the kit -- the validation panel lists them)'
         : '';
-      if (!report.changed) {
+      if (!report.changed && flagCount === 0) {
         setNotice(`"${kit.id}" option labels are already fully translated.`);
+      } else if (!report.changed) {
+        // No label changed, but the verify gate still flagged translations
+        // (reachable on a force re-bake that reproduces identical values):
+        // the backend persisted the flags into provenance, so point at the
+        // panel and reload the stored schema like any other change.
+        setNotice(
+          `"${kit.id}" option labels are already fully translated` +
+          flagNote + '.',
+        );
+        if (kit.id === selectedKitId) onOpenKit(kit);
       } else {
         setNotice(
           `Translated option labels for "${kit.id}" -- ${updated} ` +

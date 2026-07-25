@@ -522,6 +522,30 @@ describe('RemoteCatalogue standalone Translate options (bd 2h9j)', () => {
     expect(screen.getByText(/validation panel/)).toBeInTheDocument();
   });
 
+  it('still points at the panel and reloads when flags arrive without label changes (bd 9djc)', async () => {
+    // Reachable on a force re-bake that reproduces identical values: the
+    // backend persists the flags (changed=false, flags non-empty), so the
+    // notice must not read as a pure no-op and the open kit must reload.
+    vi.mocked(translateRemoteKitOptions).mockResolvedValue({
+      ...REPORT,
+      changed: false,
+      flags: [
+        { severity: 'WARNING', rule: 'translation-drift-unresolved',
+          path: 'fields[0] (id=x).options[m].label_translations.spanish',
+          field_id: 'x', message: 'judge: drift' },
+      ],
+    });
+    const onOpenKit = vi.fn();
+    render(<RemoteCatalogue onOpenKit={onOpenKit} selectedKitId="draft-kit" role="author" />);
+    await waitFor(() =>
+      expect(screen.getByText('Translate options')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Translate options'));
+    await waitFor(() => expect(
+      screen.getByText(/1 translation flag to review/)).toBeInTheDocument());
+    expect(onOpenKit).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'draft-kit' }));
+  });
+
   it('surfaces failed languages in the notice', async () => {
     vi.mocked(translateRemoteKitOptions).mockResolvedValue(
       { ...REPORT, failedLanguages: ['french'] });
