@@ -201,13 +201,27 @@ def check_widget_coverage(schema: dict, widget_leaves: list[str]) -> dict:
 # Pipeline steps.
 # --------------------------------------------------------------------------- #
 
-def _try_repair(draft_path: str) -> tuple[str, str]:
-    """Run schema_repair when it exists (P5.2); returns (draft_path, note).
-    The repaired draft goes to a TEMP file (never beside the input -- a
-    fixture input must not grow siblings in the repo)."""
+def _harvest_counts(repairs: list[dict]) -> dict:
+    """Trigger-side harvest accounting (bd polyglot-pdf-eprg): how many legacy
+    trigger-side edges the repair mirror canonicalized into v2 target-side keys
+    (mirrored) vs dropped-with-report (unconverted). Action names are the
+    backend/services/schema_repair.py controls_fields step's contract."""
+    return {
+        "mirrored": sum(1 for r in repairs
+                        if r.get("action") == "mirror-controls-fields"),
+        "unconverted": sum(1 for r in repairs if r.get("action") in (
+            "controls-fields-unmirrored", "controls-fields-dangling",
+            "drop-conditional-fields")),
+    }
+
+
+def _try_repair(draft_path: str) -> tuple[str, str, dict]:
+    """Run schema_repair when it exists (P5.2); returns (draft_path, note,
+    trigger_harvest). The repaired draft goes to a TEMP file (never beside the
+    input -- a fixture input must not grow siblings in the repo)."""
     repair_py = os.path.join(_HERE, "schema_repair.py")
     if not os.path.exists(repair_py):
-        return draft_path, "-"
+        return draft_path, "-", {}
     spec = importlib.util.spec_from_file_location("schema_repair", repair_py)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -220,7 +234,7 @@ def _try_repair(draft_path: str) -> tuple[str, str]:
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(repaired, fh, indent=2)
     substantive = [r for r in repairs if r["action"] != "alias-hit-rate"]
-    return out, f"{len(substantive)} repair(s)"
+    return out, f"{len(substantive)} repair(s)", _harvest_counts(repairs)
 
 
 def evaluate_form(form: dict, draft_path: Optional[str],
@@ -259,8 +273,10 @@ def evaluate_form(form: dict, draft_path: Optional[str],
     # broken-draft-scores-RED record).
     repair_ran = False
     if do_repair and not row.get("baseline"):
-        draft_path, repair_note = _try_repair(draft_path)
+        draft_path, repair_note, harvest = _try_repair(draft_path)
         row["repair"] = repair_note
+        if harvest.get("mirrored") or harvest.get("unconverted"):
+            row["trigger_harvest"] = harvest
         repair_ran = repair_note != "-"
     else:
         row["repair"] = "-"
@@ -282,6 +298,21 @@ def evaluate_form(form: dict, draft_path: Optional[str],
         s = schema_score.score(draft_path, form["gold"], label=name)
         row["field_f1"] = s["field_extraction"]["detection"]["f1"]
         row["score"] = s
+
+        # Sprint-15 headline relationship metrics (bd polyglot-pdf-eprg):
+        # sh/rq = the target-side show/require conditionals; logic = the bespoke
+        # keys (i-90 gold stores its flag-flips under conditional_behavior).
+        conds = s["relationships"]["conditionals"]
+
+        def _combined(keys: tuple[str, ...]) -> dict:
+            rec = sum(conds[k]["recovered"] for k in keys if k in conds)
+            tot = sum(conds[k]["total"] for k in keys if k in conds)
+            return {"recovered": rec, "total": tot,
+                    "pct": (100.0 * rec / tot) if tot else None}
+
+        row["rel_show_require"] = _combined(("show_if", "require_if"))
+        row["rel_logic"] = _combined(("conditional_logic",
+                                      "conditional_behavior"))
     else:
         row["field_f1"] = None  # gold-vs-itself is not a measurement
 
@@ -325,7 +356,8 @@ def render_table(rows: list[dict]) -> str:
     # Column width fits the widest cell: longest form name (w9-heldout, 10) +
     # the '*' baseline marker (1) + the ' [gc]' ablation suffix (5) = 16.
     header = (f"{'form':<16} {'verdict':<7} {'lint E/W':<9} {'conv%':>6} "
-              f"{'choice%':>8} {'text%':>7} {'fieldF1':>7} {'structural':<22} repair")
+              f"{'choice%':>8} {'text%':>7} {'fieldF1':>7} {'sh/rq%':>7} "
+              f"{'logic%':>7} {'structural':<22} repair")
     L = [header, "-" * len(header)]
     for r in rows:
         if r.get("skipped"):
@@ -343,13 +375,22 @@ def render_table(rows: list[dict]) -> str:
         form_cell = r["form"] + ("*" if r.get("baseline") else "")
         if r.get("group_candidates"):
             form_cell += " [gc]"  # the candidates-block ablation arm
+        repair_cell = r.get("repair", "-")
+        th = r.get("trigger_harvest")
+        if th:
+            # ts = trigger-side edges the repair mirror saw: m(irrored)/
+            # u(nconverted, dropped-with-report).
+            repair_cell += f" [ts {th['mirrored']}m/{th['unconverted']}u]"
         L.append(
             f"{form_cell:<16} {r['verdict']:<7} "
             f"{str(r['lint_errors']) + '/' + str(r['lint_warnings']):<9} "
             f"{_pct_cell(r.get('value_convention')):>6} "
             f"{_pct_cell(r.get('choice_fill')):>8} "
             f"{_pct_cell(r.get('text_fill')):>7} "
-            f"{f1_cell:>7} {st_cell:<22} {r.get('repair', '-')}"
+            f"{f1_cell:>7} "
+            f"{_pct_cell(r.get('rel_show_require')):>7} "
+            f"{_pct_cell(r.get('rel_logic')):>7} "
+            f"{st_cell:<22} {repair_cell}"
         )
     return "\n".join(L)
 

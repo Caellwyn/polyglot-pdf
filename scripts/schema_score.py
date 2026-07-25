@@ -476,6 +476,16 @@ def _resolve_to_truth(match: MatchResult) -> dict[str, dict]:
     return out
 
 
+# Trigger-side action vocabulary for the harvest-residue accounting in
+# score_relationships (bd polyglot-pdf-eprg). These names are the CONTRACT of
+# backend/services/controls_fields_mirror.py (ACTION_KEYS / MIRRORABLE_ACTIONS /
+# UNCONVERTIBLE_ACTIONS); this script stays standalone (no backend import), so
+# the sync is pinned by tests/test_schema_score_v2_dialect.py instead.
+_TRIGGER_MIRRORABLE = ("shows", "makes_required")
+_TRIGGER_UNCONVERTIBLE = ("hides", "locks", "unlocks", "makes_optional")
+_TRIGGER_ACTIONS = _TRIGGER_MIRRORABLE + _TRIGGER_UNCONVERTIBLE
+
+
 def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[str, Any]:
     """(b) half: recall of structural + conditional relationships.
 
@@ -531,7 +541,40 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
                          "pct": _pct(min(d, n), n) if n else float("nan")}
                      for k, (d, n) in struct.items()}
 
-    return {"conditionals": rel_scores, "structure": struct_scores}
+    # Trigger-side harvest residue (bd polyglot-pdf-eprg). The draft the scorer
+    # sees SHOULD be post-repair (the eval pipeline mirrors legacy trigger-side
+    # edges into v2 target-side keys first, bd c3y6) -- so any controls_fields /
+    # conditional_fields still present here are edges the harvest did NOT
+    # canonicalize. Counted per action kind so the report shows what a better
+    # mirror (bd polyglot-pdf-xbfm) would recover instead of silently dropping.
+    trig: dict[str, Any] = {"per_action": {k: 0 for k in _TRIGGER_ACTIONS},
+                            "mirrorable": 0, "unconvertible": 0,
+                            "fields_with_trigger_keys": 0,
+                            "legacy_conditional_fields": 0}
+    for d in draft.get("fields", []) or []:
+        if not isinstance(d, dict):
+            continue
+        controls = d.get("controls_fields")
+        if controls:
+            trig["fields_with_trigger_keys"] += 1
+        for edge in controls if isinstance(controls, list) else []:
+            if not isinstance(edge, dict):
+                continue
+            for k in _TRIGGER_ACTIONS:
+                tgt = edge.get(k)
+                n = len(tgt) if isinstance(tgt, list) else (1 if tgt else 0)
+                if not n:
+                    continue
+                trig["per_action"][k] += n
+                bucket = ("mirrorable" if k in _TRIGGER_MIRRORABLE
+                          else "unconvertible")
+                trig[bucket] += n
+        if d.get("conditional_fields"):
+            trig["legacy_conditional_fields"] += 1
+    trig["total"] = trig["mirrorable"] + trig["unconvertible"]
+
+    return {"conditionals": rel_scores, "structure": struct_scores,
+            "trigger_side_residue": trig}
 
 
 # --------------------------------------------------------------------------- #
@@ -582,6 +625,22 @@ def render_report(name: str, a: dict, b: dict) -> str:
     for k, v in b["structure"].items():
         L.append(f"    {k:22s} {_fmt_pct(v['pct'])}  "
                  f"(draft {v['draft']} / truth {v['truth']})")
+    t = b.get("trigger_side_residue") or {}
+    if t.get("total") or t.get("legacy_conditional_fields"):
+        acts = ", ".join(f"{k}={v}" for k, v in t["per_action"].items() if v)
+        L.append("  trigger-side residue (legacy keys still in the draft -- "
+                 "unharvested edges):")
+        line = (f"    edges {t['total']} (mirrorable {t['mirrorable']}, "
+                f"unconvertible {t['unconvertible']}")
+        if acts:
+            line += f"; {acts}"
+        if t.get("legacy_conditional_fields"):
+            line += (f"; legacy conditional_fields on "
+                     f"{t['legacy_conditional_fields']} field(s)")
+        L.append(line + ")")
+    else:
+        L.append("  trigger-side residue: none (no legacy trigger-side keys "
+                 "left in the draft)")
     L.append("")
     return "\n".join(L)
 
