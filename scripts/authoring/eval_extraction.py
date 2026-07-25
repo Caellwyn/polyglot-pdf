@@ -10,7 +10,7 @@ plus paid model tokens. Without --extract it evaluates EXISTING schemas (a
 draft dir you point it at, or each kit's gold as the baseline row), which is
 fast, free, and what the tests pin.
 
-Benchmark set (see _FORMS): w7, w7-2, f1040 (kits with gold schemas) + the
+Benchmark set (see _FORMS): w7, f1040 (kits with gold schemas) + the
 HELD-OUT w9 (form-kits/w9-heldout/NOTE.md -- no gold on purpose; it only
 produces a row under --extract or --draft-dir).
 
@@ -86,12 +86,6 @@ _FORMS: list[dict[str, Any]] = [
         "pdf": os.path.join(_kit("w7"), "form.pdf"),
         "gold": os.path.join(_kit("w7"), "schema.json"),
         "widgets": [f"c1_{i}[0]" for i in range(2, 10)],  # reason boxes a-h
-    },
-    {
-        "name": "w7-2",
-        "pdf": os.path.join(_kit("w7-2"), "form.pdf"),
-        "gold": os.path.join(_kit("w7-2"), "schema.json"),
-        "widgets": [f"c1_{i}[0]" for i in range(2, 10)],
     },
     {
         "name": "f1040",

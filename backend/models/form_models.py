@@ -909,7 +909,7 @@ class FormSchema(BaseModel):
         """Apply the strict v2 rules to EVERY schema (bd h76m.16, P6.2 flip).
 
         The v1-acceptance bypass is gone: schema v2 is the only shape. All
-        stored kits are migrated to v2 (i-90/w7/w7-2/f1040), and the trigger-
+        stored kits are migrated to v2 (i-90/w7/f1040), and the trigger-
         side controls_fields / group_kind / conditional_fields fields have been
         deleted from the model. The model uses the default extra="ignore", so a
         legacy schema carrying those keys does NOT fail here -- the key is

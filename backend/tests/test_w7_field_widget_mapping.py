@@ -1,6 +1,6 @@
 """W-7 / W-7(SP) field-to-widget mapping regression pin (bd polyglot-pdf-ivh9).
 
-The shipped w7 / w7-2 kits had a one-widget off-by-one through the treaty /
+The shipped w7 kit (and its since-deleted w7-2 copy, bd r9a7) had a one-widget off-by-one through the treaty /
 name / address / birth / id-document run: e.g. name_1a_first pointed at f1_06
 (the treaty-article box) instead of f1_07 (1a First name). The consequence was
 a user-visible mis-fill of the printed W-7 -- every value landed one box off
@@ -35,9 +35,9 @@ def _leaf(pfn: str | None) -> str | None:
 
 
 # Correct field_id -> widget leaf, verified against the AcroForm rects + a
-# filled-page render. Covers the full off-by-one run for each kit; the two kits
-# decompose the region differently (w7 uses name_1a_*, w7-2 uses name_*), so the
-# tables are per-kit even though the underlying PDF widgets are identical.
+# filled-page render. Covers the full off-by-one run. (Kept per-kit-shaped
+# for a future second W-7 edition; the retired w7-2 copy's table was removed
+# with the kit, bd polyglot-pdf-r9a7.)
 _EXPECTED = {
     "w7": {
         "treaty_country": "f1_05[0]",
@@ -63,30 +63,6 @@ _EXPECTED = {
         "id_doc_exp_date": "f1_26[0]",
         "date_of_entry": "f1_27[0]",
     },
-    "w7-2": {
-        "treaty_country": "f1_05[0]",
-        "treaty_article": "f1_06[0]",
-        "name_first": "f1_07[0]",
-        "name_middle": "f1_08[0]",
-        "name_last": "f1_09[0]",
-        "birth_name_first": "f1_10[0]",
-        "birth_name_middle": "f1_11[0]",
-        "birth_name_last": "f1_12[0]",
-        "mailing_street": "f1_13[0]",
-        "mailing_city_state_country": "f1_14[0]",
-        "foreign_street": "f1_15[0]",
-        "foreign_city_state_country": "f1_16[0]",
-        "birth_date": "f1_17[0]",
-        "birth_country": "f1_18[0]",
-        "birth_city_state": "f1_19[0]",
-        "citizenship_country": "f1_20[0]",
-        "foreign_tax_id": "f1_21[0]",
-        "us_visa_type": "f1_22[0]",
-        "id_issued_by": "f1_24[0]",
-        "id_number": "f1_25[0]",
-        "id_exp_date": "f1_26[0]",
-        "date_of_entry": "f1_27[0]",
-    },
 }
 
 # The two "Other" free-text lines are real fillable widgets that NO field models
@@ -98,7 +74,7 @@ _EXPECTED = {
 _MUST_STAY_UNCLAIMED = {"f1_04[0]", "f1_23[0]"}
 
 
-@pytest.mark.parametrize("kit", ["w7", "w7-2"])
+@pytest.mark.parametrize("kit", ["w7"])
 def test_field_widget_mapping_is_corrected(kit: str) -> None:
     schema = _load(kit)
     by_id = {f["id"]: f for f in schema["fields"]}
@@ -111,7 +87,7 @@ def test_field_widget_mapping_is_corrected(kit: str) -> None:
         )
 
 
-@pytest.mark.parametrize("kit", ["w7", "w7-2"])
+@pytest.mark.parametrize("kit", ["w7"])
 def test_other_lines_stay_unmodeled(kit: str) -> None:
     schema = _load(kit)
     claimed = {
@@ -127,7 +103,7 @@ def test_other_lines_stay_unmodeled(kit: str) -> None:
         )
 
 
-@pytest.mark.parametrize("kit", ["w7", "w7-2"])
+@pytest.mark.parametrize("kit", ["w7"])
 def test_no_widget_claimed_twice(kit: str) -> None:
     # A permutation fix must stay a bijection: no two fields on one widget.
     schema = _load(kit)

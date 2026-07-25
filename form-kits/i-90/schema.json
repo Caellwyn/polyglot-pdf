@@ -6841,9 +6841,9 @@
             "persian": "\u0627\u0633\u067e\u0627\u0646\u06cc\u0627\u06cc\u06cc\u200c\u062a\u0628\u0627\u0631 \u06cc\u0627 \u0644\u0627\u062a\u06cc\u0646",
             "dutch": "Hispanic of Latino",
             "ukrainian": "\u0406\u0441\u043f\u0430\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0441\u044c\u043a\u043e\u0433\u043e \u0430\u0431\u043e \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0441\u044c\u043a\u043e\u0433\u043e \u043f\u043e\u0445\u043e\u0434\u0436\u0435\u043d\u043d\u044f",
-            "swedish": "Spansktalande eller latino",
             "afrikaans": "Hispanies of Latino",
-            "russian": "\u0418\u0441\u043f\u0430\u043d\u0435\u0446 \u0438\u043b\u0438 \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446"
+            "russian": "\u0418\u0441\u043f\u0430\u043d\u0435\u0446 \u0438\u043b\u0438 \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446",
+            "swedish": "Spansk/latinamerikansk h\u00e4rkomst"
           }
         },
         {
@@ -6872,9 +6872,9 @@
             "persian": "\u063a\u06cc\u0631\u0627\u0633\u067e\u0627\u0646\u06cc\u0627\u06cc\u06cc\u200c\u062a\u0628\u0627\u0631 \u06cc\u0627 \u063a\u06cc\u0631\u0644\u0627\u062a\u06cc\u0646",
             "dutch": "Niet Hispanic of Latino",
             "ukrainian": "\u041d\u0435 \u0456\u0441\u043f\u0430\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0441\u044c\u043a\u043e\u0433\u043e \u0430\u0431\u043e \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0441\u044c\u043a\u043e\u0433\u043e \u043f\u043e\u0445\u043e\u0434\u0436\u0435\u043d\u043d\u044f",
-            "swedish": "Inte spansktalande eller latino",
             "afrikaans": "Nie Hispanies of Latino nie",
-            "russian": "\u041d\u0435 \u0438\u0441\u043f\u0430\u043d\u0435\u0446 \u0438 \u043d\u0435 \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446"
+            "russian": "\u041d\u0435 \u0438\u0441\u043f\u0430\u043d\u0435\u0446 \u0438 \u043d\u0435 \u043b\u0430\u0442\u0438\u043d\u043e\u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0435\u0446",
+            "swedish": "Inte spansk/latinamerikansk h\u00e4rkomst"
           }
         }
       ],
@@ -8321,7 +8321,6 @@
             "spanish": "Rubio arenoso",
             "chinese": "\u6c99\u8272",
             "arabic": "\u0631\u0645\u0644\u064a",
-            "portuguese": "Loiro-escuro",
             "korean": "\ud669\uac08\uc0c9",
             "french": "Blond v\u00e9nitien",
             "german": "Sandfarben",
@@ -8333,7 +8332,8 @@
             "ukrainian": "\u041f\u0456\u0441\u043e\u0447\u043d\u0438\u0439",
             "swedish": "Sandf\u00e4rgad",
             "afrikaans": "Sanderig",
-            "russian": "\u041f\u0435\u0441\u043e\u0447\u043d\u044b\u0439"
+            "russian": "\u041f\u0435\u0441\u043e\u0447\u043d\u044b\u0439",
+            "portuguese": "Loiro-escuro"
           }
         },
         {

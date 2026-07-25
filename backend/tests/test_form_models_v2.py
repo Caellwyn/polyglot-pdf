@@ -130,19 +130,19 @@ def assert_v2_error(doc: dict, *needles: str):
 # ---------------------------------------------------------------------------
 
 # Post the P6.2 strictness flip (bd h76m.16), EVERY shipped kit is v2: i-90
-# (P6.1b) + w7/w7-2/f1040 (migrated at P6.2). There is no v1-acceptance path left
+# (P6.1b) + w7/f1040 (migrated at P6.2). There is no v1-acceptance path left
 # -- the model applies v2 rules to every schema.
-@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
 def test_shipped_kit_is_v2_and_validates(kit):
     schema = validate(load_kit(kit))
     assert schema.schema_version == "2"
 
 
-@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
 def test_shipped_kit_has_no_dangling_references(kit):
     # Every id a section's fields[] (or a show_if/require_if) names must exist.
     # Guards the class of bug bd k2gr (i-90 Part-2 listed p2_checkbox3[1..4] as
-    # section field ids that did not exist in schema.fields) + bd p3ww (w7-2
+    # section field ids that did not exist in schema.fields) + bd p3ww (the retired w7-2 copy
     # sec_agent listed 4 agent_* fields that were never extracted) -- both dead
     # section refs, not caught by the promotion lint (which only checks condition
     # references, not section.fields).
@@ -150,7 +150,7 @@ def test_shipped_kit_has_no_dangling_references(kit):
     assert result["errors"] == [], result["errors"]
 
 
-@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
 def test_shipped_kit_shown_readonly_fields_can_unlock(kit):
     # A field that is read_only AND carries a show_if is only editable once shown
     # if it ALSO declares an unlock_method -- FieldRenderer's isDisabled falls back

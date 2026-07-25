@@ -211,7 +211,7 @@ def test_one_command_emits_the_multi_form_table(capsys, tmp_path):
     rc = ev.main(["--json", str(out_json)])
     table = capsys.readouterr().out
     # Every benchmark form has a row.
-    for name in ("i-90", "w7", "w7-2", "f1040", "w9-heldout"):
+    for name in ("i-90", "w7", "f1040", "w9-heldout"):
         assert name in table
     # Structural assertion column is rendered.
     assert "PASS (8w" in table

@@ -10,6 +10,7 @@
     "USCIS",
     "DHS",
     "IRS",
+    "IRSN",
     "ITIN",
     "SSN",
     "SSA",
@@ -137,7 +138,9 @@
     "afrikaans": {
       "register": "Formal 'u' throughout; never 'jy'/'jou'. Polite, clear, everyday vocabulary.",
       "script": "latin",
-      "pins": {}
+      "pins": {
+        "middle name": "middelnaam"
+      }
     }
   }
 }

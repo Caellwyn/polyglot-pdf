@@ -583,7 +583,7 @@ def _check_dump_claims(
         # in both places) -- not a finding.
 
     # Under-claim: a real AcroForm widget that NO field maps to. The LLM
-    # extraction pass stochastically omits a field entirely (w7 / w7-2 are the
+    # extraction pass stochastically omits a field entirely (w7 is the
     # same PDF, yet a re-extraction drops a different widget each run); without
     # this the loss was silent, since the block above only flagged OVER-claim
     # (bd polyglot-pdf-w0eq, P6.1c). A WARNING, not an ERROR: some widgets are

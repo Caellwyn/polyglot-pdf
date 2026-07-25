@@ -469,7 +469,7 @@ def migrate(schema: Dict[str, Any],
             # only when THAT bucket does not already carry the condition. A
             # pre-existing condition in the OTHER bucket is a different effect and
             # must NOT suppress the mirror (fresh-eyes r2: the key-blind check
-            # silently dropped require_if on 15 w7/w7-2 fields whose show_if
+            # silently dropped require_if on 15 W-7-kit fields whose show_if
             # happened to match). Report any action key with no v2 equivalent.
             mirrored_here: List[str] = []
             dangling_here: List[str] = []
