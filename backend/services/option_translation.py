@@ -488,7 +488,8 @@ async def bake_label_translations(
     # against the full supported set).
     coverage = [
         f.as_dict()
-        for f in coverage_findings(schema, list(languages))]
+        for f in coverage_findings(
+            schema, list(languages), attempted=True)]
     if verify_enabled or verify_flags or coverage:
         # (verify_flags may carry translator ambiguous-source flags even
         # with the verify loop off -- they come from the forward call.)

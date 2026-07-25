@@ -598,3 +598,16 @@ def test_coverage_rides_lint_kit_schema():
     findings = lint_kit_schema(_coverage_schema(), _G)
     assert [f.rule for f in findings if f.rule == RULE_COVERAGE] \
         == [RULE_COVERAGE]
+
+
+def test_coverage_attempted_flags_a_totally_failed_scoped_set():
+    """fresh-eyes gap (bd x41u): a bake that ATTEMPTED languages and ended
+    with zero coverage is the every-batch-failed outage -- with the bake's
+    attestation it flags; without it (kit-level sweep) an untranslated
+    draft stays silent."""
+    bare = {"fields": [{"id": "a", "spoken_name": "Name"}]}
+    flagged = coverage_findings(bare, ["french"], attempted=True)
+    assert [f.path for f in flagged] == ["coverage.french"]
+    assert "french covers 0/1" in flagged[0].message
+    # Same kit without the attestation: an untranslated draft, not a gap.
+    assert coverage_findings(bare, ["french"]) == []

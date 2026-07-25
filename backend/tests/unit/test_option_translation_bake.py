@@ -648,3 +648,21 @@ async def test_fully_successful_bake_has_no_coverage_flags():
     assert not any(
         f["rule"] == "translation-coverage"
         for f in report.get("flags", []))
+
+
+@pytest.mark.asyncio
+async def test_totally_failed_scoped_bake_still_surfaces_coverage():
+    """fresh-eyes gap (bd x41u): when EVERY requested language fails, the
+    report must still carry coverage findings -- previously the
+    untranslated-kit silence swallowed exactly this outage case."""
+    schema = _schema()
+    ai = MagicMock()
+    ai.translate_items = AsyncMock(return_value=None)
+
+    report = await ot.bake_label_translations(
+        schema, ai, {"french": "fr-FR"})
+
+    assert report["failed_languages"] == ["french"]
+    coverage = [f for f in report.get("flags", [])
+                if f["rule"] == "translation-coverage"]
+    assert [f["path"] for f in coverage] == ["coverage.french"]

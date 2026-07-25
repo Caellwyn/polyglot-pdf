@@ -600,6 +600,8 @@ def _iter_translation_items(
 def coverage_findings(
     schema: Optional[Dict[str, Any]],
     languages: Optional[List[str]] = None,
+    *,
+    attempted: bool = False,
 ) -> List[LintFinding]:
     """Per-language coverage gaps (bd polyglot-pdf-x41u): one WARNING per
     language whose coverage is INCOMPLETE in an otherwise-translated kit
@@ -613,7 +615,14 @@ def coverage_findings(
     `languages` scopes the judgment: the kit-level sweep passes None (every
     supported language -- kit health), while the bake report passes the
     languages THAT BAKE addressed, so a deliberate `--languages spanish`
-    subset run is not flagged for the 16 languages it never attempted."""
+    subset run is not flagged for the 16 languages it never attempted.
+
+    `attempted=True` (the bake's attestation) disables the untranslated-kit
+    silence: a bake that REQUESTED languages and ended with zero coverage
+    is the every-batch-failed outage, which must flag loudly -- without the
+    attestation it is indistinguishable from a never-translated draft
+    (fresh-eyes gap on bd x41u: a scoped bake whose only language failed
+    produced no finding at all)."""
     if languages is None:
         languages = sorted(
             n for n in SPOKEN_LANGUAGE_BCP47 if n != "english")
@@ -632,7 +641,7 @@ def coverage_findings(
                 covered[lang] += 1
             elif len(missing_examples[lang]) < 3:
                 missing_examples[lang].append(path_base)
-    if total == 0 or not any(covered.values()):
+    if total == 0 or (not attempted and not any(covered.values())):
         return []
     findings: List[LintFinding] = []
     for lang in languages:
