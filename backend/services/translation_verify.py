@@ -74,6 +74,13 @@ class VerifyResult:
     available: bool
     final: Dict[str, Dict[str, str]]   # kind -> {source: final translation}
     flags: List[VerifyFlag] = field(default_factory=list)
+    # counts tally verified SOURCE STRINGS (one per unique string checked:
+    # checked/mechanical/judge_flagged/rectified/unresolved). Downstream,
+    # the bake fans each VerifyFlag out to EVERY kit location its source
+    # appears at (one LintFinding per location), so an artifact's flags
+    # list can legitimately be LONGER than these counts -- they agree after
+    # deduping findings by (rule, source). Do not "reconcile" one to the
+    # other (bd polyglot-pdf-kpar).
     counts: Dict[str, int] = field(default_factory=dict)
 
 

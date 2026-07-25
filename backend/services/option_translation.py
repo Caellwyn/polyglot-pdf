@@ -32,6 +32,7 @@ import structlog
 
 from backend.services.schema_lint import SEVERITY_WARNING, LintFinding
 from backend.services.translation_lint import (
+    coverage_findings,
     glossary_prompt_context,
     load_glossary,
 )
@@ -478,13 +479,33 @@ async def bake_label_translations(
         _bake_one(name, code) for name, code in languages.items()
     ))
     report["failed_languages"].sort()
-    if verify_enabled or verify_flags:
+    # Post-fan-out per-language coverage gaps (bd polyglot-pdf-x41u): a
+    # missing translation falls back to the ENGLISH label mid-session, so a
+    # gap (e.g. a failed language batch) must surface as loudly as a drift
+    # flag. Computed over the mutated schema and scoped to the languages
+    # THIS bake addressed (a deliberate --languages subset run is not
+    # flagged for languages it never attempted; the kit-level sweep judges
+    # against the full supported set).
+    coverage = [
+        f.as_dict()
+        for f in coverage_findings(
+            schema, list(languages), attempted=True)]
+    if verify_enabled or verify_flags or coverage:
         # (verify_flags may carry translator ambiguous-source flags even
         # with the verify loop off -- they come from the forward call.)
         # Resolve each flag's SOURCE string to its kit path(s) post-fan-out
         # (one WARNING finding per location, parent-carrying so
         # schema_lint.field_id_of derives a clickable field id). The flags
-        # key exists whenever the gate ran -- presence == verify ran.
+        # key exists whenever the gate ran OR anything is worth flagging.
+        #
+        # COUNTS-vs-FLAGS semantics (bd polyglot-pdf-kpar): the per-language
+        # entry["verify"] counts tally verified SOURCE STRINGS (one item per
+        # unique string the loop checked), while this findings list carries
+        # one entry per KIT LOCATION -- the same source can fan out to
+        # several fields/options (i-90 repeats state names and colors), so
+        # len(flags) >= sum(counts); the two agree after deduping findings
+        # by (rule, source). Neither number is wrong -- they answer
+        # different questions (verify work done vs. where to look).
         findings: List[Dict[str, Any]] = []
         for language, flag in verify_flags:
             paths = _resolve_flag_paths(
@@ -496,6 +517,7 @@ async def bake_label_translations(
                     path=path,
                     message=flag.message,
                 ).as_dict())
+        findings.extend(coverage)
         report["flags"] = findings
     return report
 

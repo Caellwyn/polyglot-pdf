@@ -53,6 +53,7 @@ const RULE_LABELS: Record<string, string> = {
   'translation-drift-unresolved': 'Translation drift (needs human review)',
   'translation-ambiguous-source': 'Ambiguous source text',
   'translation-mechanical': 'Translation mechanical check',
+  'translation-coverage': 'Translation coverage gap',
 };
 
 // Local (non-hosted) delivery mode has no backend and no access code to reach

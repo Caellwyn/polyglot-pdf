@@ -512,7 +512,10 @@ async def test_ambiguous_self_flags_surface_as_warning_findings():
 
     async def _translate(items, language_name, language_code, *,
                          form_name=None, glossary_context=None):
-        response = _items_response(items, {"Single": "Soltero(a)"})
+        # Full table (spoken name included) so the coverage rule (bd x41u)
+        # stays silent -- this test pins the ambiguous flag alone.
+        response = _items_response(items, {
+            "Single": "Soltero(a)", "marital status": "estado civil"})
         # The translator flags the option-set item as under-determined.
         response["ambiguous"] = [
             i["id"] for i in items if i["kind"] == "option-set"]
@@ -556,3 +559,110 @@ async def test_shared_string_rides_one_call_and_lands_in_both_places():
     field = schema["fields"][0]
     assert field["options"][0]["label_translations"] == {"spanish": ESPANOL_SI}
     assert field["spoken_name_translations"] == {"spanish": ESPANOL_SI}
+
+
+@pytest.mark.asyncio
+async def test_verify_counts_vs_flags_fanout_semantics(monkeypatch):
+    """bd polyglot-pdf-kpar: entry['verify'] counts tally verified SOURCE
+    STRINGS while report['flags'] carries one finding per KIT LOCATION --
+    a source repeated on several fields fans one VerifyFlag out to several
+    findings, so len(flags) >= counts, with equality after deduping
+    findings by (rule, source). This pins that relationship (the V5
+    artifact's apparent i-90 'undercount' was exactly this)."""
+    from backend.services.translation_verify import VerifyFlag, VerifyResult
+
+    # 'Yes' appears as an option label on TWO fields -> one flagged source,
+    # two kit locations.
+    schema = {"fields": [
+        {"id": "c1", "type": "radio",
+         "options": [{"value": "y1", "label": "Yes"}]},
+        {"id": "c2", "type": "radio",
+         "options": [{"value": "y2", "label": "Yes"}]},
+    ]}
+    ai = _items_ai({"spanish": {"Yes": "Si"}})
+
+    async def _fake_verify(*, language_name, language_code, fresh, pro_ai,
+                           lite_ai, glossary):
+        return VerifyResult(
+            available=True,
+            final=fresh,
+            flags=[VerifyFlag(
+                taxonomy="translation-drift-rectified", kind="option-label",
+                source="Yes", message="judge: drift; rectified clean")],
+            counts={"checked": 1, "mechanical": 0, "judge_flagged": 1,
+                    "rectified": 1, "unresolved": 0},
+        )
+
+    monkeypatch.setattr(ot, "verify_fresh_translations", _fake_verify)
+    report = await ot.bake_label_translations(
+        schema, ai, {"spanish": "es-US"}, verify=True,
+        verify_lite_ai=object())
+
+    rectified = [f for f in report["flags"]
+                 if f["rule"] == "translation-drift-rectified"]
+    # One verified source string -> counts say 1 ...
+    assert report["languages"]["spanish"]["verify"]["rectified"] == 1
+    # ... but TWO kit locations -> two findings, distinct field ids.
+    assert len(rectified) == 2
+    assert {f["field_id"] for f in rectified} == {"c1", "c2"}
+    # The reconciliation rule: dedup by (rule, source-location-independent)
+    # -- here both findings trace to the single source 'Yes'.
+    assert len({f["rule"] for f in rectified}) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_language_surfaces_coverage_flags():
+    """bd polyglot-pdf-x41u: a language whose batch call fails leaves its
+    strings falling back to ENGLISH labels mid-session -- the report must
+    flag the gap through the same flags channel, scoped to the languages
+    this bake addressed."""
+    schema = _schema()
+    ai = MagicMock()
+
+    async def _flaky(items, language_name, language_code, *,
+                     form_name=None, glossary_context=None):
+        if language_name.lower() == "french":
+            return None
+        return _items_response(items, _TRANSLATIONS[language_name.lower()])
+
+    ai.translate_items = AsyncMock(side_effect=_flaky)
+    report = await ot.bake_label_translations(schema, ai, LANGS)
+
+    assert report["failed_languages"] == ["french"]
+    coverage = [f for f in report.get("flags", [])
+                if f["rule"] == "translation-coverage"]
+    assert len(coverage) == 1
+    assert coverage[0]["path"] == "coverage.french"
+    assert "ENGLISH" in coverage[0]["message"]
+    # Spanish succeeded and is fully covered -> no coverage flag for it,
+    # and the deliberate two-language scope is not judged against the
+    # other 15 supported languages.
+    assert not any("spanish" in f["path"] for f in coverage)
+
+
+@pytest.mark.asyncio
+async def test_fully_successful_bake_has_no_coverage_flags():
+    schema = _schema()
+    report = await ot.bake_label_translations(
+        schema, _items_ai(_TRANSLATIONS), LANGS)
+    assert not any(
+        f["rule"] == "translation-coverage"
+        for f in report.get("flags", []))
+
+
+@pytest.mark.asyncio
+async def test_totally_failed_scoped_bake_still_surfaces_coverage():
+    """fresh-eyes gap (bd x41u): when EVERY requested language fails, the
+    report must still carry coverage findings -- previously the
+    untranslated-kit silence swallowed exactly this outage case."""
+    schema = _schema()
+    ai = MagicMock()
+    ai.translate_items = AsyncMock(return_value=None)
+
+    report = await ot.bake_label_translations(
+        schema, ai, {"french": "fr-FR"})
+
+    assert report["failed_languages"] == ["french"]
+    coverage = [f for f in report.get("flags", [])
+                if f["rule"] == "translation-coverage"]
+    assert [f["path"] for f in coverage] == ["coverage.french"]

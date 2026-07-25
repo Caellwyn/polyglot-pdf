@@ -226,6 +226,15 @@ def translate_kit(
             "schema": schema_path,
             "verify_enabled": verify,
             "flags": flags,
+            # Semantics note (bd polyglot-pdf-kpar): verify_counts tally
+            # verified SOURCE STRINGS per language; `flags` carries one
+            # finding per KIT LOCATION (a source fans out to every field/
+            # option repeating it), so len(flags) can exceed the counts --
+            # they agree after deduping findings by (rule, source).
+            "verify_counts_note": (
+                "verify_counts are per verified SOURCE STRING; flags are "
+                "per KIT LOCATION (fan-out) -- equal after deduping flags "
+                "by (rule, source)"),
             "verify_counts": {
                 name: entry["verify"]
                 for name, entry in sorted(report["languages"].items())
