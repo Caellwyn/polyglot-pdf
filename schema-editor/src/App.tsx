@@ -601,6 +601,11 @@ export const App: React.FC = () => {
     }
     try {
       const reloaded = await readSchemaFromHandle(handle);
+      // Reset selection before the fresh baseline (bd 6hhc parity): a
+      // reloaded file can drop/rename the selected field. The count-guard
+      // already backstops this, but keeping every loadSchemaState caller
+      // uniform removes the asymmetry the fresh-eyes review flagged.
+      setSelectedFieldId(null);
       loadSchemaState(reloaded); // fresh baseline -> history cleared
       setSaveError(null);
     } catch (err) {
