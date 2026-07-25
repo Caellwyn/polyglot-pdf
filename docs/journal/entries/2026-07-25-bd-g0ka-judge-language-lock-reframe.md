@@ -40,7 +40,9 @@ recommendations.
   floor-FP and cannot show the over-flag drop, so a new spike
   (`scripts/spikes/translation_judge_quibble_ab.py`) judges the 14 V5
   judge-origin unresolved keeps that the cross-family audit certified
-  acceptable: old prompt 14/14 flagged -> reframed prompt **9/14 (-36%)**,
+  acceptable: old prompt 14/14 flagged -> reframed prompt **9/14 and
+  8/14 across two runs (-36% to -43%)**, committed artifact
+  `scripts/spikes/data/quibble_ab_results.json`,
   with the residual flags substantive (omitted "first name" concepts,
   Suite->Office narrowing, the IRSN case bd c6td retires) rather than
   stylistic.

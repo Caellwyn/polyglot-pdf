@@ -4,7 +4,8 @@ Direct A/B for the language-lock judge reframe: the 14 cases below are V5
 judge-origin UNRESOLVED keeps (the old prompt flagged every one, twice) that
 the cross-family Claude audit certified acceptable. Run against the CURRENT
 judge prompt; the old-prompt baseline is the V5 run itself (14/14 flagged).
-Measured 2026-07-25 with the reframed prompt: 9/14 (-36%), with the
+Measured 2026-07-25 with the reframed prompt: 9/14 then 8/14 across
+two runs (-36% to -43%; data/quibble_ab_results.json), with the
 residual flags substantive (omitted 'first name' concepts, Suite->Office
 narrowing, the IRSN DNT case bd c6td retires) rather than stylistic.
 Spend: ~$0.02/run on Vertex (ADC). Usage:
@@ -85,6 +86,7 @@ async def main():
         by_lang.setdefault((lang, code), []).append(
             {"id": f"{spec[0]}:{spec[2]}", "en": src, "translation": tr})
     total = flagged = 0
+    results = []
     for (lang, code), items in by_lang.items():
         back = await lite.back_translate(
             {i["id"]: i["translation"] for i in items}, lang, code)
@@ -102,8 +104,33 @@ async def main():
             suffix = (" -- " + reason.encode("ascii", "backslashreplace")
                       .decode("ascii")) if drift else ""
             print(f"{lang} {i['id']}: drift={drift}{suffix}")
+            results.append({
+                "language": lang, "id": i["id"], "en": i["en"],
+                "translation": i["translation"],
+                "back_translation": i["back_translation"],
+                "drift": drift, "reason": str(v.get("reason", "")),
+            })
     print(f"\nQUIBBLE SET: {flagged}/{total} still flagged "
           f"(old prompt: {total}/{total} -- every case was a V5 judge-origin "
           f"unresolved keep)")
+    # Committed audit artifact (house convention: every live measurement
+    # leaves reproducible data, not prose).
+    out = Path(__file__).resolve().parent / "data" / "quibble_ab_results.json"
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump({
+            "bead": "polyglot-pdf-g0ka",
+            "judge_rules_sha": __import__("hashlib").sha256(
+                _TAG_RULES().encode("utf-8")).hexdigest()[:16],
+            "old_prompt_baseline": f"{total}/{total} flagged (V5 run, "
+                                   "docs/research/v5-rebake artifacts)",
+            "results": results,
+            "flagged": flagged, "total": total,
+        }, fh, indent=1)
+    print(f"wrote {out}")
+
+
+def _TAG_RULES():
+    from backend.adapters.text_ai_gemini import TextAIGemini
+    return TextAIGemini._JUDGE_RULES
 
 asyncio.run(main())

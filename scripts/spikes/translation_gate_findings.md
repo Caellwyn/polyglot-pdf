@@ -218,7 +218,9 @@ explicitly NOT drift):
   measured directly by the V5 QUIBBLE SET
   (`translation_judge_quibble_ab.py`): 14 V5 judge-origin unresolved keeps
   that the cross-family Claude audit certified acceptable -- old prompt
-  14/14 flagged, reframed prompt **9/14 (-36%)**, and the residual flags
+  14/14 flagged, reframed prompt **9/14 and 8/14 across two runs
+  (-36% to -43%; committed artifact
+  `scripts/spikes/data/quibble_ab_results.json`)**, and the residual flags
   are substantive (omitted 'first name' concepts in uk/ru/ko/it renderings,
   Suite->Office narrowing, the IRSN DNT case bd c6td retires) rather than
   stylistic. Spend ~$0.02.
