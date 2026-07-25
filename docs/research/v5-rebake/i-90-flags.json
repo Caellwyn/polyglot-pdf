@@ -1,0 +1,1817 @@
+{
+  "schema": "form-kits/i-90\\schema.json",
+  "verify_enabled": true,
+  "flags": [
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.spanish",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).options[i_am_an_attorney_or_accredited_representative_and_my_representation_of_the_applicant_in_this_case_extends_does_not_extend_beyond_the_preparation_of_this_application].label_translations.spanish",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[105] (id=p7_checkbox7extend).spoken_name_translations.spanish",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7extend"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).options[i_am_not_an_attorney_or_accredited_representative_but_have_prepared_this_application_on_behalf_of_the_applicant_and_with_the_applicant_s_consent].label_translations.spanish",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.french",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.french",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.portuguese",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).options[i_am_not_an_attorney_or_accredited_representative_but_have_prepared_this_application_on_behalf_of_the_applicant_and_with_the_applicant_s_consent].label_translations.hindi",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[105] (id=p7_checkbox7extend).spoken_name_translations.hindi",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7extend"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).options[i_am_an_attorney_or_accredited_representative_and_my_representation_of_the_applicant_in_this_case_extends_does_not_extend_beyond_the_preparation_of_this_application].label_translations.hindi",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.hindi",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.hindi",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[asian].label_translations.spanish",
+      "message": "judge: The translation 'Asi\u00e1tica' is the feminine form. A gender-neutral or masculine form like 'Asi\u00e1tico' would be more appropriate as a general label, or 'Asi\u00e1tico/a' to be inclusive.; rectified clean: 'Asi\u00e1tica' -> 'Asi\u00e1tico/a'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[black_or_african_american].label_translations.spanish",
+      "message": "judge: The translation 'Negra o afroamericana' is the feminine form. A gender-neutral or masculine form like 'Negro o afroamericano' would be more appropriate as a general label, or 'Negro/a o afroamericano/a' to be inclusive.; rectified clean: 'Negra o afroamericana' -> 'Negro/a o afroamericano/a'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[american_indian_or_alaska_native].label_translations.spanish",
+      "message": "judge: The translation 'Ind\u00edgena de las Am\u00e9ricas o nativa de Alaska' uses the feminine form 'nativa'. A gender-neutral or masculine form like 'Ind\u00edgena de las Am\u00e9ricas o nativo de Alaska' would be more appropriate as a general label, or 'Ind\u00edgena de las Am\u00e9ricas o nativo/a de Alaska' to be inclusive.; rectified clean: 'Ind\u00edgena de las Am\u00e9ricas o nativa de Alaska' -> 'Ind\u00edgena de las Am\u00e9ricas o nativo/a de Alaska'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[native_hawaiian_or_other_pacific_islander].label_translations.spanish",
+      "message": "judge: The translation 'Nativa de Haw\u00e1i o de otra isla del Pac\u00edfico' is the feminine form. A gender-neutral or masculine form like 'Nativo de Haw\u00e1i o de otra isla del Pac\u00edfico' would be more appropriate as a general label, or 'Nativo/a de Haw\u00e1i o de otra isla del Pac\u00edfico' to be inclusive.; rectified clean: 'Nativa de Haw\u00e1i o de otra isla del Pac\u00edfico' -> 'Nativo/a de Haw\u00e1i o de otra isla del Pac\u00edfico'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[blue].label_translations.spanish",
+      "message": "judge: The English 'Blue' refers to eye color and should be translated to the singular 'Azul', not the plural 'Azules'.; rectified clean: 'Azules' -> 'Azul'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[green].label_translations.spanish",
+      "message": "judge: The translation 'Verdes' is plural, while the English 'Green' is singular. It should be 'Verde'.; rectified clean: 'Verdes' -> 'Verde'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[pink].label_translations.spanish",
+      "message": "judge: The translation 'Rosados' is plural, while the English 'Pink' is singular. It should be 'Rosado'.; rectified clean: 'Rosados' -> 'Rosado'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[6] (id=p1_line5a_familyname).spoken_name_translations.spanish",
+      "message": "judge: The translation adds '(Green Card)' which is not present in the English original. While 'Permanent Resident Card' is often called a 'Green Card', the original text does not include this colloquial term here, and the translation should not add it.; rectified clean: 'apellido anterior tal como aparece impreso en la tarjeta de residente (Green Card)' -> 'apellido anterior tal como aparece impreso en la tarjeta de residencia'",
+      "field_id": "p1_line5a_familyname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[7] (id=p1_line5b_givenname).spoken_name_translations.spanish",
+      "message": "judge: The translation adds '(Green Card)' which is not present in the English original. While 'Permanent Resident Card' is often called a 'Green Card', the original text does not include this colloquial term here, and the translation should not add it.; rectified clean: 'nombre de pila anterior tal como aparece impreso en la tarjeta de residente (Green Card)' -> 'nombre de pila anterior tal como aparece impreso en la tarjeta de residencia'",
+      "field_id": "p1_line5b_givenname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[8] (id=p1_line5c_middlename).spoken_name_translations.spanish",
+      "message": "judge: The translation adds '(Green Card)' which is not present in the English original. While 'Permanent Resident Card' is often called a 'Green Card', the original text does not include this colloquial term here, and the translation should not add it.; rectified clean: 'segundo nombre anterior tal como aparece impreso en la tarjeta de residente (Green Card)' -> 'segundo nombre anterior tal como aparece impreso en la tarjeta de residencia'",
+      "field_id": "p1_line5c_middlename"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.spanish",
+      "message": "judge: The translation adds a lengthy explanation 'nombre de la persona a cargo de quien se recibe el correo' and repeats the English '(In care of)'. A more direct and standard translation like 'A cargo de (nombre)' or simply 'A cargo de' would be more faithful to the concise original.; rectified clean: 'nombre de la persona a cargo de quien se recibe el correo (In care of)' -> 'A la atenci\u00f3n de (nombre)'",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[65] (id=p5_line2_nameofrepresentative).spoken_name_translations.spanish",
+      "message": "judge: The back-translation is 'Preparer's Phone Number', which does not match the English 'name of preparer'. The Spanish 'nombre del preparador' correctly translates the English, but the back-translation is incorrect and misleading.; rectified clean: 'nombre del preparador' -> 'Nombre del preparador'",
+      "field_id": "p5_line2_nameofrepresentative"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.spanish",
+      "message": "judge: The translation is an ungrammatical and overly literal rendering of the English phrase. A more natural and clear phrasing would be 'Indique si el preparador es un abogado o no' or simply '\u00bfEs el preparador un abogado?'; rectified clean: 'Si el preparador es un abogado o no' -> '\u00bfEl preparador es un abogado o no?'",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[109] (id=p1_line3a_familyname[1]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. While not strictly wrong, 'entrada' is the more standard and direct translation for 'entry' in the context of filling out a form. 'Anotaci\u00f3n' means 'annotation' or 'note', which is a subtle shift in meaning.; rectified clean: 'anotaci\u00f3n 1: apellido' -> 'Entrada 1: apellido'",
+      "field_id": "p1_line3a_familyname[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[110] (id=p1_line3b_givenname[1]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 1: nombre de pila' -> 'Entrada 1: nombre de pila'",
+      "field_id": "p1_line3b_givenname[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[111] (id=p1_line3c_middlename[1]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 1: segundo nombre' -> 'Entrada 1: segundo nombre'",
+      "field_id": "p1_line3c_middlename[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[112] (id=p8_line3a_pagenumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 1: n\u00famero de p\u00e1gina' -> 'Entrada 1: n\u00famero de p\u00e1gina'",
+      "field_id": "p8_line3a_pagenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[113] (id=p8_line3b_partnumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 1: n\u00famero de parte' -> 'Entrada 1: n\u00famero de parte'",
+      "field_id": "p8_line3b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[116] (id=p8_line5a_pagenumber[1]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 4: n\u00famero de p\u00e1gina' -> 'Entrada 4: n\u00famero de p\u00e1gina'",
+      "field_id": "p8_line5a_pagenumber[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[117] (id=p8_line5b_partnumber[1]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 4: n\u00famero de parte' -> 'Entrada 4: n\u00famero de parte'",
+      "field_id": "p8_line5b_partnumber[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[118] (id=p8_line5c_itemnumber[1]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 4: P\u00e1gina 8, n\u00famero de \u00edtem' -> 'Entrada 4: P\u00e1gina 8, n\u00famero de \u00edtem'",
+      "field_id": "p8_line5c_itemnumber[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[119] (id=p8_line5d_additionalinfo[1]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 4: P\u00e1gina 8, informaci\u00f3n adicional' -> 'Entrada 4: P\u00e1gina 8, informaci\u00f3n adicional'",
+      "field_id": "p8_line5d_additionalinfo[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[120] (id=p8_line4a_pagenumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 2: P\u00e1gina 8, n\u00famero de p\u00e1gina' -> 'Entrada 2: P\u00e1gina 8, n\u00famero de p\u00e1gina'",
+      "field_id": "p8_line4a_pagenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[121] (id=p8_line4b_partnumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 2: P\u00e1gina 8, n\u00famero de parte' -> 'Entrada 2: P\u00e1gina 8, n\u00famero de parte'",
+      "field_id": "p8_line4b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[122] (id=p8_line4c_itemnumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 2: P\u00e1gina 8, n\u00famero de \u00edtem' -> 'Entrada 2: P\u00e1gina 8, n\u00famero de \u00edtem'",
+      "field_id": "p8_line4c_itemnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[123] (id=p8_line4d_additionalinfo).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 2: P\u00e1gina 8, informaci\u00f3n adicional' -> 'Entrada 2: P\u00e1gina 8, informaci\u00f3n adicional'",
+      "field_id": "p8_line4d_additionalinfo"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[124] (id=p8_line5a_pagenumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 3: P\u00e1gina 8, n\u00famero de p\u00e1gina' -> 'Entrada 3: P\u00e1gina 8, n\u00famero de p\u00e1gina'",
+      "field_id": "p8_line5a_pagenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[125] (id=p8_line5b_partnumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 3: P\u00e1gina 8, n\u00famero de parte' -> 'Entrada 3: P\u00e1gina 8, n\u00famero de parte'",
+      "field_id": "p8_line5b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[126] (id=p8_line5c_itemnumber).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 3: P\u00e1gina 8, n\u00famero de \u00edtem' -> 'Entrada 3: P\u00e1gina 8, n\u00famero de \u00edtem'",
+      "field_id": "p8_line5c_itemnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[127] (id=p8_line5d_additionalinfo).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 3: P\u00e1gina 8, informaci\u00f3n adicional' -> 'Entrada 3: P\u00e1gina 8, informaci\u00f3n adicional'",
+      "field_id": "p8_line5d_additionalinfo"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[128] (id=p8_line5a_pagenumber[2]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 5: P\u00e1gina 8, n\u00famero de p\u00e1gina' -> 'Entrada 5: P\u00e1gina 8, n\u00famero de p\u00e1gina'",
+      "field_id": "p8_line5a_pagenumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[129] (id=p8_line5b_partnumber[2]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 5: P\u00e1gina 8, n\u00famero de parte' -> 'Entrada 5: P\u00e1gina 8, n\u00famero de parte'",
+      "field_id": "p8_line5b_partnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[130] (id=p8_line5c_itemnumber[2]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 5: P\u00e1gina 8, n\u00famero de \u00edtem' -> 'Entrada 5: P\u00e1gina 8, n\u00famero de \u00edtem'",
+      "field_id": "p8_line5c_itemnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[131] (id=p8_line5d_additionalinfo[2]).spoken_name_translations.spanish",
+      "message": "judge: The translation uses 'anotaci\u00f3n' for 'entry'. The more standard term in this context is 'entrada'. 'Anotaci\u00f3n' implies a note or comment, which is a different meaning.; rectified clean: 'anotaci\u00f3n 5: P\u00e1gina 8, informaci\u00f3n adicional' -> 'Entrada 5: P\u00e1gina 8, informaci\u00f3n adicional'",
+      "field_id": "p8_line5d_additionalinfo[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_been_mutilated].label_translations.tagalog",
+      "message": "judge: The translation 'nasira' (damaged/broken) is too general and does not capture the specific meaning of 'mutilated,' which implies severe damage, often deliberate, that defaces or renders the card unusable. A more precise term like 'lubhang nasira' or keeping the English term 'mutilated' would be better.; rectified clean: 'Ang aking kasalukuyang card ay nasira' -> 'Lubhang nasira po ang aking kasalukuyang card'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[40] (id=p2_checkbox3).options[my_existing_card_has_been_mutilated].label_translations.tagalog",
+      "message": "judge: The translation 'nasira' (damaged/broken) is too general and does not capture the specific meaning of 'mutilated,' which implies severe damage, often deliberate, that defaces or renders the card unusable. A more precise term like 'lubhang nasira' or keeping the English term 'mutilated' would be better.; rectified clean: 'Ang aking kasalukuyang card ay nasira' -> 'Lubhang nasira po ang aking kasalukuyang card'",
+      "field_id": "p2_checkbox3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.tagalog",
+      "message": "judge: The translation 'Pangalan ng in care of' is a literal and awkward rendering. A more natural and standard translation would be 'In care of na pangalan' or simply keeping the English phrase 'In care of name' which is commonly understood.; rectified clean: 'Pangalan ng in care of' -> 'Pangalan na in-care-of'",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[28] (id=p1_line8_male).spoken_name_translations.tagalog",
+      "message": "judge: The English term is 'sex', which refers to biological attributes. The translation 'kasarian' is the standard word for 'gender'. While often used interchangeably, for a government form, a more precise translation like 'Piliin ang sex' or 'Sex' would be better to avoid ambiguity.; rectified clean: 'Piliin ang kasarian' -> 'Piliin po ang sex'",
+      "field_id": "p1_line8_male"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[65] (id=p5_line2_nameofrepresentative).spoken_name_translations.tagalog",
+      "message": "judge: The back-translation 'Applicant's signature' indicates a mistranslation. The correct translation for 'name of preparer' should be 'Pangalan ng preparer' or 'Pangalan ng naghanda'.; rectified clean: 'Pangalan ng preparer' -> 'Pangalan po ng naghanda'",
+      "field_id": "p5_line2_nameofrepresentative"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[118] (id=p8_line5c_itemnumber[1]).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 4 Page 8, item number', but the translation says 'Item number on Page 8 for entry 4', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng item sa Pahina 8 para sa entry 4' -> 'Entry 4 Pahina 8, numero ng item'",
+      "field_id": "p8_line5c_itemnumber[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[119] (id=p8_line5d_additionalinfo[1]).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 4 Page 8, additional information', but the translation says 'Additional information on Page 8 for entry 4', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Karagdagang impormasyon sa Pahina 8 para sa entry 4' -> 'Entry 4 Pahina 8, karagdagang impormasyon'",
+      "field_id": "p8_line5d_additionalinfo[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[120] (id=p8_line4a_pagenumber).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 2 Page 8, page number', but the translation says 'Page number on Page 8 for entry 2', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng pahina sa Pahina 8 para sa entry 2' -> 'Entry 2 Pahina 8, numero ng pahina'",
+      "field_id": "p8_line4a_pagenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[121] (id=p8_line4b_partnumber).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 2 Page 8, part number', but the translation says 'Part number on Page 8 for entry 2', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng bahagi sa Pahina 8 para sa entry 2' -> 'Entry 2 Pahina 8, numero ng bahagi'",
+      "field_id": "p8_line4b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[122] (id=p8_line4c_itemnumber).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 2 Page 8, item number', but the translation says 'Item number on Page 8 for entry 2', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng item sa Pahina 8 para sa entry 2' -> 'Entry 2 Pahina 8, numero ng item'",
+      "field_id": "p8_line4c_itemnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[123] (id=p8_line4d_additionalinfo).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 2 Page 8, additional information', but the translation says 'Additional information on Page 8 for entry 2', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Karagdagang impormasyon sa Pahina 8 para sa entry 2' -> 'Entry 2 Pahina 8, karagdagang impormasyon'",
+      "field_id": "p8_line4d_additionalinfo"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[124] (id=p8_line5a_pagenumber).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 3 Page 8, page number', but the translation says 'Page number on Page 8 for entry 3', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng pahina sa Pahina 8 para sa entry 3' -> 'Entry 3 Pahina 8, numero ng pahina'",
+      "field_id": "p8_line5a_pagenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[125] (id=p8_line5b_partnumber).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 3 Page 8, part number', but the translation says 'Part number on Page 8 for entry 3', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng bahagi sa Pahina 8 para sa entry 3' -> 'Entry 3 Pahina 8, numero ng bahagi'",
+      "field_id": "p8_line5b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[126] (id=p8_line5c_itemnumber).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 3 Page 8, item number', but the translation says 'Item number on Page 8 for entry 3', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng item sa Pahina 8 para sa entry 3' -> 'Entry 3 Pahina 8, numero ng item'",
+      "field_id": "p8_line5c_itemnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[127] (id=p8_line5d_additionalinfo).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 3 Page 8, additional information', but the translation says 'Additional information on Page 8 for entry 3', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Karagdagang impormasyon sa Pahina 8 para sa entry 3' -> 'Entry 3 Pahina 8, karagdagang impormasyon'",
+      "field_id": "p8_line5d_additionalinfo"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[128] (id=p8_line5a_pagenumber[2]).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 5 Page 8, page number', but the translation says 'Page number on Page 8 for entry 5', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng pahina sa Pahina 8 para sa entry 5' -> 'Entry 5 Pahina 8, numero ng pahina'",
+      "field_id": "p8_line5a_pagenumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[129] (id=p8_line5b_partnumber[2]).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 5 Page 8, part number', but the translation says 'Part number on Page 8 for entry 5', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng bahagi sa Pahina 8 para sa entry 5' -> 'Entry 5 Pahina 8, numero ng bahagi'",
+      "field_id": "p8_line5b_partnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[130] (id=p8_line5c_itemnumber[2]).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 5 Page 8, item number', but the translation says 'Item number on Page 8 for entry 5', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Numero ng item sa Pahina 8 para sa entry 5' -> 'Entry 5 Pahina 8, numero ng item'",
+      "field_id": "p8_line5c_itemnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[131] (id=p8_line5d_additionalinfo[2]).spoken_name_translations.tagalog",
+      "message": "judge: The translation incorrectly reorders the elements. The English specifies 'entry 5 Page 8, additional information', but the translation says 'Additional information on Page 8 for entry 5', which changes the structure and could cause confusion in a structured data context.; rectified clean: 'Karagdagang impormasyon sa Pahina 8 para sa entry 5' -> 'Entry 5 Pahina 8, karagdagang impormasyon'",
+      "field_id": "p8_line5d_additionalinfo[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-mechanical",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[i_have_reached_my_14th_birthday_and_am_registering_as_required_my_existing_card_will_expire_after_my_16th_birthday].label_translations.arabic",
+      "message": "lint: digit-run-missing: source digit run '14' does not appear in the translation; digit-run-missing: source digit run '16' does not appear in the translation; rectified clean: '\u0644\u0642\u062f \u0628\u0644\u063a\u062a \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0631\u0627\u0628\u0639 \u0639\u0634\u0631 \u0648\u0623\u0642\u0648\u0645 \u0628\u0627\u0644\u062a\u0633\u062c\u064a\u0644 \u0643\u0645\u0627 \u0647\u0648 \u0645\u0637\u0644\u0648\u0628. \u0633\u062a\u0646\u062a\u0647\u064a \u0635\u0644\u0627\u062d\u064a\u0629 \u0628\u0637\u0627\u0642\u062a\u064a \u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0628\u0639\u062f \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0633\u0627\u062f\u0633 \u0639\u0634\u0631.' -> '\u0644\u0642\u062f \u0628\u0644\u063a\u062a \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0640 14 \u0648\u0623\u0642\u0648\u0645 \u0628\u0627\u0644\u062a\u0633\u062c\u064a\u0644 \u0643\u0645\u0627 \u0647\u0648 \u0645\u0637\u0644\u0648\u0628. \u0633\u062a\u0646\u062a\u0647\u064a \u0635\u0644\u0627\u062d\u064a\u0629 \u0628\u0637\u0627\u0642\u062a\u064a \u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0628\u0639\u062f \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0640 16.'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-mechanical",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[i_have_reached_my_14th_birthday_and_am_registering_as_required_my_existing_card_will_expire_before_my_16th_birthday].label_translations.arabic",
+      "message": "lint: digit-run-missing: source digit run '14' does not appear in the translation; digit-run-missing: source digit run '16' does not appear in the translation; rectified clean: '\u0644\u0642\u062f \u0628\u0644\u063a\u062a \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0631\u0627\u0628\u0639 \u0639\u0634\u0631 \u0648\u0623\u0642\u0648\u0645 \u0628\u0627\u0644\u062a\u0633\u062c\u064a\u0644 \u0643\u0645\u0627 \u0647\u0648 \u0645\u0637\u0644\u0648\u0628. \u0633\u062a\u0646\u062a\u0647\u064a \u0635\u0644\u0627\u062d\u064a\u0629 \u0628\u0637\u0627\u0642\u062a\u064a \u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0642\u0628\u0644 \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0633\u0627\u062f\u0633 \u0639\u0634\u0631.' -> '\u0644\u0642\u062f \u0628\u0644\u063a\u062a \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0640 14 \u0648\u0623\u0642\u0648\u0645 \u0628\u0627\u0644\u062a\u0633\u062c\u064a\u0644 \u0643\u0645\u0627 \u0647\u0648 \u0645\u0637\u0644\u0648\u0628. \u0633\u062a\u0646\u062a\u0647\u064a \u0635\u0644\u0627\u062d\u064a\u0629 \u0628\u0637\u0627\u0642\u062a\u064a \u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0642\u0628\u0644 \u0639\u064a\u062f \u0645\u064a\u0644\u0627\u062f\u064a \u0627\u0644\u0640 16.'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.arabic",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0628\u0637\u0627\u0642\u062a\u064a \u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0628\u0647\u0627 \u0628\u064a\u0627\u0646\u0627\u062a \u063a\u064a\u0631 \u0635\u062d\u064a\u062d\u0629 \u0628\u0633\u0628\u0628 \u0648\u0632\u0627\u0631\u0629 \u0627\u0644\u0623\u0645\u0646 \u0627\u0644\u062f\u0627\u062e\u0644\u064a'; trace: judge: The translation omits the acronym 'DHS' which is required to be kept verbatim. It translates 'Department of Homeland Security' but does not include the acronym. | attempt 1: judge: The translation omits the reason for the incorrect data, which is a key part of the original English phrase. The original specifies the error is 'because of Department of Homeland Security', but the translation just says 'because of Department of Homeland Security (DHS)' without mentioning the error part. | attempt 2: judge: The translation adds the word 'error' (\u062e\u0637\u0623), which is not present in the original English. The original simply states the incorrect data is 'because of' the DHS, which is a broader and more neutral attribution of cause than specifying an 'error'. | attempt bound reached",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.arabic",
+      "message": "judge: The translation '\u0627\u0633\u0645 \u0627\u0644\u0634\u062e\u0635 \u0627\u0644\u0645\u0633\u0624\u0648\u0644 \u0639\u0646 \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u0628\u0631\u064a\u062f' (name of the person responsible for receiving mail) is an over-specific explanation rather than a direct translation of the standard form term 'in care of name'. A more direct and standard translation would be '\u0627\u0633\u0645 \u0627\u0644\u0634\u062e\u0635 \u0627\u0644\u0645\u0633\u0624\u0648\u0644 \u0639\u0646 \u0631\u0639\u0627\u064a\u062a\u0643' or simply '\u0628\u0650\u0639\u0646\u0627\u064a\u0629'.; rectified clean: '\u0627\u0633\u0645 \u0627\u0644\u0634\u062e\u0635 \u0627\u0644\u0645\u0633\u0624\u0648\u0644 \u0639\u0646 \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u0628\u0631\u064a\u062f' -> '\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062a\u0644\u0645 \u0628\u0627\u0644\u0646\u064a\u0627\u0628\u0629'",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[44] (id=p3_line3a1_cityandstate).spoken_name_translations.arabic",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0645\u0646\u0641\u0630 \u0627\u0644\u062f\u062e\u0648\u0644 \u0627\u0644\u0623\u0635\u0644\u064a: \u0627\u0644\u0645\u062f\u064a\u0646\u0629 \u0648\u0627\u0644\u0648\u0644\u0627\u064a\u0629'; trace: judge: The translation omits the word 'original' (\u0627\u0644\u0623\u0635\u0644\u064a) from the English source 'original entry port of entry'. | attempt 1: no new correction",
+      "field_id": "p3_line3a1_cityandstate"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[58] (id=p4_line1a_accomodationrequested).spoken_name_translations.arabic",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0644\u063a\u0629 \u0627\u0644\u0625\u0634\u0627\u0631\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629'; trace: judge: The translation '\u0644\u063a\u0629 \u0627\u0644\u0625\u0634\u0627\u0631\u0629 \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629' means 'the required sign language', which is a different meaning from the English 'sign language needed', which implies a request for an interpreter. A better translation would be '\u0645\u0637\u0644\u0648\u0628 \u0644\u063a\u0629 \u0625\u0634\u0627\u0631\u0629' or similar to the previous item. | attempt 1: no new correction",
+      "field_id": "p4_line1a_accomodationrequested"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[80] (id=p6_line3f_province).spoken_name_translations.arabic",
+      "message": "judge: The translation '\u0645\u0642\u0627\u0637\u0639\u0629' typically means 'province' or 'district', whereas the English 'province' in the context of an address usually refers to a sub-national administrative division, similar to a state. The back-translation 'County' is a more likely intended meaning for a US form, but 'province' is also possible for international addresses. The translation is ambiguous and potentially incorrect depending on the context (US vs. international address).; rectified clean: '\u0645\u0642\u0627\u0637\u0639\u0629 \u0627\u0644\u0645\u062a\u0631\u062c\u0645 \u0627\u0644\u0634\u0641\u0647\u064a' -> '\u0648\u0644\u0627\u064a\u0629/\u0645\u0642\u0627\u0637\u0639\u0629 \u0627\u0644\u0645\u062a\u0631\u062c\u0645 \u0627\u0644\u0634\u0641\u0647\u064a'",
+      "field_id": "p6_line3f_province"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_biographic_information_p3].label_translations.arabic",
+      "message": "judge: The translation uses '\u0627\u0644\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0634\u062e\u0635\u064a\u0629' (Personal Information), which is a different concept from 'Biographic Information'. A more accurate translation would be '\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0633\u064a\u0631\u0629 \u0627\u0644\u0630\u0627\u062a\u064a\u0629'.; rectified clean: '\u0627\u0644\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0634\u062e\u0635\u064a\u0629' -> '\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u0627\u0644\u0633\u064a\u0631\u0629 \u0627\u0644\u0630\u0627\u062a\u064a\u0629'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[14] (id=p1_line6e_state).options[rhode_island].label_translations.chinese",
+      "message": "judge: The translation is missing the character '\u5dde' (state), which is standard for all other US state names in the list. This makes it inconsistent and less clear.; rectified clean: '\u7f57\u5fb7\u5c9b' -> '\u7f57\u5fb7\u5c9b\u5dde'",
+      "field_id": "p1_line6e_state"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[23] (id=p1_line7d_state).options[rhode_island].label_translations.chinese",
+      "message": "judge: The translation is missing the character '\u5dde' (state), which is standard for all other US state names in the list. This makes it inconsistent and less clear.; rectified clean: '\u7f57\u5fb7\u5c9b' -> '\u7f57\u5fb7\u5c9b\u5dde'",
+      "field_id": "p1_line7d_state"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[78] (id=p6_line3d_state).options[rhode_island].label_translations.chinese",
+      "message": "judge: The translation is missing the character '\u5dde' (state), which is standard for all other US state names in the list. This makes it inconsistent and less clear.; rectified clean: '\u7f57\u5fb7\u5c9b' -> '\u7f57\u5fb7\u5c9b\u5dde'",
+      "field_id": "p6_line3d_state"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[96] (id=p7_line3d_state).options[rhode_island].label_translations.chinese",
+      "message": "judge: The translation is missing the character '\u5dde' (state), which is standard for all other US state names in the list. This makes it inconsistent and less clear.; rectified clean: '\u7f57\u5fb7\u5c9b' -> '\u7f57\u5fb7\u5c9b\u5dde'",
+      "field_id": "p7_line3d_state"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.chinese",
+      "message": "judge: The translation omits the word 'error' from the original 'Department of Homeland Security error', changing the meaning. It should specify that the incorrect data is due to a DHS error.; rectified clean: '\u7531\u4e8e\u56fd\u571f\u5b89\u5168\u90e8\u7684\u539f\u56e0\uff0c\u6211\u7684\u73b0\u6709\u5361\u6570\u636e\u4e0d\u6b63\u786e' -> '\u7531\u4e8eDHS\u7684\u9519\u8bef\uff0c\u6211\u7684\u73b0\u6709\u5361\u4e0a\u7684\u4fe1\u606f\u4e0d\u6b63\u786e'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[white].label_translations.chinese",
+      "message": "judge: The translation for the race 'White' is '\u767d\u8272' (the color white), which is incorrect. The standard term for the race is '\u767d\u4eba'.; rectified clean: '\u767d\u8272' -> '\u767d\u4eba'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[white].label_translations.chinese",
+      "message": "judge: The translation for the race 'White' is '\u767d\u8272' (the color white), which is incorrect. The standard term for the race is '\u767d\u4eba'.; rectified clean: '\u767d\u8272' -> '\u767d\u4eba'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[maroon].label_translations.chinese",
+      "message": "judge: The translation for 'Maroon' is '\u7ea2\u8910\u8272' (red-brown), which is a reasonable approximation, but '\u6817\u8272' or '\u8910\u7ea2\u8272' are more standard and accurate translations for this color.; rectified clean: '\u7ea2\u8910\u8272' -> '\u6817\u8272'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[45] (id=p3_checkbox4[1]).spoken_name_translations.chinese",
+      "message": "judge: The translation for 'removal proceedings' and 'ordered removed' is '\u8fc1\u79fb\u7a0b\u5e8f' and '\u547d\u4ee4\u4ece\u7f8e\u56fd\u8fc1\u79fb'. The term '\u8fc1\u79fb' (qi\u0101ny\u00ed) means 'to migrate' or 'to move', which is too neutral and does not capture the legal and compulsory nature of 'removal' in an immigration context. A more accurate term would be '\u9012\u89e3' (d\u00ecji\u011b) or '\u9063\u8fd4' (qi\u01cenf\u01cen).; rectified clean: '\u60a8\u662f\u5426\u66fe\u8fdb\u5165\u8fc7\u62d2\u7edd\u5165\u5883\u3001\u9a71\u9010\u51fa\u5883\u6216\u8fc1\u79fb\u7a0b\u5e8f\uff0c\u6216\u88ab\u547d\u4ee4\u4ece\u7f8e\u56fd\u8fc1\u79fb\uff1f' -> '\u60a8\u662f\u5426\u66fe\u8fdb\u5165\u8fc7\u62d2\u7edd\u5165\u5883\u3001\u9a71\u9010\u51fa\u5883\u6216\u9012\u89e3\u51fa\u5883\u7a0b\u5e8f\uff0c\u6216\u88ab\u547d\u4ee4\u4ece\u7f8e\u56fd\u9012\u89e3\u51fa\u5883\uff1f'",
+      "field_id": "p3_checkbox4[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[105] (id=p7_checkbox7extend).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u4ee3\u7406\u8303\u56f4\u662f\u5426\u8d85\u51fa\u4ee3\u5199' (Does the scope of representation exceed preparation?) is a question, but the English original 'representation extends beyond preparation' is a statement or a checkbox label. The translation changes the grammatical mood from declarative to interrogative.; rectified clean: '\u4ee3\u7406\u8303\u56f4\u662f\u5426\u8d85\u51fa\u4ee3\u5199' -> '\u4ee3\u7406\u8303\u56f4\u8d85\u51fa\u51c6\u5907\u5de5\u4f5c'",
+      "field_id": "p7_checkbox7extend"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[118] (id=p8_line5c_itemnumber[1]).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee4\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' (entry 4 page 8, item number) incorrectly places 'Page 8' after 'entry 4'. The English original is 'entry 4 Page 8, item number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee4\u7b2c8\u9875\u7684\u9879\u76ee\u7f16\u53f7' or similar to group 'entry 4 Page 8' together.; rectified clean: '\u6761\u76ee4\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' -> '\u6761\u76ee4\uff0c\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7'",
+      "field_id": "p8_line5c_itemnumber[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[119] (id=p8_line5d_additionalinfo[1]).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee4\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' (entry 4 page 8, additional information) incorrectly places 'Page 8' after 'entry 4'. The English original is 'entry 4 Page 8, additional information', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee4\u7b2c8\u9875\u7684\u9644\u52a0\u4fe1\u606f' or similar to group 'entry 4 Page 8' together.; rectified clean: '\u6761\u76ee4\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' -> '\u6761\u76ee4\uff0c\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f'",
+      "field_id": "p8_line5d_additionalinfo[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[120] (id=p8_line4a_pagenumber).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee2\u7b2c8\u9875\uff0c\u9875\u7801' (entry 2 page 8, page number) incorrectly places 'Page 8' after 'entry 2'. The English original is 'entry 2 Page 8, page number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee2\u7b2c8\u9875\u7684\u9875\u7801' or similar to group 'entry 2 Page 8' together.; rectified clean: '\u6761\u76ee2\u7b2c8\u9875\uff0c\u9875\u7801' -> '\u6761\u76ee2\uff0c\u7b2c8\u9875\uff0c\u9875\u7801'",
+      "field_id": "p8_line4a_pagenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[121] (id=p8_line4b_partnumber).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee2\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7' (entry 2 page 8, part number) incorrectly places 'Page 8' after 'entry 2'. The English original is 'entry 2 Page 8, part number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee2\u7b2c8\u9875\u7684\u90e8\u5206\u7f16\u53f7' or similar to group 'entry 2 Page 8' together.; rectified clean: '\u6761\u76ee2\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7' -> '\u6761\u76ee2\uff0c\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7'",
+      "field_id": "p8_line4b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[122] (id=p8_line4c_itemnumber).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee2\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' (entry 2 page 8, item number) incorrectly places 'Page 8' after 'entry 2'. The English original is 'entry 2 Page 8, item number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee2\u7b2c8\u9875\u7684\u9879\u76ee\u7f16\u53f7' or similar to group 'entry 2 Page 8' together.; rectified clean: '\u6761\u76ee2\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' -> '\u6761\u76ee2\uff0c\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7'",
+      "field_id": "p8_line4c_itemnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[123] (id=p8_line4d_additionalinfo).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee2\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' (entry 2 page 8, additional information) incorrectly places 'Page 8' after 'entry 2'. The English original is 'entry 2 Page 8, additional information', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee2\u7b2c8\u9875\u7684\u9644\u52a0\u4fe1\u606f' or similar to group 'entry 2 Page 8' together.; rectified clean: '\u6761\u76ee2\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' -> '\u6761\u76ee2\uff0c\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f'",
+      "field_id": "p8_line4d_additionalinfo"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[124] (id=p8_line5a_pagenumber).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee3\u7b2c8\u9875\uff0c\u9875\u7801' (entry 3 page 8, page number) incorrectly places 'Page 8' after 'entry 3'. The English original is 'entry 3 Page 8, page number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee3\u7b2c8\u9875\u7684\u9875\u7801' or similar to group 'entry 3 Page 8' together.; rectified clean: '\u6761\u76ee3\u7b2c8\u9875\uff0c\u9875\u7801' -> '\u6761\u76ee3\uff0c\u7b2c8\u9875\uff0c\u9875\u7801'",
+      "field_id": "p8_line5a_pagenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[125] (id=p8_line5b_partnumber).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee3\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7' (entry 3 page 8, part number) incorrectly places 'Page 8' after 'entry 3'. The English original is 'entry 3 Page 8, part number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee3\u7b2c8\u9875\u7684\u90e8\u5206\u7f16\u53f7' or similar to group 'entry 3 Page 8' together.; rectified clean: '\u6761\u76ee3\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7' -> '\u6761\u76ee3\uff0c\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7'",
+      "field_id": "p8_line5b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[126] (id=p8_line5c_itemnumber).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee3\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' (entry 3 page 8, item number) incorrectly places 'Page 8' after 'entry 3'. The English original is 'entry 3 Page 8, item number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee3\u7b2c8\u9875\u7684\u9879\u76ee\u7f16\u53f7' or similar to group 'entry 3 Page 8' together.; rectified clean: '\u6761\u76ee3\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' -> '\u6761\u76ee3\uff0c\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7'",
+      "field_id": "p8_line5c_itemnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[127] (id=p8_line5d_additionalinfo).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee3\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' (entry 3 page 8, additional information) incorrectly places 'Page 8' after 'entry 3'. The English original is 'entry 3 Page 8, additional information', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee3\u7b2c8\u9875\u7684\u9644\u52a0\u4fe1\u606f' or similar to group 'entry 3 Page 8' together.; rectified clean: '\u6761\u76ee3\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' -> '\u6761\u76ee3\uff0c\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f'",
+      "field_id": "p8_line5d_additionalinfo"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[128] (id=p8_line5a_pagenumber[2]).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee5\u7b2c8\u9875\uff0c\u9875\u7801' (entry 5 page 8, page number) incorrectly places 'Page 8' after 'entry 5'. The English original is 'entry 5 Page 8, page number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee5\u7b2c8\u9875\u7684\u9875\u7801' or similar to group 'entry 5 Page 8' together.; rectified clean: '\u6761\u76ee5\u7b2c8\u9875\uff0c\u9875\u7801' -> '\u6761\u76ee5\uff0c\u7b2c8\u9875\uff0c\u9875\u7801'",
+      "field_id": "p8_line5a_pagenumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[129] (id=p8_line5b_partnumber[2]).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee5\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7' (entry 5 page 8, part number) incorrectly places 'Page 8' after 'entry 5'. The English original is 'entry 5 Page 8, part number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee5\u7b2c8\u9875\u7684\u90e8\u5206\u7f16\u53f7' or similar to group 'entry 5 Page 8' together.; rectified clean: '\u6761\u76ee5\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7' -> '\u6761\u76ee5\uff0c\u7b2c8\u9875\uff0c\u90e8\u5206\u7f16\u53f7'",
+      "field_id": "p8_line5b_partnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[130] (id=p8_line5c_itemnumber[2]).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee5\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' (entry 5 page 8, item number) incorrectly places 'Page 8' after 'entry 5'. The English original is 'entry 5 Page 8, item number', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee5\u7b2c8\u9875\u7684\u9879\u76ee\u7f16\u53f7' or similar to group 'entry 5 Page 8' together.; rectified clean: '\u6761\u76ee5\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7' -> '\u6761\u76ee5\uff0c\u7b2c8\u9875\uff0c\u9879\u76ee\u7f16\u53f7'",
+      "field_id": "p8_line5c_itemnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[131] (id=p8_line5d_additionalinfo[2]).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u6761\u76ee5\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' (entry 5 page 8, additional information) incorrectly places 'Page 8' after 'entry 5'. The English original is 'entry 5 Page 8, additional information', indicating that 'Page 8' is part of the identifier for the entry itself, not a separate location. The translation should be '\u6761\u76ee5\u7b2c8\u9875\u7684\u9644\u52a0\u4fe1\u606f' or similar to group 'entry 5 Page 8' together.; rectified clean: '\u6761\u76ee5\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f' -> '\u6761\u76ee5\uff0c\u7b2c8\u9875\uff0c\u9644\u52a0\u4fe1\u606f'",
+      "field_id": "p8_line5d_additionalinfo[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_interpreter_s_certification_p5].label_translations.chinese",
+      "message": "judge: The translation \"\u53e3\u8bd1\u5458\u8bc1\u660e\" (Interpreter's Proof/Certificate) does not fully capture the meaning of \"Interpreter's Certification,\" which in this context refers to a formal declaration or attestation by the interpreter about the accuracy of the interpretation. A more accurate translation would be \"\u53e3\u8bd1\u5458\u8d44\u683c\u8bc1\u660e\" or \"\u53e3\u8bd1\u5458\u58f0\u660e\" (Interpreter's Statement).; rectified clean: '\u53e3\u8bd1\u5458\u8bc1\u660e' -> '\u53e3\u8bd1\u5458\u8ba4\u8bc1'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.french",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Ma carte existante contient des donn\u00e9es incorrectes en raison d'une erreur du Department of Homeland Security'; trace: judge: The translation adds 'd'une erreur' (of an error), which is not present in the original English. The original simply states the incorrect data is 'because of' the DHS, not necessarily because of a DHS 'error'. | attempt 1: judge: The translation omits the phrase 'because of' ('en raison de'), changing the meaning. The original states the incorrect data is *because of* DHS, while the translation just states the card has incorrect data *at* or *due to* DHS, which is a different and less clear meaning. | attempt 2: judge: The translation adds the word 'erreur' (error), which is not present in the original English. The original simply states the incorrect data is 'because of Department of Homeland Security', without specifying the cause as an error. | attempt bound reached",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[white].label_translations.french",
+      "message": "judge: The translation 'Blancs' is plural, while the English 'White' is singular. For consistency with other race/ethnicity options, it should be singular ('Blanc').; rectified clean: 'Blancs' -> 'Blanc'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[white].label_translations.french",
+      "message": "judge: The translation 'Blancs' is plural, while the English 'White' is singular. For consistency with other race/ethnicity options, it should be singular ('Blanc').; rectified clean: 'Blancs' -> 'Blanc'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[black].label_translations.french",
+      "message": "judge: The translation 'Noirs' is plural, while the English 'Black' is singular. For consistency with other color options, it should be singular ('Noir').; rectified clean: 'Noirs' -> 'Noir'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[black].label_translations.french",
+      "message": "judge: The translation 'Noirs' is plural, while the English 'Black' is singular. For consistency with other color options, it should be singular ('Noir').; rectified clean: 'Noirs' -> 'Noir'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[blue].label_translations.french",
+      "message": "judge: The translation 'Bleus' is plural, while the English 'Blue' is singular. For consistency with other color options, it should be singular ('Bleu').; rectified clean: 'Bleus' -> 'Bleu'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[brown].label_translations.french",
+      "message": "judge: The translation 'Bruns' is plural, while the English 'Brown' is singular. For consistency with other color options, it should be singular ('Brun').; rectified clean: 'Bruns' -> 'Brun'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[brown].label_translations.french",
+      "message": "judge: The translation 'Bruns' is plural, while the English 'Brown' is singular. For consistency with other color options, it should be singular ('Brun').; rectified clean: 'Bruns' -> 'Brun'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[green].label_translations.french",
+      "message": "judge: The translation \"Verts\" is the plural form of \"green\". As a standalone option for a characteristic like eye color, the singular form \"Vert\" is correct.; rectified clean: 'Verts' -> 'Vert'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[pink].label_translations.french",
+      "message": "judge: The translation \"Roses\" is the plural form of \"pink\". As a standalone option for a characteristic like hair color, the singular form \"Rose\" is correct.; rectified clean: 'Roses' -> 'Rose'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[blond].label_translations.french",
+      "message": "judge: The translation \"Blonds\" is the plural form of \"blond\". As a standalone option for a characteristic like hair color, the singular form \"Blond\" is correct.; rectified clean: 'Blonds' -> 'Blond'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.french",
+      "message": "judge: The translation \"Nom du destinataire des soins\" means \"Name of the care recipient\". The English \"in care of name\" refers to the person or entity at whose address the mail is being sent, not the recipient of care. A better translation would be \"\u00c0 l'attention de\" or \"Nom de la personne de contact\".; rectified clean: 'Nom du destinataire des soins' -> '\u00c0 l'attention de (nom)'",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[75] (id=p6_unit_type3b_unit).spoken_name_translations.french",
+      "message": "judge: The translation 'Type de logement' (type of housing) is not a correct rendering of 'unit type' in the context of a mailing address. A more accurate translation would be 'Type d'unit\u00e9' or similar, which corresponds to apartment, suite, etc.; rectified clean: 'Type de logement de l'interpr\u00e8te' -> 'Type d'unit\u00e9 de l'interpr\u00e8te'",
+      "field_id": "p6_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[93] (id=p7_unit_type3b_unit).spoken_name_translations.french",
+      "message": "judge: The translation 'Type de logement' means 'Housing unit type', which is too specific. The English 'unit type' is more general and can refer to office units as well as residential ones. A more accurate translation would be 'Type d'unit\u00e9'.; rectified clean: 'Type de logement du pr\u00e9parateur' -> 'Type d'unit\u00e9 du pr\u00e9parateur'",
+      "field_id": "p7_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[95] (id=p7_line3c_citytown).spoken_name_translations.french",
+      "message": "judge: The translation 'Ville du pr\u00e9parateur' omits 'or town'. A more complete and faithful translation would be 'Ville ou commune du pr\u00e9parateur'.; rectified clean: 'Ville du pr\u00e9parateur' -> 'Ville ou commune du pr\u00e9parateur'",
+      "field_id": "p7_line3c_citytown"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[white].label_translations.korean",
+      "message": "judge: The translation '\ud770\uc0c9' means the color 'white', not the race 'White'. The correct translation for the race is '\ubc31\uc778'.; rectified clean: '\ud770\uc0c9' -> '\ubc31\uc778'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[white].label_translations.korean",
+      "message": "judge: The translation '\ud770\uc0c9' means the color 'white', not the race 'White'. The correct translation for the race is '\ubc31\uc778'.; rectified clean: '\ud770\uc0c9' -> '\ubc31\uc778'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[black].label_translations.korean",
+      "message": "judge: The translation '\uac80\uc740\uc0c9' means the color 'black', not the race 'Black'. The correct translation for the race is '\ud751\uc778'.; rectified clean: '\uac80\uc740\uc0c9' -> '\ud751\uc778'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[black].label_translations.korean",
+      "message": "judge: The translation '\uac80\uc740\uc0c9' means the color 'black', not the race 'Black'. The correct translation for the race is '\ud751\uc778'.; rectified clean: '\uac80\uc740\uc0c9' -> '\ud751\uc778'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[63] (id=p5_checkbox1a).options[i_can_read_and_understand_english_and_i_have_read_and_understand_every_question_and_instruction_on_this_application_and_my_answer_to_every_question].label_translations.korean",
+      "message": "judge: The translation uses a past tense ending (-\ud588\uc2b5\ub2c8\ub2e4) which implies the action is complete. The English original is a declaration of a current state of ability and understanding, which should be rendered in the present tense using the formal polite -\uc2b5\ub2c8\ub2e4 ending.; rectified clean: '\uc800\ub294 \uc601\uc5b4\ub97c \uc77d\uace0 \uc774\ud574\ud560 \uc218 \uc788\uc73c\uba70, \uc774 \uc2e0\uccad\uc11c\uc758 \ubaa8\ub4e0 \uc9c8\ubb38\uacfc \uc9c0\uce68, \uadf8\ub9ac\uace0 \ubaa8\ub4e0 \uc9c8\ubb38\uc5d0 \ub300\ud55c \uc800\uc758 \ub2f5\ubcc0\uc744 \uc77d\uace0 \uc774\ud574\ud588\uc2b5\ub2c8\ub2e4' -> '\uc800\ub294 \uc601\uc5b4\ub97c \uc77d\uace0 \uc774\ud574\ud560 \uc218 \uc788\uc73c\uba70, \uc774 \uc2e0\uccad\uc11c\uc758 \ubaa8\ub4e0 \uc9c8\ubb38\uacfc \uc9c0\uce68, \uadf8\ub9ac\uace0 \ubaa8\ub4e0 \uc9c8\ubb38\uc5d0 \ub300\ud55c \uc800\uc758 \ub2f5\ubcc0\uc744 \uc77d\uace0 \uc774\ud574\ud588\uc2b5\ub2c8\ub2e4.'",
+      "field_id": "p5_checkbox1a"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[63] (id=p5_checkbox1a).options[the_interpreter_named_in_part_6_has_read_to_me_every_question_and_instruction_on_this_application_and_my_answer_to_every_question_in_a_language_in_which_i_am_fluent_and_i_understood_everything].label_translations.korean",
+      "message": "judge: The translation uses a past tense ending (-\ud588\uc2b5\ub2c8\ub2e4) which implies the action is complete. The English original is a declaration of a current state of understanding, which should be rendered in the present tense using the formal polite -\uc2b5\ub2c8\ub2e4 ending.; rectified clean: '\ud30c\ud2b8 6\uc5d0 \uba85\uc2dc\ub41c \ud1b5\uc5ed\uc0ac\uac00 \uc81c\uac00 \uc720\ucc3d\ud558\uac8c \uad6c\uc0ac\ud558\ub294 \uc5b8\uc5b4\ub85c \uc774 \uc2e0\uccad\uc11c\uc758 \ubaa8\ub4e0 \uc9c8\ubb38\uacfc \uc9c0\uce68, \uadf8\ub9ac\uace0 \ubaa8\ub4e0 \uc9c8\ubb38\uc5d0 \ub300\ud55c \uc800\uc758 \ub2f5\ubcc0\uc744 \uc77d\uc5b4\uc8fc\uc5c8\uace0, \uc800\ub294 \ubaa8\ub4e0 \uac83\uc744 \uc774\ud574\ud588\uc2b5\ub2c8\ub2e4' -> '\ud30c\ud2b8 6\uc5d0 \uba85\uc2dc\ub41c \ud1b5\uc5ed\uc0ac\uac00 \uc81c\uac00 \uc720\ucc3d\ud558\uac8c \uad6c\uc0ac\ud558\ub294 \uc5b8\uc5b4\ub85c \uc774 \uc2e0\uccad\uc11c\uc758 \ubaa8\ub4e0 \uc9c8\ubb38\uacfc \uc9c0\uce68, \uadf8\ub9ac\uace0 \ubaa8\ub4e0 \uc9c8\ubb38\uc5d0 \ub300\ud55c \uc800\uc758 \ub2f5\ubcc0\uc744 \uc77d\uc5b4\uc8fc\uc5c8\uace0, \uc800\ub294 \ubaa8\ub4e0 \uac83\uc744 \uc774\ud574\ud588\uc2b5\ub2c8\ub2e4.'",
+      "field_id": "p5_checkbox1a"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[63] (id=p5_checkbox1a).options[at_my_request_the_preparer_named_in_part_7].label_translations.korean",
+      "message": "judge: The translation is an incomplete sentence fragment. To be a complete statement as part of a declaration, it should be followed by a verb indicating the action taken by the preparer, such as 'prepared this application'.; rectified clean: '\uc800\uc758 \uc694\uccad\uc5d0 \ub530\ub77c, \ud30c\ud2b8 7\uc5d0 \uba85\uc2dc\ub41c \uc791\uc131 \ub300\ub9ac\uc778\uc774' -> '\uc800\uc758 \uc694\uccad\uc5d0 \ub530\ub77c, \ud30c\ud2b8 7\uc5d0 \uba85\uc2dc\ub41c \uc791\uc131 \ub300\ub9ac\uc778\uc774'",
+      "field_id": "p5_checkbox1a"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[104] (id=p7_checkbox7).options[i_am_not_an_attorney_or_accredited_representative_but_have_prepared_this_application_on_behalf_of_the_applicant_and_with_the_applicant_s_consent].label_translations.korean",
+      "message": "judge: The translation uses a past tense ending (-\ud588\uc2b5\ub2c8\ub2e4) which implies the action is complete. The English original is a declaration of a current state, which should be rendered in the present tense using the formal polite -\uc2b5\ub2c8\ub2e4 ending.; rectified clean: '\uc800\ub294 \ubcc0\ud638\uc0ac\ub098 \uacf5\uc778 \ub300\ub9ac\uc778\uc740 \uc544\ub2c8\uc9c0\ub9cc, \uc2e0\uccad\uc778\uc744 \ub300\uc2e0\ud558\uc5ec \uc2e0\uccad\uc778\uc758 \ub3d9\uc758\ub97c \uc5bb\uc5b4 \uc774 \uc2e0\uccad\uc11c\ub97c \uc791\uc131\ud588\uc2b5\ub2c8\ub2e4' -> '\uc800\ub294 \ubcc0\ud638\uc0ac\ub098 \uacf5\uc778 \ub300\ub9ac\uc778\uc740 \uc544\ub2c8\uc9c0\ub9cc, \uc2e0\uccad\uc778\uc744 \ub300\uc2e0\ud558\uc5ec \uc2e0\uccad\uc778\uc758 \ub3d9\uc758\ub97c \uc5bb\uc5b4 \uc774 \uc2e0\uccad\uc11c\ub97c \uc791\uc131\ud588\uc2b5\ub2c8\ub2e4.'",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[65] (id=p5_line2_nameofrepresentative).spoken_name_translations.korean",
+      "message": "judge: The translation '\uc791\uc131 \ub300\ub9ac\uc778\uc758 \uc131\ud568' (preparer's full name) is too specific and potentially incorrect. The English 'name of preparer' is ambiguous and could mean the preparer's full name or just their last name, depending on the form's layout. A more neutral translation like '\uc791\uc131 \ub300\ub9ac\uc778\uc758 \uc774\ub984' (preparer's name) would be more faithful to the original's ambiguity.; rectified clean: '\uc791\uc131 \ub300\ub9ac\uc778\uc758 \uc131\ud568' -> '\uc791\uc131 \ub300\ub9ac\uc778 \uc774\ub984'",
+      "field_id": "p5_line2_nameofrepresentative"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_interpreter_s_certification_p5].label_translations.korean",
+      "message": "judge: The translation '\uc99d\uba85' (proof, declaration) is less accurate for 'Certification' in this context than '\uc99d\uba85\uc11c' or '\ud655\uc778\uc11c'. 'Certification' here refers to the act of formally attesting to something, for which '\uc99d\uba85' is acceptable but can be ambiguous. A more standard term like '\ud1b5\uc5ed\uc0ac \ud655\uc778\uc11c' (Interpreter's Certification Statement) would be clearer.; rectified clean: '\ud1b5\uc5ed\uc0ac \uc99d\uba85' -> '\ud1b5\uc5ed\uc0ac \ud655\uc778\uc11c'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.portuguese",
+      "message": "judge: The translation adds 'um erro do' (an error by), which is not present in the original English. The original simply states the incorrect data is 'because of' the department, which is a broader cause than a specific error.; rectified clean: 'Meu cart\u00e3o existente cont\u00e9m dados incorretos devido a um erro do Department of Homeland Security' -> 'Meu cart\u00e3o existente cont\u00e9m dados incorretos por causa do Department of Homeland Security'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[asian].label_translations.portuguese",
+      "message": "judge: The translation 'Asi\u00e1tica' is the feminine form. The context-neutral masculine form 'Asi\u00e1tico' should be used for an option label that applies to any gender.; rectified clean: 'Asi\u00e1tica' -> 'Asi\u00e1tico'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[black_or_african_american].label_translations.portuguese",
+      "message": "judge: The translation 'Negra ou Afro-americana' uses feminine forms. The context-neutral masculine forms 'Negro ou Afro-americano' should be used for an option label that applies to any gender.; rectified clean: 'Negra ou Afro-americana' -> 'Negro ou Afro-americano'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[blue].label_translations.portuguese",
+      "message": "judge: The translation 'Azuis' is plural, while the English 'Blue' is singular. The singular form 'Azul' should be used for an option label describing a color.; rectified clean: 'Azuis' -> 'Azul'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[green].label_translations.portuguese",
+      "message": "judge: The translation 'Verdes' is plural, while the English 'Green' is singular. It should be 'Verde'.; rectified clean: 'Verdes' -> 'Verde'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[pink].label_translations.portuguese",
+      "message": "judge: The translation 'Rosas' is plural, while the English 'Pink' is singular. It should be 'Rosa'.; rectified clean: 'Rosas' -> 'Rosa'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[6] (id=p1_line5a_familyname).spoken_name_translations.portuguese",
+      "message": "judge: The translation omits the term 'Permanent Resident Card', which is the official name of the document, and instead uses the informal term 'green card'. The translation should be 'Sobrenome anterior conforme impresso no Cart\u00e3o de Residente Permanente'.; rectified clean: 'Sobrenome anterior conforme impresso no green card' -> 'Sobrenome anterior conforme impresso no Cart\u00e3o de Residente Permanente (Green Card)'",
+      "field_id": "p1_line5a_familyname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[7] (id=p1_line5b_givenname).spoken_name_translations.portuguese",
+      "message": "judge: The translation omits the term 'Permanent Resident Card', which is the official name of the document, and instead uses the informal term 'green card'. The translation should be 'Nome anterior conforme impresso no Cart\u00e3o de Residente Permanente'.; rectified clean: 'Nome anterior conforme impresso no green card' -> 'Nome anterior conforme impresso no Cart\u00e3o de Residente Permanente (Green Card)'",
+      "field_id": "p1_line5b_givenname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[8] (id=p1_line5c_middlename).spoken_name_translations.portuguese",
+      "message": "judge: The translation omits the term 'Permanent Resident Card', which is the official name of the document, and instead uses the informal term 'green card'. The translation should be 'Nome do meio anterior conforme impresso no Cart\u00e3o de Residente Permanente'.; rectified clean: 'Nome do meio anterior conforme impresso no green card' -> 'Nome do meio anterior conforme impresso no Cart\u00e3o de Residente Permanente (Green Card)'",
+      "field_id": "p1_line5c_middlename"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[32] (id=p1_line12_mothergivenname).spoken_name_translations.portuguese",
+      "message": "judge: The English original asks for 'given name', which is the first name. The translation 'Nome da m\u00e3e' means 'Mother's name' and is too general. It should be 'Primeiro nome da m\u00e3e' or 'Nome de batismo da m\u00e3e' to be precise.; rectified clean: 'Nome da m\u00e3e' -> 'Primeiro nome da m\u00e3e'",
+      "field_id": "p1_line12_mothergivenname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[33] (id=p1_line13_fathergivenname).spoken_name_translations.portuguese",
+      "message": "judge: The English original asks for 'given name', which is the first name. The translation 'Nome do pai' means 'Father's name' and is too general. It should be 'Primeiro nome do pai' or 'Nome de batismo do pai' to be precise.; rectified clean: 'Nome do pai' -> 'Primeiro nome do pai'",
+      "field_id": "p1_line13_fathergivenname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[66] (id=p5_line3_daytimephonenumber).spoken_name_translations.portuguese",
+      "message": "judge: The translation 'N\u00famero de telefone comercial' means 'Business phone number', which is not the same as 'Daytime telephone number'. A more accurate translation would be 'N\u00famero de telefone diurno' or 'N\u00famero de telefone para contato durante o dia'.; rectified clean: 'N\u00famero de telefone comercial' -> 'N\u00famero de telefone para contato durante o dia'",
+      "field_id": "p5_line3_daytimephonenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[83] (id=p6_line4_interpretersdaytimephonenumber).spoken_name_translations.portuguese",
+      "message": "judge: The translation 'N\u00famero de telefone comercial do int\u00e9rprete' means 'Interpreter's business phone number', which is not the same as 'Interpreter's daytime phone number'. A more accurate translation would be 'N\u00famero de telefone diurno do int\u00e9rprete' or 'N\u00famero de telefone do int\u00e9rprete para contato durante o dia'.; rectified clean: 'N\u00famero de telefone comercial do int\u00e9rprete' -> 'N\u00famero de telefone do int\u00e9rprete para contato durante o dia'",
+      "field_id": "p6_line4_interpretersdaytimephonenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[89] (id=p7_line1b_preparersgivenname).spoken_name_translations.portuguese",
+      "message": "judge: The translation 'Nome do preparador' means 'Preparer's name', which is less specific than the original 'preparer's given name'. It should be 'Nome do preparador' or 'Primeiro nome do preparador' to match the specificity of 'given name'.; rectified clean: 'Nome do preparador' -> 'Primeiro nome do preparador'",
+      "field_id": "p7_line1b_preparersgivenname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[101] (id=p7_line4_preparersdaytimephonenumber).spoken_name_translations.portuguese",
+      "message": "judge: The translation 'N\u00famero de telefone comercial' means 'business phone number', which is a different concept from the original 'daytime phone number'. A more accurate translation would be 'N\u00famero de telefone diurno'.; rectified clean: 'N\u00famero de telefone comercial do preparador' -> 'N\u00famero de telefone do preparador para contato durante o dia'",
+      "field_id": "p7_line4_preparersdaytimephonenumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.swedish",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-ambiguous-source",
+      "path": "fields[105] (id=p7_checkbox7extend).spoken_name_translations.swedish",
+      "message": "translator self-flagged the source as under-determined; enrich context/glossary rather than editing the string",
+      "field_id": "p7_checkbox7extend"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.german",
+      "message": "judge: The translation adds 'eines Fehlers' (an error), which is not present in the English original. The original simply states the incorrect data is 'because of' the department, which could be for various reasons, not necessarily an error.; rectified clean: 'Meine bestehende Karte enth\u00e4lt falsche Daten aufgrund eines Fehlers des Department of Homeland Security' -> 'Meine bestehende Karte enth\u00e4lt falsche Daten aufgrund des Department of Homeland Security (DHS).'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[unknown_other].label_translations.german",
+      "message": "judge: The translation for 'Other' is 'Andere', which is an adjective. The correct noun form is 'Anderes'.; rectified clean: 'Unbekannt/Andere' -> 'Unbekannt/Sonstiges'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[unknown_other].label_translations.german",
+      "message": "judge: The translation for 'Other' is 'Andere', which is an adjective. The correct noun form is 'Anderes'.; rectified clean: 'Unbekannt/Andere' -> 'Unbekannt/Sonstiges'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[63] (id=p5_checkbox1a).options[i_can_read_and_understand_english_and_i_have_read_and_understand_every_question_and_instruction_on_this_application_and_my_answer_to_every_question].label_translations.german",
+      "message": "judge: The translation omits the final clause of the English original, 'and my answer to every question'.; rectified clean: 'Ich kann Englisch lesen und verstehen, und ich habe jede Frage und Anweisung in diesem Antrag sowie meine Antwort auf jede Frage gelesen und verstanden' -> 'Ich kann Englisch lesen und verstehen, und ich habe jede Frage und jede Anweisung in diesem Antrag sowie meine Antwort auf jede Frage gelesen und verstanden.'",
+      "field_id": "p5_checkbox1a"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[46] (id=p3_checkbox5[1]).spoken_name_translations.german",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Haben Sie seit der Gew\u00e4hrung Ihres st\u00e4ndigen Wohnsitzes jemals das Formular I-407, Verzicht auf den Status als rechtm\u00e4\u00dfiger st\u00e4ndiger Einwohner durch einen Ausl\u00e4nder, eingereicht oder wurde anderweitig festgestellt, dass Sie Ihren Status aufgegeben haben?'; trace: judge: The translation of Form I-407's title is incorrect. The English is 'Abandonment by Alien of Status as Lawful Permanent Resident', but the German translation 'Verzicht auf den Status als rechtm\u00e4\u00dfiger st\u00e4ndiger Einwohner durch einen Ausl\u00e4nder' omits the key information 'Record of' and misplaces 'by Alien'. A more accurate translation would be 'Formular I-407, Akte \u00fcber den Verzicht eines Ausl\u00e4nders auf den Status als rechtm\u00e4\u00dfiger st\u00e4ndiger Einwohner'. | attempt 1: judge: The translation omits the parenthetical '(field-name)' which is part of the source string and should be retained for context. | attempt 2: no new correction",
+      "field_id": "p3_checkbox5[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[79] (id=p6_line3e_zipcode).spoken_name_translations.german",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Postleitzahl (ZIP Code) des Dolmetschers'; trace: judge: The translation adds '(ZIP Code)' which is redundant and not present in the English original. A simple 'Postleitzahl des Dolmetschers' is sufficient and more faithful. | attempt 1: judge: The translation omits the parenthetical '(field-name)' which is part of the source string and should be retained for context. | attempt 2: no new correction",
+      "field_id": "p6_line3e_zipcode"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[45] (id=p3_checkbox4[1]).options[select_no].label_translations.hindi",
+      "message": "judge: The translation '\u0928\u0939\u0940\u0902 \u091a\u0941\u0928\u0947\u0902' means 'Do not select', which is the opposite of the English 'Select No'.; rectified clean: '\u0928\u0939\u0940\u0902 \u091a\u0941\u0928\u0947\u0902' -> '\u0928\u0939\u0940\u0902 \u0915\u093e \u091a\u092f\u0928 \u0915\u0930\u0947\u0902'",
+      "field_id": "p3_checkbox4[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[46] (id=p3_checkbox5[1]).options[select_no].label_translations.hindi",
+      "message": "judge: The translation '\u0928\u0939\u0940\u0902 \u091a\u0941\u0928\u0947\u0902' means 'Do not select', which is the opposite of the English 'Select No'.; rectified clean: '\u0928\u0939\u0940\u0902 \u091a\u0941\u0928\u0947\u0902' -> '\u0928\u0939\u0940\u0902 \u0915\u093e \u091a\u092f\u0928 \u0915\u0930\u0947\u0902'",
+      "field_id": "p3_checkbox5[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[56] (id=p4_checkbox1[1]).options[select_no].label_translations.hindi",
+      "message": "judge: The translation '\u0928\u0939\u0940\u0902 \u091a\u0941\u0928\u0947\u0902' means 'Do not select', which is the opposite of the English 'Select No'.; rectified clean: '\u0928\u0939\u0940\u0902 \u091a\u0941\u0928\u0947\u0902' -> '\u0928\u0939\u0940\u0902 \u0915\u093e \u091a\u092f\u0928 \u0915\u0930\u0947\u0902'",
+      "field_id": "p4_checkbox1[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[sandy].label_translations.hindi",
+      "message": "judge: The translation '\u0930\u0947\u0924\u0940\u0932\u093e' means 'sandy' in the sense of texture (like soil), not hair color. A more appropriate translation for 'sandy' hair color would be '\u0939\u0932\u094d\u0915\u093e \u092d\u0942\u0930\u093e' or '\u0930\u0947\u0924 \u091c\u0948\u0938\u093e' or even a transliteration like '\u0938\u0948\u0902\u0921\u0940'.; rectified clean: '\u0930\u0947\u0924\u0940\u0932\u093e' -> '\u0938\u0948\u0902\u0921\u0940'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.hindi",
+      "message": "judge: The translation '\u0926\u094d\u0935\u093e\u0930\u093e \u0926\u0947\u0916\u092d\u093e\u0932 \u0928\u093e\u092e' is a literal, word-for-word rendering that is unnatural and confusing in Hindi. The standard and correct translation for 'in care of name' is '\u0915\u0940 \u0926\u0947\u0916\u092d\u093e\u0932 \u092e\u0947\u0902 \u0928\u093e\u092e' or simply 'c/o \u0928\u093e\u092e'.; rectified clean: '\u0926\u094d\u0935\u093e\u0930\u093e \u0926\u0947\u0916\u092d\u093e\u0932 \u0928\u093e\u092e' -> '\u0915\u0940 \u0926\u0947\u0916\u092d\u093e\u0932 \u092e\u0947\u0902 \u0928\u093e\u092e'",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[65] (id=p5_line2_nameofrepresentative).spoken_name_translations.hindi",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u093e \u0928\u093e\u092e'; trace: judge: The translation '\u0924\u0948\u092f\u093e\u0930 \u0915\u0930\u0928\u0947 \u0935\u093e\u0932\u0947 \u0915\u093e \u0928\u093e\u092e' (name of preparer) is a correct translation of the English, but the back-translation 'Preparer's Last Name' suggests a potential mismatch in the system that generated it. The Hindi translation itself is not specific to 'last name' and is a general translation for 'name of preparer'. | attempt 1: no new correction",
+      "field_id": "p5_line2_nameofrepresentative"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[white].label_translations.italian",
+      "message": "judge: The translation 'Bianchi' is plural, while the English 'White' is singular. The translation should be the singular form 'Bianco'.; rectified clean: 'Bianchi' -> 'Bianco'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[white].label_translations.italian",
+      "message": "judge: The translation 'Bianchi' is plural, while the English 'White' is singular. The translation should be the singular form 'Bianco'.; rectified clean: 'Bianchi' -> 'Bianco'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[black].label_translations.italian",
+      "message": "judge: The translation 'Neri' is plural, while the English 'Black' is singular. The translation should be the singular form 'Nero'.; rectified clean: 'Neri' -> 'Nero'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[black].label_translations.italian",
+      "message": "judge: The translation 'Neri' is plural, while the English 'Black' is singular. The translation should be the singular form 'Nero'.; rectified clean: 'Neri' -> 'Nero'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[blue].label_translations.italian",
+      "message": "judge: The translation 'Azzurri' is plural, while the English 'Blue' is singular. The translation should be the singular form 'Azzurro'.; rectified clean: 'Azzurri' -> 'Blu'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[brown].label_translations.italian",
+      "message": "judge: The translation 'Castani' is plural, while the English 'Brown' is singular. The translation should be the singular form 'Castano'.; rectified clean: 'Castani' -> 'Marrone'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[brown].label_translations.italian",
+      "message": "judge: The translation 'Castani' is plural, while the English 'Brown' is singular. The translation should be the singular form 'Castano'.; rectified clean: 'Castani' -> 'Marrone'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[gray].label_translations.italian",
+      "message": "judge: The translation 'Grigi' is plural, while the English 'Gray' is singular. The translation should be the singular form 'Grigio'.; rectified clean: 'Grigi' -> 'Grigio'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[gray].label_translations.italian",
+      "message": "judge: The translation 'Grigi' is plural, while the English 'Gray' is singular. The translation should be the singular form 'Grigio'.; rectified clean: 'Grigi' -> 'Grigio'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[93] (id=p7_unit_type3b_unit).spoken_name_translations.italian",
+      "message": "judge: The translation \"Tipo di unit\u00e0 abitativa del preparatore\" (Preparer's housing unit type) is an over-specification. The English \"unit type\" is more general and can refer to business units as well as residential ones. A more faithful translation would be \"Tipo di unit\u00e0 del preparatore\".; rectified clean: 'Tipo di unit\u00e0 abitativa del preparatore' -> 'Tipo di unit\u00e0 del preparatore'",
+      "field_id": "p7_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.urdu",
+      "message": "judge: The translation omits the phrase 'error' from the original English 'because of Department of Homeland Security error'. The current translation '\u0645\u062d\u06a9\u0645\u06c1 \u06c1\u0648\u0645 \u0644\u06cc\u0646\u0688 \u0633\u06cc\u06a9\u06cc\u0648\u0631\u0679\u06cc \u06a9\u06cc \u0648\u062c\u06c1 \u0633\u06d2' means 'because of Department of Homeland Security', which changes the meaning.; rectified clean: '\u0645\u062d\u06a9\u0645\u06c1 \u06c1\u0648\u0645 \u0644\u06cc\u0646\u0688 \u0633\u06cc\u06a9\u06cc\u0648\u0631\u0679\u06cc \u06a9\u06cc \u0648\u062c\u06c1 \u0633\u06d2 \u0645\u06cc\u0631\u06d2 \u0645\u0648\u062c\u0648\u062f\u06c1 \u06a9\u0627\u0631\u0688 \u0645\u06cc\u06ba \u063a\u0644\u0637 \u0688\u06cc\u0679\u0627 \u06c1\u06d2' -> '\u0645\u06cc\u0631\u06d2 \u0645\u0648\u062c\u0648\u062f\u06c1 \u06a9\u0627\u0631\u0688 \u0645\u06cc\u06ba Department of Homeland Security \u06a9\u06cc \u0648\u062c\u06c1 \u0633\u06d2 \u063a\u0644\u0637 \u0688\u06cc\u0679\u0627 \u06c1\u06d2\u06d4'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[47] (id=p3_ethnicity).spoken_name_translations.urdu",
+      "message": "judge: The translation '\u0642\u0648\u0645\u06cc\u062a' means 'nationality', which is a different concept from 'ethnicity'. The correct term for ethnicity is '\u0646\u0633\u0644\u06cc \u067e\u0633 \u0645\u0646\u0638\u0631' or '\u0646\u0633\u0644\u06cc\u062a'.; rectified clean: '\u0642\u0648\u0645\u06cc\u062a' -> '\u0646\u0633\u0644\u06cc \u067e\u0633 \u0645\u0646\u0638\u0631'",
+      "field_id": "p3_ethnicity"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[maroon].label_translations.dutch",
+      "message": "judge: The translation 'Kastanjebruin' (chestnut brown) is not the best equivalent for 'Maroon'. 'Maroon' is a dark brownish-red, for which 'Kastanjebruin' is a poor fit. A better translation would be 'Bordeauxrood' or simply 'Maroon' if it refers to a specific color code on the form.; rectified clean: 'Kastanjebruin' -> 'Maron'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[10] (id=p1_line6b_streetnumbername).spoken_name_translations.dutch",
+      "message": "judge: The translation 'Postadres straatnaam en huisnummer' reverses the order from the English original 'street number and name'. The correct order in Dutch would be 'Postadres huisnummer en straatnaam'.; rectified clean: 'Postadres straatnaam en huisnummer' -> 'Postadres huisnummer en straatnaam'",
+      "field_id": "p1_line6b_streetnumbername"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[19] (id=p1_line7a_streetnumbername).spoken_name_translations.dutch",
+      "message": "judge: The translation 'Fysiek adres straatnaam en huisnummer' reverses the order from the English original 'street number and name'. The correct order in Dutch would be 'Fysiek adres huisnummer en straatnaam'.; rectified clean: 'Fysiek adres straatnaam en huisnummer' -> 'Fysiek adres huisnummer en straatnaam'",
+      "field_id": "p1_line7a_streetnumbername"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=p1_line16_ssn).spoken_name_translations.dutch",
+      "message": "judge: The English term 'social security number' should be translated. The abbreviation 'SSN' is on the never-translate list, but the full term is not. The standard Dutch translation is 'burgerservicenummer' or a more descriptive translation like 'sociaal zekerheidsnummer'.; rectified clean: 'Social security number' -> 'Sociaal zekerheidsnummer'",
+      "field_id": "p1_line16_ssn"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[97] (id=p7_line3e_zipcode).spoken_name_translations.dutch",
+      "message": "judge: The term 'ZIP-code' is an untranslated English term. The correct Dutch term is 'postcode'.; rectified clean: 'ZIP-code van de voorbereider' -> 'Postcode van de voorbereider'",
+      "field_id": "p7_line3e_zipcode"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.persian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u06a9\u0627\u0631\u062a \u0641\u0639\u0644\u06cc \u0645\u0646 \u0628\u0647 \u062f\u0644\u06cc\u0644 \u062e\u0637\u0627\u06cc \u0648\u0632\u0627\u0631\u062a \u0627\u0645\u0646\u06cc\u062a \u062f\u0627\u062e\u0644\u06cc \u062f\u0627\u0631\u0627\u06cc \u0627\u0637\u0644\u0627\u0639\u0627\u062a \u0646\u0627\u062f\u0631\u0633\u062a \u0627\u0633\u062a'; trace: judge: The translation adds the word '\u062e\u0637\u0627\u06cc' (error), which is not present in the English original. The original states the incorrect data is 'because of' the department, not necessarily because of a DHS 'error'. | attempt 1: judge: The translation adds the word '\u0627\u0642\u062f\u0627\u0645\u0627\u062a' (actions), which is not present in the original English. The original states the error is 'because of' the department, not necessarily because of its 'actions'. | attempt 2: judge: The translation adds the word 'error' ('\u062e\u0637\u0627'), which is not present in the original English. The original simply states the incorrect data is 'because of' the department, not necessarily due to a departmental 'error'. | attempt bound reached",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[maroon].label_translations.persian",
+      "message": "judge: The translation '\u062e\u0631\u0645\u0627\u06cc\u06cc' means 'date-colored' or 'auburn' and is typically used for hair color. The correct translation for the color 'Maroon' is '\u0632\u0631\u0634\u06a9\u06cc'.; rectified clean: '\u062e\u0631\u0645\u0627\u06cc\u06cc' -> '\u0632\u0631\u0634\u06a9\u06cc'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[55] (id=p3_hair_color).options[sandy].label_translations.persian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0634\u0646\u06cc'; trace: judge: The translation '\u0634\u0646\u06cc' is a literal translation of 'Sandy' but is not used to describe hair color in Persian. The correct term is '\u062e\u0627\u06a9\u0633\u062a\u0631\u06cc' (ashy/grayish) or '\u0628\u0644\u0648\u0646\u062f \u062a\u06cc\u0631\u0647' (dark blond). | attempt 1: judge: The translation '\u0628\u0644\u0648\u0646\u062f \u062e\u0627\u06a9\u0633\u062a\u0631\u06cc' (ash blonde) is a specific hair color, but it does not accurately represent 'Sandy', which is a different shade of blonde, typically a light yellowish-brown. | attempt 2: judge: The translation '\u062e\u0627\u06a9\u06cc' means 'earthy' or 'khaki' in color. The English 'Sandy' refers to a hair or skin color, for which the correct Persian term is '\u0645\u0627\u0633\u0647 \u0627\u06cc'. | attempt bound reached",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[63] (id=p5_checkbox1a).options[the_interpreter_named_in_part_6_has_read_to_me_every_question_and_instruction_on_this_application_and_my_answer_to_every_question_in_a_language_in_which_i_am_fluent_and_i_understood_everything].label_translations.persian",
+      "message": "judge: The translation uses '\u0628\u062e\u0634 6' which means 'Section 6'. The English original is 'Part 6.', which should be translated as '\u0642\u0633\u0645\u062a 6'.; rectified clean: '\u0645\u062a\u0631\u062c\u0645 \u0646\u0627\u0645\u0628\u0631\u062f\u0647 \u062f\u0631 \u0628\u062e\u0634 6\u060c \u062a\u0645\u0627\u0645 \u0633\u0648\u0627\u0644\u0627\u062a \u0648 \u062f\u0633\u062a\u0648\u0631\u0627\u0644\u0639\u0645\u0644\u200c\u0647\u0627\u06cc \u0627\u06cc\u0646 \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0648 \u067e\u0627\u0633\u062e \u0645\u0646 \u0628\u0647 \u0647\u0631 \u0633\u0648\u0627\u0644 \u0631\u0627 \u0628\u0647 \u0632\u0628\u0627\u0646\u06cc \u06a9\u0647 \u0628\u0647 \u0622\u0646 \u0645\u0633\u0644\u0637 \u0647\u0633\u062a\u0645 \u0628\u0631\u0627\u06cc \u0645\u0646 \u062e\u0648\u0627\u0646\u062f\u0647 \u0648 \u0645\u0646 \u0647\u0645\u0647 \u0686\u06cc\u0632 \u0631\u0627 \u0641\u0647\u0645\u06cc\u062f\u0645' -> '\u0645\u062a\u0631\u062c\u0645 \u0646\u0627\u0645\u0628\u0631\u062f\u0647 \u062f\u0631 \u0642\u0633\u0645\u062a 6\u060c \u062a\u0645\u0627\u0645 \u0633\u0648\u0627\u0644\u0627\u062a \u0648 \u062f\u0633\u062a\u0648\u0631\u0627\u0644\u0639\u0645\u0644\u200c\u0647\u0627\u06cc \u0627\u06cc\u0646 \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0648 \u067e\u0627\u0633\u062e \u0645\u0646 \u0628\u0647 \u0647\u0631 \u0633\u0648\u0627\u0644 \u0631\u0627 \u0628\u0647 \u0632\u0628\u0627\u0646\u06cc \u06a9\u0647 \u0628\u0647 \u0622\u0646 \u0645\u0633\u0644\u0637 \u0647\u0633\u062a\u0645 \u0628\u0631\u0627\u06cc \u0645\u0646 \u062e\u0648\u0627\u0646\u062f\u0647 \u0648 \u0645\u0646 \u0647\u0645\u0647 \u0686\u06cc\u0632 \u0631\u0627 \u0641\u0647\u0645\u06cc\u062f\u0645'",
+      "field_id": "p5_checkbox1a"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[63] (id=p5_checkbox1a).options[at_my_request_the_preparer_named_in_part_7].label_translations.persian",
+      "message": "judge: The translation uses '\u0628\u062e\u0634 7' which means 'Section 7'. The English original is 'Part 7', which should be translated as '\u0642\u0633\u0645\u062a 7'.; rectified clean: '\u0628\u0647 \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0645\u0646\u060c \u062a\u0647\u06cc\u0647\u200c\u06a9\u0646\u0646\u062f\u0647 \u0646\u0627\u0645\u0628\u0631\u062f\u0647 \u062f\u0631 \u0628\u062e\u0634 7' -> '\u0628\u0647 \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0645\u0646\u060c \u062a\u0647\u06cc\u0647\u200c\u06a9\u0646\u0646\u062f\u0647 \u0646\u0627\u0645\u0628\u0631\u062f\u0647 \u062f\u0631 \u0642\u0633\u0645\u062a 7'",
+      "field_id": "p5_checkbox1a"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[28] (id=p1_line8_male).spoken_name_translations.persian",
+      "message": "judge: The translation '\u062c\u0646\u0633\u06cc\u062a \u0631\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0646\u06cc\u062f' means 'Select Gender'. The English original is 'select sex', which should be translated as '\u062c\u0646\u0633 \u0631\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0646\u06cc\u062f' to maintain the distinction between 'sex' and 'gender'.; rectified clean: '\u062c\u0646\u0633\u06cc\u062a \u0631\u0627 \u0627\u0646\u062a\u062e\u0627\u0628 \u06a9\u0646\u06cc\u062f' -> '\u0627\u0646\u062a\u062e\u0627\u0628 \u062c\u0646\u0633\u06cc\u062a'",
+      "field_id": "p1_line8_male"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[58] (id=p4_line1a_accomodationrequested).spoken_name_translations.persian",
+      "message": "judge: The translation '\u0632\u0628\u0627\u0646 \u0627\u0634\u0627\u0631\u0647 \u0645\u0648\u0631\u062f \u0646\u06cc\u0627\u0632' means 'sign language needed', which is a statement of fact. The English 'sign language needed (field-name)' is ambiguous, but in the context of a form field, it is more likely a label for a checkbox or field asking *if* a sign language interpreter is needed. The translation for the previous item, '\u0646\u06cc\u0627\u0632 \u0628\u0647 \u0645\u062a\u0631\u062c\u0645 \u0632\u0628\u0627\u0646 \u0627\u0634\u0627\u0631\u0647' (Need for sign language interpreter), is a better fit for this meaning.; rectified clean: '\u0632\u0628\u0627\u0646 \u0627\u0634\u0627\u0631\u0647 \u0645\u0648\u0631\u062f \u0646\u06cc\u0627\u0632' -> '\u0632\u0628\u0627\u0646 \u0627\u0634\u0627\u0631\u0647 \u0645\u0648\u0631\u062f \u0646\u06cc\u0627\u0632'",
+      "field_id": "p4_line1a_accomodationrequested"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[79] (id=p6_line3e_zipcode).spoken_name_translations.persian",
+      "message": "judge: The translation includes the English term 'ZIP code' in parentheses, which is unnecessary and not part of the original string. A more direct translation like '\u06a9\u062f \u067e\u0633\u062a\u06cc \u0645\u062a\u0631\u062c\u0645' would be sufficient and more consistent with other items.; rectified clean: '\u06a9\u062f \u067e\u0633\u062a\u06cc (ZIP code) \u0645\u062a\u0631\u062c\u0645' -> '\u06a9\u062f \u067e\u0633\u062a\u06cc \u0645\u062a\u0631\u062c\u0645'",
+      "field_id": "p6_line3e_zipcode"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[92] (id=p7_line3a_streetnumbername).spoken_name_translations.persian",
+      "message": "judge: The translation adds the word '\u0622\u062f\u0631\u0633' (address), which is not present in the English original 'preparer's street number and name'.; rectified clean: '\u0622\u062f\u0631\u0633 \u062a\u0647\u06cc\u0647\u200c\u06a9\u0646\u0646\u062f\u0647\u060c \u0634\u0645\u0627\u0631\u0647 \u067e\u0644\u0627\u06a9 \u0648 \u0646\u0627\u0645 \u062e\u06cc\u0627\u0628\u0627\u0646' -> '\u0634\u0645\u0627\u0631\u0647 \u067e\u0644\u0627\u06a9 \u0648 \u0646\u0627\u0645 \u062e\u06cc\u0627\u0628\u0627\u0646 \u062a\u0647\u06cc\u0647\u200c\u06a9\u0646\u0646\u062f\u0647'",
+      "field_id": "p7_line3a_streetnumbername"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.persian",
+      "message": "judge: The translation omits the concept of 'accredited representative', which is present in the back-translation and is a common part of this standard question on USCIS forms. The English source is ambiguous ('or not'), but the translation '\u06cc\u0627 \u062e\u06cc\u0631' (or not) is too literal and misses the likely intended meaning of 'or accredited representative'.; rectified clean: '\u0622\u06cc\u0627 \u062a\u0647\u06cc\u0647\u200c\u06a9\u0646\u0646\u062f\u0647 \u0648\u06a9\u06cc\u0644 \u0627\u0633\u062a \u06cc\u0627 \u062e\u06cc\u0631' -> '\u0622\u06cc\u0627 \u062a\u0647\u06cc\u0647\u200c\u06a9\u0646\u0646\u062f\u0647 \u0648\u06a9\u06cc\u0644 \u0627\u0633\u062a \u06cc\u0627 \u062e\u06cc\u0631'",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[113] (id=p8_line3b_partnumber).spoken_name_translations.persian",
+      "message": "judge: The translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' (part number) for 'part number', but in other items (e.g., 230, 234) it uses '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number'. The English 'part number' and 'item number' are distinct, but the translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' for 'part number' and '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number', which could be confusing. A more consistent and distinct translation for 'part number' would be better, such as '\u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'.; rectified clean: '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634 \u0648\u0631\u0648\u062f\u06cc 1' -> '\u0648\u0631\u0648\u062f\u06cc 1 \u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'",
+      "field_id": "p8_line3b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[117] (id=p8_line5b_partnumber[1]).spoken_name_translations.persian",
+      "message": "judge: The translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' (part number) for 'part number', but in other items (e.g., 230, 234) it uses '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number'. The English 'part number' and 'item number' are distinct, but the translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' for 'part number' and '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number', which could be confusing. A more consistent and distinct translation for 'part number' would be better, such as '\u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'.; rectified clean: '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634 \u0648\u0631\u0648\u062f\u06cc 4' -> '\u0648\u0631\u0648\u062f\u06cc 4 \u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'",
+      "field_id": "p8_line5b_partnumber[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[121] (id=p8_line4b_partnumber).spoken_name_translations.persian",
+      "message": "judge: The translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' (part number) for 'part number', but in other items (e.g., 230, 234) it uses '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number'. The English 'part number' and 'item number' are distinct, but the translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' for 'part number' and '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number', which could be confusing. A more consistent and distinct translation for 'part number' would be better, such as '\u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'.; rectified clean: '\u0648\u0631\u0648\u062f\u06cc 2 \u0635\u0641\u062d\u0647 8\u060c \u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' -> '\u0648\u0631\u0648\u062f\u06cc 2 \u0635\u0641\u062d\u0647 8\u060c \u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'",
+      "field_id": "p8_line4b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[125] (id=p8_line5b_partnumber).spoken_name_translations.persian",
+      "message": "judge: The translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' (part number) for 'part number', but in other items (e.g., 230, 234) it uses '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number'. The English 'part number' and 'item number' are distinct, but the translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' for 'part number' and '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number', which could be confusing. A more consistent and distinct translation for 'part number' would be better, such as '\u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'.; rectified clean: '\u0648\u0631\u0648\u062f\u06cc 3 \u0635\u0641\u062d\u0647 8\u060c \u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' -> '\u0648\u0631\u0648\u062f\u06cc 3 \u0635\u0641\u062d\u0647 8\u060c \u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'",
+      "field_id": "p8_line5b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[129] (id=p8_line5b_partnumber[2]).spoken_name_translations.persian",
+      "message": "judge: The translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' (part number) for 'part number', but in other items (e.g., 230, 234) it uses '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number'. The English 'part number' and 'item number' are distinct, but the translation uses '\u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' for 'part number' and '\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0631\u062f' for 'item number', which could be confusing. A more consistent and distinct translation for 'part number' would be better, such as '\u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'.; rectified clean: '\u0648\u0631\u0648\u062f\u06cc 5 \u0635\u0641\u062d\u0647 8\u060c \u0634\u0645\u0627\u0631\u0647 \u0628\u062e\u0634' -> '\u0648\u0631\u0648\u062f\u06cc 5 \u0635\u0641\u062d\u0647 8\u060c \u0634\u0645\u0627\u0631\u0647 \u0642\u0633\u0645\u062a'",
+      "field_id": "p8_line5b_partnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[11] (id=p1_unit_type6c_unit).options[suite].label_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0456\u0441'; trace: judge: The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. 'Suite' can refer to a set of rooms for business or living. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u0430\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u0456\u0432' or simply transliterating as '\u0421\u044c\u044e\u0442' would be more accurate and encompass both residential and commercial contexts. | attempt 1: judge: The English term 'Suite' refers to a specific type of unit within a larger building, often for business or as part of an address. The Ukrainian translation '\u041f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (Premises) is too general and could refer to any room or building, losing the specific meaning of 'Suite'. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. The English 'Suite' can refer to an office, but also to other types of units like an apartment suite. A more accurate and general translation would be '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0438' or similar.",
+      "field_id": "p1_unit_type6c_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[20] (id=p1_unit_type7b_unit).options[suite].label_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0456\u0441'; trace: judge: The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. 'Suite' can refer to a set of rooms for business or living. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u0430\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u0456\u0432' or simply transliterating as '\u0421\u044c\u044e\u0442' would be more accurate and encompass both residential and commercial contexts. | attempt 1: judge: The English term 'Suite' refers to a specific type of unit within a larger building, often for business or as part of an address. The Ukrainian translation '\u041f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (Premises) is too general and could refer to any room or building, losing the specific meaning of 'Suite'. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. The English 'Suite' can refer to an office, but also to other types of units like an apartment suite. A more accurate and general translation would be '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0438' or similar.",
+      "field_id": "p1_unit_type7b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[75] (id=p6_unit_type3b_unit).options[suite].label_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0456\u0441'; trace: judge: The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. 'Suite' can refer to a set of rooms for business or living. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u0430\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u0456\u0432' or simply transliterating as '\u0421\u044c\u044e\u0442' would be more accurate and encompass both residential and commercial contexts. | attempt 1: judge: The English term 'Suite' refers to a specific type of unit within a larger building, often for business or as part of an address. The Ukrainian translation '\u041f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (Premises) is too general and could refer to any room or building, losing the specific meaning of 'Suite'. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. The English 'Suite' can refer to an office, but also to other types of units like an apartment suite. A more accurate and general translation would be '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0438' or similar.",
+      "field_id": "p6_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[93] (id=p7_unit_type3b_unit).options[suite].label_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0456\u0441'; trace: judge: The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. 'Suite' can refer to a set of rooms for business or living. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u0430\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u0456\u0432' or simply transliterating as '\u0421\u044c\u044e\u0442' would be more accurate and encompass both residential and commercial contexts. | attempt 1: judge: The English term 'Suite' refers to a specific type of unit within a larger building, often for business or as part of an address. The Ukrainian translation '\u041f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (Premises) is too general and could refer to any room or building, losing the specific meaning of 'Suite'. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation '\u041e\u0444\u0456\u0441' (Office) is too specific. The English 'Suite' can refer to an office, but also to other types of units like an apartment suite. A more accurate and general translation would be '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0456\u0441\u0443/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0438' or similar.",
+      "field_id": "p7_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[28] (id=p1_line8_male).options[male].label_translations.ukrainian",
+      "message": "judge: The translation uses the adjectival form '\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430' (male), which would modify a feminine noun. The correct form for the option 'Male' (referring to a person's sex/gender) should be the noun '\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430 \u0441\u0442\u0430\u0442\u044c' or the adjective '\u0427\u043e\u043b\u043e\u0432\u0456\u043a'.; rectified clean: '\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430' -> '\u0427\u043e\u043b\u043e\u0432\u0456\u0447\u0430 \u0441\u0442\u0430\u0442\u044c'",
+      "field_id": "p1_line8_male"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.ukrainian",
+      "message": "judge: The translation adds '\u0447\u0435\u0440\u0435\u0437 \u043f\u043e\u043c\u0438\u043b\u043a\u0443' (because of an error), which is not present in the original English 'because of Department of Homeland Security'. This addition changes the meaning by specifying the cause as an error, whereas the original is more general.; rectified clean: '\u041c\u043e\u044f \u043d\u0430\u044f\u0432\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u043c\u0456\u0441\u0442\u0438\u0442\u044c \u043d\u0435\u0432\u0456\u0440\u043d\u0456 \u0434\u0430\u043d\u0456 \u0447\u0435\u0440\u0435\u0437 \u043f\u043e\u043c\u0438\u043b\u043a\u0443 \u0414\u0435\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u0443 \u0432\u043d\u0443\u0442\u0440\u0456\u0448\u043d\u044c\u043e\u0457 \u0431\u0435\u0437\u043f\u0435\u043a\u0438' -> '\u041c\u043e\u044f \u043d\u0430\u044f\u0432\u043d\u0430 \u043a\u0430\u0440\u0442\u043a\u0430 \u043c\u0456\u0441\u0442\u0438\u0442\u044c \u043d\u0435\u0432\u0456\u0440\u043d\u0456 \u0434\u0430\u043d\u0456 \u0447\u0435\u0440\u0435\u0437 \u043f\u043e\u043c\u0438\u043b\u043a\u0443 \u0414\u0435\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u0443 \u0432\u043d\u0443\u0442\u0440\u0456\u0448\u043d\u044c\u043e\u0457 \u0431\u0435\u0437\u043f\u0435\u043a\u0438 (DHS)'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[i_have_a_prior_edition_of_the_alien_registration_card_or_i_am_applying_to_replace_my_current_permanent_resident_card_for_a_reason_that_is_not_specified_above].label_translations.ukrainian",
+      "message": "judge: The translation omits the concept of 'replacing' the card. It says '\u043f\u043e\u0434\u0430\u044e \u0437\u0430\u044f\u0432\u0443 \u043d\u0430 \u0437\u0430\u043c\u0456\u043d\u0443' (I am applying for a replacement), but the original says 'I am applying to replace'. The phrase 'and am applying to replace' is missing from the Ukrainian translation.; rectified clean: '\u042f \u043c\u0430\u044e \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044e \u0432\u0435\u0440\u0441\u0456\u044e \u0440\u0435\u0454\u0441\u0442\u0440\u0430\u0446\u0456\u0439\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u0456\u043d\u043e\u0437\u0435\u043c\u0446\u044f \u0430\u0431\u043e \u043f\u043e\u0434\u0430\u044e \u0437\u0430\u044f\u0432\u0443 \u043d\u0430 \u0437\u0430\u043c\u0456\u043d\u0443 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u043f\u043e\u0441\u0442\u0456\u0439\u043d\u043e\u0433\u043e \u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430 \u0437 \u043f\u0440\u0438\u0447\u0438\u043d\u0438, \u043d\u0435 \u0437\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u043e\u0457 \u0432\u0438\u0449\u0435' -> '\u042f \u043c\u0430\u044e \u043f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u044e \u0432\u0435\u0440\u0441\u0456\u044e \u0440\u0435\u0454\u0441\u0442\u0440\u0430\u0446\u0456\u0439\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u0456\u043d\u043e\u0437\u0435\u043c\u0446\u044f \u0430\u0431\u043e \u043f\u043e\u0434\u0430\u044e \u0437\u0430\u044f\u0432\u0443 \u043d\u0430 \u0437\u0430\u043c\u0456\u043d\u0443 \u043c\u043e\u0454\u0457 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u043a\u0430\u0440\u0442\u043a\u0438 \u043f\u043e\u0441\u0442\u0456\u0439\u043d\u043e\u0433\u043e \u0440\u0435\u0437\u0438\u0434\u0435\u043d\u0442\u0430 \u0437 \u043f\u0440\u0438\u0447\u0438\u043d\u0438, \u044f\u043a\u0430 \u043d\u0435 \u0437\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0430 \u0432\u0438\u0449\u0435'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[48] (id=p3_race).options[white].label_translations.ukrainian",
+      "message": "judge: The translation '\u0411\u0456\u043b\u0438\u0439' is the masculine adjective for 'White'. To be gender-neutral or to match the context of race, it should be '\u0411\u0456\u043b\u0430 (\u0440\u0430\u0441\u0430)' or a more neutral term if available. The feminine forms used for other races ('\u0410\u0437\u0456\u0430\u0442\u0441\u044c\u043a\u0430', '\u0427\u043e\u0440\u043d\u0430') suggest this should also be adjectival, but '\u0411\u0456\u043b\u0438\u0439' is masculine.; rectified clean: '\u0411\u0456\u043b\u0438\u0439' -> '\u0411\u0456\u043b\u0430'",
+      "field_id": "p3_race"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[white].label_translations.ukrainian",
+      "message": "judge: The translation '\u0411\u0456\u043b\u0438\u0439' is the masculine adjective for 'White'. To be gender-neutral or to match the context of race, it should be '\u0411\u0456\u043b\u0430 (\u0440\u0430\u0441\u0430)' or a more neutral term if available. The feminine forms used for other races ('\u0410\u0437\u0456\u0430\u0442\u0441\u044c\u043a\u0430', '\u0427\u043e\u0440\u043d\u0430') suggest this should also be adjectival, but '\u0411\u0456\u043b\u0438\u0439' is masculine.; rectified clean: '\u0411\u0456\u043b\u0438\u0439' -> '\u0411\u0456\u043b\u0430'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[brown].label_translations.ukrainian",
+      "message": "judge: The translation '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u0438\u0439' specifically means 'chestnut brown' and is typically used for hair color. A more general and appropriate translation for 'Brown' as an eye color is '\u041a\u0430\u0440\u0438\u0439'.; rectified clean: '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u0438\u0439' -> '\u041a\u0430\u0440\u0438\u0439'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[brown].label_translations.ukrainian",
+      "message": "judge: The translation '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u0438\u0439' specifically means 'chestnut brown' and is typically used for hair color. A more general and appropriate translation for 'Brown' as an eye color is '\u041a\u0430\u0440\u0438\u0439'.; rectified clean: '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u0438\u0439' -> '\u041a\u0430\u0440\u0438\u0439'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[gray].label_translations.ukrainian",
+      "message": "judge: The translation '\u0421\u0438\u0432\u0438\u0439' specifically means 'gray-haired'. The correct general term for the color 'Gray' is '\u0421\u0456\u0440\u0438\u0439'.; rectified clean: '\u0421\u0438\u0432\u0438\u0439' -> '\u0421\u0456\u0440\u0438\u0439'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[gray].label_translations.ukrainian",
+      "message": "judge: The translation '\u0421\u0438\u0432\u0438\u0439' specifically means 'gray-haired'. The correct general term for the color 'Gray' is '\u0421\u0456\u0440\u0438\u0439'.; rectified clean: '\u0421\u0438\u0432\u0438\u0439' -> '\u0421\u0456\u0440\u0438\u0439'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[blond].label_translations.ukrainian",
+      "message": "judge: The translation for 'Blond' (hair color) is '\u0421\u0432\u0456\u0442\u043b\u0438\u0439' (Light). The correct term for blond hair is '\u0411\u043b\u043e\u043d\u0434\u0438\u043d' (for a male), '\u0411\u043b\u043e\u043d\u0434\u0438\u043d\u043a\u0430' (for a female), or the more neutral '\u0421\u0432\u0456\u0442\u043b\u043e-\u0440\u0443\u0441\u044f\u0432\u0438\u0439' or simply '\u0411\u043b\u043e\u043d\u0434'. '\u0421\u0432\u0456\u0442\u043b\u0438\u0439' is too general and could mean light brown or other light shades, not specifically blond.; rectified clean: '\u0421\u0432\u0456\u0442\u043b\u0438\u0439' -> '\u0411\u043b\u043e\u043d\u0434'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[11] (id=p1_unit_type6c_unit).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430: \u0442\u0438\u043f \u0436\u0438\u0442\u043b\u0430'; trace: judge: The translation for 'mailing unit type' is '\u041f\u043e\u0448\u0442\u043e\u0432\u0430 \u0430\u0434\u0440\u0435\u0441\u0430: \u0442\u0438\u043f \u0436\u0438\u0442\u043b\u0430' (Mailing Address: type of housing). 'Unit type' can refer to commercial units like 'Suite' or 'Floor', not just residential ones. A more accurate translation would be '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of premises) or simply not specify '\u0436\u0438\u0442\u043b\u0430' (housing). | attempt 1: judge: The English term 'unit type' refers to address components like 'Apt', 'Ste', 'Flr'. The Ukrainian translation '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of premises) is too broad and doesn't accurately capture the specific context of an address unit designator. A more precise term like '\u0442\u0438\u043f \u0436\u0438\u0442\u043b\u043e\u0432\u043e\u0433\u043e/\u043e\u0444\u0456\u0441\u043d\u043e\u0433\u043e \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' or simply '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' if context is clear, but it's still a bit vague. '\u0422\u0438\u043f \u043e\u0434\u0438\u043d\u0438\u0446\u0456 \u0430\u0434\u0440\u0435\u0441\u0438' would be more literal and perhaps clearer in a form context. | attempt 2: judge: The translation '\u0442\u0438\u043f \u043f\u043e\u0448\u0442\u043e\u0432\u043e\u0433\u043e \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of postal premises) is an inaccurate rendering of 'mailing unit type'. In the context of a mailing address, 'unit' refers to a specific apartment, suite, or floor. The translation should be closer to '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f \u0434\u043b\u044f \u043b\u0438\u0441\u0442\u0443\u0432\u0430\u043d\u043d\u044f' or '\u0442\u0438\u043f \u043f\u043e\u0448\u0442\u043e\u0432\u043e\u0457 \u043e\u0434\u0438\u043d\u0438\u0446\u0456'. | attempt bound reached",
+      "field_id": "p1_unit_type6c_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[20] (id=p1_unit_type7b_unit).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0410\u0434\u0440\u0435\u0441\u0430 \u0444\u0430\u043a\u0442\u0438\u0447\u043d\u043e\u0433\u043e \u043f\u0440\u043e\u0436\u0438\u0432\u0430\u043d\u043d\u044f: \u0442\u0438\u043f \u0436\u0438\u0442\u043b\u0430'; trace: judge: The translation for 'physical unit type' is '\u0410\u0434\u0440\u0435\u0441\u0430 \u0444\u0430\u043a\u0442\u0438\u0447\u043d\u043e\u0433\u043e \u043f\u0440\u043e\u0436\u0438\u0432\u0430\u043d\u043d\u044f: \u0442\u0438\u043f \u0436\u0438\u0442\u043b\u0430' (Physical Address: type of housing). 'Unit type' can refer to commercial units like 'Suite' or 'Floor', not just residential ones. A more accurate translation would be '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of premises) or simply not specify '\u0436\u0438\u0442\u043b\u0430' (housing). | attempt 1: judge: Similar to the previous item, 'unit type' refers to address components like 'Apt', 'Ste', 'Flr'. The translation '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of premises) is too general and does not accurately convey the meaning of an address unit designator. The context is a physical address, but the core term 'unit type' is mistranslated. | attempt 2: judge: The translation '\u0442\u0438\u043f \u0444\u0456\u0437\u0438\u0447\u043d\u043e\u0433\u043e \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of physical premises) is an inaccurate rendering of 'physical unit type'. In the context of a physical address, 'unit' refers to a specific apartment, suite, or floor. The translation should be closer to '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f \u0437\u0430 \u0444\u0456\u0437\u0438\u0447\u043d\u043e\u044e \u0430\u0434\u0440\u0435\u0441\u043e\u044e' or '\u0442\u0438\u043f \u0444\u0456\u0437\u0438\u0447\u043d\u043e\u0457 \u043e\u0434\u0438\u043d\u0438\u0446\u0456'. | attempt bound reached",
+      "field_id": "p1_unit_type7b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[75] (id=p6_unit_type3b_unit).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0422\u0438\u043f \u0436\u0438\u0442\u043b\u0430 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447\u0430'; trace: judge: The translation '\u0422\u0438\u043f \u0436\u0438\u0442\u043b\u0430' means 'type of housing', which is too specific and may not apply to a business address. A more general term like '\u0422\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of unit) or a direct translation of the common abbreviations (Apt/Ste/Fl) would be more accurate. | attempt 1: judge: The term 'unit type' refers to address components like 'Apt', 'Ste', 'Flr'. The translation '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of premises) is too general and does not accurately convey the meaning of an address unit designator in the context of the interpreter's address. | attempt 2: no new correction",
+      "field_id": "p6_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[86] (id=p6_language).spoken_name_translations.ukrainian",
+      "message": "judge: The translation '\u041c\u043e\u0432\u0430, \u044f\u043a\u043e\u044e \u0432\u043e\u043b\u043e\u0434\u0456\u0454 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447' means 'Language the interpreter is fluent in', which is a higher standard than 'language spoken by interpreter'. A more direct translation would be '\u041c\u043e\u0432\u0430, \u044f\u043a\u043e\u044e \u0440\u043e\u0437\u043c\u043e\u0432\u043b\u044f\u0454 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447'.; rectified clean: '\u041c\u043e\u0432\u0430, \u044f\u043a\u043e\u044e \u0432\u043e\u043b\u043e\u0434\u0456\u0454 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447' -> '\u043c\u043e\u0432\u0430, \u044f\u043a\u043e\u044e \u0440\u043e\u0437\u043c\u043e\u0432\u043b\u044f\u0454 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u0430\u0447'",
+      "field_id": "p6_language"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[93] (id=p7_unit_type3b_unit).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0422\u0438\u043f \u0436\u0438\u0442\u043b\u0430 \u043e\u0441\u043e\u0431\u0438, \u0449\u043e \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442'; trace: judge: The translation '\u0422\u0438\u043f \u0436\u0438\u0442\u043b\u0430' means 'type of housing', which is incorrect. The original 'unit type' refers to apartment, suite, or floor. A better translation would be '\u0422\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f (\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430, \u043e\u0444\u0456\u0441, \u043f\u043e\u0432\u0435\u0440\u0445)' or similar. | attempt 1: judge: The term 'unit type' refers to address components like 'Apt', 'Ste', 'Flr'. The translation '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f' (type of premises) is too general and does not accurately convey the meaning of an address unit designator in the context of the preparer's address. | attempt 2: judge: The translation '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f \u043f\u0456\u0434\u0433\u043e\u0442\u043e\u0432\u043b\u044e\u0432\u0430\u0447\u0430' (preparer's premises type) is an inaccurate rendering of 'preparer's unit type'. In the context of an address, 'unit' refers to a specific apartment, suite, or floor. The translation should be closer to '\u0442\u0438\u043f \u043f\u0440\u0438\u043c\u0456\u0449\u0435\u043d\u043d\u044f \u043f\u0456\u0434\u0433\u043e\u0442\u043e\u0432\u043b\u044e\u0432\u0430\u0447\u0430 (\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430, \u043e\u0444\u0456\u0441)' or '\u0442\u0438\u043f \u043e\u0434\u0438\u043d\u0438\u0446\u0456 \u0430\u0434\u0440\u0435\u0441\u0438 \u043f\u0456\u0434\u0433\u043e\u0442\u043e\u0432\u043b\u044e\u0432\u0430\u0447\u0430'. | attempt bound reached",
+      "field_id": "p7_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0427\u0438 \u0454 \u043e\u0441\u043e\u0431\u0430, \u0449\u043e \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442, \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0447\u0438 \u043d\u0456'; trace: judge: The translation omits 'accredited representative'. The original is 'attorney or not', but the back-translation suggests the full phrase might be 'attorney or accredited representative'. The Ukrainian translation '\u0427\u0438 \u0454 \u043e\u0441\u043e\u0431\u0430, \u0449\u043e \u043f\u0456\u0434\u0433\u043e\u0442\u0443\u0432\u0430\u043b\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442, \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0447\u0438 \u043d\u0456' only mentions 'attorney'. | attempt 1: no new correction",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[6] (id=p1_line5a_familyname).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Tidigare efternamn som det st\u00e5r p\u00e5 ditt Green Card'; trace: judge: The translation omits the term 'Green Card', which is a specific and well-known document name that should be retained for clarity, as it is in the English original. | attempt 1: no new correction",
+      "field_id": "p1_line5a_familyname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[7] (id=p1_line5b_givenname).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Tidigare f\u00f6rnamn som det st\u00e5r p\u00e5 ditt Green Card'; trace: judge: The translation omits the term 'Green Card', which is a specific and well-known document name that should be retained for clarity, as it is in the English original. | attempt 1: no new correction",
+      "field_id": "p1_line5b_givenname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[8] (id=p1_line5c_middlename).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Tidigare mellannamn som det st\u00e5r p\u00e5 ditt Green Card'; trace: judge: The translation omits the term 'Green Card', which is a specific and well-known document name that should be retained for clarity, as it is in the English original. | attempt 1: no new correction",
+      "field_id": "p1_line5c_middlename"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[65] (id=p5_line2_nameofrepresentative).spoken_name_translations.swedish",
+      "message": "judge: The translation 'Handl\u00e4ggarens namn' means 'Case officer's name' or 'Processor's name'. The English 'preparer' refers to the person who filled out the form on the applicant's behalf, which is not necessarily an official. A more accurate translation would be 'Namn p\u00e5 den som fyllt i formul\u00e4ret' or similar.; rectified clean: 'Handl\u00e4ggarens namn' -> 'F\u00f6rberedarens namn'",
+      "field_id": "p5_line2_nameofrepresentative"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[92] (id=p7_line3a_streetnumbername).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Handl\u00e4ggarens gatuadress och nummer'; trace: judge: The translation 'Handl\u00e4ggarens gatuadress och nummer' reverses the standard order of 'street number and name' to 'street name and number'. The correct order would be 'Handl\u00e4ggarens gatunummer och gatuadress'. | attempt 1: judge: The translation specifies 'application' ('ans\u00f6kan'), which is an over-specification. The original 'preparer' could be preparing any type of form, not just an application. | attempt 2: judge: The translation uses 'gatuadress' (street address) for 'name', which is incorrect. The English 'street number and name' refers to the number and the name of the street, not the preparer's name. | attempt bound reached",
+      "field_id": "p7_line3a_streetnumbername"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[113] (id=p8_line3b_partnumber).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Uppgift 1, delnummer'; trace: judge: The translation 'delnummer' means 'part number', which is correct. However, the back-translation shows 'Line Number', indicating a potential inconsistency in the source data or a mistranslation. Assuming 'part number' is the intended meaning from the English source, the translation is correct, but if 'line number' is intended, it should be 'radnummer'. | attempt 1: no new correction",
+      "field_id": "p8_line3b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[117] (id=p8_line5b_partnumber[1]).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Uppgift 4, delnummer'; trace: judge: The translation 'delnummer' means 'part number', which is correct. However, the back-translation shows 'Line Number', indicating a potential inconsistency in the source data or a mistranslation. Assuming 'part number' is the intended meaning from the English source, the translation is correct, but if 'line number' is intended, it should be 'radnummer'. | attempt 1: no new correction",
+      "field_id": "p8_line5b_partnumber[1]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[121] (id=p8_line4b_partnumber).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Uppgift 2, sida 8, delnummer'; trace: judge: The translation 'delnummer' means 'part number', which is correct. However, the back-translation shows 'Line Number', indicating a potential inconsistency in the source data or a mistranslation. Assuming 'part number' is the intended meaning from the English source, the translation is correct, but if 'line number' is intended, it should be 'radnummer'. | attempt 1: no new correction",
+      "field_id": "p8_line4b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[125] (id=p8_line5b_partnumber).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Uppgift 3, sida 8, delnummer'; trace: judge: The translation 'delnummer' means 'part number', which is correct. However, the back-translation shows 'Line Number', indicating a potential inconsistency in the source data or a mistranslation. Assuming 'part number' is the intended meaning from the English source, the translation is correct, but if 'line number' is intended, it should be 'radnummer'. | attempt 1: no new correction",
+      "field_id": "p8_line5b_partnumber"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[129] (id=p8_line5b_partnumber[2]).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Uppgift 5, sida 8, delnummer'; trace: judge: The translation 'delnummer' means 'part number', which is correct. However, the back-translation shows 'Line Number', indicating a potential inconsistency in the source data or a mistranslation. Assuming 'part number' is the intended meaning from the English source, the translation is correct, but if 'line number' is intended, it should be 'radnummer'. | attempt 1: no new correction",
+      "field_id": "p8_line5b_partnumber[2]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_part_3_processing_information_p3].label_translations.swedish",
+      "message": "judge: The translation 'Handl\u00e4ggningsinformation' means 'Processing information' or 'Case handling information'. The English term 'Processing Information' in this context refers to information about how the application will be processed, not information about the person who prepared the form ('Preparer'). The back-translation 'Preparer Information' highlights the likely intended meaning, which should be translated as 'Information om den som f\u00f6rberett ans\u00f6kan' or similar.; rectified clean: 'Del 3. Handl\u00e4ggningsinformation' -> 'Del 3. Information om handl\u00e4ggning'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_preparer_s_full_name_p5].label_translations.swedish",
+      "message": "judge: The translation 'Handl\u00e4ggarens fullst\u00e4ndiga namn' means 'Case officer's full name'. The English term 'Preparer' refers to the person who helped fill out the form, not the government official who processes it. A more accurate translation would be 'Namn p\u00e5 den som f\u00f6rberett ans\u00f6kan'.; rectified clean: 'Handl\u00e4ggarens fullst\u00e4ndiga namn' -> 'F\u00f6rberedarens fullst\u00e4ndiga namn'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_preparer_s_mailing_address_p5].label_translations.swedish",
+      "message": "judge: The translation 'Handl\u00e4ggarens postadress' means 'Case officer's mailing address'. The English term 'Preparer' refers to the person who helped fill out the form, not the government official who processes it. A more accurate translation would be 'Postadress till den som f\u00f6rberett ans\u00f6kan'.; rectified clean: 'Handl\u00e4ggarens postadress' -> 'F\u00f6rberedarens postadress'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_preparer_s_contact_information_p5].label_translations.swedish",
+      "message": "judge: The translation 'Handl\u00e4ggarens kontaktinformation' means 'Case officer's contact information'. The English term 'Preparer' refers to the person who helped fill out the form, not the government official who processes it. A more accurate translation would be 'Kontaktinformation till den som f\u00f6rberett ans\u00f6kan'.; rectified clean: 'Handl\u00e4ggarens kontaktinformation' -> 'F\u00f6rberedarens kontaktinformation'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_preparer_s_statement_p6].label_translations.swedish",
+      "message": "judge: The translation 'Handl\u00e4ggarens f\u00f6rs\u00e4kran' means 'Case officer's statement'. The English term 'Preparer' refers to the person who helped fill out the form, not the government official who processes it. A more accurate translation would be 'F\u00f6rs\u00e4kran fr\u00e5n den som f\u00f6rberett ans\u00f6kan'.; rectified clean: 'Handl\u00e4ggarens f\u00f6rs\u00e4kran' -> 'F\u00f6rberedarens f\u00f6rs\u00e4kran'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_preparer_s_signature_p6].label_translations.swedish",
+      "message": "judge: The translation 'Handl\u00e4ggarens underskrift' means 'Case officer's signature'. The English term 'Preparer' refers to the person who helped fill out the form, not the government official who processes it. A more accurate translation would be 'Underskrift fr\u00e5n den som f\u00f6rberett ans\u00f6kan'.; rectified clean: 'Handl\u00e4ggarens underskrift' -> 'F\u00f6rberedarens underskrift'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[28] (id=p1_line8_male).spoken_name_translations.afrikaans",
+      "message": "judge: The translation 'kies geslag' means 'select gender'. The English original is 'select sex'. While often used interchangeably, 'sex' and 'gender' are distinct concepts, and for a government form, the more precise translation 'kies seks' should be used to match the original term.; rectified clean: 'kies geslag' -> 'kies seks'",
+      "field_id": "p1_line8_male"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[30] (id=p1_line10_citytownofbirth).spoken_name_translations.afrikaans",
+      "message": "judge: The translation 'geboortestad, -dorp of -gehug' uses 'gehug' for 'village'. While 'gehug' can mean a small settlement, 'dorpie' is a more common and direct translation for 'village' in this context, making 'geboortestad, -dorp of -dorpie' a more faithful rendering.; rectified clean: 'geboortestad, -dorp of -gehug' -> 'geboortestad, -dorp of -dorpie'",
+      "field_id": "p1_line10_citytownofbirth"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[11] (id=p1_unit_type6c_unit).options[suite].label_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0438\u0441'; trace: judge: The translation '\u041e\u0444\u0438\u0441' (Office) is too specific. 'Suite' in an address context can refer to a business office but also to a residential apartment or a specific unit number. A more general and appropriate translation would be '\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' or simply transliterating it as '\u0441\u044c\u044e\u0442'. | attempt 1: judge: The translation '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Premises/Room) is too general for 'Suite'. A more specific term like '\u041e\u0444\u0438\u0441' or '\u0410\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u044b' is needed depending on context, or even a transliteration like '\u0421\u044c\u044e\u0442' could be used. The current translation loses the specific meaning of 'Suite' in an address. | attempt 2: judge: The translation '\u041e\u0444\u0438\u0441/\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Office/Premises) is too specific. 'Suite' can also refer to an apartment or a set of rooms, not just an office. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0438\u0441\u0430/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b' would be more accurate. | attempt bound reached",
+      "field_id": "p1_unit_type6c_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[20] (id=p1_unit_type7b_unit).options[suite].label_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0438\u0441'; trace: judge: The translation '\u041e\u0444\u0438\u0441' (Office) is too specific. 'Suite' in an address context can refer to a business office but also to a residential apartment or a specific unit number. A more general and appropriate translation would be '\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' or simply transliterating it as '\u0441\u044c\u044e\u0442'. | attempt 1: judge: The translation '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Premises/Room) is too general for 'Suite'. A more specific term like '\u041e\u0444\u0438\u0441' or '\u0410\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u044b' is needed depending on context, or even a transliteration like '\u0421\u044c\u044e\u0442' could be used. The current translation loses the specific meaning of 'Suite' in an address. | attempt 2: judge: The translation '\u041e\u0444\u0438\u0441/\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Office/Premises) is too specific. 'Suite' can also refer to an apartment or a set of rooms, not just an office. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0438\u0441\u0430/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b' would be more accurate. | attempt bound reached",
+      "field_id": "p1_unit_type7b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[75] (id=p6_unit_type3b_unit).options[suite].label_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0438\u0441'; trace: judge: The translation '\u041e\u0444\u0438\u0441' (Office) is too specific. 'Suite' in an address context can refer to a business office but also to a residential apartment or a specific unit number. A more general and appropriate translation would be '\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' or simply transliterating it as '\u0441\u044c\u044e\u0442'. | attempt 1: judge: The translation '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Premises/Room) is too general for 'Suite'. A more specific term like '\u041e\u0444\u0438\u0441' or '\u0410\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u044b' is needed depending on context, or even a transliteration like '\u0421\u044c\u044e\u0442' could be used. The current translation loses the specific meaning of 'Suite' in an address. | attempt 2: judge: The translation '\u041e\u0444\u0438\u0441/\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Office/Premises) is too specific. 'Suite' can also refer to an apartment or a set of rooms, not just an office. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0438\u0441\u0430/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b' would be more accurate. | attempt bound reached",
+      "field_id": "p6_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[93] (id=p7_unit_type3b_unit).options[suite].label_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041e\u0444\u0438\u0441'; trace: judge: The translation '\u041e\u0444\u0438\u0441' (Office) is too specific. 'Suite' in an address context can refer to a business office but also to a residential apartment or a specific unit number. A more general and appropriate translation would be '\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' or simply transliterating it as '\u0441\u044c\u044e\u0442'. | attempt 1: judge: The translation '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Premises/Room) is too general for 'Suite'. A more specific term like '\u041e\u0444\u0438\u0441' or '\u0410\u043f\u0430\u0440\u0442\u0430\u043c\u0435\u043d\u0442\u044b' is needed depending on context, or even a transliteration like '\u0421\u044c\u044e\u0442' could be used. The current translation loses the specific meaning of 'Suite' in an address. | attempt 2: judge: The translation '\u041e\u0444\u0438\u0441/\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' (Office/Premises) is too specific. 'Suite' can also refer to an apartment or a set of rooms, not just an office. A more general term like '\u041d\u043e\u043c\u0435\u0440 \u043e\u0444\u0438\u0441\u0430/\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b' would be more accurate. | attempt bound reached",
+      "field_id": "p7_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[39] (id=p2_checkbox2[5]).options[my_existing_card_has_incorrect_data_because_of_department_of_homeland_security].label_translations.russian",
+      "message": "judge: The translation adds the word '\u043e\u0448\u0438\u0431\u043a\u0438' (error), which is not present in the English original. The original states the incorrect data is 'because of' the department, which could be for various reasons, not necessarily an error.; rectified clean: '\u041c\u043e\u044f \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043d\u0435\u0432\u0435\u0440\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0438\u0437-\u0437\u0430 \u043e\u0448\u0438\u0431\u043a\u0438 \u041c\u0438\u043d\u0438\u0441\u0442\u0435\u0440\u0441\u0442\u0432\u0430 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0439 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438' -> '\u041c\u043e\u044f \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043d\u0435\u0432\u0435\u0440\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0438\u0437-\u0437\u0430 \u043e\u0448\u0438\u0431\u043a\u0438 DHS'",
+      "field_id": "p2_checkbox2[5]"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[brown].label_translations.russian",
+      "message": "judge: The English 'Brown' refers to eye or hair color. The Russian translation '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u044b\u0439' specifically means 'chestnut-colored' and is almost exclusively used for hair color, not eye color. A more general and appropriate translation would be '\u041a\u0430\u0440\u0438\u0439' for eyes or '\u041a\u043e\u0440\u0438\u0447\u043d\u0435\u0432\u044b\u0439' as a general term for the color brown.; rectified clean: '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u044b\u0439' -> '\u041a\u043e\u0440\u0438\u0447\u043d\u0435\u0432\u044b\u0439'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[brown].label_translations.russian",
+      "message": "judge: The English 'Brown' refers to eye or hair color. The Russian translation '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u044b\u0439' specifically means 'chestnut-colored' and is almost exclusively used for hair color, not eye color. A more general and appropriate translation would be '\u041a\u0430\u0440\u0438\u0439' for eyes or '\u041a\u043e\u0440\u0438\u0447\u043d\u0435\u0432\u044b\u0439' as a general term for the color brown.; rectified clean: '\u041a\u0430\u0448\u0442\u0430\u043d\u043e\u0432\u044b\u0439' -> '\u041a\u043e\u0440\u0438\u0447\u043d\u0435\u0432\u044b\u0439'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=p3_eye_color).options[gray].label_translations.russian",
+      "message": "judge: The English 'Gray' refers to hair color. The Russian translation '\u0421\u0435\u0434\u043e\u0439' means 'gray-haired' or 'grizzled' and is an adjective describing a person's hair condition, not the color itself. The correct translation for the color gray is '\u0421\u0435\u0440\u044b\u0439'.; rectified clean: '\u0421\u0435\u0434\u043e\u0439' -> '\u0421\u0435\u0440\u044b\u0439'",
+      "field_id": "p3_eye_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[gray].label_translations.russian",
+      "message": "judge: The English 'Gray' refers to hair color. The Russian translation '\u0421\u0435\u0434\u043e\u0439' means 'gray-haired' or 'grizzled' and is an adjective describing a person's hair condition, not the color itself. The correct translation for the color gray is '\u0421\u0435\u0440\u044b\u0439'.; rectified clean: '\u0421\u0435\u0434\u043e\u0439' -> '\u0421\u0435\u0440\u044b\u0439'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=p3_hair_color).options[blond].label_translations.russian",
+      "message": "judge: The translation '\u0421\u0432\u0435\u0442\u043b\u044b\u0439' (Light) is a broader term than 'Blond'. A more precise translation for 'Blond' hair color is '\u0411\u043b\u043e\u043d\u0434' or '\u0411\u0435\u043b\u043e\u043a\u0443\u0440\u044b\u0439'.; rectified clean: '\u0421\u0432\u0435\u0442\u043b\u044b\u0439' -> '\u0411\u043b\u043e\u043d\u0434'",
+      "field_id": "p3_hair_color"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[9] (id=p1_line6a_incareofname).spoken_name_translations.russian",
+      "message": "judge: The translation '\u0418\u043c\u044f \u043b\u0438\u0446\u0430, \u043d\u0430 \u043f\u043e\u043f\u0435\u0447\u0435\u043d\u0438\u0438 \u043a\u043e\u0442\u043e\u0440\u043e\u0433\u043e \u0432\u044b \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u0435\u0441\u044c' (Name of the person in whose care you are) incorrectly reverses the meaning. 'In care of name' refers to the name of a person or organization that will receive mail on behalf of the applicant. The correct translation should be closer to '\u0418\u043c\u044f \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f (\u0435\u0441\u043b\u0438 \u043e\u0442\u043b\u0438\u0447\u0430\u0435\u0442\u0441\u044f)' or '\u0414\u043b\u044f \u043f\u0435\u0440\u0435\u0434\u0430\u0447\u0438 (\u0438\u043c\u044f)'.; rectified clean: '\u0418\u043c\u044f \u043b\u0438\u0446\u0430, \u043d\u0430 \u043f\u043e\u043f\u0435\u0447\u0435\u043d\u0438\u0438 \u043a\u043e\u0442\u043e\u0440\u043e\u0433\u043e \u0432\u044b \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u0435\u0441\u044c' -> '\u0414\u043b\u044f \u043f\u0435\u0440\u0435\u0434\u0430\u0447\u0438 (\u0438\u043c\u044f)'",
+      "field_id": "p1_line6a_incareofname"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[11] (id=p1_unit_type6c_unit).spoken_name_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0422\u0438\u043f \u043f\u043e\u0447\u0442\u043e\u0432\u043e\u0433\u043e \u0430\u0434\u0440\u0435\u0441\u0430'; trace: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u0447\u0442\u043e\u0432\u043e\u0433\u043e \u0430\u0434\u0440\u0435\u0441\u0430' (Type of mailing address) is ambiguous. The English 'mailing unit type' refers to the type of unit within a building (e.g., Apt, Ste, Flr). The translation should be more specific, like '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430, \u043e\u0444\u0438\u0441 \u0438 \u0442.\u0434.)'. | attempt 1: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0434\u043b\u044f \u043f\u043e\u0447\u0442\u044b' (Mail premises type) is an inaccurate and unnatural rendering for 'mailing unit type'. 'Unit' in an address context refers to an apartment, suite, etc. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0434\u043b\u044f \u043f\u043e\u0447\u0442\u043e\u0432\u043e\u0433\u043e \u0430\u0434\u0440\u0435\u0441\u0430' or simply '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u043f\u043e\u0447\u0442\u043e\u0432\u044b\u0439 \u0430\u0434\u0440\u0435\u0441)'. | attempt 2: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' (Premises type) is an inaccurate rendering of 'unit type'. 'Unit' in an address context refers to an apartment, suite, etc. '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' is too broad and can mean 'room' or 'premises'. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e/\u043e\u0444\u0438\u0441\u043d\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' or simply '\u041d\u043e\u043c\u0435\u0440 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b/\u043e\u0444\u0438\u0441\u0430'. | attempt bound reached",
+      "field_id": "p1_unit_type6c_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[20] (id=p1_unit_type7b_unit).spoken_name_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0422\u0438\u043f \u0430\u0434\u0440\u0435\u0441\u0430 \u0444\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u043f\u0440\u043e\u0436\u0438\u0432\u0430\u043d\u0438\u044f'; trace: judge: The translation '\u0422\u0438\u043f \u0430\u0434\u0440\u0435\u0441\u0430 \u0444\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u043f\u0440\u043e\u0436\u0438\u0432\u0430\u043d\u0438\u044f' (Type of physical address) is ambiguous. The English 'physical unit type' refers to the type of unit within a building (e.g., Apt, Ste, Flr). The translation should be more specific, like '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430, \u043e\u0444\u0438\u0441 \u0438 \u0442.\u0434.)'. | attempt 1: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0434\u043b\u044f \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0430\u0434\u0440\u0435\u0441\u0430' (Physical address premises type) is an inaccurate and unnatural rendering for 'physical unit type'. 'Unit' in an address context refers to an apartment, suite, etc. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0434\u043b\u044f \u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0430\u0434\u0440\u0435\u0441\u0430' or simply '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0444\u0438\u0437\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u0434\u0440\u0435\u0441)'. | attempt 2: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' (Premises type) is an inaccurate rendering of 'unit type'. 'Unit' in an address context refers to an apartment, suite, etc. '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' is too broad and can mean 'room' or 'premises'. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e/\u043e\u0444\u0438\u0441\u043d\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' or simply '\u041d\u043e\u043c\u0435\u0440 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b/\u043e\u0444\u0438\u0441\u0430'. | attempt bound reached",
+      "field_id": "p1_unit_type7b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[75] (id=p6_unit_type3b_unit).spoken_name_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0422\u0438\u043f \u0430\u0434\u0440\u0435\u0441\u0430 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430'; trace: judge: The translation '\u0422\u0438\u043f \u0430\u0434\u0440\u0435\u0441\u0430 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430' (Interpreter's address type) is too generic. The English 'unit type' specifically refers to the type of sub-address unit (e.g., Apt, Ste, Flr). A more accurate translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' or similar, but the current translation is misleadingly broad. | attempt 1: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430' (Interpreter premises type) is an inaccurate and unnatural rendering for 'interpreter's unit type'. 'Unit' in an address context refers to an apartment, suite, etc. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430' or simply '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0430\u0434\u0440\u0435\u0441 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430)'. | attempt 2: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' (Premises type) is an inaccurate rendering of 'unit type'. 'Unit' in an address context refers to an apartment, suite, etc. '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' is too broad and can mean 'room' or 'premises'. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e/\u043e\u0444\u0438\u0441\u043d\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' or simply '\u041d\u043e\u043c\u0435\u0440 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b/\u043e\u0444\u0438\u0441\u0430'. | attempt bound reached",
+      "field_id": "p6_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[93] (id=p7_unit_type3b_unit).spoken_name_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0422\u0438\u043f \u0430\u0434\u0440\u0435\u0441\u0430 \u043b\u0438\u0446\u0430, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0433\u043e \u0430\u043d\u043a\u0435\u0442\u0443'; trace: judge: The translation \"\u0422\u0438\u043f \u0430\u0434\u0440\u0435\u0441\u0430\" means \"Address type,\" which is too general. The original \"unit type\" refers to a specific part of an address like 'Apt', 'Ste', etc. A more accurate translation would be \"\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f\" or similar. | attempt 1: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u0438\u0432\u0448\u0435\u0433\u043e \u043b\u0438\u0446\u0430' (Preparer premises type) is an inaccurate and unnatural rendering for 'preparer's unit type'. 'Unit' in an address context refers to an apartment, suite, etc. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u0438\u0432\u0448\u0435\u0433\u043e \u043b\u0438\u0446\u0430' or simply '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0430\u0434\u0440\u0435\u0441 \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u0438\u0432\u0448\u0435\u0433\u043e \u043b\u0438\u0446\u0430)'. | attempt 2: judge: The translation '\u0422\u0438\u043f \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' (Premises type) is an inaccurate rendering of 'unit type'. 'Unit' in an address context refers to an apartment, suite, etc. '\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435' is too broad and can mean 'room' or 'premises'. A better translation would be '\u0422\u0438\u043f \u0436\u0438\u043b\u043e\u0433\u043e/\u043e\u0444\u0438\u0441\u043d\u043e\u0433\u043e \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f' or simply '\u041d\u043e\u043c\u0435\u0440 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b/\u043e\u0444\u0438\u0441\u0430'. | attempt bound reached",
+      "field_id": "p7_unit_type3b_unit"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[104] (id=p7_checkbox7).spoken_name_translations.russian",
+      "message": "judge: The translation omits 'accredited representative' from the original English phrase 'attorney or not'. The back-translation correctly identifies this omission. The translation should be '\u042f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u043b\u0438\u0446\u043e, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0435 \u0430\u043d\u043a\u0435\u0442\u0443, \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0438\u043b\u0438 \u0430\u043a\u043a\u0440\u0435\u0434\u0438\u0442\u043e\u0432\u0430\u043d\u043d\u044b\u043c \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u0435\u043c'.; rectified clean: '\u042f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u043b\u0438\u0446\u043e, \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0432\u0448\u0435\u0435 \u0430\u043d\u043a\u0435\u0442\u0443, \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0438\u043b\u0438 \u043d\u0435\u0442' -> '\u042f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043b\u0438 \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u0438\u0432\u0448\u0435\u0435 \u043b\u0438\u0446\u043e \u0430\u0434\u0432\u043e\u043a\u0430\u0442\u043e\u043c \u0438\u043b\u0438 \u043d\u0435\u0442'",
+      "field_id": "p7_checkbox7"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_interpreter_s_certification_p5].label_translations.russian",
+      "message": "judge: The translation '\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430' (Interpreter's Confirmation/Declaration) is a less precise term for 'Certification'. A more standard and legally recognized term in this context is '\u0417\u0430\u0432\u0435\u0440\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430', which more accurately conveys the act of certifying the translation's accuracy.; rectified clean: '\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430' -> '\u0417\u0430\u0432\u0435\u0440\u0435\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0447\u0438\u043a\u0430'",
+      "field_id": null
+    }
+  ],
+  "verify_counts": {
+    "afrikaans": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 2,
+      "rectified": 2,
+      "unresolved": 0
+    },
+    "arabic": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 2,
+      "judge_flagged": 6,
+      "rectified": 5,
+      "unresolved": 3
+    },
+    "chinese": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 21,
+      "rectified": 21,
+      "unresolved": 0
+    },
+    "dutch": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 5,
+      "rectified": 5,
+      "unresolved": 0
+    },
+    "french": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 12,
+      "rectified": 11,
+      "unresolved": 1
+    },
+    "german": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 5,
+      "rectified": 3,
+      "unresolved": 2
+    },
+    "hindi": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 4,
+      "rectified": 3,
+      "unresolved": 1
+    },
+    "italian": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 6,
+      "rectified": 6,
+      "unresolved": 0
+    },
+    "korean": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 8,
+      "rectified": 8,
+      "unresolved": 0
+    },
+    "persian": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 15,
+      "rectified": 13,
+      "unresolved": 2
+    },
+    "portuguese": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 15,
+      "rectified": 15,
+      "unresolved": 0
+    },
+    "russian": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 12,
+      "rectified": 7,
+      "unresolved": 5
+    },
+    "spanish": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 34,
+      "rectified": 34,
+      "unresolved": 0
+    },
+    "swedish": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 16,
+      "rectified": 7,
+      "unresolved": 9
+    },
+    "tagalog": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 18,
+      "rectified": 18,
+      "unresolved": 0
+    },
+    "ukrainian": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 14,
+      "rectified": 8,
+      "unresolved": 6
+    },
+    "urdu": {
+      "available": true,
+      "checked": 274,
+      "mechanical": 0,
+      "judge_flagged": 2,
+      "rectified": 2,
+      "unresolved": 0
+    }
+  }
+}
