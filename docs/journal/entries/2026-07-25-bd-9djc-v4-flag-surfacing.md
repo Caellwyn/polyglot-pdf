@@ -78,8 +78,17 @@ every authoring surface.
 ## Doc freshness
 
 - `docs/sprint_14_translation-quality-gate_plan.md` -- updated per the
-  maintainer rider (V5 scope/cost + purpose note). No component/standards
-  doc tracks the flag-surfacing seam specifically; reviewed and left as-is.
+  maintainer rider (V5 scope/cost + purpose note).
+- `docs/technical_guide.md` -- bumped: the translate-options route row now
+  records the flags return + provenance persist (the one stale doc whose
+  Tracks glob covers a file this branch changed).
+- The other STALE docs the freshness checker flagged (auth, config-deployment,
+  context-compression, jit-schema, schema-forms, tool-call-flow, voice-ai,
+  ai-models, confirmation-and-audit, hipaa-pii-policy, logging-and-cost,
+  risk-rating, section-reset-deprecation, si-reduction,
+  stateless-architecture, terminology, testing, voice-and-vad, ws-protocol)
+  track files this branch did NOT touch -- they were stale before this
+  branch; left as-is per the closeout rule.
 - CLAUDE.md untouched.
 
 ## Files touched
