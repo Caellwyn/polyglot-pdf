@@ -24,6 +24,14 @@ native-speaker review per language," with no contacts or funds yet. **This
 epic is the automated substitute for that review, with the funded human
 review filed as a funding-gated bead (maintainer directive 2026-07-23).**
 
+**Purpose note -- these translations are MODEL-FACING (maintainer directive
+2026-07-25):** the baked strings are consumed by the voice model to keep its
+spoken language consistent (field spoken names, option labels, section titles
+in the session language -- no English readouts), never rendered to users as a
+translated form. There is NO user-facing display-translation path (that
+remains parked, above), which is also the compliance posture: the app helps
+fill the official English form; it does not present a translated one.
+
 Maintainer decisions (2026-07-23, in-chat):
 - Warn-only is useless to an editor who doesn't speak the language: the gate
   must RECTIFY -- a model pass that, given the original + current translation
@@ -220,14 +228,15 @@ per-bake spend of ~cents.
 Per kit-language: base = 1 back-translate (lite) + judge calls CHUNKED at
 ~25-50 items (2-6 judge calls for a large kit). Each rectify attempt adds
 rectify (pro) + fresh back-translate (lite) + chunked re-judge (pro), max 2
-attempts. The mechanical lint is free. Across 4 kits x 17 languages = 68
+attempts. The mechanical lint is free. V5 scope is the 2 SHIPPED kits, i-90 +
+w7 (maintainer decision 2026-07-25; the original plan sized 4 kits) = 34
 kit-languages:
-- Full re-bake (context+glossary+temp0 forward pass): 68 pro calls, ~$2-3.
-- Verify worst case with chunking: ~1,100 calls (~700 pro) ~= **$7-8**;
-  realistic: ~350 calls ~= **$3**.
-- The combined V5 re-bake+audit is ONE maintainer ask (~$10-11 worst case
-  all-in). The V1 pilot (1 kit x 3 languages, ~$0.25) needs no separate
-  go-ahead (pre-authorized at plan approval).
+- Full re-bake (context+glossary+temp0 forward pass): 34 pro calls, ~$1-1.5.
+- Verify worst case with chunking: ~550 calls (~350 pro) ~= **$3-4**;
+  realistic: ~175 calls ~= **$1.50**.
+- The combined V5 re-bake+audit is ONE maintainer ask (**~$4-5 worst case
+  all-in**, 2-kit scope). The V1 pilot (1 kit x 3 languages, ~$0.25) needed no
+  separate go-ahead (pre-authorized at plan approval).
 
 ## Exit rubric (epic `polyglot-pdf-sekc`)
 
@@ -253,7 +262,7 @@ the real glossary + lint module; V1 gates V3 -- the epic's one probe gate.)
 | `polyglot-pdf-i36i` (V1) | Standalone spike: full loop on 1 kit x es/zh/ur (ur over af, review round 3). Planted errors = mechanical corruptions of Pub 850 gold. Measures (a)-(e) incl. the mechanical half-success keep-rule plant. GATE for V3. | `scripts/spikes/translation_gate_probe.py` + data + findings | 1 |
 | `polyglot-pdf-9ikj` (V3) | The loop in `bake_label_translations` (lint -> back-translate -> judge -> bounded rectify, full-loop re-entry, provenance-stripped re-judge) behind default-ON `TRANSLATION_VERIFY_ENABLED`; runtime fallback onto `translate_items`; flag taxonomy into report; test migration. | `backend/services/option_translation.py`, `backend/dependencies.py`, `backend/config.py`, bake tests | 3 |
 | `polyglot-pdf-9djc` (V4) | Flag surfacing: CLI FLAGS block + `--flags-out` + `--no-verify`; extraction provenance + console count; editor route `flags` -> ValidationPanel. | CLI script, `extract_form.py`, `editor_kit_routes.py`, `schema-editor/src/` | 3+4 (surfacing half) |
-| `polyglot-pdf-hif1` (V5) | Pre-re-bake git tag; re-bake 4 kits x 17 languages THROUGH the pipeline; per-language UNRESOLVED+ambiguous flag list (low-resource first) + findings; cross-family judge comparison via Claude subagent (once, spike-only). THE one maintainer-ask spend. | `form-kits/` | 2+4 |
+| `polyglot-pdf-hif1` (V5) | Pre-re-bake git tag; re-bake the 2 shipped kits (i-90 + w7; scope set 2026-07-25, ~$4-5 worst case) x 17 languages THROUGH the pipeline; per-language UNRESOLVED+ambiguous flag list (low-resource first) + findings; cross-family judge comparison via Claude subagent (once, spike-only). THE one maintainer-ask spend. | `form-kits/` | 2+4 |
 
 - **V6 (risk-tiered vignette check): deliberately NOT filed** -- file only if
   V5's flag rates suggest residual risk (plan decision).

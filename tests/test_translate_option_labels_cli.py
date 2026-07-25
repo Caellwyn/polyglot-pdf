@@ -162,3 +162,113 @@ def test_missing_schema_path_exits_2(tmp_path, monkeypatch, capsys):
     rc = tol.main(["--kit", str(tmp_path / "nope")])
     assert rc == 2
     assert "not found" in capsys.readouterr().out
+
+
+# --- Flag surfacing (bd polyglot-pdf-9djc) ---------------------------------
+
+
+class AmbiguousTextAI(FakeTextAI):
+    """FakeTextAI that also self-flags every option-set item as ambiguous --
+    a real report-channel flag that flows with zero judge/back-translate
+    stubbing (the planted-flag path for the CLI surface)."""
+
+    async def translate_items(self, items, language_name, language_code, *,
+                              form_name=None, glossary_context=None):
+        raw = await super().translate_items(
+            items, language_name, language_code,
+            form_name=form_name, glossary_context=glossary_context)
+        if raw is not None:
+            raw["ambiguous"] = [
+                i["id"] for i in items if i["kind"] == "option-set"]
+        return raw
+
+
+def _boobytrap_lite(monkeypatch):
+    """Fail the test if anything tries to build the verify lite adapter --
+    the skipped-gate pins below prove the loop truly does not run."""
+    import backend.services.option_translation as _ot
+
+    def _boom():
+        raise AssertionError("verify lite adapter built despite the opt-out")
+    monkeypatch.setattr(_ot, "_build_verify_lite_ai", _boom)
+
+
+def test_flags_block_and_artifact(kit, monkeypatch, capsys, tmp_path):
+    """A bake with planted flags prints the FLAGS summary block (rule + path
+    only -- messages can carry foreign script, cp1252 hazard) and writes the
+    full findings to the --flags-out JSON artifact (exit criterion 1, CLI
+    surface)."""
+    _inject(monkeypatch, AmbiguousTextAI())
+    flags_path = tmp_path / "flags.json"
+
+    rc = tol.main(["--kit", str(kit), "--languages", "spanish,french",
+                   "--flags-out", str(flags_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    # Verify gate is ON by default and says so on this surface.
+    assert "verify: ON" in out
+    assert "FLAGS:" in out
+    assert "translation-ambiguous-source" in out
+    # Paths (rule + kit location) print; messages do not (cp1252 rule).
+    assert "label_translations.spanish" in out
+    assert "under-determined" not in out
+    assert f"wrote flags artifact {flags_path}" in out
+
+    raw = flags_path.read_bytes()
+    assert all(b < 128 for b in raw)  # ensure_ascii artifact
+    artifact = json.loads(raw)
+    assert artifact["schema"] == str(kit / "schema.json")
+    assert artifact["verify_enabled"] is True
+    flags = artifact["flags"]
+    assert flags and all(f["severity"] == "WARNING" for f in flags)
+    assert {f["rule"] for f in flags} == {"translation-ambiguous-source"}
+    # The artifact carries what the console withheld: the full messages.
+    assert all("under-determined" in f["message"] for f in flags)
+
+
+def test_flags_out_written_even_when_flag_free(kit, monkeypatch, tmp_path):
+    _inject(monkeypatch, FakeTextAI())
+    flags_path = tmp_path / "flags.json"
+    rc = tol.main(["--kit", str(kit), "--languages", "spanish",
+                   "--flags-out", str(flags_path)])
+    assert rc == 0
+    artifact = json.loads(flags_path.read_text(encoding="utf-8"))
+    assert artifact["flags"] == []
+
+
+def test_no_verify_skips_the_loop_and_says_so(kit, monkeypatch, capsys):
+    """Exit criterion 2 (flag path): --no-verify never touches the verify
+    machinery and the skip is visible on the CLI surface."""
+    fake = AmbiguousTextAI()
+    monkeypatch.setattr(tol, "_build_text_ai", lambda *a, **k: fake)
+    _boobytrap_lite(monkeypatch)
+
+    rc = tol.main(["--kit", str(kit), "--no-verify",
+                   "--languages", "spanish,french"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "verify: skipped (--no-verify)" in out
+    assert "UNVERIFIED" in out
+    # Ambiguity self-flags come from the FORWARD call, so the FLAGS block
+    # still surfaces them even with the verify loop off.
+    assert "FLAGS:" in out
+
+
+def test_env_disabled_verify_skips_and_says_so(kit, monkeypatch, capsys):
+    """Exit criterion 2 (env path): TRANSLATION_VERIFY_ENABLED=false skips
+    the loop with the reason named on the CLI surface."""
+    from types import SimpleNamespace
+
+    from backend import config
+    monkeypatch.setattr(
+        config, "get_settings",
+        lambda: SimpleNamespace(TRANSLATION_VERIFY_ENABLED=False))
+    fake = FakeTextAI()
+    monkeypatch.setattr(tol, "_build_text_ai", lambda *a, **k: fake)
+    _boobytrap_lite(monkeypatch)
+
+    rc = tol.main(["--kit", str(kit), "--languages", "spanish,french"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "verify: skipped (TRANSLATION_VERIFY_ENABLED=false)" in out
+    assert "UNVERIFIED" in out

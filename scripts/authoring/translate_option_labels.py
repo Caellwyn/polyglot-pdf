@@ -34,6 +34,16 @@ Usage:
     ... --check                      # report only, write nothing
     ... --languages spanish,french   # subset (lowercase names)
     ... --force                      # retranslate + overwrite canonical keys
+    ... --no-verify                  # skip the verify/rectify gate (bd 9djc;
+                                     # default ON via TRANSLATION_VERIFY_ENABLED)
+    ... --flags-out flags.json       # write the full flag list (messages
+                                     # included) as a JSON artifact
+
+Flag surfacing (bd polyglot-pdf-9djc): a write run prints a FLAGS summary
+block -- counts by rule plus each flag's rule + kit path. Flag MESSAGES may
+quote foreign-script strings, so the console block never prints them (the
+cp1252 rule above); --flags-out carries the complete findings, ensure_ascii.
+Flags are WARNINGs by contract and never change the exit code.
 
 Exit codes:
     0  fully covered (nothing missing) / clean write, all languages succeeded
@@ -98,6 +108,31 @@ def _build_text_ai(model: str, project: str | None, location: str):
     )
 
 
+def _ascii(text: str) -> str:
+    """cp1252-safe console form of a possibly non-ASCII string (rule in the
+    module docstring): escape, never crash the Windows default console."""
+    return str(text).encode("ascii", "backslashreplace").decode("ascii")
+
+
+def _resolve_verify(check: bool, no_verify: bool) -> tuple[bool, str | None]:
+    """The effective verify-gate state + the skip reason to surface (bd 9djc).
+
+    --check is report-only (zero model calls), so the gate is force-off there
+    with no message -- nothing gets verified because nothing gets translated.
+    Otherwise --no-verify wins, then TRANSLATION_VERIFY_ENABLED (the bake
+    would resolve the same setting itself; resolving it HERE lets the CLI say
+    so -- the opt-out must be discoverable on this surface).
+    """
+    if check:
+        return False, None
+    if no_verify:
+        return False, "--no-verify"
+    from backend.config import get_settings  # noqa: E402 lazy (heavy import)
+    if not get_settings().TRANSLATION_VERIFY_ENABLED:
+        return False, "TRANSLATION_VERIFY_ENABLED=false"
+    return True, None
+
+
 def translate_kit(
     schema_path: str,
     languages: dict[str, str],
@@ -107,6 +142,8 @@ def translate_kit(
     model: str,
     project: str | None,
     location: str,
+    no_verify: bool = False,
+    flags_out: str | None = None,
 ) -> int:
     """Bake translations into one schema file. Returns the exit code."""
     with open(schema_path, encoding="utf-8") as fh:
@@ -125,8 +162,16 @@ def translate_kit(
     else:
         text_ai = _build_text_ai(model, project, location)
 
+    verify, skip_reason = _resolve_verify(check, no_verify)
+    if not check:
+        # The verify gate's state is part of the CLI surface (bd 9djc exit
+        # criterion): baking UNVERIFIED must be visible, not silent.
+        print("verify: ON (flags surface below)" if verify
+              else f"verify: skipped ({skip_reason}) -- translations bake "
+                   f"UNVERIFIED")
+
     report = asyncio.run(bake_label_translations(
-        schema, text_ai, languages, only_missing=not force))
+        schema, text_ai, languages, only_missing=not force, verify=verify))
 
     mode = "CHECK" if check else "PATCH"
     missing_total = 0
@@ -135,6 +180,16 @@ def translate_kit(
         # Spoken-name gaps count toward the --check exit code too (bd tupu.1);
         # .get keeps the CLI tolerant of an older bake report shape.
         missing_total += entry["missing"] + entry.get("names_missing", 0)
+        verify_counts = entry.get("verify") or {}
+        verify_note = ""
+        if verify_counts:
+            if verify_counts.get("available"):
+                verify_note = (
+                    f" verify=checked:{verify_counts.get('checked', 0)}"
+                    f"/rectified:{verify_counts.get('rectified', 0)}"
+                    f"/unresolved:{verify_counts.get('unresolved', 0)}")
+            else:
+                verify_note = " verify=UNAVAILABLE (baked unverified)"
         print(f"[{mode}] {schema_path} {name}: labels={entry['labels']} "
               f"missing={entry['missing']} translated={entry['translated']} "
               f"options_updated={entry['options_updated']} "
@@ -142,7 +197,45 @@ def translate_kit(
               f"names_missing={entry.get('names_missing', 0)} "
               f"names_translated={entry.get('names_translated', 0)} "
               f"fields_updated={entry.get('fields_updated', 0)}"
+              + verify_note
               + (" FAILED" if entry["failed"] else ""))
+
+    # FLAGS summary block (bd 9djc): rule + path only on the console (messages
+    # can quote foreign-script strings -- cp1252 hazard); the full findings go
+    # to --flags-out. Ambiguity self-flags flow here even with verify off (they
+    # come from the forward call), so this block is not gated on `verify`.
+    flags = report.get("flags") or []
+    if flags:
+        by_rule: dict[str, int] = {}
+        for flag in flags:
+            rule = str(flag.get("rule", "?"))
+            by_rule[rule] = by_rule.get(rule, 0) + 1
+        summary = ", ".join(f"{r}={n}" for r, n in sorted(by_rule.items()))
+        print(f"FLAGS: {len(flags)} ({summary}) -- human-review worklist; "
+              f"WARNINGs only, never blocks")
+        shown = flags[:20]
+        for flag in shown:
+            print(f"  {_ascii(flag.get('rule'))} {_ascii(flag.get('path'))}")
+        if len(flags) > len(shown):
+            print(f"  ... and {len(flags) - len(shown)} more "
+                  f"(--flags-out carries the full list)")
+    if flags_out:
+        # Written even when empty so automation can rely on the artifact
+        # existing; ensure_ascii (the default) keeps it cp1252-safe to cat.
+        artifact = {
+            "schema": schema_path,
+            "verify_enabled": verify,
+            "flags": flags,
+            "verify_counts": {
+                name: entry["verify"]
+                for name, entry in sorted(report["languages"].items())
+                if entry.get("verify")
+            },
+        }
+        with open(flags_out, "w", encoding="utf-8") as fh:
+            json.dump(artifact, fh, indent=2)
+            fh.write("\n")
+        print(f"wrote flags artifact {flags_out}")
 
     if check:
         # A write run changes the file when labels need translating OR when an
@@ -188,6 +281,13 @@ def main(argv: list[str] | None = None) -> int:
                     help="Retranslate everything and overwrite the canonical "
                          "(lowercase-name) keys -- use after option labels "
                          "were renamed.")
+    ap.add_argument("--no-verify", action="store_true",
+                    help="Skip the verify/rectify gate (bd 9djc); the default "
+                         "is ON (TRANSLATION_VERIFY_ENABLED) and bakes only "
+                         "verified translations. Skipping bakes UNVERIFIED.")
+    ap.add_argument("--flags-out", default=None, metavar="PATH",
+                    help="Write the full verify/ambiguity flag list (messages "
+                         "included) as a JSON artifact at PATH.")
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help=f"Gemini model for the batch calls "
                          f"(default: {DEFAULT_MODEL})")
@@ -216,6 +316,7 @@ def main(argv: list[str] | None = None) -> int:
         schema_path, languages,
         check=args.check, force=args.force,
         model=args.model, project=args.project, location=args.location,
+        no_verify=args.no_verify, flags_out=args.flags_out,
     )
 
 

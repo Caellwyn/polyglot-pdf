@@ -46,6 +46,13 @@ const RULE_LABELS: Record<string, string> = {
   'composite-depth': 'Nested condition too deep',
   'show-if-cycle': 'Circular show-if dependency',
   'dump-widget-multiclaim': 'PDF widget claimed twice',
+  // Translation verify/rectify gate flags (bd polyglot-pdf-9djc): persisted by
+  // the bake into _bakeoff provenance and re-emitted by the backend linter.
+  // All WARNING -- the human-review worklist for baked translations.
+  'translation-drift-rectified': 'Translation drift (auto-corrected)',
+  'translation-drift-unresolved': 'Translation drift (needs human review)',
+  'translation-ambiguous-source': 'Ambiguous source text',
+  'translation-mechanical': 'Translation mechanical check',
 };
 
 // Local (non-hosted) delivery mode has no backend and no access code to reach

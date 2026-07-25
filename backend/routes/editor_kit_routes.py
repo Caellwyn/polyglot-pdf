@@ -221,7 +221,8 @@ class TranslateOptionsResponse(BaseModel):
     post-pass and the translate_option_labels.py CLI run) and stored. Idempotent:
     already-covered options are untouched, so re-running is cheap and fills any
     failed language's gap. errorCount/warningCount are the post-bake lint counts
-    (baking only ADDS label_translations, so they should not move)."""
+    (baking only ADDS label_translations, so errors should not move; WARNINGs
+    may rise by the persisted translation-flag count -- see `flags`)."""
 
     changed: bool                     # did the stored schema change at all
     model: str                        # the Gemini model that translated
@@ -230,6 +231,12 @@ class TranslateOptionsResponse(BaseModel):
                                       # options_updated, failed, spoken_names,
                                       # names_missing, names_translated,
                                       # fields_updated} (bd tupu.1)
+    # Verify/rectify gate flags from THIS bake (bd polyglot-pdf-9djc):
+    # LintFinding-shaped dicts (severity=WARNING, rule=translation-*, path,
+    # message, field_id). Also persisted into the stored schema's
+    # _bakeoff.authoring.option_translation slot, where lint re-emits them --
+    # so the ValidationPanel shows them on every later lint pass too.
+    flags: list[dict] = []
     errorCount: int                   # lint ERRORs after the bake
     warningCount: int                 # lint WARNINGs after the bake
 
@@ -671,8 +678,16 @@ async def translate_editor_kit_options(
                  if n != "english"}
     report = await bake_label_translations(
         schema, text_ai, languages, only_missing=not force)
+    flags = report.get("flags") or []
 
-    if report["changed"]:
+    if report["changed"] or flags:
+        # Persist the bake report -- flags included -- in the SAME provenance
+        # slot extraction's step 3f writes (bd polyglot-pdf-9djc): lint re-emits
+        # the flags from there, so the ValidationPanel surfaces the translation
+        # worklist on this and every later lint pass. Before this, the route
+        # spent the verify credits and DISCARDED the findings (V3 review note).
+        authoring = schema.setdefault("_bakeoff", {}).setdefault("authoring", {})
+        authoring["option_translation"] = dict(report, model=model)
         try:
             await store.put_schema(kit_id, schema, schema_file)
         except FormKitStoreError as exc:
@@ -688,11 +703,12 @@ async def translate_editor_kit_options(
     _log.info("editor_kit_options_translated", kit_id=kit_id, role=role,
               model=model, changed=report["changed"], force=force,
               failed_languages=report["failed_languages"],
+              flag_count=len(flags),
               errors_after=error_count, warnings_after=warning_count)
     return TranslateOptionsResponse(
         changed=report["changed"], model=model,
         failedLanguages=report["failed_languages"],
-        languages=report["languages"],
+        languages=report["languages"], flags=flags,
         errorCount=error_count, warningCount=warning_count,
     )
 
