@@ -91,8 +91,12 @@ ENTIRE final baked set (all ~6,000 pairs, per language, glossary in hand,
 zero new API keys -- agent harness only) as a cross-family check on the
 Gemini-judged pipeline:
 
-- Claude flagged **7** strings; Gemini's final worklist has 81 distinct
-  strings; overlap **1** (a French option that both families flagged).
+- Claude flagged **7** strings; Gemini's final worklist has **81 distinct
+  (language, kit, source-string) triples** (the 87 worklist ENTRIES dedupe
+  to 81 because fan-out records one source at several kit paths); overlap
+  **1** (a French option that both families flagged). Full methodology,
+  per-flag detail, and the cost derivation are committed in
+  [`v5-rebake/cross-family-comparison.md`](v5-rebake/cross-family-comparison.md).
 - **Claude accepted 80 of Gemini's 81 kept-original worklist strings** --
   strong evidence the keep rules are safe and that most of the unresolved
   worklist is judge over-flagging, not real drift (consistent with cluster
