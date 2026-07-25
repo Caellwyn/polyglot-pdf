@@ -39,6 +39,7 @@ ASCII only.
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.models import conditional_vocabulary as vocab
@@ -119,6 +120,68 @@ def _migrate_top_level_required(fields: List[dict], repairs: List[dict]) -> None
             "action": "migrate-top-level-required",
             "path": path,
             "detail": detail,
+            "error": False,
+        })
+
+
+_DISAMBIG_SUFFIX_RE = re.compile(r"^(.*?)\s+(\d+)$")
+
+
+def _strip_spoken_name_disambiguation(
+    fields: List[dict], repairs: List[dict]
+) -> None:
+    """Strip the extraction disambiguation counter off a spoken_name (bd che4).
+
+    When the LLM extractor meets two fields that would share a spoken_name
+    (e.g. the i-90's two Alien Registration Number boxes, whose PDF name is
+    identical) it appends a bookkeeping integer -- 'alien registration
+    number 1' / '... 2'. But spoken_name is VOICE-MODEL-FACING, and that
+    model, by context-management design, sees only the CURRENT field -- it
+    does not know a '2' exists, so the trailing '1' conveys nothing and is
+    simply read aloud (in every language, now that spoken_names are
+    translated). Disambiguation that a MULTI-field model (the secretary)
+    needs belongs in help.instructions, not here (maintainer 2026-07-25).
+
+    Precision: only a bare trailing integer is stripped, and only from a
+    CLUSTER -- two or more fields whose spoken_names share the same base and
+    differ only by that trailing integer. This spares a SEMANTIC trailing
+    number that no sibling disambiguates: a lone 'Line 12d you born before
+    1961' (a year) or '301.9100-2' (a regulation cite, which the space-
+    delimited pattern never even matches) is left untouched. Idempotent: a
+    second run finds no cluster (the suffixes are gone) and does nothing.
+
+    A stripped spoken_name may now equal a sibling's -- that is CORRECT and
+    intended (duplicate spoken_names are fine; the voice model never sees two
+    at once). Callers that translated the old suffixed value must re-bake the
+    affected fields' spoken_name_translations (the stale digit rides the
+    translation too)."""
+    clusters: Dict[str, List[int]] = {}
+    parsed: List[Optional[tuple]] = []
+    for f in fields:
+        sn = f.get("spoken_name")
+        m = _DISAMBIG_SUFFIX_RE.match(sn.strip()) if isinstance(sn, str) else None
+        if m:
+            base = m.group(1)
+            parsed.append((base, base.lower()))
+            clusters.setdefault(base.lower(), []).append(int(m.group(2)))
+        else:
+            parsed.append(None)
+    for i, f in enumerate(fields):
+        info = parsed[i]
+        if info is None:
+            continue
+        base, base_key = info
+        # A cluster is >= 2 fields sharing the base -- proof the trailing int
+        # is a disambiguation counter, not a semantic number.
+        if len(clusters.get(base_key, [])) < 2:
+            continue
+        old = f.get("spoken_name")
+        f["spoken_name"] = base
+        repairs.append({
+            "action": "strip-spoken-name-disambiguation",
+            "path": f"fields[{i}] (id={f.get('id')})",
+            "detail": f"{old!r} -> {base!r} (voice-facing spoken_name needs "
+                      "no disambiguation counter)",
             "error": False,
         })
 
@@ -794,6 +857,10 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
     # Legacy top-level `required` -> validation.required (bd 0x10.4) before
     # anything else: it is independent of the condition/slug machinery.
     _migrate_top_level_required(fields, repairs)
+
+    # Strip extraction disambiguation counters off voice-facing spoken_names
+    # (bd che4) -- likewise independent of the slug/condition machinery.
+    _strip_spoken_name_disambiguation(fields, repairs)
 
     alias_hits: Dict[str, int] = {}
 

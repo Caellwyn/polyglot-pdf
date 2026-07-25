@@ -1011,3 +1011,66 @@ def test_required_migration_is_idempotent():
     assert not any(
         r["action"] == "migrate-top-level-required" for r in repairs2
     )
+
+
+# --------------------------------------------------------------------------- #
+# Voice-facing spoken_name disambiguation stripping (bd polyglot-pdf-che4).
+# --------------------------------------------------------------------------- #
+
+def test_disambiguation_counter_stripped_from_clustered_spoken_names():
+    # Two fields whose spoken_names differ only by a trailing counter (the
+    # i-90 alien-number shape) -- both lose the counter.
+    schema = _schema([
+        _text_field("a1", spoken_name="alien registration number 1"),
+        _text_field("a2", spoken_name="alien registration number 2"),
+    ])
+    repaired, repairs = repair(schema)
+    names = [f["spoken_name"] for f in repaired["fields"]]
+    assert names == ["alien registration number", "alien registration number"]
+    stripped = [r for r in repairs
+                if r["action"] == "strip-spoken-name-disambiguation"]
+    assert len(stripped) == 2
+    # Duplicate spoken_names are intended -- the voice model never sees two.
+
+
+def test_semantic_trailing_number_is_never_stripped():
+    # A YEAR and a lone number: no sibling shares the base, so neither is a
+    # disambiguation cluster -- both survive untouched (the f1040 shape).
+    schema = _schema([
+        _text_field("y1", spoken_name="Line 12d you born before 1961"),
+        _text_field("y2", spoken_name="Line 12d spouse born before 1961"),
+        _text_field("reg", spoken_name="Filed pursuant to 301.9100-2"),
+    ])
+    repaired, repairs = repair(schema)
+    names = [f["spoken_name"] for f in repaired["fields"]]
+    assert names == [
+        "Line 12d you born before 1961",
+        "Line 12d spouse born before 1961",
+        "Filed pursuant to 301.9100-2",
+    ]
+    assert not any(r["action"] == "strip-spoken-name-disambiguation"
+                   for r in repairs)
+
+
+def test_lone_counter_suffix_is_left_alone():
+    # A single 'field 1' with no sibling '... 2' is not a proven disambiguation
+    # cluster -- left untouched (conservative; a real numbered name like
+    # 'child 1' stays intact until a sibling proves otherwise).
+    schema = _schema([_text_field("solo", spoken_name="child 1")])
+    repaired, repairs = repair(schema)
+    assert repaired["fields"][0]["spoken_name"] == "child 1"
+    assert not any(r["action"] == "strip-spoken-name-disambiguation"
+                   for r in repairs)
+
+
+def test_spoken_name_strip_is_idempotent():
+    schema = _schema([
+        _text_field("a1", spoken_name="alien registration number 1"),
+        _text_field("a2", spoken_name="alien registration number 2"),
+    ])
+    once, _ = repair(schema)
+    twice, repairs2 = repair(once)
+    assert [f["spoken_name"] for f in twice["fields"]] == [
+        "alien registration number", "alien registration number"]
+    assert not any(r["action"] == "strip-spoken-name-disambiguation"
+                   for r in repairs2)
