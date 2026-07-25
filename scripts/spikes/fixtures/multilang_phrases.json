@@ -336,7 +336,7 @@
     "gtts": "es",
     "spoken_language": "Spanish",
     "_note": "confirm/reject only (bd lo37); es phrasing is code-native in full_form_script.py",
-    "confirm_yes": "Si, es correcto.",
+    "confirm_yes": "Sí, es correcto.",
     "reject": "No, eso no es correcto."
   }
 }

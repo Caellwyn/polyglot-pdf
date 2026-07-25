@@ -102,10 +102,28 @@ async def run_arm(label: str, codes, speech_language_code: str | None = None) ->
         return False
 
 
+def _arm_from_argv(argv) -> str | None:
+    """The --arm value, accepting BOTH the space form (--arm speech-lang) and
+    the equals form (--arm=speech-lang) (bd kcia note 4: the old substring
+    check silently ran the DEFAULT arm for the equals form). Returns None
+    when --arm is absent."""
+    for i, tok in enumerate(argv):
+        if tok == "--arm" and i + 1 < len(argv):
+            return argv[i + 1]
+        if tok.startswith("--arm="):
+            return tok.split("=", 1)[1]
+    return None
+
+
 async def main():
     # bd m1lg: --arm speech-lang probes speech_config.language_code instead of
     # the (already-verified, y25o) transcription language_codes arm.
-    if "--arm" in sys.argv and "speech-lang" in sys.argv:
+    arm = _arm_from_argv(sys.argv)
+    if arm is not None and arm not in ("speech-lang", "hint"):
+        print(f"ERROR: unknown --arm {arm!r} (expected 'speech-lang' or "
+              "'hint'/omit for the default transcription-hint arm)")
+        sys.exit(2)
+    if arm == "speech-lang":
         ok = await run_arm("speech-lang-on", ["es-US"], speech_language_code="es-US")
         if not ok:
             print("speech-lang-on failed; running control (no speech_config) to isolate...")

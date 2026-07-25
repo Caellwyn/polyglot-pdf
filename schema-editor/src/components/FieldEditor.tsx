@@ -413,26 +413,45 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
 
         {/* Why this field is flagged (bd polyglot-pdf-0x10.6): the list's red X /
             amber clock and the bottom strip's findings, explained AT the field.
-            Local completeness errors + backend lint findings; hidden when clean. */}
+            Local completeness errors + backend lint findings; hidden when clean.
+            Severity-aware styling (bd polyglot-pdf-6hhc): ERROR-class findings
+            (and local completeness errors, which ARE errors) render red to
+            match FieldList.getFieldStatus's red row; WARNING-class findings
+            render amber -- a WARNING-only field showed a green row but a red
+            banner before this. */}
         {(() => {
           const completeness = checkFieldComplete(field);
-          const problems = [
+          const errors = [
             ...completeness.errors,
-            ...(lintFindings ?? []).map(f => f.message),
+            ...(lintFindings ?? [])
+              .filter(f => f.severity === 'ERROR')
+              .map(f => f.message),
           ];
-          if (problems.length === 0) return null;
+          const warnings = (lintFindings ?? [])
+            .filter(f => f.severity !== 'ERROR')
+            .map(f => f.message);
+          if (errors.length === 0 && warnings.length === 0) return null;
+          const hasErrors = errors.length > 0;
           return (
             <div
-              className="bg-red-50 border border-red-200 rounded-md p-3 space-y-1"
+              className={
+                hasErrors
+                  ? 'bg-red-50 border border-red-200 rounded-md p-3 space-y-1'
+                  : 'bg-amber-50 border border-amber-200 rounded-md p-3 space-y-1'
+              }
               role="alert"
               data-testid="field-problems"
             >
-              <p className="text-xs font-semibold text-red-700">
+              <p className={`text-xs font-semibold ${
+                hasErrors ? 'text-red-700' : 'text-amber-700'}`}>
                 Why this field is flagged
               </p>
               <ul className="list-disc list-inside space-y-0.5">
-                {problems.map((message, i) => (
-                  <li key={i} className="text-xs text-red-700">{message}</li>
+                {errors.map((message, i) => (
+                  <li key={`e${i}`} className="text-xs text-red-700">{message}</li>
+                ))}
+                {warnings.map((message, i) => (
+                  <li key={`w${i}`} className="text-xs text-amber-700">{message}</li>
                 ))}
               </ul>
             </div>

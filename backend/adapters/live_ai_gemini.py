@@ -1661,9 +1661,12 @@ class LiveAIGemini(ILiveAI):
                           language_codes=list(lang_codes))
 
         # API-level speech language (bd polyglot-pdf-m1lg): Google's Live docs
-        # recommend speech_config.language_code match the user's language.
-        # Endpoint-verified ACCEPTED on the production native-audio tier
-        # (probe_transcription_lang_codes.py --arm speech-lang, 2026-07-22).
+        # recommend speech_config.language_code match the user's language --
+        # but the recommendation is scoped to the CASCADED gemini-live-2.5-
+        # flash tier (docs/genai_docs/live-api-best-practices.md:56); this
+        # repo runs native-audio, where the field is endpoint-VERIFIED ACCEPTED
+        # (probe_transcription_lang_codes.py --arm speech-lang, 2026-07-22),
+        # not doc-recommended.
         # Reuses the SAME per-session bias codes as the block above (seeded
         # from the handshake spoken language); never set for an unmapped
         # language. Kill-switch mirrors the y25o hint flag pattern.

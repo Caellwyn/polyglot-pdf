@@ -724,6 +724,36 @@ export const App: React.FC = () => {
     return schema.fields.find(f => f.id === selectedFieldId) || null;
   }, [schema, selectedFieldId]);
 
+  // Re-point selection when the selected id vanishes from the schema
+  // (bd polyglot-pdf-6hhc nit 2). Selection is deliberately NOT part of the
+  // undo/redo history (same as merge/ungroup), so undoing a field-id RENAME
+  // leaves selectedFieldId holding the now-absent NEW id, dropping the editor
+  // back to the metadata panel. A rename keeps the field at its position, so
+  // re-select the field now occupying the index the vanished selection held --
+  // recovering the exact field the author was editing (under its restored id).
+  // Guards: only fires when a field WAS selected and its id truly vanished (not
+  // on load/clear, where selection is reset elsewhere), and only when the old
+  // index still exists in the new field list.
+  const prevSelectedIndexRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (!schema) { prevSelectedIndexRef.current = null; return; }
+    const idx = selectedFieldId
+      ? schema.fields.findIndex(f => f.id === selectedFieldId)
+      : -1;
+    if (idx >= 0) {
+      // Selection still resolves -- remember its position for a later vanish.
+      prevSelectedIndexRef.current = idx;
+      return;
+    }
+    // Selected id no longer resolves. Re-point to the field at the last-known
+    // index, if that slot still exists (a rename preserves the slot; a delete
+    // legitimately leaves nothing to recover -> fall through to metadata).
+    const prevIdx = prevSelectedIndexRef.current;
+    if (selectedFieldId && prevIdx !== null && prevIdx < schema.fields.length) {
+      setSelectedFieldId(schema.fields[prevIdx].id);
+    }
+  }, [schema, selectedFieldId]);
+
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
