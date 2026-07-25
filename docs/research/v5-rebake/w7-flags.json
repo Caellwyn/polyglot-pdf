@@ -1,0 +1,893 @@
+{
+  "schema": "form-kits/w7\\schema.json",
+  "verify_enabled": true,
+  "flags": [
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[parent].label_translations.chinese",
+      "message": "judge: The translation '\u7236\u6bcd' means 'parents' (plural), while the English original 'Parent' is singular. A more accurate translation would be '\u7236\u4eb2\u6216\u6bcd\u4eb2' (father or mother) or simply '\u5bb6\u957f' (guardian/parent).; rectified clean: '\u7236\u6bcd' -> '\u7236\u4eb2\u6216\u6bcd\u4eb2'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[7] (id=us_person_name).spoken_name_translations.chinese",
+      "message": "judge: The translation omits the term 'resident alien'. The English specifies 'U.S. citizen or resident', which in this context refers to a resident alien. The translation '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11' (U.S. citizen or resident) is too general and could be misinterpreted. A better translation would be '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u5916\u56fd\u4eba' to be more precise.; rectified clean: '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u7684\u59d3\u540d' -> '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u7684\u59d3\u540d'",
+      "field_id": "us_person_name"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[8] (id=us_person_ssn_itin).spoken_name_translations.chinese",
+      "message": "judge: The translation omits the term 'resident alien'. The English specifies 'U.S. citizen or resident', which in this context refers to a resident alien. The translation '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11' (U.S. citizen or resident) is too general and could be misinterpreted. A better translation would be '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u5916\u56fd\u4eba' to be more precise.; rectified clean: '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u7684SSN\u6216ITIN' -> '\u7f8e\u56fd\u516c\u6c11\u6216\u5c45\u6c11\u7684SSN\u6216ITIN'",
+      "field_id": "us_person_ssn_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[10] (id=reason_g).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u975e\u5c45\u6c11\u7b7e\u8bc1\u6301\u6709\u4eba' (non-resident visa holder) is a literal but slightly unnatural rendering of 'nonresident visa holder'. A more standard and clearer term would be '\u975e\u5c45\u6c11\u5916\u56fd\u4eba\u7b7e\u8bc1\u6301\u6709\u4eba' (non-resident alien visa holder) to align with official terminology.; rectified clean: '\u539f\u56e0g\uff0c\u975e\u5c45\u6c11\u7b7e\u8bc1\u6301\u6709\u4eba\u7684\u88ab\u629a\u517b\u4eba\u6216\u914d\u5076' -> '\u539f\u56e0g\uff0c\u975e\u5c45\u6c11\u7b7e\u8bc1\u6301\u6709\u4eba\u7684\u88ab\u629a\u517b\u4eba\u6216\u914d\u5076'",
+      "field_id": "reason_g"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.chinese",
+      "message": "judge: The translation '\u4e4b\u524d\u662f\u5426\u6536\u5230\u8fc7ITIN\u6216IRSN' is a question ('Have you previously received...'), but the original English 'Previously received ITIN or IRSN' is a field label, not a question. The translation should be a noun phrase, such as '\u4e4b\u524d\u6536\u5230\u7684ITIN\u6216IRSN' (Previously received ITIN or IRSN).; rectified clean: '\u4e4b\u524d\u662f\u5426\u6536\u5230\u8fc7ITIN\u6216IRSN' -> '\u4e4b\u524d\u6536\u5230\u7684ITIN\u6216IRSN'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.french",
+      "message": "judge: The translation changes the field name from a noun phrase ('Previously received ITIN or IRSN') to a question ('Have you ever received an ITIN or IRSN'). The original is a label for a field, not a direct question to the user.; rectified clean: 'Avez-vous d\u00e9j\u00e0 re\u00e7u un ITIN ou un IRSN' -> 'ITIN ou IRSN re\u00e7u pr\u00e9c\u00e9demment'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.french",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN premier groupe'; trace: judge: The original English term is 'IRSN', but the translation uses 'IRSN'. This is a typo and should be 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.french",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN deuxi\u00e8me groupe'; trace: judge: The original English term is 'IRSN', but the translation uses 'IRSN'. This is a typo and should be 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.french",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN troisi\u00e8me groupe'; trace: judge: The original English term is 'IRSN', but the translation uses 'IRSN'. This is a typo and should be 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).options[no_don_t_know_skip_line_6f].label_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'f' from '6f' as the Arabic letter '\u0648' (waw). It should be the English letter 'f' to match the form.; rectified clean: '\u0644\u0627/\u0644\u0627 \u0623\u0639\u0631\u0641. \u062a\u062e\u0637\u0651\u064e \u0627\u0644\u0633\u0637\u0631 6\u0648.' -> '\u0644\u0627/\u0644\u0627 \u0623\u0639\u0631\u0641. \u062a\u062e\u0637\u0651\u064e \u0627\u0644\u0633\u0637\u0631 6f.'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).options[yes_complete_line_6f].label_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'f' from '6f' as the Arabic letter '\u0648' (waw). It should be the English letter 'f' to match the form.; rectified clean: '\u0646\u0639\u0645. \u0623\u0643\u0645\u0644 \u0627\u0644\u0633\u0637\u0631 6\u0648.' -> '\u0646\u0639\u0645. \u0623\u0643\u0645\u0644 \u0627\u0644\u0633\u0637\u0631 6f.'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[1] (id=reason_a).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'a' as the Arabic letter '\u0623' (alif). It should be the English letter 'a' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u0623\u060c \u0645\u0646\u0641\u0639\u0629 \u0628\u0645\u0648\u062c\u0628 \u0645\u0639\u0627\u0647\u062f\u0629 \u0636\u0631\u064a\u0628\u064a\u0629' -> '\u0627\u0644\u0633\u0628\u0628 a\u060c \u0645\u0646\u0641\u0639\u0629 \u0628\u0645\u0648\u062c\u0628 \u0645\u0639\u0627\u0647\u062f\u0629 \u0636\u0631\u064a\u0628\u064a\u0629'",
+      "field_id": "reason_a"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[2] (id=reason_b).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'b' as the Arabic letter '\u0628' (ba). It should be the English letter 'b' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u0628' -> '\u0627\u0644\u0633\u0628\u0628 b'",
+      "field_id": "reason_b"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[3] (id=reason_c).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'c' as the Arabic letter '\u062c' (jim). It should be the English letter 'c' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u062c' -> '\u0627\u0644\u0633\u0628\u0628 c'",
+      "field_id": "reason_c"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[4] (id=reason_d).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'd' as the Arabic letter '\u062f' (dal). It should be the English letter 'd' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u062f\u060c \u0645\u064f\u0639\u0627\u0644' -> '\u0627\u0644\u0633\u0628\u0628 d\u060c \u0645\u064f\u0639\u0627\u0644'",
+      "field_id": "reason_d"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[6] (id=reason_e).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'e' as the Arabic letter '\u0647\u0640' (ha). It should be the English letter 'e' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u0647\u0640\u060c \u0632\u0648\u062c/\u0632\u0648\u062c\u0629' -> '\u0627\u0644\u0633\u0628\u0628 e\u060c \u0632\u0648\u062c/\u0632\u0648\u062c\u0629'",
+      "field_id": "reason_e"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[9] (id=reason_f).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'f' as the Arabic letter '\u0648' (waw). It should be the English letter 'f' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u0648\u060c \u0637\u0627\u0644\u0628 \u0623\u0648 \u0623\u0633\u062a\u0627\u0630 \u0623\u0648 \u0628\u0627\u062d\u062b' -> '\u0627\u0644\u0633\u0628\u0628 f\u060c \u0637\u0627\u0644\u0628 \u0623\u0648 \u0623\u0633\u062a\u0627\u0630 \u0623\u0648 \u0628\u0627\u062d\u062b'",
+      "field_id": "reason_f"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[10] (id=reason_g).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'g' as the Arabic letter '\u0632' (zay). It should be the English letter 'g' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u0632\u060c \u0645\u064f\u0639\u0627\u0644 \u0623\u0648 \u0632\u0648\u062c/\u0632\u0648\u062c\u0629 \u062d\u0627\u0645\u0644 \u062a\u0623\u0634\u064a\u0631\u0629 \u063a\u064a\u0631 \u0645\u0647\u0627\u062c\u0631' -> '\u0627\u0644\u0633\u0628\u0628 g\u060c \u0645\u064f\u0639\u0627\u0644 \u0623\u0648 \u0632\u0648\u062c/\u0632\u0648\u062c\u0629 \u062d\u0627\u0645\u0644 \u062a\u0623\u0634\u064a\u0631\u0629 \u063a\u064a\u0631 \u0645\u0647\u0627\u062c\u0631'",
+      "field_id": "reason_g"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[11] (id=reason_h).spoken_name_translations.arabic",
+      "message": "judge: The translation incorrectly renders the letter 'h' as the Arabic letter '\u062d' (ha). It should be the English letter 'h' to match the form.; rectified clean: '\u0627\u0644\u0633\u0628\u0628 \u062d\u060c \u0633\u0628\u0628 \u0622\u062e\u0631' -> '\u0627\u0644\u0633\u0628\u0628 h\u060c \u0633\u0628\u0628 \u0622\u062e\u0631'",
+      "field_id": "reason_h"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.arabic",
+      "message": "judge: The translation changes the original statement 'Previously received ITIN or IRSN' into a question, 'Have you ever been issued an ITIN or IRSN'. The original is a field label, not a question.; rectified clean: '\u0647\u0644 \u0633\u0628\u0642 \u0644\u0643 \u0627\u0644\u062d\u0635\u0648\u0644 \u0639\u0644\u0649 ITIN \u0623\u0648 IRSN' -> 'ITIN \u0623\u0648 IRSN \u0627\u0644\u0630\u064a \u062a\u0645 \u0627\u0633\u062a\u0644\u0627\u0645\u0647 \u0645\u0633\u0628\u0642\u064b\u0627'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.arabic",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0627\u0644\u0645\u062c\u0645\u0648\u0639\u0629 \u0627\u0644\u0623\u0648\u0644\u0649 \u0645\u0646 IRSN'; trace: judge: The translation incorrectly keeps 'IRSN' verbatim. This appears to be a typo in the English source, which should likely be 'ITIN' or another standard identifier. However, as written, the translation should have reflected the source's 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.arabic",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0627\u0644\u0645\u062c\u0645\u0648\u0639\u0629 \u0627\u0644\u062b\u0627\u0646\u064a\u0629 \u0645\u0646 IRSN'; trace: judge: The translation incorrectly keeps 'IRSN' verbatim. This appears to be a typo in the English source, which should likely be 'ITIN' or another standard identifier. However, as written, the translation should have reflected the source's 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.arabic",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u0627\u0644\u0645\u062c\u0645\u0648\u0639\u0629 \u0627\u0644\u062b\u0627\u0644\u062b\u0629 \u0645\u0646 IRSN'; trace: judge: The translation incorrectly keeps 'IRSN' verbatim. This appears to be a typo in the English source, which should likely be 'ITIN' or another standard identifier. However, as written, the translation should have reflected the source's 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[17] (id=name_1b_first).spoken_name_translations.portuguese",
+      "message": "judge: The translation 'Nome de nascimento' only captures 'Name at birth' but omits 'first name'. A more accurate translation would be 'Primeiro nome de nascimento'.; rectified clean: 'Nome de nascimento' -> 'Primeiro nome de nascimento'",
+      "field_id": "name_1b_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.portuguese",
+      "message": "judge: The original English term 'IRSN' was not kept verbatim as required by the rules for never-translated tokens. The translation incorrectly omits it.; rectified clean: 'IRSN, primeiro grupo' -> 'IRSN primeiro grupo'",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.portuguese",
+      "message": "judge: The original English term 'IRSN' was not kept verbatim as required by the rules for never-translated tokens. The translation incorrectly omits it.; rectified clean: 'IRSN, segundo grupo' -> 'IRSN segundo grupo'",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.portuguese",
+      "message": "judge: The original English term 'IRSN' was not kept verbatim as required by the rules for never-translated tokens. The translation incorrectly omits it.; rectified clean: 'IRSN, terceiro grupo' -> 'IRSN terceiro grupo'",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[power_of_attorney].label_translations.spanish",
+      "message": "judge: The translation 'Poder legal' is a common but less precise term for 'Power of attorney'. A more standard and clearer translation in legal and administrative contexts is 'Poder notarial' or simply 'Poder'.; rectified clean: 'Poder legal' -> 'Poder notarial'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[court_appointed_guardian].label_translations.spanish",
+      "message": "judge: The translation 'Tutor legal' is a valid term but 'Tutor designado por el tribunal' is more precise and directly translates 'Court-appointed guardian', avoiding ambiguity with other types of legal guardians.; rectified clean: 'Tutor legal' -> 'Tutor designado por el tribunal'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[10] (id=reason_g).spoken_name_translations.spanish",
+      "message": "judge: The translation 'visa de no inmigrante' is a literal but less common rendering. The standard term used in immigration contexts is 'visa de no residente'.; rectified clean: 'Motivo g, dependiente o c\u00f3nyuge del titular de una visa de no inmigrante' -> 'Motivo g, dependiente o c\u00f3nyuge del titular de una visa de no residente'",
+      "field_id": "reason_g"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.spanish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Recibi\u00f3 anteriormente un ITIN o IRSN'; trace: judge: The translation 'Recibi\u00f3 anteriormente un ITIN o IRSN' changes the field name from a noun phrase ('Previously received ITIN or IRSN') into a past-tense question. A more faithful translation would be a noun phrase like 'ITIN o IRSN recibido anteriormente'. | attempt 1: judge: The translation omits 'IRSN'. The original is 'ITIN or IRSN', but the translation is just 'ITIN o IRSN recibido anteriormente', which back-translates to 'Previously received ITIN or IRSN'. Wait, the back-translation is wrong. The translation is 'ITIN o IRSN recibido anteriormente'. The original is 'Previously received ITIN or IRSN'. The translation is correct. The back-translation is 'Previously received ITIN or TIN', which is incorrect. Let me re-evaluate. Original: 'Previously received ITIN or IRSN'. Translation: 'ITIN o IRSN recibido anteriormente'. This is a correct and faithful translation. The back-translation is faulty, but the instructions say to ignore the back-translation. I will mark this as not a drift. Re-re-evaluating. Ah, I see the issue. The original is 'Previously received ITIN or IRSN'. The translation is 'ITIN o IRSN recibido anteriormente'. This is correct. I will change my initial assessment. No drift. | attempt 2: no new correction",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.spanish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN, primer grupo'; trace: judge: The English acronym 'IRSN' was not kept verbatim as required by the rules. It was translated or mistyped as 'IRSN' in the Spanish text, but the back-translation suggests it might be a typo for TIN, which is also an acronym that should be preserved. | attempt 1: no new correction",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.spanish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN, segundo grupo'; trace: judge: The English acronym 'IRSN' was not kept verbatim as required by the rules. It was translated or mistyped as 'IRSN' in the Spanish text, but the back-translation suggests it might be a typo for TIN, which is also an acronym that should be preserved. | attempt 1: no new correction",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.spanish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN, tercer grupo'; trace: judge: The English acronym 'IRSN' was not kept verbatim as required by the rules. It was translated or mistyped as 'IRSN' in the Spanish text, but the back-translation suggests it might be a typo for TIN, which is also an acronym that should be preserved. | attempt 1: no new correction",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[46] (id=college_company).spoken_name_translations.spanish",
+      "message": "judge: The translation of 'college' as 'colegio' is a common false cognate. In a US context, 'colegio' typically means high school, whereas 'college' refers to higher education. A better term would be 'instituci\u00f3n de educaci\u00f3n superior' or simply keeping 'college'.; rectified clean: 'Nombre del colegio, universidad o empresa' -> 'Nombre de la instituci\u00f3n de educaci\u00f3n superior, universidad o empresa'",
+      "field_id": "college_company"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[47] (id=college_city_state).spoken_name_translations.spanish",
+      "message": "judge: The translation of 'college' as 'colegio' is a common false cognate. In a US context, 'colegio' typically means high school, whereas 'college' refers to higher education. A better term would be 'instituci\u00f3n de educaci\u00f3n superior' or simply keeping 'college'.; rectified clean: 'Ciudad y estado del colegio' -> 'Ciudad y estado de la instituci\u00f3n de educaci\u00f3n superior'",
+      "field_id": "college_city_state"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[52] (id=delegate_name).spoken_name_translations.spanish",
+      "message": "judge: The term 'delegate' in this context refers to a person designated to act on behalf of the applicant, not a 'delegado' in the sense of a political delegate. 'Representante' or 'persona designada' would be a more accurate translation.; rectified clean: 'Nombre del delegado' -> 'Nombre del representante'",
+      "field_id": "delegate_name"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).spoken_name_translations.spanish",
+      "message": "judge: The term 'delegate' was translated as 'delegado', which is not the best fit for this context. 'Relaci\u00f3n del representante con el solicitante' would be more accurate. Additionally, 'parentesco' implies a family relationship, which may not be the case.; rectified clean: 'Parentesco del delegado con el solicitante' -> 'Relaci\u00f3n del representante con el solicitante'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[54] (id=agent_signature).spoken_name_translations.spanish",
+      "message": "judge: The term 'Acceptance agent' has been translated as 'agente tramitador'. While not entirely incorrect, a more standard and clearer term in tax contexts is 'agente de aceptaci\u00f3n'.; rectified clean: 'Firma del agente tramitador' -> 'Firma del agente de aceptaci\u00f3n'",
+      "field_id": "agent_signature"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[55] (id=agent_sign_date).spoken_name_translations.spanish",
+      "message": "judge: The term 'Acceptance agent' has been translated as 'agente tramitador'. A more standard and clearer term in tax contexts is 'agente de aceptaci\u00f3n'.; rectified clean: 'Fecha del agente tramitador' -> 'Fecha del agente de aceptaci\u00f3n'",
+      "field_id": "agent_sign_date"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[56] (id=agent_phone).spoken_name_translations.spanish",
+      "message": "judge: The term 'Acceptance agent' has been translated as 'agente tramitador'. A more standard and clearer term in tax contexts is 'agente de aceptaci\u00f3n'.; rectified clean: 'Tel\u00e9fono del agente tramitador' -> 'Tel\u00e9fono del agente de aceptaci\u00f3n'",
+      "field_id": "agent_phone"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[57] (id=agent_fax).spoken_name_translations.spanish",
+      "message": "judge: The term 'Acceptance agent' has been translated as 'agente tramitador'. A more standard and clearer term in tax contexts is 'agente de aceptaci\u00f3n'.; rectified clean: 'Fax del agente tramitador' -> 'Fax del agente de aceptaci\u00f3n'",
+      "field_id": "agent_fax"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[58] (id=agent_name_title).spoken_name_translations.spanish",
+      "message": "judge: The term 'Acceptance agent' has been translated as 'agente tramitador'. A more standard and clearer term in tax contexts is 'agente de aceptaci\u00f3n'.; rectified clean: 'Nombre y cargo del agente tramitador' -> 'Nombre y cargo del agente de aceptaci\u00f3n'",
+      "field_id": "agent_name_title"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_other_information_p1].label_translations.spanish",
+      "message": "judge: The English 'Other Information' means information that doesn't fit in the previous categories. The Spanish 'Informaci\u00f3n adicional' means 'Additional Information', which implies it adds to previous information rather than being a separate category. 'Otra informaci\u00f3n' is a more direct and faithful translation.; rectified clean: 'Informaci\u00f3n adicional' -> 'Otra informaci\u00f3n'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_acceptance_agent_s_use_only_p1].label_translations.spanish",
+      "message": "judge: The term 'Acceptance agent' has been translated as 'agente tramitador'. A more standard and clearer term in tax contexts is 'agente de aceptaci\u00f3n'.; rectified clean: 'PARA USO EXCLUSIVO del agente tramitador' -> 'PARA USO EXCLUSIVO del agente de aceptaci\u00f3n'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[32] (id=id_doc_issued_by).spoken_name_translations.tagalog",
+      "message": "judge: The translation changes the field name from a noun phrase ('Document issued by') to a question ('Sino po ang nag-isyu ng dokumento' / 'Who issued the document'). A more direct translation like 'Nag-isyu po ng dokumento' would be more faithful to the original label format.; rectified clean: 'Sino po ang nag-isyu ng dokumento' -> 'Dokumento na inisyu ng'",
+      "field_id": "id_doc_issued_by"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.tagalog",
+      "message": "judge: The translation changes the field name from a noun phrase ('Previously received ITIN or IRSN') to a yes/no question ('Nakatanggap na po ba dati ng ITIN o IRSN' / 'Have you previously received an ITIN or IRSN'). A more direct translation like 'Dating natanggap na ITIN o IRSN' would be more faithful to the original label format.; rectified clean: 'Nakatanggap na po ba dati ng ITIN o IRSN' -> 'Dating natanggap na ITIN o IRSN'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.tagalog",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Unang grupo po ng IRSN'; trace: judge: The translation uses 'IRSN' which is a typo for the original 'IRS' and 'EIN'. The original is 'IRSN first group', which seems to be a typo for 'EIN first group' or 'IRS EIN first group'. The translation propagates the typo 'IRSN' instead of using the correct term 'EIN' as per the form context. | attempt 1: judge: The translation incorrectly uses 'EIN' instead of 'IRSN' as specified in the English original. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation incorrectly uses 'IRSN' instead of 'IRS'. The original English is 'IRS', which is a never-translate token.",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.tagalog",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Pangalawang grupo po ng IRSN'; trace: judge: The translation uses 'IRSN' which is a typo for the original 'IRS' and 'EIN'. The original is 'IRSN second group', which seems to be a typo for 'EIN second group' or 'IRS EIN second group'. The translation propagates the typo 'IRSN' instead of using the correct term 'EIN' as per the form context. | attempt 1: judge: The translation incorrectly uses 'EIN' instead of 'IRSN' as specified in the English original. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation incorrectly uses 'IRSN' instead of 'IRS'. The original English is 'IRS', which is a never-translate token.",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.tagalog",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Pangatlong grupo po ng IRSN'; trace: judge: The translation uses 'IRSN' which is a typo for the original 'IRS' and 'EIN'. The original is 'IRSN third group', which seems to be a typo for 'EIN third group' or 'IRS EIN third group'. The translation propagates the typo 'IRSN' instead of using the correct term 'EIN' as per the form context. | attempt 1: judge: The translation incorrectly uses 'EIN' instead of 'IRSN' as specified in the English original. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation incorrectly uses 'IRSN' instead of 'IRS'. The original English is 'IRS', which is a never-translate token.",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[43] (id=prior_name_first).spoken_name_translations.tagalog",
+      "message": "judge: The translation 'Dating unang pangalan' omits the required politeness marker 'po'.; rectified clean: 'Dating unang pangalan' -> 'Dati po ninyong unang pangalan'",
+      "field_id": "prior_name_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[44] (id=prior_name_middle).spoken_name_translations.tagalog",
+      "message": "judge: The translation 'Dating gitnang pangalan' omits the required politeness marker 'po'.; rectified clean: 'Dating gitnang pangalan' -> 'Dati po ninyong gitnang pangalan'",
+      "field_id": "prior_name_middle"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[45] (id=prior_name_last).spoken_name_translations.tagalog",
+      "message": "judge: The translation 'Dating apelyido' omits the required politeness marker 'po'.; rectified clean: 'Dating apelyido' -> 'Dati po ninyong apelyido'",
+      "field_id": "prior_name_last"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_foreign_non_u_s_address_p1].label_translations.tagalog",
+      "message": "judge: The translation keeps the English text verbatim. A translation like 'Address sa Ibang Bansa (hindi sa U.S.)' would be more appropriate for the target language.; rectified clean: 'Foreign (non-U.S.) Address' -> 'Address sa Ibang Bansa (hindi sa U.S.)'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[12] (id=treaty_country).spoken_name_translations.german",
+      "message": "judge: The translation 'Vertragsstaat' means 'treaty state' or 'contracting state', which is more specific than the original 'Treaty country'. A more direct and accurate translation would be 'Vertragsland'.; rectified clean: 'Vertragsstaat' -> 'Vertragsland'",
+      "field_id": "treaty_country"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[13] (id=treaty_article).spoken_name_translations.german",
+      "message": "judge: The translation 'Artikelnummer des Abkommens' means 'article number of the agreement'. The English 'Treaty article number' is more accurately translated as 'Artikelnummer des Vertragsabkommens' or simply 'Vertragsartikelnummer'. The current translation is slightly imprecise.; rectified clean: 'Artikelnummer des Abkommens' -> 'Vertragsartikelnummer'",
+      "field_id": "treaty_article"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.german",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Haben Sie bereits eine ITIN oder IRSN erhalten'; trace: judge: The translation 'Haben Sie bereits eine ITIN oder IRSN erhalten' is a question, whereas the English 'Previously received ITIN or IRSN' is a field label (a noun phrase). The translation should be a phrase like 'Zuvor erhaltene ITIN oder IRSN'. | attempt 1: judge: The translation incorrectly includes 'IRSN', which is not present in the English source. The source only mentions 'ITIN'. | attempt 2: judge: The translation omits the term 'IRSN' from the original English text 'ITIN or IRSN'. | attempt bound reached",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.german",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN erste Gruppe'; trace: judge: The original identifier 'IRSN' has been incorrectly transcribed as 'IRSN' in the translation. The English source is 'IRSN', but the translation uses 'IRSN'. This is a typo that changes the identifier. | attempt 1: no new correction",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.german",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN zweite Gruppe'; trace: judge: The original identifier 'IRSN' has been incorrectly transcribed as 'IRSN' in the translation. This is a typo that changes the identifier. | attempt 1: no new correction",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.german",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN dritte Gruppe'; trace: judge: The original identifier 'IRSN' has been incorrectly transcribed as 'IRSN' in the translation. This is a typo that changes the identifier. | attempt 1: no new correction",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.korean",
+      "message": "judge: The translation changes a field name (a noun phrase) into a full question, which is a change in grammatical function. The Korean should be a noun phrase like '\uc774\uc804\uc5d0 \ubc1c\uae09\ubc1b\uc740 ITIN \ub610\ub294 IRSN' to match the English 'Previously received ITIN or IRSN'.; rectified clean: '\uc774\uc804\uc5d0 ITIN \ub610\ub294 IRSN\uc744 \ubc1c\uae09\ubc1b\uc740 \uc801\uc774 \uc788\uc2b5\ub2c8\uae4c' -> '\uc774\uc804\uc5d0 \ubc1c\uae09\ubc1b\uc740 ITIN \ub610\ub294 IRSN'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[43] (id=prior_name_first).spoken_name_translations.korean",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\uc774\uc804 \uc774\ub984'; trace: judge: The translation omits the concept of 'first name'. It translates to 'Previous name' instead of 'Previous first name'. | attempt 1: judge: The translation '\uc774\uc804 \uc774\ub984 (\uc131 \uc81c\uc678)' means 'Previous name (excluding last name)', which incorrectly specifies that only the first name should be entered by excluding the last name. The original 'Prior name first name' simply labels the field for the first name part of a prior name, not instructing the user to exclude the last name from their thinking. | attempt 2: judge: The translation omits the word 'first' (\uc131). The English specifies 'Prior name first name', but the Korean '\uc774\uc804 \uc774\ub984 (\uc774\ub984)' translates to 'Prior name (name)', which is incomplete and could be misinterpreted as the full prior name rather than just the first name. | attempt bound reached",
+      "field_id": "prior_name_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[46] (id=college_company).spoken_name_translations.korean",
+      "message": "judge: The translation omits 'university' from the list. The English is 'college, university, or company', but the Korean only mentions 'college or company'.; rectified clean: '\ub300\ud559 \ub610\ub294 \ud68c\uc0ac \uc774\ub984' -> '\ub300\ud559, \ub300\ud559\uad50 \ub610\ub294 \ud68c\uc0ac \uc774\ub984'",
+      "field_id": "college_company"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).spoken_name_translations.korean",
+      "message": "judge: The translation omits 'delegate's'. It translates to 'Relationship to applicant' instead of 'Delegate's relationship to applicant'.; rectified clean: '\uc2e0\uccad\uc778\uacfc\uc758 \uad00\uacc4' -> '\ub300\ub9ac\uc778\uacfc \uc2e0\uccad\uc778\uc758 \uad00\uacc4'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[parent].label_translations.persian",
+      "message": "judge: The translation '\u0648\u0627\u0644\u062f\u06cc\u0646' means 'parents' (plural), while the English original 'Parent' is singular.; rectified clean: '\u0648\u0627\u0644\u062f\u06cc\u0646' -> '\u0648\u0627\u0644\u062f'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[17] (id=name_1b_first).spoken_name_translations.persian",
+      "message": "judge: The translation '\u0646\u0627\u0645 \u062f\u0631 \u0628\u062f\u0648 \u062a\u0648\u0644\u062f' means 'Name at birth' and omits 'first name'. A more accurate translation would be '\u0646\u0627\u0645 (\u06a9\u0648\u0686\u06a9) \u062f\u0631 \u0628\u062f\u0648 \u062a\u0648\u0644\u062f'.; rectified clean: '\u0646\u0627\u0645 \u062f\u0631 \u0628\u062f\u0648 \u062a\u0648\u0644\u062f' -> '\u0646\u0627\u0645 \u06a9\u0648\u0686\u06a9 \u062f\u0631 \u0632\u0645\u0627\u0646 \u062a\u0648\u0644\u062f'",
+      "field_id": "name_1b_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[43] (id=prior_name_first).spoken_name_translations.persian",
+      "message": "judge: The translation omits the concept of 'first name'. It translates to 'Prior name' instead of 'Prior name first name'.; rectified clean: '\u0646\u0627\u0645 \u0642\u0628\u0644\u06cc' -> '\u0646\u0627\u0645 \u06a9\u0648\u0686\u06a9 \u0642\u0628\u0644\u06cc'",
+      "field_id": "prior_name_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.hindi",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN \u0915\u093e \u092a\u0939\u0932\u093e \u0938\u092e\u0942\u0939'; trace: judge: The source token 'IRSN' was incorrectly translated as 'IRSN'. The never-translated token list does not include 'IRSN', and it appears to be a typo for 'IRS' or another identifier. The translation should reflect the correct English token. | attempt 1: judge: The translation omits the letter 'N' from the identifier 'IRSN'. The English is 'IRSN first group', but the translation 'IRS \u0915\u093e \u092a\u0939\u0932\u093e \u0938\u092e\u0942\u0939' translates to 'IRS first group'. | attempt 2: flip-flop (re-flagged a previously flagged value): The token 'IRSN' was used in the translation, but the English original is 'IRS'. 'IRSN' is not a standard US government acronym and appears to be a typo.",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.hindi",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN \u0915\u093e \u0926\u0942\u0938\u0930\u093e \u0938\u092e\u0942\u0939'; trace: judge: The source token 'IRSN' was incorrectly translated as 'IRSN'. The never-translated token list does not include 'IRSN', and it appears to be a typo for 'IRS' or another identifier. The translation should reflect the correct English token. | attempt 1: judge: The translation omits the letter 'N' from the identifier 'IRSN'. The English is 'IRSN second group', but the translation 'IRS \u0915\u093e \u0926\u0942\u0938\u0930\u093e \u0938\u092e\u0942\u0939' translates to 'IRS second group'. | attempt 2: flip-flop (re-flagged a previously flagged value): The token 'IRSN' was used in the translation, but the English original is 'IRS'. 'IRSN' is not a standard US government acronym and appears to be a typo.",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.hindi",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN \u0915\u093e \u0924\u0940\u0938\u0930\u093e \u0938\u092e\u0942\u0939'; trace: judge: The source token 'IRSN' was incorrectly translated as 'IRSN'. The never-translated token list does not include 'IRSN', and it appears to be a typo for 'IRS' or another identifier. The translation should reflect the correct English token. | attempt 1: judge: The translation omits the letter 'N' from the identifier 'IRSN'. The English is 'IRSN third group', but the translation 'IRS \u0915\u093e \u0924\u0940\u0938\u0930\u093e \u0938\u092e\u0942\u0939' translates to 'IRS third group'. | attempt 2: flip-flop (re-flagged a previously flagged value): The token 'IRSN' was used in the translation, but the English original is 'IRS'. 'IRSN' is not a standard US government acronym and appears to be a typo.",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[power_of_attorney].label_translations.italian",
+      "message": "judge: The translation 'Procuratore legale' means 'Legal representative' or 'attorney', which is a specific type of 'Power of attorney'. The more general and accurate translation for 'Power of attorney' as a role or relationship is 'Procuratore' or 'Delegato'.; rectified clean: 'Procuratore legale' -> 'Procura'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[17] (id=name_1b_first).spoken_name_translations.italian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Nome alla nascita'; trace: judge: The translation 'Nome alla nascita' only means 'Name at birth' and omits the specific field 'first name'. The translation should be 'Nome (alla nascita)' or 'Nome di battesimo' to be consistent with the other 'name at birth' fields. | attempt 1: judge: The translation 'Nome (alla nascita)' means 'Name (at birth)'. The English original 'Name at birth first name' specifically asks for the 'first name' part of the name at birth. The translation omits 'first name' ('nome'). | attempt 2: judge: The translation uses 'nome di battesimo' (baptismal name) for 'first name'. While often used colloquially, the more neutral and accurate term is simply 'nome' (name), which avoids religious connotations and aligns better with official documentation. | attempt bound reached",
+      "field_id": "name_1b_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[43] (id=prior_name_first).spoken_name_translations.italian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Nome precedente'; trace: judge: The translation omits the word 'first' (primo). The original is 'Prior name first name', but the translation 'Nome precedente' just means 'Prior name'. | attempt 1: judge: The translation 'Nome precedente (nome)' means 'Previous name (name)'. The English original 'Prior name first name' specifically asks for the 'first name' part of the prior name. The translation is redundant and confusing, repeating 'nome' instead of specifying 'first name'. | attempt 2: judge: The translation uses 'nome di battesimo' (baptismal name) for 'first name'. The more neutral and accurate term is 'nome' (name), which avoids religious connotations and aligns better with official documentation. The correct translation would be 'Nome precedente'. | attempt bound reached",
+      "field_id": "prior_name_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_name_p1].label_translations.italian",
+      "message": "judge: The translation 'Nome e cognome' (First name and last name) is more specific than the original 'Name'. A more faithful translation would be 'Nome'.; rectified clean: 'Nome e cognome' -> 'Nome'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[parent].label_translations.urdu",
+      "message": "judge: The translation '\u0648\u0627\u0644\u062f\u06cc\u0646' means 'Parents' (plural), but the English original is 'Parent' (singular). This changes the meaning from singular to plural.; rectified clean: '\u0648\u0627\u0644\u062f\u06cc\u0646' -> '\u0648\u0627\u0644\u062f/\u0648\u0627\u0644\u062f\u06c1'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.urdu",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN \u06a9\u0627 \u067e\u06c1\u0644\u0627 \u06af\u0631\u0648\u067e'; trace: judge: The translation incorrectly uses 'IRSN' instead of 'IRS'. The English original is 'IRS', which is a never-translate token. | attempt 1: judge: The translation uses 'IRS' instead of the required 'IRSN'. The 'N' is a crucial part of the acronym for 'Individual Repayment Serial Number' and must be retained. | attempt 2: flip-flop (re-flagged a previously flagged value): The acronym 'IRSN' in the English original has been incorrectly transliterated. It should be 'IRS' as per the project's never-translate list.",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.urdu",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN \u06a9\u0627 \u062f\u0648\u0633\u0631\u0627 \u06af\u0631\u0648\u067e'; trace: judge: The translation incorrectly uses 'IRSN' instead of 'IRS'. The English original is 'IRS', which is a never-translate token. | attempt 1: judge: The translation uses 'IRS' instead of the required 'IRSN'. The 'N' is a crucial part of the acronym for 'Individual Repayment Serial Number' and must be retained. | attempt 2: flip-flop (re-flagged a previously flagged value): The acronym 'IRSN' in the English original has been incorrectly transliterated. It should be 'IRS' as per the project's never-translate list.",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.urdu",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN \u06a9\u0627 \u062a\u06cc\u0633\u0631\u0627 \u06af\u0631\u0648\u067e'; trace: judge: The translation incorrectly uses 'IRSN' instead of 'IRS'. The English original is 'IRS', which is a never-translate token. | attempt 1: judge: The translation uses 'IRS' instead of the required 'IRSN'. The 'N' is a crucial part of the acronym for 'Individual Repayment Serial Number' and must be retained. | attempt 2: flip-flop (re-flagged a previously flagged value): The acronym 'IRSN' in the English original has been incorrectly transliterated. It should be 'IRS' as per the project's never-translate list.",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.dutch",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN eerste groep'; trace: judge: The original English refers to 'IRSN', but the translation uses 'IRSN'. This is a typo and should be 'IRS'. | attempt 1: judge: The original identifier 'IRSN' was shortened to 'IRS' in the translation, which is a different identifier. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation incorrectly uses 'IRSN' instead of 'IRS'. The 'N' seems to be an erroneous addition.",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.dutch",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN tweede groep'; trace: judge: The original English refers to 'IRSN', but the translation uses 'IRSN'. This is a typo and should be 'IRS'. | attempt 1: judge: The original identifier 'IRSN' was shortened to 'IRS' in the translation, which is a different identifier. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation incorrectly uses 'IRSN' instead of 'IRS'. The 'N' seems to be an erroneous addition.",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.dutch",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN derde groep'; trace: judge: The original English refers to 'IRSN', but the translation uses 'IRSN'. This is a typo and should be 'IRS'. | attempt 1: judge: The original identifier 'IRSN' was shortened to 'IRS' in the translation, which is a different identifier. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation incorrectly uses 'IRSN' instead of 'IRS'. The 'N' seems to be an erroneous addition.",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.afrikaans",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Voorheen 'n ITIN of IRSN ontvang'; trace: judge: The translation incorrectly uses 'IRSN' where the English original specifies 'IRSN'. While IRSN (IRS an Individual Taxpayer Identification Number) is related, the source text explicitly uses 'IRSN', and this should be preserved. The translation should be 'Voorheen 'n ITIN of IRSN ontvang'. | attempt 1: no new correction",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.afrikaans",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN eerste groep'; trace: judge: The original English term is 'IRSN', but the translation uses 'IRSN'. This is a mistranslation of the acronym, which should have been kept verbatim as 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.afrikaans",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN tweede groep'; trace: judge: The original English term is 'IRSN', but the translation uses 'IRSN'. This is a mistranslation of the acronym, which should have been kept verbatim as 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.afrikaans",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'IRSN derde groep'; trace: judge: The original English term is 'IRSN', but the translation uses 'IRSN'. This is a mistranslation of the acronym, which should have been kept verbatim as 'IRSN'. | attempt 1: no new correction",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[45] (id=prior_name_last).spoken_name_translations.afrikaans",
+      "message": "judge: The translation 'Vorige naam van' is an incomplete phrase. It should be 'Vorige van' to correctly mean 'Prior last name'.; rectified clean: 'Vorige naam van' -> 'Vorige van'",
+      "field_id": "prior_name_last"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[power_of_attorney].label_translations.ukrainian",
+      "message": "judge: The translation '\u0414\u043e\u0432\u0456\u0440\u0435\u043d\u0430 \u043e\u0441\u043e\u0431\u0430' means 'trustee' or 'authorized representative', which is not the same as 'Power of attorney'. 'Power of attorney' refers to the legal document or authority itself, not the person. A better translation would be '\u041f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a \u0437\u0430 \u0434\u043e\u0432\u0456\u0440\u0435\u043d\u0456\u0441\u0442\u044e' (Representative by power of attorney).; rectified clean: '\u0414\u043e\u0432\u0456\u0440\u0435\u043d\u0430 \u043e\u0441\u043e\u0431\u0430' -> '\u0414\u043e\u0432\u0456\u0440\u0435\u043d\u0456\u0441\u0442\u044c'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.ukrainian",
+      "message": "judge: The English original is a field name, a noun phrase: 'Previously received ITIN or IRSN'. The Ukrainian translation '\u0427\u0438 \u043e\u0442\u0440\u0438\u043c\u0443\u0432\u0430\u043b\u0438 \u0432\u0438 \u0440\u0430\u043d\u0456\u0448\u0435 ITIN \u0430\u0431\u043e IRSN' is a full question, meaning 'Have you previously received an ITIN or IRSN?'. This changes the grammatical structure from a label to a question.; rectified clean: '\u0427\u0438 \u043e\u0442\u0440\u0438\u043c\u0443\u0432\u0430\u043b\u0438 \u0432\u0438 \u0440\u0430\u043d\u0456\u0448\u0435 ITIN \u0430\u0431\u043e IRSN' -> '\u0420\u0430\u043d\u0456\u0448\u0435 \u043e\u0442\u0440\u0438\u043c\u0430\u043d\u0438\u0439 ITIN \u0430\u0431\u043e IRSN'",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[43] (id=prior_name_first).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0454 \u0456\u043c'\u044f'; trace: judge: The translation omits the word 'first name'. It translates to 'Previous name' instead of 'Prior name first name'. | attempt 1: no new correction",
+      "field_id": "prior_name_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[44] (id=prior_name_middle).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0454 \u043f\u043e \u0431\u0430\u0442\u044c\u043a\u043e\u0432\u0456'; trace: judge: The translation omits the word 'middle name'. It translates to 'Previous patronymic' instead of 'Prior name middle name'. | attempt 1: no new correction",
+      "field_id": "prior_name_middle"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[45] (id=prior_name_last).spoken_name_translations.ukrainian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041f\u043e\u043f\u0435\u0440\u0435\u0434\u043d\u0454 \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435'; trace: judge: The translation omits the word 'last name'. It translates to 'Previous last name' instead of 'Prior name last name'. | attempt 1: no new correction",
+      "field_id": "prior_name_last"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[52] (id=delegate_name).spoken_name_translations.ukrainian",
+      "message": "judge: The translation '\u0406\u043c'\u044f \u0442\u0430 \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u0430' (Representative's first name and last name) is more specific than the original 'Name of delegate'. A more direct translation like '\u0406\u043c'\u044f \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u0430' would be better.; rectified clean: '\u0406\u043c'\u044f \u0442\u0430 \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u0430' -> '\u0406\u043c'\u044f \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u043d\u0438\u043a\u0430'",
+      "field_id": "delegate_name"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[58] (id=agent_name_title).spoken_name_translations.ukrainian",
+      "message": "judge: The translation '\u0406\u043c'\u044f, \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u0442\u0430 \u043f\u043e\u0441\u0430\u0434\u0430' (First name, last name, and title) is more specific than the original 'Name and title'. A more direct translation like '\u0406\u043c'\u044f \u0442\u0430 \u043f\u043e\u0441\u0430\u0434\u0430' would be better.; rectified clean: '\u0406\u043c'\u044f, \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u0442\u0430 \u043f\u043e\u0441\u0430\u0434\u0430 \u0443\u043f\u043e\u0432\u043d\u043e\u0432\u0430\u0436\u0435\u043d\u043e\u0433\u043e \u0430\u0433\u0435\u043d\u0442\u0430' -> '\u0406\u043c'\u044f \u0442\u0430 \u043f\u043e\u0441\u0430\u0434\u0430 \u0430\u0433\u0435\u043d\u0442\u0430 \u0437 \u043f\u0440\u0438\u0439\u043c\u0430\u043d\u043d\u044f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0456\u0432'",
+      "field_id": "agent_name_title"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "sections[sec_name_p1].label_translations.ukrainian",
+      "message": "judge: The translation '\u0406\u043c'\u044f \u0442\u0430 \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435' (First name and last name) is more specific than the original 'Name'. A more direct translation like '\u0406\u043c'\u044f' would be better.; rectified clean: '\u0406\u043c'\u044f \u0442\u0430 \u043f\u0440\u0456\u0437\u0432\u0438\u0449\u0435' -> '\u0406\u043c'\u044f'",
+      "field_id": null
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[53] (id=delegate_relationship).options[power_of_attorney].label_translations.russian",
+      "message": "judge: The translation '\u0414\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0435 \u043b\u0438\u0446\u043e' means 'authorized representative' or 'proxy', which is a broader term. The English 'Power of attorney' refers to the legal document or the authority granted, not the person. A more accurate translation for the person holding this authority would be '\u043f\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u044b\u0439' or '\u043b\u0438\u0446\u043e, \u0434\u0435\u0439\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0435 \u043f\u043e \u0434\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u0438'.; rectified clean: '\u0414\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0435 \u043b\u0438\u0446\u043e' -> '\u0414\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c'",
+      "field_id": "delegate_relationship"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.russian",
+      "message": "judge: The original English term 'IRSN' was incorrectly transcribed as 'IRSN' in the translation. It should be 'IRS' as per the never-translated tokens rule.; rectified clean: 'IRSN, \u043f\u0435\u0440\u0432\u0430\u044f \u0433\u0440\u0443\u043f\u043f\u0430' -> 'IRSN, \u043f\u0435\u0440\u0432\u0430\u044f \u0433\u0440\u0443\u043f\u043f\u0430'",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.russian",
+      "message": "judge: The original English term 'IRSN' was incorrectly transcribed as 'IRSN' in the translation. It should be 'IRS' as per the never-translated tokens rule.; rectified clean: 'IRSN, \u0432\u0442\u043e\u0440\u0430\u044f \u0433\u0440\u0443\u043f\u043f\u0430' -> 'IRSN, \u0432\u0442\u043e\u0440\u0430\u044f \u0433\u0440\u0443\u043f\u043f\u0430'",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.russian",
+      "message": "judge: The original English term 'IRSN' was incorrectly transcribed as 'IRSN' in the translation. It should be 'IRS' as per the never-translated tokens rule.; rectified clean: 'IRSN, \u0442\u0440\u0435\u0442\u044c\u044f \u0433\u0440\u0443\u043f\u043f\u0430' -> 'IRSN, \u0442\u0440\u0435\u0442\u044c\u044f \u0433\u0440\u0443\u043f\u043f\u0430'",
+      "field_id": "irsn_part3"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[43] (id=prior_name_first).spoken_name_translations.russian",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original '\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u0438\u043c\u044f'; trace: judge: The translation omits the concept of 'first name'. It translates to 'Previous name' instead of 'Previous first name'. | attempt 1: judge: The translation incorrectly uses 'first name' in English within parentheses. The correct Russian term for 'first name' is '\u0438\u043c\u044f', which should be used instead of the English phrase. | attempt 2: flip-flop (re-flagged a previously flagged value): The translation omits the concept of 'first name'. It translates 'Prior name first name' as just 'Previous name', which is incomplete and could cause confusion with other name fields.",
+      "field_id": "prior_name_first"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[44] (id=prior_name_middle).spoken_name_translations.russian",
+      "message": "judge: The translation omits the concept of 'middle name'. It translates to 'Previous patronymic' instead of 'Previous middle name'.; rectified clean: '\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u043e\u0442\u0447\u0435\u0441\u0442\u0432\u043e' -> '\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u043e\u0442\u0447\u0435\u0441\u0442\u0432\u043e'",
+      "field_id": "prior_name_middle"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[31] (id=id_doc_type).options[other].label_translations.swedish",
+      "message": "judge: The translation 'Annan' means 'Other' (singular). The standard and more appropriate translation for this context is 'Annat' or '\u00d6vrigt'.; rectified clean: 'Annan' -> '\u00d6vrigt'",
+      "field_id": "id_doc_type"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[4] (id=reason_d).spoken_name_translations.swedish",
+      "message": "judge: The translation 'beroende' is a direct but less common term for 'dependent' in this context. The standard term used in Swedish tax and social contexts is 'underh\u00e5llsber\u00e4ttigad' or 'f\u00f6rs\u00f6rjningsber\u00e4ttigad'.; rectified clean: 'Anledning d, beroende' -> 'Anledning d, f\u00f6rs\u00f6rjningsber\u00e4ttigad'",
+      "field_id": "reason_d"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[10] (id=reason_g).spoken_name_translations.swedish",
+      "message": "judge: The translation 'beroende' is a direct but less common term for 'dependent' in this context. The standard term used in Swedish tax and social contexts is 'underh\u00e5llsber\u00e4ttigad' or 'f\u00f6rs\u00f6rjningsber\u00e4ttigad'.; rectified clean: 'Anledning g, beroende eller make/maka till innehavare av visum f\u00f6r icke-bosatt' -> 'Anledning g, f\u00f6rs\u00f6rjningsber\u00e4ttigad eller make/maka till innehavare av visum f\u00f6r icke-bosatt'",
+      "field_id": "reason_g"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-unresolved",
+      "path": "fields[36] (id=previously_received_itin).spoken_name_translations.swedish",
+      "message": "UNRESOLVED after bounded rectify (judge-origin); kept original 'Tidigare mottaget ITIN eller IRSN'; trace: judge: The translation incorrectly includes 'IRSN' which is not in the original English string. The original is 'ITIN or IRSN', but the back-translation shows 'ITIN or TIN', suggesting a possible typo in the source or a misunderstanding. The Swedish translation should match the English source exactly: 'Tidigare mottaget ITIN eller IRSN'. | attempt 1: no new correction",
+      "field_id": "previously_received_itin"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[40] (id=irsn_part1).spoken_name_translations.swedish",
+      "message": "judge: The translation uses 'IRSN' which is a typo for the required never-translated token 'IRS'. The English original does not contain 'IRSN'.; rectified clean: 'IRSN f\u00f6rsta gruppen' -> 'IRSN f\u00f6rsta gruppen'",
+      "field_id": "irsn_part1"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[41] (id=irsn_part2).spoken_name_translations.swedish",
+      "message": "judge: The translation uses 'IRSN' which is a typo for the required never-translated token 'IRS'. The English original does not contain 'IRSN'.; rectified clean: 'IRSN andra gruppen' -> 'IRSN andra gruppen'",
+      "field_id": "irsn_part2"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "translation-drift-rectified",
+      "path": "fields[42] (id=irsn_part3).spoken_name_translations.swedish",
+      "message": "judge: The translation uses 'IRSN' which is a typo for the required never-translated token 'IRS'. The English original does not contain 'IRSN'.; rectified clean: 'IRSN tredje gruppen' -> 'IRSN tredje gruppen'",
+      "field_id": "irsn_part3"
+    }
+  ],
+  "verify_counts": {
+    "afrikaans": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 5,
+      "rectified": 1,
+      "unresolved": 4
+    },
+    "arabic": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 14,
+      "rectified": 11,
+      "unresolved": 3
+    },
+    "chinese": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 5,
+      "rectified": 5,
+      "unresolved": 0
+    },
+    "dutch": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 3,
+      "rectified": 0,
+      "unresolved": 3
+    },
+    "french": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 4,
+      "rectified": 1,
+      "unresolved": 3
+    },
+    "german": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 6,
+      "rectified": 2,
+      "unresolved": 4
+    },
+    "hindi": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 3,
+      "rectified": 0,
+      "unresolved": 3
+    },
+    "italian": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 4,
+      "rectified": 2,
+      "unresolved": 2
+    },
+    "korean": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 4,
+      "rectified": 3,
+      "unresolved": 1
+    },
+    "persian": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 3,
+      "rectified": 3,
+      "unresolved": 0
+    },
+    "portuguese": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 4,
+      "rectified": 4,
+      "unresolved": 0
+    },
+    "russian": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 6,
+      "rectified": 5,
+      "unresolved": 1
+    },
+    "spanish": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 18,
+      "rectified": 14,
+      "unresolved": 4
+    },
+    "swedish": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 7,
+      "rectified": 6,
+      "unresolved": 1
+    },
+    "tagalog": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 9,
+      "rectified": 6,
+      "unresolved": 3
+    },
+    "ukrainian": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 8,
+      "rectified": 5,
+      "unresolved": 3
+    },
+    "urdu": {
+      "available": true,
+      "checked": 80,
+      "mechanical": 0,
+      "judge_flagged": 4,
+      "rectified": 1,
+      "unresolved": 3
+    }
+  }
+}
