@@ -96,6 +96,10 @@ TRANSLATION_FLAG_RULES = frozenset({
     "translation-drift-unresolved",
     "translation-ambiguous-source",
     "translation-mechanical",
+    # Per-language coverage gaps (bd polyglot-pdf-x41u): a missing
+    # translation falls back to the English label mid-session, so the bake
+    # reports gaps through the same flag channel.
+    "translation-coverage",
 })
 
 # Every field-anchored finding path embeds its field id as "(id=X)" (see the

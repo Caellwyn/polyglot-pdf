@@ -322,7 +322,12 @@ def test_iter_translation_entries_paths_and_coverage():
 
 
 def test_lint_kit_schema_flags_and_skips():
-    findings = lint_kit_schema(_SCHEMA, _G)
+    # The synthetic kit covers only a couple of the 17 supported languages,
+    # so the coverage rule (bd x41u) legitimately fires alongside; this test
+    # pins the STRING checks, so filter to the mechanical rule.
+    all_findings = lint_kit_schema(_SCHEMA, _G)
+    from backend.services.translation_lint import RULE_COVERAGE as _RC
+    findings = [f for f in all_findings if f.rule != _RC]
     by_path = {}
     for finding in findings:
         assert finding.severity == SEVERITY_WARNING
@@ -386,10 +391,15 @@ def test_main_exit_codes(tmp_path, capsys):
     glossary_path = tmp_path / "glossary.json"
     glossary_path.write_text(json.dumps(_G, ensure_ascii=False),
                              encoding="utf-8")
+    # Fully covered across the supported set so the coverage rule (bd x41u)
+    # stays silent -- this test pins the exit-code contract, not coverage.
+    # Identity-kept values (translation == source) are the sanctioned way to
+    # be clean in EVERY language at once (script + wrong-language checks
+    # skip identity by design).
     clean_schema = {
         "fields": [{
             "id": "f1", "spoken_name": "Part one",
-            "spoken_name_translations": {"russian": RU_WORD},
+            "spoken_name_translations": _all_langs("Part one"),
         }],
     }
     _write_kit(tmp_path, "clean-kit", clean_schema)
@@ -408,3 +418,183 @@ def test_main_exit_codes(tmp_path, capsys):
 def test_main_errors_without_glossary(tmp_path):
     assert main(["--kits-root", str(tmp_path),
                  "--glossary", str(tmp_path / "nope.json")]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Pin check: English-side word boundaries (bd polyglot-pdf-m6w5)
+# ---------------------------------------------------------------------------
+
+_G_REFUND = {
+    "languages": {
+        "spanish": {
+            "register": "usted", "script": "latin",
+            "pins": {"refund": "reembolso"},
+        },
+    },
+}
+
+
+def test_pin_check_ignores_english_derivational_morphology():
+    """'Refundable credit' contains 'refund' only as a stem; the correct es
+    'reembolsable' does not contain 'reembolso' -- must NOT flag."""
+    failures = lint_translation(
+        "Refundable credit", "Credito reembolsable", "spanish", _G_REFUND)
+    assert CHECK_PIN not in _checks(failures)
+
+
+def test_pin_check_still_fires_on_the_standalone_term():
+    failures = lint_translation(
+        "Refund amount", "Cantidad devuelta", "spanish", _G_REFUND)
+    assert CHECK_PIN in _checks(failures)
+    # And the pinned rendering satisfies it.
+    ok = lint_translation(
+        "Refund amount", "Cantidad del reembolso", "spanish", _G_REFUND)
+    assert CHECK_PIN not in _checks(ok)
+
+
+def test_pin_check_matches_term_at_punctuation_boundaries():
+    # Word boundary = non-letter, so 'refund.' / '(refund)' still match.
+    failures = lint_translation(
+        "Amount (refund)", "Cantidad devuelta", "spanish", _G_REFUND)
+    assert CHECK_PIN in _checks(failures)
+
+
+# ---------------------------------------------------------------------------
+# Wrong-language markers (bd polyglot-pdf-za4p)
+# ---------------------------------------------------------------------------
+
+from backend.services.translation_lint import (  # noqa: E402
+    CHECK_WRONG_LANGUAGE,
+    RULE_COVERAGE,
+    coverage_findings,
+)
+
+# Portuguese "Nao e elegivel" with a-tilde (U+00E3).
+PT_IN_ES = "N" + chr(0x00E3) + "o elegivel"
+# Russian word with yery (U+044B): "Vyberite" (choose).
+RU_YERY_WORD = _chrs(0x0412, 0x044B, 0x0431, 0x043E, 0x0440)
+# Ukrainian word with i (U+0456): "imia".
+UK_I_WORD = _chrs(0x0406, 0x043C, 0x2019, 0x044F)
+
+
+def test_wrong_language_flags_portuguese_in_a_spanish_slot():
+    failures = lint_translation("Not eligible", PT_IN_ES, "spanish", _G)
+    assert CHECK_WRONG_LANGUAGE in _checks(failures)
+    msg = next(f.message for f in failures
+               if f.check == CHECK_WRONG_LANGUAGE)
+    assert "portuguese" in msg
+
+
+def test_wrong_language_flags_russian_in_a_ukrainian_slot():
+    failures = lint_translation("Choose", RU_YERY_WORD, "ukrainian", _G)
+    assert CHECK_WRONG_LANGUAGE in _checks(failures)
+    assert "russian" in next(
+        f.message for f in failures if f.check == CHECK_WRONG_LANGUAGE)
+
+
+def test_wrong_language_flags_ukrainian_in_a_russian_slot():
+    failures = lint_translation("Name", UK_I_WORD, "russian", _G)
+    assert CHECK_WRONG_LANGUAGE in _checks(failures)
+
+
+def test_wrong_language_flags_persian_letters_in_an_arabic_slot():
+    # Persian pe (U+067E) inside an otherwise-Arabic string.
+    text = _chrs(0x0627, 0x0633, 0x0645) + " " + chr(0x067E)
+    failures = lint_translation("Name", text, "arabic", _G)
+    assert CHECK_WRONG_LANGUAGE in _checks(failures)
+
+
+def test_wrong_language_tolerates_legit_orthography():
+    # Spanish enye/accents are fine in spanish...
+    ok = lint_translation(
+        "Year", "A" + chr(0x00F1) + "o", "spanish", _G)
+    assert CHECK_WRONG_LANGUAGE not in _checks(ok)
+    # ...and the enye is NOT a wrong-language marker for tagalog (Spanish
+    # loans are standard Tagalog orthography).
+    ok = lint_translation(
+        "Mr.", "Se" + chr(0x00F1) + "or", "tagalog", _G)
+    assert CHECK_WRONG_LANGUAGE not in _checks(ok)
+    # Plain Russian in a russian slot: no marker hit.
+    ok = lint_translation("Number", RU_WORD, "russian", _G)
+    assert CHECK_WRONG_LANGUAGE not in _checks(ok)
+
+
+def test_wrong_language_skips_identity_kept_strings():
+    # A deliberately untranslated proper noun (translation == source) is the
+    # translator's sanctioned identity choice -- never flagged, even when it
+    # carries a marker character.
+    src = "S" + chr(0x00E3) + "o Paulo"
+    ok = lint_translation(src, src, "spanish", _G)
+    assert CHECK_WRONG_LANGUAGE not in _checks(ok)
+
+
+# ---------------------------------------------------------------------------
+# Per-language coverage gaps (bd polyglot-pdf-x41u)
+# ---------------------------------------------------------------------------
+
+def _all_langs(value):
+    from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
+    return {n: value for n in SPOKEN_LANGUAGE_BCP47 if n != "english"}
+
+
+def _coverage_schema(drop_french_from_second=True):
+    full = _all_langs("x")
+    partial = dict(full)
+    if drop_french_from_second:
+        partial.pop("french")
+    return {
+        "fields": [
+            {"id": "a", "spoken_name": "First name",
+             "spoken_name_translations": dict(full),
+             "options": [{"value": "y", "label": "Yes",
+                          "label_translations": dict(full)}]},
+            {"id": "b", "spoken_name": "Last name",
+             "spoken_name_translations": partial},
+        ],
+        "sections": [
+            {"id": "s1", "label": "Part 1", "label_translations": dict(full)},
+        ],
+    }
+
+
+def test_coverage_flags_the_partial_language_only():
+    findings = coverage_findings(_coverage_schema())
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.rule == RULE_COVERAGE
+    assert f.severity == SEVERITY_WARNING
+    assert f.path == "coverage.french"
+    # 4 translation-bearing items, 3 covered for french.
+    assert "french covers 3/4" in f.message
+    assert "ENGLISH" in f.message
+    assert "fields[1] (id=b).spoken_name_translations" in f.message
+
+
+def test_coverage_counts_a_fully_failed_language_as_a_gap():
+    # A language with ZERO coverage in an otherwise-translated kit is the
+    # failed-batch case -- flagged, not treated as 'not attempted'.
+    schema = _coverage_schema(drop_french_from_second=False)
+    for field in schema["fields"]:
+        field.get("spoken_name_translations", {}).pop("urdu", None)
+        for opt in field.get("options") or []:
+            opt.get("label_translations", {}).pop("urdu", None)
+    schema["sections"][0]["label_translations"].pop("urdu")
+    findings = coverage_findings(schema)
+    assert [f.path for f in findings] == ["coverage.urdu"]
+    assert "urdu covers 0/4" in findings[0].message
+
+
+def test_coverage_silent_on_untranslated_and_full_kits():
+    # No baked translations at all: an untranslated draft is not a gap.
+    bare = {"fields": [{"id": "a", "spoken_name": "Name"}]}
+    assert coverage_findings(bare) == []
+    assert coverage_findings(None) == []
+    # Fully covered: nothing to flag.
+    assert coverage_findings(
+        _coverage_schema(drop_french_from_second=False)) == []
+
+
+def test_coverage_rides_lint_kit_schema():
+    findings = lint_kit_schema(_coverage_schema(), _G)
+    assert [f.rule for f in findings if f.rule == RULE_COVERAGE] \
+        == [RULE_COVERAGE]

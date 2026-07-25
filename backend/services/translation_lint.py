@@ -19,16 +19,36 @@ Check tolerances (plan review round 3 -- these are load-bearing):
   legitimately keep "I-90", "USCIS", "mm/dd/yyyy" verbatim inside
   Cyrillic/Devanagari/Han strings. (Presence-only, not dominance -- see
   _check_script's docstring for the measured rationale.)
-- Glossary-pin checks are exact-substring (case-insensitive). Sound for the
-  current pins (zh does not inflect; es only mildly, and the pinned phrases
-  are stable in IRS usage). When pins expand to inflecting languages
-  (ru/ur/pl-class), this check needs lemma normalization or demotion to
-  advisory -- do not copy it as-is.
+- Glossary-pin checks match the ENGLISH source term at word boundaries
+  (bd polyglot-pdf-m6w5: a bare substring match tripped on English
+  derivational morphology -- 'Refundable credit' contains 'refund', which
+  then demanded the pinned 'reembolso' inside the correct 'reembolsable')
+  and the TARGET rendering as exact-substring (case-insensitive). The
+  target side is sound for the current pins (zh does not inflect; es only
+  mildly, and the pinned phrases are stable in IRS usage). When pins expand
+  to inflecting languages (ru/ur/pl-class), the target check needs lemma
+  normalization or demotion to advisory -- do not copy it as-is.
+- The wrong-language check (bd polyglot-pdf-za4p) is MARKER-based and
+  precision-first: it flags only characters that are standard orthography
+  in a same-script NEIGHBOR language but foreign to the expected one
+  (Portuguese a-tilde/o-tilde in a Spanish slot; Russian yery/hard-sign in
+  a Ukrainian slot; Persian pe/che/zhe/gaf in an Arabic slot). It cannot
+  catch a wrong-language string that avoids every marker -- that residual
+  is the bilingual judge's job. Under the language-lock purpose (memory:
+  translations-are-drift-anchors-not-display) a wrong-LANGUAGE string is
+  the worst shippable defect: it anchors the voice model to the wrong
+  language, the exact live failure (a Spanish session slipping into
+  Portuguese) that started the epic.
 
-Findings are schema_lint.LintFinding-shaped, ALL severity=WARNING with
-rule="translation-mechanical" (the flag-taxonomy kind); the specific check id
-leads the message. WARNING never blocks kit publish -- shipping decisions on
-flags stay human (fail-open doctrine).
+Findings are schema_lint.LintFinding-shaped, ALL severity=WARNING. String
+checks carry rule="translation-mechanical" (the flag-taxonomy kind) with the
+specific check id leading the message; the kit-level coverage check (bd
+polyglot-pdf-x41u) carries rule="translation-coverage" -- one finding per
+language whose coverage is incomplete in an otherwise-translated kit,
+because a MISSING translation falls back to the English label mid-session
+(an English injection at the exact point the language lock is held), making
+gaps worse than imperfect strings. WARNING never blocks kit publish --
+shipping decisions on flags stay human (fail-open doctrine).
 """
 from __future__ import annotations
 
@@ -47,9 +67,12 @@ from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
 
 _log = structlog.get_logger(__name__)
 
-# The one taxonomy rule id every mechanical finding carries (the plan's flag
-# taxonomy); the per-check id leads the message text instead.
+# The taxonomy rule id every mechanical STRING finding carries (the plan's
+# flag taxonomy); the per-check id leads the message text instead.
 RULE_MECHANICAL = "translation-mechanical"
+# Kit-level coverage findings (bd polyglot-pdf-x41u) carry their own rule so
+# the editor can label the class distinctly (a gap is not a bad string).
+RULE_COVERAGE = "translation-coverage"
 
 # Per-check ids (message prefixes + spike/report grouping).
 CHECK_EMPTY = "empty"
@@ -59,6 +82,7 @@ CHECK_MASK = "mask-broken"
 CHECK_DNT = "dnt-violated"
 CHECK_SCRIPT = "wrong-script"
 CHECK_PIN = "pin-missed"
+CHECK_WRONG_LANGUAGE = "wrong-language-marker"
 
 DEFAULT_GLOSSARY_PATH = (
     Path(__file__).resolve().parents[2] / "form-kits" / "_translation"
@@ -90,6 +114,45 @@ class MechanicalFailure:
 
     check: str
     message: str
+
+
+# Same-script neighbor markers (bd polyglot-pdf-za4p). For each EXPECTED
+# language, characters that are standard orthography in a neighbor language
+# sharing its script but foreign to the expected one -- their presence is a
+# high-confidence wrong-language signal the script check cannot see (both
+# languages pass the script-range test). Precision-first: only unambiguous
+# markers are listed; e.g. the enye is NOT a marker for tagalog (Tagalog
+# legitimately uses it in Spanish loans), and urdu gets no marker set at all
+# (its alphabet embeds both the Perso-Arabic and retroflex letters). ASCII
+# escapes per the module rule; the claimed-language string feeds the message.
+_MARKS_PT = {c: "portuguese" for c in
+             "\u00e3\u00c3\u00f5\u00d5"}  # a/o with tilde
+_MARKS_ES = {c: "spanish" for c in "\u00f1\u00d1"}  # enye
+_MARKS_DE = {c: "german" for c in "\u00df\u1e9e"}  # sharp s
+_MARKS_UK = {c: "ukrainian" for c in
+             "\u0456\u0406\u0457\u0407\u0454\u0404\u0491\u0490"}  # i / yi / ye / ghe
+_MARKS_RU = {c: "russian" for c in
+             "\u044b\u042b\u044d\u042d\u044a\u042a\u0451\u0401"}  # yery / e / hard sign / yo
+_MARKS_FA_UR = {c: "persian/urdu" for c in
+                "\u067e\u0686\u0698\u06af"}  # pe / che / zhe / gaf
+_MARKS_UR = {c: "urdu" for c in
+             "\u0679\u0688\u0691\u06ba\u06d2\u06be"}  # retroflex set + barree ye / do-chashmi he
+
+_FOREIGN_MARKERS: Dict[str, Dict[str, str]] = {
+    "spanish": {**_MARKS_PT, **_MARKS_DE},
+    "portuguese": {**_MARKS_ES, **_MARKS_DE},
+    "italian": {**_MARKS_PT, **_MARKS_ES, **_MARKS_DE},
+    "french": {**_MARKS_PT, **_MARKS_ES, **_MARKS_DE},
+    "german": {**_MARKS_PT, **_MARKS_ES},
+    "dutch": {**_MARKS_PT, **_MARKS_ES, **_MARKS_DE},
+    "afrikaans": {**_MARKS_PT, **_MARKS_ES, **_MARKS_DE},
+    "swedish": {**_MARKS_PT, **_MARKS_ES, **_MARKS_DE},
+    "tagalog": {**_MARKS_PT, **_MARKS_DE},
+    "russian": _MARKS_UK,
+    "ukrainian": _MARKS_RU,
+    "arabic": {**_MARKS_FA_UR, **_MARKS_UR},
+    "persian": _MARKS_UR,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +275,7 @@ def lint_translation(
     failures.extend(
         _check_script(source, translation, lang_entry, dnt_terms,
                       form_number_re, mask_re))
+    failures.extend(_check_wrong_language(source, translation, language_name))
     failures.extend(_check_pins(source, translation, lang_entry))
     return failures
 
@@ -370,12 +434,51 @@ def _check_script(
     return []
 
 
+def _check_wrong_language(
+    source: str, translation: str, language_name: str
+) -> List[MechanicalFailure]:
+    """Same-script wrong-language detection (bd polyglot-pdf-za4p): flag
+    characters that are standard orthography in a neighbor language but
+    foreign to the expected one -- the class the script check is blind to
+    (a Portuguese string in a spanish slot passes the latin-script test).
+    Marker-based and precision-first (see _FOREIGN_MARKERS); identity-kept
+    strings are skipped for parity with _check_script (a deliberately
+    untranslated proper noun is the translator's sanctioned choice)."""
+    markers = _FOREIGN_MARKERS.get(language_name)
+    if not markers or translation.strip() == source.strip():
+        return []
+    hits: Dict[str, List[str]] = {}
+    for ch in set(translation):
+        claimed = markers.get(ch)
+        if claimed:
+            hits.setdefault(claimed, []).append("U+%04X" % ord(ch))
+    if not hits:
+        return []
+    detail = "; ".join(
+        "%s marker(s) %s" % (claimed, ", ".join(sorted(chars)))
+        for claimed, chars in sorted(hits.items()))
+    return [MechanicalFailure(
+        CHECK_WRONG_LANGUAGE,
+        "wrong-language-marker: translation for %s contains %s -- likely a "
+        "same-script wrong-language string, which would anchor the voice "
+        "model to the WRONG language" % (language_name, detail),
+    )]
+
+
 def _check_pins(
     source: str, translation: str, lang_entry: Dict[str, Any]
 ) -> List[MechanicalFailure]:
     """Where an official pinned rendering exists for a term in the source,
-    the translation must contain it (case-insensitive substring; see the
-    module docstring's inflection caveat)."""
+    the translation must contain it (case-insensitive substring on the
+    target side; see the module docstring's inflection caveat).
+
+    The ENGLISH term is matched at ASCII-letter word boundaries (bd
+    polyglot-pdf-m6w5): a bare substring match trips on English
+    derivational morphology -- 'Refundable credit' contains 'refund',
+    which then demands the pinned noun rendering inside the correct
+    adjectival translation. ASCII-letter lookarounds are safe here because
+    the SOURCE side is English (the translation-side caveat about \\w next
+    to CJK/Arabic letters does not apply)."""
     pins = lang_entry.get("pins")
     if not isinstance(pins, dict) or not pins:
         return []
@@ -385,7 +488,8 @@ def _check_pins(
     for en_term, target in pins.items():
         if not isinstance(en_term, str) or not isinstance(target, str):
             continue
-        if en_term.lower() in source_lower \
+        term_re = r"(?<![a-z])%s(?![a-z])" % re.escape(en_term.lower())
+        if re.search(term_re, source_lower) \
                 and target.lower() not in translation_lower:
             failures.append(MechanicalFailure(
                 CHECK_PIN,
@@ -458,13 +562,105 @@ def iter_translation_entries(
             )
 
 
+def _iter_translation_items(
+    schema: Optional[Dict[str, Any]],
+) -> Iterator[Tuple[str, Dict[str, Any]]]:
+    """Yield (path_base, translations_map_or_empty) for every translation-
+    BEARING item in a kit schema -- unlike iter_translation_entries, an item
+    with NO translations dict still yields (with {}), so coverage can see
+    absences."""
+    for index, field in enumerate((schema or {}).get("fields") or []):
+        if not isinstance(field, dict):
+            continue
+        field_ref = "fields[%d] (id=%s)" % (index, field.get("id"))
+        spoken = field.get("spoken_name") or field.get("name")
+        if isinstance(spoken, str) and spoken.strip():
+            tmap = field.get("spoken_name_translations")
+            yield (field_ref + ".spoken_name_translations",
+                   tmap if isinstance(tmap, dict) else {})
+        for opt in field.get("options") or field.get("allowed_values") or []:
+            if not isinstance(opt, dict):
+                continue
+            label = opt.get("label")
+            if isinstance(label, str) and label.strip():
+                tmap = opt.get("label_translations")
+                yield ("%s.options[%s].label_translations"
+                       % (field_ref, opt.get("value")),
+                       tmap if isinstance(tmap, dict) else {})
+    for section in (schema or {}).get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        label = section.get("label")
+        if isinstance(label, str) and label.strip():
+            tmap = section.get("label_translations")
+            yield ("sections[%s].label_translations" % section.get("id"),
+                   tmap if isinstance(tmap, dict) else {})
+
+
+def coverage_findings(
+    schema: Optional[Dict[str, Any]],
+    languages: Optional[List[str]] = None,
+) -> List[LintFinding]:
+    """Per-language coverage gaps (bd polyglot-pdf-x41u): one WARNING per
+    language whose coverage is INCOMPLETE in an otherwise-translated kit
+    (a fully-failed language counts -- coverage 0 is the failed-batch
+    case). A kit with NO baked translations at all yields nothing (an
+    untranslated draft is not a gap). Rationale: a missing translation
+    falls back to the English label mid-session -- an English injection at
+    the exact point the language lock is held -- so gaps are worse than
+    imperfect strings (memory: translations-are-drift-anchors-not-display).
+
+    `languages` scopes the judgment: the kit-level sweep passes None (every
+    supported language -- kit health), while the bake report passes the
+    languages THAT BAKE addressed, so a deliberate `--languages spanish`
+    subset run is not flagged for the 16 languages it never attempted."""
+    if languages is None:
+        languages = sorted(
+            n for n in SPOKEN_LANGUAGE_BCP47 if n != "english")
+    else:
+        languages = sorted(
+            lang for lang in ((_resolve_language_key(l) for l in languages))
+            if lang and lang != "english")
+    total = 0
+    covered: Dict[str, int] = {lang: 0 for lang in languages}
+    missing_examples: Dict[str, List[str]] = {lang: [] for lang in languages}
+    for path_base, tmap in _iter_translation_items(schema):
+        total += 1
+        resolved = {_resolve_language_key(k) for k in tmap}
+        for lang in languages:
+            if lang in resolved:
+                covered[lang] += 1
+            elif len(missing_examples[lang]) < 3:
+                missing_examples[lang].append(path_base)
+    if total == 0 or not any(covered.values()):
+        return []
+    findings: List[LintFinding] = []
+    for lang in languages:
+        n = covered[lang]
+        if n >= total:
+            continue
+        examples = "; ".join(missing_examples[lang])
+        findings.append(LintFinding(
+            severity=SEVERITY_WARNING,
+            rule=RULE_COVERAGE,
+            path="coverage.%s" % lang,
+            message="translation-coverage: %s covers %d/%d strings -- %d "
+                    "missing (each falls back to the ENGLISH label in a %s "
+                    "session; re-run the bake to fill the gap). First "
+                    "missing: %s" % (lang, n, total, total - n, lang,
+                                     examples),
+        ))
+    return findings
+
+
 def lint_kit_schema(
     schema: Optional[Dict[str, Any]],
     glossary: Optional[Dict[str, Any]],
 ) -> List[LintFinding]:
-    """Lint every baked translation in one kit schema. Translation-map keys
-    that resolve to no known language (hand-authored oddities) are SKIPPED,
-    not flagged -- the lint checks strings, not key hygiene."""
+    """Lint every baked translation in one kit schema, plus the per-language
+    coverage check. Translation-map keys that resolve to no known language
+    (hand-authored oddities) are SKIPPED, not flagged -- the string lint
+    checks strings, not key hygiene."""
     findings: List[LintFinding] = []
     for path, lang_key, source, translation in \
             iter_translation_entries(schema):
@@ -479,6 +675,7 @@ def lint_kit_schema(
                 path=path,
                 message=failure.message,
             ))
+    findings.extend(coverage_findings(schema))
     return findings
 
 
