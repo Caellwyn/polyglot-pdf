@@ -66,7 +66,9 @@ storage back to the schema.
   semantics allow (else loud repair-report + lint surfacing). This implements
   existing schema semantics -- no new schema contract.
 - **Provisional bars are set final at baseline time** (R1) and logged on the
-  epic bead, per the rubric-change doctrine.
+  epic bead, per the rubric rule in
+  [`docs/doctrine/planning.md`](doctrine/planning.md) ("changes are logged on
+  the epic bead").
 
 ## Exit rubric (epic `polyglot-pdf-o2bs`)
 

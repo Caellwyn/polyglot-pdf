@@ -49,7 +49,8 @@ canonicalize with zero silent drops, not trigger-side storage.
   against) mirroring the 7a9 bake pattern.
 - Provisional rubric bars (i-90 show_if+require_if >= 70%, logic keys >=
   50%, w7 >= 60% or +20 points) finalized at R1 baseline time and logged on
-  the epic bead, per the rubric-change doctrine.
+  the epic bead, per planning.md's rubric rule (changes are logged on the
+  epic bead).
 
 ## Doc-freshness note
 
