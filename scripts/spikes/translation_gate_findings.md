@@ -193,19 +193,29 @@ discrimination works in both directions on the verifiable slice; the FP class
 found is diagnosed, mitigable, and concentrated where gold confidence was
 lowest.
 
-## Run 3 (2026-07-25, the g0ka judge-reframe regression check)
+## Run 3 (2026-07-25) -- INVALID as a reframe check; kept as an old-prompt replicate
 
-Re-run against the LANGUAGE-LOCK judge prompt (bd polyglot-pdf-g0ka: the
-strings' consumer is the voice model; the bar is intelligible-and-in-
-language; wrong/mixed language leads the DRIFT list, imperfect-but-
-intelligible word choice is explicitly NOT drift):
+Intended as the g0ka judge-reframe regression check, but the probe carried
+its OWN stale copy of the judge rules, so this run silently exercised the
+OLD prompt (caught by fresh-eyes on the g0ka closeout). Its numbers stand
+only as a third old-prompt replicate: 14/14 plants, es gold 15/15 clean,
+zh gold FP 1. Cost $0.21. The probe now IMPORTS the production adapter's
+`_JUDGE_RULES` (aliasing pinned by unit test), so this divergence class is
+closed.
 
-- **Discrimination PRESERVED: 14/14 plants caught (7/7 es + 7/7 zh), same
-  layers.** es gold 15/15 clean; zh gold FP 1 at both chunk sizes (within
-  the run-1/run-2 range of 1-2). Cost $0.21.
-- The Pub-850 gold set is a FLOOR-FP corpus (0-1 FPs even under the old
-  prompt), so it cannot show the over-flag reduction the reframe targets.
-  That is measured directly by the V5 QUIBBLE SET instead
+## Run 4 (2026-07-25, the REAL g0ka reframe check)
+
+Re-run with the probe reading the production LANGUAGE-LOCK prompt (bd
+polyglot-pdf-g0ka: voice-model consumer, intelligible-and-in-language bar,
+wrong/mixed language leads DRIFT, imperfect-but-intelligible word choice
+explicitly NOT drift):
+
+- **Discrimination PRESERVED under the reframe: 14/14 plants caught (7/7
+  es + 7/7 zh), same layers.** es gold 15/15 clean; zh gold FP 2 at
+  chunk 25 / 1 at chunk 50 (within the 1-2 old-prompt range). Cost $0.20.
+- The Pub-850 gold set is a FLOOR-FP corpus (0-2 FPs under either prompt),
+  so it cannot show the over-flag reduction the reframe targets. That is
+  measured directly by the V5 QUIBBLE SET
   (`translation_judge_quibble_ab.py`): 14 V5 judge-origin unresolved keeps
   that the cross-family Claude audit certified acceptable -- old prompt
   14/14 flagged, reframed prompt **9/14 (-36%)**, and the residual flags

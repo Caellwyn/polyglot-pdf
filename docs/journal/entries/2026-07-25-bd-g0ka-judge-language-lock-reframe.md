@@ -28,10 +28,14 @@ recommendations.
   never-flag-your-own-proposal + conventional-rendering zh-g11, register,
   negation, option-mismatch, numbers). Byte-stable constant, pinned by
   `test_judge_rules_carry_the_language_lock_framing`.
-- **Regression check (live, $0.21):** V1 probe re-run -- 14/14 plants
-  caught at the same layers (recall unchanged), es gold 15/15 clean, zh
-  gold FP 1 (within the 1-2 baseline range). Recorded as Run 3 in
-  `scripts/spikes/translation_gate_findings.md`.
+- **Regression check (live, $0.41 across two runs):** the first probe
+  re-run (Run 3, $0.21) turned out to exercise the OLD prompt -- the probe
+  carried its own stale copy of the judge rules (fresh-eyes catch). The
+  probe now IMPORTS the production adapter's `_JUDGE_RULES` (aliasing
+  pinned by `test_probe_judges_with_the_production_rules`), and the real
+  re-run (Run 4, $0.20) proves recall under the reframe: 14/14 plants at
+  the same layers, es gold 15/15 clean, zh gold FP 1-2 (baseline range).
+  Both runs recorded in `scripts/spikes/translation_gate_findings.md`.
 - **FP-reduction measurement (live, ~$0.02):** the Pub-850 gold set is
   floor-FP and cannot show the over-flag drop, so a new spike
   (`scripts/spikes/translation_judge_quibble_ab.py`) judges the 14 V5
@@ -40,7 +44,11 @@ recommendations.
   with the residual flags substantive (omitted "first name" concepts,
   Suite->Office narrowing, the IRSN case bd c6td retires) rather than
   stylistic.
-- Fresh-eyes triage: (filled at closeout -- see PR.)
+- Fresh-eyes triage: Opus round 1 -- GAPS-FOUND (2), both adopted: (1)
+  the probe's stale local judge-rules copy invalidated the recall check
+  (fixed by importing the adapter constant + aliasing pin + live Run 4);
+  (2) the prompt pin missed several load-bearing V1 clauses (pin
+  extended to all of them). Opus round 2 cleared. Rejected: none.
 
 ## Lessons
 
