@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-14. See [../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the overlay []-alias read fix.*
+*Last updated: 2026-07-25. See [../journal/entries/2026-07-25-bd-c6td-r9a7-v5-followups.md](../journal/entries/2026-07-25-bd-c6td-r9a7-v5-followups.md) for closeout details.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -146,8 +146,8 @@ approximation for feedback; this modal (and download) is the ground truth.
 - `signature` fields with a usable `pdf_position` DO get overlays (the i-90
   has 4 such): a signature is not paintable as text, so if one ever carried a
   string value it would render as raw text in its rect. (Coverage varies by
-  kit -- w7-2's signature fields have all-zero rects, so `hasValidCoordinates`
-  rejects them and no overlay renders.)
+  kit -- a kit whose signature fields carry all-zero rects is rejected by
+  `hasValidCoordinates` and renders no overlay.)
   Simplified mode has no signature INPUT widget yet
   (`FieldRenderer` marks the type not-yet-implemented), but that is a
   widget gap, not a value/paint gap -- nothing restricts `update_form_fields`

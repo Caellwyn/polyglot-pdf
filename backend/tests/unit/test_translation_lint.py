@@ -353,13 +353,13 @@ def test_lint_kit_schema_empty_and_none_schema():
 
 
 def test_lint_kits_sweeps_real_repo_kits():
-    """Exit criterion 3: the sweep over the 4 shipped kits completes without
+    """Exit criterion 3: the sweep over the committed kits completes without
     error. Findings are allowed (the shipped bake predates the lint); the
     pin is completion + coverage, not zero findings."""
     kits_root = DEFAULT_GLOSSARY_PATH.parents[1]
     glossary = load_glossary()
     results = lint_kits(kits_root, glossary)
-    assert {"f1040", "i-90", "w7", "w7-2"} <= set(results)
+    assert {"f1040", "i-90", "w7"} <= set(results)
     assert "_translation" not in results
     for findings in results.values():
         for finding in findings:

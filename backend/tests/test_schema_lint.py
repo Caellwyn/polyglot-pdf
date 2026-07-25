@@ -559,7 +559,7 @@ def _load_kit_schema(kit):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2"])
+@pytest.mark.parametrize("kit", ["i-90", "w7"])
 def test_shipped_kits_lint_error_free(kit):
     # The promotion gate is zero ERRORs (WARNINGs never block). Post the
     # guardrail-first inventory (bd h76m.16 follow-up), the shipped kits DO carry
@@ -593,7 +593,7 @@ def _dump_kit(kit):
 # exists but can't be filled through the app":
 #   - dump-widget-unclaimed: a real fillable PDF widget with NO schema field
 #     (extraction dropped it) -- i-90's 4 were FIXED by bd 0nxh (now 0); f1040
-#     still has 12; w7 / w7-2 each have 2 (the box-h "Other" reason text line
+#     still has 12; w7 has 2 (the box-h "Other" reason text line
 #     f1_04 and the 6d "Other" ID-document text line f1_23 -- both surfaced as
 #     genuinely unmodeled once bd polyglot-pdf-ivh9 corrected the field-to-widget
 #     off-by-one that had been mis-parking treaty_country / id_number on them;
@@ -608,12 +608,11 @@ def _dump_kit(kit):
 _UNFILLABLE_BASELINE = {
     "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
     "w7": {"dump-widget-unclaimed": 2, "readonly-conditional-no-unlock": 0},
-    "w7-2": {"dump-widget-unclaimed": 2, "readonly-conditional-no-unlock": 0},
     "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
 }
 
 
-@pytest.mark.parametrize("kit", ["i-90", "w7", "w7-2", "f1040"])
+@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
 def test_kit_unfillable_field_inventory(kit):
     # Lint each committed kit WITH its AcroForm dump and pin the count of each
     # "unfillable field" warning class against the known baseline. A mismatch is

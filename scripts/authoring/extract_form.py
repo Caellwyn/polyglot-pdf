@@ -463,7 +463,7 @@ def _backfill_unclaimed_widgets(schema: dict, dump_path: str) -> int:
     """Append a minimal field for every fillable AcroForm widget NO field claims
     (bd polyglot-pdf-w0eq, P6.1c).
 
-    The LLM extraction pass stochastically omits a field entirely -- w7 and w7-2
+    The LLM extraction pass stochastically omits a field entirely -- re-runs on w7
     are the SAME PDF, yet a re-extraction drops a different widget each run, and
     the loss was silent (lint flagged only OVER-claim). This deterministic step
     closes the gap: any USER-FILLABLE dump widget (per schema_lint's
@@ -1014,7 +1014,7 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
 
         # 3d. Deterministically backfill any fillable dump widget NO field claims
         #     (bd polyglot-pdf-w0eq, P6.1c). The LLM pass stochastically omits a
-        #     field (w7 / w7-2 are the same PDF, yet each re-extraction drops a
+        #     field (repeat extractions of the same W-7 PDF each drop a
         #     different widget); this guarantees every widget is covered instead
         #     of trusting the model to enumerate all of them.
         widgets_backfilled = _backfill_unclaimed_widgets(schema, dump_path)
