@@ -59,4 +59,4 @@ $1.25/M in, $10/M out; gemini-2.5-flash-lite $0.10/M in, $0.40/M out).
 
 - gemini-2.5-flash-lite: 92 calls, 120,197 in / 112,362 out tokens -> $0.06
 - gemini-2.5-pro: 287 calls, 620,833 in / 341,909 out tokens -> $4.20
-- TOTAL: $4.25
+- TOTAL: $4.26 (sum of the displayed per-model components; the raw-token sum is $4.2521)

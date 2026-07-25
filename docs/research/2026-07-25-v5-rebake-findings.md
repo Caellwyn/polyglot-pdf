@@ -16,7 +16,7 @@ might say something off", never "the user sees a wrong form".
 
 - Scope: 2 kits x 17 languages = 34 kit-languages; 274 (i-90) + 80 (w7)
   strings verified per language; ~6,000 baked translations total.
-- **Actual spend: $4.25** (287 pro calls $4.20 + 92 flash-lite calls $0.05)
+- **Actual spend: $4.26** (287 pro calls $4.20 + 92 flash-lite calls $0.06; raw-token sum $4.2521)
   -- inside the approved ~$4-5 worst-case ask.
 - Zero failed languages; both kits written in one pass.
 - **Deterministic lint sweep over the re-baked kits: 0 findings** (DNT

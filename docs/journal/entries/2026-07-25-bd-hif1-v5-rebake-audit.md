@@ -21,7 +21,7 @@ maintainer 2026-07-25).
 - Rollback tag `pre-v5-rebake-2026-07-25` (pushed), then a `--force` re-bake
   of i-90 + w7 across all 17 non-English languages via
   `translate_option_labels.py` with `--flags-out` artifacts. Zero failed
-  languages. **Actual spend $4.25** (287 pro + 92 flash-lite calls) vs the
+  languages. **Actual spend $4.26** (287 pro + 92 flash-lite calls) vs the
   ~$4-5 approved worst case.
 - The deterministic lint sweep over the re-baked kits: **0 findings**
   (`backend/services/translation_lint.py`, script-checked -- epic criterion
