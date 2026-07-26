@@ -139,6 +139,12 @@ def get_field_guidance(
         guidance["instructions"] = instructions
     if format_hint:
         guidance["format_hint"] = format_hint
+    # details: verbatim official-booklet reference text (bd wsao.1). Injected
+    # inline for the CURRENT field only (v1 delivery policy, sprint-16 plan);
+    # the spoken ask-hint path never reads it.
+    details = help_block.get("details")
+    if details:
+        guidance["details"] = details
 
     # Options for select/radio/checkbox (label/value pairs or bare values).
     # SANITIZE via the shared helper (bd polyglot-pdf-lj5v) to the

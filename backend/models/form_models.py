@@ -165,6 +165,23 @@ class FormMetadata(BaseModel):
     page_count: Optional[int] = Field(None, description="Total pages in PDF")
     instructions_url: Optional[str] = Field(None, description="Link to separate instructions PDF")
     agency: Optional[str] = Field(None, description='e.g., "U.S. Citizenship and Immigration Services"')
+    details: Optional[str] = Field(
+        None,
+        description="Form-LEVEL guidance details (eligibility, supporting "
+                    "documents, how/when/where to apply) excerpted from the "
+                    "official instructions booklet -- content that attaches to "
+                    "no single field. Secretary-catalog only "
+                    "(bd polyglot-pdf-wsao.1; sprint-16 plan)."
+    )
+    booklet_text: Optional[str] = Field(
+        None,
+        description="Full verbatim text of the official instructions booklet "
+                    "-- the secretary's zero-trust reference floor, so "
+                    "form-level and orphaned passages are always answerable. "
+                    "Secretary-catalog only; rides the client-owned schema "
+                    "like all other content (transport decision, "
+                    "bd polyglot-pdf-wsao.1)."
+    )
 
 
 class PDFPosition(BaseModel):
@@ -357,6 +374,15 @@ class FieldHelp(BaseModel):
     inline: Optional[str] = Field(None, description='Inline hint text like "(if any)"')
     tooltip: Optional[str] = Field(None, description="Hover tooltip")
     instructions: Optional[str] = Field(None, description="Longer instructions below field")
+    details: Optional[str] = Field(
+        None,
+        description="Verbatim excerpts from the form's official instructions "
+                    "booklet for this field (headings per option/line). "
+                    "MODEL-FACING ONLY: injected into the current field's "
+                    "guidance block and the secretary catalog, never rendered "
+                    "on-screen and never in the spoken ask-hint "
+                    "(bd polyglot-pdf-wsao.1; sprint-16 plan)."
+    )
     format_hint: Optional[str] = Field(None, description='Short input-format hint, e.g. "7-9 digits" or "YYYY-MM-DD" (rendered into the SI; bd polyglot-pdf-jnjj.23)')
     warning: Optional[str] = Field(None, description="Legal warning or important note")
     example: Optional[str] = Field(None, description="Example value")

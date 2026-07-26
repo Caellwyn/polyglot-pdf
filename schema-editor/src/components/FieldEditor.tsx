@@ -694,6 +694,21 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           </div>
 
           <div>
+            <label className="label">Details (official reference text)</label>
+            <textarea
+              className="input font-mono text-xs"
+              rows={6}
+              value={field.help?.details || ''}
+              onChange={(e) =>
+                updateField({
+                  help: { ...field.help, details: e.target.value },
+                })
+              }
+              placeholder="Verbatim excerpts from the official instructions booklet for this field (AI reference only -- never shown to users)..."
+            />
+          </div>
+
+          <div>
             <label className="label">Format Hint</label>
             <input
               type="text"

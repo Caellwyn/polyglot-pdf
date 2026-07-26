@@ -77,6 +77,8 @@ export interface FormMetadata {
   page_count?: number;
   instructions_url?: string;
   agency?: string; // e.g., "U.S. Citizenship and Immigration Services"
+  details?: string; // Form-LEVEL guidance from the official booklet (bd wsao.1). Secretary-catalog only; never rendered
+  booklet_text?: string; // Full verbatim official-booklet text -- the secretary's reference floor (bd wsao.1). Never rendered
 }
 
 export interface PDFPosition {
@@ -131,6 +133,7 @@ export interface FieldHelp {
   inline?: string; // Inline hint text like "(if any)"
   tooltip?: string; // Hover tooltip
   instructions?: string; // Longer instructions below field
+  details?: string; // Verbatim official-booklet excerpts (bd wsao.1). MODEL-FACING ONLY: never rendered on-screen, never in the spoken ask-hint
   format_hint?: string; // Short input-format hint, e.g. "7-9 digits" / "YYYY-MM-DD" (rendered into the SI; bd polyglot-pdf-jnjj.23)
   warning?: string; // Legal warning or important note
   example?: string; // Example value

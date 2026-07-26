@@ -32,7 +32,15 @@ fresh, APPEND-ONLY tail.
 INCLUDE/EXCLUDE contract (from docs/standards/validation-delegation.md + the
 secretary research plan):
   INCLUDE per field: id, spoken_name, name/label, type, options (radio/select),
-    help.instructions (+ help.format_hint), section label, current value, shown.
+    help.instructions (+ help.format_hint), help.details (verbatim booklet
+    excerpts, bd wsao.1), section label, current value, shown.
+  INCLUDE form-level (bd wsao.1, sprint-16 plan): metadata.details (form-level
+    guidance -- eligibility/documents/where-to-apply) and metadata.booklet_text
+    (the WHOLE official instructions booklet, verbatim) -- the secretary's
+    reference FLOOR, so form-level and orphaned-passage questions are
+    answerable and the "ask the secretary" fallback is never circular. Both are
+    session-invariant and render at the END of the static catalog (cacheable
+    prefix stays byte-stable).
   EXCLUDE: PDF mechanics (pdf_position, pdf_field_name, consolidated_widgets,
     is_comb), validation.pattern/regex, raw show_if/controls_fields logic.
 
@@ -199,7 +207,35 @@ def _render_field(field: dict, fid: str, field_values: dict, shown_map: dict,
         lines.append(h)
     elif fmt_hint:
         lines.append("    help: (format: " + fmt_hint + ")")
+    # Verbatim official-booklet excerpts for this field (bd wsao.1). Multi-line
+    # by design (headings per option/line); indented under the field entry so
+    # the catalog's list structure stays scannable.
+    details = (help_obj.get("details") or "").strip()
+    if details:
+        lines.append("    details: |")
+        lines.extend("      " + dl for dl in details.splitlines())
     return "\n".join(lines)
+
+
+def _render_form_reference(schema: dict) -> str:
+    """Render the form-LEVEL reference floor (bd wsao.1): metadata.details
+    (form-level guidance that attaches to no field) and metadata.booklet_text
+    (the whole official instructions booklet, verbatim). Session-invariant, so
+    it belongs in the cacheable static catalog; returns "" when neither is set
+    (renders stay byte-identical for kits without them)."""
+    meta = schema.get("metadata") or {}
+    out = []
+    form_details = (meta.get("details") or "").strip()
+    if form_details:
+        out.append("=== FORM-LEVEL GUIDANCE ===")
+        out.append(form_details)
+        out.append("")
+    booklet = (meta.get("booklet_text") or "").strip()
+    if booklet:
+        out.append("=== OFFICIAL FORM INSTRUCTIONS (verbatim reference) ===")
+        out.append(booklet)
+        out.append("")
+    return "\n".join(out)
 
 
 def render_secretary_context(schema: dict, field_values: dict, shown_map: dict) -> str:
@@ -225,6 +261,10 @@ def render_secretary_context(schema: dict, field_values: dict, shown_map: dict) 
                 continue
             out.append(_render_field(field, fid, field_values, shown_map))
         out.append("")  # blank line between sections
+    reference = _render_form_reference(schema)
+    if reference:
+        out.append("")
+        out.append(reference)
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -249,6 +289,13 @@ def render_static_catalog(schema: dict) -> str:
                 continue
             out.append(_render_field(field, fid, {}, {}, with_state=False))
         out.append("")
+    # Form-level reference floor (bd wsao.1) -- session-invariant, so it lives
+    # in the cacheable prefix. Appended at the END so schemas without it render
+    # byte-identically to the pre-wsao.1 catalog.
+    reference = _render_form_reference(schema)
+    if reference:
+        out.append("")
+        out.append(reference)
     return "\n".join(out).rstrip() + "\n"
 
 
