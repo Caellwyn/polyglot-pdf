@@ -580,6 +580,30 @@ def test_all_six_trigger_actions_end_to_end():
     assert repaired2["fields"][4] == by_id["t_hide"]
 
 
+def test_mirror_alias_is_reported_exactly_once():
+    # Outer review (bd xbfm): the conversion pass re-normalizes each
+    # unlocks/hides-bearing control QUIETLY -- a loud second pass would
+    # double-log every alias-operator entry and double alias_hit_count (the
+    # P6 decay metric). Pin exact cardinality for both a plain shows edge and
+    # an unlocks-bearing edge on a checkbox_group trigger (whose v1 `equals`
+    # aliases to `includes`).
+    def _draft(actions):
+        trigger = {"id": "trg", "type": "checkbox_group", "options": [
+            {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+            {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+            "controls_fields": [dict({"operator": "equals", "value": "yes"},
+                                     **actions)]}
+        target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+        return _v2_schema([trigger, target])
+
+    for actions in ({"shows": ["tgt"]},
+                    {"shows": ["tgt"], "unlocks": ["tgt"]},
+                    {"hides": ["tgt"]}):
+        _, repairs = repair(_draft(actions))
+        aliases = [r for r in repairs if r["action"] == "alias-operator"]
+        assert len(aliases) == 1, (actions, aliases)
+
+
 def test_lint_warns_on_unlock_method_without_flag_change():
     # Fresh-eyes round 1 (bd xbfm): an unlock_method with no
     # pdf_field_flag_change is invisible-broken -- editor UI + the

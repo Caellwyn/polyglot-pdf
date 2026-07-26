@@ -955,7 +955,15 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
         if isinstance(controls, list):
             path = f"fields[{i}] (id={fid}).controls_fields"
 
-            def _normalize(atom: dict, _path=path) -> Optional[dict]:
+            def _normalize(atom: dict, _path=path,
+                           quiet: bool = False) -> Optional[dict]:
+                # quiet=True re-normalizes an atom the mirror pass ALREADY
+                # normalized loudly (the unlocks/hides conversion below) --
+                # identical rewrites, but no report entries / alias counting,
+                # or every alias would be double-logged and alias_hit_count
+                # doubled (outer-review gap on bd xbfm).
+                _repairs = [] if quiet else repairs
+                _count = (lambda _k: None) if quiet else count_alias
                 trig = fields_by_id.get(atom.get("field")) \
                     if isinstance(atom.get("field"), str) else None
                 # v1-semantics pre-pass (migrate_schema_v2._rewrite_atom_value
@@ -981,14 +989,14 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                 elif ttype == "checkbox_group" and op in ("equals", "not_equals"):
                     new_op = ("includes" if op == "equals"
                               else "not_includes")
-                    repairs.append({
+                    _repairs.append({
                         "action": "alias-operator", "path": _path,
                         "detail": f"{op} on checkbox_group trigger -> "
                                   f"{new_op} (v1 controls_fields "
                                   "membership reading)",
                         "error": False,
                     })
-                    count_alias(f"{op}@controls_fields")
+                    _count(f"{op}@controls_fields")
                     atom["operator"] = new_op
                 elif (op == "is_checked"
                         and ttype in vocab.CHOICE_FIELD_TYPES):
@@ -998,18 +1006,18 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                     # standalone `checkbox` trigger keeps is_checked). Without
                     # this the mirrored atom itself lints operator-trigger RED
                     # (Opus review gap, round 2).
-                    repairs.append({
+                    _repairs.append({
                         "action": "alias-operator", "path": _path,
                         "detail": f"is_checked on {ttype!r} trigger -> "
                                   "is_not_empty (v1 controls_fields "
                                   "selection-exists reading)",
                         "error": False,
                     })
-                    count_alias("is_checked@controls_fields")
+                    _count("is_checked@controls_fields")
                     atom["operator"] = "is_not_empty"
                     atom.pop("value", None)
-                return _rewrite_atom(atom, trig, resolution, _path, repairs,
-                                     count_alias)
+                return _rewrite_atom(atom, trig, resolution, _path, _repairs,
+                                     _count)
 
             outcome = cfm.mirror_controls_fields(
                 f, fields_by_id, _walk_condition_atoms, _normalize,
@@ -1041,9 +1049,18 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
             for control in f.get("controls_fields") or []:
                 if not isinstance(control, dict):
                     continue
-                standalone_old = (standalone_old_value or {}).get(fid)
+                if not (control.get("unlocks") or control.get("hides")):
+                    continue  # nothing for this pass to convert
+                # Same raw (uncoerced) id + standalone lookup the mirror pass
+                # used, so both passes' atoms agree byte-for-byte; quiet=True
+                # because the mirror already normalized this control LOUDLY --
+                # a second loud pass double-logs every alias (outer review).
+                raw_id = f.get("id")
+                standalone_old = (standalone_old_value or {}).get(raw_id) \
+                    if isinstance(raw_id, str) else None
                 atom = _normalize(copy.deepcopy(
-                    cfm.control_condition(control, fid, standalone_old)))
+                    cfm.control_condition(control, raw_id, standalone_old)),
+                    quiet=True)
                 if atom is None:
                     continue  # unresolvable atom: its drop is already logged
                 for tid in control.get("unlocks") or []:

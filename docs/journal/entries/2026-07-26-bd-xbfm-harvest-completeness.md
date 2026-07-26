@@ -50,6 +50,12 @@ would only see in the repair log -- invisible to lint.
   - Conversion entries reuse the `mirror-controls-fields` action name and the
     rump entry reuses `controls-fields-unmirrored`, so eval_extraction's
     harvest counters keep working unchanged.
+  - Outer review caught the conversion pass double-logging: it re-normalized
+    every control loudly, duplicating alias-operator entries and doubling
+    alias_hit_count (the P6 decay metric) even on plain shows edges. Fixed:
+    the pass skips controls with nothing to convert and re-normalizes
+    unlocks/hides-bearing controls QUIETLY (identical rewrites, no report
+    side-effects); exact-once cardinality is now test-pinned.
 - **`tests/test_schema_repair.py`**: the old unlocks-drop pin REPLACED by the
   new contract (that behavior change IS the bead), plus: hides->none_of,
   rump+lint loudness, the all-six-actions end-to-end criterion test,
