@@ -203,9 +203,14 @@ def _run_second_pass(draft: dict, pdf_path: str, model: str,
     # Freeze-guard: overlay refined relationship keys onto the ORIGINAL fields
     # by id, so a second pass that dropped/renamed a field cannot corrupt
     # identity. Only the four relationship keys transfer.
+    # Key by id, skipping id-less fields entirely: an id-less field cannot be
+    # matched back to an original, and collapsing several under a shared "None"
+    # key would let one field's refined keys overlay a DIFFERENT original.
     refined_by_id = {str(f.get("id")): f for f in refined.get("fields", [])
-                     if isinstance(f, dict)}
+                     if isinstance(f, dict) and f.get("id") is not None}
     for f in draft.get("fields", []):
+        if f.get("id") is None:
+            continue  # unmatchable original; never touched by the refine overlay
         r = refined_by_id.get(str(f.get("id")))
         if not r:
             continue
@@ -277,6 +282,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--forms", default="i-90,w7")
     ap.add_argument("--model", default="claude-opus-4-8")
     ap.add_argument("--repeats", type=int, default=1)
+    ap.add_argument("--round", type=int, default=1,
+                    help="round tag written into each JSONL row -- distinguishes "
+                         "separate invocations (rep is per-invocation only)")
     ap.add_argument("--out", default=None,
                     help="append each run as a JSONL row")
     args = ap.parse_args(argv)
@@ -299,6 +307,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(f"[run] {label} ({ARMS[arm]['desc']}) ...", flush=True)
                 try:
                     row = run_arm(arm, form, args.model, keep_draft=None)
+                    row["round"] = args.round
                     row["rep"] = rep
                     rows.append(row)
                     s = row["summary"]
@@ -315,7 +324,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                             fh.write(json.dumps(row) + "\n")
                 except Exception as exc:  # noqa: BLE001 -- research harness: log + continue
                     print(f"  FAILED: {type(exc).__name__}: {exc}", flush=True)
-                    rows.append({"arm": arm, "form": form, "rep": rep,
+                    rows.append({"arm": arm, "form": form, "round": args.round,
+                                 "rep": rep,
                                  "error": f"{type(exc).__name__}: {exc}"})
     return 0
 

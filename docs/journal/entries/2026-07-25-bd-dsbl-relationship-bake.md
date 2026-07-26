@@ -29,9 +29,10 @@ stated the dual-role pattern.
 ## Gate 2 (cost) -- $0 metered
 
 Backend is the local claude CLI (claude-opus-4-8), free in-env; option-
-translation disabled (irrelevant, needs Vertex creds). ~14 CLI calls across two
-rounds, no metered spend -> no paid go-ahead needed (recorded in the findings
-doc's Gate-2 section).
+translation disabled (irrelevant, needs Vertex creds). 14 extraction runs across
+two rounds = ~20 CLI calls (A2/A4 are 2-call arms: extraction + a relationship-
+only second pass), no metered spend -> no paid go-ahead needed (recorded in the
+findings doc's Gate-2 section).
 
 ## What shipped (research only -- no production file touched)
 

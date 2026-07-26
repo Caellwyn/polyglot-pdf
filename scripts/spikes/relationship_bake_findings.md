@@ -111,9 +111,14 @@ Two rounds, `claude-opus-4-8`, local CLI (free in-env). Raw rows:
 Round-1 read: every intervention lifts w7 `require_if` off 0 and w7 `show_if`
 to 12/12; the whole w7 gap is `require_if` (dual-role omission, as diagnosed).
 A3 leads w7 require_if AND is the only arm with require_if trigger-correctness.
-Apparent i-90 show_if regression on the contract-clause arms (A1/A3: 15/19) --
-flagged for a variance re-check before pruning. A2 (contract untouched) holds
-i-90 perfectly, isolating the perturbation to the first-pass prompt text.
+Apparent i-90 show_if dip on the contract-clause arms (A1/A3: 15/19) -- carried
+into round 2 as a variance re-check on the CONTENDER (A3). A1 was not re-run:
+it is dominated by A3 on the w7 target in round 1 (require_if 3/9 vs A3's 6/9,
+no trigger-correctness), so it loses on w7 regardless of whether its i-90 dip is
+variance or real -- re-running it could not change the pruning decision. A3's
+re-check (below) resolves whether the clause itself is safe on i-90; A2
+(contract untouched) already holds i-90 perfectly, isolating any first-pass
+perturbation to the contract text.
 
 ### Round 2 (finalist A4 + A2/A3 variance anchor, gives n=2 on contenders)
 
