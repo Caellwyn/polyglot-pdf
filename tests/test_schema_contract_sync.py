@@ -236,3 +236,25 @@ def test_prompt_example_omits_divisions_but_canonical_example_keeps_them():
     # And the opt-in rendering (used nowhere in the prompt) still has them.
     full = json.loads(sc.render_example(include_divisions=True))
     assert full["sections"]
+
+
+def test_contract_carries_the_dual_role_relationship_clause():
+    # bd polyglot-pdf-kfni (sprint 15 R3): the measured winner of the
+    # relationship bake (bd dsbl, scripts/spikes/relationship_bake_findings.md)
+    # is the dual-role emphasis clause + shape-only example -- W-7 require_if
+    # went 0/9 -> 3-7/9 across the confirming runs (median 4, best 7). Pin its
+    # load-bearing lines so a later contract rewording cannot silently drop
+    # the measured win. If you are REWORDING the clause deliberately: update
+    # these pins AND re-run the w7/i-90 confirm (eval_extraction --extract) --
+    # the prose IS the measured artifact, so a reword is a re-measurement, not
+    # a style edit.
+    contract = sc.render_contract()
+    assert "RELATIONSHIP EMPHASIS" in contract
+    assert "show_if and require_if are DIFFERENT relationships" in contract
+    assert "emit BOTH show_if AND require_if with the SAME" in contract
+    assert "BROADER condition than show_if" in contract
+    # The shape example renders with SINGLE braces (template doubling worked)
+    # and is generic -- never target-form content.
+    assert '{"id": "spouse_details", "type": "text",' in contract
+    assert '"require_if": {"field": "is_married", "operator": "is_checked"}}' in contract
+    assert contract.count("RELATIONSHIP EMPHASIS") == 1

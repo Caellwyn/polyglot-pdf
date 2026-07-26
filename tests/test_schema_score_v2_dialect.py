@@ -155,6 +155,57 @@ def test_trigger_correctness_requires_the_right_resolved_trigger():
     assert "trigger_correct" not in conds["conditional_behavior"]
 
 
+def test_spurious_relationship_emissions_are_counted():
+    """Over-emission accounting (bd kfni outer review): a draft that INVENTS a
+    relationship gold does not have -- on a matched field or on an unmatched
+    extra field -- must surface in the per-key `spurious` count, because a
+    spurious require_if turns an optional field required at runtime."""
+    truth = {"fields": [
+        {"id": "t1", "pdf_field_name": "A[0]"},          # gold: no relationships
+        {"id": "t2", "pdf_field_name": "B[0]",
+         "show_if": {"field": "t1", "operator": "is_checked"}},
+    ]}
+    draft = {"fields": [
+        # matched to t1 but carries an invented require_if -> spurious.
+        {"id": "d1", "pdf_field_name": "A[0]",
+         "require_if": {"field": "d2", "operator": "is_checked"}},
+        # matched to t2, show_if legitimately recovered -> NOT spurious.
+        {"id": "d2", "pdf_field_name": "B[0]",
+         "show_if": {"field": "d1", "operator": "is_checked"}},
+        # unmatched extra field carrying show_if -> spurious.
+        {"id": "d3", "pdf_field_name": "Z[0]",
+         "show_if": {"field": "d1", "operator": "is_checked"}},
+    ]}
+    match = schema_score.match_fields(truth["fields"], draft["fields"])
+    conds = schema_score.score_relationships(truth, draft, match)["conditionals"]
+    assert conds["require_if"]["spurious"] == 1
+    assert conds["show_if"]["spurious"] == 1   # d3 only; d2's is legitimate
+    assert conds["show_if"]["recovered"] == 1  # recall unaffected
+
+
+def test_render_report_surfaces_spurious_even_when_gold_has_none():
+    """The zero-gold branch is the headline over-emission case (a key gold has
+    NOWHERE, e.g. i-90 require_if): the report must still carry the SPURIOUS
+    annotation there, not just in the recovered/total branch."""
+    truth = {"fields": [{"id": "t1", "pdf_field_name": "A[0]"}]}
+    draft = {"fields": [
+        {"id": "d1", "pdf_field_name": "A[0]",
+         "require_if": {"field": "d1", "operator": "is_checked"}}]}
+    match = schema_score.match_fields(truth["fields"], draft["fields"])
+    b = schema_score.score_relationships(truth, draft, match)
+    a_stub = {"detection": {"precision": float("nan"), "recall": float("nan"),
+                            "f1": float("nan"), "true_positive": 0,
+                            "false_negative": 0, "false_positive": 0},
+              "attributes": {}}
+    report = schema_score.render_report("x", a_stub, b)
+    for line in report.splitlines():
+        if line.strip().startswith("require_if"):
+            assert "n/a" in line and "SPURIOUS 1" in line
+            break
+    else:
+        raise AssertionError("no require_if line in report")
+
+
 def test_trigger_correctness_handles_combinator_trees():
     """all_of/any_of trees flatten to their atom triggers; the full resolved
     trigger SET must match."""

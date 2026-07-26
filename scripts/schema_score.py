@@ -574,9 +574,27 @@ def score_relationships(truth: dict, draft: dict, match: MatchResult) -> dict[st
                    if f.get("type") == "table" or f.get("multi_entry"))
     struct["tables/multi_entry"] = [d_tables, t_tables]
 
+    # Spurious (over-emission) accounting -- outer-review finding on bd kfni:
+    # recall alone cannot see a draft INVENTING a relationship gold does not
+    # have (a spurious require_if turns an optional field required at runtime).
+    # spurious = matched draft field carries the key, its gold twin does not,
+    # PLUS unmatched draft fields carrying the key (no gold twin at all).
+    spurious: dict[str, int] = {k: 0 for k in rel_keys}
+    for t, d in match.pairs:
+        for k in rel_keys:
+            if d.get(k) and not t.get(k):
+                spurious[k] += 1
+    for d in match.unmatched_draft:
+        if not isinstance(d, dict):
+            continue
+        for k in rel_keys:
+            if d.get(k):
+                spurious[k] += 1
+
     rel_scores = {}
     for k, (c, n, tc) in field_rels.items():
-        entry = {"recovered": c, "total": n, "pct": _pct(c, n)}
+        entry = {"recovered": c, "total": n, "pct": _pct(c, n),
+                 "spurious": spurious[k]}
         if k in _CONDITION_SHAPED:
             entry["trigger_correct"] = tc
             entry["trigger_correct_pct"] = _pct(tc, n)
@@ -661,13 +679,20 @@ def render_report(name: str, a: dict, b: dict) -> str:
     L.append("  conditional recall (recovered / total in ground truth):")
     for k, v in b["conditionals"].items():
         if v["total"] == 0:
-            L.append(f"    {k:22s}   n/a   (0 in ground truth)")
+            line = f"    {k:22s}   n/a   (0 in ground truth)"
+            # The zero-gold branch is the HEADLINE spurious case (a key gold
+            # does not have anywhere) -- never mask the over-emission signal.
+            if v.get("spurious"):
+                line += f"  SPURIOUS {v['spurious']}"
+            L.append(line)
         else:
             line = (f"    {k:22s} {_fmt_pct(v['pct'])}  "
                     f"({v['recovered']}/{v['total']})")
             if "trigger_correct" in v:
                 line += (f"  trigger-correct {v['trigger_correct']}"
                          f"/{v['total']}")
+            if v.get("spurious"):
+                line += f"  SPURIOUS {v['spurious']}"
             L.append(line)
     L.append("  structure (draft vs truth count):")
     for k, v in b["structure"].items():
