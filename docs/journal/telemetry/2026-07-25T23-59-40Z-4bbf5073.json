@@ -1,0 +1,89 @@
+{
+  "recorded_at": "2026-07-25T23:59:40Z",
+  "session_id": "4bbf5073-69f5-4f93-9ef9-65f9f600f63a",
+  "beads": [
+    "polyglot-pdf-ce62"
+  ],
+  "arm": null,
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-07-25T18:17:03.225Z",
+    "last_ts": "2026-07-25T23:59:08.261Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 319,
+      "output_tokens": 310277,
+      "cache_read_input_tokens": 28428376,
+      "cache_creation_input_tokens": 1286621
+    },
+    "subagent": {
+      "input_tokens": 67012,
+      "output_tokens": 63076,
+      "cache_read_input_tokens": 13624590,
+      "cache_creation_input_tokens": 1507939
+    },
+    "total": {
+      "input_tokens": 67331,
+      "output_tokens": 373353,
+      "cache_read_input_tokens": 42052966,
+      "cache_creation_input_tokens": 2794560
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-fable-5": {
+        "input_tokens": 319,
+        "output_tokens": 310277,
+        "cache_read_input_tokens": 28428376,
+        "cache_creation_input_tokens": 1286621
+      }
+    },
+    "subagent": {
+      "claude-opus-4-8": {
+        "input_tokens": 61382,
+        "output_tokens": 43211,
+        "cache_read_input_tokens": 11102961,
+        "cache_creation_input_tokens": 1221384
+      },
+      "claude-fable-5": {
+        "input_tokens": 5630,
+        "output_tokens": 19865,
+        "cache_read_input_tokens": 2521629,
+        "cache_creation_input_tokens": 286555
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-fable-5": 60.028179
+    },
+    "subagent": {
+      "claude-opus-4-8": 14.572316,
+      "claude-fable-5": 7.153117
+    },
+    "by_model": {
+      "claude-fable-5": 67.181296,
+      "claude-opus-4-8": 14.572316
+    },
+    "unpriced_models": [],
+    "orchestrator_total": 60.028179,
+    "subagent_total": 21.725432,
+    "total": 81.753611,
+    "cache_write_ttl_assumed": "5m"
+  },
+  "subagent_models": [
+    "claude-fable-5",
+    "claude-opus-4-8"
+  ],
+  "assistant_turns": {
+    "orchestrator": 169,
+    "subagent": 219
+  },
+  "phase_tokens": null,
+  "copilot_rounds": null,
+  "maintainer_touchpoints": 4,
+  "deferred_nits": null,
+  "haiku_escalations": null,
+  "errors_shipped": null
+}
