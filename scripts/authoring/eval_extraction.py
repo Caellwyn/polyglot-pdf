@@ -383,8 +383,9 @@ def guidance_metrics(schema: dict) -> dict:
         if instr:
             covered += 1
             lengths.append(len(instr))
-            labels = [o.get("label", "") for o in f.get("options") or []
-                      if isinstance(o, dict)]
+            opts = f.get("options")
+            opts = opts if isinstance(opts, list) else []
+            labels = [o.get("label", "") for o in opts if isinstance(o, dict)]
             if guidance_contract.is_label_restatement(
                     instr, f.get("name"), labels):
                 restatements += 1

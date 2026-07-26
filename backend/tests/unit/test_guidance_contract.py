@@ -192,6 +192,11 @@ def test_lint_never_throws_on_malformed_guidance_values():
          "options": [{"value": "x", "label": 9}],
          "help": {"instructions": "Select the one that applies to you."}},
         {"id": "c", "name": "C", "type": "text", "help": "not-a-dict"},
+        # truthy NON-LIST options + present instructions: the restatement
+        # path iterates options (fix-round-2 gap -- `or []` only guards
+        # falsy values)
+        {"id": "d", "name": "D", "type": "select", "options": 5,
+         "help": {"instructions": "Pick the value from your notice."}},
     ])
     schema["form_metadata"]["booklet_text"] = 42  # non-string floor
     findings = lint_schema(schema)  # must not raise

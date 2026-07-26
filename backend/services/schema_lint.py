@@ -869,8 +869,11 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
             ))
 
         if instr.strip():
-            labels = [o.get("label", "") for o in f.get("options") or []
-                      if isinstance(o, dict)]
+            # non-list options never crash the never-throws contract (same
+            # guard as every sibling options read in this file)
+            opts = f.get("options")
+            opts = opts if isinstance(opts, list) else []
+            labels = [o.get("label", "") for o in opts if isinstance(o, dict)]
             if guidance_contract.is_label_restatement(
                     instr, f.get("name"), labels):
                 out.append(LintFinding(
