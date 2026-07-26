@@ -1046,6 +1046,16 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
             # Runs AFTER the shows/makes_required mirror so add_target_condition
             # composes with anything it just wrote. Migrate is deliberately
             # untouched (its pinned behavior keeps unlocks/hides unconverted).
+            # (action, target-id) edges that hit the model's DEPTH-1 composite
+            # limit (an existing composite condition that cannot absorb the
+            # mirrored atom without an invalid nested group): collected here,
+            # RETAINED in the rump below. Seeded with the mirror pass's own
+            # inexpressible shows/makes_required edges.
+            failed_pairs: set = set()
+            for entry in outcome["unconverted"]:
+                for pair in entry.get("inexpressible") or []:
+                    action_name, _, target_id = pair.partition(":")
+                    failed_pairs.add((action_name, target_id))
             for control in f.get("controls_fields") or []:
                 if not isinstance(control, dict):
                     continue
@@ -1076,21 +1086,16 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                                 "error": True,
                             })
                         continue
-                    behavior = target.get("conditional_behavior")
-                    if not (isinstance(behavior, dict)
-                            and behavior.get("unlock_method")):
-                        target["conditional_behavior"] = cfm.unlock_descriptor()
-                        repairs.append({
-                            "action": "mirror-controls-fields",
-                            "path": path,
-                            "detail": f"{fid} unlocks {tid} -> "
-                                      "conditional_behavior.unlock_method="
-                                      "flip_readonly_bit on the target",
-                            "error": False,
-                        })
-                    if not cfm.target_has_condition(target, "show_if", atom,
-                                                    _walk_condition_atoms):
-                        cfm.add_target_condition(target, "show_if", dict(atom))
+                    # Condition FIRST: the descriptor is only set when the
+                    # visibility pairing exists (gold shape); a depth-1
+                    # composition failure keeps the WHOLE edge unconverted
+                    # rather than emitting a half-paired descriptor.
+                    if cfm.target_has_condition(target, "show_if", atom,
+                                                _walk_condition_atoms):
+                        cond_ok = True
+                    elif cfm.add_target_condition(target, "show_if",
+                                                  dict(atom)):
+                        cond_ok = True
                         repairs.append({
                             "action": "mirror-controls-fields",
                             "path": path,
@@ -1099,6 +1104,23 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                                       "target (gold read-only-unlock pairing)",
                             "error": False,
                         })
+                    else:
+                        cond_ok = False
+                        failed_pairs.add(("unlocks", tid))
+                    if cond_ok:
+                        behavior = target.get("conditional_behavior")
+                        if not (isinstance(behavior, dict)
+                                and behavior.get("unlock_method")):
+                            target["conditional_behavior"] = \
+                                cfm.unlock_descriptor()
+                            repairs.append({
+                                "action": "mirror-controls-fields",
+                                "path": path,
+                                "detail": f"{fid} unlocks {tid} -> "
+                                          "conditional_behavior.unlock_method="
+                                          "flip_readonly_bit on the target",
+                                "error": False,
+                            })
                 for tid in control.get("hides") or []:
                     target = fields_by_id.get(tid) if isinstance(tid, str) else None
                     if not isinstance(target, dict):
@@ -1114,8 +1136,10 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                         continue
                     if cfm.negated_atom_present(target, "show_if", atom):
                         continue  # already negated -- idempotent re-repair
-                    cfm.add_target_negated_condition(target, "show_if",
-                                                     dict(atom))
+                    if not cfm.add_target_negated_condition(target, "show_if",
+                                                            dict(atom)):
+                        failed_pairs.add(("hides", tid))
+                        continue
                     repairs.append({
                         "action": "mirror-controls-fields",
                         "path": path,
@@ -1136,6 +1160,14 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                 remaining = {k: control[k]
                              for k in ("locks", "makes_optional")
                              if control.get(k)}
+                # Edges that hit the depth-1 composite limit stay too: only
+                # the tids that actually failed, under their action key.
+                for action_name in ("shows", "makes_required", "unlocks",
+                                    "hides"):
+                    kept_tids = [t for t in control.get(action_name) or []
+                                 if (action_name, t) in failed_pairs]
+                    if kept_tids:
+                        remaining[action_name] = kept_tids
                 if remaining:
                     kept = {k: control[k]
                             for k in ("field", "operator", "value")
@@ -1144,16 +1176,27 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                     rump.append(kept)
             if rump:
                 f["controls_fields"] = rump
-                actions = sorted({k for c in rump
-                                  for k in ("locks", "makes_optional")
-                                  if c.get(k)})
+                no_encoding = sorted({k for c in rump
+                                      for k in ("locks", "makes_optional")
+                                      if c.get(k)})
+                depth_limited = sorted({k for c in rump
+                                        for k in ("shows", "makes_required",
+                                                  "unlocks", "hides")
+                                        if c.get(k)})
+                bits = []
+                if no_encoding:
+                    bits.append(f"action(s) {no_encoding} have no v2 "
+                                "target-side encoding")
+                if depth_limited:
+                    bits.append(f"action(s) {depth_limited} hit the depth-1 "
+                                "composite limit on their target's existing "
+                                "condition")
                 repairs.append({
                     "action": "controls-fields-unmirrored",
                     "path": path,
-                    "detail": f"action(s) {actions} have no v2 target-side "
-                              "encoding -- RETAINED on the field (schema_lint "
-                              "legacy-trigger-side-logic flags it), needs "
-                              "human review",
+                    "detail": "; ".join(bits) + " -- RETAINED on the field "
+                              "(schema_lint legacy-trigger-side-logic flags "
+                              "it), needs human review",
                     "error": False,
                 })
             else:

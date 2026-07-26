@@ -580,6 +580,83 @@ def test_all_six_trigger_actions_end_to_end():
     assert repaired2["fields"][4] == by_id["t_hide"]
 
 
+def _assert_depth1(schema):
+    """Every condition in the schema honors the v2 DEPTH-1 rule: a composite
+    group's buckets hold ATOMS only (dicts with a 'field' key), never nested
+    groups -- the invalid shape the old wrap branches emitted."""
+    for f in schema.get("fields", []):
+        for key in ("show_if", "require_if"):
+            cond = f.get(key)
+            if not isinstance(cond, dict) or "field" in cond:
+                continue
+            for bucket in ("all_of", "any_of", "none_of"):
+                for member in cond.get(bucket) or []:
+                    assert isinstance(member, dict) and "field" in member, \
+                        f"nested group in {f.get('id')}.{key}.{bucket}: {member}"
+
+
+def test_depth_limit_hides_onto_any_of_target_is_retained_not_nested():
+    # Outer review (bd xbfm): v2 conditions are DEPTH-1 -- bucket members must
+    # be atoms. `(a OR b) AND NOT c` cannot be expressed, so a hides edge onto
+    # a target whose show_if is an any_of composite must be RETAINED in the
+    # rump (loud), never emitted as the model-invalid all_of:[{any_of:[...]}]
+    # nest the old wrap produced. Reproduces seat B's two-shows-plus-one-hides
+    # scenario.
+    triggers = [
+        {"id": f"trg{i}", "type": "checkbox", "pdf_field_name": f"R{i}[0]"}
+        for i in range(3)]
+    triggers[0]["controls_fields"] = [{"operator": "is_checked",
+                                       "shows": ["tgt"]}]
+    triggers[1]["controls_fields"] = [{"operator": "is_checked",
+                                       "shows": ["tgt"]}]
+    triggers[2]["controls_fields"] = [{"operator": "is_checked",
+                                       "hides": ["tgt"]}]
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _v2_schema(triggers + [target])
+    repaired, repairs = repair(draft)
+    tgt = next(f for f in repaired["fields"] if f["id"] == "tgt")
+    # The two shows composed into a flat any_of; the hides edge did NOT nest.
+    assert sorted(a["field"] for a in tgt["show_if"]["any_of"]) == \
+        ["trg0", "trg1"]
+    assert "all_of" not in tgt["show_if"] and "none_of" not in tgt["show_if"]
+    # The hides edge is retained loudly on its trigger.
+    trg2 = next(f for f in repaired["fields"] if f["id"] == "trg2")
+    assert trg2["controls_fields"] == [{"operator": "is_checked",
+                                        "hides": ["tgt"]}]
+    unconv = [r for r in repairs if r["action"] == "controls-fields-unmirrored"]
+    assert any("depth-1" in r["detail"] for r in unconv)
+    _assert_depth1(repaired)  # no nested groups anywhere
+    # And the rump keeps the schema loud under lint.
+    assert any(fnd.rule == "legacy-trigger-side-logic"
+               for fnd in lint_schema(repaired))
+
+
+def test_depth_limit_unlocks_onto_composite_target_is_retained_whole():
+    # The unlocks edge is all-or-nothing: when its visibility pairing cannot
+    # compose at depth 1, NO half-paired descriptor is written and the edge is
+    # retained in the rump.
+    trigger = {"id": "trg", "type": "checkbox", "pdf_field_name": "R[0]",
+               "controls_fields": [{"operator": "is_checked",
+                                    "unlocks": ["tgt"]}]}
+    other = {"id": "oth", "type": "checkbox", "pdf_field_name": "O[0]"}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
+              "read_only": True,
+              "show_if": {"all_of": [
+                  {"field": "oth", "operator": "is_checked"}],
+                  "none_of": [{"field": "trg", "operator": "is_empty"}]}}
+    draft = _v2_schema([trigger, other, target])
+    repaired, _ = repair(draft)
+    tgt = next(f for f in repaired["fields"] if f["id"] == "tgt")
+    assert "conditional_behavior" not in tgt  # no half-paired descriptor
+    assert tgt["show_if"] == {  # existing condition untouched
+        "all_of": [{"field": "oth", "operator": "is_checked"}],
+        "none_of": [{"field": "trg", "operator": "is_empty"}]}
+    trg = next(f for f in repaired["fields"] if f["id"] == "trg")
+    assert trg["controls_fields"] == [{"operator": "is_checked",
+                                       "unlocks": ["tgt"]}]
+    _assert_depth1(repaired)
+
+
 def test_mirror_alias_is_reported_exactly_once():
     # Outer review (bd xbfm): the conversion pass re-normalizes each
     # unlocks/hides-bearing control QUIETLY -- a loud second pass would

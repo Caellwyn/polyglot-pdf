@@ -50,6 +50,18 @@ would only see in the repair log -- invisible to lint.
   - Conversion entries reuse the `mirror-controls-fields` action name and the
     rump entry reuses `controls-fields-unmirrored`, so eval_extraction's
     harvest counters keep working unchanged.
+  - Outer review seat B caught a model-invalidity bug: v2 conditions are
+    DEPTH-1 (bucket members must be ATOMS), and both composition wrap paths
+    -- the new hides AND-NOT wrap and the pre-existing c3y6 OR wrap that
+    unlocks newly reached -- emitted nested groups the model rejects and the
+    frontend fails open on. Fixed centrally: add_target_condition /
+    add_target_negated_condition now return False when the combination is
+    inexpressible at depth 1 (existing composite that cannot absorb the atom),
+    and every caller routes the failed edge to the LOUD rump instead of
+    emitting invalid schema (the mirror core reports them via the unconverted
+    channel, so migrate surfaces them too). Depth-1 is now structurally
+    asserted in tests; the unlocks edge is all-or-nothing (no half-paired
+    descriptor when its visibility pairing cannot compose).
   - Outer review caught the conversion pass double-logging: it re-normalized
     every control loudly, duplicating alias-operator entries and doubling
     alias_hit_count (the P6 decay metric) even on plain shows edges. Fixed:

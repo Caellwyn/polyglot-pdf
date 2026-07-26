@@ -103,21 +103,28 @@ def negated_atom_present(target: Dict[str, Any], key: str,
 
 
 def add_target_negated_condition(target: Dict[str, Any], key: str,
-                                 atom: Dict[str, Any]) -> None:
+                                 atom: Dict[str, Any]) -> bool:
     """AND-NOT a mirrored atom into a target condition: the field keeps its
     existing visibility AND is hidden while the trigger condition holds
-    (`hides` semantics). Contrast add_target_condition(), which ORs.
+    (`hides` semantics). Contrast add_target_condition(), which ORs. Returns
+    True when expressed, False when inexpressible at the model's DEPTH-1
+    limit (bucket members must be atoms -- see add_target_condition).
 
     - no existing condition: {"none_of": [atom]} ("shown unless ...").
-    - existing PURE bucket composite (no atom keys, no any_of -- an any_of arm
+    - existing PURE AND-composite (no atom keys, no any_of -- an any_of arm
       ORs, which would wrongly weaken the AND-NOT): append to its none_of.
-    - anything else: wrap the WHOLE existing condition as one all_of arm beside
-      a fresh none_of, preserving its semantics as a single AND operand.
+    - existing single ATOM: {"all_of": [old_atom], "none_of": [atom]} --
+      members atomic, valid.
+    - existing composite carrying any_of: `(a OR b) AND NOT c` needs a nested
+      group -- INEXPRESSIBLE at depth 1. Return False.
     """
     existing = target.get(key)
     if not existing:
         target[key] = {"none_of": [atom]}
-        return
+        return True
+    if isinstance(existing, dict) and "field" in existing:
+        target[key] = {"all_of": [existing], "none_of": [atom]}
+        return True
     is_pure_and_composite = (
         isinstance(existing, dict)
         and "field" not in existing
@@ -127,8 +134,8 @@ def add_target_negated_condition(target: Dict[str, Any], key: str,
     )
     if is_pure_and_composite:
         existing.setdefault("none_of", []).append(atom)
-    else:
-        target[key] = {"all_of": [existing], "none_of": [atom]}
+        return True
+    return False
 
 
 def control_condition(control: Dict[str, Any], trigger_id: Any,
@@ -188,23 +195,32 @@ def target_has_condition(target: Dict[str, Any], key: str,
 
 
 def add_target_condition(target: Dict[str, Any], key: str,
-                         atom: Dict[str, Any]) -> None:
+                         atom: Dict[str, Any]) -> bool:
     """Add a mirrored show_if/require_if atom to a target field as an OR
     alternative -- the field is shown/required under its OWN condition OR the
-    mirrored trigger.
+    mirrored trigger. Returns True when the combination was expressed, False
+    when it CANNOT be at the model's depth limit (see below) -- the caller
+    must then surface the edge as unconverted, never emit a nested group.
 
-    Appending in place is safe ONLY when the existing condition is a PURE
-    any_of (no all_of/none_of alongside it): appending into an any_of that sits
-    beside an all_of/none_of would read as `all_of AND (any_of OR new) AND
-    none_of`, NOT `(whole old condition) OR new` (Codex PR #346). For anything
-    else -- a single atom, or a composite carrying all_of/none_of -- wrap the
-    WHOLE existing condition as one arm of a fresh any_of so its AND/NOT
-    semantics are preserved as a single OR alternative.
+    v2 conditions are DEPTH-1: a composite group's buckets hold ATOMS only
+    (FormSchema rejects a group nested inside a bucket, lint flags it
+    composite-depth, and the frontend normalizer fails open -- outer review on
+    bd xbfm; the old wrap branch produced exactly that invalid nest). So:
+    - no existing condition: the atom stands alone.
+    - existing PURE any_of (no all_of/none_of beside it -- appending into an
+      any_of that sits beside those would read as AND (any_of OR new), not
+      (whole old) OR new; Codex PR #346): append the atom.
+    - existing single ATOM: {any_of: [old_atom, atom]} -- members atomic, valid.
+    - existing composite carrying all_of/none_of: `(A AND NOT B) OR c` needs a
+      nested group -- INEXPRESSIBLE at depth 1. Return False.
     """
     existing = target.get(key)
     if not existing:
         target[key] = atom
-        return
+        return True
+    if isinstance(existing, dict) and "field" in existing:
+        target[key] = {"any_of": [existing, atom]}
+        return True
     is_pure_any_of = (
         isinstance(existing, dict)
         and isinstance(existing.get("any_of"), list)
@@ -213,8 +229,8 @@ def add_target_condition(target: Dict[str, Any], key: str,
     )
     if is_pure_any_of:
         existing["any_of"].append(atom)
-    else:
-        target[key] = {"any_of": [existing, atom]}
+        return True
+    return False
 
 
 def mirror_controls_fields(
@@ -271,6 +287,7 @@ def mirror_controls_fields(
 
         mirrored_here: List[str] = []
         dangling_here: List[str] = []
+        inexpressible_here: List[str] = []  # "action:tid" -- depth-1 limit hit
         noop_here = 0
         # want is None when the caller's own normalization dropped the atom
         # (e.g. an unresolvable value or unknown operator -- the caller has
@@ -295,7 +312,14 @@ def mirror_controls_fields(
                     if target_has_condition(target, key, want, walk_atoms):
                         noop_here += 1  # already mirrored in THIS bucket
                         continue
-                    add_target_condition(target, key, dict(want))
+                    if not add_target_condition(target, key, dict(want)):
+                        # Depth-1 limit: the target's existing condition is a
+                        # composite that cannot absorb an OR alternative
+                        # without an (invalid) nested group. The edge is
+                        # UNCONVERTED, never emitted invalid (bd xbfm outer
+                        # review; the old wrap produced model-rejected nests).
+                        inexpressible_here.append(f"{action}:{tid}")
+                        continue
                     mirrored_here.append(f"{tid}.{key}")
                     result["mirrored"].append({
                         "trigger": trigger_id, "target": tid, "key": key,
@@ -317,14 +341,17 @@ def mirror_controls_fields(
         )
         result["noop"] += noop_here
         result["dangling"].extend(sorted(dangling_here))
-        if unconverted or dangling_here:
+        if unconverted or dangling_here or inexpressible_here:
             result["unconverted"].append({
                 "trigger": trigger_id,
                 "operator": (want or raw_atom).get("operator"),
                 "value": (want or raw_atom).get("value"),
                 "mirrored_into": sorted(mirrored_here),
                 "unconverted_actions": unconverted,
-                "unconverted_action_keys": unconverted_action_keys,
+                "unconverted_action_keys": unconverted_action_keys
+                + sorted(f"{k} (no depth-1 composition)"
+                         for k in inexpressible_here),
+                "inexpressible": sorted(inexpressible_here),
                 "dangling_targets": sorted(dangling_here),
             })
 
