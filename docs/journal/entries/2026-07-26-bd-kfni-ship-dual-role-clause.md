@@ -58,6 +58,17 @@ is what the amended reading measures.
   requiredness-implies-visibility decision (bd w3tj); gold updates when that
   lands.
 
+## Precision (spurious-emission) check -- outer-review driven
+
+The outer review flagged that recall alone cannot see INVENTED relationships.
+Added `spurious` counting to schema_score (matched-pair key-without-gold-twin
++ unmatched-draft-with-key) and measured the saved R3 drafts: w7 essentially
+clean (1/1); i-90 require_if spurious 9 (gold has zero require_if anywhere --
+adjudication of over-emission vs gold under-encoding logged on bd btbi) and
+conditional_logic spurious 19 (dual emission beside conditional_behavior;
+likely pre-dates the clause -- control re-measure on bd btbi). Blast radius:
+new extractions only; skip satisfies the gate; shipped kits are hand-finished.
+
 ## Verification record
 
 Full backend suite green with the graft in place: 1280 passed, 1 skipped, 3

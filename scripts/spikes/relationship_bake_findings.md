@@ -195,6 +195,23 @@ Diagnosis of the residual misses (draft-vs-gold trigger comparison, rep2/3):
   inconsistent dual-role propagation (itin_part1 gets both keys, part2/3
   sometimes only show_if). Follow-up bead filed.
 
+**Spurious-emission (precision) check** (outer-review finding: recall alone
+cannot see invented relationships; `spurious` counting added to schema_score
+and measured on the saved R3 drafts):
+- w7 (rep3): show_if spurious 1, require_if spurious 1 -- the clause is NOT
+  meaningfully over-emitting on the test form.
+- i-90 (rep2): show_if spurious 0; **require_if spurious 9** -- the draft
+  emits requiredness on dual-role-style fields where the hand-authored gold
+  encodes NO require_if at all (i-90 gold predates the dual-role convention;
+  it has zero require_if anywhere). Whether this is over-emission or gold
+  under-encoding needs maintainer adjudication (logged on bd btbi). Runtime
+  blast radius: newly extracted forms only (shipped kits are hand-finished),
+  and a skip always satisfies the section gate.
+- i-90: conditional_logic spurious 19 -- the draft emits BOTH logic keys where
+  gold carries only conditional_behavior; the contract documented both keys
+  before this change, so the duplication likely predates the clause (control
+  re-measure folded into bd btbi).
+
 **Bar verdict (bars logged on epic o2bs):** i-90 -- presence 100%,
 cond_behavior 100%, F1 96.7, trigger-correct 89.5% raw / 17/17
 relationship-attributable under the logged amendment: MET. w7 -- presence

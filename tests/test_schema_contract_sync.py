@@ -244,7 +244,10 @@ def test_contract_carries_the_dual_role_relationship_clause():
     # is the dual-role emphasis clause + shape-only example -- W-7 require_if
     # went 0/9 -> 3-7/9 across the confirming runs (median 4, best 7). Pin its
     # load-bearing lines so a later contract rewording cannot silently drop
-    # the measured win.
+    # the measured win. If you are REWORDING the clause deliberately: update
+    # these pins AND re-run the w7/i-90 confirm (eval_extraction --extract) --
+    # the prose IS the measured artifact, so a reword is a re-measurement, not
+    # a style edit.
     contract = sc.render_contract()
     assert "RELATIONSHIP EMPHASIS" in contract
     assert "show_if and require_if are DIFFERENT relationships" in contract
