@@ -499,8 +499,9 @@ class Settings(BaseModel):
 			# The secretary (bd polyglot-pdf-jnjj.45): a cheap text-model helper
 			# that holds the WHOLE form catalog + the applicant's current answers
 			# and answers prose questions about them -- the principal does NOT
-			# hold that catalog (tight compression window). Two uses (bd
-			# polyglot-pdf-2af7/3vby): (1) recall a PAST ANSWER/value; (2) IDENTIFY
+			# hold that catalog (tight compression window). Three uses (bd
+			# polyglot-pdf-2af7/3vby + wsao.8's official-guidance lookups from
+			# the booklet floor): (1) recall a PAST ANSWER/value; (2) IDENTIFY
 			# which field the user means when you need to navigate to a field you do
 			# not currently hold -- the response's `fields` list carries the exact
 			# field_id + spoken_name to pass to switch_to_field. The ONE thing it is

@@ -206,13 +206,14 @@ def derive_compression_window(
         window  = floor  + window_headroom_tokens   (room for a couple fields)
         trigger = window + trigger_margin_tokens    (pile-up before eviction)
 
-    Returns a dict ready to drop into the adapter's compression config. With the
-    config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872) the I-90
-    derives a ~1601 ESTIMATED floor (chars/4 undershoots the ~1978 real billed
-    floor -- see the config.py headroom comment) -> ~2200 raw window -> ~3700 raw
-    trigger; on Vertex the trigger then clamps UP to the API minimum 5000 and the
-    retune in _build_live_config lands the ctu8-validated 3500 window
-    (5000 - margin). bd jnjj.35 / A6.
+    Returns a dict ready to drop into the adapter's compression config. With
+    the config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872)
+    the CURRENT default DTI form derives a ~4.5k floor -> ~5.1k window ->
+    ~6.6k trigger, above the API minimum 5000 (the SI has grown since the
+    jnjj.35-era ~1601-floor example; the clamp-up + retune path in
+    _build_live_config now fires only for forms with a much smaller SI
+    floor). injection_budget_tokens (bd wsao.8) adds headroom for the largest
+    per-field inline guidance injection on top. bd jnjj.35 / A6.
     """
     floor = estimate_si_floor_tokens(system_instruction, function_declarations)
     # injection_budget_tokens (bd wsao.8): headroom for the LARGEST per-field
@@ -222,10 +223,10 @@ def derive_compression_window(
     # assembled window and Vertex closes 1007 AT SESSION ASSEMBLE -- the
     # session never opens (the wsao.2 measured failure). 0 for a details-less
     # form -> the FORMULA is unchanged from pre-wsao.8 (the derived numbers
-    # still move whenever the SI text itself grows -- as of wsao.8 the
-    # default DTI form derives ~5.1k window / ~6.6k trigger, ABOVE the API
-    # minimum, so the clamp-to-5000 narrative in older comments below no
-    # longer fires for it).
+    # still move whenever the SI text itself grows). The default DTI form
+    # currently derives ~5.1k window / ~6.6k trigger -- above the API minimum
+    # (already true before wsao.8), so the clamp-to-5000 path fires only for
+    # forms with a much smaller SI floor.
     window = floor + max(1, window_headroom_tokens) + max(0, injection_budget_tokens)
     trigger = window + max(1, trigger_margin_tokens)
     return {"floor": floor, "window": window, "trigger": trigger}
