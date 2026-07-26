@@ -679,7 +679,12 @@ def render_report(name: str, a: dict, b: dict) -> str:
     L.append("  conditional recall (recovered / total in ground truth):")
     for k, v in b["conditionals"].items():
         if v["total"] == 0:
-            L.append(f"    {k:22s}   n/a   (0 in ground truth)")
+            line = f"    {k:22s}   n/a   (0 in ground truth)"
+            # The zero-gold branch is the HEADLINE spurious case (a key gold
+            # does not have anywhere) -- never mask the over-emission signal.
+            if v.get("spurious"):
+                line += f"  SPURIOUS {v['spurious']}"
+            L.append(line)
         else:
             line = (f"    {k:22s} {_fmt_pct(v['pct'])}  "
                     f"({v['recovered']}/{v['total']})")

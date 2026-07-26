@@ -183,6 +183,29 @@ def test_spurious_relationship_emissions_are_counted():
     assert conds["show_if"]["recovered"] == 1  # recall unaffected
 
 
+def test_render_report_surfaces_spurious_even_when_gold_has_none():
+    """The zero-gold branch is the headline over-emission case (a key gold has
+    NOWHERE, e.g. i-90 require_if): the report must still carry the SPURIOUS
+    annotation there, not just in the recovered/total branch."""
+    truth = {"fields": [{"id": "t1", "pdf_field_name": "A[0]"}]}
+    draft = {"fields": [
+        {"id": "d1", "pdf_field_name": "A[0]",
+         "require_if": {"field": "d1", "operator": "is_checked"}}]}
+    match = schema_score.match_fields(truth["fields"], draft["fields"])
+    b = schema_score.score_relationships(truth, draft, match)
+    a_stub = {"detection": {"precision": float("nan"), "recall": float("nan"),
+                            "f1": float("nan"), "true_positive": 0,
+                            "false_negative": 0, "false_positive": 0},
+              "attributes": {}}
+    report = schema_score.render_report("x", a_stub, b)
+    for line in report.splitlines():
+        if line.strip().startswith("require_if"):
+            assert "n/a" in line and "SPURIOUS 1" in line
+            break
+    else:
+        raise AssertionError("no require_if line in report")
+
+
 def test_trigger_correctness_handles_combinator_trees():
     """all_of/any_of trees flatten to their atom triggers; the full resolved
     trigger SET must match."""

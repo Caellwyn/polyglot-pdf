@@ -211,6 +211,15 @@ and measured on the saved R3 drafts):
   gold carries only conditional_behavior; the contract documented both keys
   before this change, so the duplication likely predates the clause (control
   re-measure folded into bd btbi).
+- Metric limitation (labeled): `spurious` counts "draft key without a gold
+  twin", which cannot distinguish an INVENTED relationship from a REDUNDANT
+  alternate-key emission on a correctly-conditional field -- the
+  conditional_logic 19 is the latter shape. Read spurious counts with the
+  per-key gold inventory in hand.
+- Model-provenance caveat: all clause measurements ran on claude-opus-4-8 (the
+  local default); the HOSTED editor route serves the same contract to
+  gemini-2.5-pro (EXTRACTOR_MODEL default) un-remeasured -- gemini re-measure
+  logged on bd btbi.
 
 **Bar verdict (bars logged on epic o2bs):** i-90 -- presence 100%,
 cond_behavior 100%, F1 96.7, trigger-correct 89.5% raw / 17/17
