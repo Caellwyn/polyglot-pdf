@@ -59,6 +59,17 @@ from typing import List, Optional
 
 INSTRUCTIONS_SOFT_CHARS = 280
 INSTRUCTIONS_HARD_CHARS = 500
+# The INLINE guidance budget (bd wsao.8, maintainer decision 2026-07-26): up
+# to this many characters of help.details ride the voice model's guidance
+# block while the field is focused (~5k tokens; ~$0.005/encounter on live-2.5
+# per the maintainer's math, measured in wsao.8). The schema + secretary
+# always carry the FULL text; an oversize SOURCE is handled by the enrichment
+# engine via SELECTION + INDEX (verbatim excerpts up to budget + a one-line
+# index of dropped topics), never summarization (bake-time rewriting of legal
+# text) and never blind truncation (the model must KNOW what it is missing).
+# clamp_details_inline below is the defensive RENDER-time backstop for a kit
+# that ships oversize anyway.
+DETAILS_INLINE_MAX_CHARS = 20000
 DETAILS_OVERSIZE_WORDS = 3000
 # A details block longer than this without any heading line is unnavigable
 # for the secretary + human review (plan: "headings mandatory above a size
@@ -156,6 +167,49 @@ def details_paragraphs(details: str) -> List[str]:
         if body:
             out.append(body)
     return out
+
+
+def clamp_details_inline(details: str,
+                         max_chars: int = DETAILS_INLINE_MAX_CHARS) -> str:
+    """Defensive render-time clamp for the inline details budget (bd wsao.8).
+
+    A details value within budget passes through UNTOUCHED (byte-identical).
+    An oversize value is cut at the last paragraph boundary within budget and
+    a one-line INDEX of the dropped topics (heading lines found in the
+    remainder) is appended, so the voice model KNOWS what it is missing and
+    that the secretary holds it -- the selection+index policy's backstop.
+    """
+    if not isinstance(details, str) or len(details) <= max_chars:
+        return details
+    cut = details.rfind("\n\n", 0, max_chars)
+    if cut <= 0:
+        cut = max_chars
+    kept, dropped = details[:cut].rstrip(), details[cut:]
+    topics = []
+    for ln in dropped.splitlines():
+        ln = ln.strip()
+        if ln and _HEADING_LINE_RE.match(ln) and len(ln) <= 120:
+            topics.append(ln.lstrip("#").strip().rstrip("."))
+    index = ("; ".join(topics[:8])) if topics else "additional official guidance"
+    return (kept + "\n\n[Reference text continues -- the secretary holds the "
+            "full official instructions, including: " + index + ". Ask the "
+            "secretary when the answer is not above.]")
+
+
+def inline_injection_budget_tokens(schema: dict) -> int:
+    """The compression-window headroom (in ~tokens) the LARGEST per-field
+    inline guidance injection needs for this schema: max over fields of the
+    CLAMPED details length, chars/4. 0 when no field carries details -- the
+    window derivation then stays byte-identical to pre-wsao.8 behavior."""
+    worst = 0
+    for f in schema.get("fields") or []:
+        if not isinstance(f, dict):
+            continue
+        h = f.get("help")
+        d = h.get("details") if isinstance(h, dict) else None
+        if isinstance(d, str) and d.strip():
+            worst = max(worst, min(len(d), DETAILS_INLINE_MAX_CHARS))
+    return worst // 4
 
 
 def has_heading(details: str) -> bool:

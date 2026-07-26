@@ -160,15 +160,68 @@ def test_lint_containment_passes_verbatim_excerpt():
 
 
 def test_lint_oversize_and_headings_missing():
-    booklet_words = ("word " * (gc.DETAILS_OVERSIZE_WORDS + 10)).strip()
+    big = ("word " * ((gc.DETAILS_INLINE_MAX_CHARS // 5) + 10)).strip()
     findings = lint_schema(_schema([
         {"id": "f1", "name": "F1", "type": "text",
          "help": {"instructions": "ok guidance here for coverage",
-                  "details": booklet_words}},
-    ], booklet=booklet_words))
+                  "details": big}},
+    ], booklet=big))
     rules = _rules(findings)
-    assert "help-details-oversize" in rules
+    assert "help-details-oversize" in rules  # > the 20k inline budget
     assert "help-details-headings-missing" in rules  # long + zero headings
+
+
+# --- wsao.8: inline budget clamp + injection budget --------------------------
+
+def test_clamp_details_inline_passthrough_is_byte_identical():
+    small = "## a. Heading\nSome verbatim excerpt.\n\nAnother paragraph."
+    assert gc.clamp_details_inline(small) is small
+
+
+def test_clamp_details_inline_cuts_at_paragraph_and_indexes_dropped_topics():
+    kept_para = "K" * 900
+    dropped = ("## Exceptions 3-5\nDropped body one.\n\n"
+               "## Military family rules\nDropped body two.")
+    details = "\n\n".join([kept_para] * 25) + "\n\n" + dropped
+    clamped = gc.clamp_details_inline(details, max_chars=10000)
+    assert len(clamped) < len(details)
+    # cut lands on a kept paragraph boundary; the index line names the
+    # dropped headings and points at the secretary
+    assert clamped.rstrip().endswith("]")
+    assert "secretary holds the full official instructions" in clamped
+    assert "Exceptions 3-5" in clamped and "Military family rules" in clamped
+    assert "Dropped body one" not in clamped
+
+
+def test_inline_injection_budget_tokens():
+    assert gc.inline_injection_budget_tokens({"fields": [
+        {"id": "a", "help": {"details": "x" * 8000}},
+        {"id": "b", "help": {"details": "y" * 100}},
+        {"id": "c"},
+    ]}) == 2000  # max clamped details chars / 4
+    # oversize details count at the CLAMP, not raw size
+    assert gc.inline_injection_budget_tokens({"fields": [
+        {"id": "a", "help": {"details": "x" * (gc.DETAILS_INLINE_MAX_CHARS + 9999)}},
+    ]}) == gc.DETAILS_INLINE_MAX_CHARS // 4
+    # no details anywhere -> 0 (window derivation stays pre-wsao.8 identical)
+    assert gc.inline_injection_budget_tokens({"fields": [{"id": "a"}]}) == 0
+    assert gc.inline_injection_budget_tokens({}) == 0
+
+
+def test_derive_compression_window_adds_injection_budget():
+    from backend.adapters.live_ai_gemini import derive_compression_window
+    base = derive_compression_window(
+        "s" * 4000, None, window_headroom_tokens=599,
+        trigger_margin_tokens=1500)
+    bumped = derive_compression_window(
+        "s" * 4000, None, window_headroom_tokens=599,
+        trigger_margin_tokens=1500, injection_budget_tokens=5000)
+    assert bumped["window"] == base["window"] + 5000
+    assert bumped["trigger"] == base["trigger"] + 5000
+    # default arg -> byte-identical to pre-wsao.8 derivation
+    assert base == derive_compression_window(
+        "s" * 4000, None, window_headroom_tokens=599,
+        trigger_margin_tokens=1500, injection_budget_tokens=0)
 
 
 def test_guidance_rules_are_warning_severity_only():
