@@ -213,7 +213,7 @@ def _render_field(field: dict, fid: str, field_values: dict, shown_map: dict,
     details = (help_obj.get("details") or "").strip()
     if details:
         lines.append("    details: |")
-        lines.extend("      " + dl for dl in details.splitlines())
+        lines.extend(("      " + dl) if dl else "" for dl in details.splitlines())
     return "\n".join(lines)
 
 

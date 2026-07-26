@@ -100,8 +100,8 @@ def get_field_guidance(
 
     Returns:
         A guidance dict, or None if no field. Keys: field_id, spoken_name, name,
-        type, required, instructions, format_hint, options, validation. Absent keys
-        are omitted (not null) to keep the rendered block lean.
+        type, required, instructions, format_hint, details, options, validation,
+        example. Absent keys are omitted (not null) to keep the rendered block lean.
     """
     if not field or not field.get("id"):
         return None
