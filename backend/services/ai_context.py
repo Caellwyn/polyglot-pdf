@@ -90,6 +90,13 @@ def render_field_guidance(
                 parts.append(f"{key}: {validation[key]}")
     if guidance.get("example"):
         parts.append(f"Example: {guidance['example']}")
+    # Official reference text (bd wsao.1): verbatim booklet excerpts for THIS
+    # field, injected inline so deep questions are answered from source while
+    # the field is current (v1 delivery, sprint-16 plan). Appended near the end
+    # so a no-details render stays byte-identical; behavioral rules (ground
+    # claims here, never read aloud wholesale) live in the static SI.
+    if guidance.get("details"):
+        parts.append(f"Official reference text: {guidance['details']}")
 
     # fill_language rides with every field render (bd polyglot-pdf-uogm): the
     # language for field VALUES, distinct from the spoken language. Appended last

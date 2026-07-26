@@ -56,6 +56,27 @@ describe('formatNextFieldHint', () => {
     expect(hint).not.toContain('Context to briefly convey')
   })
 
+  it('NEVER carries help.details -- the hint stays short (bd wsao.1)', () => {
+    // The spoken ask-hint carries only the short instructions; the verbatim
+    // official-booklet excerpts (help.details) reach the model via the
+    // guidance block + secretary catalog, never the spoken channel. A details
+    // leak here would have the model "briefly convey" pages of IRS prose.
+    const field = baseField({
+      help: {
+        instructions: 'Check the one box that best explains your reason.',
+        details: 'a. Nonresident alien required to get an ITIN to claim a ' +
+          'tax treaty benefit. If you check this box you must also check box h.'
+      }
+    })
+
+    const hint = formatNextFieldHint(field, 2)
+
+    expect(hint).toContain('Context to briefly convey when asking: ' +
+      'Check the one box that best explains your reason.')
+    expect(hint).not.toContain('tax treaty benefit')
+    expect(hint).not.toContain('box h')
+  })
+
   it('keeps options and required-ness alongside the context suffix', () => {
     const field = baseField({
       validation: { required: true },

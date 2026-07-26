@@ -5,6 +5,11 @@
  * long printed instructions under every field fight that. The short
  * user-facing hint remains the input placeholder (format_hint / help.inline).
  *
+ * help.details is under the SAME contract (bd polyglot-pdf-wsao.1): verbatim
+ * official-booklet excerpts for the AI's guidance block + secretary catalog,
+ * never on-screen -- pages of IRS/USCIS prose under a field would be worse
+ * than instructions ever were.
+ *
  * One test per field component family so a future "helpful" re-add fails
  * loudly here.
  */
@@ -21,6 +26,9 @@ import type { FormField } from '../../types/schema';
 
 const INSTRUCTIONS =
   'Reason You Are Submitting: you must check the box to indicate the reason.';
+const DETAILS =
+  'a. Nonresident alien required to get an ITIN to claim tax treaty benefit. ' +
+  'If you check this box you must also check box h.';
 
 function fieldOf(type: string, extra: Partial<FormField> = {}): FormField {
   return {
@@ -29,7 +37,7 @@ function fieldOf(type: string, extra: Partial<FormField> = {}): FormField {
     spoken_name: 'field one',
     type,
     section_id: 's1',
-    help: { instructions: INSTRUCTIONS },
+    help: { instructions: INSTRUCTIONS, details: DETAILS },
     ...extra,
   } as unknown as FormField;
 }
@@ -80,5 +88,12 @@ describe('help.instructions is AI guidance, never on-screen text (bd 0x10.2)', (
     doRender();
     expect(screen.queryByText(INSTRUCTIONS)).toBeNull();
     expect(document.querySelector('.form-field__instructions')).toBeNull();
+  });
+
+  it.each(cases)('%s renders no details text (bd wsao.1)', (_name, doRender) => {
+    doRender();
+    expect(screen.queryByText(DETAILS)).toBeNull();
+    // Substring guard too: details must not surface inside any rendered node.
+    expect(document.body.textContent).not.toContain('tax treaty benefit');
   });
 });

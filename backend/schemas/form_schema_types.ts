@@ -94,6 +94,8 @@ export interface FormMetadata {
   page_count?: number;          // Total pages in PDF
   instructions_url?: string;    // Link to separate instructions PDF
   agency?: string;              // e.g., "U.S. Citizenship and Immigration Services"
+  details?: string;             // Form-LEVEL guidance from the official booklet (bd wsao.1); secretary-catalog only
+  booklet_text?: string;        // Full verbatim official-booklet text -- secretary reference floor (bd wsao.1)
 }
 
 /**
@@ -148,6 +150,8 @@ export interface FieldHelp {
   inline?: string;        // Inline hint text like "(if any)"
   tooltip?: string;       // Hover tooltip
   instructions?: string;  // Longer instructions below field
+  details?: string;       // Verbatim official-booklet excerpts (bd wsao.1); AI-facing only, never rendered
+  format_hint?: string;   // Short input-format hint, e.g. "7-9 digits" / "YYYY-MM-DD" (bd polyglot-pdf-jnjj.23; mirror drift fixed by bd b7lj)
   warning?: string;       // Legal warning or important note
   example?: string;       // Example value
 }

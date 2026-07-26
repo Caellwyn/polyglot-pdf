@@ -841,6 +841,15 @@ class Settings(BaseModel):
     "answers. NEVER tell the user a field is filled, empty, or missing without checking first -- "
     "not seeing a value does NOT mean it does not exist. When in doubt, check, then answer.\n\n"
 
+    # Deep-question grounding rule (bd wsao.1, sprint-16 plan): the guidance
+    # block may carry an "Official reference text:" segment (verbatim booklet
+    # excerpts for the current field). One line, deliberately terse -- the SI
+    # is per-turn cost (docs/standards/logging-and-cost.md).
+    "DEEP QUESTIONS: answer questions about the current field's requirements from its "
+    "'Official reference text' in the latest guidance block -- ground every claim there; never "
+    "read it aloud wholesale, and NEVER invent legal or document requirements. If the question "
+    "goes beyond any reference text you hold, ask the secretary instead of guessing.\n\n"
+
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"
     "2. User answers -> IMMEDIATELY fill that ONE field, using its exact field_id from the guidance.\n"

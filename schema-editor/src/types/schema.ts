@@ -34,6 +34,11 @@ export interface FormMetadata {
   // 0-1 confidence in the auto-extracted version (high for a specific Edition/Rev
   // pattern, low for a generic year/OMB fallback, 0 when version is "unknown").
   version_confidence?: number;
+  // Form-level guidance + whole-booklet reference floor (bd wsao.1). Mirrors the
+  // backend FormMetadata fields; kept on the editor type so a load -> edit -> save
+  // round-trip does not strip them. AI-facing only, never rendered.
+  details?: string;
+  booklet_text?: string;
 }
 
 export interface FormPart {
@@ -117,6 +122,9 @@ export type FieldType =
 
 export interface FieldHelp {
   instructions?: string;
+  // Verbatim official-booklet excerpts for this field (bd wsao.1). AI-guidance
+  // only (voice guidance block + secretary catalog) -- never rendered to users.
+  details?: string;
   format_hint?: string;
 }
 
