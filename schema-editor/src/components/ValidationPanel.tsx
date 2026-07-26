@@ -54,6 +54,17 @@ const RULE_LABELS: Record<string, string> = {
   'translation-ambiguous-source': 'Ambiguous source text',
   'translation-mechanical': 'Translation mechanical check',
   'translation-coverage': 'Translation coverage gap',
+  // Guidance-content rules (bd wsao.3, sprint-16): the instructions/details
+  // authoring worklist. All WARNING; the coverage rule is ONE aggregated
+  // finding per schema (path $.fields, no field focus by design).
+  'help-instructions-missing': 'Guidance coverage gap',
+  'help-instructions-too-long': 'Instructions too long (spoken bound)',
+  'help-instructions-label-restatement': 'Instructions restate the label',
+  'help-instructions-screen-ref': 'Instructions reference the page/screen',
+  'help-details-not-contained': 'Details not verbatim from booklet',
+  'help-details-no-reference-floor': 'Details without booklet floor',
+  'help-details-oversize': 'Details oversize',
+  'help-details-headings-missing': 'Details missing headings',
 };
 
 // Local (non-hosted) delivery mode has no backend and no access code to reach

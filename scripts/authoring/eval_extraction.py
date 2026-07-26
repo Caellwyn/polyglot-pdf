@@ -56,6 +56,7 @@ sys.path.insert(0, os.path.join(_REPO, "scripts", "authoring"))
 import roundtrip_fill  # noqa: E402
 import schema_score  # noqa: E402
 from backend.services.schema_lint import lint_schema  # noqa: E402
+from backend.services import guidance_contract  # noqa: E402
 
 
 def _kit(name: str) -> str:
@@ -326,6 +327,12 @@ def evaluate_form(form: dict, draft_path: Optional[str],
     if form.get("widgets"):
         row["structural"] = check_widget_coverage(draft, form["widgets"])
 
+    # Guidance-content metrics (bd wsao.3, sprint-16): coverage / quality of
+    # the two guidance channels, so enrichment progress (wsao.4+) is visible
+    # on every eval run with zero model calls. Bounds + heuristics come from
+    # the shared guidance_contract module (same source the lint rules use).
+    row["guidance"] = guidance_metrics(draft)
+
     # Verdict: RED on any lint ERROR, a failed structural assertion, a
     # non-conforming value convention, or choice fill below the epic's 95%
     # gate. The value-convention column measures the V1 widget-leaf value
@@ -348,6 +355,52 @@ def evaluate_form(form: dict, draft_path: Optional[str],
     return row
 
 
+def guidance_metrics(schema: dict) -> dict:
+    """Deterministic guidance-channel metrics (bd wsao.3): instructions
+    coverage %, median instructions length, label-restatement rate, and
+    details containment % (None when no field carries details or the schema
+    has no booklet floor to check against)."""
+    fields = [f for f in schema.get("fields", []) if isinstance(f, dict)]
+    askable = [f for f in fields
+               if not f.get("read_only") and f.get("type") != "signature"]
+    meta = schema.get("form_metadata")
+    booklet = (meta.get("booklet_text") if isinstance(meta, dict) else None) or ""
+
+    lengths: list[int] = []
+    restatements = 0
+    covered = 0
+    paras_total = 0
+    paras_contained = 0
+    for f in askable:
+        help_obj = f.get("help") if isinstance(f.get("help"), dict) else {}
+        instr = (help_obj.get("instructions") or "").strip()
+        if instr:
+            covered += 1
+            lengths.append(len(instr))
+            labels = [o.get("label", "") for o in f.get("options") or []
+                      if isinstance(o, dict)]
+            if guidance_contract.is_label_restatement(
+                    instr, f.get("name"), labels):
+                restatements += 1
+        details = (help_obj.get("details") or "").strip()
+        if details and booklet:
+            for para in guidance_contract.details_paragraphs(details):
+                paras_total += 1
+                if guidance_contract.check_containment(para, booklet).contained:
+                    paras_contained += 1
+
+    lengths.sort()
+    return {
+        "askable": len(askable),
+        "covered": covered,
+        "coverage_pct": (100.0 * covered / len(askable)) if askable else None,
+        "median_len": lengths[len(lengths) // 2] if lengths else None,
+        "restatement_pct": (100.0 * restatements / covered) if covered else None,
+        "containment_pct": (100.0 * paras_contained / paras_total)
+                           if paras_total else None,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Table rendering.
 # --------------------------------------------------------------------------- #
@@ -364,7 +417,8 @@ def render_table(rows: list[dict]) -> str:
     # the '*' baseline marker (1) + the ' [gc]' ablation suffix (5) = 16.
     header = (f"{'form':<16} {'verdict':<7} {'lint E/W':<9} {'conv%':>6} "
               f"{'choice%':>8} {'text%':>7} {'fieldF1':>7} {'sh/rq%':>7} "
-              f"{'logic%':>7} {'structural':<22} repair")
+              f"{'logic%':>7} {'guid%':>6} {'gLen':>5} {'cont%':>6} "
+              f"{'structural':<22} repair")
     L = [header, "-" * len(header)]
     for r in rows:
         if r.get("skipped"):
@@ -397,6 +451,9 @@ def render_table(rows: list[dict]) -> str:
             f"{f1_cell:>7} "
             f"{_pct_cell(r.get('rel_show_require')):>7} "
             f"{_pct_cell(r.get('rel_logic')):>7} "
+            f"{_pct_cell({'pct': (r.get('guidance') or {}).get('coverage_pct')}):>6} "
+            f"{str((r.get('guidance') or {}).get('median_len') or '-'):>5} "
+            f"{_pct_cell({'pct': (r.get('guidance') or {}).get('containment_pct')}):>6} "
             f"{st_cell:<22} {repair_cell}"
         )
     return "\n".join(L)
