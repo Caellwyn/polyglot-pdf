@@ -31,6 +31,17 @@ _REPO = Path(__file__).resolve().parents[2]
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
+
+def _lint_structural(schema, dump=None):
+    """lint_schema minus the standing guidance-coverage/quality worklist
+    (help-* WARNINGs, bd wsao.3): these structural-defect tests assert on
+    schema DEFECTS, and a fixture without authored help.instructions now
+    legitimately carries the aggregated coverage warning -- orthogonal to
+    what each test pins. The guidance rules have their own suite
+    (backend/tests/unit/test_guidance_contract.py)."""
+    return [f for f in lint_schema(schema, dump)
+            if not f.rule.startswith("help-")]
+
 def _schema(fields, version=None):
     s = {"source": "pdf", "fields": fields}
     if version is not None:
@@ -47,7 +58,12 @@ def _select(fid="picker", options=("alpha", "beta")):
 
 
 def _rules(findings):
-    return [f.rule for f in findings]
+    """Rule ids minus the standing guidance worklist (help-*, bd wsao.3):
+    these structural tests pin exact defect lists, and a fixture without
+    authored help.instructions legitimately carries the aggregated coverage
+    warning -- orthogonal noise here. The guidance rules have their own suite
+    (backend/tests/unit/test_guidance_contract.py)."""
+    return [f.rule for f in findings if not f.rule.startswith("help-")]
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +128,7 @@ def test_option_value_slug_trips_once_v2_only():
          "options": [{"value": "Bad Slug", "label": "A"}, {"value": "ok", "label": "B"}]},
     ]
     # v1: no slug convention -- clean.
-    assert lint_schema(_schema(fields)) == []
+    assert _lint_structural(_schema(fields)) == []
     # v2: the slug rule fires exactly once.
     findings = lint_schema(_schema(fields, version="2"))
     assert _rules(findings) == ["option-value-slug"]
@@ -150,7 +166,7 @@ def test_v1_is_checked_on_option_bearing_trigger_is_tolerated():
         {"id": "dep", "type": "text",
          "show_if": {"field": "grp", "operator": "is_checked"}},
     ]
-    assert lint_schema(_schema(fields)) == []
+    assert _lint_structural(_schema(fields)) == []
     findings = lint_schema(_schema(fields, version="2"))
     assert _rules(findings) == ["operator-trigger"]
 
@@ -238,8 +254,9 @@ def test_unclaimed_fillable_widget_warns():
     ]}
     findings = lint_schema(_schema(fields), dump)
     assert _rules(findings) == ["dump-widget-unclaimed"]
-    assert findings[0].severity == "WARNING"
-    assert "f2[0]" in findings[0].path
+    unclaimed = [f for f in findings if f.rule == "dump-widget-unclaimed"][0]
+    assert unclaimed.severity == "WARNING"
+    assert "f2[0]" in unclaimed.path
     assert not has_errors(findings)
 
 
@@ -250,7 +267,7 @@ def test_unclaimed_button_widget_is_not_a_finding():
         {"name": "top[0].f1[0]", "logical_type": "text"},
         {"name": "top[0].reset[0]", "logical_type": "button"},
     ]}
-    assert lint_schema(_schema(fields), dump) == []
+    assert _lint_structural(_schema(fields), dump) == []
 
 
 def test_all_widgets_claimed_emits_no_unclaimed_finding():
@@ -262,7 +279,7 @@ def test_all_widgets_claimed_emits_no_unclaimed_finding():
         {"name": "top[0].f1[0]", "logical_type": "text"},
         {"name": "top[0].f2[0]", "logical_type": "text"},
     ]}
-    assert lint_schema(_schema(fields), dump) == []
+    assert _lint_structural(_schema(fields), dump) == []
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +294,7 @@ def test_groups_of_one_field_plus_own_option_claim_is_benign():
          "options": [{"value": "cb[0]", "label": "Yes", "pdf_field_name": "cb[0]"}]},
     ]
     dump = {"fields": [{"name": "top[0].cb[0]"}]}
-    assert lint_schema(_schema(fields), dump) == []
+    assert _lint_structural(_schema(fields), dump) == []
 
 
 def test_empty_string_value_is_the_v1_emptiness_idiom_not_a_bad_option_ref():
@@ -286,7 +303,7 @@ def test_empty_string_value_is_the_v1_emptiness_idiom_not_a_bad_option_ref():
         {"id": "dep", "type": "text",
          "show_if": {"field": "picker", "operator": "not_equals", "value": ""}},
     ]
-    assert lint_schema(_schema(fields)) == []
+    assert _lint_structural(_schema(fields)) == []
 
 
 def test_vestigial_value_on_no_value_operator_is_tolerated_on_v1_only():
@@ -296,7 +313,7 @@ def test_vestigial_value_on_no_value_operator_is_tolerated_on_v1_only():
          "show_if": {"field": "picker", "operator": "is_not_empty", "value": "x"}},
     ]
     # v1: the operator ignores the stray value -- tolerated.
-    assert lint_schema(_schema(fields)) == []
+    assert _lint_structural(_schema(fields)) == []
     # v2: the model rejects this exact shape as an arity error, and lint must
     # agree on the Pydantic-rejected raw-draft path (Codex PR #302).
     findings = lint_schema(_schema(fields, version="2"))
@@ -330,7 +347,7 @@ def test_plain_string_options_get_value_hygiene_checks():
         {"id": "dep", "type": "text",
          "show_if": {"field": "p", "operator": "equals", "value": "alpha"}},
     ]
-    assert lint_schema(_schema(fields)) == []
+    assert _lint_structural(_schema(fields)) == []
 
 
 def test_readonly_conditional_no_unlock_warns():
@@ -510,15 +527,15 @@ def test_composite_v2_group_with_valid_atoms_is_clean():
              "none_of": [{"field": "picker", "operator": "equals", "value": "beta"}],
          }},
     ]
-    assert lint_schema(_schema(fields)) == []
+    assert _lint_structural(_schema(fields)) == []
 
 
 def test_lint_never_raises_on_garbage():
     assert has_errors(lint_schema("not even a dict"))
-    assert lint_schema({"fields": "oops"}) == []  # non-list fields -> empty
-    assert lint_schema({"fields": 123}) == []     # non-iterable too (PR #302)
-    assert lint_schema({"fields": [None, 42, "x"]}) == []  # non-dict members
-    assert lint_schema({}) == []
+    assert _lint_structural({"fields": "oops"}) == []  # non-list fields -> empty
+    assert _lint_structural({"fields": 123}) == []     # non-iterable too (PR #302)
+    assert _lint_structural({"fields": [None, 42, "x"]}) == []  # non-dict members
+    assert _lint_structural({}) == []
 
 
 def test_non_list_options_never_crash_any_pass():
@@ -545,7 +562,7 @@ def test_long_acyclic_show_if_chain_does_not_overflow():
          "show_if": {"field": f"f{i-1}", "operator": "is_not_empty"}}
         for i in range(1, n)
     ]
-    assert lint_schema(_schema(fields)) == []
+    assert _lint_structural(_schema(fields)) == []
 
 
 # ---------------------------------------------------------------------------
@@ -717,7 +734,12 @@ def test_archived_broken_w7_draft_findings_all_carry_field_focus():
         (_FIXTURES / "w7_broken_draft.json").read_text(encoding="utf-8")
     )
     ids = {f["id"] for f in draft["fields"] if isinstance(f, dict) and "id" in f}
-    findings = lint_schema(draft)
+    # The aggregated guidance-coverage worklist (help-*, bd wsao.3) anchors at
+    # $.fields by design (one finding per SCHEMA, not per field) -- it is the
+    # documented exception to the every-finding-focusable contract, so the
+    # focus assertion runs over the structural findings only.
+    findings = [f for f in lint_schema(draft)
+                if not f.rule.startswith("help-")]
     dicts = [f.as_dict() for f in findings]
     assert dicts, "the broken draft must produce findings"
     for d in dicts:
@@ -823,11 +845,13 @@ def test_translation_flags_reemitted_as_warning_findings():
     }
     findings = lint_schema(_with_translation_flags([flag]))
     assert _rules(findings) == ["translation-drift-unresolved"]
-    assert findings[0].severity == SEVERITY_WARNING
-    assert findings[0].message == flag["message"]
+    reemitted = [f for f in findings
+                 if f.rule == "translation-drift-unresolved"][0]
+    assert reemitted.severity == SEVERITY_WARNING
+    assert reemitted.message == flag["message"]
     # The stored path round-trips through the SAME field-focus derivation as
     # native findings, so the panel can jump to the flagged field.
-    assert findings[0].as_dict()["field_id"] == "sex"
+    assert reemitted.as_dict()["field_id"] == "sex"
 
 
 def test_translation_flags_all_four_rules_pass_through():
@@ -841,7 +865,7 @@ def test_translation_flags_all_four_rules_pass_through():
     ]
     findings = lint_schema(_with_translation_flags(flags))
     assert sorted(_rules(findings)) == sorted(f["rule"] for f in flags)
-    assert all(f.severity == SEVERITY_WARNING for f in findings)
+    assert all(f.severity == SEVERITY_WARNING for f in findings)  # incl. help-*
 
 
 def test_translation_flags_severity_is_pinned_warning():
@@ -850,7 +874,8 @@ def test_translation_flags_severity_is_pinned_warning():
     flag = {"severity": "ERROR", "rule": "translation-mechanical",
             "path": "p", "message": "m"}
     findings = lint_schema(_with_translation_flags([flag]))
-    assert [f.severity for f in findings] == [SEVERITY_WARNING]
+    translation = [f for f in findings if f.rule.startswith("translation-")]
+    assert [f.severity for f in translation] == [SEVERITY_WARNING]
     assert not has_errors(findings)
 
 
@@ -872,4 +897,4 @@ def test_translation_flags_malformed_slots_are_ignored():
         s = _schema([_select()])
         if bakeoff is not None:
             s["_bakeoff"] = bakeoff
-        assert lint_schema(s) == []
+        assert _lint_structural(s) == []

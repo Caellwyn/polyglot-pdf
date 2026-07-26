@@ -47,8 +47,12 @@ VALID_SCHEMA = {
     "form_metadata": {"title": "Test Form", "version": "unknown"},
     "sections": [{"id": "s1", "label": "Section 1", "order": 1, "fields": ["f1"]}],
     "fields": [
+        # help.instructions authored so this fixture is CLEAN under the
+        # wsao.3 guidance-coverage lint too (a guidance-less field now
+        # legitimately carries the aggregated coverage WARNING).
         {"id": "f1", "name": "Field 1", "spoken_name": "field one",
-         "type": "text", "section_id": "s1"}
+         "type": "text", "section_id": "s1",
+         "help": {"instructions": "Enter the value shown on your notice."}}
     ],
     "extraction_info": {
         "extracted_at": "2026-07-01T00:00:00Z",
@@ -1466,7 +1470,10 @@ def test_extract_runs_and_stores_the_draft(client, monkeypatch):
         "form_metadata": {"title": "T", "version": "unknown"},
         "sections": [{"id": "s1", "label": "S1", "order": 1, "fields": ["a"]}],
         "fields": [{"id": "a", "name": "A", "spoken_name": "a", "type": "text",
-                    "section_id": "s1", "pdf_field_name": "form1[0].a[0]"}],
+                    "section_id": "s1", "pdf_field_name": "form1[0].a[0]",
+                    # authored guidance so the clean-draft path stays
+                    # zero-findings under the wsao.3 coverage lint
+                    "help": {"instructions": "Enter the code from your card."}}],
         "extraction_info": {"extracted_at": "2026-07-05T00:00:00Z",
                             "extraction_confidence": 0.9,
                             "extractor_version": "t", "manual_review_required": True},

@@ -60,6 +60,32 @@ Rules (stable ids; one finding per violation site):
                                 taxonomy (TRANSLATION_FLAG_RULES below), re-
                                 emitted verbatim from the persisted bake report
                                 at _bakeoff.authoring.option_translation.flags
+- help-instructions-missing WARNING ONE AGGREGATED finding per schema: N of M
+                                askable fields (read_only + signature
+                                excluded) have no help.instructions -- the
+                                guidance-coverage worklist WITHOUT a per-field
+                                flood (a fresh pre-enrichment draft would
+                                otherwise emit one warning per field). bd
+                                wsao.3
+- help-instructions-too-long WARNING instructions exceed the hard bound
+                                (guidance_contract.INSTRUCTIONS_HARD_CHARS) --
+                                they ride the SPOKEN ask-hint
+- help-instructions-label-restatement WARNING instructions add nothing beyond
+                                the field's own name/option labels
+- help-instructions-screen-ref WARNING instructions carry on-screen deixis or
+                                a "see page/instructions" cross-reference --
+                                meaningless in a spoken channel
+- help-details-not-contained WARNING a help.details paragraph is NOT a
+                                verbatim (normalized) excerpt of
+                                metadata.booklet_text -- the zero-trust
+                                extractive contract (guidance_contract)
+- help-details-no-reference-floor WARNING help.details present but the schema
+                                carries no metadata.booklet_text -- the
+                                containment check cannot run
+- help-details-oversize  WARNING details exceed
+                                guidance_contract.DETAILS_OVERSIZE_WORDS words
+- help-details-headings-missing WARNING a long details block has no heading
+                                lines (unnavigable for secretary/human review)
 
 ASCII only.
 """
@@ -70,6 +96,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.models import conditional_vocabulary as vocab
+from backend.services import guidance_contract
 
 SEVERITY_ERROR = "ERROR"
 SEVERITY_WARNING = "WARNING"
@@ -777,12 +804,144 @@ def lint_schema(
                 f"form can be marked complete",
             ))
 
+    _check_guidance(fields, schema, out)
+
     _emit_translation_flags(schema, out)
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)
 
     return out
+
+
+def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
+                    out: List[LintFinding]) -> None:
+    """Guidance-content rules (bd wsao.3; sprint-16 plan). All WARNING --
+    guidance quality informs the authoring worklist, never blocks publish.
+    Bounds + normalization live in guidance_contract (one module shared with
+    the enrichment + judge prompts, so mechanical checks cannot drift from
+    what the prompts demand)."""
+    meta = schema.get("form_metadata")
+    booklet = meta.get("booklet_text") if isinstance(meta, dict) else None
+    booklet = booklet if isinstance(booklet, str) else ""
+    booklet_norm: Optional[str] = None  # lazily normalized once (perf)
+
+    # Coverage is ONE aggregated finding, not per-field: a fresh
+    # pre-enrichment draft has no guidance on ANY field, and a per-field rule
+    # would flood the ValidationPanel (and every zero-findings test fixture)
+    # with dozens of identical warnings. Askable = fields a user is actually
+    # asked (read_only + signature excluded -- decide-and-note).
+    askable = [f for f in fields
+               if not f.get("read_only") and f.get("type") != "signature"]
+    def _instr_of(f: Dict[str, Any]) -> str:
+        # Raw LLM drafts carry lists/numbers where strings belong; lint never
+        # throws on malformed input (wsao.3 fresh-eyes).
+        h = f.get("help")
+        v = h.get("instructions") if isinstance(h, dict) else None
+        return v if isinstance(v, str) else ""
+
+    uncovered = [f for f in askable if not _instr_of(f).strip()]
+    if uncovered:
+        sample = ", ".join(str(f.get("id")) for f in uncovered[:5])
+        more = ", ..." if len(uncovered) > 5 else ""
+        out.append(LintFinding(
+            SEVERITY_WARNING, "help-instructions-missing", "$.fields",
+            f"{len(uncovered)} of {len(askable)} askable fields have no "
+            f"help.instructions ({sample}{more}) -- the voice AI has no "
+            f"authored guidance for them (sprint-16 coverage worklist)",
+        ))
+
+    for i, f in enumerate(fields):
+        field_path = f"fields[{i}] (id={f.get('id')})"
+        help_obj = f.get("help")
+        help_obj = help_obj if isinstance(help_obj, dict) else {}
+        instr = help_obj.get("instructions")
+        instr = instr if isinstance(instr, str) else ""
+        details = help_obj.get("details")
+        details = details if isinstance(details, str) else ""
+
+        if len(instr) > guidance_contract.INSTRUCTIONS_HARD_CHARS:
+            out.append(LintFinding(
+                SEVERITY_WARNING, "help-instructions-too-long",
+                f"{field_path}.help.instructions",
+                f"instructions are {len(instr)} chars (hard bound "
+                f"{guidance_contract.INSTRUCTIONS_HARD_CHARS}) -- they ride "
+                f"the spoken ask-hint; move depth into help.details",
+            ))
+
+        if instr.strip():
+            # non-list options never crash the never-throws contract (same
+            # guard as every sibling options read in this file)
+            opts = f.get("options")
+            opts = opts if isinstance(opts, list) else []
+            labels = [o.get("label", "") for o in opts if isinstance(o, dict)]
+            if guidance_contract.is_label_restatement(
+                    instr, f.get("name"), labels):
+                out.append(LintFinding(
+                    SEVERITY_WARNING, "help-instructions-label-restatement",
+                    f"{field_path}.help.instructions",
+                    "instructions merely restate the field label/options -- "
+                    "empty beats filler (guidance contract)",
+                ))
+            if guidance_contract.SCREEN_REF_RE.search(instr):
+                out.append(LintFinding(
+                    SEVERITY_WARNING, "help-instructions-screen-ref",
+                    f"{field_path}.help.instructions",
+                    "instructions carry on-screen deixis or a 'see page/"
+                    "instructions' cross-reference -- meaningless when spoken",
+                ))
+
+        if not details.strip():
+            continue
+
+        if not booklet.strip():
+            out.append(LintFinding(
+                SEVERITY_WARNING, "help-details-no-reference-floor",
+                f"{field_path}.help.details",
+                "help.details present but the schema has no "
+                "form_metadata.booklet_text -- the verbatim-containment check "
+                "cannot run; bake the booklet floor",
+            ))
+        else:
+            # normalize the (potentially 80KB+) booklet ONCE per schema, not
+            # per paragraph -- quadratic cost on the hosted lint route
+            # otherwise (wsao.3 outer review)
+            if booklet_norm is None:
+                booklet_norm = guidance_contract.normalize_for_containment(booklet)
+            for para in guidance_contract.details_paragraphs(details):
+                res = guidance_contract.check_containment_normalized(
+                    para, booklet_norm)
+                if not res.contained:
+                    head = para[:60].replace("\n", " ")
+                    out.append(LintFinding(
+                        SEVERITY_WARNING, "help-details-not-contained",
+                        f"{field_path}.help.details",
+                        f"details paragraph is not a verbatim excerpt of the "
+                        f"booklet text (normalized substring check failed): "
+                        f"\"{head}...\" -- the details channel is "
+                        f"SELECT-not-REWRITE (guidance contract)",
+                    ))
+
+        word_count = len(details.split())
+        if word_count > guidance_contract.DETAILS_OVERSIZE_WORDS:
+            out.append(LintFinding(
+                SEVERITY_WARNING, "help-details-oversize",
+                f"{field_path}.help.details",
+                f"details are {word_count} words (bound "
+                f"{guidance_contract.DETAILS_OVERSIZE_WORDS}); also check the "
+                f"per-form inline token budget (wsao.2 findings)",
+            ))
+
+        if (len(details) > guidance_contract.DETAILS_HEADINGS_REQUIRED_CHARS
+                and not guidance_contract.has_heading(details)):
+            out.append(LintFinding(
+                SEVERITY_WARNING, "help-details-headings-missing",
+                f"{field_path}.help.details",
+                f"details exceed "
+                f"{guidance_contract.DETAILS_HEADINGS_REQUIRED_CHARS} chars "
+                f"with no heading lines -- add the booklet's own headings "
+                f"(## / 'a.' / 'Exception N.')",
+            ))
 
 
 def _emit_translation_flags(schema: Dict[str, Any], out: List[LintFinding]) -> None:
