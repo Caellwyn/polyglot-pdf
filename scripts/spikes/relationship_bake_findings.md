@@ -216,10 +216,16 @@ and measured on the saved R3 drafts):
   alternate-key emission on a correctly-conditional field -- the
   conditional_logic 19 is the latter shape. Read spurious counts with the
   per-key gold inventory in hand.
-- Model-provenance caveat: all clause measurements ran on claude-opus-4-8 (the
-  local default); the HOSTED editor route serves the same contract to
-  gemini-2.5-pro (EXTRACTOR_MODEL default) un-remeasured -- gemini re-measure
-  logged on bd btbi.
+- Model-provenance caveat + PILOT: the clause measurements ran on
+  claude-opus-4-8 (local default); the HOSTED editor route serves the same
+  contract to gemini-2.5-pro (EXTRACTOR_MODEL default). One Vertex pilot run
+  (w7, gemini-2.5-pro, 2026-07-26, ~<$1): the clause TRANSFERS on recall --
+  show_if 12/12, require_if 7/9, combined presence 90.5% (best w7 presence of
+  any run) -- but gemini OVER-APPLIES it: require_if spurious 10, show_if
+  spurious 5 (vs opus 1/1), trigger-correct 57.1%, draft lint-RED. Hosted-path
+  consequence is bounded (drafts go through human editor touch-up by design;
+  skip satisfies the runtime gate) but the full gemini re-measure + possible
+  gemini-specific precision guard stays on bd btbi.
 
 **Bar verdict (bars logged on epic o2bs):** i-90 -- presence 100%,
 cond_behavior 100%, F1 96.7, trigger-correct 89.5% raw / 17/17
