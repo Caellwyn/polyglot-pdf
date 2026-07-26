@@ -1010,6 +1010,14 @@ class FormFillingService:
             system_instruction=system_instruction,
             tool_declarations=tool_declarations,
             enable_transcripts=bool(self._send_transcript),
+            # Re-thread the inline-details window budget on RESTART too (bd
+            # wsao.8 fresh-eyes): set_callbacks resets the adapter's budget,
+            # so omitting it here re-derived the compression window WITHOUT
+            # details headroom and a reconnect whose current field carries
+            # large help.details 1007'd at assemble -- the exact wsao.2
+            # failure, back on the routine reconnect path.
+            injection_budget_tokens=guidance_contract.inline_injection_budget_tokens(
+                self._full_schema or self._schema or {}),
         )
 
         # Verify session is now active

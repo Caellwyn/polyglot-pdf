@@ -37,17 +37,20 @@ engine copies from the SAME extracted source text that becomes the floor, so
 both sides normalize identically in practice; hand-typed excerpts should be
 pasted from the extraction, not re-typed.
 
-Size bounds (sprint-16 plan + the wsao.2 measurement):
+Size bounds (sprint-16 plan; oversize policy DECIDED by the maintainer
+2026-07-26, bd wsao.8):
   - instructions: soft <= INSTRUCTIONS_SOFT_CHARS (speakable ask-tail), hard
     INSTRUCTIONS_HARD_CHARS (lint WARNING above it);
-  - details: DETAILS_OVERSIZE_WORDS lint WARNING. NOTE (wsao.2 finding): the
-    live session's ctu8-derived compression window imposes a HARD form-
-    dependent token budget on inline details (w7: between 1,717 and 3,366
-    tokens -- 3,366 breached the ~6,400-token assembled budget and Vertex
-    closed 1007 at session assemble). The oversize POLICY (bake-time cap vs
-    bigger window vs secretary-mediated delivery) is a reserved maintainer
-    decision; until it lands, the lint bound stays WARNING-level and the
-    engine must consult scripts/spikes/wsao2_inline_details_findings.md.
+  - details: up to DETAILS_INLINE_MAX_CHARS ride the voice model INLINE while
+    the field is focused (lint WARNING above it; clamp_details_inline is the
+    render backstop). The enrichment engine authors to fit via SELECTION +
+    INDEX -- verbatim excerpts up to budget plus a one-line index of dropped
+    topics -- never summarization, never blind truncation. The secretary
+    always holds the FULL text (the booklet floor). The compression window
+    derivation prices the inline injection in (inline_injection_budget_tokens
+    -> derive_compression_window), which is what makes the budget viable: a
+    details-bearing initiating message used to 1007 at session assemble
+    (wsao.2 measurement; scripts/spikes/wsao2_inline_details_findings.md).
 
 ASCII only (CLAUDE.md scar #6).
 """
@@ -70,7 +73,11 @@ INSTRUCTIONS_HARD_CHARS = 500
 # clamp_details_inline below is the defensive RENDER-time backstop for a kit
 # that ships oversize anyway.
 DETAILS_INLINE_MAX_CHARS = 20000
-DETAILS_OVERSIZE_WORDS = 3000
+# Fixed slop the injection budget adds on top of the clamp: the clamp's
+# appended topic-index tail can push the rendered injection slightly past
+# max_chars (measured worst case ~+1.1k chars ~= 280 tokens; wsao.8
+# fresh-eyes finding 3).
+INJECTION_BUDGET_SLOP_TOKENS = 288
 # A details block longer than this without any heading line is unnavigable
 # for the secretary + human review (plan: "headings mandatory above a size
 # threshold").
@@ -209,7 +216,10 @@ def inline_injection_budget_tokens(schema: dict) -> int:
         d = h.get("details") if isinstance(h, dict) else None
         if isinstance(d, str) and d.strip():
             worst = max(worst, min(len(d), DETAILS_INLINE_MAX_CHARS))
-    return worst // 4
+    if worst == 0:
+        return 0
+    # + slop for the clamp's appended topic-index tail (see the constant).
+    return worst // 4 + INJECTION_BUDGET_SLOP_TOKENS
 
 
 def has_heading(details: str) -> bool:

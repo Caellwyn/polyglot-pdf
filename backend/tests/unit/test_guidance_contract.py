@@ -194,16 +194,18 @@ def test_clamp_details_inline_cuts_at_paragraph_and_indexes_dropped_topics():
 
 
 def test_inline_injection_budget_tokens():
+    slop = gc.INJECTION_BUDGET_SLOP_TOKENS
     assert gc.inline_injection_budget_tokens({"fields": [
         {"id": "a", "help": {"details": "x" * 8000}},
         {"id": "b", "help": {"details": "y" * 100}},
         {"id": "c"},
-    ]}) == 2000  # max clamped details chars / 4
+    ]}) == 2000 + slop  # max clamped details chars / 4 + index-tail slop
     # oversize details count at the CLAMP, not raw size
     assert gc.inline_injection_budget_tokens({"fields": [
         {"id": "a", "help": {"details": "x" * (gc.DETAILS_INLINE_MAX_CHARS + 9999)}},
-    ]}) == gc.DETAILS_INLINE_MAX_CHARS // 4
-    # no details anywhere -> 0 (window derivation stays pre-wsao.8 identical)
+    ]}) == gc.DETAILS_INLINE_MAX_CHARS // 4 + slop
+    # no details anywhere -> 0, NO slop (window derivation stays pre-wsao.8
+    # byte-identical for details-less forms)
     assert gc.inline_injection_budget_tokens({"fields": [{"id": "a"}]}) == 0
     assert gc.inline_injection_budget_tokens({}) == 0
 
