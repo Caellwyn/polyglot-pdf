@@ -955,7 +955,15 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
         if isinstance(controls, list):
             path = f"fields[{i}] (id={fid}).controls_fields"
 
-            def _normalize(atom: dict, _path=path) -> Optional[dict]:
+            def _normalize(atom: dict, _path=path,
+                           quiet: bool = False) -> Optional[dict]:
+                # quiet=True re-normalizes an atom the mirror pass ALREADY
+                # normalized loudly (the unlocks/hides conversion below) --
+                # identical rewrites, but no report entries / alias counting,
+                # or every alias would be double-logged and alias_hit_count
+                # doubled (outer-review gap on bd xbfm).
+                _repairs = [] if quiet else repairs
+                _count = (lambda _k: None) if quiet else count_alias
                 trig = fields_by_id.get(atom.get("field")) \
                     if isinstance(atom.get("field"), str) else None
                 # v1-semantics pre-pass (migrate_schema_v2._rewrite_atom_value
@@ -981,14 +989,14 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                 elif ttype == "checkbox_group" and op in ("equals", "not_equals"):
                     new_op = ("includes" if op == "equals"
                               else "not_includes")
-                    repairs.append({
+                    _repairs.append({
                         "action": "alias-operator", "path": _path,
                         "detail": f"{op} on checkbox_group trigger -> "
                                   f"{new_op} (v1 controls_fields "
                                   "membership reading)",
                         "error": False,
                     })
-                    count_alias(f"{op}@controls_fields")
+                    _count(f"{op}@controls_fields")
                     atom["operator"] = new_op
                 elif (op == "is_checked"
                         and ttype in vocab.CHOICE_FIELD_TYPES):
@@ -998,18 +1006,18 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                     # standalone `checkbox` trigger keeps is_checked). Without
                     # this the mirrored atom itself lints operator-trigger RED
                     # (Opus review gap, round 2).
-                    repairs.append({
+                    _repairs.append({
                         "action": "alias-operator", "path": _path,
                         "detail": f"is_checked on {ttype!r} trigger -> "
                                   "is_not_empty (v1 controls_fields "
                                   "selection-exists reading)",
                         "error": False,
                     })
-                    count_alias("is_checked@controls_fields")
+                    _count("is_checked@controls_fields")
                     atom["operator"] = "is_not_empty"
                     atom.pop("value", None)
-                return _rewrite_atom(atom, trig, resolution, _path, repairs,
-                                     count_alias)
+                return _rewrite_atom(atom, trig, resolution, _path, _repairs,
+                                     _count)
 
             outcome = cfm.mirror_controls_fields(
                 f, fields_by_id, _walk_condition_atoms, _normalize,
@@ -1030,17 +1038,169 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                               "field -- edge dropped, needs human review",
                     "error": True,
                 })
-            for u in outcome["unconverted"]:
-                if u["unconverted_action_keys"]:
+            # REPAIR-TIME conversion of the two gold-encodable "unconvertible"
+            # actions (bd polyglot-pdf-xbfm; cfm.REPAIR_CONVERTIBLE_ACTIONS):
+            #   unlocks -> conditional_behavior unlock descriptor + the trigger
+            #              condition as a show_if alternative (i-90 gold shape);
+            #   hides   -> the trigger condition NEGATED into show_if (none_of).
+            # Runs AFTER the shows/makes_required mirror so add_target_condition
+            # composes with anything it just wrote. Migrate is deliberately
+            # untouched (its pinned behavior keeps unlocks/hides unconverted).
+            # (action, target-id) edges that hit the model's DEPTH-1 composite
+            # limit (an existing composite condition that cannot absorb the
+            # mirrored atom without an invalid nested group): collected here,
+            # RETAINED in the rump below. Seeded with the mirror pass's own
+            # inexpressible shows/makes_required edges.
+            failed_pairs: set = set()
+            for entry in outcome["unconverted"]:
+                for pair in entry.get("inexpressible") or []:
+                    action_name, _, target_id = pair.partition(":")
+                    failed_pairs.add((action_name, target_id))
+            for control in f.get("controls_fields") or []:
+                if not isinstance(control, dict):
+                    continue
+                if not (control.get("unlocks") or control.get("hides")):
+                    continue  # nothing for this pass to convert
+                # Same raw (uncoerced) id + standalone lookup the mirror pass
+                # used, so both passes' atoms agree byte-for-byte; quiet=True
+                # because the mirror already normalized this control LOUDLY --
+                # a second loud pass double-logs every alias (outer review).
+                raw_id = f.get("id")
+                standalone_old = (standalone_old_value or {}).get(raw_id) \
+                    if isinstance(raw_id, str) else None
+                atom = _normalize(copy.deepcopy(
+                    cfm.control_condition(control, raw_id, standalone_old)),
+                    quiet=True)
+                if atom is None:
+                    continue  # unresolvable atom: its drop is already logged
+                for tid in control.get("unlocks") or []:
+                    target = fields_by_id.get(tid) if isinstance(tid, str) else None
+                    if not isinstance(target, dict):
+                        if isinstance(tid, str):
+                            repairs.append({
+                                "action": "controls-fields-dangling",
+                                "path": path,
+                                "detail": f"unlocks target {tid!r} resolves to "
+                                          "no field -- edge dropped, needs "
+                                          "human review",
+                                "error": True,
+                            })
+                        continue
+                    # Condition FIRST: the descriptor is only set when the
+                    # visibility pairing exists (gold shape); a depth-1
+                    # composition failure keeps the WHOLE edge unconverted
+                    # rather than emitting a half-paired descriptor.
+                    if cfm.target_has_condition(target, "show_if", atom,
+                                                _walk_condition_atoms):
+                        cond_ok = True
+                    elif cfm.add_target_condition(target, "show_if",
+                                                  dict(atom)):
+                        cond_ok = True
+                        repairs.append({
+                            "action": "mirror-controls-fields",
+                            "path": path,
+                            "detail": f"{fid} unlocks {tid}: trigger condition "
+                                      f"{atom} -> show_if alternative on the "
+                                      "target (gold read-only-unlock pairing)",
+                            "error": False,
+                        })
+                    else:
+                        cond_ok = False
+                        failed_pairs.add(("unlocks", tid))
+                    if cond_ok:
+                        behavior = target.get("conditional_behavior")
+                        if not (isinstance(behavior, dict)
+                                and behavior.get("unlock_method")):
+                            target["conditional_behavior"] = \
+                                cfm.unlock_descriptor()
+                            repairs.append({
+                                "action": "mirror-controls-fields",
+                                "path": path,
+                                "detail": f"{fid} unlocks {tid} -> "
+                                          "conditional_behavior.unlock_method="
+                                          "flip_readonly_bit on the target",
+                                "error": False,
+                            })
+                for tid in control.get("hides") or []:
+                    target = fields_by_id.get(tid) if isinstance(tid, str) else None
+                    if not isinstance(target, dict):
+                        if isinstance(tid, str):
+                            repairs.append({
+                                "action": "controls-fields-dangling",
+                                "path": path,
+                                "detail": f"hides target {tid!r} resolves to "
+                                          "no field -- edge dropped, needs "
+                                          "human review",
+                                "error": True,
+                            })
+                        continue
+                    if cfm.negated_atom_present(target, "show_if", atom):
+                        continue  # already negated -- idempotent re-repair
+                    if not cfm.add_target_negated_condition(target, "show_if",
+                                                            dict(atom)):
+                        failed_pairs.add(("hides", tid))
+                        continue
                     repairs.append({
-                        "action": "controls-fields-unmirrored",
+                        "action": "mirror-controls-fields",
                         "path": path,
-                        "detail": f"trigger {u['trigger']!r} action(s) "
-                                  f"{u['unconverted_action_keys']} have no v2 "
-                                  "target-side equivalent -- dropped, needs "
-                                  "human review",
+                        "detail": f"{fid} hides {tid} -> show_if none_of"
+                                  f"({atom}) on the target",
                         "error": False,
                     })
+
+            # Rump retention (zero silent drops, bd polyglot-pdf-xbfm): strip
+            # every CONVERTED action key; a control still carrying a genuinely
+            # unconvertible action (locks / makes_optional) is RETAINED on the
+            # field, where schema_lint's legacy-trigger-side-logic ERROR flags
+            # it for a human -- loud in the report AND the lint, never dropped.
+            rump = []
+            for control in f.get("controls_fields") or []:
+                if not isinstance(control, dict):
+                    continue
+                remaining = {k: control[k]
+                             for k in ("locks", "makes_optional")
+                             if control.get(k)}
+                # Edges that hit the depth-1 composite limit stay too: only
+                # the tids that actually failed, under their action key.
+                for action_name in ("shows", "makes_required", "unlocks",
+                                    "hides"):
+                    kept_tids = [t for t in control.get(action_name) or []
+                                 if (action_name, t) in failed_pairs]
+                    if kept_tids:
+                        remaining[action_name] = kept_tids
+                if remaining:
+                    kept = {k: control[k]
+                            for k in ("field", "operator", "value")
+                            if k in control}
+                    kept.update(remaining)
+                    rump.append(kept)
+            if rump:
+                f["controls_fields"] = rump
+                no_encoding = sorted({k for c in rump
+                                      for k in ("locks", "makes_optional")
+                                      if c.get(k)})
+                depth_limited = sorted({k for c in rump
+                                        for k in ("shows", "makes_required",
+                                                  "unlocks", "hides")
+                                        if c.get(k)})
+                bits = []
+                if no_encoding:
+                    bits.append(f"action(s) {no_encoding} have no v2 "
+                                "target-side encoding")
+                if depth_limited:
+                    bits.append(f"action(s) {depth_limited} hit the depth-1 "
+                                "composite limit on their target's existing "
+                                "condition")
+                repairs.append({
+                    "action": "controls-fields-unmirrored",
+                    "path": path,
+                    "detail": "; ".join(bits) + " -- RETAINED on the field "
+                              "(schema_lint legacy-trigger-side-logic flags "
+                              "it), needs human review",
+                    "error": False,
+                })
+            else:
+                f.pop("controls_fields", None)
         # conditional_fields is a plain legacy list of field ids (no
         # trigger-side actions to mirror -- unlike controls_fields it never
         # carried operator/value/action-key structure), so there is nothing
@@ -1053,7 +1213,6 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                           "target-side equivalent to mirror into)",
                 "error": False,
             })
-        f.pop("controls_fields", None)
         f.pop("conditional_fields", None)
 
     # Schema-level: complete a contract-shaped supplements entry (bd

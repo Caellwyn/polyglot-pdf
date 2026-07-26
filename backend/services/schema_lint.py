@@ -49,6 +49,10 @@ Rules (stable ids; one finding per violation site):
 - readonly-conditional-no-unlock WARNING a read_only field shown/required by a
                                 condition but with no unlock_method -- it is
                                 permanently non-fillable when shown
+- unlock-missing-flag-change WARNING an unlock_method with no
+                                pdf_field_flag_change -- the PDF filler cannot
+                                flip the read-only bit, so the field silently
+                                stays locked in the filled PDF
 - legacy-trigger-side-logic ERROR (v2 only) a schema still carries the removed
                                 controls_fields / conditional_fields key
 - required-top-level     ERROR   (v2 only) a field carries a TRUTHY top-level
@@ -718,6 +722,23 @@ def lint_schema(
                 "field is read_only and conditionally shown/required but has no "
                 "unlock_method -- it will be permanently non-fillable when shown "
                 "(add conditional_behavior.unlock_method=flip_readonly_bit)",
+            ))
+        # An unlock_method WITHOUT pdf_field_flag_change is invisible-broken
+        # (bd polyglot-pdf-xbfm fresh-eyes): the editor UI and the check above
+        # both key on unlock_method alone, but the PDF filler's
+        # apply_field_flag_changes early-returns unless pdf_field_flag_change
+        # is present in conditional_behavior OR conditional_logic -- the field
+        # LOOKS unlocked everywhere and silently stays read-only in the filled
+        # PDF. Gold always pairs both (i-90 shape: bit 0, 1 -> 0).
+        if has_unlock and not (cb.get("pdf_field_flag_change")
+                               or cl.get("pdf_field_flag_change")):
+            out.append(LintFinding(
+                SEVERITY_WARNING, "unlock-missing-flag-change", field_path,
+                "unlock_method is set but pdf_field_flag_change is missing -- "
+                "the PDF filler cannot flip the read-only bit without it, so "
+                "the field silently stays locked in the filled PDF (add "
+                "pdf_field_flag_change {bit: 0, current_value: 1, "
+                "required_value: 0} beside the unlock_method)",
             ))
 
         # controls_fields / conditional_fields were DELETED at the P6.2 flip (bd

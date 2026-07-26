@@ -40,6 +40,103 @@ MIRRORABLE_ACTIONS = (("shows", "show_if"), ("makes_required", "require_if"))
 # logic) and are reported as unconverted rather than mirrored.
 UNCONVERTIBLE_ACTIONS = ("hides", "locks", "unlocks", "makes_optional")
 
+# REPAIR-TIME extension (bd polyglot-pdf-xbfm): two of the "unconvertible"
+# actions DO have a faithful v2 target-side encoding, applied by
+# schema_repair's controls_fields step (NOT by migrate -- the proven v1->v2
+# migration keeps its original, pinned behavior, which is why these stay in
+# UNCONVERTIBLE_ACTIONS above):
+#   unlocks -> the gold-attested read-only-unlock pattern: the TARGET carries
+#              conditional_behavior {unlock_method: flip_readonly_bit} plus the
+#              trigger condition as a show_if alternative (i-90 gold shape).
+#   hides   -> conditional visibility NEGATED: the TARGET's show_if gains the
+#              trigger condition under a none_of bucket ("shown when NOT ...").
+# locks / makes_optional remain genuinely unconvertible (no gold-attested
+# target-side encoding; makes_optional collides with the static
+# validation.required short-circuit in the runtime's isFieldRequired).
+REPAIR_CONVERTIBLE_ACTIONS = ("unlocks", "hides")
+
+
+def unlock_descriptor() -> Dict[str, Any]:
+    """The COMPLETE gold-attested conditional_behavior payload for an unlocked
+    read-only field (i-90 gold shape). Both halves are load-bearing:
+    unlock_method is what the editor UI and schema_lint's
+    readonly-conditional-no-unlock check read, but the PDF filler's
+    apply_field_flag_changes needs pdf_field_flag_change to actually flip the
+    read-only bit -- without it the field LOOKS unlocked everywhere and
+    silently stays locked in the filled PDF (bd xbfm fresh-eyes). The flag
+    change is stereotyped: PDF bit 0 is the read-only flag, and the unlock
+    premise is read-only now (1) -> writable (0)."""
+    return {"unlock_method": "flip_readonly_bit",
+            "pdf_field_flag_change": {"bit": 0, "current_value": 1,
+                                      "required_value": 0}}
+
+
+def _none_of_atoms(cond: Any) -> List[Dict[str, Any]]:
+    """Flatten every atom sitting under a none_of bucket anywhere in a v2
+    condition tree (atoms never nest inside atoms; buckets may sit beside each
+    other at one level)."""
+    out: List[Dict[str, Any]] = []
+    if not isinstance(cond, dict):
+        return out
+    for atom in cond.get("none_of") or []:
+        if isinstance(atom, dict) and "field" in atom:
+            out.append(atom)
+    for bucket in ("all_of", "any_of"):
+        for sub in cond.get(bucket) or []:
+            out.extend(_none_of_atoms(sub))
+    return out
+
+
+def negated_atom_present(target: Dict[str, Any], key: str,
+                         want: Dict[str, Any]) -> bool:
+    """True if the target's condition under `key` already NEGATES the wanted
+    atom (same field/operator/value under a none_of bucket). Polarity-aware on
+    purpose: target_has_condition() flattens ALL buckets, so it cannot tell a
+    positive occurrence from a negated one -- a hides edge is only "already
+    mirrored" when the atom sits under none_of specifically."""
+    for atom in _none_of_atoms(target.get(key)):
+        if (atom.get("field") == want.get("field")
+                and atom.get("operator") == want.get("operator")
+                and atom.get("value") == want.get("value")):
+            return True
+    return False
+
+
+def add_target_negated_condition(target: Dict[str, Any], key: str,
+                                 atom: Dict[str, Any]) -> bool:
+    """AND-NOT a mirrored atom into a target condition: the field keeps its
+    existing visibility AND is hidden while the trigger condition holds
+    (`hides` semantics). Contrast add_target_condition(), which ORs. Returns
+    True when expressed, False when inexpressible at the model's DEPTH-1
+    limit (bucket members must be atoms -- see add_target_condition).
+
+    - no existing condition: {"none_of": [atom]} ("shown unless ...").
+    - existing PURE AND-composite (no atom keys, no any_of -- an any_of arm
+      ORs, which would wrongly weaken the AND-NOT): append to its none_of.
+    - existing single ATOM: {"all_of": [old_atom], "none_of": [atom]} --
+      members atomic, valid.
+    - existing composite carrying any_of: `(a OR b) AND NOT c` needs a nested
+      group -- INEXPRESSIBLE at depth 1. Return False.
+    """
+    existing = target.get(key)
+    if not existing:
+        target[key] = {"none_of": [atom]}
+        return True
+    if isinstance(existing, dict) and "field" in existing:
+        target[key] = {"all_of": [existing], "none_of": [atom]}
+        return True
+    is_pure_and_composite = (
+        isinstance(existing, dict)
+        and "field" not in existing
+        and not existing.get("any_of")
+        and (isinstance(existing.get("all_of"), list)
+             or isinstance(existing.get("none_of"), list))
+    )
+    if is_pure_and_composite:
+        existing.setdefault("none_of", []).append(atom)
+        return True
+    return False
+
 
 def control_condition(control: Dict[str, Any], trigger_id: Any,
                       standalone_old_val: Optional[str] = None
@@ -98,23 +195,32 @@ def target_has_condition(target: Dict[str, Any], key: str,
 
 
 def add_target_condition(target: Dict[str, Any], key: str,
-                         atom: Dict[str, Any]) -> None:
+                         atom: Dict[str, Any]) -> bool:
     """Add a mirrored show_if/require_if atom to a target field as an OR
     alternative -- the field is shown/required under its OWN condition OR the
-    mirrored trigger.
+    mirrored trigger. Returns True when the combination was expressed, False
+    when it CANNOT be at the model's depth limit (see below) -- the caller
+    must then surface the edge as unconverted, never emit a nested group.
 
-    Appending in place is safe ONLY when the existing condition is a PURE
-    any_of (no all_of/none_of alongside it): appending into an any_of that sits
-    beside an all_of/none_of would read as `all_of AND (any_of OR new) AND
-    none_of`, NOT `(whole old condition) OR new` (Codex PR #346). For anything
-    else -- a single atom, or a composite carrying all_of/none_of -- wrap the
-    WHOLE existing condition as one arm of a fresh any_of so its AND/NOT
-    semantics are preserved as a single OR alternative.
+    v2 conditions are DEPTH-1: a composite group's buckets hold ATOMS only
+    (FormSchema rejects a group nested inside a bucket, lint flags it
+    composite-depth, and the frontend normalizer fails open -- outer review on
+    bd xbfm; the old wrap branch produced exactly that invalid nest). So:
+    - no existing condition: the atom stands alone.
+    - existing PURE any_of (no all_of/none_of beside it -- appending into an
+      any_of that sits beside those would read as AND (any_of OR new), not
+      (whole old) OR new; Codex PR #346): append the atom.
+    - existing single ATOM: {any_of: [old_atom, atom]} -- members atomic, valid.
+    - existing composite carrying all_of/none_of: `(A AND NOT B) OR c` needs a
+      nested group -- INEXPRESSIBLE at depth 1. Return False.
     """
     existing = target.get(key)
     if not existing:
         target[key] = atom
-        return
+        return True
+    if isinstance(existing, dict) and "field" in existing:
+        target[key] = {"any_of": [existing, atom]}
+        return True
     is_pure_any_of = (
         isinstance(existing, dict)
         and isinstance(existing.get("any_of"), list)
@@ -123,8 +229,8 @@ def add_target_condition(target: Dict[str, Any], key: str,
     )
     if is_pure_any_of:
         existing["any_of"].append(atom)
-    else:
-        target[key] = {"any_of": [existing, atom]}
+        return True
+    return False
 
 
 def mirror_controls_fields(
@@ -181,6 +287,7 @@ def mirror_controls_fields(
 
         mirrored_here: List[str] = []
         dangling_here: List[str] = []
+        inexpressible_here: List[str] = []  # "action:tid" -- depth-1 limit hit
         noop_here = 0
         # want is None when the caller's own normalization dropped the atom
         # (e.g. an unresolvable value or unknown operator -- the caller has
@@ -205,7 +312,14 @@ def mirror_controls_fields(
                     if target_has_condition(target, key, want, walk_atoms):
                         noop_here += 1  # already mirrored in THIS bucket
                         continue
-                    add_target_condition(target, key, dict(want))
+                    if not add_target_condition(target, key, dict(want)):
+                        # Depth-1 limit: the target's existing condition is a
+                        # composite that cannot absorb an OR alternative
+                        # without an (invalid) nested group. The edge is
+                        # UNCONVERTED, never emitted invalid (bd xbfm outer
+                        # review; the old wrap produced model-rejected nests).
+                        inexpressible_here.append(f"{action}:{tid}")
+                        continue
                     mirrored_here.append(f"{tid}.{key}")
                     result["mirrored"].append({
                         "trigger": trigger_id, "target": tid, "key": key,
@@ -227,14 +341,17 @@ def mirror_controls_fields(
         )
         result["noop"] += noop_here
         result["dangling"].extend(sorted(dangling_here))
-        if unconverted or dangling_here:
+        if unconverted or dangling_here or inexpressible_here:
             result["unconverted"].append({
                 "trigger": trigger_id,
                 "operator": (want or raw_atom).get("operator"),
                 "value": (want or raw_atom).get("value"),
                 "mirrored_into": sorted(mirrored_here),
                 "unconverted_actions": unconverted,
-                "unconverted_action_keys": unconverted_action_keys,
+                "unconverted_action_keys": unconverted_action_keys
+                + sorted(f"{k} (no depth-1 composition)"
+                         for k in inexpressible_here),
+                "inexpressible": sorted(inexpressible_here),
                 "dangling_targets": sorted(dangling_here),
             })
 

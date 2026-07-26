@@ -462,11 +462,11 @@ def test_two_triggers_requiring_one_target_merge_into_any_of():
     assert not has_errors(lint_schema(repaired))
 
 
-def test_unconvertible_action_is_reported_not_silently_lost():
-    # unlocks/locks/hides/makes_optional have no v2 target-side equivalent;
-    # controls_fields is still removed and the schema still lints clean (the
-    # legacy-trigger-side-logic rule is satisfied by the key's removal; a
-    # human still needs to review the reported unconverted action).
+def test_unlocks_converts_to_gold_unlock_pattern():
+    # bd polyglot-pdf-xbfm: `unlocks` IS convertible -- the gold-attested
+    # read-only-unlock pattern puts conditional_behavior {unlock_method:
+    # flip_readonly_bit} on the TARGET plus the trigger condition as its
+    # show_if (i-90 gold shape). No unmirrored entry: nothing was dropped.
     trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
         {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
         {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
@@ -475,13 +475,256 @@ def test_unconvertible_action_is_reported_not_silently_lost():
     target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
     draft = _v2_schema([trigger, target])
     repaired, repairs = repair(draft)
-    assert "controls_fields" not in repaired["fields"][0]
-    assert "show_if" not in repaired["fields"][1]
-    assert "require_if" not in repaired["fields"][1]
-    unconv = [r for r in repairs if r["action"] == "controls-fields-unmirrored"]
-    assert len(unconv) == 1
-    assert "unlocks" in unconv[0]["detail"] and "tgt" in unconv[0]["detail"]
+    assert "controls_fields" not in repaired["fields"][0]  # fully converted
+    tgt = repaired["fields"][1]
+    # The COMPLETE gold descriptor: unlock_method alone looks unlocked in the
+    # editor/lint but the PDF filler early-returns without the flag change
+    # (fresh-eyes round 1 on this bead).
+    assert tgt["conditional_behavior"] == {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {"bit": 0, "current_value": 1,
+                                  "required_value": 0}}
+    atoms = [tgt["show_if"]] if "field" in tgt["show_if"] else \
+        [a for b in ("all_of", "any_of", "none_of")
+         for a in tgt["show_if"].get(b, [])]
+    assert any(a.get("field") == "trg" and a.get("value") == "yes"
+               for a in atoms)
+    assert not [r for r in repairs
+                if r["action"] == "controls-fields-unmirrored"]
+    mirrored = [r for r in repairs if r["action"] == "mirror-controls-fields"]
+    assert any("unlocks" in r["detail"] for r in mirrored)
     assert not has_errors(lint_schema(repaired))
+
+
+def test_hides_converts_to_negated_show_if():
+    # bd polyglot-pdf-xbfm: `hides` = conditional visibility NEGATED -- the
+    # target's show_if gains the trigger condition under none_of.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "hides": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _v2_schema([trigger, target])
+    repaired, repairs = repair(draft)
+    assert "controls_fields" not in repaired["fields"][0]
+    tgt = repaired["fields"][1]
+    none_of = tgt["show_if"]["none_of"]
+    assert any(a.get("field") == "trg" and a.get("value") == "yes"
+               for a in none_of)
+    assert not has_errors(lint_schema(repaired))
+
+
+def test_locks_and_makes_optional_are_retained_for_lint_not_dropped():
+    # bd polyglot-pdf-xbfm: the two GENUINELY unconvertible actions are
+    # RETAINED on the field (a reduced controls_fields rump), so schema_lint's
+    # legacy-trigger-side-logic ERROR flags them for a human -- loud in the
+    # report AND the lint, never a silent drop.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "locks": ["tgt"], "makes_optional": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _v2_schema([trigger, target])
+    repaired, repairs = repair(draft)
+    rump = repaired["fields"][0]["controls_fields"]
+    assert rump == [{"operator": "equals", "value": "yes",
+                     "locks": ["tgt"], "makes_optional": ["tgt"]}]
+    unconv = [r for r in repairs if r["action"] == "controls-fields-unmirrored"]
+    assert len(unconv) == 1 and "RETAINED" in unconv[0]["detail"]
+    findings = lint_schema(repaired)
+    assert any(fnd.rule == "legacy-trigger-side-logic" for fnd in findings)
+
+
+def test_all_six_trigger_actions_end_to_end():
+    # bd polyglot-pdf-xbfm exit criterion: every trigger-side relationship is
+    # either canonicalized into a v2 key or surfaced in the repair report +
+    # lint -- all six action kinds in ONE control, end to end through repair().
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "shows": ["t_show"], "makes_required": ["t_req"],
+                             "unlocks": ["t_unlock"], "hides": ["t_hide"],
+                             "locks": ["t_lock"],
+                             "makes_optional": ["t_opt"]}]}
+    targets = [{"id": t, "type": "text", "pdf_field_name": f"{t}[0]"}
+               for t in ("t_show", "t_req", "t_unlock", "t_hide", "t_lock",
+                         "t_opt")]
+    draft = _v2_schema([trigger] + targets)
+    repaired, repairs = repair(draft)
+    by_id = {f["id"]: f for f in repaired["fields"]}
+    # Converted four:
+    assert by_id["t_show"]["show_if"]["field"] == "trg"
+    assert by_id["t_req"]["require_if"]["field"] == "trg"
+    assert by_id["t_unlock"]["conditional_behavior"]["unlock_method"] == \
+        "flip_readonly_bit"
+    assert by_id["t_unlock"]["conditional_behavior"]["pdf_field_flag_change"] \
+        == {"bit": 0, "current_value": 1, "required_value": 0}
+    assert by_id["t_unlock"]["show_if"]["field"] == "trg"
+    assert any(a["field"] == "trg"
+               for a in by_id["t_hide"]["show_if"]["none_of"])
+    # Retained two (rump strips converted actions, keeps the condition):
+    rump = by_id["trg"]["controls_fields"]
+    assert rump == [{"operator": "equals", "value": "yes",
+                     "locks": ["t_lock"], "makes_optional": ["t_opt"]}]
+    # Loud on both surfaces:
+    assert any(r["action"] == "controls-fields-unmirrored" and
+               "RETAINED" in r["detail"] for r in repairs)
+    assert any(fnd.rule == "legacy-trigger-side-logic"
+               for fnd in lint_schema(repaired))
+    # And repair is idempotent on its own output (the rump does not multiply).
+    repaired2, _ = repair(repaired)
+    assert repaired2["fields"][0]["controls_fields"] == rump
+    assert repaired2["fields"][4] == by_id["t_hide"]
+
+
+def _assert_depth1(schema):
+    """Every condition in the schema honors the v2 DEPTH-1 rule: a composite
+    group's buckets hold ATOMS only (dicts with a 'field' key), never nested
+    groups -- the invalid shape the old wrap branches emitted."""
+    for f in schema.get("fields", []):
+        for key in ("show_if", "require_if"):
+            cond = f.get(key)
+            if not isinstance(cond, dict) or "field" in cond:
+                continue
+            for bucket in ("all_of", "any_of", "none_of"):
+                for member in cond.get(bucket) or []:
+                    assert isinstance(member, dict) and "field" in member, \
+                        f"nested group in {f.get('id')}.{key}.{bucket}: {member}"
+
+
+def test_depth_limit_hides_onto_any_of_target_is_retained_not_nested():
+    # Outer review (bd xbfm): v2 conditions are DEPTH-1 -- bucket members must
+    # be atoms. `(a OR b) AND NOT c` cannot be expressed, so a hides edge onto
+    # a target whose show_if is an any_of composite must be RETAINED in the
+    # rump (loud), never emitted as the model-invalid all_of:[{any_of:[...]}]
+    # nest the old wrap produced. Reproduces seat B's two-shows-plus-one-hides
+    # scenario.
+    triggers = [
+        {"id": f"trg{i}", "type": "checkbox", "pdf_field_name": f"R{i}[0]"}
+        for i in range(3)]
+    triggers[0]["controls_fields"] = [{"operator": "is_checked",
+                                       "shows": ["tgt"]}]
+    triggers[1]["controls_fields"] = [{"operator": "is_checked",
+                                       "shows": ["tgt"]}]
+    triggers[2]["controls_fields"] = [{"operator": "is_checked",
+                                       "hides": ["tgt"]}]
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _v2_schema(triggers + [target])
+    repaired, repairs = repair(draft)
+    tgt = next(f for f in repaired["fields"] if f["id"] == "tgt")
+    # The two shows composed into a flat any_of; the hides edge did NOT nest.
+    assert sorted(a["field"] for a in tgt["show_if"]["any_of"]) == \
+        ["trg0", "trg1"]
+    assert "all_of" not in tgt["show_if"] and "none_of" not in tgt["show_if"]
+    # The hides edge is retained loudly on its trigger.
+    trg2 = next(f for f in repaired["fields"] if f["id"] == "trg2")
+    assert trg2["controls_fields"] == [{"operator": "is_checked",
+                                        "hides": ["tgt"]}]
+    unconv = [r for r in repairs if r["action"] == "controls-fields-unmirrored"]
+    assert any("depth-1" in r["detail"] for r in unconv)
+    _assert_depth1(repaired)  # no nested groups anywhere
+    # And the rump keeps the schema loud under lint.
+    assert any(fnd.rule == "legacy-trigger-side-logic"
+               for fnd in lint_schema(repaired))
+
+
+def test_depth_limit_unlocks_onto_composite_target_is_retained_whole():
+    # The unlocks edge is all-or-nothing: when its visibility pairing cannot
+    # compose at depth 1, NO half-paired descriptor is written and the edge is
+    # retained in the rump.
+    trigger = {"id": "trg", "type": "checkbox", "pdf_field_name": "R[0]",
+               "controls_fields": [{"operator": "is_checked",
+                                    "unlocks": ["tgt"]}]}
+    other = {"id": "oth", "type": "checkbox", "pdf_field_name": "O[0]"}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
+              "read_only": True,
+              "show_if": {"all_of": [
+                  {"field": "oth", "operator": "is_checked"}],
+                  "none_of": [{"field": "trg", "operator": "is_empty"}]}}
+    draft = _v2_schema([trigger, other, target])
+    repaired, _ = repair(draft)
+    tgt = next(f for f in repaired["fields"] if f["id"] == "tgt")
+    assert "conditional_behavior" not in tgt  # no half-paired descriptor
+    assert tgt["show_if"] == {  # existing condition untouched
+        "all_of": [{"field": "oth", "operator": "is_checked"}],
+        "none_of": [{"field": "trg", "operator": "is_empty"}]}
+    trg = next(f for f in repaired["fields"] if f["id"] == "trg")
+    assert trg["controls_fields"] == [{"operator": "is_checked",
+                                       "unlocks": ["tgt"]}]
+    _assert_depth1(repaired)
+
+
+def test_mirror_alias_is_reported_exactly_once():
+    # Outer review (bd xbfm): the conversion pass re-normalizes each
+    # unlocks/hides-bearing control QUIETLY -- a loud second pass would
+    # double-log every alias-operator entry and double alias_hit_count (the
+    # P6 decay metric). Pin exact cardinality for both a plain shows edge and
+    # an unlocks-bearing edge on a checkbox_group trigger (whose v1 `equals`
+    # aliases to `includes`).
+    def _draft(actions):
+        trigger = {"id": "trg", "type": "checkbox_group", "options": [
+            {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+            {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+            "controls_fields": [dict({"operator": "equals", "value": "yes"},
+                                     **actions)]}
+        target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+        return _v2_schema([trigger, target])
+
+    for actions in ({"shows": ["tgt"]},
+                    {"shows": ["tgt"], "unlocks": ["tgt"]},
+                    {"hides": ["tgt"]}):
+        _, repairs = repair(_draft(actions))
+        aliases = [r for r in repairs if r["action"] == "alias-operator"]
+        assert len(aliases) == 1, (actions, aliases)
+
+
+def test_lint_warns_on_unlock_method_without_flag_change():
+    # Fresh-eyes round 1 (bd xbfm): an unlock_method with no
+    # pdf_field_flag_change is invisible-broken -- editor UI + the
+    # readonly-conditional-no-unlock check read unlock_method alone, but the
+    # PDF filler early-returns without the flag change. The new WARNING makes
+    # the failure mode visible to a human; repair's own synthesis emits the
+    # full descriptor, so a fresh conversion never trips it.
+    field = {"id": "f1", "type": "text", "pdf_field_name": "F[0]",
+             "read_only": True,
+             "show_if": {"field": "f0", "operator": "is_checked"},
+             "conditional_behavior": {"unlock_method": "flip_readonly_bit"}}
+    trigger = {"id": "f0", "type": "checkbox", "pdf_field_name": "C[0]"}
+    schema = _v2_schema([trigger, field])
+    findings = lint_schema(schema)
+    assert any(fnd.rule == "unlock-missing-flag-change" for fnd in findings)
+    # The complete descriptor (what repair now synthesizes) is clean.
+    field["conditional_behavior"] = {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {"bit": 0, "current_value": 1,
+                                  "required_value": 0}}
+    findings2 = lint_schema(schema)
+    assert not any(fnd.rule == "unlock-missing-flag-change"
+                   for fnd in findings2)
+
+
+def test_hides_polarity_guard_existing_positive_atom_does_not_suppress():
+    # A POSITIVE occurrence of the same atom in the target's show_if must not
+    # count as "already hidden" -- polarity matters (cfm.negated_atom_present
+    # checks none_of buckets only). The existing positive condition is
+    # preserved as an all_of arm beside the new none_of.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "hides": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
+              "show_if": {"field": "trg", "operator": "equals", "value": "yes"}}
+    draft = _v2_schema([trigger, target])
+    repaired, _ = repair(draft)
+    cond = repaired["fields"][1]["show_if"]
+    assert cond["all_of"] == [
+        {"field": "trg", "operator": "equals", "value": "yes"}]
+    assert cond["none_of"] == [
+        {"field": "trg", "operator": "equals", "value": "yes"}]
 
 
 def test_dangling_shows_target_is_reported_not_dropped_silently():
