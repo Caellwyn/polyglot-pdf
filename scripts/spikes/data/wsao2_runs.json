@@ -1,0 +1,50 @@
+{
+  "bead": "polyglot-pdf-wsao.2",
+  "date": "2026-07-26",
+  "model": "gemini-live-2.5-flash-native-audio",
+  "platform": "vertex (polyglot-demo-aa709)",
+  "vad": "manual (DISABLE_GEMINI_VAD=true)",
+  "scenario": "w7 reason_a: seed application_type -> agree -> deep treaty question -> box-a answer -> confirm",
+  "deep_question_en": "Do I need to attach a tax return if I'm applying under a treaty exception?",
+  "runs": [
+    {
+      "arm": "A-baseline", "run": "r3", "details_tokens": 0,
+      "session": "healthy", "fill": true, "confirm": true,
+      "tool_call_latency_ms_after_activity_end": 500,
+      "answer_transcript": null,
+      "note": "pre-transcript-tap run; mechanics PASS"
+    },
+    {
+      "arm": "A-baseline", "run": "r4", "details_tokens": 0,
+      "session": "healthy", "fill": true, "confirm": true,
+      "answer_transcript": "I'm looking that up for you. In the meantime, is \"Reason a, tax treaty benefit\" correct?Regarding your question about attaching a tax return, that information is usually found in the form instructions. I can't answer it based on the fields I have. Is \"Reason a, tax treaty benefit\" correct?",
+      "note": "claims to look it up but ask_secretary was NEVER called (0 in backend log); honest starvation, no hallucination"
+    },
+    {
+      "arm": "B-full", "run": "r1", "details_tokens": 3366,
+      "session": "FAIL-1007",
+      "error": "1007: the provided content is above the context window size 6400 (assemble_generate_request)",
+      "initiating_message_chars": 14717, "si_chars": 12274,
+      "note": "session never opens; binding constraint is the ctu8-derived compression window, not attention"
+    },
+    {
+      "arm": "B-trim", "run": "r1", "details_tokens": 1717,
+      "session": "healthy", "fill": true, "confirm": true,
+      "answer_transcript": "It depends. If you're applying under Exception 1 for passive income covered by a tax treaty, you won't need to attach a tax return. Are you applying under Exception 1 or a different exception?",
+      "note": "grounded in the verbatim excerpt; concise; no read-aloud flooding"
+    },
+    {
+      "arm": "B-trim", "run": "r2", "details_tokens": 1717,
+      "session": "healthy", "fill": true, "confirm": true,
+      "answer_transcript": "For some exceptions, like Exception 1, you do not need to attach a tax return. Which exception are you applying under?",
+      "note": "replication; grounded again"
+    },
+    {
+      "arm": "C-es-trim", "run": "r1", "details_tokens": 1717,
+      "session": "healthy", "fill": true, "confirm": true,
+      "deep_question": "¿Necesito adjuntar una declaración de impuestos si presento la solicitud bajo una excepción del tratado?",
+      "answer_transcript": "Un momento, estoy verificando eso. ¿Me podría decir si la solicitud es para un beneficio de tratado fiscal?Generalmente, si solicita su ITIN bajo una excepción de beneficio de tratado fiscal, no necesitará adjuntar una declaración de impuestos y deberá presentar la documentación requerida para esa excepción específica. ¿Entonces, confirmamos que se trata de la excepción de tratado fiscal?",
+      "note": "fully Spanish, grounded in ENGLISH reference text; zero language-lock contamination"
+    }
+  ]
+}

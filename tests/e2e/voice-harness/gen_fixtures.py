@@ -47,6 +47,28 @@ UTTERANCES = [
     # current values. Phrasing matches the tool description's example shape.
     ("secretary_query_alien.wav",
      "what alien registration number did I give earlier?"),
+    # wsao.2 measurement-gate utterances (sprint-16 step 2): the w7
+    # reason-for-applying A/B. A deep requirements question answerable ONLY
+    # from the booklet's reason section (Exceptions 1-2: no tax return needed
+    # under an exception; boxes a/f also require box h), the box-a answer, and
+    # Spanish variants for the language-lock contamination arm. Spanish text is
+    # unicode-escaped to keep this source ASCII (CLAUDE.md scar #6). Entries
+    # may carry an optional third element: the gTTS language code.
+    ("treaty_question.wav",
+     "Do I need to attach a tax return if I'm applying under a treaty "
+     "exception?"),
+    ("reason_a_answer.wav",
+     "Yes, box A applies to me. I'm claiming a tax treaty benefit."),
+    # Spanish glyphs are chr()-composed so this source stays pure ASCII
+    # (CLAUDE.md scar #6): 0xBF=inverted-?, 0xF3=o-acute, 0xED=i-acute.
+    ("treaty_question_es.wav",
+     chr(0xBF) + "Necesito adjuntar una declaraci" + chr(0xF3) + "n de "
+     "impuestos si presento la solicitud bajo una excepci" + chr(0xF3) + "n "
+     "del tratado?", "es"),
+    ("reason_a_answer_es.wav",
+     "S" + chr(0xED) + ", la casilla A. Reclamo un beneficio del tratado "
+     "fiscal.", "es"),
+    ("confirm_yes_es.wav", "s" + chr(0xED) + ", es correcto", "es"),
 ]
 
 TARGET_SR = 16000  # Gemini Live input rate (audio/pcm;rate=16000).
@@ -57,13 +79,13 @@ _REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 OUT_DIR = os.path.join(_REPO_ROOT, "frontend", "public", "test-fixtures")
 
 
-def synth_to_wav(text: str, out_path: str) -> None:
+def synth_to_wav(text: str, out_path: str, lang: str = "en") -> None:
     """Synthesize `text`, resample to 16 kHz mono PCM16, write `out_path`."""
     # gTTS emits MP3; write to a temp file then load+resample with librosa.
     tmp_fd, tmp_mp3 = tempfile.mkstemp(suffix=".mp3")
     os.close(tmp_fd)
     try:
-        gTTS(text=text, lang="en").save(tmp_mp3)
+        gTTS(text=text, lang=lang).save(tmp_mp3)
         # mono=True downmixes; sr=TARGET_SR resamples. Returns float32 in [-1, 1].
         audio, sr = librosa.load(tmp_mp3, sr=TARGET_SR, mono=True)
     finally:
@@ -93,10 +115,19 @@ def synth_to_wav(text: str, out_path: str) -> None:
 
 
 def main() -> int:
+    force = "--force" in sys.argv
     os.makedirs(OUT_DIR, exist_ok=True)
     print("output dir:", OUT_DIR)
-    for name, text in UTTERANCES:
-        synth_to_wav(text, os.path.join(OUT_DIR, name))
+    for entry in UTTERANCES:
+        name, text = entry[0], entry[1]
+        lang = entry[2] if len(entry) > 2 else "en"
+        out_path = os.path.join(OUT_DIR, name)
+        # Committed fixtures are stable artifacts -- regenerating them churns
+        # bytes for no reason. Skip existing files unless --force.
+        if os.path.exists(out_path) and not force:
+            print("skip (exists):", name)
+            continue
+        synth_to_wav(text, out_path, lang=lang)
     print("done. commit the .wav files under frontend/public/test-fixtures/.")
     return 0
 
