@@ -473,6 +473,7 @@ def migrate(schema: Dict[str, Any],
             # happened to match). Report any action key with no v2 equivalent.
             mirrored_here: List[str] = []
             dangling_here: List[str] = []
+            inexpressible_here: List[str] = []  # depth-1 limit (bd xbfm)
             noop_here = 0
             for action, key in (("shows", "show_if"),
                                 ("makes_required", "require_if")):
@@ -489,12 +490,19 @@ def migrate(schema: Dict[str, Any],
                     if _target_has_condition(target, key, want):
                         noop_here += 1  # already mirrored in THIS bucket
                         continue
-                    _add_target_condition(target, key, dict(want))
+                    if not _add_target_condition(target, key, dict(want)):
+                        # Depth-1 limit (bd xbfm): the target's existing
+                        # composite condition cannot absorb an OR alternative
+                        # without an invalid nested group. Surface the edge as
+                        # needs-human -- never report a mirror that did not
+                        # happen (nothing was mutated).
+                        inexpressible_here.append(f"{tid}.{key}")
+                        continue
                     mirrored_here.append(f"{tid}.{key}")
             unconverted = sorted(
                 t for k in ("hides", "locks", "unlocks", "makes_optional")
                 for t in (control.get(k) or []) if isinstance(t, str)
-            )
+            ) + sorted(inexpressible_here)
             report["controls_mirrored"] += len(mirrored_here)
             report["dangling_controls_targets"].extend(sorted(dangling_here))
             if (not mirrored_here and not unconverted and not dangling_here
@@ -519,12 +527,14 @@ def migrate(schema: Dict[str, Any],
 
 
 def _add_target_condition(target: Dict[str, Any], key: str,
-                          atom: Dict[str, Any]) -> None:
+                          atom: Dict[str, Any]) -> bool:
     """Add a mirrored show_if/require_if atom to a target field as an OR
     alternative. Delegates to the shared core (bd polyglot-pdf-c3y6) -- see
     backend/services/controls_fields_mirror.add_target_condition for the full
-    semantics (the any_of-append-vs-wrap merge rule, Codex PR #346)."""
-    cfm.add_target_condition(target, key, atom)
+    semantics (the any_of-append-vs-wrap merge rule, Codex PR #346; the
+    depth-1 False return, bd xbfm -- the caller surfaces a False as
+    unconverted, never reports a mirror that did not happen)."""
+    return cfm.add_target_condition(target, key, atom)
 
 
 def _control_condition(control: Dict[str, Any], trigger_id: Any,

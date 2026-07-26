@@ -397,3 +397,31 @@ def test_migrated_i90_validates_v2_lints_clean_and_is_idempotent():
     # No ambiguous duplicate option values or unresolved trigger refs on i-90.
     assert report["duplicate_option_values"] == []
     assert report.get("unresolved_trigger_refs", []) == []
+
+
+def test_depth_limited_shows_edge_is_reported_unconverted_not_falsely_mirrored():
+    # bd polyglot-pdf-urrt (xbfm outer review): since the depth-1 fix, the
+    # shared add_target_condition returns False (mutating nothing) when the
+    # target's existing show_if is a composite carrying all_of/none_of --
+    # `(A AND NOT B) OR c` has no depth-1 encoding. Migrate must surface that
+    # edge as UNCONVERTED, never count a mirror that did not happen.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "R[0]", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "R[1]", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "R[0]",
+                             "shows": ["tgt"]}]}
+    other = {"id": "oth", "type": "text", "pdf_field_name": "O[0]"}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
+              "show_if": {"all_of": [{"field": "oth", "operator": "is_not_empty"}],
+                          "none_of": [{"field": "oth", "operator": "equals",
+                                       "value": "x"}]}}
+    out, rep = mig.migrate(_v1([trigger, other, target]))
+    tgt = next(f for f in out["fields"] if f["id"] == "tgt")
+    # Target condition untouched -- no invalid nested group emitted.
+    assert tgt["show_if"] == {
+        "all_of": [{"field": "oth", "operator": "is_not_empty"}],
+        "none_of": [{"field": "oth", "operator": "equals", "value": "x"}]}
+    assert rep["controls_mirrored"] == 0  # never a false mirror count
+    edges = [u for u in rep["unmirrored_controls"]
+             if any("tgt.show_if" in a for a in u.get("unconverted_actions", []))]
+    assert edges, rep["unmirrored_controls"]

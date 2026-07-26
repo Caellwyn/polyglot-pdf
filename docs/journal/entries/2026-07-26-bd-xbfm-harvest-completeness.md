@@ -59,9 +59,15 @@ would only see in the repair log -- invisible to lint.
     inexpressible at depth 1 (existing composite that cannot absorb the atom),
     and every caller routes the failed edge to the LOUD rump instead of
     emitting invalid schema (the mirror core reports them via the unconverted
-    channel, so migrate surfaces them too). Depth-1 is now structurally
-    asserted in tests; the unlocks edge is all-or-nothing (no half-paired
-    descriptor when its visibility pairing cannot compose).
+    channel). Depth-1 is now structurally asserted in tests; the unlocks edge
+    is all-or-nothing (no half-paired descriptor when its visibility pairing
+    cannot compose). The final outer round then caught that MIGRATE's caller
+    ignored the new False return (silent drop + false "mirrored" count on a
+    composite-conditioned target) -- so migrate's Pass 4 now honors it too,
+    surfacing the edge through its unmirrored_controls channel (bd urrt,
+    resolved here; migrate is otherwise behavior-identical and its prior
+    behavior on that input was an invalid nested group). One latent depth-1
+    migrate caveat is thereby FIXED, not just avoided.
   - Outer review caught the conversion pass double-logging: it re-normalized
     every control loudly, duplicating alias-operator entries and doubling
     alias_hit_count (the P6 decay metric) even on plain shows edges. Fixed:
