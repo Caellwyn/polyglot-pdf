@@ -96,11 +96,15 @@ BACKUP = SCHEMA.with_suffix(".json.vff-backup")
 
 
 def extract_trimmed_section() -> str:
-    """A ~1.2k-token TRIMMED variant that fits inside the ctu8-tuned
-    compression window (the full 3.4k-token section breached it -- Vertex
-    closed 1007 'above the context window size'; wsao.2 finding). Still
-    VERBATIM: the section intro + category a + box h + Exceptions 1-2, sliced
-    from the full extraction by their own headings."""
+    """A ~1.7k-token TRIMMED variant that fits inside the ctu8-tuned
+    compression window (the full ~3.4k-token section breached it -- Vertex
+    closed 1007 'above the context window size'; wsao.2 finding). Verbatim
+    slices from the full extraction. KNOWN DEFECT (bd polyglot-pdf-r0za): the
+    "Exception 2." anchor matches a cross-reference inside category f before
+    the real heading, so the slice set includes more than the docstring's
+    intended intro+a+h+Exceptions-1-2 -- the measured 1,717-token artifact in
+    scripts/spikes/data/wsao2_runs.json reflects THIS slice; do not "fix" the
+    anchors without re-running the measurement."""
     full = extract_reason_section()
 
     def slice_between(start_key: str, end_key: str) -> str:
@@ -158,7 +162,7 @@ if __name__ == "__main__":
     group.add_argument("--apply", action="store_true")
     group.add_argument("--revert", action="store_true")
     ap.add_argument("--trim", action="store_true",
-                    help="apply the ~1.2k-token trimmed details variant")
+                    help="apply the ~1.7k-token trimmed details variant")
     args = ap.parse_args()
     if args.apply:
         apply(trim=args.trim)

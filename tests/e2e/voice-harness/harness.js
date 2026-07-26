@@ -147,9 +147,14 @@
     var silence = new ArrayBuffer(bytesPerChunk);
     var stream = { alive: true, stop: function () { stream.alive = false; if (_silenceStream === stream) _silenceStream = null; } };
     (async function pump() {
+      // Channel-clocked like injectUtterance (declarations hoist, so paceUntil
+      // is reachable here): a hidden tab's setTimeout clamp would smear the
+      // silence cadence to ~1 Hz and starve native-VAD turn detection.
+      var next = performance.now();
       while (stream.alive) {
         try { h.sendAudio(silence.slice(0)); } catch (e) { stream.stop(); return; }
-        await sleep(chunkMs);
+        next += chunkMs;
+        await paceUntil(next);
       }
     })().catch(function (e) {
       stream.stop();
