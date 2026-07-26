@@ -40,6 +40,88 @@ MIRRORABLE_ACTIONS = (("shows", "show_if"), ("makes_required", "require_if"))
 # logic) and are reported as unconverted rather than mirrored.
 UNCONVERTIBLE_ACTIONS = ("hides", "locks", "unlocks", "makes_optional")
 
+# REPAIR-TIME extension (bd polyglot-pdf-xbfm): two of the "unconvertible"
+# actions DO have a faithful v2 target-side encoding, applied by
+# schema_repair's controls_fields step (NOT by migrate -- the proven v1->v2
+# migration keeps its original, pinned behavior, which is why these stay in
+# UNCONVERTIBLE_ACTIONS above):
+#   unlocks -> the gold-attested read-only-unlock pattern: the TARGET carries
+#              conditional_behavior {unlock_method: flip_readonly_bit} plus the
+#              trigger condition as a show_if alternative (i-90 gold shape).
+#   hides   -> conditional visibility NEGATED: the TARGET's show_if gains the
+#              trigger condition under a none_of bucket ("shown when NOT ...").
+# locks / makes_optional remain genuinely unconvertible (no gold-attested
+# target-side encoding; makes_optional collides with the static
+# validation.required short-circuit in the runtime's isFieldRequired).
+REPAIR_CONVERTIBLE_ACTIONS = ("unlocks", "hides")
+
+
+def unlock_descriptor() -> Dict[str, str]:
+    """The gold-attested conditional_behavior payload for an unlocked
+    read-only field (i-90 gold shape; also what schema_lint's
+    readonly-conditional-no-unlock warning asks for)."""
+    return {"unlock_method": "flip_readonly_bit"}
+
+
+def _none_of_atoms(cond: Any) -> List[Dict[str, Any]]:
+    """Flatten every atom sitting under a none_of bucket anywhere in a v2
+    condition tree (atoms never nest inside atoms; buckets may sit beside each
+    other at one level)."""
+    out: List[Dict[str, Any]] = []
+    if not isinstance(cond, dict):
+        return out
+    for atom in cond.get("none_of") or []:
+        if isinstance(atom, dict) and "field" in atom:
+            out.append(atom)
+    for bucket in ("all_of", "any_of"):
+        for sub in cond.get(bucket) or []:
+            out.extend(_none_of_atoms(sub))
+    return out
+
+
+def negated_atom_present(target: Dict[str, Any], key: str,
+                         want: Dict[str, Any]) -> bool:
+    """True if the target's condition under `key` already NEGATES the wanted
+    atom (same field/operator/value under a none_of bucket). Polarity-aware on
+    purpose: target_has_condition() flattens ALL buckets, so it cannot tell a
+    positive occurrence from a negated one -- a hides edge is only "already
+    mirrored" when the atom sits under none_of specifically."""
+    for atom in _none_of_atoms(target.get(key)):
+        if (atom.get("field") == want.get("field")
+                and atom.get("operator") == want.get("operator")
+                and atom.get("value") == want.get("value")):
+            return True
+    return False
+
+
+def add_target_negated_condition(target: Dict[str, Any], key: str,
+                                 atom: Dict[str, Any]) -> None:
+    """AND-NOT a mirrored atom into a target condition: the field keeps its
+    existing visibility AND is hidden while the trigger condition holds
+    (`hides` semantics). Contrast add_target_condition(), which ORs.
+
+    - no existing condition: {"none_of": [atom]} ("shown unless ...").
+    - existing PURE bucket composite (no atom keys, no any_of -- an any_of arm
+      ORs, which would wrongly weaken the AND-NOT): append to its none_of.
+    - anything else: wrap the WHOLE existing condition as one all_of arm beside
+      a fresh none_of, preserving its semantics as a single AND operand.
+    """
+    existing = target.get(key)
+    if not existing:
+        target[key] = {"none_of": [atom]}
+        return
+    is_pure_and_composite = (
+        isinstance(existing, dict)
+        and "field" not in existing
+        and not existing.get("any_of")
+        and (isinstance(existing.get("all_of"), list)
+             or isinstance(existing.get("none_of"), list))
+    )
+    if is_pure_and_composite:
+        existing.setdefault("none_of", []).append(atom)
+    else:
+        target[key] = {"all_of": [existing], "none_of": [atom]}
+
 
 def control_condition(control: Dict[str, Any], trigger_id: Any,
                       standalone_old_val: Optional[str] = None

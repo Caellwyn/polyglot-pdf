@@ -462,11 +462,11 @@ def test_two_triggers_requiring_one_target_merge_into_any_of():
     assert not has_errors(lint_schema(repaired))
 
 
-def test_unconvertible_action_is_reported_not_silently_lost():
-    # unlocks/locks/hides/makes_optional have no v2 target-side equivalent;
-    # controls_fields is still removed and the schema still lints clean (the
-    # legacy-trigger-side-logic rule is satisfied by the key's removal; a
-    # human still needs to review the reported unconverted action).
+def test_unlocks_converts_to_gold_unlock_pattern():
+    # bd polyglot-pdf-xbfm: `unlocks` IS convertible -- the gold-attested
+    # read-only-unlock pattern puts conditional_behavior {unlock_method:
+    # flip_readonly_bit} on the TARGET plus the trigger condition as its
+    # show_if (i-90 gold shape). No unmirrored entry: nothing was dropped.
     trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
         {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
         {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
@@ -475,13 +475,122 @@ def test_unconvertible_action_is_reported_not_silently_lost():
     target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
     draft = _v2_schema([trigger, target])
     repaired, repairs = repair(draft)
-    assert "controls_fields" not in repaired["fields"][0]
-    assert "show_if" not in repaired["fields"][1]
-    assert "require_if" not in repaired["fields"][1]
-    unconv = [r for r in repairs if r["action"] == "controls-fields-unmirrored"]
-    assert len(unconv) == 1
-    assert "unlocks" in unconv[0]["detail"] and "tgt" in unconv[0]["detail"]
+    assert "controls_fields" not in repaired["fields"][0]  # fully converted
+    tgt = repaired["fields"][1]
+    assert tgt["conditional_behavior"] == {"unlock_method": "flip_readonly_bit"}
+    atoms = [tgt["show_if"]] if "field" in tgt["show_if"] else \
+        [a for b in ("all_of", "any_of", "none_of")
+         for a in tgt["show_if"].get(b, [])]
+    assert any(a.get("field") == "trg" and a.get("value") == "yes"
+               for a in atoms)
+    assert not [r for r in repairs
+                if r["action"] == "controls-fields-unmirrored"]
+    mirrored = [r for r in repairs if r["action"] == "mirror-controls-fields"]
+    assert any("unlocks" in r["detail"] for r in mirrored)
     assert not has_errors(lint_schema(repaired))
+
+
+def test_hides_converts_to_negated_show_if():
+    # bd polyglot-pdf-xbfm: `hides` = conditional visibility NEGATED -- the
+    # target's show_if gains the trigger condition under none_of.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "hides": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _v2_schema([trigger, target])
+    repaired, repairs = repair(draft)
+    assert "controls_fields" not in repaired["fields"][0]
+    tgt = repaired["fields"][1]
+    none_of = tgt["show_if"]["none_of"]
+    assert any(a.get("field") == "trg" and a.get("value") == "yes"
+               for a in none_of)
+    assert not has_errors(lint_schema(repaired))
+
+
+def test_locks_and_makes_optional_are_retained_for_lint_not_dropped():
+    # bd polyglot-pdf-xbfm: the two GENUINELY unconvertible actions are
+    # RETAINED on the field (a reduced controls_fields rump), so schema_lint's
+    # legacy-trigger-side-logic ERROR flags them for a human -- loud in the
+    # report AND the lint, never a silent drop.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "locks": ["tgt"], "makes_optional": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]"}
+    draft = _v2_schema([trigger, target])
+    repaired, repairs = repair(draft)
+    rump = repaired["fields"][0]["controls_fields"]
+    assert rump == [{"operator": "equals", "value": "yes",
+                     "locks": ["tgt"], "makes_optional": ["tgt"]}]
+    unconv = [r for r in repairs if r["action"] == "controls-fields-unmirrored"]
+    assert len(unconv) == 1 and "RETAINED" in unconv[0]["detail"]
+    findings = lint_schema(repaired)
+    assert any(fnd.rule == "legacy-trigger-side-logic" for fnd in findings)
+
+
+def test_all_six_trigger_actions_end_to_end():
+    # bd polyglot-pdf-xbfm exit criterion: every trigger-side relationship is
+    # either canonicalized into a v2 key or surfaced in the repair report +
+    # lint -- all six action kinds in ONE control, end to end through repair().
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "shows": ["t_show"], "makes_required": ["t_req"],
+                             "unlocks": ["t_unlock"], "hides": ["t_hide"],
+                             "locks": ["t_lock"],
+                             "makes_optional": ["t_opt"]}]}
+    targets = [{"id": t, "type": "text", "pdf_field_name": f"{t}[0]"}
+               for t in ("t_show", "t_req", "t_unlock", "t_hide", "t_lock",
+                         "t_opt")]
+    draft = _v2_schema([trigger] + targets)
+    repaired, repairs = repair(draft)
+    by_id = {f["id"]: f for f in repaired["fields"]}
+    # Converted four:
+    assert by_id["t_show"]["show_if"]["field"] == "trg"
+    assert by_id["t_req"]["require_if"]["field"] == "trg"
+    assert by_id["t_unlock"]["conditional_behavior"]["unlock_method"] == \
+        "flip_readonly_bit"
+    assert by_id["t_unlock"]["show_if"]["field"] == "trg"
+    assert any(a["field"] == "trg"
+               for a in by_id["t_hide"]["show_if"]["none_of"])
+    # Retained two (rump strips converted actions, keeps the condition):
+    rump = by_id["trg"]["controls_fields"]
+    assert rump == [{"operator": "equals", "value": "yes",
+                     "locks": ["t_lock"], "makes_optional": ["t_opt"]}]
+    # Loud on both surfaces:
+    assert any(r["action"] == "controls-fields-unmirrored" and
+               "RETAINED" in r["detail"] for r in repairs)
+    assert any(fnd.rule == "legacy-trigger-side-logic"
+               for fnd in lint_schema(repaired))
+    # And repair is idempotent on its own output (the rump does not multiply).
+    repaired2, _ = repair(repaired)
+    assert repaired2["fields"][0]["controls_fields"] == rump
+    assert repaired2["fields"][4] == by_id["t_hide"]
+
+
+def test_hides_polarity_guard_existing_positive_atom_does_not_suppress():
+    # A POSITIVE occurrence of the same atom in the target's show_if must not
+    # count as "already hidden" -- polarity matters (cfm.negated_atom_present
+    # checks none_of buckets only). The existing positive condition is
+    # preserved as an all_of arm beside the new none_of.
+    trigger = {"id": "trg", "type": "radio", "pdf_field_name": "R[0]", "options": [
+        {"value": "yes", "label": "Yes", "pdf_field_name": "R[0]"},
+        {"value": "no", "label": "No", "pdf_field_name": "R[1]"}],
+        "controls_fields": [{"operator": "equals", "value": "yes",
+                             "hides": ["tgt"]}]}
+    target = {"id": "tgt", "type": "text", "pdf_field_name": "T[0]",
+              "show_if": {"field": "trg", "operator": "equals", "value": "yes"}}
+    draft = _v2_schema([trigger, target])
+    repaired, _ = repair(draft)
+    cond = repaired["fields"][1]["show_if"]
+    assert cond["all_of"] == [
+        {"field": "trg", "operator": "equals", "value": "yes"}]
+    assert cond["none_of"] == [
+        {"field": "trg", "operator": "equals", "value": "yes"}]
 
 
 def test_dangling_shows_target_is_reported_not_dropped_silently():
