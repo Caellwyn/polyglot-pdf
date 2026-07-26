@@ -285,7 +285,11 @@ help.details -- VERBATIM OFFICIAL EXCERPTS (zero-trust channel).
   "Exception 1." headings) -- required above 1,500 characters.
 - Do not leave cross-references dangling: excerpt the referenced passage too,
   or omit the sentence that points at it.
-- Size: watch the per-form inline token budget (wsao.2: the live session's
-  compression window HARD-caps what can ride inline; w7's budget lies between
-  1,717 and 3,366 tokens).
+- Size: up to 20,000 characters ride the voice model inline while the field
+  is focused (the compression window prices this in). When the relevant
+  source exceeds that, SELECT the most load-bearing verbatim excerpts up to
+  the budget and end with ONE line indexing the dropped topics by their
+  headings ("The secretary also holds: ...") -- never summarize (no rewriting
+  of legal text) and never cut silently. The secretary always holds the full
+  text.
 """

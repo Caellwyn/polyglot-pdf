@@ -217,11 +217,15 @@ def derive_compression_window(
     floor = estimate_si_floor_tokens(system_instruction, function_declarations)
     # injection_budget_tokens (bd wsao.8): headroom for the LARGEST per-field
     # inline guidance injection this form can produce (the clamped
-    # help.details, ~<=5k tokens at the 20k-char budget). Without it a
-    # details-bearing initiating message can exceed the assembled window and
-    # Vertex closes 1007 AT SESSION ASSEMBLE -- the session never opens (the
-    # wsao.2 measured failure). 0 for a details-less form -> derivation
-    # byte-identical to pre-wsao.8.
+    # help.details, ~<=5.3k tokens at the 20k-char budget + index slop).
+    # Without it a details-bearing initiating message can exceed the
+    # assembled window and Vertex closes 1007 AT SESSION ASSEMBLE -- the
+    # session never opens (the wsao.2 measured failure). 0 for a details-less
+    # form -> the FORMULA is unchanged from pre-wsao.8 (the derived numbers
+    # still move whenever the SI text itself grows -- as of wsao.8 the
+    # default DTI form derives ~5.1k window / ~6.6k trigger, ABOVE the API
+    # minimum, so the clamp-to-5000 narrative in older comments below no
+    # longer fires for it).
     window = floor + max(1, window_headroom_tokens) + max(0, injection_budget_tokens)
     trigger = window + max(1, trigger_margin_tokens)
     return {"floor": floor, "window": window, "trigger": trigger}
