@@ -222,8 +222,13 @@ def _render_form_reference(schema: dict) -> str:
     (form-level guidance that attaches to no field) and metadata.booklet_text
     (the whole official instructions booklet, verbatim). Session-invariant, so
     it belongs in the cacheable static catalog; returns "" when neither is set
-    (renders stay byte-identical for kits without them)."""
-    meta = schema.get("metadata") or {}
+    (renders stay byte-identical for kits without them).
+
+    The form-level metadata key on the wire is `form_metadata` (the
+    FormSchema Pydantic field, every form-kits/*/schema.json, and the client
+    handshake full_schema all use it) -- caught by the wsao.1 Opus fresh-eyes
+    round after a test helper's invented `metadata` key masked a silent no-op."""
+    meta = schema.get("form_metadata") or {}
     out = []
     form_details = (meta.get("details") or "").strip()
     if form_details:

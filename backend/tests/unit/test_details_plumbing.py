@@ -49,13 +49,18 @@ def _field(with_details: bool = True) -> dict:
 
 
 def _schema(with_reference: bool = True) -> dict:
+    """Build a schema in the PRODUCTION wire shape. The form-level metadata key
+    is `form_metadata` (FormSchema Pydantic field + every kit schema.json +
+    the client handshake full_schema) -- an earlier version of this helper used
+    an invented `metadata` key, which masked a renderer wired to the wrong key
+    (wsao.1 Opus fresh-eyes catch). Keep this helper on the real key."""
     field = _field()
     metadata = {"title": "Form W-7", "version": "2024-12"}
     if with_reference:
         metadata["details"] = "Who Is Eligible: see the eligibility rules."
         metadata["booklet_text"] = "FULL BOOKLET TEXT PAGE 1\nFULL BOOKLET TEXT PAGE 2"
     return {
-        "metadata": metadata,
+        "form_metadata": metadata,
         "fields": [field],
         "sections": [{"id": "s1", "label": "Section 1", "fields": [field["id"]]}],
         "parts": [{"id": "p1", "label": "Part 1", "section_ids": ["s1"]}],
