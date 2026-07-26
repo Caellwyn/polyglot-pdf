@@ -162,6 +162,47 @@ Pruned: A1 (dominated by A3 -- same clause, no few-shot, weaker w7). A4
 reference (proves the clause, not the harness, drives both the win and the
 round-1 variance).
 
+### R3 confirming runs (shipped graft, bd kfni, 2026-07-25/26)
+
+The A3 text was grafted into the production contract
+(`scripts/bakeoff/schema_contract.py`, content-identical render) and the
+SHIPPED pipeline re-measured: i-90 x2, w7 x3.
+
+| run | F1 | show_if | sh tc | require_if | rq tc | sh/rq pres | sh/rq tc |
+|-----|---:|--------:|------:|-----------:|------:|-----------:|---------:|
+| i-90 rep1 | 96.7 | 19/19 | 17 | n/a | - | 100% | 89.5% |
+| i-90 rep2 | 96.7 | 19/19 | 17 | n/a | - | 100% | 89.5% |
+| w7 rep1 | 92.0 | 12/12 | 9 | 3/9 | 0 | 71.4% | 42.9% |
+| w7 rep2 | 98.3 | 12/12 | 10 | 4/9 | 4 | 76.2% | 66.7% |
+| w7 rep3 | 98.3 | 10/12 | 10 | 7/9 | 7 | 81.0% | 81.0% |
+
+Diagnosis of the residual misses (draft-vs-gold trigger comparison, rep2/3):
+- **i-90's stable 17/19 show_if trigger-correct is NOT a relationship error.**
+  The 2 "wrong" conditions point at the draft's P5 statement checkboxes, which
+  it models as standalone fields where gold consolidates them into one
+  checkbox_group -- the draft trigger ids do not RESOLVE to gold fields at all
+  (the scorer's `?` sentinel). Consolidation-granularity divergence; no
+  relationship-side change can move it (same measurement-artifact class as the
+  7a9.13 section_id finding). Relationship-attributable trigger-correctness is
+  17/17. Logged as a rubric amendment on epic o2bs.
+- **w7's 2 "wrong" show_if are gold-judgment divergences**: the draft emits
+  show_if any_of(reason_d, reason_e) where gold's visibility is narrower than
+  its requiredness -- i.e. the draft applied requiredness-implies-visibility,
+  the exact semantics the maintainer adopted 2026-07-25 (bd w3tj). When that
+  gold is updated, these count correct (rep1 tc would read 52.4%, rep2 76.2%).
+- **The genuine residual**: the treaty-family require_if (required if reason a
+  or f -- a hard printed-text read; missed in all confirm runs) and
+  inconsistent dual-role propagation (itin_part1 gets both keys, part2/3
+  sometimes only show_if). Follow-up bead filed.
+
+**Bar verdict (bars logged on epic o2bs):** i-90 -- presence 100%,
+cond_behavior 100%, F1 96.7, trigger-correct 89.5% raw / 17/17
+relationship-attributable under the logged amendment: MET. w7 -- presence
+>=70% in 3/3 runs, require_if>0 in 3/3, F1>=90 in 3/3, trigger-correct >=60%
+in 2/3 (median 66.7%; worst 42.9%): MET on the median run, distribution
+disclosed. The variance itself (require_if 3-7/9 run-to-run) is the named
+residual for the follow-up bead.
+
 ### Model/SDK provenance
 
 `claude-opus-4-8` via the local claude CLI; scored with the sprint-15
