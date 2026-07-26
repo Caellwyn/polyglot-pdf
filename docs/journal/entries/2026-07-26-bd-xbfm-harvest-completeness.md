@@ -27,10 +27,17 @@ would only see in the repair log -- invisible to lint.
   against them.
 - **`backend/services/schema_repair.py`**: after the shows/makes_required
   mirror, a repair-time conversion pass:
-  - `unlocks` -> `conditional_behavior {unlock_method: flip_readonly_bit}` on
-    the target + the trigger condition as a show_if alternative (the exact
-    gold read-only-unlock pairing schema_lint's readonly-conditional-no-unlock
-    warning asks for); never overwrites an existing unlock_method.
+  - `unlocks` -> the COMPLETE gold unlock descriptor on the target
+    (`conditional_behavior {unlock_method: flip_readonly_bit,
+    pdf_field_flag_change: {bit 0, 1 -> 0}}`) + the trigger condition as a
+    show_if alternative. Fresh-eyes round 1 caught the first draft
+    synthesizing unlock_method ALONE -- which lints clean and looks unlocked
+    in the editor while the PDF filler's apply_field_flag_changes
+    early-returns without pdf_field_flag_change, silently leaving the field
+    locked in the filled PDF. Fixed (full descriptor synthesized) AND the
+    failure mode got its own lint rule: `unlock-missing-flag-change` WARNING
+    for any pre-existing unlock_method lacking the flag change. Never
+    overwrites an existing unlock_method.
   - `hides` -> the trigger condition NEGATED into the target's show_if
     (none_of; "shown when NOT ...").
   - `locks` / `makes_optional` (genuinely unconvertible: no gold-attested

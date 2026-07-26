@@ -477,7 +477,13 @@ def test_unlocks_converts_to_gold_unlock_pattern():
     repaired, repairs = repair(draft)
     assert "controls_fields" not in repaired["fields"][0]  # fully converted
     tgt = repaired["fields"][1]
-    assert tgt["conditional_behavior"] == {"unlock_method": "flip_readonly_bit"}
+    # The COMPLETE gold descriptor: unlock_method alone looks unlocked in the
+    # editor/lint but the PDF filler early-returns without the flag change
+    # (fresh-eyes round 1 on this bead).
+    assert tgt["conditional_behavior"] == {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {"bit": 0, "current_value": 1,
+                                  "required_value": 0}}
     atoms = [tgt["show_if"]] if "field" in tgt["show_if"] else \
         [a for b in ("all_of", "any_of", "none_of")
          for a in tgt["show_if"].get(b, [])]
@@ -554,6 +560,8 @@ def test_all_six_trigger_actions_end_to_end():
     assert by_id["t_req"]["require_if"]["field"] == "trg"
     assert by_id["t_unlock"]["conditional_behavior"]["unlock_method"] == \
         "flip_readonly_bit"
+    assert by_id["t_unlock"]["conditional_behavior"]["pdf_field_flag_change"] \
+        == {"bit": 0, "current_value": 1, "required_value": 0}
     assert by_id["t_unlock"]["show_if"]["field"] == "trg"
     assert any(a["field"] == "trg"
                for a in by_id["t_hide"]["show_if"]["none_of"])
@@ -570,6 +578,31 @@ def test_all_six_trigger_actions_end_to_end():
     repaired2, _ = repair(repaired)
     assert repaired2["fields"][0]["controls_fields"] == rump
     assert repaired2["fields"][4] == by_id["t_hide"]
+
+
+def test_lint_warns_on_unlock_method_without_flag_change():
+    # Fresh-eyes round 1 (bd xbfm): an unlock_method with no
+    # pdf_field_flag_change is invisible-broken -- editor UI + the
+    # readonly-conditional-no-unlock check read unlock_method alone, but the
+    # PDF filler early-returns without the flag change. The new WARNING makes
+    # the failure mode visible to a human; repair's own synthesis emits the
+    # full descriptor, so a fresh conversion never trips it.
+    field = {"id": "f1", "type": "text", "pdf_field_name": "F[0]",
+             "read_only": True,
+             "show_if": {"field": "f0", "operator": "is_checked"},
+             "conditional_behavior": {"unlock_method": "flip_readonly_bit"}}
+    trigger = {"id": "f0", "type": "checkbox", "pdf_field_name": "C[0]"}
+    schema = _v2_schema([trigger, field])
+    findings = lint_schema(schema)
+    assert any(fnd.rule == "unlock-missing-flag-change" for fnd in findings)
+    # The complete descriptor (what repair now synthesizes) is clean.
+    field["conditional_behavior"] = {
+        "unlock_method": "flip_readonly_bit",
+        "pdf_field_flag_change": {"bit": 0, "current_value": 1,
+                                  "required_value": 0}}
+    findings2 = lint_schema(schema)
+    assert not any(fnd.rule == "unlock-missing-flag-change"
+                   for fnd in findings2)
 
 
 def test_hides_polarity_guard_existing_positive_atom_does_not_suppress():

@@ -56,11 +56,19 @@ UNCONVERTIBLE_ACTIONS = ("hides", "locks", "unlocks", "makes_optional")
 REPAIR_CONVERTIBLE_ACTIONS = ("unlocks", "hides")
 
 
-def unlock_descriptor() -> Dict[str, str]:
-    """The gold-attested conditional_behavior payload for an unlocked
-    read-only field (i-90 gold shape; also what schema_lint's
-    readonly-conditional-no-unlock warning asks for)."""
-    return {"unlock_method": "flip_readonly_bit"}
+def unlock_descriptor() -> Dict[str, Any]:
+    """The COMPLETE gold-attested conditional_behavior payload for an unlocked
+    read-only field (i-90 gold shape). Both halves are load-bearing:
+    unlock_method is what the editor UI and schema_lint's
+    readonly-conditional-no-unlock check read, but the PDF filler's
+    apply_field_flag_changes needs pdf_field_flag_change to actually flip the
+    read-only bit -- without it the field LOOKS unlocked everywhere and
+    silently stays locked in the filled PDF (bd xbfm fresh-eyes). The flag
+    change is stereotyped: PDF bit 0 is the read-only flag, and the unlock
+    premise is read-only now (1) -> writable (0)."""
+    return {"unlock_method": "flip_readonly_bit",
+            "pdf_field_flag_change": {"bit": 0, "current_value": 1,
+                                      "required_value": 0}}
 
 
 def _none_of_atoms(cond: Any) -> List[Dict[str, Any]]:
