@@ -320,6 +320,26 @@ CANONICAL v2 EXAMPLE (imitate its conventions: slug option values, per-box
 pdf_field_name, and an `includes` membership show_if referencing an option
 slug; divisions are absent on purpose -- they are derived after extraction):
 {example}
+
+RELATIONSHIP EMPHASIS (read carefully -- a common miss):
+- show_if and require_if are DIFFERENT relationships. show_if = the field only
+  APPEARS when the condition holds (conditional VISIBILITY). require_if = the
+  field MUST be completed when the condition holds (conditional REQUIREDNESS).
+- A field is FREQUENTLY BOTH: when the printed instruction says a field both
+  appears and must be filled under the same trigger ("if you checked box d,
+  complete lines 1-3"), emit BOTH show_if AND require_if with the SAME
+  condition on that field. Recovering only show_if and dropping require_if is
+  the most common relationship error -- do not make it.
+- require_if can also stand alone (a field always visible but required only
+  under a condition) and can carry a BROADER condition than show_if (required
+  if ANY of several boxes, shown if one). Read the printed text for which
+  boxes make the field mandatory.
+
+EXAMPLE (shape only, not from any target form) -- a field shown AND required by
+the same trigger:
+  {{"id": "spouse_details", "type": "text",
+   "show_if":    {{"field": "is_married", "operator": "is_checked"}},
+   "require_if": {{"field": "is_married", "operator": "is_checked"}}}}
 """
 
 
