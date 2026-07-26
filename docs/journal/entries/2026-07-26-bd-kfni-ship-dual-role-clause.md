@@ -58,6 +58,13 @@ is what the amended reading measures.
   requiredness-implies-visibility decision (bd w3tj); gold updates when that
   lands.
 
+## Verification record
+
+Full backend suite green with the graft in place: 1280 passed, 1 skipped, 3
+deselected (closeout_prep run, 2026-07-26) -- the bead's criterion-3 pytest
+record. Targeted suites (contract sync + extractor lint + scorer dialect: 34
+tests) also green.
+
 ## Doc-freshness note
 
 closeout_prep's STALE tier-2 doc flags reviewed: all cite code changed by

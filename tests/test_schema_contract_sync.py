@@ -242,8 +242,9 @@ def test_contract_carries_the_dual_role_relationship_clause():
     # bd polyglot-pdf-kfni (sprint 15 R3): the measured winner of the
     # relationship bake (bd dsbl, scripts/spikes/relationship_bake_findings.md)
     # is the dual-role emphasis clause + shape-only example -- W-7 require_if
-    # went 0/9 -> 7/9 with it. Pin its load-bearing lines so a later contract
-    # rewording cannot silently drop the measured win.
+    # went 0/9 -> 3-7/9 across the confirming runs (median 4, best 7). Pin its
+    # load-bearing lines so a later contract rewording cannot silently drop
+    # the measured win.
     contract = sc.render_contract()
     assert "RELATIONSHIP EMPHASIS" in contract
     assert "show_if and require_if are DIFFERENT relationships" in contract
