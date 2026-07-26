@@ -193,6 +193,7 @@ def derive_compression_window(
     *,
     window_headroom_tokens: int,
     trigger_margin_tokens: int,
+    injection_budget_tokens: int = 0,
 ) -> Dict[str, int]:
     """Derive a per-form (trigger_tokens, target_tokens) from the SI+tools floor.
 
@@ -205,16 +206,28 @@ def derive_compression_window(
         window  = floor  + window_headroom_tokens   (room for a couple fields)
         trigger = window + trigger_margin_tokens    (pile-up before eviction)
 
-    Returns a dict ready to drop into the adapter's compression config. With the
-    config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872) the I-90
-    derives a ~1601 ESTIMATED floor (chars/4 undershoots the ~1978 real billed
-    floor -- see the config.py headroom comment) -> ~2200 raw window -> ~3700 raw
-    trigger; on Vertex the trigger then clamps UP to the API minimum 5000 and the
-    retune in _build_live_config lands the ctu8-validated 3500 window
-    (5000 - margin). bd jnjj.35 / A6.
+    Returns a dict ready to drop into the adapter's compression config. With
+    the config.py defaults (headroom 599, margin 1500; bd polyglot-pdf-7872)
+    the CURRENT default DTI form derives a ~4.5k floor -> ~5.1k window ->
+    ~6.6k trigger, above the API minimum 5000 (the SI has grown since the
+    jnjj.35-era ~1601-floor example; the clamp-up + retune path in
+    _build_live_config now fires only for forms with a much smaller SI
+    floor). injection_budget_tokens (bd wsao.8) adds headroom for the largest
+    per-field inline guidance injection on top. bd jnjj.35 / A6.
     """
     floor = estimate_si_floor_tokens(system_instruction, function_declarations)
-    window = floor + max(1, window_headroom_tokens)
+    # injection_budget_tokens (bd wsao.8): headroom for the LARGEST per-field
+    # inline guidance injection this form can produce (the clamped
+    # help.details, ~<=5.3k tokens at the 20k-char budget + index slop).
+    # Without it a details-bearing initiating message can exceed the
+    # assembled window and Vertex closes 1007 AT SESSION ASSEMBLE -- the
+    # session never opens (the wsao.2 measured failure). 0 for a details-less
+    # form -> the FORMULA is unchanged from pre-wsao.8 (the derived numbers
+    # still move whenever the SI text itself grows). The default DTI form
+    # currently derives ~5.1k window / ~6.6k trigger -- above the API minimum
+    # (already true before wsao.8), so the clamp-to-5000 path fires only for
+    # forms with a much smaller SI floor.
+    window = floor + max(1, window_headroom_tokens) + max(0, injection_budget_tokens)
     trigger = window + max(1, trigger_margin_tokens)
     return {"floor": floor, "window": window, "trigger": trigger}
 
@@ -651,6 +664,7 @@ class LiveAIGemini(ILiveAI):
         system_instruction: str | None = None,
         tool_declarations: list[Dict[str, Any]] | None = None,
         enable_transcripts: bool = False,
+        injection_budget_tokens: int = 0,
     ):
         """Register callbacks and ensure the background session task is running.
 
@@ -677,6 +691,9 @@ class LiveAIGemini(ILiveAI):
             self._on_processing_done = on_processing_done
         self._system_instruction = system_instruction
         self._function_declarations = deepcopy(tool_declarations) if tool_declarations else None
+        # Compression-window headroom for the largest per-field inline
+        # guidance injection (bd wsao.8; see derive_compression_window).
+        self._injection_budget_tokens = max(0, int(injection_budget_tokens or 0))
         # Honor explicit enable_transcripts flag from the caller (UI/service).
         # If enable_transcripts is False, we will not request TEXT responses from Gemini
         # even if an on_transcript callback is present.
@@ -1704,6 +1721,8 @@ class LiveAIGemini(ILiveAI):
                     self._function_declarations,
                     window_headroom_tokens=settings.CONTEXT_COMPRESSION_WINDOW_HEADROOM_TOKENS,
                     trigger_margin_tokens=settings.CONTEXT_COMPRESSION_TRIGGER_MARGIN_TOKENS,
+                    injection_budget_tokens=getattr(
+                        self, "_injection_budget_tokens", 0),
                 )
                 trigger_tokens = derived["trigger"]
                 window_tokens = derived["window"]

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from backend.config import Settings, get_settings
 from backend.ports.live_ai_port import ILiveAI
+from backend.services import guidance_contract
 from backend.utils.language_codes import bcp47_codes_for_spoken_language
 from .field_utils import (
     build_fields_from_schema,
@@ -396,6 +397,14 @@ class FormFillingService:
             # polyglot-pdf-wpw.5); the WS-route liveness bump is chained as the inner
             # callback.
             self._callback_handler.set_user_activity_inner(self._on_user_activity)
+            # The largest per-field inline guidance injection this form can
+            # produce (clamped help.details, bd wsao.8) -- the compression
+            # window derivation must leave room for it or a details-bearing
+            # initiating message 1007s at session assemble (wsao.2 finding).
+            # full_schema (the secretary catalog) sees every field; the DTI
+            # minimal schema may not.
+            injection_budget = guidance_contract.inline_injection_budget_tokens(
+                self._full_schema or self._schema or {})
             try:
                 self._live_ai.set_callbacks(
                     on_form_update=self._callback_handler.on_form_update,
@@ -409,6 +418,7 @@ class FormFillingService:
                     system_instruction=system_instruction,
                     tool_declarations=tool_declarations,
                     enable_transcripts=bool(send_transcript),
+                    injection_budget_tokens=injection_budget,
                 )
             except TypeError:
                 # Adapter does not accept on_audio (older implementations); fall
@@ -1000,6 +1010,14 @@ class FormFillingService:
             system_instruction=system_instruction,
             tool_declarations=tool_declarations,
             enable_transcripts=bool(self._send_transcript),
+            # Re-thread the inline-details window budget on RESTART too (bd
+            # wsao.8 fresh-eyes): set_callbacks resets the adapter's budget,
+            # so omitting it here re-derived the compression window WITHOUT
+            # details headroom and a reconnect whose current field carries
+            # large help.details 1007'd at assemble -- the exact wsao.2
+            # failure, back on the routine reconnect path.
+            injection_budget_tokens=guidance_contract.inline_injection_budget_tokens(
+                self._full_schema or self._schema or {}),
         )
 
         # Verify session is now active

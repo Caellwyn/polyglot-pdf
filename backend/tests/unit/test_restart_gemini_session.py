@@ -351,3 +351,27 @@ async def test_non_restart_fresh_session_still_greets():
     assert "greet" in sent[0].lower(), (
         "a fresh non-restart session must still greet the user"
     )
+
+
+@pytest.mark.asyncio
+async def test_restart_rethreads_injection_budget_tokens():
+    """The restart's set_callbacks must re-thread the inline-details window
+    budget (bd wsao.8 fresh-eyes): set_callbacks resets the adapter's budget,
+    so omitting the kwarg here re-derived the compression window WITHOUT
+    details headroom and a reconnect whose current field carries large
+    help.details 1007'd at session assemble -- the wsao.2 failure back on the
+    routine reconnect path."""
+    service = _make_service_ready_for_restart(send_transcript=False)
+    service._schema = {
+        "form_metadata": {"form_number": "W-7"},
+        "fields": [
+            {"id": "reason_a", "name": "Reason a", "type": "checkbox",
+             "help": {"details": "x" * 8000}},
+        ],
+    }
+
+    await service.restart_gemini_session(next_field_hint="reason_a (Reason a)")
+
+    kwargs = service._live_ai.set_callbacks.call_args.kwargs
+    from backend.services import guidance_contract as gc
+    assert kwargs["injection_budget_tokens"] == 2000 + gc.INJECTION_BUDGET_SLOP_TOKENS

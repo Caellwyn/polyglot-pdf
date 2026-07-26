@@ -11,6 +11,8 @@ JIT SI mode in bd polyglot-pdf-en2j; DTI is the shipped reduced-SI mode.
 
 import structlog
 
+from backend.services import guidance_contract
+
 _log = structlog.get_logger(__name__)
 
 # The only option keys a voice/text model needs. The schema option dicts also
@@ -141,10 +143,14 @@ def get_field_guidance(
         guidance["format_hint"] = format_hint
     # details: verbatim official-booklet reference text (bd wsao.1). Injected
     # inline for the CURRENT field only (v1 delivery policy, sprint-16 plan);
-    # the spoken ask-hint path never reads it.
+    # the spoken ask-hint path never reads it. Clamped to the inline budget
+    # (bd wsao.8) as a defensive backstop -- the enrichment engine authors to
+    # fit; a kit that ships oversize degrades to clamp+topic-index, never an
+    # unbounded injection.
     details = help_block.get("details")
     if details:
-        guidance["details"] = details
+        guidance["details"] = guidance_contract.clamp_details_inline(details) \
+            if isinstance(details, str) else details
 
     # Options for select/radio/checkbox (label/value pairs or bare values).
     # SANITIZE via the shared helper (bd polyglot-pdf-lj5v) to the

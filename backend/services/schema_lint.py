@@ -86,8 +86,11 @@ Rules (stable ids; one finding per violation site):
 - help-details-no-reference-floor WARNING help.details present but the schema
                                 carries no metadata.booklet_text -- the
                                 containment check cannot run
-- help-details-oversize  WARNING details exceed
-                                guidance_contract.DETAILS_OVERSIZE_WORDS words
+- help-details-oversize  WARNING details exceed the INLINE budget
+                                (guidance_contract.DETAILS_INLINE_MAX_CHARS,
+                                bd wsao.8) -- the overflow reaches only the
+                                secretary; the engine should select+index to
+                                fit
 - help-details-headings-missing WARNING a long details block has no heading
                                 lines (unnavigable for secretary/human review)
 
@@ -943,14 +946,16 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
                         f"SELECT-not-REWRITE (guidance contract)",
                     ))
 
-        word_count = len(details.split())
-        if word_count > guidance_contract.DETAILS_OVERSIZE_WORDS:
+        if len(details) > guidance_contract.DETAILS_INLINE_MAX_CHARS:
             out.append(LintFinding(
                 SEVERITY_WARNING, "help-details-oversize",
                 f"{field_path}.help.details",
-                f"details are {word_count} words (bound "
-                f"{guidance_contract.DETAILS_OVERSIZE_WORDS}); also check the "
-                f"per-form inline token budget (wsao.2 findings)",
+                f"details are {len(details)} chars; only the first "
+                f"{guidance_contract.DETAILS_INLINE_MAX_CHARS} ride the voice "
+                f"model inline (clamp+topic-index backstop) -- the overflow "
+                f"reaches only the secretary. The enrichment engine should "
+                f"SELECT verbatim excerpts to fit and INDEX the rest "
+                f"(bd wsao.8)",
             ))
 
         if (len(details) > guidance_contract.DETAILS_HEADINGS_REQUIRED_CHARS

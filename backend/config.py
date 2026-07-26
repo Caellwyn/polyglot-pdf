@@ -499,8 +499,9 @@ class Settings(BaseModel):
 			# The secretary (bd polyglot-pdf-jnjj.45): a cheap text-model helper
 			# that holds the WHOLE form catalog + the applicant's current answers
 			# and answers prose questions about them -- the principal does NOT
-			# hold that catalog (tight compression window). Two uses (bd
-			# polyglot-pdf-2af7/3vby): (1) recall a PAST ANSWER/value; (2) IDENTIFY
+			# hold that catalog (tight compression window). Three uses (bd
+			# polyglot-pdf-2af7/3vby + wsao.8's official-guidance lookups from
+			# the booklet floor): (1) recall a PAST ANSWER/value; (2) IDENTIFY
 			# which field the user means when you need to navigate to a field you do
 			# not currently hold -- the response's `fields` list carries the exact
 			# field_id + spoken_name to pass to switch_to_field. The ONE thing it is
@@ -508,11 +509,15 @@ class Settings(BaseModel):
 			# your latest guidance block.
 			"name": "ask_secretary",
 			"description": (
-				"Ask the secretary a plain-language question about the form. Two "
+				"Ask the secretary a plain-language question about the form. Three "
 				"uses: (1) recall a past ANSWER/value -- 'what previous name did "
 				"they give?', 'have we got their date of birth yet?'; (2) IDENTIFY "
 				"which field the user means when you need to jump to a field you do "
-				"NOT currently hold -- 'which field is the mailing city?'. The "
+				"NOT currently hold -- 'which field is the mailing city?'; (3) look "
+				"up OFFICIAL GUIDANCE the secretary holds (the form's full official "
+				"instructions text) when the current field's reference text does "
+				"not clearly answer a requirements question -- 'what documents does "
+				"exception 3 require?'. The "
 				"secretary holds the whole form catalog + the applicant's answers "
 				"and replies in prose; when it identifies fields, the response also "
 				"carries a `fields` list of exact {field_id, spoken_name} you can "
@@ -841,14 +846,19 @@ class Settings(BaseModel):
     "answers. NEVER tell the user a field is filled, empty, or missing without checking first -- "
     "not seeing a value does NOT mean it does not exist. When in doubt, check, then answer.\n\n"
 
-    # Deep-question grounding rule (bd wsao.1, sprint-16 plan): the guidance
-    # block may carry an "Official reference text:" segment (verbatim booklet
-    # excerpts for the current field). One line, deliberately terse -- the SI
-    # is per-turn cost (docs/standards/logging-and-cost.md).
+    # Deep-question grounding + no-advice rules (bd wsao.1 + wsao.8, sprint-16
+    # plan; maintainer directive 2026-07-26). Terse on purpose -- the SI is
+    # per-turn cost (docs/standards/logging-and-cost.md).
     "DEEP QUESTIONS: answer questions about the current field's requirements from its "
     "'Official reference text' in the latest guidance block -- ground every claim there; never "
-    "read it aloud wholesale, and NEVER invent legal or document requirements. If the question "
-    "goes beyond any reference text you hold, ask the secretary instead of guessing.\n\n"
+    "read it aloud wholesale, and NEVER invent legal or document requirements. If the reference "
+    "text does not clearly answer -- or you hold none -- CALL ask_secretary (it holds the full "
+    "official instructions) instead of guessing.\n\n"
+
+    "INFORMATION, NEVER ADVICE: you explain what a field expects and what the official "
+    "instructions say -- you NEVER tell the user what to enter, which option to choose, or what "
+    "applies to their situation. Those decisions are the user's alone. 'The instructions say "
+    "category a covers X' is information; 'you should check box a' is advice -- never say it.\n\n"
 
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"

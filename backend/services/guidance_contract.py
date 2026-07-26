@@ -37,17 +37,20 @@ engine copies from the SAME extracted source text that becomes the floor, so
 both sides normalize identically in practice; hand-typed excerpts should be
 pasted from the extraction, not re-typed.
 
-Size bounds (sprint-16 plan + the wsao.2 measurement):
+Size bounds (sprint-16 plan; oversize policy DECIDED by the maintainer
+2026-07-26, bd wsao.8):
   - instructions: soft <= INSTRUCTIONS_SOFT_CHARS (speakable ask-tail), hard
     INSTRUCTIONS_HARD_CHARS (lint WARNING above it);
-  - details: DETAILS_OVERSIZE_WORDS lint WARNING. NOTE (wsao.2 finding): the
-    live session's ctu8-derived compression window imposes a HARD form-
-    dependent token budget on inline details (w7: between 1,717 and 3,366
-    tokens -- 3,366 breached the ~6,400-token assembled budget and Vertex
-    closed 1007 at session assemble). The oversize POLICY (bake-time cap vs
-    bigger window vs secretary-mediated delivery) is a reserved maintainer
-    decision; until it lands, the lint bound stays WARNING-level and the
-    engine must consult scripts/spikes/wsao2_inline_details_findings.md.
+  - details: up to DETAILS_INLINE_MAX_CHARS ride the voice model INLINE while
+    the field is focused (lint WARNING above it; clamp_details_inline is the
+    render backstop). The enrichment engine authors to fit via SELECTION +
+    INDEX -- verbatim excerpts up to budget plus a one-line index of dropped
+    topics -- never summarization, never blind truncation. The secretary
+    always holds the FULL text (the booklet floor). The compression window
+    derivation prices the inline injection in (inline_injection_budget_tokens
+    -> derive_compression_window), which is what makes the budget viable: a
+    details-bearing initiating message used to 1007 at session assemble
+    (wsao.2 measurement; scripts/spikes/wsao2_inline_details_findings.md).
 
 ASCII only (CLAUDE.md scar #6).
 """
@@ -59,7 +62,22 @@ from typing import List, Optional
 
 INSTRUCTIONS_SOFT_CHARS = 280
 INSTRUCTIONS_HARD_CHARS = 500
-DETAILS_OVERSIZE_WORDS = 3000
+# The INLINE guidance budget (bd wsao.8, maintainer decision 2026-07-26): up
+# to this many characters of help.details ride the voice model's guidance
+# block while the field is focused (~5k tokens; ~$0.005/encounter on live-2.5
+# per the maintainer's math, measured in wsao.8). The schema + secretary
+# always carry the FULL text; an oversize SOURCE is handled by the enrichment
+# engine via SELECTION + INDEX (verbatim excerpts up to budget + a one-line
+# index of dropped topics), never summarization (bake-time rewriting of legal
+# text) and never blind truncation (the model must KNOW what it is missing).
+# clamp_details_inline below is the defensive RENDER-time backstop for a kit
+# that ships oversize anyway.
+DETAILS_INLINE_MAX_CHARS = 20000
+# Fixed slop the injection budget adds on top of the clamp: the clamp's
+# appended topic-index tail can push the rendered injection slightly past
+# max_chars (measured worst case ~+1.1k chars ~= 280 tokens; wsao.8
+# fresh-eyes finding 3).
+INJECTION_BUDGET_SLOP_TOKENS = 288
 # A details block longer than this without any heading line is unnavigable
 # for the secretary + human review (plan: "headings mandatory above a size
 # threshold").
@@ -158,6 +176,52 @@ def details_paragraphs(details: str) -> List[str]:
     return out
 
 
+def clamp_details_inline(details: str,
+                         max_chars: int = DETAILS_INLINE_MAX_CHARS) -> str:
+    """Defensive render-time clamp for the inline details budget (bd wsao.8).
+
+    A details value within budget passes through UNTOUCHED (byte-identical).
+    An oversize value is cut at the last paragraph boundary within budget and
+    a one-line INDEX of the dropped topics (heading lines found in the
+    remainder) is appended, so the voice model KNOWS what it is missing and
+    that the secretary holds it -- the selection+index policy's backstop.
+    """
+    if not isinstance(details, str) or len(details) <= max_chars:
+        return details
+    cut = details.rfind("\n\n", 0, max_chars)
+    if cut <= 0:
+        cut = max_chars
+    kept, dropped = details[:cut].rstrip(), details[cut:]
+    topics = []
+    for ln in dropped.splitlines():
+        ln = ln.strip()
+        if ln and _HEADING_LINE_RE.match(ln) and len(ln) <= 120:
+            topics.append(ln.lstrip("#").strip().rstrip("."))
+    index = ("; ".join(topics[:8])) if topics else "additional official guidance"
+    return (kept + "\n\n[Reference text continues -- the secretary holds the "
+            "full official instructions, including: " + index + ". Ask the "
+            "secretary when the answer is not above.]")
+
+
+def inline_injection_budget_tokens(schema: dict) -> int:
+    """The compression-window headroom (in ~tokens) the LARGEST per-field
+    inline guidance injection needs for this schema: max over fields of the
+    CLAMPED details length, chars/4. 0 when no field carries details -- the
+    window derivation then stays byte-identical to pre-wsao.8 behavior."""
+    worst = 0
+    for f in schema.get("fields") or []:
+        if not isinstance(f, dict):
+            continue
+        h = f.get("help")
+        d = h.get("details") if isinstance(h, dict) else None
+        if isinstance(d, str) and d.strip():
+            worst = max(worst, min(len(d), DETAILS_INLINE_MAX_CHARS))
+    if worst == 0:
+        return 0
+    # + slop for the clamp's appended topic-index tail (see the constant).
+    return worst // 4 + INJECTION_BUDGET_SLOP_TOKENS
+
+
 def has_heading(details: str) -> bool:
     return any(_HEADING_LINE_RE.match(ln.strip())
                for ln in (details or "").splitlines())
@@ -221,7 +285,11 @@ help.details -- VERBATIM OFFICIAL EXCERPTS (zero-trust channel).
   "Exception 1." headings) -- required above 1,500 characters.
 - Do not leave cross-references dangling: excerpt the referenced passage too,
   or omit the sentence that points at it.
-- Size: watch the per-form inline token budget (wsao.2: the live session's
-  compression window HARD-caps what can ride inline; w7's budget lies between
-  1,717 and 3,366 tokens).
+- Size: up to 20,000 characters ride the voice model inline while the field
+  is focused (the compression window prices this in). When the relevant
+  source exceeds that, SELECT the most load-bearing verbatim excerpts up to
+  the budget and end with ONE line indexing the dropped topics by their
+  headings ("The secretary also holds: ...") -- never summarize (no rewriting
+  of legal text) and never cut silently. The secretary always holds the full
+  text.
 """
