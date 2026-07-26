@@ -170,6 +170,40 @@
    * native VAD streams continuously -- the utterance, then unbroken real-time
    * silence (see startSilenceStream above) so Gemini's own VAD can close the turn.
    */
+  /*
+   * Timer-clamp-immune real-time pacer (bd polyglot-pdf-f58l; re-hit + fixed
+   * for real in bd wsao.2). A hidden/background Chrome tab clamps setTimeout
+   * to ~1Hz, which starves the 20ms chunk pacing into a 1 chunk/second
+   * trickle -- Gemini receives an unusable smear and the session idle-times
+   * out. A pure microtask burst is NOT the answer either: the backend's
+   * audio queue is finite and pace-drained, so a whole-utterance burst
+   * overflows it and frames get DROPPED (observed as AUDIO_QUEUE_FULL).
+   * MessageChannel messages are macrotasks that are NOT subject to the
+   * background timer clamp, so spinning on channel yields until the next
+   * chunk's wall-clock deadline gives true real-time pacing in ANY tab
+   * visibility state, for both manual and native VAD.
+   */
+  var _paceChannel = null;
+  var _paceResolvers = [];
+  function channelYield() {
+    if (!_paceChannel) {
+      _paceChannel = new MessageChannel();
+      _paceChannel.port1.onmessage = function () {
+        var r = _paceResolvers.shift();
+        if (r) r();
+      };
+    }
+    return new Promise(function (res) {
+      _paceResolvers.push(res);
+      _paceChannel.port2.postMessage(0);
+    });
+  }
+  async function paceUntil(deadlineMs) {
+    while (performance.now() < deadlineMs) {
+      await channelYield();
+    }
+  }
+
   async function injectUtterance(pcmBuffer, opts) {
     opts = opts || {};
     var chunkMs = opts.chunkMs || CHUNK_MS;
@@ -186,10 +220,12 @@
       h.sendActivityStart();
     }
 
+    var next = performance.now();
     for (var pos = 0; pos < pcmBuffer.byteLength; pos += bytesPerChunk) {
       var end = Math.min(pos + bytesPerChunk, pcmBuffer.byteLength);
       h.sendAudio(pcmBuffer.slice(pos, end));
-      await sleep(chunkMs); // pace at ~real time
+      next += chunkMs;
+      await paceUntil(next); // real-time, clamp-immune (see above)
     }
 
     if (native) {

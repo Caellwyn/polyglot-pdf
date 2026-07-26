@@ -95,13 +95,37 @@ def extract_full_booklet() -> str:
 BACKUP = SCHEMA.with_suffix(".json.vff-backup")
 
 
-def apply() -> None:
+def extract_trimmed_section() -> str:
+    """A ~1.2k-token TRIMMED variant that fits inside the ctu8-tuned
+    compression window (the full 3.4k-token section breached it -- Vertex
+    closed 1007 'above the context window size'; wsao.2 finding). Still
+    VERBATIM: the section intro + category a + box h + Exceptions 1-2, sliced
+    from the full extraction by their own headings."""
+    full = extract_reason_section()
+
+    def slice_between(start_key: str, end_key: str) -> str:
+        s = full.find(start_key)
+        e = full.find(end_key, s + 1)
+        if s < 0:
+            raise SystemExit("trim anchor missing: %r" % start_key)
+        return full[s:e].strip() if e > s else full[s:].strip()
+
+    parts = [
+        slice_between("Reason You", "b. Nonresident alien filing"),  # intro + a
+        slice_between("h. Other.", "Exception 1."),
+        slice_between("Exception 1.", "Exception 2."),
+        slice_between("Exception 2.", "Exception 3."),
+    ]
+    return "\n\n".join(parts)
+
+
+def apply(trim: bool = False) -> None:
     # frontend/public/form-kits/ is GITIGNORED (synced from form-kits/), so
     # revert restores from a sidecar backup, not git.
     if not BACKUP.exists():
         BACKUP.write_bytes(SCHEMA.read_bytes())
     schema = json.loads(BACKUP.read_text(encoding="utf-8"))
-    details = extract_reason_section()
+    details = extract_trimmed_section() if trim else extract_reason_section()
     for field in schema["fields"]:
         if field["id"] == "reason_a":
             help_obj = field.get("help") or {}
@@ -133,5 +157,10 @@ if __name__ == "__main__":
     group = ap.add_mutually_exclusive_group(required=True)
     group.add_argument("--apply", action="store_true")
     group.add_argument("--revert", action="store_true")
+    ap.add_argument("--trim", action="store_true",
+                    help="apply the ~1.2k-token trimmed details variant")
     args = ap.parse_args()
-    (apply if args.apply else revert)()
+    if args.apply:
+        apply(trim=args.trim)
+    else:
+        revert()
