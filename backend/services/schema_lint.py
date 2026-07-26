@@ -822,7 +822,8 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
     the enrichment + judge prompts, so mechanical checks cannot drift from
     what the prompts demand)."""
     meta = schema.get("form_metadata")
-    booklet = (meta.get("booklet_text") if isinstance(meta, dict) else None) or ""
+    booklet = meta.get("booklet_text") if isinstance(meta, dict) else None
+    booklet = booklet if isinstance(booklet, str) else ""
 
     # Coverage is ONE aggregated finding, not per-field: a fresh
     # pre-enrichment draft has no guidance on ANY field, and a per-field rule
@@ -831,11 +832,14 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
     # asked (read_only + signature excluded -- decide-and-note).
     askable = [f for f in fields
                if not f.get("read_only") and f.get("type") != "signature"]
-    uncovered = [
-        f for f in askable
-        if not (((f.get("help") or {}) if isinstance(f.get("help"), dict)
-                 else {}).get("instructions") or "").strip()
-    ]
+    def _instr_of(f: Dict[str, Any]) -> str:
+        # Raw LLM drafts carry lists/numbers where strings belong; lint never
+        # throws on malformed input (wsao.3 fresh-eyes).
+        h = f.get("help")
+        v = h.get("instructions") if isinstance(h, dict) else None
+        return v if isinstance(v, str) else ""
+
+    uncovered = [f for f in askable if not _instr_of(f).strip()]
     if uncovered:
         sample = ", ".join(str(f.get("id")) for f in uncovered[:5])
         more = ", ..." if len(uncovered) > 5 else ""

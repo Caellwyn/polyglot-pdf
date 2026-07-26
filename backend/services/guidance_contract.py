@@ -29,6 +29,14 @@ Match = exact substring of the normalized source. No similarity scores: a
 deterministic yes/no with a recorded matched span beats a tunable fuzz that
 would slowly readmit rewriting.
 
+KNOWN false-positive mode of the pinned dehyphenation (wsao.3 fresh-eyes):
+a legitimately hyphenated compound that wraps AT its hyphen in the source
+("third-\\nparty") normalizes to "thirdparty", so a clean-typed excerpt
+keeping "third-party" fails containment. Accepted tradeoff: the enrichment
+engine copies from the SAME extracted source text that becomes the floor, so
+both sides normalize identically in practice; hand-typed excerpts should be
+pasted from the extraction, not re-typed.
+
 Size bounds (sprint-16 plan + the wsao.2 measurement):
   - instructions: soft <= INSTRUCTIONS_SOFT_CHARS (speakable ask-tail), hard
     INSTRUCTIONS_HARD_CHARS (lint WARNING above it);
@@ -147,7 +155,14 @@ def is_label_restatement(instructions: str, name: Optional[str],
     """True when instructions add nothing beyond the field's own label and
     option labels (plan: anti-restatement). Normalized comparison: the
     instructions text, minus the label/option words and filler verbs, must
-    leave some residue to count as guidance."""
+    leave some residue to count as guidance.
+
+    Coerces non-string inputs (raw LLM drafts carry lists/numbers where
+    strings belong) -- callers sit inside lint's never-throws contract."""
+    if not isinstance(instructions, str):
+        return False
+    name = name if isinstance(name, str) else ""
+    option_labels = [l for l in option_labels if isinstance(l, str)]
     instr = normalize_for_containment(instructions)
     if not instr:
         return False

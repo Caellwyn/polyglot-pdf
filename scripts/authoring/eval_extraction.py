@@ -364,7 +364,13 @@ def guidance_metrics(schema: dict) -> dict:
     askable = [f for f in fields
                if not f.get("read_only") and f.get("type") != "signature"]
     meta = schema.get("form_metadata")
-    booklet = (meta.get("booklet_text") if isinstance(meta, dict) else None) or ""
+    booklet = meta.get("booklet_text") if isinstance(meta, dict) else None
+    booklet = booklet if isinstance(booklet, str) else ""
+
+    def _str(v: Any) -> str:
+        # Raw drafts carry lists/numbers where strings belong; the metrics
+        # must not crash the eval mid-table (wsao.3 fresh-eyes).
+        return v if isinstance(v, str) else ""
 
     lengths: list[int] = []
     restatements = 0
@@ -373,7 +379,7 @@ def guidance_metrics(schema: dict) -> dict:
     paras_contained = 0
     for f in askable:
         help_obj = f.get("help") if isinstance(f.get("help"), dict) else {}
-        instr = (help_obj.get("instructions") or "").strip()
+        instr = _str(help_obj.get("instructions")).strip()
         if instr:
             covered += 1
             lengths.append(len(instr))
@@ -382,7 +388,7 @@ def guidance_metrics(schema: dict) -> dict:
             if guidance_contract.is_label_restatement(
                     instr, f.get("name"), labels):
                 restatements += 1
-        details = (help_obj.get("details") or "").strip()
+        details = _str(help_obj.get("details")).strip()
         if details and booklet:
             for para in guidance_contract.details_paragraphs(details):
                 paras_total += 1

@@ -180,6 +180,39 @@ def test_guidance_rules_are_warning_severity_only():
             assert f.severity == "WARNING"
 
 
+def test_lint_never_throws_on_malformed_guidance_values():
+    """The lint never-throws contract extends to the guidance rules (wsao.3
+    Opus fresh-eyes): raw LLM drafts carry lists/numbers where strings belong
+    -- a list-shaped instructions 500'd the editor lint route before the
+    coercion guards."""
+    schema = _schema([
+        {"id": "a", "name": 7, "type": "text",
+         "help": {"instructions": ["a", "list"], "details": 42}},
+        {"id": "b", "name": "B", "type": "select",
+         "options": [{"value": "x", "label": 9}],
+         "help": {"instructions": "Select the one that applies to you."}},
+        {"id": "c", "name": "C", "type": "text", "help": "not-a-dict"},
+    ])
+    schema["form_metadata"]["booklet_text"] = 42  # non-string floor
+    findings = lint_schema(schema)  # must not raise
+    assert isinstance(findings, list)
+
+
+def test_guidance_metrics_never_throws_on_malformed_values():
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location(
+        "eval_extraction_under_test",
+        REPO / "scripts" / "authoring" / "eval_extraction.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    m = mod.guidance_metrics({
+        "form_metadata": {"booklet_text": 42},
+        "fields": [{"id": "a", "name": 7, "type": "text",
+                    "help": {"instructions": 123, "details": ["x"]}}],
+    })
+    assert m["covered"] == 0 and m["containment_pct"] is None
+
+
 # --- exit criterion: fires on the real w7 kit --------------------------------
 
 def test_w7_kit_coverage_gap_is_flagged():
