@@ -117,12 +117,25 @@ class ContainmentResult:
 
 
 def check_containment(paragraph: str, source_text: str) -> ContainmentResult:
-    """Is `paragraph` a verbatim (normalized) excerpt of `source_text`?"""
+    """Is `paragraph` a verbatim (normalized) excerpt of `source_text`?
+
+    Convenience single-shot form. HOT LOOPS (lint over many details-bearing
+    fields against one booklet) must normalize the source ONCE and call
+    check_containment_normalized -- re-normalizing an 80KB+ booklet per
+    paragraph per field is quadratic and measurably slows the hosted lint
+    route (wsao.3 outer review)."""
+    return check_containment_normalized(
+        paragraph, normalize_for_containment(source_text))
+
+
+def check_containment_normalized(
+        paragraph: str, normalized_source: str) -> ContainmentResult:
+    """check_containment against a source ALREADY passed through
+    normalize_for_containment (the caller normalizes once per source)."""
     p = normalize_for_containment(paragraph)
-    s = normalize_for_containment(source_text)
     if not p:
         return ContainmentResult(True, -1, "")  # empty paragraph: vacuous
-    idx = s.find(p)
+    idx = normalized_source.find(p)
     if idx < 0:
         return ContainmentResult(False, -1, "")
     return ContainmentResult(True, idx, p)
@@ -170,7 +183,9 @@ def is_label_restatement(instructions: str, name: Optional[str],
         " ".join([name or ""] + list(option_labels)))
     residue = instr
     for token in label_blob.split():
-        residue = residue.replace(token, " ")
+        # word-boundary, not substring: a one-letter label token ("a") must
+        # not blank every 'a' inside real guidance (wsao.3 outer review)
+        residue = re.sub(r"\b" + re.escape(token) + r"\b", " ", residue)
     residue = re.sub(
         r"\b(select|enter|choose|your|the|a|an|please|type|check|one|box)\b",
         " ", residue)

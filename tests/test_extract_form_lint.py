@@ -39,8 +39,12 @@ def test_broken_schema_reports_findings_as_plain_dicts():
     }
     report = ef._lint_schema(schema, None)
     assert report["errors"] == 1
-    assert report["warnings"] == 0
-    (finding,) = report["findings"]
+    # help-* guidance findings (bd wsao.3) are a standing WARNING worklist on
+    # guidance-less fixtures -- filter them; this test pins the ERROR shape.
+    findings = [f for f in report["findings"]
+                if not f["rule"].startswith("help-")]
+    assert report["warnings"] == len(report["findings"]) - len(findings)
+    (finding,) = findings
     # JSON-ready plain dict (rides inside the draft written to disk).
     assert finding["severity"] == "ERROR"
     assert finding["rule"] == "unknown-operator"
@@ -99,7 +103,10 @@ def test_dump_reaches_the_widget_claim_rule():
     with_dump = ef._lint_schema(schema, dump)
     assert without_dump["errors"] == 0  # the rule is dump-only
     assert with_dump["errors"] == 1
-    assert with_dump["findings"][0]["rule"] == "dump-widget-multiclaim"
+    # index by rule, not position: the wsao.3 guidance WARNINGs precede the
+    # dump-claim findings in lint order.
+    assert any(f["rule"] == "dump-widget-multiclaim"
+               for f in with_dump["findings"])
 
 
 # --- Translation flag surfacing at extraction (bd polyglot-pdf-9djc) --------

@@ -824,6 +824,7 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
     meta = schema.get("form_metadata")
     booklet = meta.get("booklet_text") if isinstance(meta, dict) else None
     booklet = booklet if isinstance(booklet, str) else ""
+    booklet_norm: Optional[str] = None  # lazily normalized once (perf)
 
     # Coverage is ONE aggregated finding, not per-field: a fresh
     # pre-enrichment draft has no guidance on ANY field, and a per-field rule
@@ -902,8 +903,14 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
                 "cannot run; bake the booklet floor",
             ))
         else:
+            # normalize the (potentially 80KB+) booklet ONCE per schema, not
+            # per paragraph -- quadratic cost on the hosted lint route
+            # otherwise (wsao.3 outer review)
+            if booklet_norm is None:
+                booklet_norm = guidance_contract.normalize_for_containment(booklet)
             for para in guidance_contract.details_paragraphs(details):
-                res = guidance_contract.check_containment(para, booklet)
+                res = guidance_contract.check_containment_normalized(
+                    para, booklet_norm)
                 if not res.contained:
                     head = para[:60].replace("\n", " ")
                     out.append(LintFinding(

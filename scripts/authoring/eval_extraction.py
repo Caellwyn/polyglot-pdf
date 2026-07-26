@@ -377,6 +377,7 @@ def guidance_metrics(schema: dict) -> dict:
     covered = 0
     paras_total = 0
     paras_contained = 0
+    booklet_norm: Optional[str] = None
     for f in askable:
         help_obj = f.get("help") if isinstance(f.get("help"), dict) else {}
         instr = _str(help_obj.get("instructions")).strip()
@@ -391,9 +392,12 @@ def guidance_metrics(schema: dict) -> dict:
                 restatements += 1
         details = _str(help_obj.get("details")).strip()
         if details and booklet:
+            if booklet_norm is None:  # normalize once per schema (perf)
+                booklet_norm = guidance_contract.normalize_for_containment(booklet)
             for para in guidance_contract.details_paragraphs(details):
                 paras_total += 1
-                if guidance_contract.check_containment(para, booklet).contained:
+                if guidance_contract.check_containment_normalized(
+                        para, booklet_norm).contained:
                     paras_contained += 1
 
     lengths.sort()
