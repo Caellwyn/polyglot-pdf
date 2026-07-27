@@ -802,10 +802,20 @@ def write_kit(kit_dir: str, proposals: dict, booklet: str, flags: List[dict],
             continue
         help_obj = f.get("help") if isinstance(f.get("help"), dict) else {}
         rec = prov.get(f.get("id")) or {}
-        cur = help_obj.get("instructions")
-        cur = cur if isinstance(cur, str) else ""
-        machine_owned = (not cur.strip()) or bool(
-            rec and _sha1(cur) == rec.get("instructions_sha1"))
+        # A field is machine-owned only when EVERY channel is blank or
+        # hash-matches its provenance record -- the per-key sha1s exist so a
+        # hand-edited details/format_hint is protected even while
+        # instructions still matches (sprint-16 plan review note c; outer
+        # review finding: checking instructions alone clobbered the rest).
+        machine_owned = True
+        for key in ("instructions", "details", "format_hint"):
+            cur = help_obj.get(key)
+            cur = cur if isinstance(cur, str) else ""
+            if not cur.strip():
+                continue
+            if not (rec and _sha1(cur) == rec.get(key + "_sha1")):
+                machine_owned = False
+                break
         if not machine_owned:
             skipped_human += 1
             continue

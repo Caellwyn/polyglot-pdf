@@ -344,3 +344,46 @@ def test_thin_verdict_on_rectified_field_flags_once(monkeypatch):
     flags = ei.verify_and_rectify(schema, proposals, "BOOKLET", "T", "m")
     mine = [f for f in flags if "id=a" in f["path"]]
     assert len(mine) == 1 and mine[0]["rule"] == "instructions-rectified"
+
+
+def test_write_kit_protects_details_only_human_edit(tmp_path):
+    """The ownership gate covers EVERY channel (outer review finding): a
+    human edit to details alone -- instructions still hash-matching -- must
+    protect the field; and a hand-authored details with blank instructions
+    and no record is human-owned from the start."""
+    import json as _json
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    schema = {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [
+            {"id": "f1", "name": "A", "type": "text"},
+            {"id": "hand_details", "name": "H", "type": "text",
+             "help": {"details": "Curated verbatim excerpt."}},
+        ],
+        "sections": [], "parts": [],
+    }
+    (kit / "schema.json").write_text(_json.dumps(schema), encoding="utf-8")
+    proposals = {"fields": {
+        "f1": {"instructions": "I1.", "details": "D1.", "format_hint": ""},
+        "hand_details": {"instructions": "X.", "details": "Machine D.",
+                         "format_hint": ""}},
+        "form_details": ""}
+    s1 = ei.write_kit(str(kit), proposals, "B", [], "m", "j")
+    saved = _json.loads((kit / "schema.json").read_text(encoding="utf-8"))
+    by_id = {f["id"]: f for f in saved["fields"]}
+    # blank-instructions + hand-authored details, no record => protected
+    assert s1["skipped_human"] == 1
+    assert by_id["hand_details"]["help"]["details"] == \
+        "Curated verbatim excerpt."
+    # now hand-edit ONLY details on the machine-written field
+    by_id["f1"]["help"]["details"] = "Human curated this excerpt."
+    (kit / "schema.json").write_text(_json.dumps(saved), encoding="utf-8")
+    proposals2 = {"fields": {"f1": {"instructions": "I2.", "details": "D2.",
+                                    "format_hint": ""}}, "form_details": ""}
+    s2 = ei.write_kit(str(kit), proposals2, "B", [], "m", "j")
+    saved2 = _json.loads((kit / "schema.json").read_text(encoding="utf-8"))
+    f1 = {f["id"]: f for f in saved2["fields"]}["f1"]
+    assert s2["written"] == 0 and s2["skipped_human"] >= 1
+    assert f1["help"]["details"] == "Human curated this excerpt."
+    assert f1["help"]["instructions"] == "I1."
