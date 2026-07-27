@@ -355,6 +355,10 @@ def run_json_gemini(prompt: str, model: str) -> tuple[dict, dict]:
             max_output_tokens=65535,
         ),
     )
+    if not resp.text:
+        # A safety-blocked/empty candidate otherwise surfaces as an opaque
+        # AttributeError from deep inside the JSON extractor.
+        raise RuntimeError(f"empty gemini response (model={model})")
     obj = _extract_json_loose(resp.text)
     tok = {}
     usage = getattr(resp, "usage_metadata", None)

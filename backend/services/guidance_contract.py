@@ -184,6 +184,8 @@ def clean_booklet_furniture(text: str) -> str:
     fails containment against the raw stream. BOTH sides must use the
     cleaned text: the enrichment engine excerpts from it AND bakes it as the
     metadata.booklet_text floor, so containment stays consistent."""
+    if not isinstance(text, str):  # never-throws contract (module siblings)
+        return ""
     out = []
     for ln in (text or "").splitlines():
         if _FURNITURE_LINE_RE.match(ln.strip()):

@@ -203,6 +203,9 @@ def test_clean_booklet_furniture_strips_sidebars_and_footers_only():
     # a standalone bare-number line would lose it (none observed on w7; the
     # wsao.5 write path inherits this and must revisit if a real kit hits it).
     assert "100" not in gc.clean_booklet_furniture("above\n100\nbelow")
+    # never-throws contract: truthy non-strings coerce to "" like siblings
+    assert gc.clean_booklet_furniture([1, 2]) == ""
+    assert gc.clean_booklet_furniture(42) == ""
 
 
 # --- wsao.8: inline budget clamp + injection budget --------------------------
