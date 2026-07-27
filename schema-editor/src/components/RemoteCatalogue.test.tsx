@@ -110,7 +110,7 @@ describe('RemoteCatalogue', () => {
 
     fireEvent.click(screen.getByText('Mark complete'));
     await waitFor(() =>
-      expect(screen.getByText(/Re-translated 3 drifted translations/)).toBeInTheDocument());
+      expect(screen.getByText(/Refreshed 3 translation entries/)).toBeInTheDocument());
   });
 
   it('surfaces the incomplete-translation refusal (409 "N of M") as the error banner (bd 783r)', async () => {

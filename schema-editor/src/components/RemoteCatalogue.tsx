@@ -233,9 +233,14 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     try {
       const result = await setRemoteStatus(kit.id, status);
       if (status === 'complete') {
+        // result.retranslated counts translation ENTRIES baked (one per
+        // location x language), not distinct drifted strings -- a label shared
+        // by several options across N languages contributes many entries. Word
+        // it as "entries refreshed" so the number is not mistaken for a
+        // drifted-item count (Opus outer-review nit, bd 783r).
         const drift = result.retranslated > 0
-          ? ` Re-translated ${result.retranslated} drifted translation` +
-            `${result.retranslated === 1 ? '' : 's'} first.`
+          ? ` Refreshed ${result.retranslated} translation ` +
+            `entr${result.retranslated === 1 ? 'y' : 'ies'} first.`
           : '';
         setNotice(
           `"${kit.label}" marked complete -- it ships with the maintainer's ` +
