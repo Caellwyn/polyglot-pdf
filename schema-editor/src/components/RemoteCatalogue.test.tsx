@@ -25,7 +25,7 @@ import { RemoteCatalogue } from './RemoteCatalogue';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
-  type RemoteKitEntry,
+  type RemoteKitEntry, type KitStatusResult,
 } from '../utils/remoteKitStore';
 
 const KITS: RemoteKitEntry[] = [
@@ -46,7 +46,11 @@ const SCHEMA = {
 beforeEach(() => {
   vi.mocked(listRemoteKits).mockResolvedValue([...KITS]);
   vi.mocked(loadRemoteSchema).mockResolvedValue(SCHEMA);
-  vi.mocked(setRemoteStatus).mockResolvedValue(undefined);
+  // Default: a clean complete flip with no drift (bd polyglot-pdf-783r). Tests
+  // that exercise the drift notice / refusal override this per-case.
+  vi.mocked(setRemoteStatus).mockResolvedValue({
+    ok: true, status: 'complete', retranslated: 0, translationModel: null,
+  });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -95,6 +99,30 @@ describe('RemoteCatalogue', () => {
     // Refresh happened (list re-requested).
     await waitFor(() => expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
     await waitFor(() => expect(screen.getByText(/marked complete/)).toBeInTheDocument());
+  });
+
+  it('notes the drift sweep in the complete notice when it re-translated (bd 783r)', async () => {
+    vi.mocked(setRemoteStatus).mockResolvedValue({
+      ok: true, status: 'complete', retranslated: 3, translationModel: 'gemini-2.5-pro',
+    });
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Mark complete'));
+    await waitFor(() =>
+      expect(screen.getByText(/Refreshed 3 translation entries/)).toBeInTheDocument());
+  });
+
+  it('surfaces the incomplete-translation refusal (409 "N of M") as the error banner (bd 783r)', async () => {
+    vi.mocked(setRemoteStatus).mockRejectedValue(
+      new Error('10 of 17 language translations complete. Please try again later to finish (retrying only the missing ones).'),
+    );
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Mark complete'));
+    await waitFor(() =>
+      expect(screen.getByText(/10 of 17 language translations complete/)).toBeInTheDocument());
   });
 
   it('surfaces the promote-gate refusal detail (422) as the error banner', async () => {
@@ -358,6 +386,36 @@ describe('RemoteCatalogue extraction progress state (fresh-eyes 92qe.3)', () => 
       await waitFor(() =>
         expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
       expect(screen.queryByText(/Extracting\.\.\./)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('RemoteCatalogue mark-complete drift-sweep ticker (bd 783r)', () => {
+  it('shows the re-translating ticker while the complete sweep runs, then reverts', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let resolveStatus: (r: KitStatusResult) => void = () => {};
+    vi.mocked(setRemoteStatus).mockImplementation(
+      () => new Promise((res) => { resolveStatus = res; }),
+    );
+    try {
+      render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+      await waitFor(() => expect(screen.getByText('Mark complete')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      // Mid-flight: the button shows the elapsed re-translating ticker (the
+      // sweep can take tens of seconds -- a dead button would read as a hang).
+      await waitFor(() =>
+        expect(screen.getByText(/Re-translating & validating\.\.\. \d+s/)).toBeInTheDocument());
+
+      resolveStatus({
+        ok: true, status: 'complete', retranslated: 2, translationModel: 'gemini-2.5-pro',
+      });
+      await waitFor(() =>
+        expect(screen.getByText(/marked complete/)).toBeInTheDocument());
+      // Ticker gone once the flip resolved.
+      expect(screen.queryByText(/Re-translating & validating\.\.\./)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

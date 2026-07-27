@@ -25,6 +25,7 @@ Pins:
 
 ASCII only (scar #6): non-ASCII fixture strings use unicode escapes.
 """
+import asyncio
 import json
 
 import pytest
@@ -164,6 +165,8 @@ async def test_bake_one_call_per_language_over_deduped_missing():
         # Section-label bake keys (bd tupu.2); fixture has no sections.
         "section_labels": 0, "sections_missing": 0,
         "sections_translated": 0, "sections_updated": 0,
+        # Forward-call attempts (bd polyglot-pdf-783r); default no-retry -> 1.
+        "attempts": 1,
     }
 
 
@@ -666,3 +669,205 @@ async def test_totally_failed_scoped_bake_still_surfaces_coverage():
     coverage = [f for f in report.get("flags", [])
                 if f["rule"] == "translation-coverage"]
     assert [f["path"] for f in coverage] == ["coverage.french"]
+
+
+# --- 8. Per-language retry with backoff (bd polyglot-pdf-783r) ------------------
+
+
+@pytest.mark.asyncio
+async def test_bake_retries_a_failing_language_with_backoff(monkeypatch):
+    """A language whose forward call fails twice then succeeds is retried per
+    the attempt_delays, sleeping between tries; the third attempt lands and the
+    language is NOT reported failed. The sleeps are the given delays in order."""
+    slept = []
+
+    async def _fake_sleep(secs):
+        slept.append(secs)
+
+    monkeypatch.setattr(ot.asyncio, "sleep", _fake_sleep)
+
+    schema = _schema([{"id": "sex", "options": [
+        {"value": "M", "label": "Male"},
+        {"value": "F", "label": "Female"},
+    ]}])
+    ai = MagicMock()
+    calls = {"n": 0}
+
+    async def _fail_twice(items, language_name, language_code, *,
+                          form_name=None, glossary_context=None):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return None  # transient failure
+        return _items_response(items, _TRANSLATIONS["spanish"])
+
+    ai.translate_items = AsyncMock(side_effect=_fail_twice)
+    report = await ot.bake_label_translations(
+        schema, ai, {"spanish": "es-US"}, attempt_delays=(1.0, 5.0))
+
+    assert calls["n"] == 3                       # two failures + the success
+    assert slept == [1.0, 5.0]                   # backoff in order
+    assert report["failed_languages"] == []      # recovered
+    assert report["languages"]["spanish"]["attempts"] == 3
+    assert _options(schema, "sex")[0]["label_translations"] == {
+        "spanish": ESPANOL_MASCULINO}
+
+
+@pytest.mark.asyncio
+async def test_bake_retry_exhausted_reports_failed(monkeypatch):
+    """When every attempt fails, the language is reported failed after
+    len(attempt_delays)+1 tries and the schema is left uncovered (the caller's
+    coverage gate then blocks / re-runs)."""
+    async def _fake_sleep(_secs):
+        return None
+
+    monkeypatch.setattr(ot.asyncio, "sleep", _fake_sleep)
+
+    schema = _schema([{"id": "sex", "options": [
+        {"value": "M", "label": "Male"},
+        {"value": "F", "label": "Female"},
+    ]}])
+    ai = MagicMock()
+    ai.translate_items = AsyncMock(return_value=None)  # always fails
+
+    report = await ot.bake_label_translations(
+        schema, ai, {"spanish": "es-US"}, attempt_delays=(1.0, 5.0))
+
+    assert ai.translate_items.await_count == 3    # 1 + 2 retries
+    assert report["failed_languages"] == ["spanish"]
+    assert report["languages"]["spanish"]["attempts"] == 3
+    assert "label_translations" not in _options(schema, "sex")[0]
+
+
+@pytest.mark.asyncio
+async def test_bake_no_retry_by_default_single_attempt(monkeypatch):
+    """attempt_delays defaults to () -- one attempt, no sleep (the pre-783r
+    shape / the runtime path's behavior)."""
+    sleeps = []
+
+    async def _fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(ot.asyncio, "sleep", _fake_sleep)
+
+    schema = _schema([{"id": "sex", "options": [
+        {"value": "M", "label": "Male"},
+    ]}])
+    ai = MagicMock()
+    ai.translate_items = AsyncMock(return_value=None)
+
+    report = await ot.bake_label_translations(schema, ai, {"spanish": "es-US"})
+
+    assert ai.translate_items.await_count == 1
+    assert sleeps == []
+    assert report["languages"]["spanish"]["attempts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_bake_retry_backoff_does_not_starve_a_healthy_language(monkeypatch):
+    """A language stuck in its retry backoff must NOT block a HEALTHY language
+    (criterion 2: languages remain concurrent during retry). Proven by making
+    the retrying language's sleep BLOCK on an event that only the healthy
+    language's completion releases: if the sleep held a concurrency slot or
+    serialized the languages, the healthy call could never run and this
+    deadlocks (caught by the test timeout). Order asserted: the healthy
+    language finishes its translate call BEFORE the retrying language's sleep
+    returns."""
+    healthy_done = asyncio.Event()
+    order = []
+
+    async def _gated_sleep(_secs):
+        # The retrying language parks here until the healthy one has finished --
+        # only possible if the two languages run concurrently (the sleep is
+        # outside the semaphore, so it holds no slot).
+        await healthy_done.wait()
+        order.append("retry-sleep-resumed")
+
+    monkeypatch.setattr(ot.asyncio, "sleep", _gated_sleep)
+
+    schema = _schema([{"id": "sex", "options": [
+        {"value": "M", "label": "Male"},
+        {"value": "F", "label": "Female"},
+    ]}])
+    ai = MagicMock()
+    spanish_calls = {"n": 0}
+
+    async def _mixed(items, language_name, language_code, *,
+                     form_name=None, glossary_context=None):
+        lang = language_name.lower()
+        if lang == "french":
+            # Healthy: succeeds immediately, then releases the gate.
+            order.append("french-done")
+            healthy_done.set()
+            return _items_response(items, {"Male": "Homme", "Female": "Femme"})
+        # Spanish: fail first (-> the language enters the gated sleep), succeed
+        # on the retry that runs only after french released the gate.
+        spanish_calls["n"] += 1
+        if spanish_calls["n"] == 1:
+            return None
+        return _items_response(items, _TRANSLATIONS["spanish"])
+
+    ai.translate_items = AsyncMock(side_effect=_mixed)
+    report = await asyncio.wait_for(
+        ot.bake_label_translations(
+            schema, ai, {"spanish": "es-US", "french": "fr-FR"},
+            attempt_delays=(1.0,)),
+        timeout=5.0,  # a serialized/slot-holding sleep would deadlock -> timeout
+    )
+
+    # French finished while Spanish was parked in its backoff -> concurrent.
+    assert order[0] == "french-done"
+    assert "retry-sleep-resumed" in order
+    assert report["failed_languages"] == []
+    assert report["languages"]["french"]["failed"] is False
+    assert report["languages"]["spanish"]["attempts"] == 2
+
+
+# --- 9. Whole-kit coverage summary for the completion gate (bd 783r) -----------
+
+
+def test_coverage_summary_empty_kit_is_trivially_complete():
+    """A kit with nothing to translate is complete (never traps it in draft)."""
+    summary = ot.translation_coverage_summary({"fields": [], "sections": []})
+    assert summary.complete
+    assert summary.incomplete_languages == []
+    assert summary.covered_languages == summary.total_languages
+
+
+@pytest.mark.asyncio
+async def test_coverage_summary_flags_a_partially_covered_kit():
+    """A kit missing ONE language is incomplete, names that language, and the
+    N-of-M message counts it."""
+    schema = _schema([{"id": "sex", "type": "radio", "options": [
+        {"value": "M", "label": "Male"},
+        {"value": "F", "label": "Female"},
+    ]}])
+    # Cover every supported language EXCEPT one.
+    langs = {n: c for n, c in ot.SPOKEN_LANGUAGE_BCP47.items() if n != "english"}
+    dropped = sorted(langs)[0]
+    await ot.bake_label_translations(
+        schema, _items_ai({n: {"Male": "x", "Female": "y"} for n in langs}),
+        {n: c for n, c in langs.items() if n != dropped})
+
+    summary = ot.translation_coverage_summary(schema)
+    assert not summary.complete
+    assert summary.incomplete_languages == [dropped]
+    assert summary.covered_languages == summary.total_languages - 1
+    assert "%d of %d" % (summary.total_languages - 1, summary.total_languages) \
+        in summary.message()
+
+
+@pytest.mark.asyncio
+async def test_coverage_summary_complete_after_full_bake():
+    """A fully baked kit reads complete across every supported language."""
+    schema = _schema([{"id": "sex", "type": "radio", "options": [
+        {"value": "M", "label": "Male"},
+        {"value": "F", "label": "Female"},
+    ]}])
+    langs = {n: c for n, c in ot.SPOKEN_LANGUAGE_BCP47.items() if n != "english"}
+    await ot.bake_label_translations(
+        schema, _items_ai({n: {"Male": "x", "Female": "y"} for n in langs}),
+        langs)
+
+    summary = ot.translation_coverage_summary(schema)
+    assert summary.complete
+    assert summary.covered_languages == summary.total_languages

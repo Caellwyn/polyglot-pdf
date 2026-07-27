@@ -40,7 +40,10 @@ from backend.services.translation_verify import (
     VerifyFlag,
     verify_fresh_translations,
 )
-from backend.utils.language_codes import bcp47_codes_for_spoken_language
+from backend.utils.language_codes import (
+    SPOKEN_LANGUAGE_BCP47,
+    bcp47_codes_for_spoken_language,
+)
 
 # The translator's own under-determined-source self-flag (bd polyglot-pdf-alry;
 # the flag taxonomy's fourth kind -- usually fixed by enriching context or the
@@ -53,6 +56,20 @@ _log = structlog.get_logger(__name__)
 # call). A build that blows it fails -- uncached -- and the session runs on
 # English labels; the next session retries.
 OPTION_TRANSLATION_TIMEOUT_S = 20.0
+
+# Per-language retry backoff for the authoring bake (bd polyglot-pdf-783r): when
+# a language's forward translate_items call fails (returns None or raises), wait
+# and retry, so a transient blip self-heals inside ONE bake instead of leaving a
+# gap the caller must re-run. The delays run PER LANGUAGE inside _bake_one, so
+# languages stay concurrent -- a slow-to-recover language sleeps while the others
+# are already done; total added wall-clock for one bad language is ~sum(delays),
+# not delays x language-count. The default (1s then 5s -> 3 attempts total) is
+# the maintainer-set completion-gate policy. The RUNTIME path
+# (build_translation_overrides / get_translation_overrides) does NOT use this --
+# the session-start greeting has a hard OPTION_TRANSLATION_TIMEOUT_S bound a
+# multi-second backoff would blow; it fails open to English and the next session
+# retries. attempt_delays=() disables retry (the pre-783r single-attempt shape).
+TRANSLATE_RETRY_DELAYS: Tuple[float, ...] = (1.0, 5.0)
 
 # (form_id, language-lowercase) -> the in-flight/completed build task. Module
 # level on purpose: the translation of a form's labels into a language is
@@ -199,6 +216,7 @@ async def bake_label_translations(
     verify: Optional[bool] = None,
     verify_lite_ai: Any = None,
     glossary: Optional[Dict[str, Any]] = None,
+    attempt_delays: Tuple[float, ...] = (),
 ) -> Dict[str, Any]:
     """Bake label_translations into a kit schema, in place (bd polyglot-pdf-2h9j).
 
@@ -220,7 +238,13 @@ async def bake_label_translations(
     Per-language failures (translate_items -> None, or an adapter exception)
     skip that language and continue -- one flaky language must not cost the
     rest; the report's failed_languages drives the caller's exit code and an
-    idempotent re-run fills the gap. Returns a JSON-ready report:
+    idempotent re-run fills the gap. `attempt_delays` (bd polyglot-pdf-783r)
+    adds in-bake retry: on a failed forward call the language sleeps
+    attempt_delays[0], retries, sleeps attempt_delays[1], retries, ... so a
+    transient blip self-heals inside ONE bake. The sleeps run PER LANGUAGE
+    inside each _bake_one task, so languages stay concurrent (see
+    TRANSLATE_RETRY_DELAYS). Default () = one attempt (the pre-783r shape); the
+    completion gate passes TRANSLATE_RETRY_DELAYS. Returns a JSON-ready report:
     {"changed": bool, "failed_languages": [...],
      "languages": {name: {labels, missing, translated, options_updated, failed}}}.
 
@@ -267,6 +291,11 @@ async def bake_label_translations(
             # on it).
             "section_labels": 0, "sections_missing": 0,
             "sections_translated": 0, "sections_updated": 0,
+            # Forward-call attempts made for this language (bd
+            # polyglot-pdf-783r): 1 when it succeeds first try, up to
+            # len(attempt_delays)+1 when it retried. 0 when nothing to
+            # translate (union_missing empty).
+            "attempts": 0,
         }
         report["languages"][name] = entry
         if name == "english":  # labels are already English; nothing to bake
@@ -308,20 +337,38 @@ async def bake_label_translations(
             # questions, and option sets as units, glossary injected.
             payload_items = _build_context_items(
                 schema, missing, names_missing, sections_missing)
-            try:
-                async with semaphore:
-                    raw = await text_ai.translate_items(
-                        payload_items, name.capitalize(), code,
-                        form_name=form_name,
-                        glossary_context=glossary_prompt_context(
-                            glossary, name),
+            # Per-language retry with backoff (bd polyglot-pdf-783r): attempt
+            # the forward call, and on failure (None result OR an exception)
+            # sleep the next delay and retry. The sleeps sit INSIDE this
+            # language's task and OUTSIDE the semaphore, so a recovering
+            # language does not hold a concurrency slot while it waits and the
+            # other languages keep flowing. delays=() -> one attempt.
+            raw = None
+            for attempt in range(len(attempt_delays) + 1):
+                if attempt > 0:
+                    await asyncio.sleep(attempt_delays[attempt - 1])
+                    _log.info(
+                        "option_translation_bake_language_retry",
+                        language=name, attempt=attempt + 1,
                     )
-            except Exception as exc:  # noqa: BLE001 -- skip-and-report by design
-                _log.warning(
-                    "option_translation_bake_language_failed",
-                    language=name, exc_type=type(exc).__name__,
-                )
-                raw = None
+                entry["attempts"] = attempt + 1
+                try:
+                    async with semaphore:
+                        raw = await text_ai.translate_items(
+                            payload_items, name.capitalize(), code,
+                            form_name=form_name,
+                            glossary_context=glossary_prompt_context(
+                                glossary, name),
+                        )
+                except Exception as exc:  # noqa: BLE001 -- skip-and-report by design
+                    _log.warning(
+                        "option_translation_bake_language_failed",
+                        language=name, exc_type=type(exc).__name__,
+                        attempt=attempt + 1,
+                    )
+                    raw = None
+                if raw is not None:
+                    break
             translated, ambiguous_sources = _flatten_items_result(
                 payload_items, raw)
             # Ambiguous self-flags ride the same report channel as verify
@@ -730,6 +777,62 @@ def _flatten_items_result(
         else:
             ambiguous_sources.append(request["text"])
     return flat, ambiguous_sources
+
+
+@dataclass(frozen=True)
+class CoverageSummary:
+    """Whole-kit translation coverage across the supported spoken languages
+    (bd polyglot-pdf-783r). The Mark-complete gate uses this to decide whether
+    every drifted/absent translation has been filled: `complete` is the pass
+    signal, `incomplete_languages` names the ones still missing at least one
+    string, and (covered, total) build the editor-facing "N of M" message.
+
+    A kit with NO translatable items at all (no options, no spoken names, no
+    section labels) is trivially complete (total gap is 0) -- there is nothing
+    to translate, so it never traps such a kit in draft."""
+
+    total_languages: int          # supported spoken languages minus english
+    covered_languages: int        # of those, the ones with FULL coverage
+    incomplete_languages: List[str]  # sorted names still missing a string
+
+    @property
+    def complete(self) -> bool:
+        return not self.incomplete_languages
+
+    def message(self) -> str:
+        """The editor-facing progress line for a blocked completion."""
+        return (
+            "%d of %d language translations complete. Please try again later "
+            "to finish (retrying only the missing ones)."
+            % (self.covered_languages, self.total_languages)
+        )
+
+
+def translation_coverage_summary(
+    schema: Optional[Dict[str, Any]],
+) -> CoverageSummary:
+    """Coverage of a kit schema over EVERY supported spoken language (bd
+    polyglot-pdf-783r). Built on translation_lint.coverage_findings with
+    attempted=True, so a kit whose translations all failed reads as incomplete
+    (loud) rather than silently passing as an untranslated draft would. Returns
+    total=covered=0 with no incomplete languages when the kit has nothing to
+    translate."""
+    supported = sorted(n for n in SPOKEN_LANGUAGE_BCP47 if n != "english")
+    findings = coverage_findings(schema, None, attempted=True)
+    # coverage_findings emits one finding per incomplete language, path
+    # "coverage.<lang>"; empty means either fully covered OR nothing to
+    # translate. Recover the incomplete language names from the paths.
+    incomplete = sorted(
+        f.path.split(".", 1)[1]
+        for f in findings
+        if f.path.startswith("coverage.")
+    )
+    total = len(supported)
+    return CoverageSummary(
+        total_languages=total,
+        covered_languages=total - len(incomplete),
+        incomplete_languages=incomplete,
+    )
 
 
 @dataclass(frozen=True)

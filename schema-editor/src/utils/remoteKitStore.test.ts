@@ -162,8 +162,12 @@ describe('endpoints', () => {
   });
 
   it('setRemoteStatus POSTs the status and surfaces the promote-gate detail', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
-    await setRemoteStatus('i-90', 'complete');
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ok: true, status: 'complete', retranslated: 2, translationModel: 'gemini-2.5-pro',
+    }));
+    // The sweep summary round-trips to the caller (bd polyglot-pdf-783r).
+    const result = await setRemoteStatus('i-90', 'complete');
+    expect(result.retranslated).toBe(2);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/editor/kits/i-90/status');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ status: 'complete' });

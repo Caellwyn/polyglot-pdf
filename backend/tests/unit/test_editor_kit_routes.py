@@ -103,7 +103,12 @@ def _make_kit(root, kit_id, *, status="draft", schema=None, label=None, extra_me
 def client(tmp_path, monkeypatch):
     """A TestClient over ONLY the editor router, with a LocalFormKitStore on a
     tmp dir and both tokens configured. Auth runs through the real dependency
-    wiring (no override), so 401/503 behavior is the deployed behavior."""
+    wiring (no override), so 401/503 behavior is the deployed behavior.
+
+    The Mark-complete drift sweep (bd polyglot-pdf-783r) is stubbed to a clean
+    no-op here so the OTHER gate tests (validate/lint/v2/PDF) exercise their own
+    concern without a real model call or a translation block; the sweep has its
+    own dedicated tests that un-patch it."""
     app = FastAPI()
     app.include_router(ekr.router)
     store = LocalFormKitStore(tmp_path)
@@ -111,6 +116,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(
         ekr, "get_settings", lambda: _settings(editor="edit-tok", author="auth-tok")
     )
+
+    async def _no_drift(_store, _kit_id, _schema, _schema_file):
+        return 0, None
+
+    monkeypatch.setattr(ekr, "_sweep_drifted_translations", _no_drift)
     return TestClient(app), store, tmp_path
 
 
@@ -1050,6 +1060,172 @@ def test_status_flip_preserves_other_metadata(client):
     assert meta["status"] == "complete"
     assert meta["label"] == "Form I-90"          # preserved
     assert meta["description"] == "Green card"   # preserved
+
+
+# --- POST status: the drift re-translation sweep (bd polyglot-pdf-783r) ------
+#
+# The client fixture stubs _sweep_drifted_translations to a no-op so the gate
+# tests above are unaffected; these un-patch it and instead mock the sweep's
+# INNER pieces (the TextAIGemini construction + bake_label_translations) so the
+# real coverage gate runs against the swept schema, with NO live model call.
+
+# The supported-language count the coverage gate spans (drives the "N of M"
+# message). Imported from the same source the gate uses so this never drifts.
+from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47  # noqa: E402
+
+_SUPPORTED = [n for n in SPOKEN_LANGUAGE_BCP47 if n != "english"]
+
+# Captured at import BEFORE any fixture can patch it, so _unstub_sweep can
+# restore the genuine implementation (the client fixture replaces the module
+# attribute with a no-op for the OTHER gate tests).
+_REAL_SWEEP = ekr._sweep_drifted_translations
+
+
+def _unstub_sweep(monkeypatch):
+    """Restore the real _sweep_drifted_translations (the client fixture stubbed
+    it) and neutralize the model-client constructor so no live call happens."""
+    monkeypatch.setattr(ekr, "_sweep_drifted_translations", _REAL_SWEEP)
+    monkeypatch.setattr(ekr, "TextAIGemini", lambda **kw: SimpleNamespace())
+
+
+def _cover_all(schema, languages):
+    """Fake-bake fan-out: write a translation for EVERY translatable item
+    (spoken names + section labels + option labels) in each of `languages`, so
+    the real coverage gate sees the kit fully covered -- matching what the real
+    bake does across all three classes (a fake that filled only spoken names
+    would leave section labels uncovered and wrongly trip the gate)."""
+    for field in schema.get("fields", []):
+        if field.get("spoken_name") or field.get("name"):
+            field["spoken_name_translations"] = {n: "traducido" for n in languages}
+        for opt in field.get("options") or []:
+            if opt.get("label"):
+                opt["label_translations"] = {n: "traducido" for n in languages}
+    for section in schema.get("sections", []):
+        if section.get("label"):
+            section["label_translations"] = {n: "traducido" for n in languages}
+
+
+def test_mark_complete_runs_the_drift_sweep_then_completes(client, monkeypatch):
+    """A drifted spoken name (source present, translations dropped) is filled by
+    the sweep, and the response reports the count; status flips to complete."""
+    c, _store, root = client
+    _unstub_sweep(monkeypatch)
+    _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA, label="I-90")
+
+    async def _fake_bake(schema, _text_ai, languages, **_kw):
+        # Simulate a full, successful bake: fan the spoken name AND the section
+        # label out to every supported language so the coverage gate passes
+        # (coverage spans every translatable item, section labels included).
+        _cover_all(schema, languages)
+        return {
+            "changed": True, "failed_languages": [],
+            "languages": {n: {"fields_updated": 1, "options_updated": 0,
+                              "sections_updated": 1} for n in languages},
+        }
+
+    monkeypatch.setattr(ekr, "bake_label_translations", _fake_bake)
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.json()
+    body = r.json()
+    assert body["status"] == "complete"
+    # One spoken name + one section label, each x every language.
+    assert body["retranslated"] == 2 * len(_SUPPORTED)
+    assert body["translationModel"] == "gemini-2.5-pro"
+    # The swept translations were persisted.
+    saved = json.loads((root / "i-90" / "schema.json").read_text())
+    assert saved["fields"][0]["spoken_name_translations"]
+    assert json.loads((root / "i-90" / "metadata.json").read_text())["status"] \
+        == "complete"
+
+
+def test_mark_complete_blocked_when_coverage_incomplete(client, monkeypatch):
+    """A sweep that leaves some language uncovered REFUSES completion with the
+    'N of M' message, and the kit stays draft. (The idempotent retry-only-gaps
+    property is proven at the service-unit level by
+    test_bake_only_missing_is_idempotent.)"""
+    c, _store, root = client
+    _unstub_sweep(monkeypatch)
+    _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA, label="I-90")
+
+    async def _partial_bake(schema, _text_ai, languages, **_kw):
+        # Cover all but ONE language (simulate a language whose batch failed).
+        covered = {n: c for n, c in languages.items() if n != _SUPPORTED[0]}
+        _cover_all(schema, covered)
+        return {
+            "changed": True, "failed_languages": [_SUPPORTED[0]],
+            "languages": {n: {"fields_updated": 1, "options_updated": 0,
+                              "sections_updated": 1} for n in covered},
+        }
+
+    monkeypatch.setattr(ekr, "bake_label_translations", _partial_bake)
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert "language translations complete" in detail
+    assert "%d of %d" % (len(_SUPPORTED) - 1, len(_SUPPORTED)) in detail
+    # Stayed a draft -- the completion was refused.
+    assert json.loads((root / "i-90" / "metadata.json").read_text())["status"] \
+        == "draft"
+
+
+def test_mark_complete_blocked_when_translation_unconfigured(client, monkeypatch):
+    """No Gemini auth -> the sweep cannot run; completion is refused with the
+    maintainer-contact message (a config issue, not an editor one)."""
+    c, _store, root = client
+    _unstub_sweep(monkeypatch)
+    # No key AND not Vertex -> the sweep's auth gate fails.
+    monkeypatch.setattr(
+        ekr, "get_settings",
+        lambda: _settings(editor="edit-tok", author="auth-tok",
+                          GEMINI_API_KEY=None, VERTEXAI=False),
+    )
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA, label="I-90")
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 503
+    assert "josh@caellwynai.com" in r.json()["detail"]
+    assert json.loads((root / "i-90" / "metadata.json").read_text())["status"] \
+        == "draft"
+
+
+def test_mark_complete_sweep_is_noop_when_fully_translated(client, monkeypatch):
+    """A kit already fully translated triggers ZERO model work: bake reports no
+    change, retranslated is 0, and completion proceeds."""
+    c, _store, root = client
+    _unstub_sweep(monkeypatch)
+    pre_translated = json.loads(json.dumps(VALID_SCHEMA))
+    # Fully covered ALREADY (spoken name + section label) across every language.
+    _cover_all(pre_translated, {n: n for n in _SUPPORTED})
+    _make_kit(root, "i-90", status="draft", schema=pre_translated, label="I-90")
+
+    called = {"n": 0}
+
+    async def _noop_bake(schema, _text_ai, languages, **_kw):
+        called["n"] += 1
+        # only_missing over a fully-covered kit changes nothing.
+        return {"changed": False, "failed_languages": [], "languages": {}}
+
+    monkeypatch.setattr(ekr, "bake_label_translations", _noop_bake)
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 200, r.json()
+    assert r.json()["retranslated"] == 0
+    assert called["n"] == 1  # the bake is invoked, but reports no change
 
 
 # --- POST /kits/{kit_id}/label (rename the display label, bd 15ic) ---------- #
