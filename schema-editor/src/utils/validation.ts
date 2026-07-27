@@ -169,7 +169,17 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
 }
 
 /**
- * Get completion statistics for schema
+ * Get completion statistics for schema.
+ *
+ * Counts the EFFECTIVE status so a human review sign-off is reflected in the
+ * same numbers the FieldList icons show (bd polyglot-pdf-u8t6): a field marked
+ * reviewed_correct counts as complete even if its automatic derivation is amber,
+ * and a needs_followup field counts as needs-review. A real ERROR (local
+ * completeness) is neither -- it counts toward total but not complete/needsReview,
+ * exactly as before. The layering is inlined (not imported from reviewStatus.ts)
+ * to keep validation.ts free of a reviewStatus <-> validation import cycle; the
+ * ordering mirrors reviewStatus.effectiveStatus (error wins, then the review
+ * status governs the green-vs-amber band).
  */
 export function getCompletionStats(schema: FormSchema): {
   complete: number;
@@ -182,7 +192,14 @@ export function getCompletionStats(schema: FormSchema): {
 
   for (const field of schema.fields) {
     const status = checkFieldComplete(field);
-    if (status.isComplete) {
+    // Red always wins: an ERROR field is neither complete nor needs-review.
+    if (status.errors.length > 0) continue;
+    const review = (field as { _review?: { status?: string } })._review?.status;
+    if (review === 'needs_followup') {
+      needsReview++;
+    } else if (review === 'reviewed_correct') {
+      complete++;
+    } else if (status.isComplete) {
       complete++;
     } else if (status.needsReview) {
       needsReview++;

@@ -187,19 +187,24 @@ export const FieldList: React.FC<FieldListProps> = ({
     const status = checkFieldComplete(field);
     const lint = lintFindingsByField?.get(field.id) ?? [];
     const review = getReview(field);
+    // Cap the note in the native tooltip: the editor's notes textarea is
+    // uncapped, and a multi-KB note would make an unwieldy title (fresh-eyes).
+    // The full note is always visible in the FieldEditor's Review box.
+    const noteForTooltip = (n: string) =>
+      n.length > 200 ? `${n.slice(0, 200)}...` : n;
     const reviewMessages: string[] = [];
     if (review.status === 'needs_followup') {
       reviewMessages.push(
-        review.note ? `Needs follow-up: ${review.note}` : 'Marked needs follow-up',
+        review.note ? `Needs follow-up: ${noteForTooltip(review.note)}` : 'Marked needs follow-up',
       );
     } else if (review.status === 'reviewed_correct') {
       // A signed-off field shows green; surface the sign-off (and any note) so
       // the tooltip still explains WHY it is green rather than looking untouched.
       reviewMessages.push(
-        review.note ? `Reviewed - correct: ${review.note}` : 'Reviewed - correct',
+        review.note ? `Reviewed - correct: ${noteForTooltip(review.note)}` : 'Reviewed - correct',
       );
     } else if (review.note) {
-      reviewMessages.push(`Note: ${review.note}`);
+      reviewMessages.push(`Note: ${noteForTooltip(review.note)}`);
     }
     return [
       ...reviewMessages,

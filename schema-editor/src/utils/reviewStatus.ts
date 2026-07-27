@@ -57,17 +57,19 @@ export function withReviewStatus(field: FormField, status: FieldReviewStatus): F
 }
 
 /**
- * Set (or clear) a field's review note, returning a NEW field. An empty note on
- * an otherwise-neutral field drops the _review key so it serializes clean.
+ * Set (or clear) a field's review note, returning a NEW field. A whitespace-only
+ * note counts as empty (so it never lands as a "   " tooltip); an empty note on
+ * an otherwise-neutral field drops the _review key so it serializes clean. The
+ * note is stored AS TYPED (internal spacing preserved) once it has real content.
  */
 export function withReviewNote(field: FormField, note: string): FormField {
   const status = getReview(field).status;
-  const trimmed = note;
-  if (status === 'unreviewed' && !trimmed.trim()) {
+  const hasContent = note.trim().length > 0;
+  if (status === 'unreviewed' && !hasContent) {
     const { _review, ...rest } = field;
     return rest;
   }
-  return { ...field, _review: { status, ...(trimmed ? { note: trimmed } : {}) } };
+  return { ...field, _review: { status, ...(hasContent ? { note } : {}) } };
 }
 
 /**

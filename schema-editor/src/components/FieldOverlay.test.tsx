@@ -143,6 +143,65 @@ describe('FieldOverlay', () => {
       expect(overlay.style.border).toContain('rgb(248, 113, 113)'); // red-400
     });
 
+    it('should turn a reviewed_correct auto-amber field green (bd u8t6)', () => {
+      // Missing spoken name = auto-amber; the sign-off must green the overlay
+      // to agree with the FieldList row, not leave it yellow.
+      const field = createMockField({
+        spoken_name: '',
+        _review: { status: 'reviewed_correct' },
+      });
+
+      const { container } = render(
+        <FieldOverlay
+          field={field}
+          pageHeight={mockPageHeight}
+          scale={mockScale}
+          isSelected={false}
+        />
+      );
+
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.border).toContain('rgb(74, 222, 128)'); // green-400
+    });
+
+    it('should keep a real ERROR field red even when reviewed_correct (bd u8t6)', () => {
+      const field = createMockField({
+        id: '', // missing id = local ERROR
+        _review: { status: 'reviewed_correct' },
+      });
+
+      const { container } = render(
+        <FieldOverlay
+          field={field}
+          pageHeight={mockPageHeight}
+          scale={mockScale}
+          isSelected={false}
+        />
+      );
+
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.border).toContain('rgb(248, 113, 113)'); // red-400
+    });
+
+    it('should show a needs_followup field in the yellow band (bd u8t6)', () => {
+      const field = createMockField({
+        // otherwise auto-complete; the human flag alone drives the color
+        _review: { status: 'needs_followup' },
+      });
+
+      const { container } = render(
+        <FieldOverlay
+          field={field}
+          pageHeight={mockPageHeight}
+          scale={mockScale}
+          isSelected={false}
+        />
+      );
+
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.border).toContain('rgb(250, 204, 21)'); // yellow-400
+    });
+
     it('should have thicker border when selected', () => {
       const field = createMockField();
 

@@ -110,6 +110,22 @@ describe('reviewStatus write helpers serialize clean', () => {
     expect('_review' in cleared).toBe(false);
   });
 
+  it('a whitespace-only note counts as empty (no "   " stored)', () => {
+    // On a flagged field, a whitespace-only note must not survive as the note --
+    // else the tooltip renders "Needs follow-up:    " instead of the default.
+    const flagged = withReviewStatus(completeField(), 'needs_followup');
+    const noted = withReviewNote(flagged, '   ');
+    expect(noted._review).toEqual({ status: 'needs_followup' });
+    // On a neutral field, whitespace-only clears the key entirely.
+    const neutral = withReviewNote(completeField(), '  \n ');
+    expect('_review' in neutral).toBe(false);
+  });
+
+  it('preserves internal spacing once a note has real content', () => {
+    const noted = withReviewNote(completeField(), 'line one\n  line two');
+    expect(noted._review?.note).toBe('line one\n  line two');
+  });
+
   it('a status change preserves an existing note', () => {
     const noted = withReviewNote(completeField(), 'see comment');
     const flagged = withReviewStatus(noted, 'needs_followup');

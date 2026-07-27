@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkFieldComplete, validateSchema } from './validation';
+import { checkFieldComplete, getCompletionStats, validateSchema } from './validation';
 import type { FormSchema, FormField } from '../types/schema';
 
 // Minimal valid field; override per test. read_only/pdf_field_name are the
@@ -203,5 +203,45 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
     const clean = checkFieldComplete(field('done', complete as Partial<FormField>));
     expect(clean.reviewReasons).toEqual([]);
     expect(clean.isComplete).toBe(true);
+  });
+});
+
+describe('getCompletionStats reflects human review status (bd u8t6)', () => {
+  const complete = { spoken_name: 'spoken', help: { instructions: 'Done.' } };
+
+  it('counts a reviewed_correct auto-amber field as complete', () => {
+    // A bare field is auto-amber (no spoken name / help). Signing it off should
+    // move it from needsReview into complete, matching the FieldList green icon.
+    const stats = getCompletionStats(schemaWith([
+      field('amber', { _review: { status: 'reviewed_correct' } } as Partial<FormField>),
+    ]));
+    expect(stats).toMatchObject({ complete: 1, needsReview: 0, total: 1, percentage: 100 });
+  });
+
+  it('counts a needs_followup field as needs-review even when auto-complete', () => {
+    const stats = getCompletionStats(schemaWith([
+      field('ok', { ...complete, _review: { status: 'needs_followup' } } as Partial<FormField>),
+    ]));
+    expect(stats).toMatchObject({ complete: 0, needsReview: 1, total: 1 });
+  });
+
+  it('never counts a real ERROR field as complete, even when reviewed_correct', () => {
+    // No pdf_field_name -> local ERROR. A sign-off must not green it in the stats
+    // any more than in the list icon (error always wins).
+    const stats = getCompletionStats(schemaWith([
+      field('broken', {
+        ...complete, pdf_field_name: undefined,
+        _review: { status: 'reviewed_correct' },
+      } as Partial<FormField>),
+    ]));
+    expect(stats).toMatchObject({ complete: 0, needsReview: 0, total: 1 });
+  });
+
+  it('unreviewed fields keep the automatic counting', () => {
+    const stats = getCompletionStats(schemaWith([
+      field('done', complete as Partial<FormField>),
+      field('amber', {} as Partial<FormField>),
+    ]));
+    expect(stats).toMatchObject({ complete: 1, needsReview: 1, total: 2, percentage: 50 });
   });
 });
