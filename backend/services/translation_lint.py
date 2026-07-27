@@ -635,7 +635,18 @@ def coverage_findings(
     missing_examples: Dict[str, List[str]] = {lang: [] for lang in languages}
     for path_base, tmap in _iter_translation_items(schema):
         total += 1
-        resolved = {_resolve_language_key(k) for k in tmap}
+        # Count a language covered only when its value is a NON-EMPTY string
+        # (parity with option_translation._kit_translation, bd polyglot-pdf-z3rs):
+        # keying on mere PRESENCE let a hand-authored empty ({"spanish": ""}) --
+        # which the bake's fresh-value filter never fills -- pass the hard
+        # completion gate (bd 783r) as "covered", shipping a form that speaks the
+        # ENGLISH label in that session. An empty/whitespace/non-string value is
+        # not a translation, so it does not count.
+        resolved = {
+            _resolve_language_key(k)
+            for k, v in tmap.items()
+            if isinstance(v, str) and v.strip()
+        }
         for lang in languages:
             if lang in resolved:
                 covered[lang] += 1
