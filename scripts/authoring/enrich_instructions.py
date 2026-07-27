@@ -297,6 +297,7 @@ def repair_details_contiguity(details: str, booklet_norm: str) -> tuple[str, Lis
 
 def enrich(kit_dir: str, instructions_pdf: Optional[str], model: str,
            chunk_size: int) -> dict:
+    """File-I/O wrapper around enrich_schema (the CLI path)."""
     schema_path = os.path.join(kit_dir, "schema.json")
     with open(schema_path, encoding="utf-8") as fh:
         schema = json.load(fh)
@@ -304,10 +305,19 @@ def enrich(kit_dir: str, instructions_pdf: Optional[str], model: str,
     if not booklet_path:
         raise SystemExit(f"no instructions booklet found in {kit_dir} "
                          f"(pass --instructions-pdf)")
-    booklet = booklet_text(booklet_path)
-    fields = askable_fields(schema)
     form_name = ((schema.get("form_metadata") or {}).get("title")
                  or os.path.basename(kit_dir))
+    result = enrich_schema(schema, booklet_text(booklet_path), form_name,
+                           model, chunk_size)
+    result["booklet"] = booklet_path
+    return result
+
+
+def enrich_schema(schema: dict, booklet: str, form_name: str, model: str,
+                  chunk_size: int) -> dict:
+    """The in-memory authoring core (bd wsao.6: the pipeline stage calls this
+    directly on the draft dict; the CLI wraps it with file loading)."""
+    fields = askable_fields(schema)
 
     runner = llm_providers.resolve_json_runner(model)
     proposals: Dict[str, Any] = {"fields": {}, "form_details": ""}
@@ -347,9 +357,8 @@ def enrich(kit_dir: str, instructions_pdf: Optional[str], model: str,
 
     return {
         "contiguity_dropped": dropped_report,
-        "kit": kit_dir,
+        "form_name": form_name,
         "model": model,
-        "booklet": booklet_path,
         "booklet_chars": len(booklet),
         "proposals": proposals,
         "tokens": tokens,
@@ -802,13 +811,31 @@ def write_kit(kit_dir: str, proposals: dict, booklet: str, flags: List[dict],
     with open(schema_path, encoding="utf-8") as fh:
         schema = json.load(fh)
 
+    tu_map: Dict[str, str] = {}
+    pdf_path = os.path.join(kit_dir, "form.pdf")
+    if os.path.exists(pdf_path):
+        tu_map = tu_map_from_pdf(pdf_path)
+
+    summary = apply_proposals(schema, proposals, booklet, flags,
+                              model, judge_model, tu_map=tu_map)
+    with open(schema_path, "w", encoding="utf-8") as fh:
+        json.dump(schema, fh, indent=2, ensure_ascii=False)
+    return summary
+
+
+def apply_proposals(schema: dict, proposals: dict, booklet: str,
+                    flags: List[dict], model: str, judge_model: str,
+                    tu_map: Optional[Dict[str, str]] = None) -> dict:
+    """The in-memory provenance-guarded apply (bd wsao.6: shared by write_kit
+    and the extract() pipeline stage). Mutates `schema` in place -- fields,
+    form_metadata, and the _bakeoff.authoring.instructions_enrich block --
+    and returns the write summary."""
     bakeoff = schema.setdefault("_bakeoff", {}).setdefault("authoring", {})
     prior = bakeoff.get("instructions_enrich") or {}
     prov: Dict[str, dict] = dict(prior.get("provenance") or {})
 
-    pdf_path = os.path.join(kit_dir, "form.pdf")
-    if os.path.exists(pdf_path) and not prov:
-        prov.update(bootstrap_provenance(schema, tu_map_from_pdf(pdf_path)))
+    if tu_map and not prov:
+        prov.update(bootstrap_provenance(schema, tu_map))
 
     written = skipped_human = 0
     for f in schema.get("fields", []):
@@ -862,8 +889,6 @@ def write_kit(kit_dir: str, proposals: dict, booklet: str, flags: List[dict],
         "booklet_sha1": _sha1(booklet),
         "provenance": prov, "flags": flags,
     }
-    with open(schema_path, "w", encoding="utf-8") as fh:
-        json.dump(schema, fh, indent=2, ensure_ascii=False)
     return {"written": written, "skipped_human": skipped_human,
             "flags": len(flags)}
 

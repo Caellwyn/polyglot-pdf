@@ -951,13 +951,72 @@ def _translation_flag_summary(report: dict) -> str | None:
             f"human-review worklist)")
 
 
+def _enrich_guidance(schema: dict, pdf_path: str,
+                     instructions_pdf: str | None,
+                     name_to_tu: dict[str, str],
+                     model: str | None = None) -> dict:
+    """The sprint-16 guidance-enrichment stage (bd wsao.6): author
+    help.instructions/details/format_hint + the form-level details from the
+    official booklet, judge + rectify (KEEP rule), and apply under the
+    provenance guard -- all via scripts/authoring/enrich_instructions.py.
+
+    FAIL-OPEN by contract, mirroring _bake_option_translations: extraction
+    NEVER fails because enrichment failed. When the LLM stage is unavailable
+    (no authoring model, no booklet-judge credentials -> the engine's KEEP
+    rule already empties unverified text) or raises, the pre-wsao naive
+    substring match (_enrich_instructions_from_pdf) runs as the fallback so
+    an explicit --instructions-pdf still adds SOMETHING, exactly as before.
+    """
+    booklet_dir = os.path.dirname(os.path.abspath(pdf_path))
+    try:
+        import enrich_instructions as ei  # noqa: E402  (same directory)
+        booklet_path = ei.find_booklet(booklet_dir, instructions_pdf)
+        if not booklet_path:
+            return {"skipped": "no instructions booklet found"}
+        model = model or ei.DEFAULT_MODEL
+        booklet = ei.booklet_text(booklet_path)
+        form_name = ((schema.get("form_metadata") or {}).get("title")
+                     or os.path.basename(pdf_path))
+        result = ei.enrich_schema(schema, booklet, form_name, model,
+                                  ei.DEFAULT_CHUNK)
+        flags = ei.verify_and_rectify(schema, result["proposals"], booklet,
+                                      form_name, model)
+        summary = ei.apply_proposals(schema, result["proposals"], booklet,
+                                     flags, model, ei.JUDGE_MODEL,
+                                     tu_map=name_to_tu)
+        # apply_proposals stores the provenance block on the schema, but
+        # extract() REPLACES _bakeoff.authoring wholesale below -- so lift
+        # the block into the returned report for the authoring literal.
+        block = (schema.get("_bakeoff", {}).get("authoring", {})
+                 .get("instructions_enrich") or {})
+        report = dict(block)  # keeps the FLAGS LIST + provenance intact
+        report.update(
+            written=summary.get("written", 0),
+            skipped_human=summary.get("skipped_human", 0),
+            booklet=os.path.basename(booklet_path),
+            tokens=result.get("tokens", []))
+        return report
+    except Exception as exc:  # noqa: BLE001 -- fail-open by contract
+        fallback = 0
+        if instructions_pdf:
+            try:
+                fallback = _enrich_instructions_from_pdf(schema,
+                                                         instructions_pdf)
+            except Exception:  # noqa: BLE001
+                pass
+        return {"failed": f"{type(exc).__name__}: {exc}",
+                "fallback_enriched": fallback}
+
+
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             model: str = "claude-opus-4-8", keep_dump: bool = False,
             instructions_pdf: str | None = None,
             group_candidates: bool = True,
             division_cap: int = derive_sections.DEFAULT_CAP,
             translate_options: bool = True,
-            translation_model: str | None = None) -> dict:
+            translation_model: str | None = None,
+            enrich_guidance: bool = True,
+            guidance_model: str | None = None) -> dict:
     """Run the full PDF -> draft-schema pass and write `out_path`. Returns the
     draft dict (with a `_bakeoff` provenance block).
 
@@ -1004,6 +1063,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs
         #     while the dump still exists (it is removed in the finally below).
         instructions_filled = _extract_instructions_from_dump(schema, dump_path)
+        # Keep the /TU map for the guidance-enrichment stage (3g): it seeds
+        # source-tu provenance so a fresh draft's /TU baseline is machine-
+        # owned (upgradeable), not mistaken for human text. Built here while
+        # the dump file still exists (removed in the finally below).
+        name_to_tu = _build_name_to_tu(dump_path)
 
         # 3c2. Complete any partially-grouped widget family: when the LLM
         #      consolidated SOME-but-not-all of a mined family into one field's
@@ -1058,12 +1122,8 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
                         if k not in ("version", "version_confidence")}
     meta.update(version_meta)
 
-    # 3c. Optional instructions-PDF enrichment: when an instructions PDF is
-    #     provided, append its per-field text to help.instructions on top of the
-    #     /TU baseline (bd s4dp.3). Absent -> /TU-only, no error.
-    instructions_enriched = 0
-    if instructions_pdf:
-        instructions_enriched = _enrich_instructions_from_pdf(schema, instructions_pdf)
+    # (The old 3c naive instructions-PDF substring enrichment now lives
+    #  INSIDE the 3g guidance stage as its unavailable-fallback -- bd wsao.6.)
 
     # 4. Normalize required-but-missing scalars to draft defaults, REPAIR (bd
     #    h76m.13: deterministic invented-vocabulary rewrites; the report rides
@@ -1080,6 +1140,17 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     #     --no-translate-options skips it for cheap extraction-strategy runs.
     translation_report = (_bake_option_translations(schema, translation_model)
                           if translate_options else {"skipped": "disabled"})
+
+    # 3g. Guidance enrichment (bd wsao.6; sprint-16): booklet-grounded
+    #     help.instructions/details + form-level details, judged + verified,
+    #     applied under the provenance guard. After repair (channels key off
+    #     final fields), before validate/lint (the shipped artifact is the
+    #     linted artifact). Fail-open + fallback (see the helper);
+    #     --no-enrich-guidance skips it for cheap extraction-strategy runs.
+    guidance_report = (_enrich_guidance(schema, pdf_path, instructions_pdf,
+                                        name_to_tu, guidance_model)
+                       if enrich_guidance else {"skipped": "disabled"})
+    instructions_enriched = guidance_report.get("fallback_enriched", 0)
 
     ok, detail = _validate_schema(schema)
     lint_report = _lint_schema(schema, dump_data)
@@ -1101,6 +1172,7 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "repair": repair_report,
         "lint": lint_report,
         "option_translation": translation_report,
+        "instructions_enrich": guidance_report,
     }
 
     with open(out_path, "w", encoding="utf-8") as fh:
@@ -1146,6 +1218,20 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         flag_line = _translation_flag_summary(translation_report)
         if flag_line:
             print(flag_line)
+    if guidance_report.get("skipped"):
+        print(f"guidance: skipped ({guidance_report['skipped']})",
+              file=sys.stderr)
+    elif guidance_report.get("failed"):
+        print(f"guidance: FAILED ({guidance_report['failed']}) -- naive "
+              f"fallback enriched {guidance_report.get('fallback_enriched', 0)}"
+              f" field(s)", file=sys.stderr)
+    else:
+        gflags = guidance_report.get("flags") or []
+        print(f"guidance: {guidance_report.get('written', 0)} field(s) "
+              f"enriched, {guidance_report.get('skipped_human', 0)} "
+              f"human-owned skipped, {len(gflags)} flag(s)"
+              + (" -- recorded in _bakeoff.authoring.instructions_enrich"
+                 ".flags (WARNINGs, human-review worklist)" if gflags else ""))
     if lint_report.get("skipped"):
         print(f"lint: skipped ({lint_report['skipped']})", file=sys.stderr)
     else:
@@ -1229,6 +1315,17 @@ def main(argv: list[str] | None = None) -> int:
                     help="Gemini model for the option-translation bake "
                          "(default: OPTION_TRANSLATION_MODEL env or "
                          "gemini-2.5-pro)")
+    ap.add_argument("--no-enrich-guidance", dest="enrich_guidance",
+                    action="store_false", default=True,
+                    help="skip the booklet-grounded guidance enrichment "
+                         "stage (bd wsao.6; default ON, fail-open, needs an "
+                         "instructions booklet next to the PDF or "
+                         "--instructions-pdf -- turn off for cheap "
+                         "extraction-strategy test runs)")
+    ap.add_argument("--guidance-model", default=None,
+                    help="authoring model for the guidance enrichment stage "
+                         "(default: INSTRUCTIONS_MODEL env or the local "
+                         "claude CLI)")
     args = ap.parse_args(argv)
 
     plain = DEFAULT_PLAIN if args.plain is None else args.plain
@@ -1238,7 +1335,9 @@ def main(argv: list[str] | None = None) -> int:
                      group_candidates=args.group_candidates,
                      division_cap=args.division_cap,
                      translate_options=args.translate_options,
-                     translation_model=args.translation_model)
+                     translation_model=args.translation_model,
+                     enrich_guidance=args.enrich_guidance,
+                     guidance_model=args.guidance_model)
     # Tri-state exit (bd v96b): 0 valid+clean / 3 stored-with-issues / 1 no
     # usable draft. The draft was already written unconditionally in extract().
     return _classify_exit(schema)
