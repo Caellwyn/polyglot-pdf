@@ -30,7 +30,7 @@ import os
 import pathlib
 import shutil
 import subprocess
-from typing import Callable, Optional, Protocol
+from typing import Any, Callable, Dict, Optional, Protocol
 
 # token_info shape: {"input": int|None, "output": int|None, optionally
 # "cost_usd_equiv": float|None}. schema is the parsed FormSchema dict.

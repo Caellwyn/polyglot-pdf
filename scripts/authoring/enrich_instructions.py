@@ -459,8 +459,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         schema = json.load(fh)
 
     flags: List[dict] = []
+    booklet = booklet_text(result["booklet"]) \
+        if (args.verify or args.write) else ""
     if args.verify or args.write:
-        booklet = booklet_text(result["booklet"])
         form_name = ((schema.get("form_metadata") or {}).get("title")
                      or os.path.basename(args.kit))
         flags = verify_and_rectify(schema, result["proposals"], booklet,
@@ -473,7 +474,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     result["report"] = rep
 
     if args.write:
-        booklet = booklet_text(result["booklet"])
         summary = write_kit(args.kit, result["proposals"], booklet, flags,
                             args.model, JUDGE_MODEL)
         result["write_summary"] = summary
@@ -654,6 +654,25 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
             rectified.add(fid)
         verdicts = judge_proposals(schema, proposals, booklet, form_name,
                                    judge_model)
+
+    # Completeness sweep FIRST: a field the judge silently OMITTED from its
+    # JSON response has no verdict, and without this it would fall through to
+    # write_kit as "llm-verified" with zero flags -- a fail-open hole in the
+    # KEEP rule (wsao.5 fresh-eyes finding 1). Judge-omission is treated
+    # identically to a safety fail: drop + flag.
+    for fid, e in list((proposals.get("fields") or {}).items()):
+        has_guidance = isinstance(e, dict) and (
+            (e.get("instructions") or "").strip()
+            or (e.get("details") or "").strip())
+        if has_guidance and fid not in verdicts:
+            proposals["fields"][fid] = {}
+            flags.append({
+                "severity": "WARNING",
+                "rule": "instructions-ungrounded-dropped",
+                "path": "fields (id=" + fid + ").help",
+                "message": "the judge omitted this field from its response "
+                           "-- treated as UNVERIFIED: proposed text DROPPED, "
+                           "deterministic baseline kept (KEEP rule)"})
 
     for fid, v in verdicts.items():
         safety_fail = (not v.get("grounded")) or v.get("advice") \

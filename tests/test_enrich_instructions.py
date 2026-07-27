@@ -254,3 +254,32 @@ def test_lint_reemits_guidance_flags():
             if f.rule == "instructions-ungrounded-dropped"]
     assert len(hits) == 1 and hits[0].severity == "WARNING"
     assert not [f for f in findings if f.rule == "not-a-guidance-rule"]
+
+
+def test_judge_omission_drops_field(monkeypatch):
+    """A field the judge SILENTLY OMITS from its response must be treated as
+    unverified -- dropped + flagged, never written as llm-verified (wsao.5
+    fresh-eyes finding 1: the fail-open hole in the KEEP rule)."""
+    def _partial(model):
+        def runner(prompt, m):
+            # verdict for field a only; field b silently omitted
+            return ({"fields": {"a": {
+                "grounded": True, "unsupported_claims": [],
+                "useful_beyond_label": True, "omission_concerns": [],
+                "advice": False}}}, 100)
+        return runner
+    monkeypatch.setattr(ei.llm_providers, "resolve_json_runner", _partial)
+    proposals = {"fields": {
+        "a": {"instructions": "Fine.", "details": "", "format_hint": ""},
+        "b": {"instructions": "INVENTED legal claim never verified.",
+              "details": "", "format_hint": ""}},
+        "form_details": ""}
+    schema = {"fields": [{"id": "a", "name": "A", "type": "text"},
+                         {"id": "b", "name": "B", "type": "text"}]}
+    flags = ei.verify_and_rectify(schema, proposals, "BOOKLET", "T", "m")
+    assert proposals["fields"]["a"]["instructions"] == "Fine."
+    assert proposals["fields"]["b"] == {}
+    omission = [f for f in flags
+                if f["rule"] == "instructions-ungrounded-dropped"
+                and "id=b" in f["path"]]
+    assert len(omission) == 1 and "omitted" in omission[0]["message"]
