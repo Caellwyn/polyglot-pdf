@@ -584,6 +584,30 @@ def test_coverage_counts_a_fully_failed_language_as_a_gap():
     assert "urdu covers 0/4" in findings[0].message
 
 
+def test_coverage_treats_a_present_but_empty_value_as_not_covered():
+    # bd polyglot-pdf-z3rs: a translation key present with an empty/whitespace/
+    # non-string VALUE is not a translation -- it must NOT count as covered, so
+    # the hard completion gate (bd 783r) does not pass a form that would speak
+    # the ENGLISH label aloud in that session. Parity with
+    # option_translation._kit_translation's non-empty-string filter.
+    for bad in ("", "   ", None, 123):
+        schema = _coverage_schema(drop_french_from_second=False)
+        # Corrupt ONLY french on the second field's spoken name.
+        schema["fields"][1]["spoken_name_translations"]["french"] = bad
+        findings = coverage_findings(schema)
+        assert [f.path for f in findings] == ["coverage.french"], bad
+        assert "french covers 3/4" in findings[0].message, bad
+    # And it flips the whole-kit summary gate (bd 783r) to incomplete.
+    from backend.services.option_translation import (
+        translation_coverage_summary,
+    )
+    schema = _coverage_schema(drop_french_from_second=False)
+    schema["fields"][1]["spoken_name_translations"]["french"] = ""
+    summary = translation_coverage_summary(schema)
+    assert not summary.complete
+    assert "french" in summary.incomplete_languages
+
+
 def test_coverage_silent_on_untranslated_and_full_kits():
     # No baked translations at all: an untranslated draft is not a gap.
     bare = {"fields": [{"id": "a", "spoken_name": "Name"}]}
