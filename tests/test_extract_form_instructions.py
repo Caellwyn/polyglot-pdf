@@ -366,3 +366,37 @@ def test_enrich_guidance_no_booklet_skips(tmp_path):
                                  None, {})
     assert "skipped" in report
     assert "help" not in schema["fields"][1]
+
+
+def test_enrich_guidance_judge_unavailable_runs_naive_fallback(tmp_path,
+                                                               monkeypatch):
+    """Credential-less local parity (outer review): the judge-unavailable
+    KEEP path is caught INSIDE verify_and_rectify, so the stage must
+    detect the unavailable flag and still run the naive fallback for an
+    explicit --instructions-pdf -- matching pre-wsao behavior."""
+    schema = _guidance_schema()
+    booklet = tmp_path / "instructions.pdf"
+    booklet.write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "B")
+    monkeypatch.setattr(
+        _ei_mod, "enrich_schema",
+        lambda s, b, n, m, c: {"proposals": {"fields": {
+            "f2": {"instructions": "Authored.", "details": "",
+                   "format_hint": ""}}, "form_details": ""}, "tokens": []})
+    def _unavailable(schema_, proposals, *a, **k):
+        for fid in list(proposals["fields"]):
+            proposals["fields"][fid] = {}
+        proposals["form_details"] = ""
+        return [{"severity": "WARNING",
+                 "rule": "instructions-enrich-unavailable",
+                 "path": "$.fields", "message": "no credentials"}]
+    monkeypatch.setattr(_ei_mod, "verify_and_rectify", _unavailable)
+    monkeypatch.setattr(ef, "_enrich_instructions_from_pdf", lambda s, p: 4)
+    report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"),
+                                 str(booklet), {})
+    assert report.get("unavailable") is True
+    assert report.get("fallback_enriched") == 4
+    assert report.get("written") == 0
+    # the flags list survives for the worklist
+    assert any(f.get("rule") == "instructions-enrich-unavailable"
+               for f in report.get("flags", []))

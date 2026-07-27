@@ -995,6 +995,24 @@ def _enrich_guidance(schema: dict, pdf_path: str,
             skipped_human=summary.get("skipped_human", 0),
             booklet=os.path.basename(booklet_path),
             tokens=result.get("tokens", []))
+        # Judge-unavailable is caught INSIDE verify_and_rectify (the KEEP
+        # rule empties every proposal + flags), so it never reaches the
+        # except below -- without this, a credential-less local run
+        # produced EMPTY guidance where the pre-wsao path produced naive
+        # substring content (outer review). Behavior parity: run the naive
+        # fallback for an explicit --instructions-pdf, exactly as the
+        # exception path does.
+        if any(isinstance(f, dict)
+               and f.get("rule") == "instructions-enrich-unavailable"
+               for f in (flags or [])):
+            report["unavailable"] = True
+            if instructions_pdf:
+                try:
+                    report["fallback_enriched"] = \
+                        _enrich_instructions_from_pdf(schema,
+                                                      instructions_pdf)
+                except Exception:  # noqa: BLE001
+                    pass
         return report
     except Exception as exc:  # noqa: BLE001 -- fail-open by contract
         fallback = 0
@@ -1229,6 +1247,13 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         print(f"guidance: FAILED ({guidance_report['failed']}) -- naive "
               f"fallback enriched {guidance_report.get('fallback_enriched', 0)}"
               f" field(s)", file=sys.stderr)
+    elif guidance_report.get("unavailable"):
+        print("guidance: JUDGE UNAVAILABLE (no gemini credentials -- set "
+              "VERTEXAI=true or GEMINI_API_KEY, or pass "
+              "--no-enrich-guidance) -- authored guidance dropped per the "
+              "KEEP rule; naive fallback enriched "
+              f"{guidance_report.get('fallback_enriched', 0)} field(s)",
+              file=sys.stderr)
     else:
         gflags = guidance_report.get("flags") or []
         print(f"guidance: {guidance_report.get('written', 0)} field(s) "
