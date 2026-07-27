@@ -1365,6 +1365,11 @@ async def extract_editor_kit(
                     "one call per language). Uncheck for cheap "
                     "extraction-strategy test runs."
     )] = True,
+    enrich_guidance: Annotated[bool, Form(
+        description="Also author booklet-grounded field guidance "
+                    "(bd wsao.6; authoring + judge LLM calls). Uncheck for "
+                    "cheap extraction-strategy test runs."
+    )] = True,
     instructions_pdf: Annotated[Optional[UploadFile], File(
         description="OPTIONAL official instructions PDF; enriches help text"
     )] = None,
@@ -1471,8 +1476,13 @@ async def extract_editor_kit(
             # the stage's model falls through to the raw INSTRUCTIONS_MODEL /
             # EXTRACTOR_MODEL env vars and then the local claude CLI -- absent
             # in this container -- so it would silently degrade to the naive
-            # fallback on a correctly-configured host.
-            cmd += ["--guidance-model", settings.EXTRACTOR_MODEL]
+            # fallback on a correctly-configured host. The opt-out mirrors
+            # translate_options: the guidance stage is the LARGER of the two
+            # LLM add-ons, so a cheap test run must be able to skip it too.
+            if enrich_guidance:
+                cmd += ["--guidance-model", settings.EXTRACTOR_MODEL]
+            else:
+                cmd += ["--no-enrich-guidance"]
             if instructions_bytes is not None:
                 instructions_path = tmp / "instructions.pdf"
                 instructions_path.write_bytes(instructions_bytes)

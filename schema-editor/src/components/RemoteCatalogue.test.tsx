@@ -317,7 +317,8 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
 
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() => expect(extractRemoteKit).toHaveBeenCalledWith(
-      'fresh-kit', { instructionsPdf: undefined, translateOptions: true }));
+      'fresh-kit', { instructionsPdf: undefined, translateOptions: true,
+        enrichGuidance: true }));
     await waitFor(() =>
       expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
   });
@@ -334,7 +335,22 @@ describe('RemoteCatalogue author tier (bd 92qe.3)', () => {
     fireEvent.click(checkbox);
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() => expect(extractRemoteKit).toHaveBeenCalledWith(
-      'fresh-kit', { instructionsPdf: undefined, translateOptions: false }));
+      'fresh-kit', { instructionsPdf: undefined, translateOptions: false,
+        enrichGuidance: true }));
+  });
+
+  it('unchecking the enrich-guidance checkbox threads false (bd wsao.6)', async () => {
+    vi.mocked(extractRemoteKit).mockResolvedValue({
+      ok: true, detail: '[OK] wrote schema.json -- 42 fields', fieldCount: 42,
+    });
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="author" />);
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('enrich-guidance-checkbox'));
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(extractRemoteKit).toHaveBeenCalledWith(
+      'fresh-kit', { instructionsPdf: undefined, translateOptions: true,
+        enrichGuidance: false }));
   });
 
   it('store-with-issues extraction surfaces the lint counts (bd v96b)', async () => {

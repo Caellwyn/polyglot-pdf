@@ -358,7 +358,10 @@ export interface RemoteExtractionResult {
  * enriches the per-field help text (parity with the local dev flow). */
 export async function extractRemoteKit(
   kitId: string,
-  opts: { force?: boolean; instructionsPdf?: File; translateOptions?: boolean } = {},
+  opts: {
+    force?: boolean; instructionsPdf?: File; translateOptions?: boolean;
+    enrichGuidance?: boolean;
+  } = {},
 ): Promise<RemoteExtractionResult> {
   const form = new FormData();
   // ALWAYS append force (true or false) so the multipart body is never empty.
@@ -371,6 +374,9 @@ export async function extractRemoteKit(
   // Bake option label_translations during extraction (bd 2h9j; backend default
   // true) -- uncheckable in the catalogue for cheap extraction-strategy runs.
   form.append('translate_options', opts.translateOptions === false ? 'false' : 'true');
+  // Booklet-grounded guidance enrichment (bd wsao.6; backend default true) --
+  // the larger LLM add-on, so cheap test runs can skip it too.
+  form.append('enrich_guidance', opts.enrichGuidance === false ? 'false' : 'true');
   if (opts.instructionsPdf) {
     form.append('instructions_pdf', opts.instructionsPdf, opts.instructionsPdf.name);
   }

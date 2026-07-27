@@ -968,11 +968,25 @@ def _enrich_guidance(schema: dict, pdf_path: str,
     an explicit --instructions-pdf still adds SOMETHING, exactly as before.
     """
     booklet_dir = os.path.dirname(os.path.abspath(pdf_path))
+    booklet_path: str | None = None
     try:
         import enrich_instructions as ei  # noqa: E402  (same directory)
         booklet_path = ei.find_booklet(booklet_dir, instructions_pdf)
         if not booklet_path:
             return {"skipped": "no instructions booklet found"}
+        askable = ei.askable_fields(schema)
+        max_fields = int(os.getenv("GUIDANCE_MAX_FIELDS", "250"))
+        if len(askable) > max_fields:
+            # The stage's LLM cost/latency scales as fields x booklet (the
+            # full booklet rides EVERY authoring + judge chunk) and runs
+            # inside the extraction subprocess timeout -- an unbounded form
+            # could time the whole extraction out (wsao.6 outer review).
+            # Oversize forms defer to the standalone CLI, which has no
+            # request deadline.
+            return {"skipped": f"{len(askable)} askable fields > "
+                               f"GUIDANCE_MAX_FIELDS={max_fields} -- run "
+                               f"scripts/authoring/enrich_instructions.py "
+                               f"standalone"}
         model = model or ei.DEFAULT_MODEL
         booklet = ei.booklet_text(booklet_path)
         form_name = ((schema.get("form_metadata") or {}).get("title")
@@ -1006,20 +1020,39 @@ def _enrich_guidance(schema: dict, pdf_path: str,
                and f.get("rule") == "instructions-enrich-unavailable"
                for f in (flags or [])):
             report["unavailable"] = True
-            if instructions_pdf:
-                try:
-                    report["fallback_enriched"] = \
-                        _enrich_instructions_from_pdf(schema,
-                                                      instructions_pdf)
-                except Exception:  # noqa: BLE001
-                    pass
+            try:
+                # the AUTO-DISCOVERED booklet feeds the fallback too --
+                # gating on the explicit flag alone gave the default
+                # discovery path strictly weaker degraded-mode coverage
+                # (outer review finding 4)
+                report["fallback_enriched"] = \
+                    _enrich_instructions_from_pdf(schema, booklet_path)
+                # The fallback APPENDS to help.instructions AFTER the tu
+                # bootstrap hashed the pre-append text -- without a refresh
+                # the seeded records go stale and every touched field is
+                # silently human-locked on the next credentialed run
+                # (outer review finding 1, reproduced). The appended text
+                # is machine text, so refreshing keeps it machine-owned.
+                by_id = {f.get("id"): f for f in schema.get("fields", [])
+                         if isinstance(f, dict)}
+                for fid, rec in (report.get("provenance") or {}).items():
+                    if isinstance(rec, dict) and rec.get("source") == "tu":
+                        fld = by_id.get(fid) or {}
+                        help_obj = fld.get("help") \
+                            if isinstance(fld.get("help"), dict) else {}
+                        cur = help_obj.get("instructions")
+                        rec["instructions_sha1"] = ei._sha1(
+                            cur if isinstance(cur, str) else "")
+            except Exception:  # noqa: BLE001
+                pass
         return report
     except Exception as exc:  # noqa: BLE001 -- fail-open by contract
         fallback = 0
-        if instructions_pdf:
+        fallback_src = instructions_pdf or booklet_path
+        if fallback_src:
             try:
                 fallback = _enrich_instructions_from_pdf(schema,
-                                                         instructions_pdf)
+                                                         fallback_src)
             except Exception:  # noqa: BLE001
                 pass
         return {"failed": f"{type(exc).__name__}: {exc}",

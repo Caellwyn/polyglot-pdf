@@ -400,3 +400,60 @@ def test_enrich_guidance_judge_unavailable_runs_naive_fallback(tmp_path,
     # the flags list survives for the worklist
     assert any(f.get("rule") == "instructions-enrich-unavailable"
                for f in report.get("flags", []))
+
+
+def test_unavailable_fallback_refreshes_tu_provenance(tmp_path, monkeypatch):
+    """Outer review finding 1 (reproduced there): the naive fallback APPENDS
+    to help.instructions AFTER the tu bootstrap hashed the pre-append text;
+    without a refresh the seeded record goes stale and the field is
+    silently human-locked on the next credentialed run. The stage now
+    re-hashes tu-seeded records after the fallback -- and the fallback runs
+    for the AUTO-DISCOVERED booklet (finding 4), not just --instructions-pdf."""
+    import hashlib
+    schema = _guidance_schema()
+    # auto-discovery: booklet named instructions.pdf next to the form,
+    # NO explicit --instructions-pdf passed
+    (tmp_path / "instructions.pdf").write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "B")
+    monkeypatch.setattr(
+        _ei_mod, "enrich_schema",
+        lambda s, b, n, m, c: {"proposals": {"fields": {
+            "f1": {"instructions": "X.", "details": "", "format_hint": ""}},
+            "form_details": ""}, "tokens": []})
+    def _unavailable(schema_, proposals, *a, **k):
+        for fid in list(proposals["fields"]):
+            proposals["fields"][fid] = {}
+        proposals["form_details"] = ""
+        return [{"severity": "WARNING",
+                 "rule": "instructions-enrich-unavailable",
+                 "path": "$.fields", "message": "no credentials"}]
+    monkeypatch.setattr(_ei_mod, "verify_and_rectify", _unavailable)
+    def _append_naive(s, p):
+        f = s["fields"][0]
+        f["help"]["instructions"] += "\n\nAppended booklet passage."
+        return 1
+    monkeypatch.setattr(ef, "_enrich_instructions_from_pdf", _append_naive)
+    report = ef._enrich_guidance(
+        schema, str(tmp_path / "form.pdf"), None,
+        {"A[0]": "TU text for alpha."})
+    assert report.get("fallback_enriched") == 1  # auto-discovered booklet
+    rec = report["provenance"]["f1"]
+    cur = schema["fields"][0]["help"]["instructions"]
+    assert cur.endswith("Appended booklet passage.")
+    assert rec["instructions_sha1"] == \
+        hashlib.sha1(cur.encode("utf-8")).hexdigest()
+
+
+def test_oversize_form_skips_guidance_stage(tmp_path, monkeypatch):
+    """Outer review finding 3: the stage's cost scales fields x booklet and
+    runs inside the extraction subprocess timeout -- oversize forms skip
+    with a pointer to the standalone CLI."""
+    schema = {"form_metadata": {"title": "T"}, "fields": [
+        {"id": f"f{i}", "name": f"F{i}", "type": "text"}
+        for i in range(9)], "sections": [], "parts": []}
+    (tmp_path / "instructions.pdf").write_bytes(b"%PDF-fake")
+    monkeypatch.setenv("GUIDANCE_MAX_FIELDS", "5")
+    report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"),
+                                 None, {})
+    assert "skipped" in report and "GUIDANCE_MAX_FIELDS" in report["skipped"]
+    assert "help" not in schema["fields"][0]
