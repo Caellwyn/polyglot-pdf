@@ -76,3 +76,32 @@ the Pydantic model. It survives save/load because:
 
 Fields only -- no section-level review (maintainer-approved). A section rollup
 was considered and deferred; not filed as a bead (speculative, no demand).
+
+## Closeout notes
+
+- Doc-freshness (closeout_prep) flagged STALE `docs/components/*` and
+  `docs/standards/*` docs, but ALL are backend/frontend docs stale vs OTHER recent
+  `dev` commits (config.py, live_ai_gemini.py, schema-forms/types/schema.ts et al.,
+  dated 2026-07-25/26) -- NONE caused by this change. This diff touches only
+  `schema-editor/` + this journal entry; the nearest-looking one,
+  `docs/components/schema-forms.md`, is stale vs the frontend voice-app
+  `frontend/src/schema-forms/types/schema.ts`, a different file in a different app
+  than the editor's `schema-editor/src/types/schema.ts`. No doc update owed by this
+  bead.
+- Prep ran the backend pytest suite (1299 passed, 1 skipped); this change is
+  frontend-only (schema-editor), covered by its own vitest suite (793 passing).
+
+## Follow-on work (out of scope, filed)
+
+While verifying the editor, the maintainer surfaced red/amber "phantom" signature
+fields: a `pdf_field_name` is set but no widget highlights in the PDF preview, and
+the error ("Missing PDF field name") is misleading. Root-caused to the extraction
+pipeline: the LLM enrichment can ADD fields the deterministic PyMuPDF dump never
+identified, `type=signature` is ONLY ever LLM-inferred (the deterministic dump maps
+a real signature widget to a `text` field), and a missing/degenerate widget rect
+yields a field with no `pdf_position` (so no preview highlight) -- with neither
+`schema_repair` nor `schema_lint` flagging it. Filed as bd `polyglot-pdf-emap`
+(pipeline reconcile LLM output against the dump). Editor-side mitigations (accurate
+error text + a non-destructive 'ignore' state reusing this bead's `reviewStatus.ts`;
+NO delete, per maintainer -- deletion risks unrecoverable loss) are a SEPARATE
+follow-up PR, not this one.
