@@ -113,13 +113,25 @@ for _cp in (0x00A0, 0x2007, 0x2009, 0x202F):
 
 def normalize_for_containment(text: str) -> str:
     """The PINNED normalization both sides of the containment check pass
-    through. See the module docstring before changing anything here."""
+    through. See the module docstring before changing anything here.
+
+    wsao.4 additions (both PDF line-wrap/glyph artifacts, measured on the
+    real w7 booklet -- the same class as dehyphenation, NOT a loosening
+    toward paraphrase): bullet glyphs fold to "-" (models transliterate
+    list bullets), and whitespace after a slash is dropped (the booklet
+    wraps lines AFTER slashes: "citizen/\\nresident")."""
     if not text:
         return ""
     for src, dst in _PUNCT_FOLD.items():
         text = text.replace(src, dst)
+    # bullet glyphs -> "-" (2022 bullet, 25CF black circle, 00B7 middle dot,
+    # F0B7 the Symbol-font private-use bullet PDFs often emit)
+    for cp in (0x2022, 0x25CF, 0x00B7, 0xF0B7):
+        text = text.replace(chr(cp), "-")
     # join line-break hyphenation BEFORE whitespace collapse ("with-\nholding")
     text = re.sub(r"-\s*\n\s*", "", text)
+    # join slash-wraps ("citizen/\nresident" -> "citizen/resident")
+    text = re.sub(r"/\s+", "/", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip().casefold()
 
@@ -157,6 +169,27 @@ def check_containment_normalized(
     if idx < 0:
         return ContainmentResult(False, -1, "")
     return ContainmentResult(True, idx, p)
+
+
+_FURNITURE_LINE_RE = re.compile(
+    r"^(\d{1,3}|CAUTION|TIP|!|Instructions for Form [A-Z0-9-]+.*)$")
+
+
+def clean_booklet_furniture(text: str) -> str:
+    """Strip PDF page furniture from extracted booklet text: sidebar glyph
+    labels (CAUTION / TIP / !), bare page numbers, and the running
+    'Instructions for Form X-N (Rev. ...)' footer. The raw extraction
+    interleaves these MID-SENTENCE in the text stream (wsao.4, measured on
+    the real w7 booklet), so a model's correctly-copied logical sentence
+    fails containment against the raw stream. BOTH sides must use the
+    cleaned text: the enrichment engine excerpts from it AND bakes it as the
+    metadata.booklet_text floor, so containment stays consistent."""
+    out = []
+    for ln in (text or "").splitlines():
+        if _FURNITURE_LINE_RE.match(ln.strip()):
+            continue
+        out.append(ln)
+    return "\n".join(out)
 
 
 def details_paragraphs(details: str) -> List[str]:

@@ -254,3 +254,127 @@ def resolve_provider(model: str) -> LLMProvider:
         src = "EXTRACTOR_PROVIDER" if explicit else "model-name dispatch"
         raise KeyError(
             f"unknown LLM provider {name!r} (from {src}); known: {known}") from None
+
+
+# --------------------------------------------------------------------------- #
+# Generic JSON runners (bd wsao.4). The class .run() methods above are
+# SCHEMA-shaped on purpose (they normalize into a FormSchema and are graded by
+# the extraction bake-off); the guidance-enrichment engine needs the SAME
+# transport mechanics -- the CLI scratch-file dance, the Vertex-default Gemini
+# client -- but a passthrough JSON parse. These stay separate so the graded
+# extraction path is never perturbed.
+# --------------------------------------------------------------------------- #
+
+def _extract_json_loose(text: str) -> dict:
+    """Parse the first JSON object out of `text` (tolerates fences/prose),
+    mirroring arm_llm_native._extract_json but returning the RAW object."""
+    extract_json, _ = _parse_helpers()
+    obj = extract_json(text)
+    if not isinstance(obj, dict):
+        raise ValueError(f"expected a JSON object, got {type(obj).__name__}")
+    return obj
+
+
+def run_json_claude_cli(prompt: str, model: str) -> tuple[dict, dict]:
+    """The ClaudeCliProvider transport with a passthrough JSON parse: the model
+    Writes its JSON to a scratch file (output-ceiling workaround) and we read
+    it back raw. Returns (obj, token_info)."""
+    exe = shutil.which("claude") or "claude"
+    outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "outputs")
+    os.makedirs(outputs_dir, exist_ok=True)
+    scratch = os.path.join(outputs_dir, f"_cli_json_{os.getpid()}.json")
+    if os.path.exists(scratch):
+        os.remove(scratch)
+    cmd = [exe, "-p", "--model", model, "--output-format", "json",
+           "--permission-mode", "acceptEdits", "--add-dir", outputs_dir]
+    wrapped = (
+        prompt
+        + "\n\nIMPORTANT -- how to deliver your output: do NOT print the JSON. "
+        "Use your Write tool to write the COMPLETE JSON object (and nothing "
+        "else -- no fences, no commentary) to this exact file path:\n  "
+        + scratch
+        + "\nThen end with a final message of just: WROTE OK"
+    )
+    timeout_s = int(os.getenv("BAKEOFF_CLAUDE_TIMEOUT_S", "1200"))
+    try:
+        proc = subprocess.run(
+            cmd, input=wrapped, capture_output=True, text=True,
+            encoding="utf-8", timeout=timeout_s,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"claude CLI exited {proc.returncode}: "
+                               f"{(proc.stderr or proc.stdout)[:500]}")
+        envelope = json.loads(proc.stdout)
+        if envelope.get("is_error"):
+            raise RuntimeError(f"claude CLI error: {envelope.get('result')!r}")
+        if os.path.exists(scratch):
+            with open(scratch, encoding="utf-8") as fh:
+                obj = _extract_json_loose(fh.read())
+        else:
+            obj = _extract_json_loose(envelope.get("result", ""))
+    finally:
+        if os.path.exists(scratch):
+            os.remove(scratch)
+    usage = envelope.get("usage") or {}
+    tok = {"input": usage.get("input_tokens"),
+           "output": usage.get("output_tokens"),
+           "cost_usd_equiv": envelope.get("total_cost_usd")}
+    return obj, tok
+
+
+def run_json_gemini(prompt: str, model: str) -> tuple[dict, dict]:
+    """The GeminiProvider transport (Vertex-default) with a passthrough JSON
+    parse. Returns (obj, token_info)."""
+    if not model.lower().startswith("gemini"):
+        raise ValueError(
+            f"the gemini runner needs a gemini-* model, got {model!r}")
+    from google import genai  # lazy
+    from google.genai import types
+
+    timeout_ms = int(os.getenv("BAKEOFF_GEMINI_TIMEOUT_MS", "600000"))
+    http_opts = types.HttpOptions(timeout=timeout_ms)
+    if os.getenv("VERTEXAI", "").lower() == "true":
+        client = genai.Client(
+            vertexai=True,
+            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            http_options=http_opts,
+        )
+    else:
+        client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
+                              http_options=http_opts)
+    resp = client.models.generate_content(
+        model=model,
+        contents=[prompt],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.0,
+            # 65535, not 65536: some models (2.5-flash-lite on Vertex) treat
+            # the documented 65536 limit as EXCLUSIVE and 400 on it.
+            max_output_tokens=65535,
+        ),
+    )
+    obj = _extract_json_loose(resp.text)
+    tok = {}
+    usage = getattr(resp, "usage_metadata", None)
+    if usage is not None:
+        tok = {"input": getattr(usage, "prompt_token_count", None),
+               "output": getattr(usage, "candidates_token_count", None)}
+    return obj, tok
+
+
+def resolve_json_runner(model: str):
+    """Pick the JSON runner the same way resolve_provider picks the schema
+    provider (EXTRACTOR_PROVIDER override, else model-name dispatch)."""
+    explicit = os.getenv("EXTRACTOR_PROVIDER")
+    name = explicit.strip() if explicit and explicit.strip() \
+        else _provider_for_model(model)
+    runners = {"claude-cli": run_json_claude_cli, "gemini": run_json_gemini}
+    try:
+        return runners[name]
+    except KeyError:
+        known = ", ".join(sorted(runners))
+        src = "EXTRACTOR_PROVIDER" if explicit else "model-name dispatch"
+        raise KeyError(
+            f"unknown JSON runner {name!r} (from {src}); known: {known}") from None
