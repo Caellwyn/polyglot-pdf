@@ -2524,3 +2524,13 @@ def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     assert r.status_code == 200, r.text
     assert "--no-translate-options" in seen_cmds[1]
     assert "--translation-model" not in seen_cmds[1]
+
+    # The guidance kill switch's SERVER-SIDE half (bd wsao.6): unchecking
+    # must actually suppress the LLM stage in the subprocess cmd.
+    _make_kit(root, "fresh3")
+    r = c.post("/api/editor/kits/fresh3/extract",
+               headers={"X-Editor-Token": "auth-tok"},
+               data={"enrich_guidance": "false"})
+    assert r.status_code == 200, r.text
+    assert "--no-enrich-guidance" in seen_cmds[2]
+    assert "--guidance-model" not in seen_cmds[2]
