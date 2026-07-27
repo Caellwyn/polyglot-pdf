@@ -560,11 +560,17 @@ def judge_proposals(schema: dict, proposals: dict, booklet: str,
     for fid, e in (proposals.get("fields") or {}).items():
         instr = (e.get("instructions") or "").strip()
         det = (e.get("details") or "").strip()
-        if not instr and not det:
+        # format_hint is judged too: write_kit stamps it llm-verified, so a
+        # format_hint-only field skipping the judge would be the same
+        # fail-open class as judge-omission (wsao.5 fresh-eyes round 2)
+        fh = (e.get("format_hint") or "").strip()
+        if not instr and not det and not fh:
             continue
         digest = field_digest(fields_by_id.get(fid) or {"id": fid})
-        entries.append({"digest": digest, "instructions": instr,
-                        "details": det})
+        entry = {"digest": digest, "instructions": instr, "details": det}
+        if fh:
+            entry["format_hint"] = fh
+        entries.append(entry)
     runner = llm_providers.resolve_json_runner(model)
     verdicts: Dict[str, dict] = {}
     for i in range(0, len(entries), JUDGE_CHUNK):
@@ -663,7 +669,8 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
     for fid, e in list((proposals.get("fields") or {}).items()):
         has_guidance = isinstance(e, dict) and (
             (e.get("instructions") or "").strip()
-            or (e.get("details") or "").strip())
+            or (e.get("details") or "").strip()
+            or (e.get("format_hint") or "").strip())
         if has_guidance and fid not in verdicts:
             proposals["fields"][fid] = {}
             flags.append({
@@ -685,7 +692,11 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
                     "message": "guidance was revised by the verify loop and "
                                "passed on re-judge -- review the revision"})
             if (v.get("_has_instructions")
-                    and not v.get("useful_beyond_label")):
+                    and not v.get("useful_beyond_label")
+                    and fid not in rectified):
+                # rectified fields already carry a review flag above --
+                # a second flag for the same id would double-list it on
+                # the editor worklist (round-2 cosmetic finding)
                 # usefulness is a QUALITY signal, not a SAFETY property --
                 # grounded-but-thin text is harmless, so it FLAGS for the
                 # human worklist, never drops (wsao.5 measured: the drop

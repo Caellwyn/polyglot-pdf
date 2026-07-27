@@ -283,3 +283,64 @@ def test_judge_omission_drops_field(monkeypatch):
                 if f["rule"] == "instructions-ungrounded-dropped"
                 and "id=b" in f["path"]]
     assert len(omission) == 1 and "omitted" in omission[0]["message"]
+
+
+def test_format_hint_only_field_is_judged_and_swept(monkeypatch):
+    """A format_hint-only field must reach the judge (write_kit stamps
+    format_hint llm-verified) and, when the judge omits it, be dropped by
+    the completeness sweep (wsao.5 fresh-eyes round 2)."""
+    seen_prompts = []
+    def _partial(model):
+        def runner(prompt, m):
+            seen_prompts.append(prompt)
+            return ({"fields": {"a": {
+                "grounded": True, "unsupported_claims": [],
+                "useful_beyond_label": True, "omission_concerns": [],
+                "advice": False}}}, 100)
+        return runner
+    monkeypatch.setattr(ei.llm_providers, "resolve_json_runner", _partial)
+    proposals = {"fields": {
+        "a": {"instructions": "Fine.", "details": "", "format_hint": ""},
+        "fh_only": {"instructions": "", "details": "",
+                    "format_hint": "MM/DD/YYYY"}},
+        "form_details": ""}
+    schema = {"fields": [{"id": "a", "name": "A", "type": "text"},
+                         {"id": "fh_only", "name": "F", "type": "text"}]}
+    flags = ei.verify_and_rectify(schema, proposals, "BOOKLET", "T", "m")
+    # the format_hint-only field was SENT to the judge...
+    assert any("fh_only" in p and "MM/DD/YYYY" in p for p in seen_prompts)
+    # ...and, having been omitted from the verdicts, dropped + flagged
+    assert proposals["fields"]["fh_only"] == {}
+    assert any(f["rule"] == "instructions-ungrounded-dropped"
+               and "id=fh_only" in f["path"] for f in flags)
+
+
+def test_thin_verdict_on_rectified_field_flags_once(monkeypatch):
+    """A field that was rectified AND judged thin gets ONE flag, not two
+    (round-2 cosmetic finding: double-listing on the editor worklist)."""
+    calls = {"n": 0}
+    def _runner_factory(model):
+        def runner(prompt, m):
+            calls["n"] += 1
+            if "REVISE the guidance" in prompt:
+                return ({"fields": {"a": {
+                    "instructions": "Revised.", "details": "",
+                    "format_hint": ""}}}, 100)
+            verdict = {"grounded": True, "unsupported_claims": [],
+                       "omission_concerns": [], "advice": False,
+                       # thin on every judge pass; unsupported on the first
+                       "useful_beyond_label": False}
+            if calls["n"] == 1:
+                verdict = dict(verdict, grounded=False,
+                               unsupported_claims=["bogus"])
+            return ({"fields": {"a": verdict}}, 100)
+        return runner
+    monkeypatch.setattr(ei.llm_providers, "resolve_json_runner",
+                        _runner_factory)
+    proposals = {"fields": {"a": {"instructions": "Original.",
+                                  "details": "", "format_hint": ""}},
+                 "form_details": ""}
+    schema = {"fields": [{"id": "a", "name": "A", "type": "text"}]}
+    flags = ei.verify_and_rectify(schema, proposals, "BOOKLET", "T", "m")
+    mine = [f for f in flags if "id=a" in f["path"]]
+    assert len(mine) == 1 and mine[0]["rule"] == "instructions-rectified"
