@@ -130,8 +130,11 @@ def normalize_for_containment(text: str) -> str:
         text = text.replace(chr(cp), "-")
     # join line-break hyphenation BEFORE whitespace collapse ("with-\nholding")
     text = re.sub(r"-\s*\n\s*", "", text)
-    # join slash-wraps ("citizen/\nresident" -> "citizen/resident")
-    text = re.sub(r"/\s+", "/", text)
+    # join slash-wraps ("citizen/\nresident" -> "citizen/resident") --
+    # NEWLINE-adjacent only, mirroring the dehyphenation rule above; an
+    # unconditional post-slash collapse would equate textually-distinct
+    # sources like "and/ or" vs "and/or" (wsao.4 outer review).
+    text = re.sub(r"/\s*\n\s*", "/", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip().casefold()
 

@@ -146,6 +146,8 @@ anything else. HARD RULES the check enforces:
   point at anything on screen -- they are SPOKEN.
 - If your instructions would only restate the field's label or options,
   emit "" instead (empty beats filler; a restatement is a lint finding).
+- EVERY rule above applies to form_details IDENTICALLY -- it is checked by
+  the same per-paragraph containment gate as field details.
 Only fields whose booklet coverage is substantial need details; simple
 fields (a plain name/date box) usually need only instructions grounded in
 their existing tooltip text.
@@ -153,6 +155,11 @@ their existing tooltip text.
 
 
 def build_prompt(form_name: str, booklet: str, digests: List[dict]) -> str:
+    # TRUST ASSUMPTION (wsao.4 outer review): the booklet text is interpolated
+    # RAW between the --- fences (digests are JSON-encoded). The booklet is a
+    # trusted artifact (an official IRS/USCIS publication committed to the
+    # kit), not user input -- a hostile booklet could steer the prompt, so
+    # never point this engine at an untrusted PDF.
     return (
         guidance_contract.CONTRACT_TEXT
         + "\n\nFORM: " + form_name
@@ -163,6 +170,106 @@ def build_prompt(form_name: str, booklet: str, digests: List[dict]) -> str:
         + json.dumps(digests, ensure_ascii=False, indent=1)
         + "\n" + _OUTPUT_SPEC
     )
+
+
+# --------------------------------------------------------------------------- #
+# Deterministic contiguity repair (bd wsao.4 outer review). The one recurring
+# model slip is gluing NON-ADJACENT verbatim passages into a single paragraph
+# (a skipped Note/list block mid-paragraph). That is a FORMATTING defect over
+# verbatim content, so it is mechanically repairable: split the paragraph at
+# the longest contained-prefix boundary and re-check both halves. A fragment
+# that stays uncontained after splitting is genuinely non-verbatim -> DROP it
+# and record it (select-not-rewrite: dropping is always safe; rewriting never
+# is). Deterministic, so re-runnable over an existing proposals artifact.
+# --------------------------------------------------------------------------- #
+
+def _longest_contained_prefix(norm_para: str, booklet_norm: str) -> int:
+    lo, hi = 0, len(norm_para)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if booklet_norm.find(norm_para[:mid]) >= 0:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def repair_details_contiguity(details: str, booklet_norm: str) -> tuple[str, List[str]]:
+    """Split glued paragraphs at contained-prefix boundaries; drop residues
+    that remain non-verbatim. Returns (repaired_details, dropped_fragments)."""
+    out_paras: List[str] = []
+    dropped: List[str] = []
+    for raw in (details or "").split("\n\n"):
+        para = raw.strip()
+        if not para:
+            continue
+        body = guidance_contract.details_paragraphs(para)
+        if not body:  # heading-only block: scaffolding, keep as-is
+            out_paras.append(para)
+            continue
+        if guidance_contract.check_containment_normalized(
+                body[0], booklet_norm).contained and len(body) == 1:
+            out_paras.append(para)
+            continue
+        # split at word boundaries near the longest contained prefix,
+        # repeatedly, keeping contained pieces as separate paragraphs
+        remainder = body[0]
+        guard = 0
+        pieces: List[str] = []
+        ok = True
+        while remainder and guard < 20:
+            guard += 1
+            norm = guidance_contract.normalize_for_containment(remainder)
+            if guidance_contract.check_containment_normalized(
+                    remainder, booklet_norm).contained:
+                pieces.append(remainder)
+                remainder = ""
+                break
+            cut_norm = _longest_contained_prefix(norm, booklet_norm)
+            if cut_norm < 24:  # nothing meaningful contained -> paraphrase
+                ok = False
+                break
+            # map the normalized cut back to the raw text approximately: walk
+            # raw, normalizing incrementally, until the normalized length
+            # reaches cut_norm; then back up to the previous sentence/word end.
+            raw_cut = None
+            for i in range(len(remainder), 0, -1):
+                if len(guidance_contract.normalize_for_containment(
+                        remainder[:i])) <= cut_norm:
+                    raw_cut = i
+                    break
+            if not raw_cut:
+                ok = False
+                break
+            head = remainder[:raw_cut]
+            # back up to the last sentence end inside head for a clean split
+            m = max(head.rfind(". "), head.rfind(".\n"), head.rfind(";"))
+            if m > 24:
+                head, rest = remainder[:m + 1], remainder[m + 1:]
+            else:
+                rest = remainder[raw_cut:]
+            head = head.strip()
+            if head and guidance_contract.check_containment_normalized(
+                    head, booklet_norm).contained:
+                pieces.append(head)
+                remainder = rest.strip()
+            else:
+                ok = False
+                break
+        if ok and not remainder:
+            # keep the original heading line (if the block had one) with the
+            # first piece
+            heading_lines = [ln for ln in para.splitlines()
+                             if ln.strip() and ln not in body[0]]
+            prefix = "\n".join(
+                ln for ln in heading_lines
+                if guidance_contract.has_heading(ln)) or ""
+            if prefix and pieces:
+                pieces[0] = prefix + "\n" + pieces[0]
+            out_paras.extend(pieces)
+        else:
+            dropped.append(para[:120])
+    return "\n\n".join(out_paras), dropped
 
 
 # --------------------------------------------------------------------------- #
@@ -201,7 +308,26 @@ def enrich(kit_dir: str, instructions_pdf: Optional[str], model: str,
         if isinstance(fd, str) and len(fd) > len(proposals["form_details"]):
             proposals["form_details"] = fd
 
+    # Deterministic contiguity repair over BOTH channels (see the repairer's
+    # rationale above): splits glued verbatim passages, drops paraphrase.
+    booklet_norm = guidance_contract.normalize_for_containment(booklet)
+    dropped_report: Dict[str, List[str]] = {}
+    for fid, entry in proposals["fields"].items():
+        det = entry.get("details")
+        if isinstance(det, str) and det.strip():
+            repaired, dropped = repair_details_contiguity(det, booklet_norm)
+            entry["details"] = repaired
+            if dropped:
+                dropped_report[fid] = dropped
+    if proposals["form_details"].strip():
+        repaired, dropped = repair_details_contiguity(
+            proposals["form_details"], booklet_norm)
+        proposals["form_details"] = repaired
+        if dropped:
+            dropped_report["<form_details>"] = dropped
+
     return {
+        "contiguity_dropped": dropped_report,
         "kit": kit_dir,
         "model": model,
         "booklet": booklet_path,

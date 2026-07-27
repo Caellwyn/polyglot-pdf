@@ -144,6 +144,32 @@ def test_lint_containment_failure_and_floor_missing():
     assert "help-details-not-contained" not in _rules(findings2)
 
 
+def test_lint_containment_checks_form_level_details_too():
+    """form_metadata.details is under the SAME zero-trust gate as per-field
+    details (wsao.4 outer review: 3 glued paragraphs shipped as 'clean'
+    through the form-level blind spot)."""
+    booklet = "Purpose of Form. Use Form W-7 to apply for an ITIN."
+    schema = _schema([
+        {"id": "f1", "name": "F1", "type": "text",
+         "help": {"instructions": "ok guidance here for coverage"}},
+    ], booklet=booklet)
+    schema["form_metadata"]["details"] = "This sentence was invented."
+    findings = lint_schema(schema)
+    hits = [f for f in findings if f.rule == "help-details-not-contained"]
+    assert len(hits) == 1 and hits[0].path == "$.form_metadata.details"
+    # verbatim form-level details pass
+    schema["form_metadata"]["details"] = \
+        "Use Form W-7 to apply for an ITIN."
+    assert not [f for f in lint_schema(schema)
+                if f.rule == "help-details-not-contained"]
+    # form-level details without a floor -> the no-reference-floor finding
+    schema2 = _schema([{"id": "f1", "name": "F1", "type": "text",
+                        "help": {"instructions": "ok guidance here x"}}])
+    schema2["form_metadata"]["details"] = "Anything."
+    rules2 = [f.rule for f in lint_schema(schema2)]
+    assert "help-details-no-reference-floor" in rules2
+
+
 def test_lint_containment_passes_verbatim_excerpt():
     booklet = ("a. Tax treaty benefit. Certain nonresident aliens must get "
                "an ITIN to claim tax treaty benefits even if they don" +

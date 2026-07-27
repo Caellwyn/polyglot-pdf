@@ -96,3 +96,31 @@ def test_find_booklet_glob_fallback(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     assert ei.find_booklet(str(empty), None) is None
+
+
+def test_repair_details_contiguity_splits_glue_and_drops_paraphrase():
+    """The deterministic contiguity repairer (wsao.4 outer review): a glued
+    paragraph of two non-adjacent verbatim passages is SPLIT at the contained
+    -prefix boundary (pure re-formatting); genuine paraphrase is DROPPED and
+    reported, never kept."""
+    from backend.services import guidance_contract as gc
+    booklet = ("First verbatim sentence about the ITIN. Skipped middle "
+               "sentence that the model omitted. Second verbatim sentence "
+               "about documentation.")
+    bn = gc.normalize_for_containment(booklet)
+    glued = ("First verbatim sentence about the ITIN. Second verbatim "
+             "sentence about documentation.")
+    repaired, dropped = ei.repair_details_contiguity(glued, bn)
+    assert dropped == []
+    paras = [p for p in repaired.split("\n\n") if p.strip()]
+    assert len(paras) == 2
+    assert all(gc.check_containment_normalized(p, bn).contained
+               for p in paras)
+    # paraphrase drops
+    repaired2, dropped2 = ei.repair_details_contiguity(
+        "A wholly invented summary sentence.", bn)
+    assert repaired2 == "" and len(dropped2) == 1
+    # already-contiguous text passes through untouched
+    ok = "First verbatim sentence about the ITIN."
+    repaired3, dropped3 = ei.repair_details_contiguity(ok, bn)
+    assert repaired3 == ok and dropped3 == []

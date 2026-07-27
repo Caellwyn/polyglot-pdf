@@ -857,6 +857,40 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
     # asked (read_only + signature excluded -- decide-and-note).
     askable = [f for f in fields
                if not f.get("read_only") and f.get("type") != "signature"]
+    # FORM-LEVEL details (metadata.details, the wsao.1 floor's guidance block)
+    # are a first-class engine output under the SAME zero-trust contract as
+    # per-field details -- the containment check must see them too (wsao.4
+    # outer review: 3 glued-non-adjacent paragraphs shipped as "clean"
+    # through this exact blind spot).
+    form_details = meta.get("details") if isinstance(meta, dict) else None
+    form_details = form_details if isinstance(form_details, str) else ""
+    if form_details.strip():
+        if not booklet.strip():
+            out.append(LintFinding(
+                SEVERITY_WARNING, "help-details-no-reference-floor",
+                "$.form_metadata.details",
+                "form-level details present but the schema has no "
+                "form_metadata.booklet_text -- the verbatim-containment "
+                "check cannot run; bake the booklet floor",
+            ))
+        else:
+            if booklet_norm is None:
+                booklet_norm = guidance_contract.normalize_for_containment(
+                    booklet)
+            for para in guidance_contract.details_paragraphs(form_details):
+                res = guidance_contract.check_containment_normalized(
+                    para, booklet_norm)
+                if not res.contained:
+                    head = para[:60].replace("\n", " ")
+                    out.append(LintFinding(
+                        SEVERITY_WARNING, "help-details-not-contained",
+                        "$.form_metadata.details",
+                        f"form-level details paragraph is not a verbatim "
+                        f"excerpt of the booklet text: \"{head}...\" -- the "
+                        f"details channel is SELECT-not-REWRITE "
+                        f"(guidance contract)",
+                    ))
+
     def _instr_of(f: Dict[str, Any]) -> str:
         # Raw LLM drafts carry lists/numbers where strings belong; lint never
         # throws on malformed input (wsao.3 fresh-eyes).
