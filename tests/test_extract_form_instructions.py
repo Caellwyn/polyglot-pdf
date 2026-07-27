@@ -453,7 +453,11 @@ def test_oversize_form_skips_guidance_stage(tmp_path, monkeypatch):
         for i in range(9)], "sections": [], "parts": []}
     (tmp_path / "instructions.pdf").write_bytes(b"%PDF-fake")
     monkeypatch.setenv("GUIDANCE_MAX_FIELDS", "5")
+    monkeypatch.setattr(ef, "_enrich_instructions_from_pdf", lambda s, p: 7)
     report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"),
                                  None, {})
     assert "skipped" in report and "GUIDANCE_MAX_FIELDS" in report["skipped"]
+    # oversize is a DEGRADED path: the naive fallback still runs (reviewer
+    # 2: pre-wsao parity -- the old 3c step enriched oversize forms too)
+    assert report.get("fallback_enriched") == 7
     assert "help" not in schema["fields"][0]

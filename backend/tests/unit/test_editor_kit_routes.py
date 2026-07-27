@@ -2524,6 +2524,8 @@ def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     assert r.status_code == 200, r.text
     assert "--no-translate-options" in seen_cmds[1]
     assert "--translation-model" not in seen_cmds[1]
+    # the two opt-outs are independent: guidance stays ON here
+    assert "--guidance-model" in seen_cmds[1]
 
     # The guidance kill switch's SERVER-SIDE half (bd wsao.6): unchecking
     # must actually suppress the LLM stage in the subprocess cmd.

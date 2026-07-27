@@ -783,7 +783,13 @@ def bootstrap_provenance(schema: dict, tu_map: Dict[str, str]) -> Dict[str, dict
     """Legacy kits carry no provenance, so 'no record => human-owned' would
     freeze them forever (the sprint-16 i-90 no-op trap). A field whose
     current instructions EXACTLY match its /TU tooltip is mechanically
-    machine-owned (source: tu); anything else stays protected."""
+    machine-owned (source: tu); anything else stays protected.
+
+    PRECONDITION: only instructions_sha1 is stamped -- callers assume
+    details/format_hint are BLANK at bootstrap time (true for fresh drafts
+    and /TU-era kits). A field with pre-existing unverified details would
+    hash-mismatch the absent details_sha1 and be conservatively treated as
+    human-owned (over-protective, never over-writing)."""
     prov: Dict[str, dict] = {}
     for f in schema.get("fields", []):
         if not isinstance(f, dict):

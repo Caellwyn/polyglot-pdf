@@ -982,11 +982,21 @@ def _enrich_guidance(schema: dict, pdf_path: str,
             # inside the extraction subprocess timeout -- an unbounded form
             # could time the whole extraction out (wsao.6 outer review).
             # Oversize forms defer to the standalone CLI, which has no
-            # request deadline.
-            return {"skipped": f"{len(askable)} askable fields > "
-                               f"GUIDANCE_MAX_FIELDS={max_fields} -- run "
-                               f"scripts/authoring/enrich_instructions.py "
-                               f"standalone"}
+            # request deadline. The oversize case is a DEGRADED path like
+            # the others, so the naive fallback still runs (pre-wsao parity
+            # -- reviewer 2: returning bare here gave an oversize form with
+            # a booklet ZERO enrichment where the old 3c step enriched it).
+            report = {"skipped": f"{len(askable)} askable fields > "
+                                 f"GUIDANCE_MAX_FIELDS={max_fields} -- run "
+                                 f"scripts/authoring/"
+                                 f"enrich_instructions.py standalone"}
+            try:
+                report["fallback_enriched"] = \
+                    _enrich_instructions_from_pdf(
+                        schema, instructions_pdf or booklet_path)
+            except Exception:  # noqa: BLE001
+                pass
+            return report
         model = model or ei.DEFAULT_MODEL
         booklet = ei.booklet_text(booklet_path)
         form_name = ((schema.get("form_metadata") or {}).get("title")
@@ -1274,7 +1284,10 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         if flag_line:
             print(flag_line)
     if guidance_report.get("skipped"):
-        print(f"guidance: skipped ({guidance_report['skipped']})",
+        _fb = guidance_report.get("fallback_enriched", 0)
+        print(f"guidance: skipped ({guidance_report['skipped']})"
+              + (f" -- naive fallback enriched {_fb} field(s)"
+                 if _fb else ""),
               file=sys.stderr)
     elif guidance_report.get("failed"):
         print(f"guidance: FAILED ({guidance_report['failed']}) -- naive "
