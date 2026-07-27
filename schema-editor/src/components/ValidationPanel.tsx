@@ -65,6 +65,11 @@ const RULE_LABELS: Record<string, string> = {
   'help-details-no-reference-floor': 'Details without booklet floor',
   'help-details-oversize': 'Details oversize',
   'help-details-headings-missing': 'Details missing headings',
+  // Guidance verify-loop flags (bd wsao.5), re-emitted from the persisted
+  // bake report -- the instructions_enrich analog of the translation flags.
+  'instructions-rectified': 'Guidance revised by verify loop',
+  'instructions-ungrounded-dropped': 'Guidance dropped (failed judge)',
+  'instructions-enrich-unavailable': 'Guidance judge unavailable',
 };
 
 // Local (non-hosted) delivery mode has no backend and no access code to reach

@@ -331,3 +331,51 @@ help.details -- VERBATIM OFFICIAL EXCERPTS (zero-trust channel).
   of legal text) and never cut silently. The secretary always holds the full
   text.
 """
+
+
+# --------------------------------------------------------------------------- #
+# Verify loop vocabulary (bd wsao.5). The judge rubric rendered into the
+# judge prompt, and the flag taxonomy the bake persists at
+# _bakeoff.authoring.instructions_enrich.flags (schema_lint re-emits these on
+# every lint pass so the editor worklist needs zero extra plumbing --
+# mirroring TRANSLATION_FLAG_RULES).
+# --------------------------------------------------------------------------- #
+
+GUIDANCE_FLAG_RULES = frozenset({
+    # a field's authored text was revised by the bounded rectify loop and the
+    # revision passed -- informational provenance for the human reviewer
+    "instructions-rectified",
+    # a field failed the judge even after rectify; its proposed text was
+    # DROPPED and the deterministic baseline kept (the KEEP rule: never ship
+    # unverified LLM legal text)
+    "instructions-ungrounded-dropped",
+    # the judge leg was unavailable (no credentials / API failure); NO
+    # proposed text was written for the affected fields -- baseline kept
+    "instructions-enrich-unavailable",
+})
+
+JUDGE_TEXT = """GUIDANCE JUDGE RUBRIC (sprint-16; bd wsao.5)
+
+You are judging AI-authored per-field guidance for an official government
+form against the form's OFFICIAL INSTRUCTIONS TEXT (provided verbatim). The
+details channel is separately machine-checked for verbatim containment; your
+job is what a mechanical check cannot see:
+
+Per field, return a verdict object:
+- grounded (bool): is EVERY claim in `instructions` traceable to the
+  official text, the field's own digest (name/options/tooltip), or plain
+  formatting fact? Outside legal knowledge or invented
+  thresholds/dates/documents => false.
+- unsupported_claims (list of short quotes): each claim you could not trace.
+- useful_beyond_label (bool): does `instructions` tell the user anything
+  beyond restating the field's label/options?
+- omission_concerns (list of short notes): places where the SELECTED details
+  excerpts drop an adjacent qualifying clause ("unless...", "except...",
+  "only if...") whose absence makes the excerpt misleading.
+- advice (bool): true if the text TELLS the user what to enter or which
+  option to pick rather than explaining what the official text says
+  (information-never-advice is a hard product rule).
+
+A field passes when: grounded, useful_beyond_label (or instructions empty),
+no advice, and no omission_concerns you judge material.
+"""
