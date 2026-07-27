@@ -124,3 +124,27 @@ def test_repair_details_contiguity_splits_glue_and_drops_paraphrase():
     ok = "First verbatim sentence about the ITIN."
     repaired3, dropped3 = ei.repair_details_contiguity(ok, bn)
     assert repaired3 == ok and dropped3 == []
+
+
+def test_repairer_whitespace_blank_lines_and_interleaved_paraphrase():
+    """wsao.4 outer re-review round: (a) a whitespace-bearing blank line
+    ('\n \n') must NOT silently lose the following verbatim segment; (b) an
+    interleaved [verbatim][paraphrase][verbatim] span keeps BOTH verbatim
+    pieces and drops only the paraphrase sentence (bd polyglot-pdf-9v3p)."""
+    from backend.services import guidance_contract as gc
+    booklet = ("Alpha verbatim sentence about the ITIN process. "
+               "Beta verbatim sentence about required documentation.")
+    bn = gc.normalize_for_containment(booklet)
+    # (a) whitespace blank-line separator
+    repaired, dropped = ei.repair_details_contiguity(
+        "Alpha verbatim sentence about the ITIN process.\n \n"
+        "Beta verbatim sentence about required documentation.", bn)
+    assert "Alpha verbatim" in repaired and "Beta verbatim" in repaired
+    assert dropped == []
+    # (b) interleaved paraphrase keeps A and C, drops only B
+    repaired2, dropped2 = ei.repair_details_contiguity(
+        "Alpha verbatim sentence about the ITIN process. "
+        "A wholly invented middle claim goes here. "
+        "Beta verbatim sentence about required documentation.", bn)
+    assert "Alpha verbatim" in repaired2 and "Beta verbatim" in repaired2
+    assert len(dropped2) == 1 and "invented middle" in dropped2[0]

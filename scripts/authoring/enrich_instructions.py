@@ -36,6 +36,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 from typing import Any, Dict, List, Optional
 
@@ -194,81 +195,99 @@ def _longest_contained_prefix(norm_para: str, booklet_norm: str) -> int:
     return lo
 
 
+def _first_sentence_split(text: str) -> tuple[str, str]:
+    """(first sentence-ish unit, rest). Falls back to the whole text."""
+    m = min((i for i in (text.find(". "), text.find(".\n"), text.find("; "))
+             if i >= 0), default=-1)
+    if m < 0:
+        return text, ""
+    return text[:m + 1], text[m + 1:].strip()
+
+
+def _repair_span(span: str, booklet_norm: str) -> tuple[List[str], List[str]]:
+    """Repair ONE body span: emit contained pieces (split at contained-prefix
+    boundaries), drop non-verbatim SENTENCES (not the whole span -- an
+    interleaved [verbatim A][paraphrase B][verbatim C] keeps A and C; bd
+    polyglot-pdf-9v3p). Every emitted piece is containment-verified."""
+    pieces: List[str] = []
+    drops: List[str] = []
+    remainder = span.strip()
+    guard = 0
+    while remainder and guard < 60:
+        guard += 1
+        if guidance_contract.check_containment_normalized(
+                remainder, booklet_norm).contained:
+            pieces.append(remainder)
+            return pieces, drops
+        norm = guidance_contract.normalize_for_containment(remainder)
+        cut_norm = _longest_contained_prefix(norm, booklet_norm)
+        if cut_norm < 24:
+            # the span STARTS with non-verbatim text: drop its first
+            # sentence and keep repairing the rest (never the whole span)
+            head, rest = _first_sentence_split(remainder)
+            drops.append(head[:120])
+            remainder = rest
+            continue
+        # map the normalized cut back to raw text, back up to a sentence end
+        raw_cut = None
+        for i in range(len(remainder), 0, -1):
+            if len(guidance_contract.normalize_for_containment(
+                    remainder[:i])) <= cut_norm:
+                raw_cut = i
+                break
+        if not raw_cut:
+            head, rest = _first_sentence_split(remainder)
+            drops.append(head[:120])
+            remainder = rest
+            continue
+        head = remainder[:raw_cut]
+        m = max(head.rfind(". "), head.rfind(".\n"), head.rfind(";"))
+        if m > 24:
+            head, rest = remainder[:m + 1], remainder[m + 1:]
+        else:
+            rest = remainder[raw_cut:]
+        head = head.strip()
+        if head and guidance_contract.check_containment_normalized(
+                head, booklet_norm).contained:
+            pieces.append(head)
+            remainder = rest.strip()
+        else:
+            # contained-prefix mapping failed cleanly: drop one sentence
+            drop_head, rest2 = _first_sentence_split(remainder)
+            drops.append(drop_head[:120])
+            remainder = rest2
+    if remainder:
+        drops.append(remainder[:120])
+    return pieces, drops
+
+
 def repair_details_contiguity(details: str, booklet_norm: str) -> tuple[str, List[str]]:
     """Split glued paragraphs at contained-prefix boundaries; drop residues
-    that remain non-verbatim. Returns (repaired_details, dropped_fragments)."""
+    that remain non-verbatim (sentence-granular -- see _repair_span). Returns
+    (repaired_details, dropped_fragments). Iterates EVERY body segment using
+    the SAME blank-line regex as the containment checker (a whitespace-bearing
+    blank line like '\\n \\n' previously lost segments silently -- wsao.4
+    outer review)."""
     out_paras: List[str] = []
     dropped: List[str] = []
-    for raw in (details or "").split("\n\n"):
+    for raw in re.split(r"\n\s*\n", details or ""):
         para = raw.strip()
         if not para:
             continue
-        body = guidance_contract.details_paragraphs(para)
-        if not body:  # heading-only block: scaffolding, keep as-is
+        lines = para.splitlines()
+        heading_lines = [ln for ln in lines
+                         if guidance_contract.has_heading(ln)
+                         and len(ln) <= 120]
+        body_text = "\n".join(ln for ln in lines
+                              if ln not in heading_lines).strip()
+        if not body_text:  # heading-only scaffolding
             out_paras.append(para)
             continue
-        if guidance_contract.check_containment_normalized(
-                body[0], booklet_norm).contained and len(body) == 1:
-            out_paras.append(para)
-            continue
-        # split at word boundaries near the longest contained prefix,
-        # repeatedly, keeping contained pieces as separate paragraphs
-        remainder = body[0]
-        guard = 0
-        pieces: List[str] = []
-        ok = True
-        while remainder and guard < 20:
-            guard += 1
-            norm = guidance_contract.normalize_for_containment(remainder)
-            if guidance_contract.check_containment_normalized(
-                    remainder, booklet_norm).contained:
-                pieces.append(remainder)
-                remainder = ""
-                break
-            cut_norm = _longest_contained_prefix(norm, booklet_norm)
-            if cut_norm < 24:  # nothing meaningful contained -> paraphrase
-                ok = False
-                break
-            # map the normalized cut back to the raw text approximately: walk
-            # raw, normalizing incrementally, until the normalized length
-            # reaches cut_norm; then back up to the previous sentence/word end.
-            raw_cut = None
-            for i in range(len(remainder), 0, -1):
-                if len(guidance_contract.normalize_for_containment(
-                        remainder[:i])) <= cut_norm:
-                    raw_cut = i
-                    break
-            if not raw_cut:
-                ok = False
-                break
-            head = remainder[:raw_cut]
-            # back up to the last sentence end inside head for a clean split
-            m = max(head.rfind(". "), head.rfind(".\n"), head.rfind(";"))
-            if m > 24:
-                head, rest = remainder[:m + 1], remainder[m + 1:]
-            else:
-                rest = remainder[raw_cut:]
-            head = head.strip()
-            if head and guidance_contract.check_containment_normalized(
-                    head, booklet_norm).contained:
-                pieces.append(head)
-                remainder = rest.strip()
-            else:
-                ok = False
-                break
-        if ok and not remainder:
-            # keep the original heading line (if the block had one) with the
-            # first piece
-            heading_lines = [ln for ln in para.splitlines()
-                             if ln.strip() and ln not in body[0]]
-            prefix = "\n".join(
-                ln for ln in heading_lines
-                if guidance_contract.has_heading(ln)) or ""
-            if prefix and pieces:
-                pieces[0] = prefix + "\n" + pieces[0]
-            out_paras.extend(pieces)
-        else:
-            dropped.append(para[:120])
+        pieces, drops = _repair_span(body_text, booklet_norm)
+        dropped.extend(drops)
+        if heading_lines and pieces:
+            pieces[0] = "\n".join(heading_lines) + "\n" + pieces[0]
+        out_paras.extend(pieces)
     return "\n\n".join(out_paras), dropped
 
 
