@@ -278,17 +278,37 @@ export async function loadUnclaimedWidgets(kitId: string): Promise<UnclaimedWidg
   return Array.isArray(body.widgets) ? body.widgets : [];
 }
 
+/** The status route's success payload (bd polyglot-pdf-783r). On a successful
+ * `complete`, the server ran the drift sweep first: `retranslated` counts the
+ * translation entries it freshly baked (0 when nothing had drifted) and
+ * `translationModel` is the model that ran (null when the sweep did no work or
+ * the flip was to draft). A BLOCKED completion never returns this -- it is a
+ * non-ok response whose detail carries the editor-facing "N of M" / contact
+ * message, surfaced by errorDetail below. */
+export interface KitStatusResult {
+  ok: boolean;
+  status: 'draft' | 'complete';
+  retranslated: number;
+  translationModel: string | null;
+}
+
 /** Flip a kit's status. Promotion to complete is validated server-side (the
- * publish gate) -- a 422 carries the validation detail to show the human. */
+ * publish gate) -- a 422 carries the validation detail to show the human. A
+ * complete flip ALSO runs the translation drift sweep server-side (bd
+ * polyglot-pdf-783r): it can take tens of seconds (one pro-tier call per
+ * language, with retry), and a 409 whose detail is the "N of M translations
+ * complete" message means some language is still missing -- re-press to retry
+ * only the gaps. */
 export async function setRemoteStatus(
   kitId: string, status: 'draft' | 'complete',
-): Promise<void> {
+): Promise<KitStatusResult> {
   const res = await editorFetch(`/api/editor/kits/${encodeURIComponent(kitId)}/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   });
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not update the status'));
+  return (await res.json()) as KitStatusResult;
 }
 
 /** Rename a kit's DISPLAY label (bd 15ic) -- metadata-only; the kit's identity

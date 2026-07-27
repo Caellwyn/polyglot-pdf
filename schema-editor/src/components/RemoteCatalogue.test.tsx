@@ -46,7 +46,11 @@ const SCHEMA = {
 beforeEach(() => {
   vi.mocked(listRemoteKits).mockResolvedValue([...KITS]);
   vi.mocked(loadRemoteSchema).mockResolvedValue(SCHEMA);
-  vi.mocked(setRemoteStatus).mockResolvedValue(undefined);
+  // Default: a clean complete flip with no drift (bd polyglot-pdf-783r). Tests
+  // that exercise the drift notice / refusal override this per-case.
+  vi.mocked(setRemoteStatus).mockResolvedValue({
+    ok: true, status: 'complete', retranslated: 0, translationModel: null,
+  });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -95,6 +99,30 @@ describe('RemoteCatalogue', () => {
     // Refresh happened (list re-requested).
     await waitFor(() => expect(vi.mocked(listRemoteKits).mock.calls.length).toBeGreaterThan(1));
     await waitFor(() => expect(screen.getByText(/marked complete/)).toBeInTheDocument());
+  });
+
+  it('notes the drift sweep in the complete notice when it re-translated (bd 783r)', async () => {
+    vi.mocked(setRemoteStatus).mockResolvedValue({
+      ok: true, status: 'complete', retranslated: 3, translationModel: 'gemini-2.5-pro',
+    });
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Mark complete'));
+    await waitFor(() =>
+      expect(screen.getByText(/Re-translated 3 drifted translations/)).toBeInTheDocument());
+  });
+
+  it('surfaces the incomplete-translation refusal (409 "N of M") as the error banner (bd 783r)', async () => {
+    vi.mocked(setRemoteStatus).mockRejectedValue(
+      new Error('10 of 17 language translations complete. Please try again later to finish (retrying only the missing ones).'),
+    );
+    render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+    await waitFor(() => expect(screen.getByText('Draft Form')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Mark complete'));
+    await waitFor(() =>
+      expect(screen.getByText(/10 of 17 language translations complete/)).toBeInTheDocument());
   });
 
   it('surfaces the promote-gate refusal detail (422) as the error banner', async () => {

@@ -90,6 +90,13 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // Translate-options action covers already-extracted kits (one at a time).
   const [translateOptionsChecked, setTranslateOptionsChecked] = React.useState(true);
   const [translatingId, setTranslatingId] = React.useState<string | null>(null);
+  // Mark-complete drift sweep (bd polyglot-pdf-783r): the id of the kit whose
+  // completion is running its server-side re-translation + validation, plus an
+  // elapsed-seconds ticker. The sweep makes one pro-tier call per language with
+  // retry, so a complete flip can take tens of seconds -- the button shows the
+  // ticker (same pattern as extraction) so it does not read as a hang.
+  const [completingId, setCompletingId] = React.useState<string | null>(null);
+  const [completeElapsed, setCompleteElapsed] = React.useState(0);
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
   const isAuthor = role === 'author';
 
@@ -101,6 +108,15 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     const t = window.setInterval(() => setExtractElapsed((s) => s + 1), 1000);
     return () => window.clearInterval(t);
   }, [extractingId]);
+
+  // Elapsed-seconds ticker while a Mark-complete sweep runs (bd 783r), same
+  // rationale as the extraction ticker.
+  React.useEffect(() => {
+    if (completingId === null) return;
+    setCompleteElapsed(0);
+    const t = window.setInterval(() => setCompleteElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [completingId]);
 
   // Last SAVED in-editor stats per kit (the FormCatalogue editedProgress
   // pattern -- Codex P1, PR #280): liveProgress only covers the kit that is
@@ -200,18 +216,34 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   React.useEffect(() => { void refresh(); }, [refresh]);
 
   // Promote/demote a kit in the SHARED store. Promotion can be refused by the
-  // server's publish gate (schema must validate) -- surface that detail.
+  // server's publish gate (schema must validate) -- surface that detail. A
+  // complete flip ALSO runs the server-side translation drift sweep (bd
+  // polyglot-pdf-783r): re-translating spoken names / option labels whose
+  // English drifted during review, then refusing completion until every
+  // language is covered. The sweep is slow (a pro-tier call per language with
+  // retry), so a complete flip shows the elapsed ticker via completingId, and a
+  // 409 "N of M translations complete" refusal surfaces as the error to re-press.
   const handleSetStatus = React.useCallback(async (
     kit: RemoteKitEntry, status: 'draft' | 'complete',
   ) => {
     setNotice(null);
     setBusy(true);
     setError(null);
+    if (status === 'complete') setCompletingId(kit.id);
     try {
-      await setRemoteStatus(kit.id, status);
-      setNotice(status === 'complete'
-        ? `"${kit.label}" marked complete -- it ships with the maintainer's next deploy.`
-        : `"${kit.label}" reverted to draft.`);
+      const result = await setRemoteStatus(kit.id, status);
+      if (status === 'complete') {
+        const drift = result.retranslated > 0
+          ? ` Re-translated ${result.retranslated} drifted translation` +
+            `${result.retranslated === 1 ? '' : 's'} first.`
+          : '';
+        setNotice(
+          `"${kit.label}" marked complete -- it ships with the maintainer's ` +
+          `next deploy.${drift}`,
+        );
+      } else {
+        setNotice(`"${kit.label}" reverted to draft.`);
+      }
       await refresh();
     } catch (err) {
       if (err instanceof AuthError) {
@@ -220,6 +252,8 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       }
       setError(err instanceof Error ? err.message : 'Failed to update status');
       setBusy(false);
+    } finally {
+      setCompletingId(null);
     }
   }, [refresh, onAuthError]);
 
@@ -561,13 +595,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                   <button
                     className="btn-sm btn-primary text-xs"
                     onClick={() => void handleSetStatus(kit, 'complete')}
-                    disabled={busy || stripDirty}
+                    disabled={busy || stripDirty || completingId !== null}
                     title={stripDirty
                       ? 'Save your changes first (Cmd+S) -- completing now '
                         + 'would publish the last saved version, not your edits'
-                      : "Mark complete (ships with the maintainer's next deploy)"}
+                      : "Mark complete (re-translates any drifted names/options, "
+                        + "then ships with the maintainer's next deploy)"}
                   >
-                    Mark complete
+                    {completingId === kit.id
+                      ? `Re-translating & validating... ${completeElapsed}s`
+                      : 'Mark complete'}
                   </button>
                 ))}
                 {isAuthor && kit.hasSchema && kit.status !== 'complete' && (
@@ -707,13 +744,16 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                       <button
                         className="btn-sm btn-primary text-xs"
                         onClick={() => void handleSetStatus(kit, 'complete')}
-                        disabled={busy || openDirty}
+                        disabled={busy || openDirty || completingId !== null}
                         title={openDirty
                           ? 'Save your changes first (Cmd+S) -- completing now '
                             + 'would publish the last saved version, not your edits'
-                          : "Mark complete (ships with the maintainer's next deploy)"}
+                          : "Mark complete (re-translates any drifted names/options, "
+                            + "then ships with the maintainer's next deploy)"}
                       >
-                        Mark complete
+                        {completingId === kit.id
+                          ? `Re-translating & validating... ${completeElapsed}s`
+                          : 'Mark complete'}
                       </button>
                     )}
                   </div>

@@ -58,7 +58,11 @@ from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.adapters.text_ai_gemini import TextAIGemini
-from backend.services.option_translation import bake_label_translations
+from backend.services.option_translation import (
+    TRANSLATE_RETRY_DELAYS,
+    bake_label_translations,
+    translation_coverage_summary,
+)
 from backend.services.schema_lint import (
     SEVERITY_ERROR, SEVERITY_WARNING, lint_schema,
 )
@@ -162,6 +166,22 @@ class EditorKitListResponse(BaseModel):
 
 class KitStatusBody(BaseModel):
     status: Literal["draft", "complete"]
+
+
+class KitStatusResponse(BaseModel):
+    """Result of a status flip (bd polyglot-pdf-783r).
+
+    On a successful `complete`, the drift sweep ran first: `retranslated` is the
+    number of translation entries (option/spoken-name/section across languages)
+    the sweep freshly baked -- 0 when nothing had drifted -- and `translationModel`
+    names the model that ran (null when the sweep did no work / the flip was to
+    draft). A blocked completion never reaches this model: it raises an
+    HTTPException whose detail carries the editor-facing "N of M" message."""
+
+    ok: bool
+    status: str
+    retranslated: int = 0
+    translationModel: Optional[str] = None
 
 
 class KitLabelBody(BaseModel):
@@ -868,12 +888,99 @@ async def get_unclaimed_widgets(
     return UnclaimedWidgetsResponse(widgets=widgets)
 
 
-@router.post("/kits/{kit_id}/status")
+async def _sweep_drifted_translations(
+    store,
+    kit_id: str,
+    schema: dict,
+    schema_file: str,
+) -> tuple[int, Optional[str]]:
+    """Fill every MISSING translation in `schema` and gate on full coverage
+    (bd polyglot-pdf-783r), for the Mark-complete drift sweep.
+
+    Mutates `schema` in place (so the caller's later validate/lint gates see the
+    swept schema) and persists it whenever anything changed. Uses the SAME bake
+    as /translate-options with only_missing=True -- so it never re-litigates a
+    non-drifted translation -- plus per-language 1s/5s retry backoff
+    (TRANSLATE_RETRY_DELAYS). Returns (entries_freshly_baked, model_or_None).
+
+    Raises HTTPException to REFUSE completion when:
+      - Gemini auth is not configured (503; the sweep cannot run -- a
+        maintainer/config issue, so the message points the editor at the
+        maintainer);
+      - after the sweep some supported language is still incomplete (409 with
+        the "N of M" progress message; a re-press retries only the gaps).
+    """
+    settings = get_settings()
+    if not (settings.VERTEXAI or settings.GEMINI_API_KEY
+            or os.getenv("GEMINI_API_KEY")):
+        # A config/deployment issue, not something the editor can fix -- point
+        # them at the maintainer and block (maintainer 2026-07-26).
+        raise HTTPException(
+            status_code=503,
+            detail="Translation is not configured on this server, so this form "
+                   "cannot be checked for translation drift before completion. "
+                   "Please contact the maintainer at josh@caellwynai.com.",
+        )
+
+    # Same constructor discipline as /translate-options: an EMPTY fallback chain
+    # (a chosen tier fails loud, never silently degrades to lite) and a bounded
+    # thinking budget (2.5-pro cannot disable thinking).
+    model = settings.OPTION_TRANSLATION_MODEL
+    text_ai = TextAIGemini(
+        api_key=settings.GEMINI_API_KEY,
+        model=model,
+        vertexai=settings.VERTEXAI,
+        fallback_models=(),
+        thinking_budget=512 if "pro" in model else None,
+    )
+    languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
+                 if n != "english"}
+    report = await bake_label_translations(
+        schema, text_ai, languages, only_missing=True,
+        attempt_delays=TRANSLATE_RETRY_DELAYS,
+    )
+    # Entries freshly baked across every class + language (for the editor note).
+    retranslated = sum(
+        e.get("options_updated", 0) + e.get("fields_updated", 0)
+        + e.get("sections_updated", 0)
+        for e in report.get("languages", {}).values()
+    )
+    flags = report.get("flags") or []
+    if report.get("changed") or flags:
+        # Persist into the SAME provenance slot the extraction post-pass and
+        # /translate-options write, so a later lint re-emits the flags -- and so
+        # the freshly baked translations survive even if a LATER gate
+        # (validate/lint) blocks this completion (the next press's sweep then
+        # no-ops over them).
+        authoring = schema.setdefault("_bakeoff", {}).setdefault("authoring", {})
+        authoring["option_translation"] = dict(report, model=model)
+        try:
+            await store.put_schema(kit_id, schema, schema_file)
+        except FormKitStoreError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Re-translation succeeded but the schema could not be "
+                       "stored",
+            ) from exc
+
+    summary = translation_coverage_summary(schema)
+    if not summary.complete:
+        _log.info(
+            "editor_status_translation_incomplete", kit_id=kit_id,
+            covered=summary.covered_languages, total=summary.total_languages,
+            incomplete=summary.incomplete_languages,
+            failed_languages=report.get("failed_languages"),
+        )
+        raise HTTPException(status_code=409, detail=summary.message())
+    return retranslated, (model if retranslated else None)
+
+
+@router.post("/kits/{kit_id}/status", response_model=KitStatusResponse)
 async def set_editor_kit_status(
     kit_id: str,
     body: KitStatusBody,
     role: Annotated[str, Depends(require_editor_role)],
-) -> dict:
+) -> KitStatusResponse:
     """Flip a kit's status (draft <-> complete), preserving other metadata keys.
 
     `complete` is the PUBLISH gate: the deploy ships only complete kits to the
@@ -881,11 +988,24 @@ async def set_editor_kit_status(
     against the canonical FormSchema -- a broken schema surfaces here, to the
     person who can fix it, not later in the voice app. Reverting to draft is
     unconditional.
+
+    DRIFT SWEEP (bd polyglot-pdf-783r): before the validate/lint gates, a
+    completion re-translates every spoken-name / option-label / section-label
+    whose translation is missing -- which, because editing an English string in
+    the editor DROPS its baked translations, is exactly the set that drifted
+    during human review (plus anything never translated). The sweep runs
+    server-side as a STEP of the editor-authorized completion (so it needs no
+    author role -- an editor, who cannot call /translate-options, can still fix
+    drift), retries each language with backoff, and REFUSES completion until
+    every supported language is fully covered (the "N of M" message). It is
+    idempotent: a re-press retries only the still-missing languages.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
     meta, files = await _load_meta_or_404(store, kit_id)
     schema_file, pdf_file = _resolve_meta_names(meta)
+    retranslated = 0
+    translation_model: Optional[str] = None
 
     if body.status == "complete":
         # The voice app serves BOTH the schema and the PDF of a complete kit;
@@ -910,6 +1030,16 @@ async def set_editor_kit_status(
             raise HTTPException(
                 status_code=502, detail="Unable to load schema"
             ) from exc
+
+        # Drift sweep (bd polyglot-pdf-783r): fill every MISSING translation
+        # (the drifted-during-review set + any never-translated), persist, then
+        # gate on full coverage. Runs FIRST so the validate/lint gates below see
+        # the swept schema, and a translation block reads distinctly from a
+        # schema-invalid one.
+        retranslated, translation_model = await _sweep_drifted_translations(
+            store, kit_id, schema, schema_file,
+        )
+
         try:
             parsed = FormSchema.model_validate(schema)
         except ValidationError as exc:
@@ -982,8 +1112,12 @@ async def set_editor_kit_status(
     except FormKitStoreError as exc:
         _log.error("editor_status_save_failed", kit_id=kit_id, error=str(exc))
         raise HTTPException(status_code=502, detail="Unable to update status") from exc
-    _log.info("editor_status_set", kit_id=kit_id, status=body.status, role=role)
-    return {"ok": True, "status": body.status}
+    _log.info("editor_status_set", kit_id=kit_id, status=body.status, role=role,
+              retranslated=retranslated, translation_model=translation_model)
+    return KitStatusResponse(
+        ok=True, status=body.status,
+        retranslated=retranslated, translationModel=translation_model,
+    )
 
 
 @router.post("/kits/{kit_id}/label")
