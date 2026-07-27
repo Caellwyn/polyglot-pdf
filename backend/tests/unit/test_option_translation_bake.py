@@ -25,6 +25,7 @@ Pins:
 
 ASCII only (scar #6): non-ASCII fixture strings use unicode escapes.
 """
+import asyncio
 import json
 
 import pytest
@@ -759,6 +760,66 @@ async def test_bake_no_retry_by_default_single_attempt(monkeypatch):
     assert ai.translate_items.await_count == 1
     assert sleeps == []
     assert report["languages"]["spanish"]["attempts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_bake_retry_backoff_does_not_starve_a_healthy_language(monkeypatch):
+    """A language stuck in its retry backoff must NOT block a HEALTHY language
+    (criterion 2: languages remain concurrent during retry). Proven by making
+    the retrying language's sleep BLOCK on an event that only the healthy
+    language's completion releases: if the sleep held a concurrency slot or
+    serialized the languages, the healthy call could never run and this
+    deadlocks (caught by the test timeout). Order asserted: the healthy
+    language finishes its translate call BEFORE the retrying language's sleep
+    returns."""
+    healthy_done = asyncio.Event()
+    order = []
+
+    async def _gated_sleep(_secs):
+        # The retrying language parks here until the healthy one has finished --
+        # only possible if the two languages run concurrently (the sleep is
+        # outside the semaphore, so it holds no slot).
+        await healthy_done.wait()
+        order.append("retry-sleep-resumed")
+
+    monkeypatch.setattr(ot.asyncio, "sleep", _gated_sleep)
+
+    schema = _schema([{"id": "sex", "options": [
+        {"value": "M", "label": "Male"},
+        {"value": "F", "label": "Female"},
+    ]}])
+    ai = MagicMock()
+    spanish_calls = {"n": 0}
+
+    async def _mixed(items, language_name, language_code, *,
+                     form_name=None, glossary_context=None):
+        lang = language_name.lower()
+        if lang == "french":
+            # Healthy: succeeds immediately, then releases the gate.
+            order.append("french-done")
+            healthy_done.set()
+            return _items_response(items, {"Male": "Homme", "Female": "Femme"})
+        # Spanish: fail first (-> the language enters the gated sleep), succeed
+        # on the retry that runs only after french released the gate.
+        spanish_calls["n"] += 1
+        if spanish_calls["n"] == 1:
+            return None
+        return _items_response(items, _TRANSLATIONS["spanish"])
+
+    ai.translate_items = AsyncMock(side_effect=_mixed)
+    report = await asyncio.wait_for(
+        ot.bake_label_translations(
+            schema, ai, {"spanish": "es-US", "french": "fr-FR"},
+            attempt_delays=(1.0,)),
+        timeout=5.0,  # a serialized/slot-holding sleep would deadlock -> timeout
+    )
+
+    # French finished while Spanish was parked in its backoff -> concurrent.
+    assert order[0] == "french-done"
+    assert "retry-sleep-resumed" in order
+    assert report["failed_languages"] == []
+    assert report["languages"]["french"]["failed"] is False
+    assert report["languages"]["spanish"]["attempts"] == 2
 
 
 # --- 9. Whole-kit coverage summary for the completion gate (bd 783r) -----------

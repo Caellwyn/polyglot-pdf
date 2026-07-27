@@ -21,8 +21,10 @@ protocol's job, not this gate's.) Decisions locked in-chat 2026-07-26.
 ## What shipped
 
 - NEW server-side sweep inside `set_editor_kit_status`
-  (`backend/routes/editor_kit_routes.py`), before the existing
-  validate/lint/v2/PDF gates: `_sweep_drifted_translations` runs the SAME
+  (`backend/routes/editor_kit_routes.py`), AFTER the cheap structural gates
+  (PDF-exists / schema-validate / extraction_info / v2-stamp / lint) so a schema
+  that will be rejected anyway never pays for the pro-tier sweep (fresh-eyes cost
+  finding): `_sweep_drifted_translations` runs the SAME
   `bake_label_translations` as `/translate-options` with `only_missing=True` --
   so it fills exactly the dropped-on-edit (drifted) set plus anything never
   translated, and never re-litigates a non-drifted translation -- persists the
@@ -66,6 +68,10 @@ protocol's job, not this gate's.) Decisions locked in-chat 2026-07-26.
   failing language waits.
 - **Gate hard-blocks (per maintainer), but self-heals.** Pressing Mark complete
   does the remaining work; `only_missing` makes each press cheap.
+- **Sweep runs LAST, after the cheap structural gates** (fresh-eyes cost finding):
+  validate / extraction_info / v2-stamp / lint reject a bad schema for free, so
+  only a schema that will actually complete pays for the pro-tier sweep.
+  Translations are additive and affect none of those gates.
 
 ## Doc freshness
 

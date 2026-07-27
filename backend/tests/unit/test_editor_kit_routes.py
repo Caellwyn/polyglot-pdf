@@ -1144,7 +1144,9 @@ def test_mark_complete_runs_the_drift_sweep_then_completes(client, monkeypatch):
 
 def test_mark_complete_blocked_when_coverage_incomplete(client, monkeypatch):
     """A sweep that leaves some language uncovered REFUSES completion with the
-    'N of M' message, and the kit stays draft; the retry is idempotent."""
+    'N of M' message, and the kit stays draft. (The idempotent retry-only-gaps
+    property is proven at the service-unit level by
+    test_bake_only_missing_is_idempotent.)"""
     c, _store, root = client
     _unstub_sweep(monkeypatch)
     _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA, label="I-90")

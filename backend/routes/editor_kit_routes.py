@@ -171,12 +171,15 @@ class KitStatusBody(BaseModel):
 class KitStatusResponse(BaseModel):
     """Result of a status flip (bd polyglot-pdf-783r).
 
-    On a successful `complete`, the drift sweep ran first: `retranslated` is the
-    number of translation entries (option/spoken-name/section across languages)
-    the sweep freshly baked -- 0 when nothing had drifted -- and `translationModel`
-    names the model that ran (null when the sweep did no work / the flip was to
-    draft). A blocked completion never reaches this model: it raises an
-    HTTPException whose detail carries the editor-facing "N of M" message."""
+    On a successful `complete`, the drift sweep ran: `retranslated` is the number
+    of translation entries (option/spoken-name/section across languages) the sweep
+    freshly BAKED (fanned into the schema) -- 0 when nothing had drifted -- and
+    `translationModel` names the model, reported only when `retranslated > 0`
+    (null for a to-draft flip, a fully-covered kit, or the edge case where a call
+    ran but produced no usable translation -- the editor notice keys on the fanned
+    count, not on whether an API call happened). A blocked completion never reaches
+    this model: it raises an HTTPException whose detail carries the editor-facing
+    "N of M" message."""
 
     ok: bool
     status: str
@@ -1031,15 +1034,6 @@ async def set_editor_kit_status(
                 status_code=502, detail="Unable to load schema"
             ) from exc
 
-        # Drift sweep (bd polyglot-pdf-783r): fill every MISSING translation
-        # (the drifted-during-review set + any never-translated), persist, then
-        # gate on full coverage. Runs FIRST so the validate/lint gates below see
-        # the swept schema, and a translation block reads distinctly from a
-        # schema-invalid one.
-        retranslated, translation_model = await _sweep_drifted_translations(
-            store, kit_id, schema, schema_file,
-        )
-
         try:
             parsed = FormSchema.model_validate(schema)
         except ValidationError as exc:
@@ -1105,6 +1099,19 @@ async def set_editor_kit_status(
                 detail=f"Schema has {len(lint_errors)} lint error(s), so it "
                        f"cannot be marked complete: {shown}",
             )
+
+        # Drift sweep (bd polyglot-pdf-783r): fill every MISSING translation
+        # (the drifted-during-review set + any never-translated), persist, then
+        # gate on full coverage. Runs LAST, AFTER the cheap structural gates
+        # (validate / extraction_info / v2-stamp / lint) -- those reject a bad
+        # schema for FREE, so a schema that will be refused anyway never pays for
+        # the pro-tier sweep (fresh-eyes cost finding, bd 783r). The sweep does
+        # not affect any earlier gate: translations are additive metadata that
+        # leave schema validity, extraction_info, the v2 stamp, and every lint
+        # rule (option values / conditions / widgets) untouched.
+        retranslated, translation_model = await _sweep_drifted_translations(
+            store, kit_id, schema, schema_file,
+        )
 
     next_meta = {**(meta or {}), "status": body.status}
     try:

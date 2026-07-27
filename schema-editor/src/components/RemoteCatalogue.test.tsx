@@ -25,7 +25,7 @@ import { RemoteCatalogue } from './RemoteCatalogue';
 import {
   AuthError, extractRemoteKit, listRemoteKits, loadRemoteSchema,
   onboardRemoteKit, setRemoteLabel, setRemoteStatus, translateRemoteKitOptions,
-  type RemoteKitEntry,
+  type RemoteKitEntry, type KitStatusResult,
 } from '../utils/remoteKitStore';
 
 const KITS: RemoteKitEntry[] = [
@@ -386,6 +386,36 @@ describe('RemoteCatalogue extraction progress state (fresh-eyes 92qe.3)', () => 
       await waitFor(() =>
         expect(screen.getByText(/Extracted "fresh-kit"/)).toBeInTheDocument());
       expect(screen.queryByText(/Extracting\.\.\./)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('RemoteCatalogue mark-complete drift-sweep ticker (bd 783r)', () => {
+  it('shows the re-translating ticker while the complete sweep runs, then reverts', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let resolveStatus: (r: KitStatusResult) => void = () => {};
+    vi.mocked(setRemoteStatus).mockImplementation(
+      () => new Promise((res) => { resolveStatus = res; }),
+    );
+    try {
+      render(<RemoteCatalogue defaultExpanded onOpenKit={() => {}} selectedKitId={null} role="editor" />);
+      await waitFor(() => expect(screen.getByText('Mark complete')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      // Mid-flight: the button shows the elapsed re-translating ticker (the
+      // sweep can take tens of seconds -- a dead button would read as a hang).
+      await waitFor(() =>
+        expect(screen.getByText(/Re-translating & validating\.\.\. \d+s/)).toBeInTheDocument());
+
+      resolveStatus({
+        ok: true, status: 'complete', retranslated: 2, translationModel: 'gemini-2.5-pro',
+      });
+      await waitFor(() =>
+        expect(screen.getByText(/marked complete/)).toBeInTheDocument());
+      // Ticker gone once the flip resolved.
+      expect(screen.queryByText(/Re-translating & validating\.\.\./)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
