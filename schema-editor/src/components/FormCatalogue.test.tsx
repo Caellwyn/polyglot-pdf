@@ -54,6 +54,15 @@ function mockRoot(kits: ReturnType<typeof mockKit>[]) {
 
 const SCHEMA = JSON.stringify({ form_metadata: { title: 'X' }, fields: [] });
 
+// bd tynm parity: the card grid is collapsed by default behind the compact
+// selector strip; expand it so a test that asserts card-level content (labels,
+// status toggles, Run-extraction, review bars) can see the cards. Waits for the
+// toggle to appear (it renders only once a folder with kits has loaded).
+async function expandCards() {
+  await waitFor(() => expect(screen.getByText('Show form cards')).toBeTruthy());
+  fireEvent.click(screen.getByText('Show form cards'));
+}
+
 afterEach(() => {
   delete (window as unknown as Record<string, unknown>).showDirectoryPicker;
   vi.clearAllMocks();
@@ -78,6 +87,7 @@ describe('FormCatalogue', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
 
     await waitFor(() => expect(screen.getByText('I-90')).toBeTruthy());
     expect(screen.getByText('N-400')).toBeTruthy();
@@ -92,6 +102,7 @@ describe('FormCatalogue', () => {
 
     render(<FormCatalogue onOpenKit={onOpenKit} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('I-90')).toBeTruthy());
 
     fireEvent.click(screen.getByText('I-90'));
@@ -185,6 +196,7 @@ describe('FormCatalogue', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
 
     await screen.findByText('Done');
     await waitFor(() => expect(screen.getByText('100%')).toBeTruthy());
@@ -201,6 +213,7 @@ describe('FormCatalogue', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
 
     await screen.findByText('Empty');
     // The empty-schema kit shows a 0% review bar...
@@ -223,6 +236,7 @@ describe('FormCatalogue', () => {
       <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await screen.findByText('Kit A');
 
     // ...then the user opens Kit A and edits it (liveProgress appears at 60%)...
@@ -257,6 +271,7 @@ describe('FormCatalogue', () => {
       <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await screen.findByText('Kit A');
 
     // Save an edit -> 60% cached for A.
@@ -289,6 +304,7 @@ describe('FormCatalogue', () => {
       <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await screen.findByText('Kit A');
 
     // Save an edit -> 60% cached for A, then deselect.
@@ -323,6 +339,7 @@ describe('FormCatalogue', () => {
       <FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} liveProgress={null} />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await screen.findByText('Kit A');
 
     // User opens A and edits it WITHOUT saving (saved:false) -> 60% shows live.
@@ -359,6 +376,7 @@ describe('FormCatalogue', () => {
       />,
     );
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
 
     await screen.findByText('I-90');
     await waitFor(() => expect(screen.getByText('75%')).toBeTruthy());
@@ -373,6 +391,7 @@ describe('FormCatalogue', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await screen.findByText('I-90');
     expect(screen.getByText('draft')).toBeTruthy();
 
@@ -397,6 +416,7 @@ describe('FormCatalogue', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await screen.findByText('Raw');
     expect(screen.queryByText('Mark complete')).toBeNull(); // schema-less -> no toggle
   });
@@ -409,6 +429,7 @@ describe('FormCatalogue', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
 
     await screen.findByText('Broken');
     await waitFor(() => expect(screen.getByText(/Schema present but unreadable/i)).toBeTruthy());
@@ -479,6 +500,77 @@ describe('FormCatalogue', () => {
   });
 });
 
+// --- Compact selector strip (bd tynm parity) ------------------------------- //
+//
+// The card grid is collapsed by default behind a dropdown + Show/Hide toggle, so
+// the header gives its vertical space to the editor (the same behavior the hosted
+// RemoteCatalogue already had). These mirror RemoteCatalogue's strip tests.
+describe('FormCatalogue -- compact selector strip (bd tynm)', () => {
+  beforeEach(() => {
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = undefined;
+  });
+
+  it('collapses the card grid by default; the dropdown lists every kit', async () => {
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+      mockKit('raw', { 'metadata.json': JSON.stringify({ label: 'Raw', status: 'draft' }) }), // no schema
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+
+    // The dropdown appears; no card buttons render in the collapsed default.
+    await waitFor(() => expect(screen.getByLabelText('Select a form')).toBeTruthy());
+    expect(screen.queryByTitle('Open I-90 for editing')).toBeNull();
+    const select = screen.getByLabelText('Select a form') as HTMLSelectElement;
+    const labels = Array.from(select.options).map((o) => o.text);
+    expect(labels.some((t) => t.includes('I-90'))).toBe(true);
+    // A schemaless kit is listed too, tagged so the user knows it can't be opened.
+    expect(labels.some((t) => t.includes('Raw') && t.includes('no schema yet'))).toBe(true);
+  });
+
+  it('selecting a schema-bearing kit opens it; a schemaless kit only selects', async () => {
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+      mockKit('raw', { 'metadata.json': JSON.stringify({ label: 'Raw', status: 'draft' }) }), // no schema
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+    const onOpenKit = vi.fn();
+
+    render(<FormCatalogue onOpenKit={onOpenKit} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByLabelText('Select a form')).toBeTruthy());
+    const select = screen.getByLabelText('Select a form');
+
+    fireEvent.change(select, { target: { value: 'i-90' } });
+    expect(onOpenKit).toHaveBeenCalledWith(expect.objectContaining({ id: 'i-90' }));
+
+    // A schemaless kit can be selected in the dropdown but is not "opened".
+    onOpenKit.mockClear();
+    fireEvent.change(select, { target: { value: 'raw' } });
+    expect(onOpenKit).not.toHaveBeenCalled();
+  });
+
+  it('the toggle expands the full card grid and collapses it again', async () => {
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Show form cards')).toBeTruthy());
+
+    // Collapsed: no card. Expand -> the card appears. Collapse -> it is gone.
+    expect(screen.queryByTitle('Open I-90 for editing')).toBeNull();
+    fireEvent.click(screen.getByText('Show form cards'));
+    expect(screen.getByTitle('Open I-90 for editing')).toBeTruthy();
+    fireEvent.click(screen.getByText('Hide form cards'));
+    expect(screen.queryByTitle('Open I-90 for editing')).toBeNull();
+  });
+});
+
 // --- Run-extraction button (bd 7a9.17) ------------------------------------- //
 //
 // A schemaless kit WITH a pdf gets a "Run extraction" button ONLY when the host
@@ -515,6 +607,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('W7')).toBeTruthy());
 
     // No button; the degraded instruction hint is shown instead.
@@ -529,6 +622,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
   });
 
@@ -541,6 +635,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('I-90')).toBeTruthy());
     expect(screen.queryByText('Run extraction')).toBeNull();
   });
@@ -556,6 +651,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     fireEvent.click(screen.getByText('Run extraction'));
@@ -576,6 +672,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     // Pick an instructions PDF via the hidden file input (the "+ instructions PDF" label).
@@ -607,6 +704,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -646,6 +744,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     fireEvent.click(screen.getByText('Run extraction'));
@@ -664,6 +763,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     fireEvent.click(screen.getByText('Run extraction'));
@@ -683,6 +783,7 @@ describe('FormCatalogue -- run extraction', () => {
 
     render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
     fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     fireEvent.click(screen.getByText('Run extraction'));

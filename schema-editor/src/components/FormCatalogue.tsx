@@ -59,6 +59,19 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
   const [kits, setKits] = React.useState<CatalogueEntry[]>([]);
+  // bd tynm parity: the card grid is collapsed by default behind a compact
+  // selector strip (a dropdown to switch forms + a "Show form cards" toggle), so
+  // the header gives its vertical space to the editor. The full grid -- with its
+  // per-card Rename / status / Run-extraction actions -- stays one click away.
+  // The hosted RemoteCatalogue already worked this way; this brings the local
+  // catalogue to the same footprint.
+  const [expanded, setExpanded] = React.useState(false);
+  // The strip's current selection. Distinct from selectedKitId so a schemaless
+  // kit (no open semantics) can be picked in the dropdown without being "open".
+  const [actionKitId, setActionKitId] = React.useState<string | null>(null);
+  // When the parent confirms an open (selectedKitId advances), drop the local
+  // optimistic strip selection so the dropdown tracks the actually-open kit.
+  React.useEffect(() => { setActionKitId(null); }, [selectedKitId]);
   // Per-kit review progress, keyed by kit id (filled in after the list renders).
   const [progress, setProgress] = React.useState<Record<string, KitProgress>>({});
   const [error, setError] = React.useState<string | null>(null);
@@ -348,7 +361,53 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         </div>
       )}
 
+      {/* bd tynm parity: the compact selector strip -- the default, low-footprint
+          way to switch forms. The full card grid stays available behind the
+          toggle. Mirrors RemoteCatalogue's strip (dropdown + Show/Hide toggle). */}
       {root && kits.length > 0 && (
+        <div className="mt-2 flex items-center gap-2 flex-wrap" data-testid="catalogue-strip">
+          <select
+            className="input text-sm max-w-xs"
+            aria-label="Select a form"
+            value={(actionKitId ?? selectedKitId) ?? ''}
+            onChange={(e) => {
+              const kit = kits.find((k) => k.id === e.target.value) ?? null;
+              setActionKitId(kit?.id ?? null);
+              // Opening needs a schema; a schemaless kit is still selectable so
+              // the user can find it (its Run-extraction action lives on its card).
+              if (kit?.hasSchema) onOpenKit(kit);
+            }}
+          >
+            <option value="" disabled>
+              Select a form...
+            </option>
+            {kits.map((k) => {
+              // Same precedence as the card: live > cached-saved > disk scan.
+              const pct = liveProgress && liveProgress.kitId === k.id
+                ? liveProgress.percent
+                : (editedProgress[k.id]?.percent ?? progress[k.id]?.reviewPercent ?? null);
+              return (
+                <option key={k.id} value={k.id}>
+                  {k.label} -- {k.status}
+                  {pct !== null ? `, ${pct}%` : ''}
+                  {k.hasSchema ? '' : ' (no schema yet)'}
+                </option>
+              );
+            })}
+          </select>
+          <button
+            className="btn-sm btn-secondary text-xs ml-auto"
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded
+              ? 'Collapse the form cards back to the compact selector'
+              : 'Show every form as a card (status, version, review progress, actions)'}
+          >
+            {expanded ? 'Hide form cards' : 'Show form cards'}
+          </button>
+        </div>
+      )}
+
+      {root && expanded && kits.length > 0 && (
         <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {kits.map((kit) => {
             const prog = progress[kit.id];
