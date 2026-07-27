@@ -387,3 +387,43 @@ def test_write_kit_protects_details_only_human_edit(tmp_path):
     assert s2["written"] == 0 and s2["skipped_human"] >= 1
     assert f1["help"]["details"] == "Human curated this excerpt."
     assert f1["help"]["instructions"] == "I1."
+
+
+def test_rectify_to_empty_flags_as_dropped(monkeypatch):
+    """A field the rectifier EMPTIES (sources support nothing) is the same
+    outcome as a KEEP-rule drop and must carry the same flag -- found by
+    the wsao.5 re-bake, where 6 drops became 0 flags via this path."""
+    calls = {"n": 0}
+    def _runner_factory(model):
+        def runner(prompt, m):
+            if "REVISE the guidance" in prompt:
+                return ({"fields": {"bad": {"instructions": "",
+                                            "details": "",
+                                            "format_hint": ""}}}, 100)
+            calls["n"] += 1
+            ok = {"grounded": True, "unsupported_claims": [],
+                  "useful_beyond_label": True, "omission_concerns": [],
+                  "advice": False}
+            fields = {"good": dict(ok)}
+            if calls["n"] == 1:
+                fields["bad"] = dict(ok, grounded=False,
+                                     unsupported_claims=["invented"])
+            return ({"fields": fields}, 100)
+        return runner
+    monkeypatch.setattr(ei.llm_providers, "resolve_json_runner",
+                        _runner_factory)
+    proposals = {"fields": {
+        "good": {"instructions": "Fine.", "details": "", "format_hint": ""},
+        "bad": {"instructions": "Invented claim.", "details": "",
+                "format_hint": ""}},
+        "form_details": ""}
+    schema = {"fields": [{"id": "good", "name": "G", "type": "text"},
+                         {"id": "bad", "name": "B", "type": "text"}]}
+    flags = ei.verify_and_rectify(schema, proposals, "BOOKLET", "T", "m")
+    assert proposals["fields"]["bad"] == {}
+    assert proposals["fields"]["good"]["instructions"] == "Fine."
+    dropped = [f for f in flags
+               if f["rule"] == "instructions-ungrounded-dropped"
+               and "id=bad" in f["path"]]
+    assert len(dropped) == 1 and "rectifier emptied" in dropped[0]["message"]
+    assert not [f for f in flags if "id=good" in f["path"]]

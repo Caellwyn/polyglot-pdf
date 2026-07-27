@@ -654,10 +654,27 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
             if isinstance(det, str) and det.strip():
                 det, _dropped = repair_details_contiguity(det, booklet_norm)
                 e["details"] = det
-            proposals["fields"][fid] = {
-                k: (e.get(k) or "").strip()
-                for k in ("instructions", "details", "format_hint")}
-            rectified.add(fid)
+            revised = {k: (e.get(k) or "").strip()
+                       for k in ("instructions", "details", "format_hint")}
+            proposals["fields"][fid] = revised
+            if any(revised.values()):
+                rectified.add(fid)
+            else:
+                # The rectifier emptied the field ("sources support
+                # nothing") -- the SAME outcome as a KEEP-rule drop, so it
+                # must carry the same worklist flag. Without this, a
+                # rectify-to-empty vanished silently (found by the wsao.5
+                # re-bake: 6 drops became 0 flags). The emptied field is
+                # skipped by the re-judge, so flag it here.
+                proposals["fields"][fid] = {}
+                flags.append({
+                    "severity": "WARNING",
+                    "rule": "instructions-ungrounded-dropped",
+                    "path": "fields (id=" + fid + ").help",
+                    "message": "the rectifier emptied this field's guidance "
+                               "(sources support nothing) -- proposed text "
+                               "DROPPED, deterministic baseline kept "
+                               "(KEEP rule)"})
         verdicts = judge_proposals(schema, proposals, booklet, form_name,
                                    judge_model)
 
