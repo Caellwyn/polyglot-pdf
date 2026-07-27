@@ -1,6 +1,7 @@
 import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
 import { checkFieldComplete } from '../utils/validation';
+import { effectiveStatus, getReview, isReviewTarget } from '../utils/reviewStatus';
 import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
 import { isToReviewSection } from '../utils/sectionOps';
 import type { LintFinding } from '../utils/remoteKitStore';
@@ -165,26 +166,43 @@ export const FieldList: React.FC<FieldListProps> = ({
     });
   };
 
-  const getFieldStatus = (field: FormField) => {
-    const status = checkFieldComplete(field);
-    // A backend lint ERROR anchored to this field is as red as a local
-    // completeness error -- the row should agree with the bottom strip
-    // (bd polyglot-pdf-0x10.6).
-    const hasLintError = (lintFindingsByField?.get(field.id) ?? []).some(
-      f => f.severity === 'ERROR'
-    );
-    if (status.errors.length > 0 || hasLintError) return 'error';
-    if (status.needsReview) return 'review';
-    return 'complete';
-  };
+  // A backend lint ERROR anchored to this field is as red as a local
+  // completeness error -- the row should agree with the bottom strip
+  // (bd polyglot-pdf-0x10.6).
+  const fieldHasLintError = (field: FormField) =>
+    (lintFindingsByField?.get(field.id) ?? []).some(f => f.severity === 'ERROR');
 
-  // Every reason a row is red or amber, in plain language, for the icon's
-  // tooltip: local completeness errors + review reasons + backend lint
-  // findings. Empty for a complete field with no findings.
+  // The row's effective status layers the human review sign-off over the
+  // automatic derivation (bd polyglot-pdf-u8t6): a real ERROR always wins;
+  // otherwise needs_followup -> 'followup', reviewed_correct -> 'complete',
+  // unreviewed falls through to the automatic amber/green.
+  const getFieldStatus = (field: FormField) =>
+    effectiveStatus(field, fieldHasLintError(field));
+
+  // Every reason a row is red, amber, or flagged, in plain language, for the
+  // icon's tooltip: the human review state (sign-off / follow-up + its note)
+  // first, then local completeness errors + review reasons + backend lint
+  // findings. Empty for a settled-clean field with no findings.
   const getFieldMessages = (field: FormField): string[] => {
     const status = checkFieldComplete(field);
     const lint = lintFindingsByField?.get(field.id) ?? [];
+    const review = getReview(field);
+    const reviewMessages: string[] = [];
+    if (review.status === 'needs_followup') {
+      reviewMessages.push(
+        review.note ? `Needs follow-up: ${review.note}` : 'Marked needs follow-up',
+      );
+    } else if (review.status === 'reviewed_correct') {
+      // A signed-off field shows green; surface the sign-off (and any note) so
+      // the tooltip still explains WHY it is green rather than looking untouched.
+      reviewMessages.push(
+        review.note ? `Reviewed - correct: ${review.note}` : 'Reviewed - correct',
+      );
+    } else if (review.note) {
+      reviewMessages.push(`Note: ${review.note}`);
+    }
     return [
+      ...reviewMessages,
       ...status.errors,
       ...status.reviewReasons,
       ...lint.map(f => f.message),
@@ -212,6 +230,20 @@ export const FieldList: React.FC<FieldListProps> = ({
           <path
             fillRule="evenodd"
             d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+            clipRule="evenodd"
+          />
+        </svg>
+      );
+    }
+    if (status === 'followup') {
+      // Human-flagged "needs follow-up" (bd polyglot-pdf-u8t6): a flag icon, in
+      // amber to sit in the same needs-attention band as the auto-review clock
+      // but visibly distinct (a deliberate human flag, not a machine guess).
+      return (
+        <svg className="w-4 h-4 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+          <path
+            fillRule="evenodd"
+            d="M3 3a1 1 0 011-1h11.5a1 1 0 01.8 1.6L13.75 7l3.55 3.4a1 1 0 01-.8 1.6H5v6a1 1 0 11-2 0V3z"
             clipRule="evenodd"
           />
         </svg>
@@ -307,9 +339,12 @@ export const FieldList: React.FC<FieldListProps> = ({
 
   // Anything left to review? Drives the button's disabled state so a finished
   // form reads as DONE instead of a silently dead button (fresh-eyes note).
+  // A field signed off as reviewed_correct is NOT a target; a needs_followup
+  // field IS one (bd polyglot-pdf-u8t6) -- both flow through isReviewTarget's
+  // effective-status precedence.
   const hasReviewTarget = React.useMemo(
-    () => visibleOrderedFields.some(f => getFieldStatus(f) !== 'complete'),
-    // getFieldStatus is a pure per-field check; the memo keys on the fields
+    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f))),
+    // isReviewTarget is a pure per-field check; the memo keys on the fields
     // plus the lint findings (a backend ERROR also makes a row a review target).
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visibleOrderedFields, lintFindingsByField]
@@ -323,7 +358,7 @@ export const FieldList: React.FC<FieldListProps> = ({
       : -1;
     for (let step = 1; step <= fields.length; step++) {
       const candidate = fields[(current + step) % fields.length];
-      if (getFieldStatus(candidate) !== 'complete') {
+      if (isReviewTarget(candidate, fieldHasLintError(candidate))) {
         onSelectField(candidate.id);
         return;
       }
