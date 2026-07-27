@@ -1,0 +1,298 @@
+{
+  "kit": "form-kits/w7",
+  "model": "claude-opus-4-8",
+  "booklet": "form-kits/w7\\w7-instructions.pdf",
+  "booklet_chars": 81200,
+  "proposals": {
+    "fields": {
+      "application_type": {
+        "instructions": "Check one box to show whether you are a first-time applicant applying for a new ITIN, or you are seeking to renew an ITIN you already have. If you choose to renew, you must also answer the previously-received-ITIN question and include your ITIN. A selection here is required.",
+        "details": "Application Type\n\nCheck the applicable box to indicate if you're:\n1.\na first-time applicant applying for a new ITIN, or\n2.\nseeking to renew an ITIN that you already have.\nIf you check Renew an existing ITIN, you must answer the question on line 6e and include your ITIN information on line 6f. See the instructions for lines 6e and 6f for more information.\n\nAn ITIN only needs to be renewed if it'll be included on a U.S. federal tax return and it's expired. Individuals renewing an ITIN must include a U.S. federal tax return unless they meet an exception, and the required documentation."
+      },
+      "reason_a": {
+        "instructions": "Check this if you are a nonresident alien who must get an ITIN to claim a tax treaty benefit, even if you don't have to file a U.S. federal tax return. If you check this box, you must also check box h and enter the Exception 1 or 2 designation there, plus the treaty country and article number.",
+        "details": "a. Nonresident alien required to get an ITIN to claim tax treaty benefit. Certain nonresident aliens must get an ITIN to claim certain tax treaty benefits even if they don't have to file a U.S. federal tax return. If you check this box to claim the benefits of a U.S. income tax treaty with a foreign country, you must also check box h. On the dotted line next to box h, enter the appropriate designation for Exception 1 or 2, whichever applies (see Exception 1 and Exception 2, later). Identify the exception by its number, alpha subsection, and category under which you're applying (for example, enter \"Exception 1d-Pension Income\" or \"Exception 2d-Gambling Winnings\"). Also, enter the name of the treaty country and treaty article number in the appropriate entry spaces below box h and attach the documents required under whichever exception applies. For more details on tax treaties, see Pub. 901."
+      },
+      "reason_b": {
+        "instructions": "Check this if you are a nonresident alien filing a U.S. federal tax return, either to report income connected or not connected with a U.S. trade or business, or only to get a refund. If you choose this reason, you must provide a complete foreign address on line 3.",
+        "details": "b. Nonresident alien filing a U.S. federal tax return. This category includes:\n\n- A nonresident alien who must file a U.S. federal tax return to report income effectively or not effectively connected with the conduct of a trade or business in the United States, and\n- A nonresident alien who is filing a U.S. federal tax return only to get a refund. See Pub. 519.\n\nIf you choose reason b, you must provide a complete foreign (non-U.S.) address on line 3. If you no longer have a permanent foreign residence, enter a complete foreign (non-U.S.) address for your most recent residence in the country where you permanently or normally resided."
+      },
+      "reason_c": {
+        "instructions": "Check this if you are a foreign individual who meets the substantial presence test based on days present in the United States, don't have USCIS work permission, aren't eligible for a Social Security number, and are filing a U.S. federal tax return. If you check this, you must include a date of entry into the United States.",
+        "details": "c. U.S. resident alien (based on days present in the United States) filing a U.S. federal tax return. A foreign individual living or present in the United States for a certain number of days (that is, meeting the test known as the \"substantial presence\" test) who doesn't have permission to work from the USCIS, and is ineligible for an SSN, may still be required to file a U.S. federal tax return or may file a U.S. federal tax return to claim a refund or report income. These individuals must check this box and include a date of entry into the United States on line 6d. For information about the substantial presence test, see Pub. 519."
+      },
+      "reason_d": {
+        "instructions": "Check this if you are someone who can be claimed as a dependent on a U.S. federal tax return and isn't eligible for a Social Security number. Your spouse is never considered your dependent. You must provide your relationship to the U.S. citizen or resident alien and their name and SSN or ITIN, and normally a date of entry into the United States.",
+        "details": "d. Dependent of U.S. citizen/resident alien. This is an individual who can be claimed as a dependent on a U.S. federal tax return and isn't eligible to get an SSN. Your spouse is never considered your dependent. See Pubs. 501 and 519. Dependents of U.S. military personnel can submit original documents, certified copies or notarized copies of identification documents. A copy of the servicemember's U.S. military ID is required if the documents are notarized. Additionally, the applicant must be applying from an overseas or APO/FPO address.\n\nIf you're applying for an ITIN under this category, you must provide the relationship (for example, parent, child, grandchild, etc.) of the dependent to the U.S. citizen/resident alien. Enter the information on the dotted line in the space provided.\n\nAlso, if you're applying for an ITIN under this category, you must provide the full name and SSN or ITIN of the U.S. citizen/resident alien. Enter the information on the dotted line in the space provided and include a date of entry into the United States on line 6d, unless the applicant is a dependent of U.S. military personnel stationed overseas or is from Canada or Mexico and the applicant is claimed for an allowable tax benefit other than the credit for other dependents (ODC). Dependent applicants claimed for the ODC must provide a date of entry on line 6d unless they are dependents of U.S. military personnel stationed overseas."
+      },
+      "relationship_d": {
+        "instructions": "Enter your relationship to the U.S. citizen or resident alien, for example parent, child, or grandchild.",
+        "details": "If you're applying for an ITIN under this category, you must provide the relationship (for example, parent, child, grandchild, etc.) of the dependent to the U.S. citizen/resident alien. Enter the information on the dotted line in the space provided."
+      },
+      "reason_e": {
+        "instructions": "Check this if you are the spouse of a U.S. citizen or resident alien, not eligible for a Social Security number, and either claimed as an exemption (for tax years before 2018) or electing to file a joint U.S. federal tax return with your spouse. You must provide the full name and SSN or ITIN of the U.S. citizen or resident alien.",
+        "details": "e. Spouse of U.S. citizen/resident alien. This category includes:\n\n- A resident or nonresident alien spouse who isn't filing a U.S. federal tax return (including a joint return) and who isn't eligible to get an SSN but who, as a spouse, is claimed as an exemption; and\n- A resident or nonresident alien spouse who isn't eligible to get an SSN but who is electing to file a U.S. federal tax return jointly with a spouse who is a U.S. citizen or resident alien. For more information about this category, see Pubs. 501 and 519.\n\nSpouses of U.S. military personnel can submit original documents, certified copies, or notarized copies of identification documents. A copy of the servicemember's U.S. military ID is required if the documents are notarized. Additionally, the applicant must be applying from an overseas or APO/FPO address.\n\nIf you're applying for an ITIN under this category, you must provide the full name and SSN or ITIN of the U.S. citizen/resident alien. Enter the information on the dotted line in the space provided.\n\nA spouse can be claimed as a personal exemption only for tax years prior to 2018."
+      },
+      "us_person_name": {},
+      "us_person_ssn_itin": {},
+      "reason_f": {
+        "instructions": "Check this if you are a bona fide nonresident alien student, professor, or researcher who hasn't abandoned a foreign residence and came temporarily to the U.S. to study, teach, or do research, and you are filing a U.S. federal tax return or claiming an exception. You must complete lines 6a, 6c, 6d, and 6g and provide your passport with a valid U.S. visa (no visa needed if your foreign address is Canada, Mexico, or Bermuda).",
+        "details": "f. Nonresident alien student, professor, or researcher filing a U.S. federal tax return or claiming an exception. This is an individual who hasn't abandoned his or her residence in a foreign country and who is a bona fide student, professor, or researcher coming temporarily to the United States solely to attend classes at a recognized institution of education, to teach, or to perform research. For more information about the U.S. tax rules that apply to foreign students, professors, or researchers, see Pub. 519.\n\nIf you check this box, you must complete lines 6a, 6c, 6d, and 6g, and provide your passport with a valid U.S. visa. No U.S. visa needs to be provided if the foreign address is Canada, Mexico, or Bermuda. If you're present in the United States on a work-related visa (F-1, J-1, or M-1), but won't be employed (that is, your presence in the United States is study related), you can choose to attach a letter from the Designated School Official (DSO) or Responsible Officer (RO) instead of applying to the SSA for an SSN. The letter must clearly state that you won't be securing employment while in the United States and your presence here is solely study related. This letter can be submitted instead of a Social Security Administration denial letter if you're filing a tax return with this Form W-7 or claiming Exception 2 (explained later)."
+      },
+      "reason_g": {
+        "instructions": "Check this if you can be claimed as a dependent (any tax year) or are a spouse (tax year before 2018) on a U.S. federal tax return, are unable or not eligible to get a Social Security number, and entered the United States with a nonresident alien who holds a U.S. visa. Attach a copy of your visa and include a date of entry into the United States on line 6d.",
+        "details": "g. Dependent/spouse of a nonresident alien holding a U.S. visa. This is an individual who can be claimed as a dependent for any tax year, or is a spouse on a U.S. federal tax return for a tax year before 2018, who is unable, or not eligible, to get an SSN, and who has entered the United States with a nonresident alien who holds a U.S. visa. If you apply for an ITIN under this category, remember to attach a copy of your visa to your Form W-7 and include a date of entry into the United States on line 6d."
+      },
+      "reason_h": {
+        "instructions": "Check this only if your reason for requesting an ITIN isn't covered by the other boxes. Describe your reason in detail and attach supporting documents. If a third party such as a bank requested your ITIN, you may be able to claim an exception; enter that exception on the dotted line next to this box.",
+        "details": "h. Other. If the reason for your ITIN request isn't described in boxes a through g, check this box. Describe in detail your reason for requesting an ITIN and attach supporting documents.\n\nFrequently, third parties (such as banks and other financial institutions) that are subject to information-reporting and withholding requirements will request an ITIN from you to enable them to file information returns required by law. If you're requesting an ITIN for this reason, you may be able to claim one of the exceptions described later. Enter on the dotted line next to box h the exception that applies to you. Identify the exception by its number, alpha subsection (if applicable), and category under which you're applying (for example, enter \"Exception 1a-Partnership Income\" or \"Exception 3-Mortgage Interest\"). Examples of completed Forms W-7 for \"Exceptions\" can be found in Pub. 1915. You won't need to attach a tax return to your Form W-7."
+      },
+      "treaty_country": {
+        "instructions": "Enter the name of the treaty country. If you are claiming a benefit under an income tax treaty, the treaty country must be the same as the country you list as your foreign residence.",
+        "details": "If you're claiming a benefit under an income tax treaty with the United States, the income tax treaty country must be the same as the country listed on line 3."
+      },
+      "treaty_article": {},
+      "name_1a_first": {
+        "instructions": "Enter your legal first name exactly as it appears on your identifying documents. This should reflect your name as it will appear on a U.S. federal tax return, and your ITIN will be established using this name.",
+        "details": "Line 1a. Enter your legal name on line 1a as it appears on your identifying documents. Be sure to properly identify your first, middle, and last names. This entry should reflect your name as it'll appear on a U.S. federal tax return.\n\nYour ITIN will be established using this name. If you don't use this name on the U.S. federal tax return, the processing of the U.S. federal tax return may be delayed."
+      },
+      "name_1a_middle": {
+        "instructions": "Enter your legal middle name exactly as it appears on your identifying documents. This should reflect your name as it will appear on a U.S. federal tax return.",
+        "details": "Line 1a. Enter your legal name on line 1a as it appears on your identifying documents. Be sure to properly identify your first, middle, and last names. This entry should reflect your name as it'll appear on a U.S. federal tax return."
+      },
+      "name_1a_last": {
+        "instructions": "Enter your legal last name exactly as it appears on your identifying documents. This should reflect your name as it will appear on a U.S. federal tax return, and your ITIN will be established using this name.",
+        "details": "Line 1a. Enter your legal name on line 1a as it appears on your identifying documents. Be sure to properly identify your first, middle, and last names. This entry should reflect your name as it'll appear on a U.S. federal tax return.\n\nYour ITIN will be established using this name. If you don't use this name on the U.S. federal tax return, the processing of the U.S. federal tax return may be delayed."
+      },
+      "name_1b_first": {
+        "instructions": "Enter the first name as it appears on your birth certificate, only if it is different from the name you entered on line 1a.",
+        "details": "Line 1b. Enter your name as it appears on your birth certificate if it's different from your entry on line 1a."
+      },
+      "name_1b_middle": {
+        "instructions": "Enter the middle name as it appears on your birth certificate, only if it is different from the name you entered on line 1a.",
+        "details": "Line 1b. Enter your name as it appears on your birth certificate if it's different from your entry on line 1a."
+      },
+      "name_1b_last": {
+        "instructions": "Enter the last name as it appears on your birth certificate, only if it is different from the name you entered on line 1a.",
+        "details": "Line 1b. Enter your name as it appears on your birth certificate if it's different from your entry on line 1a."
+      },
+      "mailing_street": {
+        "instructions": "Enter your complete mailing street address, apartment, or rural route number. This is the address the IRS will use to return your original documents and to send notice of your ITIN application status. If the U.S. Postal Service won't deliver to your physical location, enter your post office box number, but not one owned by a private firm.",
+        "details": "Line 2. Enter your complete mailing address on line 2. This is the address the IRS will use to return your original documents and send written notification of your ITIN application status.\n\nThe IRS won't use the address you enter to update its records for other purposes unless you include a U.S. federal tax return with your Form W-7. If you aren't including a U.S. federal tax return with your Form W-7 and you changed your home mailing address since you filed your last U.S. federal tax return, also file Form 8822, Change of Address, with the IRS at the address listed in the Form 8822 instructions.\n\nNote. If the U.S. Postal Service won't deliver mail to your physical location, enter the U.S. Postal Service's post office box number for your mailing address. Contact your local U.S. Post Office for more information. Don't use a post office box owned and operated by a private firm or company."
+      },
+      "mailing_city": {},
+      "foreign_street": {
+        "instructions": "Enter the complete foreign street address in the country where you permanently or normally reside, even if it is the same as your mailing address. Don't use a P.O. box or an \"in care of\" address here if you are only entering a country name, or your application may be rejected.",
+        "details": "Line 3. Enter your complete foreign (non-U.S.) address in the country where you permanently or normally reside, even if it's the same as the address on line 2. If you no longer have a permanent foreign residence due to your relocation to the United States, enter only the foreign country where you last resided on line 3. If you selected reason b, Nonresident alien filing a U.S. federal tax return, as the reason you're submitting Form W-7, then enter the complete foreign (non-U.S.) address for your most recent residence in the country where you permanently or normally resided. If you're claiming a benefit under an income tax treaty with the United States, the income tax treaty country must be the same as the country listed on line 3.\n\nDon't use a post office box or an \"in care of\" (c/o) address instead of a street address on line 2 if you're entering just a \"country\" name on line 3. If you do, your application may be rejected."
+      },
+      "foreign_city": {
+        "instructions": "Enter the city or town, state or province, and country of your foreign residence, including the postal code where appropriate. If you no longer have a permanent foreign residence, enter only the foreign country where you last resided.",
+        "details": "Line 3. Enter your complete foreign (non-U.S.) address in the country where you permanently or normally reside, even if it's the same as the address on line 2. If you no longer have a permanent foreign residence due to your relocation to the United States, enter only the foreign country where you last resided on line 3."
+      },
+      "dob": {
+        "instructions": "Enter your date of birth in month, day, year order, where the month is 1 to 12 and the day is 1 to 31.",
+        "details": "Line 4. Enter your date of birth in the month/day/year (MM/DD/YYYY) format, where MM = 1 to 12 and DD = 1 to 31.",
+        "format_hint": "MM/DD/YYYY"
+      },
+      "country_of_birth": {
+        "instructions": "",
+        "details": ""
+      },
+      "city_state_of_birth": {
+        "instructions": "",
+        "details": ""
+      },
+      "gender": {
+        "instructions": "",
+        "details": ""
+      },
+      "citizenship": {
+        "instructions": "Enter the complete name of the country or countries in which you are a citizen; if you have dual citizenship, list both. Don't abbreviate the country name.",
+        "details": "Line 6a. Enter the country or countries (in the case of dual citizenship) in which you're a citizen. Enter the complete country name; don't abbreviate."
+      },
+      "foreign_tax_id": {
+        "instructions": "If the country where you are a resident for tax purposes has issued you a tax identification number, enter it here. For example, a resident of Canada would enter the Canadian Social Insurance Number.",
+        "details": "Line 6b. If your country of residence for tax purposes has issued you a tax identification number, enter that number on line 6b. For example, if you're a resident of Canada, enter your Canadian social security number (known as the Canadian Social Insurance Number)."
+      },
+      "visa_type": {
+        "instructions": "Enter only U.S. nonimmigrant visa information: the USCIS classification, the visa number, and the expiration date in month, day, year format. For example, an F-1/F-2 visa numbered 123456 would be entered as F-1/F-2, 123456, then the expiration date.",
+        "details": "Line 6c. Enter only U.S. nonimmigrant visa information. Include the USCIS classification, number of the U.S. visa, and the expiration date in month/day/year format. For example, if you have an F-1/F-2 visa with the number 123456, enter, in the entry space, F-1/F-2 and 123456, followed by the visa's expiration date in MM/DD/YYYY format. Individuals in possession of an I-20/I-94 document(s) should attach a copy to their Form W-7.",
+        "format_hint": "Classification, number, then expiration as MM/DD/YYYY"
+      },
+      "id_doc_type": {
+        "instructions": "Check the type of document you are submitting to prove your identity. If you submit a valid passport or a certified copy from the issuing agency, no other documents are needed. Otherwise you must submit at least two documents that prove identity and foreign status.",
+        "details": "Line 6d. Check the box indicating the type of document you're submitting to prove your identity. Enter the name of the state or country or other issuer, the identification number (if any) appearing on the document, the expiration date, and the date on which you entered the United States. Dates must be entered in the month/day/year format.\n\nIf you're submitting more than one document, enter only the information for the first document on this line. Attach a separate sheet showing the required information for the additional document(s). On the separate sheet, be sure to write your name and \"Form W-7\" at the top.\n\nNote. If you're submitting a passport, or a certified copy of a passport from the issuing agency, no other documentation is required to prove your identity and foreign status. Ensure any visa information shown on the passport is entered on line 6c and the pages of the passport showing the U.S. visa (if a visa is required for your Form W-7) are included with your Form W-7. A passport that doesn't have a date of entry into the United States will no longer be accepted as a stand-alone identification document for dependents, unless the dependents are dependents of U.S. military personnel stationed overseas or the dependents are from Canada or Mexico and are claimed for any allowable tax benefit other than the credit for other dependents (ODC)."
+      },
+      "id_doc_issued_by": {},
+      "id_doc_number": {},
+      "id_doc_exp_date": {
+        "instructions": "Enter the document's expiration date in month, day, year format. Passports and national identification cards are considered current only if their expiration date hasn't passed before the date you submit Form W-7.",
+        "details": "Passports and national identification cards. These documents will be considered current only if their expiration date hasn't passed prior to the date the Form W-7 is submitted. In general, the postmark date determines when the document was submitted. Certified copies of a passport from the issuing agency must include the U.S. visa pages if a visa is required for your Form W-7 application.",
+        "format_hint": "MM/DD/YYYY"
+      },
+      "date_of_entry": {
+        "instructions": "Enter the complete date you entered the United States for the purpose for which you are requesting an ITIN, in month, day, year format. If you have never entered the United States, enter \"Never entered the United States\" here. A passport without an entry date doesn't prove U.S. residency and may not be a stand-alone document for certain dependents.",
+        "details": "The \"Date of entry into the United States\" must contain the complete date on which you entered the country for the purpose for which you're requesting an ITIN (if applicable). If you've never entered the United States, enter \"Never entered the United States\" on this line. A passport without an entry date doesn't prove U.S. residency and may not be used as a stand-alone document for certain dependents. See Supporting Documentation Requirements, earlier.\n\nExample. You entered the United States last year to work. You want to file a tax return for the income you earned in the United States that year. You aren't eligible to get a social security number. You file Form W-7 with your tax return for that year. On line 6d of your Form W-7, enter, as the \"Date of entry into the United States,\" the month, day, and year you entered the United States in MM/DD/YYYY format.",
+        "format_hint": "MM/DD/YYYY, or \"Never entered the United States\""
+      },
+      "previously_received_itin": {
+        "instructions": "Answer Yes if you ever received an ITIN or an Internal Revenue Service Number (IRSN), and then complete the ITIN line. Answer No/Don't know if you never had one or don't know it. If you are renewing your ITIN, you must include your previously assigned ITIN to avoid processing delays.",
+        "details": "Line 6e. If you ever received an ITIN and/or an Internal Revenue Service Number (IRSN), check the \"Yes\" box and complete line 6f. If you never had an ITIN or an IRSN, or if you don't know your ITIN or IRSN, check the No/Don't know box.\n\nAn IRSN is a nine-digit number issued by the IRS to persons who file a return or make a payment without providing a taxpayer identification number. You would've been issued this number if you filed a U.S. federal tax return and didn't have an SSN. This IRSN will appear on any correspondence the IRS sent you concerning that return.\n\nIf you're submitting Form W-7 to renew your ITIN, you must include your previously assigned ITIN on line 6f to avoid delays in processing your Form W-7."
+      },
+      "itin_part1": {
+        "instructions": "Enter the first three digits of your previously assigned ITIN. Also identify the first, middle, and last name under which the ITIN was issued.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top.\n\nIf you're submitting Form W-7 to renew your ITIN, the name under which you applied for your ITIN must be included on line 6f to avoid delays in processing your Form W-7."
+      },
+      "itin_part2": {
+        "instructions": "Enter the middle two digits of your previously assigned ITIN.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top."
+      },
+      "itin_part3": {
+        "instructions": "Enter the last four digits of your previously assigned ITIN.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top."
+      },
+      "irsn_part1": {
+        "instructions": "Enter the first three digits of your IRSN, the nine-digit number the IRS issued to you if you once filed a return or made a payment without a taxpayer identification number. It appears on any IRS correspondence about that return. If you are renewing your ITIN, include your previously assigned number here to avoid processing delays.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top.\n\nIf you're submitting Form W-7 to renew your ITIN, the name under which you applied for your ITIN must be included on line 6f to avoid delays in processing your Form W-7.\n\nAn IRSN is a nine-digit number issued by the IRS to persons who file a return or make a payment without providing a taxpayer identification number. You would've been issued this number if you filed a U.S. federal tax return and didn't have an SSN. This IRSN will appear on any correspondence the IRS sent you concerning that return."
+      },
+      "irsn_part2": {
+        "instructions": "Enter the middle two digits of your IRSN or ITIN. If you are renewing your ITIN, be sure to include your previously assigned number on line 6f to avoid delays in processing.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top."
+      },
+      "irsn_part3": {
+        "instructions": "Enter the last four digits of your IRSN or ITIN. If you are renewing your ITIN, include your previously assigned number on line 6f to avoid delays in processing your Form W-7.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top."
+      },
+      "prior_name_first": {
+        "instructions": "Enter the first name under which your ITIN or IRSN was issued. If you are renewing your ITIN, the name under which you applied for it must be included here to avoid delays in processing.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top.\n\nIf you're submitting Form W-7 to renew your ITIN, the name under which you applied for your ITIN must be included on line 6f to avoid delays in processing your Form W-7.\n\nNote. If you're renewing your ITIN and your legal name has changed since the original assignment of your ITIN, you'll need to submit documentation to support your legal name change, such as your marriage certificate or a court order, which may include a divorce decree. Attach supporting documentation to Form W-7."
+      },
+      "prior_name_middle": {
+        "instructions": "Enter the middle name under which your ITIN or IRSN was issued. If you are renewing your ITIN, the name under which you applied for it must be included here to avoid delays in processing.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top."
+      },
+      "prior_name_last": {
+        "instructions": "Enter the last name under which your ITIN or IRSN was issued. If you are renewing your ITIN, the name under which you applied for it must be included here to avoid delays in processing.",
+        "details": "Line 6f. If you have an ITIN and/or an IRSN, list them in the space(s) provided. Identify your first, middle, and last name under which the ITIN and/or IRSN was issued. If you were issued more than one IRSN, attach a separate sheet listing all the IRSNs you received. On the separate sheet, be sure to write your name and \"Form W-7\" at the top.\n\nNote. If you're renewing your ITIN and your legal name has changed since the original assignment of your ITIN, you'll need to submit documentation to support your legal name change, such as your marriage certificate or a court order, which may include a divorce decree. Attach supporting documentation to Form W-7."
+      },
+      "college_company": {
+        "instructions": "If your reason for applying is that you are a nonresident student, professor, or researcher, enter the name of the educational institution here. If you are temporarily in the United States for business, instead enter the name of the company with whom you are conducting your business.",
+        "details": "Line 6g. If you checked reason f, you must enter the name of the educational institution and the city and state in which it's located. You must also enter your length of stay in the United States.\n\nIf you're temporarily in the United States for business purposes, you must enter the name of the company with whom you're conducting your business and the city and state in which it's located. You must also enter your length of stay in the United States."
+      },
+      "college_city_state": {
+        "instructions": "Enter the city and state where the educational institution or company is located. This accompanies the institution or company name and your length of stay in the United States.",
+        "details": "Line 6g. If you checked reason f, you must enter the name of the educational institution and the city and state in which it's located. You must also enter your length of stay in the United States.\n\nIf you're temporarily in the United States for business purposes, you must enter the name of the company with whom you're conducting your business and the city and state in which it's located. You must also enter your length of stay in the United States."
+      },
+      "length_of_stay": {
+        "instructions": "Enter your length of stay in the United States. This is required along with the name and location of the educational institution or, if you are here for business, the company you are conducting business with.",
+        "details": "Line 6g. If you checked reason f, you must enter the name of the educational institution and the city and state in which it's located. You must also enter your length of stay in the United States.\n\nIf you're temporarily in the United States for business purposes, you must enter the name of the company with whom you're conducting your business and the city and state in which it's located. You must also enter your length of stay in the United States."
+      },
+      "applicant_sign_date": {
+        "instructions": "Enter the date the form is signed, using month, day, and year. The applicant is generally required to sign, and the signature must be original.",
+        "details": "Who Can Sign Form W-7\n\nThe applicant is required to sign their Form W-7 unless they meet one of the conditions noted below. The signature must be original.",
+        "format_hint": "MM/DD/YYYY"
+      },
+      "applicant_phone": {
+        "instructions": "",
+        "details": ""
+      },
+      "delegate_name": {
+        "instructions": "If someone other than the applicant is signing, that person must type or print their name here and check the box showing their relationship to the applicant. A parent or court-appointed guardian may sign for a dependent who cannot sign; other adults must attach a Form 2848 authorizing them to sign.",
+        "details": "Applicant is a dependent under 18 years of age. If the applicant is a dependent under 18 years of age, his or her parent or court-appointed guardian can sign if the child can't sign. The parent or court-appointed guardian must type or print his or her name in the space provided and check the appropriate box that indicates his or her relationship to the applicant. If the individual is signing as a court-appointed guardian, a copy of the court-appointment papers showing the legal guardianship must be attached.\n\nAdults, other than a parent or court-appointed guardian, can sign Form W-7 only if a Form 2848, Power of Attorney and Declaration of Representative, has been signed by a parent or court-appointed guardian authorizing the individual to sign for the applicant.\n\nApplicant is a dependent 18 years of age or older. If an applicant is 18 years of age or older, the applicant or a court-appointed guardian can sign or appoint a parent or another individual to sign. The individual (if other than the applicant) must type or print their name in the space provided and check the appropriate box that indicates their relationship to the applicant. If the individual is signing as a court-appointed guardian, a copy of the court-appointment papers showing the legal guardianship must be attached. Individuals other than the applicant or a court-appointed guardian must attach a Form 2848 from the applicant or court-appointed guardian authorizing them to sign the Form W-7."
+      },
+      "delegate_relationship": {
+        "instructions": "Check the box showing the delegate's relationship to the applicant. If signing as a court-appointed guardian, a copy of the court-appointment papers showing the legal guardianship must be attached. A spouse can't sign for his or her spouse unless the power of attorney box is checked and Form 2848 has been attached.",
+        "details": "Applicant is a dependent 18 years of age or older. If an applicant is 18 years of age or older, the applicant or a court-appointed guardian can sign or appoint a parent or another individual to sign. The individual (if other than the applicant) must type or print their name in the space provided and check the appropriate box that indicates their relationship to the applicant. If the individual is signing as a court-appointed guardian, a copy of the court-appointment papers showing the legal guardianship must be attached. Individuals other than the applicant or a court-appointed guardian must attach a Form 2848 from the applicant or court-appointed guardian authorizing them to sign the Form W-7.\n\nA spouse can't sign for his or her spouse, unless the Power of attorney box is checked and Form 2848 has been attached to Form W-7."
+      },
+      "agent_sign_date": {
+        "instructions": "",
+        "details": ""
+      },
+      "agent_phone": {
+        "instructions": "",
+        "details": ""
+      },
+      "agent_fax": {
+        "instructions": "",
+        "details": ""
+      },
+      "agent_name_title": {
+        "instructions": "For acceptance agent use only. Complete all fields as appropriate and enter the eight-digit office code that was issued to you by the ITIN Program Office.",
+        "details": "Acceptance Agent's Use ONLY\n\nComplete all fields as appropriate and enter the eight-digit office code that was issued to you by the ITIN Program Office."
+      }
+    },
+    "form_details": "What's an ITIN. An ITIN is a nine-digit number issued by the IRS to individuals who are required for federal tax purposes to have a U.S. taxpayer identification number but who don't have and aren't eligible to get a social security number (SSN).\n\nPurpose of Form\nUse Form W-7 for the following purposes.\n- To apply for a new ITIN. Individuals applying for an ITIN must include a U.S. federal tax return unless they meet an exception, and the required documentation.\n- To renew an ITIN. An ITIN only needs to be renewed if it'll be included on a U.S. federal tax return and it's expired. Individuals renewing an ITIN must include a U.S. federal tax return unless they meet an exception, and the required documentation. See How To Apply, later, for more information on how to renew your ITIN.\n\nSocial security numbers. Don't complete Form W-7 if you have an SSN or if you're eligible to get an SSN. You're eligible for an SSN if you're a U.S. citizen or if you've been admitted by the United States for permanent residence or U.S. employment.\n\nIf you have an application for an SSN pending, don't file Form W-7. Complete Form W-7 only if the SSA notifies you that you're ineligible for an SSN.\n\nAllowable tax benefit. For tax years after December 31, 2017, spouses and dependents are NOT eligible for an ITIN or to renew an ITIN unless they are claimed for an allowable tax benefit or they file their own tax return. Spouses and dependents must be listed on an attached U.S. federal tax return and include the schedule, form, or check the box on the return that applies to the allowable tax benefit. An allowable tax benefit includes:\n- A spouse filing a joint return,\n- Head of household (HOH),\n- Qualifying surviving spouse (QSS),\n- American opportunity tax credit (AOTC),\n- Premium tax credit (PTC),\n- Child and dependent care credit (CDCC), or\n- Credit for other dependents (ODC).\n\nSupporting Documentation Requirements\nWhether you are applying for a new ITIN or renewing an existing ITIN, you must provide documentation that meets the following requirements.\n1.\nYou must submit documentation to establish your identity and your connection to a foreign country (\"foreign status\"). Applicants claimed as dependents must also prove U.S. residency unless the applicant is a dependent of U.S. military personnel stationed overseas or the applicant is from Canada or Mexico and is claimed for any allowable tax benefit other than the credit for other dependents (ODC). Dependent applicants claimed for ODC must submit proof of U.S. residency unless they are dependents of U.S. military personnel stationed overseas. See Proof of U.S. residency for applicants who are dependents, later.\n2.\nYou must submit original documents, or certified copies of these documents from the issuing agency, that support the information provided on Form W-7. A certified copy of a document is one that the original issuing agency provides and certifies as an exact copy of the original document and contains an official stamped seal from the agency. You may be able to request a certified copy of documents at an embassy or consulate. However, services may vary between countries, so it's recommended that you contact the appropriate consulate or embassy for specific information.\n\n3.\nThe documentation you provide must be current (that is, not expired at the time you submit your application).\n\nIf you submit an original valid passport or a certified copy from the issuing agency, you don't need to submit any other documents from the table. Otherwise, you must submit at least two types of documents listed in the \"Supporting Documentation\" table that prove identity and foreign status, and that meet the photograph requirement explained earlier.\n\nWhere To Apply\nBy mail. Mail Form W-7, your tax return (if applicable) or other documents required by an exception, and the documentation described under Supporting Documentation Requirements, earlier, to:\nInternal Revenue Service\nITIN Operation\nP.O. Box 149342\nAustin, TX 78714-9342\n\nProcessing times. Allow 7 weeks for the IRS to notify you of your ITIN application status (9 to 11 weeks if you submit the application during peak processing periods (January 15 through April 30) or if you're filing from overseas). If you haven't received your ITIN or correspondence at the end of that time, you can call the IRS to find out the status of your application (see Telephone help, earlier)."
+  },
+  "tokens": [
+    {
+      "input": 4,
+      "output": 11053,
+      "cost_usd_equiv": 1.0625404999999999
+    },
+    {
+      "input": 4,
+      "output": 4667,
+      "cost_usd_equiv": 0.8218734999999998
+    }
+  ],
+  "report": {
+    "askable": 57,
+    "instructions_covered": 44,
+    "coverage_pct": 77.2,
+    "details_fields": 44,
+    "form_details_chars": 4416,
+    "guidance_findings": [
+      {
+        "severity": "WARNING",
+        "rule": "help-instructions-missing",
+        "path": "$.fields",
+        "message": "13 of 57 askable fields have no help.instructions (us_person_name, us_person_ssn_itin, treaty_article, mailing_city, country_of_birth, ...) -- the voice AI has no authored guidance for them (sprint-16 coverage worklist)",
+        "field_id": null
+      }
+    ]
+  },
+  "contiguity_dropped": {},
+  "verify_flags": [
+    {
+      "severity": "WARNING",
+      "rule": "instructions-ungrounded-dropped",
+      "path": "fields (id=us_person_name).help",
+      "message": "authored guidance FAILED A SAFETY CHECK (grounding/advice/omission) after 2 rectify rounds -- proposed text DROPPED, deterministic baseline kept (KEEP rule): If d or e, enter name of U.S. citizen/resident alien"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "instructions-ungrounded-dropped",
+      "path": "fields (id=us_person_ssn_itin).help",
+      "message": "authored guidance FAILED A SAFETY CHECK (grounding/advice/omission) after 2 rectify rounds -- proposed text DROPPED, deterministic baseline kept (KEEP rule): If d or e, enter SSN/ITIN of U.S. citizen/resident alien"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "instructions-ungrounded-dropped",
+      "path": "fields (id=treaty_article).help",
+      "message": "authored guidance FAILED A SAFETY CHECK (grounding/advice/omission) after 2 rectify rounds -- proposed text DROPPED, deterministic baseline kept (KEEP rule): Additional information for a and f: Enter treaty article number"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "instructions-ungrounded-dropped",
+      "path": "fields (id=mailing_city).help",
+      "message": "authored guidance FAILED A SAFETY CHECK (grounding/advice/omission) after 2 rectify rounds -- proposed text DROPPED, deterministic baseline kept (KEEP rule): City or town, state or province, and country. Include ZIP code or postal code where appropriate."
+    },
+    {
+      "severity": "WARNING",
+      "rule": "instructions-ungrounded-dropped",
+      "path": "fields (id=id_doc_issued_by).help",
+      "message": "authored guidance FAILED A SAFETY CHECK (grounding/advice/omission) after 2 rectify rounds -- proposed text DROPPED, deterministic baseline kept (KEEP rule): 6d. Issued by"
+    },
+    {
+      "severity": "WARNING",
+      "rule": "instructions-ungrounded-dropped",
+      "path": "fields (id=id_doc_number).help",
+      "message": "authored guidance FAILED A SAFETY CHECK (grounding/advice/omission) after 2 rectify rounds -- proposed text DROPPED, deterministic baseline kept (KEEP rule): 6d. Number"
+    }
+  ],
+  "write_summary": {
+    "written": 44,
+    "skipped_human": 0,
+    "flags": 6
+  }
+}

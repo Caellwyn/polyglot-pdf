@@ -148,3 +148,109 @@ def test_repairer_whitespace_blank_lines_and_interleaved_paraphrase():
         "Beta verbatim sentence about required documentation.", bn)
     assert "Alpha verbatim" in repaired2 and "Beta verbatim" in repaired2
     assert len(dropped2) == 1 and "invented middle" in dropped2[0]
+
+
+def test_write_kit_no_clobber_and_provenance(tmp_path):
+    """wsao.5 exit criterion 2 (first half): a human-owned field survives a
+    re-run untouched; blank/machine-owned fields update with provenance."""
+    import json as _json
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    schema = {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [
+            {"id": "blank", "name": "B", "type": "text"},
+            {"id": "human", "name": "H", "type": "text",
+             "help": {"instructions": "Hand-authored by the maintainer."}},
+        ],
+        "sections": [], "parts": [],
+    }
+    (kit / "schema.json").write_text(_json.dumps(schema), encoding="utf-8")
+    proposals = {"fields": {
+        "blank": {"instructions": "Authored A.", "details": "", "format_hint": ""},
+        "human": {"instructions": "Machine overwrite attempt.",
+                  "details": "", "format_hint": ""}},
+        "form_details": ""}
+    s1 = ei.write_kit(str(kit), proposals, "BOOKLET", [], "m", "j")
+    assert s1["written"] == 1 and s1["skipped_human"] == 1
+    saved = _json.loads((kit / "schema.json").read_text(encoding="utf-8"))
+    by_id = {f["id"]: f for f in saved["fields"]}
+    assert by_id["blank"]["help"]["instructions"] == "Authored A."
+    assert by_id["human"]["help"]["instructions"] == \
+        "Hand-authored by the maintainer."
+    prov = saved["_bakeoff"]["authoring"]["instructions_enrich"]["provenance"]
+    assert prov["blank"]["source"] == "llm-verified"
+    assert saved["form_metadata"]["booklet_text"] == "BOOKLET"
+    # machine-owned field UPDATES on re-run (hash matches recorded)
+    proposals2 = {"fields": {"blank": {"instructions": "Authored A v2.",
+                                       "details": "", "format_hint": ""}},
+                  "form_details": ""}
+    s2 = ei.write_kit(str(kit), proposals2, "BOOKLET", [], "m", "j")
+    saved2 = _json.loads((kit / "schema.json").read_text(encoding="utf-8"))
+    assert s2["written"] == 1
+    assert {f["id"]: f for f in saved2["fields"]}["blank"]["help"][
+        "instructions"] == "Authored A v2."
+    # then a HUMAN EDIT to that same field protects it from round 3
+    saved2["fields"][0]["help"]["instructions"] = "Maintainer fixed this."
+    (kit / "schema.json").write_text(_json.dumps(saved2), encoding="utf-8")
+    s3 = ei.write_kit(str(kit), proposals2, "BOOKLET", [], "m", "j")
+    assert s3["written"] == 0 and s3["skipped_human"] >= 1
+    saved3 = _json.loads((kit / "schema.json").read_text(encoding="utf-8"))
+    assert {f["id"]: f for f in saved3["fields"]}["blank"]["help"][
+        "instructions"] == "Maintainer fixed this."
+
+
+def test_verify_unavailable_keeps_baseline(monkeypatch):
+    """wsao.5 exit criterion 2 (second half): judge unavailable => NO
+    authored text survives (KEEP rule) + the unavailable flag."""
+    def _boom(model):
+        def runner(prompt, m):
+            raise RuntimeError("no credentials")
+        return runner
+    monkeypatch.setattr(ei.llm_providers, "resolve_json_runner", _boom)
+    proposals = {"fields": {"a": {"instructions": "X", "details": "Y"}},
+                 "form_details": "Z"}
+    flags = ei.verify_and_rectify(
+        {"fields": [{"id": "a", "name": "A", "type": "text"}]},
+        proposals, "BOOKLET", "T", "author-model")
+    assert proposals["fields"]["a"] == {}
+    assert proposals["form_details"] == ""
+    assert [f["rule"] for f in flags] == ["instructions-enrich-unavailable"]
+
+
+def test_bootstrap_provenance_marks_tu_identical_only():
+    """wsao.5 exit criterion 3 shape: exact /TU match => machine-owned;
+    anything else stays protected."""
+    schema = {"fields": [
+        {"id": "tu_match", "pdf_field_name": "A[0]",
+         "help": {"instructions": "Enter Family Name (Last Name)."}},
+        {"id": "edited", "pdf_field_name": "B[0]",
+         "help": {"instructions": "A human improved this text."}},
+        {"id": "no_help", "pdf_field_name": "C[0]"},
+    ]}
+    prov = ei.bootstrap_provenance(schema, {
+        "A[0]": "Enter Family Name (Last Name).",
+        "B[0]": "Original tooltip that was edited away.",
+        "C[0]": "Anything."})
+    assert set(prov) == {"tu_match"}
+    assert prov["tu_match"]["source"] == "tu"
+
+
+def test_lint_reemits_guidance_flags():
+    from backend.services.schema_lint import lint_schema
+    schema = {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [], "sections": [], "parts": [],
+        "_bakeoff": {"authoring": {"instructions_enrich": {"flags": [
+            {"severity": "ERROR",  # pinned back to WARNING on re-emit
+             "rule": "instructions-ungrounded-dropped",
+             "path": "fields (id=x).help", "message": "dropped"},
+            {"rule": "not-a-guidance-rule", "path": "p", "message": "m"},
+            "junk",
+        ]}}},
+    }
+    findings = lint_schema(schema)
+    hits = [f for f in findings
+            if f.rule == "instructions-ungrounded-dropped"]
+    assert len(hits) == 1 and hits[0].severity == "WARNING"
+    assert not [f for f in findings if f.rule == "not-a-guidance-rule"]

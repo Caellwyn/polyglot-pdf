@@ -344,16 +344,23 @@ def run_json_gemini(prompt: str, model: str) -> tuple[dict, dict]:
     else:
         client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                               http_options=http_opts)
+    config_kwargs: Dict[str, Any] = dict(
+        response_mime_type="application/json",
+        temperature=0.0,
+        # 65535, not 65536: some models (2.5-flash-lite on Vertex) treat
+        # the documented 65536 limit as EXCLUSIVE and 400 on it.
+        max_output_tokens=65535,
+    )
+    # Vertex enables THINKING by default on 2.5-flash (not -lite) and the
+    # thinking-output tokens can dwarf the answer 10-50x (the repo's probe
+    # cost scar). Pin a zero budget for these structured-JSON tasks.
+    if "flash" in model.lower() and "lite" not in model.lower():
+        config_kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_budget=0)
     resp = client.models.generate_content(
         model=model,
         contents=[prompt],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.0,
-            # 65535, not 65536: some models (2.5-flash-lite on Vertex) treat
-            # the documented 65536 limit as EXCLUSIVE and 400 on it.
-            max_output_tokens=65535,
-        ),
+        config=types.GenerateContentConfig(**config_kwargs),
     )
     if not resp.text:
         # A safety-blocked/empty candidate otherwise surfaces as an opaque

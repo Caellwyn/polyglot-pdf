@@ -831,11 +831,37 @@ def lint_schema(
     _check_guidance(fields, schema, out)
 
     _emit_translation_flags(schema, out)
+    _emit_guidance_flags(schema, out)
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)
 
     return out
+
+
+def _emit_guidance_flags(schema: Dict[str, Any], out: List[LintFinding]) -> None:
+    """Re-emit the guidance verify loop's persisted flags as findings (bd
+    wsao.5) -- the instructions_enrich analog of _emit_translation_flags:
+    flags live at _bakeoff.authoring.instructions_enrich.flags, severity is
+    pinned WARNING (inform, never block), malformed entries are skipped
+    (never-throws)."""
+    authoring = schema.get("_bakeoff")
+    authoring = authoring.get("authoring") if isinstance(authoring, dict) else None
+    enrich = authoring.get("instructions_enrich") if isinstance(authoring, dict) else None
+    flags = enrich.get("flags") if isinstance(enrich, dict) else None
+    if not isinstance(flags, list):
+        return
+    for flag in flags:
+        if not isinstance(flag, dict):
+            continue
+        rule = flag.get("rule")
+        path = flag.get("path")
+        message = flag.get("message")
+        if rule not in guidance_contract.GUIDANCE_FLAG_RULES:
+            continue
+        if not isinstance(path, str) or not isinstance(message, str):
+            continue
+        out.append(LintFinding(SEVERITY_WARNING, rule, path, message))
 
 
 def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
