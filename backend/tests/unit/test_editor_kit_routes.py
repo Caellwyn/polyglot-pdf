@@ -2510,6 +2510,12 @@ def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     model = seen_cmds[0][seen_cmds[0].index("--translation-model") + 1]
     assert model == "gemini-2.5-pro"
     assert "--no-translate-options" not in seen_cmds[0]
+    # The guidance stage's model must ALSO be settings-resolved (bd wsao.6):
+    # without --guidance-model the child falls through raw env vars to the
+    # local claude CLI, absent in the hosted container.
+    assert "--guidance-model" in seen_cmds[0]
+    gmodel = seen_cmds[0][seen_cmds[0].index("--guidance-model") + 1]
+    assert gmodel == "gemini-2.5-pro"
 
     _make_kit(root, "fresh2")
     r = c.post("/api/editor/kits/fresh2/extract",
