@@ -1181,8 +1181,12 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     nf = len(schema.get("fields", []))
     status = "OK" if ok else "INVALID"
     instr_note = f", help.instructions: {instructions_filled} from /TU"
-    if instructions_pdf:
-        instr_note += f" + {instructions_enriched} from instructions PDF"
+    if instructions_enriched:
+        # only the NAIVE FALLBACK count (the LLM guidance stage prints its
+        # own line below) -- printing it unconditionally misread as "the
+        # booklet added nothing" on the happy path (wsao.6 fresh-eyes)
+        instr_note += (f" + {instructions_enriched} via naive booklet "
+                       f"fallback")
     print(f"[{status}] wrote {out_path} -- {nf} fields, prompt="
           f"{'plain' if plain else 'enriched'}{instr_note}; {detail}")
     print(f"division: {division['strategy']} -- {division['parts']} part(s) / "
@@ -1299,8 +1303,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="OPT OUT of the deterministic pre-grouping candidates "
                          "block (bd h76m.12; default ON per bd qmxb)")
     ap.add_argument("--instructions-pdf", default=None,
-                    help="OPTIONAL official instructions PDF; its text enriches "
-                         "help.instructions on top of the /TU baseline (bd s4dp.3)")
+                    help="OPTIONAL official instructions PDF: the primary "
+                         "source for the LLM guidance stage (bd wsao.6; a "
+                         "booklet next to the form PDF is auto-discovered "
+                         "without this flag), and the input to the naive "
+                         "substring fallback (bd s4dp.3) when that stage is "
+                         "unavailable")
     ap.add_argument("--division-cap", type=int,
                     default=derive_sections.DEFAULT_CAP,
                     help="display-sanity cap on fields per derived section "
@@ -1324,8 +1332,8 @@ def main(argv: list[str] | None = None) -> int:
                          "extraction-strategy test runs)")
     ap.add_argument("--guidance-model", default=None,
                     help="authoring model for the guidance enrichment stage "
-                         "(default: INSTRUCTIONS_MODEL env or the local "
-                         "claude CLI)")
+                         "(default: INSTRUCTIONS_MODEL env, then "
+                         "EXTRACTOR_MODEL env, then the local claude CLI)")
     args = ap.parse_args(argv)
 
     plain = DEFAULT_PLAIN if args.plain is None else args.plain

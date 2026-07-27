@@ -1467,6 +1467,12 @@ async def extract_editor_kit(
                 cmd += ["--translation-model", settings.OPTION_TRANSLATION_MODEL]
             else:
                 cmd += ["--no-translate-options"]
+            # Same reasoning for the guidance stage (bd wsao.6): without this
+            # the stage's model falls through to the raw INSTRUCTIONS_MODEL /
+            # EXTRACTOR_MODEL env vars and then the local claude CLI -- absent
+            # in this container -- so it would silently degrade to the naive
+            # fallback on a correctly-configured host.
+            cmd += ["--guidance-model", settings.EXTRACTOR_MODEL]
             if instructions_bytes is not None:
                 instructions_path = tmp / "instructions.pdf"
                 instructions_path.write_bytes(instructions_bytes)

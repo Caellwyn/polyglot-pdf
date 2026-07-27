@@ -813,7 +813,11 @@ def write_kit(kit_dir: str, proposals: dict, booklet: str, flags: List[dict],
 
     tu_map: Dict[str, str] = {}
     pdf_path = os.path.join(kit_dir, "form.pdf")
-    if os.path.exists(pdf_path):
+    prior_prov = ((schema.get("_bakeoff", {}).get("authoring", {})
+                   .get("instructions_enrich") or {}).get("provenance"))
+    # only parse the PDF when the bootstrap can actually use it (a kit with
+    # provenance discards the map -- apply_proposals' `not prov` gate)
+    if os.path.exists(pdf_path) and not prior_prov:
         tu_map = tu_map_from_pdf(pdf_path)
 
     summary = apply_proposals(schema, proposals, booklet, flags,
