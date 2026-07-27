@@ -144,6 +144,32 @@ def test_lint_containment_failure_and_floor_missing():
     assert "help-details-not-contained" not in _rules(findings2)
 
 
+def test_lint_containment_checks_form_level_details_too():
+    """form_metadata.details is under the SAME zero-trust gate as per-field
+    details (wsao.4 outer review: 3 glued paragraphs shipped as 'clean'
+    through the form-level blind spot)."""
+    booklet = "Purpose of Form. Use Form W-7 to apply for an ITIN."
+    schema = _schema([
+        {"id": "f1", "name": "F1", "type": "text",
+         "help": {"instructions": "ok guidance here for coverage"}},
+    ], booklet=booklet)
+    schema["form_metadata"]["details"] = "This sentence was invented."
+    findings = lint_schema(schema)
+    hits = [f for f in findings if f.rule == "help-details-not-contained"]
+    assert len(hits) == 1 and hits[0].path == "$.form_metadata.details"
+    # verbatim form-level details pass
+    schema["form_metadata"]["details"] = \
+        "Use Form W-7 to apply for an ITIN."
+    assert not [f for f in lint_schema(schema)
+                if f.rule == "help-details-not-contained"]
+    # form-level details without a floor -> the no-reference-floor finding
+    schema2 = _schema([{"id": "f1", "name": "F1", "type": "text",
+                        "help": {"instructions": "ok guidance here x"}}])
+    schema2["form_metadata"]["details"] = "Anything."
+    rules2 = [f.rule for f in lint_schema(schema2)]
+    assert "help-details-no-reference-floor" in rules2
+
+
 def test_lint_containment_passes_verbatim_excerpt():
     booklet = ("a. Tax treaty benefit. Certain nonresident aliens must get "
                "an ITIN to claim tax treaty benefits even if they don" +
@@ -169,6 +195,43 @@ def test_lint_oversize_and_headings_missing():
     rules = _rules(findings)
     assert "help-details-oversize" in rules  # > the 20k inline budget
     assert "help-details-headings-missing" in rules  # long + zero headings
+
+
+# --- wsao.4: pinned-normalization additions + furniture cleaner --------------
+
+def test_normalization_folds_bullets_and_slash_wraps():
+    """The wsao.4 additions to the PINNED spec (measured PDF artifacts, not
+    paraphrase loosening): bullet glyphs fold to '-', slash-wraps join."""
+    bullet = chr(0x2022)
+    src = (bullet + " Form 1042-S, Foreign Person" + chr(0x2019) + "s income\n"
+           + bullet + " Form 1099-INT, Interest Income")
+    excerpt = "- Form 1042-S, Foreign Person's income - Form 1099-INT, Interest Income"
+    assert gc.check_containment(excerpt, src).contained
+    # slash-wrap: the booklet wraps AFTER slashes ("citizen/\nresident")
+    assert (gc.normalize_for_containment("U.S. citizen/\nresident alien")
+            == "u.s. citizen/resident alien")
+    assert gc.check_containment("U.S. citizen/resident alien",
+                                "U.S. citizen/\n resident alien").contained
+
+
+def test_clean_booklet_furniture_strips_sidebars_and_footers_only():
+    raw = ("identification \nCAUTION\n!\nCAUTION\n!\ndocuments. A copy of "
+           "the ID is required.\n8\nInstructions for Form W-7 (Rev. December "
+           "2024)\nTIP\nreal content line continues here.")
+    cleaned = gc.clean_booklet_furniture(raw)
+    assert "CAUTION" not in cleaned and "TIP" not in cleaned
+    assert "Instructions for Form W-7" not in cleaned
+    assert "\n8\n" not in cleaned
+    assert "documents. A copy of the ID is required." in cleaned
+    assert "real content line continues here." in cleaned
+    # DOCUMENTED TRADEOFF (wsao.4 fresh-eyes): a line that is ONLY 1-3 digits
+    # is treated as a page number and dropped -- a booklet whose body carries
+    # a standalone bare-number line would lose it (none observed on w7; the
+    # wsao.5 write path inherits this and must revisit if a real kit hits it).
+    assert "100" not in gc.clean_booklet_furniture("above\n100\nbelow")
+    # never-throws contract: truthy non-strings coerce to "" like siblings
+    assert gc.clean_booklet_furniture([1, 2]) == ""
+    assert gc.clean_booklet_furniture(42) == ""
 
 
 # --- wsao.8: inline budget clamp + injection budget --------------------------
