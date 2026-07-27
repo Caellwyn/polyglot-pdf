@@ -102,6 +102,30 @@ export interface FormField {
   copy_to?: string[];
   pdf_position?: PDFPosition;
   question_number?: string;
+  // Editor-owned human review state (bd polyglot-pdf-u8t6). PURE editor-workflow
+  // metadata: it is NOT part of the backend FormField model (which ignores
+  // unknown keys) and never reaches the voice runtime. It round-trips because the
+  // hosted draft-save/lint routes store the raw dict verbatim and the publish gate
+  // validates without re-serializing (see reviewStatus.ts). The underscore prefix
+  // marks it as provenance/editor-side, matching FormSchema._bakeoff.
+  _review?: FieldReview;
+}
+
+// A field's human review sign-off, distinct from the AUTOMATIC status
+// checkFieldComplete derives from the field's contents (bd polyglot-pdf-u8t6):
+//   - 'unreviewed'       -- default; no human has looked at it, so the automatic
+//                           status (green/amber) shows through.
+//   - 'reviewed_correct' -- a human signed off; forces green OVER an auto-amber
+//                           (but never over a real ERROR -- errors always win).
+//   - 'needs_followup'   -- a human flagged it; counts as a review target and
+//                           carries an optional free-text note.
+export type FieldReviewStatus = 'unreviewed' | 'reviewed_correct' | 'needs_followup';
+
+export interface FieldReview {
+  status: FieldReviewStatus;
+  // Free-text note editors leave themselves/others (most useful on
+  // 'needs_followup'; allowed on any state).
+  note?: string;
 }
 
 export type FieldType =

@@ -16,6 +16,8 @@ import {
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
 import { checkFieldComplete } from '../utils/validation';
+import { getReview, withReviewNote, withReviewStatus } from '../utils/reviewStatus';
+import type { FieldReviewStatus } from '../types/schema';
 import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
 
 interface FieldEditorProps {
@@ -227,6 +229,62 @@ const FormMetadataEditor: React.FC<{
         <p className="text-xs text-gray-400">
           Select a field on the left to edit its properties.
         </p>
+      </div>
+    </div>
+  );
+};
+
+// Human review sign-off + notes for the selected field (bd polyglot-pdf-u8t6).
+// Distinct from the AUTOMATIC "Why this field is flagged" banner above: this is
+// where an editor records THEIR judgment -- mark an auto-amber field
+// "reviewed - correct" (turns it green), flag one "needs follow-up", and leave a
+// note for themselves/others. Commits through the field-level _review helpers so
+// a neutral reset serializes clean (no dangling {status:'unreviewed'}).
+const REVIEW_CHOICES: { value: FieldReviewStatus; label: string }[] = [
+  { value: 'unreviewed', label: 'Un-reviewed' },
+  { value: 'reviewed_correct', label: 'Reviewed - correct' },
+  { value: 'needs_followup', label: 'Needs follow-up' },
+];
+
+const FieldReviewEditor: React.FC<{
+  field: FormField;
+  onUpdateField: (field: FormField) => void;
+}> = ({ field, onUpdateField }) => {
+  const review = getReview(field);
+  return (
+    <div className="space-y-3 border-t border-gray-200 pt-4" data-testid="field-review">
+      <h4 className="text-sm font-semibold text-gray-900">Review</h4>
+      <div>
+        <label className="label" htmlFor="review-status-select">Review status</label>
+        <select
+          id="review-status-select"
+          className="input"
+          aria-label="Review status"
+          value={review.status}
+          onChange={(e) =>
+            onUpdateField(withReviewStatus(field, e.target.value as FieldReviewStatus))
+          }
+        >
+          {REVIEW_CHOICES.map(({ value, label }) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500 mt-1">
+          "Reviewed - correct" marks a field done even if the tool still flags it
+          amber. A real error (red) always stays red until fixed.
+        </p>
+      </div>
+      <div>
+        <label className="label" htmlFor="review-note">Review notes</label>
+        <textarea
+          id="review-note"
+          className="input"
+          rows={2}
+          aria-label="Review notes"
+          value={review.note || ''}
+          onChange={(e) => onUpdateField(withReviewNote(field, e.target.value))}
+          placeholder="Notes for yourself or other editors about this field..."
+        />
       </div>
     </div>
   );
@@ -457,6 +515,9 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             </div>
           );
         })()}
+
+        {/* Human review sign-off + notes (bd polyglot-pdf-u8t6). */}
+        <FieldReviewEditor field={field} onUpdateField={onUpdateField} />
 
         {/* Basic Properties */}
         <div className="space-y-4">

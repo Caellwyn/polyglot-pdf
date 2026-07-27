@@ -8,15 +8,17 @@
  * - Visual feedback: Selected fields have thicker borders, blue glow, and stronger background
  * - Hover tooltips: Shows field name and type on hover
  * 
- * Color indicates field completion status:
- * - Green: Complete
- * - Yellow: Needs review
- * - Red: Has errors
+ * Color indicates field status (the SAME effective status the FieldList row
+ * shows, so a review sign-off agrees across surfaces -- bd polyglot-pdf-u8t6):
+ * - Green: complete, OR reviewed-correct (human sign-off over an auto-amber)
+ * - Yellow: needs review (automatic) OR needs-follow-up (human flag)
+ * - Red: has errors (always wins -- a sign-off never greens a broken field)
  */
 
 import React from 'react';
 import type { FormField } from '../types/schema';
 import { pdfToScreenCoords, hasValidCoordinates } from '../utils/pdfCoordinates';
+import { effectiveStatus } from '../utils/reviewStatus';
 import { checkFieldComplete } from '../utils/validation';
 
 export interface FieldOverlayProps {
@@ -51,15 +53,21 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // Convert PDF coordinates to screen coordinates
   const screenPos = pdfToScreenCoords(field.pdf_position!, pageHeight, scale);
 
-  // Determine border color based on field status
-  const status = checkFieldComplete(field);
+  // Determine border color from the EFFECTIVE status (review sign-off layered
+  // over the automatic derivation), so the overlay agrees with the FieldList
+  // row instead of contradicting it (bd polyglot-pdf-u8t6). The overlay has no
+  // backend lint findings threaded in, so hasLintError stays false here -- a
+  // lint ERROR already reds the row via FieldList; the overlay keeps mirroring
+  // local completeness + the review layer, which is what changed. 'followup'
+  // and the automatic 'review' both sit in the yellow (needs-attention) band.
+  const status = effectiveStatus(field);
   let borderColor: string;
   let bgColor: string;
 
-  if (status.isComplete) {
+  if (status === 'complete') {
     borderColor = isSelected ? 'rgb(34, 197, 94)' : 'rgb(74, 222, 128)';  // green-500 : green-400
     bgColor = isSelected ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.05)';  // Stronger highlight when selected
-  } else if (status.needsReview) {
+  } else if (status === 'review' || status === 'followup') {
     borderColor = isSelected ? 'rgb(234, 179, 8)' : 'rgb(250, 204, 21)';  // yellow-500 : yellow-400
     bgColor = isSelected ? 'rgba(234, 179, 8, 0.15)' : 'rgba(234, 179, 8, 0.05)';  // Stronger highlight when selected
   } else {
