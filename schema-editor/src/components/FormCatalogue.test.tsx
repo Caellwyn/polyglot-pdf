@@ -569,6 +569,28 @@ describe('FormCatalogue -- compact selector strip (bd tynm)', () => {
     fireEvent.click(screen.getByText('Hide form cards'));
     expect(screen.queryByTitle('Open I-90 for editing')).toBeNull();
   });
+
+  it('returns to the collapsed default after changing folders', async () => {
+    // A fresh folder open resets the grid to collapsed -- expanding folder A must
+    // not leave folder B expanded (fresh-eyes finding on bd rykl).
+    const root = mockRoot([
+      mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+    ]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await waitFor(() => expect(screen.getByText('Show form cards')).toBeTruthy());
+
+    // Expand the grid for the first folder...
+    fireEvent.click(screen.getByText('Show form cards'));
+    expect(screen.getByTitle('Open I-90 for editing')).toBeTruthy();
+
+    // ...then change folders: the grid must be collapsed again for the new folder.
+    fireEvent.click(screen.getByText('Change folder'));
+    await waitFor(() => expect(screen.getByText('Show form cards')).toBeTruthy());
+    expect(screen.queryByTitle('Open I-90 for editing')).toBeNull();
+  });
 });
 
 // --- Run-extraction button (bd 7a9.17) ------------------------------------- //

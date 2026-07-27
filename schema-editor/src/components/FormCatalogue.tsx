@@ -171,6 +171,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       const dir = await pickDirectory();
       clearOpenKit?.();
       setEditedProgress({}); // remembered edits belong to the old folder
+      setExpanded(false); // a fresh folder returns to the collapsed default (bd tynm parity)
       setRoot(dir);
       await refresh(dir);
     } catch (err) {
