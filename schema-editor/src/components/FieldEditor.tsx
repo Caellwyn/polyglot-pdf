@@ -432,6 +432,75 @@ const WidgetPicker: React.FC<{
   );
 };
 
+// The per-option backing-widget selector (bd polyglot-pdf-mrdj). Replaces a
+// free-text pdf_field_name box: a typo or invented name silently broke that
+// option's round-trip fill (the fill route writes widgets BY pdf_field_name,
+// so an unknown name just never fills). The editor may REASSIGN an option to a
+// different REAL widget but can never invent a name.
+//
+// Choices are the union of (a) every pdf_field_name already referenced by this
+// field's options -- so the current value is always selectable and the author
+// can reassign within the group -- and (b) the kit's unclaimed button widgets
+// (hosted author mode only, loaded lazily on first open). Local mode with no
+// backend dump still gets (a): reassignment among the group's existing widgets,
+// never free text.
+const OptionWidgetSelect: React.FC<{
+  value: string;                  // this option's current pdf_field_name ('' if none)
+  inGroupNames: string[];         // pdf_field_names referenced by sibling options
+  onLoadUnclaimedWidgets?: () => Promise<UnclaimedWidget[]>;
+  onChange: (name: string) => void;
+  ariaLabel: string;
+}> = ({ value, inGroupNames, onLoadUnclaimedWidgets, onChange, ariaLabel }) => {
+  const [unclaimed, setUnclaimed] = React.useState<string[] | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadUnclaimed = React.useCallback(async () => {
+    if (!onLoadUnclaimedWidgets || unclaimed !== null || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const ws = await onLoadUnclaimedWidgets();
+      setUnclaimed(Array.from(new Set(ws.map(w => w.name))));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load PDF widgets');
+    } finally {
+      setLoading(false);
+    }
+  }, [onLoadUnclaimedWidgets, unclaimed, loading]);
+
+  // The selectable set: current value + sibling widgets + any loaded unclaimed,
+  // de-duped, stable order (current first so it always shows even mid-load).
+  const choices = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const n of [value, ...inGroupNames, ...(unclaimed ?? [])]) {
+      if (n && !seen.has(n)) { seen.add(n); out.push(n); }
+    }
+    return out;
+  }, [value, inGroupNames, unclaimed]);
+
+  return (
+    <div className="mt-1">
+      <select
+        className="input input-sm w-full font-mono"
+        value={value}
+        aria-label={ariaLabel}
+        onFocus={() => void loadUnclaimed()}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {/* An empty current value stays selectable but is not a real widget. */}
+        {!value && <option value="">(no widget assigned)</option>}
+        {choices.map(name => (
+          <option key={name} value={name}>{name}</option>
+        ))}
+      </select>
+      {loading && <p className="text-xs text-gray-400 mt-0.5">Loading widgets...</p>}
+      {error && <p className="text-xs text-red-600 mt-0.5" role="alert">{error}</p>}
+    </div>
+  );
+};
+
 export const FieldEditor: React.FC<FieldEditorProps> = ({
   field,
   schema,
@@ -1046,17 +1115,18 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             </span>
                           </div>
                         )}
-                        <input
-                          type="text"
-                          className="input input-sm mt-1 w-full font-mono"
+                        <OptionWidgetSelect
                           value={option.pdf_field_name || ''}
-                          onChange={(e) => {
+                          inGroupNames={(field.options || [])
+                            .map(o => o.pdf_field_name)
+                            .filter((n): n is string => !!n)}
+                          onLoadUnclaimedWidgets={onLoadUnclaimedWidgets}
+                          ariaLabel={`Option ${idx + 1} PDF widget`}
+                          onChange={(name) => {
                             const newOptions = [...(field.options || [])];
-                            newOptions[idx] = { ...option, pdf_field_name: e.target.value };
+                            newOptions[idx] = { ...option, pdf_field_name: name };
                             updateField({ options: newOptions });
                           }}
-                          placeholder="pdf_field_name (widget backing this option)"
-                          aria-label={`Option ${idx + 1} PDF widget`}
                         />
                       </details>
                     )}
