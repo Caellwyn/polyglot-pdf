@@ -202,6 +202,14 @@ describe('ignoreField / restoreField round-trip (bd mzkw)', () => {
     expect(restoreField(saved, 'grp').fields.map(f => f.id)).toEqual(['a', 'grp']);
   });
 
+  it('degrades cleanly when asked to describe zero owners', () => {
+    // Unreachable from the real call sites, but the exported signature allows
+    // a reason/deps mismatch, and "depend on this field ()." reads as a bug.
+    const message = describeIgnoreBlock('has-dependents', []);
+    expect(message).not.toContain('()');
+    expect(message).toContain('depend on this field');
+  });
+
   it('does not promise more dependents than there are owners', () => {
     // One owner referencing through TWO surfaces produced 2 entries but 1
     // name, printing a "..." that implied unnamed extra fields (fresh-eyes).

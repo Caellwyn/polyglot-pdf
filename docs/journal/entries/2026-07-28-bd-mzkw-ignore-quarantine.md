@@ -87,7 +87,8 @@ schemas, one Cmd+Z reverses the whole move for free.
 - `FieldList.ignored.test.tsx` (7): the bucket's presence/absence, count,
   expansion, Un-ignore wiring, read-only mode, the note tooltip, exclusion from
   the review jump, and exclusion from the section count.
-- Full schema-editor suite green (61 files, 871 tests); tsc clean.
+- Full schema-editor suite green (62 files, 884 tests after the review rounds);
+  backend form-model suite green (55); tsc clean.
 
 ## Live verification
 
@@ -118,6 +119,33 @@ Also pinned (round-2 blocker): the "backend tolerates the stash" claim -- the on
 load-bearing assumption outside this feature's own suite, and a sibling model in
 form_models.py already sets `extra="forbid"` -- now has two backend tests, which
 the reviewer mutation-verified by adding that very config and watching them fail.
+
+Round 3 (blocker): `stripEditorState` only walked `schema.fields`, so a field
+that was merged and then IGNORED carried its `_ungroup` stash to disk -- which
+falsified the very premise the dependents detector cites for not scanning that
+surface ("session-only, stripped on save"). Rather than soften the claim, the
+strip now covers parked entries so the premise is true on every path. Also:
+`describeIgnoreBlock` counted raw dependent ENTRIES against a deduped-by-owner
+name list, printing a "..." that implied unnamed extra fields when one owner
+depended through two surfaces.
+
+Round 4 (blocker): `FieldReviewEditor` holds a local `ignoreError` and had no
+`key={field.id}`, so a block reason earned by field A stayed on screen under
+field B -- blaming a field that may have no dependents at all. The id header two
+lines above already guards this exact class of bug with the same technique and
+says so in its comment. Fixed, pinned, mutation-verified. Also: the stash key
+was a bare literal in fieldGrouping.ts vs a private const here (silent desync on
+rename -- now one exported `IGNORED_FIELDS_KEY`, imported one-way), and
+`describeIgnoreBlock('has-dependents', [])` rendered "depend on this field ()."
+
+Round 5 (coverage): pinned the empty-owners degenerate message and the
+quarantined-finding click path (a lint finding naming a parked field explains
+itself instead of dead-ending), plus this journal's own currency.
+
+Every fix is mutation-verified: the reviewer independently re-ran all five
+probes (remove `key={field.id}`; no-op `handleIgnoreField`,
+`handleRestoreField`, `useSchemaHistory.undo`; revert the parked-strip) and
+each failed exactly the test claiming to guard it.
 
 ## Closeout notes
 

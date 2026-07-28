@@ -17,7 +17,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { FormField, FormSchema } from './types/schema';
 
 vi.mock('./components/PDFViewer', () => ({ PDFViewer: () => <div data-testid="pdf" /> }));
-vi.mock('./components/ValidationPanel', () => ({ ValidationPanel: () => <div /> }));
+// Exposes onSelectField so the test can fire a lint finding that names a
+// PARKED field -- the click-to-focus dead end App guards against.
+vi.mock('./components/ValidationPanel', () => ({
+  ValidationPanel: ({ onSelectField }: { onSelectField?: (id: string) => void }) => (
+    <button onClick={() => onSelectField?.('f2')}>finding-f2</button>
+  ),
+}));
 // FieldEditor exposes App's ignore callback the way the real review dropdown
 // does, so the test drives handleIgnoreField itself.
 vi.mock('./components/FieldEditor', () => ({
@@ -152,6 +158,34 @@ describe('App ignore/restore/undo wiring (bd mzkw)', () => {
     await waitFor(() => expect(stashCount()).toBe('0'));
     expect(liveIds()).toBe('f1,f3,f2');       // appended to fields[]...
     expect(sectionIds()).toBe('f1,f2,f3');    // ...but back in its section slot
+  });
+
+  it('explains, rather than dead-ends, when a finding names a parked field', async () => {
+    // Lint findings persisted before a field was ignored still name it. The
+    // editor pane has nothing to render for a parked id, so clicking would
+    // otherwise fall silently back to the metadata panel (fresh-eyes).
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<App />);
+    await loadForm();
+    fireEvent.click(screen.getByText('select-f2'));
+    fireEvent.click(screen.getByText('ignore-selected'));
+    await waitFor(() => expect(liveIds()).toBe('f1,f3'));
+
+    fireEvent.click(screen.getByText('finding-f2'));
+
+    expect(alertSpy).toHaveBeenCalledOnce();
+    expect(alertSpy.mock.calls[0][0]).toContain('ignored');
+    // ...and it did NOT select the parked id (which would render nothing).
+    expect(screen.getByTestId('editor-field').textContent).toBe('(none)');
+  });
+
+  it('still focuses a LIVE field from a finding', async () => {
+    // The guard must not break the ordinary click-to-focus path.
+    render(<App />);
+    await loadForm();
+    fireEvent.click(screen.getByText('finding-f2'));
+    await waitFor(() =>
+      expect(screen.getByTestId('editor-field').textContent).toBe('f2'));
   });
 
   it('App refuses to quarantine a required field, with the reason', async () => {
