@@ -19,6 +19,7 @@
  * restoring stale ids.
  */
 import type { FormSchema, FormField, FormSection } from '../types/schema';
+import { allFieldIds, isIgnored } from './ignoreField';
 
 // Mirrors the backend option-slug convention (conditional_vocabulary):
 // lowercase snake_case, starting with a letter.
@@ -37,8 +38,14 @@ export function renameBlockReason(
   if (!ID_PATTERN.test(trimmed)) {
     return 'Use snake_case: lowercase letters, digits and underscores, starting with a letter.';
   }
-  if (schema.fields.some(f => f.id === trimmed)) {
-    return `A field with the ID "${trimmed}" already exists.`;
+  // Check LIVE and PARKED ids (bd polyglot-pdf-mzkw): an ignored field still
+  // owns its id and reclaims it on un-ignore, so handing that id to a live
+  // field here would produce a duplicate the moment it is restored.
+  if (allFieldIds(schema).has(trimmed)) {
+    return isIgnored(schema, trimmed)
+      ? `"${trimmed}" belongs to an ignored field. Un-ignore it first, or pick `
+        + 'another ID -- it would collide when that field is restored.'
+      : `A field with the ID "${trimmed}" already exists.`;
   }
   return null;
 }

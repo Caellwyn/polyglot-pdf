@@ -41,6 +41,11 @@ import type {
   ConditionalDisplay,
   FieldCondition,
 } from '../types/schema';
+// One source for the quarantine stash key (bd polyglot-pdf-mzkw): stripEditorState
+// must reach into the same key ignoreField writes, and a duplicate literal here
+// would desync silently on a rename. One-way import -- ignoreField never imports
+// this module, so no cycle.
+import { IGNORED_FIELDS_KEY } from './ignoreField';
 
 // Field types that can participate in a merge group. A consolidated options[]
 // field is a single-select group, so only radio/checkbox source fields qualify.
@@ -169,14 +174,38 @@ function readStash(field: FormField): UngroupStash | undefined {
 // still lossless.
 export function stripEditorState(schema: FormSchema): FormSchema {
   let touched = false;
-  const fields = schema.fields.map(f => {
+  const stripOne = (f: FormField): FormField => {
     if ((f as unknown as Record<string, unknown>)[STASH_KEY] === undefined) return f;
     touched = true;
     const copy = { ...f } as Record<string, unknown>;
     delete copy[STASH_KEY];
     return copy as unknown as FormField;
-  });
-  return touched ? { ...schema, fields } : schema;
+  };
+
+  const fields = schema.fields.map(stripOne);
+
+  // A QUARANTINED field (bd polyglot-pdf-mzkw) lives in the _ignored_fields
+  // stash, not in fields[] -- so a field that was merged and then ignored kept
+  // its _ungroup snapshot all the way to disk (fresh-eyes). That silently broke
+  // this function's own contract AND the premise ignoreField's dependents
+  // detector relies on ("_ungroup is session-only, stripped on save, so it can
+  // never strand a reference in a stored kit"). Strip it there too, so the
+  // premise is true on every path.
+  const ignored = (schema as unknown as Record<string, unknown>)[IGNORED_FIELDS_KEY];
+  let nextIgnored = ignored;
+  if (Array.isArray(ignored)) {
+    nextIgnored = ignored.map(entry => {
+      const e = entry as { field?: FormField } | null;
+      if (!e || typeof e !== 'object' || !e.field) return entry;
+      const strippedField = stripOne(e.field);
+      return strippedField === e.field ? entry : { ...e, field: strippedField };
+    });
+  }
+
+  if (!touched) return schema;
+  const out = { ...schema, fields } as unknown as Record<string, unknown>;
+  if (Array.isArray(ignored)) out[IGNORED_FIELDS_KEY] = nextIgnored;
+  return out as unknown as FormSchema;
 }
 
 export interface MergeResult {

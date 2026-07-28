@@ -677,3 +677,58 @@ def test_minted_slugs_pass_the_v2_validator():
     }
     doc["fields"][1].pop("require_if")
     validate(doc)
+
+
+# ---------------------------------------------------------------------------
+# The editor's _ignored_fields quarantine stash (bd polyglot-pdf-mzkw).
+#
+# The Ignored escape hatch MOVES a field out of schema.fields into a top-level
+# `_ignored_fields` stash. That design rests on ONE load-bearing backend fact:
+# FormSchema tolerates the unknown top-level key (Pydantic's default
+# extra="ignore"; FormSchema declares no model_config override). Nothing pinned
+# it -- and a sibling model in this very file's module already sets
+# extra="forbid", so adding one to FormSchema is a plausible future edit that
+# would silently break every save-with-ignored-field round-trip (fresh-eyes).
+# ---------------------------------------------------------------------------
+
+def _ignored_stash_entry(doc: dict) -> dict:
+    """One editor stash entry shaped exactly as ignoreField.ts writes it."""
+    field = copy.deepcopy(doc["fields"][0])
+    return {
+        "field": field,
+        "sectionId": field.get("section_id"),
+        "index": 0,
+        "ignoredAt": "2026-07-28T00:00:00Z",
+    }
+
+
+def test_form_schema_tolerates_the_editor_ignored_fields_stash():
+    doc = valid_v2_doc()
+    doc["_ignored_fields"] = [_ignored_stash_entry(doc)]
+    # Must not raise: the stash is editor-only metadata the backend ignores.
+    parsed = FormSchema.model_validate(doc)
+    # It is DROPPED from the validated object (extra="ignore"), never rejected
+    # -- and the caller's raw dict, which is what the editor routes actually
+    # store and serve, keeps it.
+    assert not hasattr(parsed, "_ignored_fields")
+    assert len(doc["_ignored_fields"]) == 1
+
+
+def test_ignored_fields_stash_does_not_resurrect_a_quarantined_field():
+    # A quarantined field is absent from fields[] but present inside the stash.
+    # The model must count only the live fields -- if the stash ever became a
+    # modeled key, a conditional pointing at a quarantined id would resolve and
+    # the whole "invisible to the backend" contract would collapse.
+    doc = valid_v2_doc()
+    quarantined = copy.deepcopy(doc["fields"][-1])
+    doc["fields"] = [f for f in doc["fields"] if f["id"] != quarantined["id"]]
+    for section in doc.get("sections", []):
+        section["fields"] = [
+            fid for fid in section.get("fields", []) if fid != quarantined["id"]
+        ]
+    doc["_ignored_fields"] = [{
+        "field": quarantined, "sectionId": quarantined.get("section_id"),
+        "index": 0, "ignoredAt": "2026-07-28T00:00:00Z",
+    }]
+    parsed = FormSchema.model_validate(doc)
+    assert quarantined["id"] not in {f.id for f in parsed.fields}

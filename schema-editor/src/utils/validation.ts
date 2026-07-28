@@ -5,7 +5,10 @@ import { isToReviewSection } from './sectionOps';
 
 // Flatten a legacy-or-composite condition to its atomic conditions (bd
 // h76m.8) for reference checking. [] for absent/malformed shapes.
-function conditionAtoms(condition: unknown) {
+// Exported for ignoreField's dependents detector (bd polyglot-pdf-mzkw):
+// three near-identical flatteners already exist across this file,
+// fieldGrouping and fieldRename -- reuse rather than add a fourth.
+export function conditionAtoms(condition: unknown) {
   const group = normalizeToComposite(condition);
   if (!group) return [];
   return [

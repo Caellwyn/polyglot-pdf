@@ -68,6 +68,12 @@ interface FieldEditorProps {
   // The loaded PDF's page count (bd polyglot-pdf-g63j) so the flagged-reasons
   // banner can name a field claiming a page the document does not have.
   pageCount?: number;
+  // Quarantine this field (bd polyglot-pdf-mzkw). Returns a block reason to
+  // display, or null on success. Absent -> the Ignored option is not offered.
+  onIgnoreField?: (fieldId: string) => string | null;
+  // Why ignoring is currently refused for the selected field, or null when it
+  // is allowed (computed by App, which owns the whole schema).
+  ignoreBlocked?: string | null;
 }
 
 // Editable field-id header (bd polyglot-pdf-0x10.1). The id is the schema's
@@ -249,11 +255,46 @@ const REVIEW_CHOICES: { value: FieldReviewStatus; label: string }[] = [
   { value: 'needs_followup', label: 'Needs follow-up' },
 ];
 
+// The sentinel the review dropdown uses for Ignored (bd polyglot-pdf-mzkw). It
+// is NOT a FieldReviewStatus: ignoring RELOCATES the field out of fields[], so
+// it cannot ride withReviewStatus's single-field patch -- picking it routes to
+// onIgnoreField instead, and the <select> reverts (the field is about to leave
+// the pane entirely).
+const IGNORE_OPTION = '__ignore__';
+
 const FieldReviewEditor: React.FC<{
   field: FormField;
   onUpdateField: (field: FormField) => void;
-}> = ({ field, onUpdateField }) => {
+  // Quarantine this field (bd mzkw). Returns a block reason to show, or null on
+  // success. Absent -> the Ignored option is not offered at all.
+  onIgnoreField?: (fieldId: string) => string | null;
+  // Why ignoring is currently refused (required / has dependents), or null when
+  // it is allowed. Drives the disabled option + its inline explanation.
+  ignoreBlocked?: string | null;
+}> = ({ field, onUpdateField, onIgnoreField, ignoreBlocked }) => {
   const review = getReview(field);
+  const [ignoreError, setIgnoreError] = React.useState<string | null>(null);
+
+  const handleStatusChange = (value: string) => {
+    setIgnoreError(null);
+    if (value === IGNORE_OPTION) {
+      // Confirm first: ignoring is a deliberate, visible act (and reversible --
+      // say so, so the dialog does not read like a delete).
+      const label = field.spoken_name || field.id;
+      const ok = window.confirm(
+        `Ignore "${label}"?\n\n`
+        + 'It will be set aside: hidden from the form, the checks and the '
+        + 'progress count -- but NOT deleted. You can un-ignore it at any time '
+        + 'from the Ignored list.',
+      );
+      if (!ok) return; // <select> reverts on re-render; nothing committed
+      const reason = onIgnoreField?.(field.id) ?? null;
+      if (reason) setIgnoreError(reason);
+      return;
+    }
+    onUpdateField(withReviewStatus(field, value as FieldReviewStatus));
+  };
+
   return (
     <div className="space-y-3 border-t border-gray-200 pt-4" data-testid="field-review">
       <h4 className="text-sm font-semibold text-gray-900">Review</h4>
@@ -264,18 +305,28 @@ const FieldReviewEditor: React.FC<{
           className="input"
           aria-label="Review status"
           value={review.status}
-          onChange={(e) =>
-            onUpdateField(withReviewStatus(field, e.target.value as FieldReviewStatus))
-          }
+          onChange={(e) => handleStatusChange(e.target.value)}
         >
           {REVIEW_CHOICES.map(({ value, label }) => (
             <option key={value} value={value}>{label}</option>
           ))}
+          {onIgnoreField && (
+            <option value={IGNORE_OPTION} disabled={!!ignoreBlocked}>
+              Ignored -- not on this form
+              {ignoreBlocked ? ' (unavailable)' : ''}
+            </option>
+          )}
         </select>
         <p className="text-xs text-gray-500 mt-1">
           "Reviewed - correct" marks a field done even if the tool still flags it
           amber. A real error (red) always stays red until fixed.
         </p>
+        {onIgnoreField && ignoreBlocked && (
+          <p className="text-xs text-gray-500 mt-1">{ignoreBlocked}</p>
+        )}
+        {ignoreError && (
+          <p className="text-xs text-red-600 mt-1" role="alert">{ignoreError}</p>
+        )}
       </div>
       <div>
         <label className="label" htmlFor="review-note">Review notes</label>
@@ -534,6 +585,8 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   onLoadUnclaimedWidgets,
   lintFindings,
   pageCount,
+  onIgnoreField,
+  ignoreBlocked,
 }) => {
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -613,8 +666,19 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           );
         })()}
 
-        {/* Human review sign-off + notes (bd polyglot-pdf-u8t6). */}
-        <FieldReviewEditor field={field} onUpdateField={onUpdateField} />
+        {/* Human review sign-off + notes (bd polyglot-pdf-u8t6).
+            key={field.id} remounts it on selection change, exactly as the id
+            header above does: it holds a local ignoreError, and without the
+            remount a block reason earned by THIS field would still be on
+            screen under the NEXT one, blaming a field that may have no
+            dependents at all (bd mzkw, fresh-eyes). */}
+        <FieldReviewEditor
+          key={field.id}
+          field={field}
+          onUpdateField={onUpdateField}
+          onIgnoreField={onIgnoreField}
+          ignoreBlocked={ignoreBlocked}
+        />
 
         {/* Basic Properties */}
         <div className="space-y-4">

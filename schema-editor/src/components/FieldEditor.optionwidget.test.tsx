@@ -304,8 +304,14 @@ describe('FieldEditor option widget -- shared-name kid with NO on-state is flagg
     );
     // the well-formed kid shows its on-state
     expect(screen.getByText(/on: A/)).toBeInTheDocument();
-    // the malformed kid gets a warning, NOT a confident 'widget: X (on: ...)'
-    expect(screen.getByRole('alert')).toHaveTextContent(/not fillable/i);
+    // the malformed kid gets a warning, NOT a confident 'widget: X (on: ...)'.
+    // Query ALL alerts and pick this test's own: since bd polyglot-pdf-g63j the
+    // pane also renders a flagged-reasons banner (role="alert") listing the
+    // automatic amber reasons, and this fixture -- no help, no pdf_position --
+    // legitimately earns one. getByRole finds both and throws on the ambiguity.
+    expect(
+      screen.getAllByRole('alert').some(el => /not fillable/i.test(el.textContent ?? '')),
+    ).toBe(true);
     // and no reassign select (still a shared-name shape, just broken)
     expect(screen.queryByLabelText('Option 2 PDF widget')).toBeNull();
   });
