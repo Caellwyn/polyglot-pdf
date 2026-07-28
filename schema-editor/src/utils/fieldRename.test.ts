@@ -270,11 +270,50 @@ describe('renameFieldId -- _bakeoff provenance retargeting (bd polyglot-pdf-yli5
     expect(auth.option_translation.provenance.applicant_phone).toBeUndefined();
   });
 
-  it('is a no-op on _bakeoff when the renamed field has no provenance record', () => {
-    const out = renameFieldId(schemaWithProvenance(), 'other', 'other2');
+  it('preserves _bakeoff by REFERENCE when the renamed field is absent from every provenance map', () => {
+    // a field that carries no provenance entry at all (fixture seeds only
+    // applicant_phone + other; rename a third field) -- the whole _bakeoff
+    // must pass through untouched, not be rebuilt
+    const schema = schemaWith(
+      [field('applicant_phone'), field('other'), field('third')],
+      {
+        _bakeoff: {
+          authoring: {
+            instructions_enrich: {
+              provenance: { applicant_phone: { source: 'llm-verified', instructions_sha1: 'aaa' } },
+              flags: [],
+            },
+          },
+        },
+      },
+    );
+    const out = renameFieldId(schema, 'third', 'third_renamed');
+    expect((out as unknown as Record<string, any>)._bakeoff)
+      .toBe((schema as unknown as Record<string, any>)._bakeoff);
+  });
+
+  it('live record WINS over a stale orphan sitting under the target id (no silent loss; bd fle7)', () => {
+    // a dead-id provenance entry left under the exact rename TARGET must not
+    // clobber the live record being renamed in -- the live one wins, the
+    // orphan is dropped (it referenced no field by definition)
+    const schema = schemaWith([field('applicant_phone')], {
+      _bakeoff: {
+        authoring: {
+          instructions_enrich: {
+            provenance: {
+              applicant_phone: { source: 'llm-verified', instructions_sha1: 'LIVE' },
+              applicant_phone_number: { source: 'tu', instructions_sha1: 'GHOST' },
+            },
+            flags: [],
+          },
+        },
+      },
+    });
+    const out = renameFieldId(schema, 'applicant_phone', 'applicant_phone_number');
     const prov = (out as unknown as Record<string, any>)._bakeoff.authoring.instructions_enrich.provenance;
-    expect(prov.other2).toBeDefined();
-    expect(prov.applicant_phone).toBeDefined(); // untouched
+    expect(prov.applicant_phone_number).toEqual({ source: 'llm-verified', instructions_sha1: 'LIVE' });
+    expect(prov.applicant_phone).toBeUndefined();
+    expect(Object.keys(prov)).toEqual(['applicant_phone_number']);
   });
 
   it('never throws when _bakeoff/authoring/provenance are absent or malformed', () => {

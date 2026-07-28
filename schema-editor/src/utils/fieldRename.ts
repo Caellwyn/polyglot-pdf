@@ -168,12 +168,12 @@ export function renameFieldId(
 
   const out: FormSchema = { ...schema, fields, sections };
 
-  // Untyped pass-through: _bakeoff.authoring.<stage>.provenance is a
-  // field-id-keyed ownership map (guidance = instructions_enrich, and the
-  // translation re-run checker in flight keys the same way). It is declared
-  // in neither the editor's types nor the retargeting above, so a rename
-  // would ORPHAN the record: the field silently flips machine-owned ->
-  // human-protected and a dangling entry sits under the dead id (bd
+  // _bakeoff is typed as an opaque Record on FormSchema, but its inner
+  // authoring.<stage>.provenance is a field-id-keyed ownership map (guidance
+  // = instructions_enrich; the translation re-run checker in flight keys the
+  // same way). That inner shape is opaque to the retargeting above, so a
+  // rename would ORPHAN the record: the field silently flips machine-owned
+  // -> human-protected and a dangling entry sits under the dead id (bd
   // polyglot-pdf-yli5). Re-key every such map generically -- any object
   // named `provenance` under any authoring stage -- so this survives
   // whatever field-keyed stages exist now or land later, without this
@@ -202,6 +202,15 @@ export function renameFieldId(
         const provRec = prov as Record<string, unknown>;
         const nextProv: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(provRec)) {
+          // Skip any pre-existing newId entry: renameBlockReason already
+          // guarantees no live FIELD has newId, so such a provenance key is
+          // an ORPHAN (a stale record left under a dead id that nothing
+          // prunes). The live record being renamed in must win; copying the
+          // orphan first would let the rename below overwrite it (fine), but
+          // copying it AFTER would clobber the live one -- so drop it here
+          // and let the oldId->newId assignment be the sole source (bd
+          // polyglot-pdf-fle7: silent record loss on stale-id collision).
+          if (k === newId) continue;
           nextProv[k === oldId ? newId : k] = v;
         }
         nextStages[stageName] = {
