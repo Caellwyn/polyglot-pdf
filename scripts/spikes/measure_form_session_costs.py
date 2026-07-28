@@ -1828,7 +1828,15 @@ async def run(args) -> int:
         # DEFAULT (bd kbi1), so a bare `--model 3.1` must fall BACK to AI
         # Studio rather than fail on a default the user never chose -- an
         # EXPLICIT --vertex with 3.1 is still a contradiction we refuse.
-        if "--vertex" in sys.argv:
+        # Distinguish an EXPLICIT --vertex from the new default=True. A literal
+        # `"--vertex" in sys.argv` misses argparse's legal abbreviations
+        # (--vert, --verte), silently overriding an explicit ask instead of
+        # refusing it (bd kbi1 round 2). Match any unambiguous prefix of the
+        # real flag, which is exactly what argparse itself accepts.
+        explicit_vertex = any(
+            a == "--vertex" or (a.startswith("--vert") and "--vertex".startswith(a))
+            for a in sys.argv)
+        if explicit_vertex:
             print("--vertex is not available for --model 3.1: the 3.1 Live "
                   "model has no Vertex id (AI-Studio-only as of 2026-06). "
                   "Use --model 2.5, or --no-vertex with GEMINI_API_KEY.")

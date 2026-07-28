@@ -384,10 +384,18 @@ async def main_async(args: argparse.Namespace) -> int:
         if on_vertex:
             if tier == "2.5":
                 model_name = MODEL_NATIVE_STANDARD_VERTEX
-            elif tier == "3.1":
-                print(f"  [skip-warn] tier 3.1 has no Vertex id -- this cell "
-                      f"will 1008 on connect (set VERTEXAI=false with "
-                      f"GEMINI_API_KEY to run 3.1 on AI Studio).", flush=True)
+            else:
+                # EVERY other tier is an AI-Studio-shaped id: 3.1 has no Vertex
+                # equivalent, and the 2.5-latest / 2.5-0925 aliases are
+                # unverified AI Studio strings. Passing any of them to a Vertex
+                # client 1008s on connect, so warn per cell rather than let it
+                # fail cryptically (bd polyglot-pdf-kbi1 round 2; the alias
+                # tiers were missed in round 1's fix).
+                why = ("has no Vertex id" if tier == "3.1"
+                       else "is an unverified AI-Studio-only alias")
+                print(f"  [warn] tier {tier} {why} -- this cell will 1008 on "
+                      f"the Vertex path (set VERTEXAI=false with "
+                      f"GEMINI_API_KEY to run it on AI Studio).", flush=True)
         for (label, enabled, trigger, window) in configs:
             for rep in range(args.repeats):
                 n += 1
@@ -430,7 +438,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-model compression support matrix on google-genai 2.8.x (bd h04c).")
     ap.add_argument("--models", default="2.5,3.1",
-                    help="comma list of tiers: 2.5,3.1,2.5-latest,2.5-0925")
+                    help="comma list of tiers: 2.5,3.1,2.5-latest,2.5-0925. "
+                         "Only 2.5 has a Vertex id (the DEFAULT backend); "
+                         "3.1 and the 2.5-latest/2.5-0925 aliases are "
+                         "AI-Studio-only and 1008 on Vertex -- run those with "
+                         "VERTEXAI=false plus GEMINI_API_KEY.")
     ap.add_argument("--configs", default="off,on-inert,on-live",
                     help="comma list of: off,on-inert,on-live")
     ap.add_argument("--repeats", type=int, default=5)
