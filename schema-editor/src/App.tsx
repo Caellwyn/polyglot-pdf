@@ -41,7 +41,7 @@ import {
 } from './utils/fieldRename';
 import {
   dependentsOf, describeIgnoreBlock, ignoreBlockReason, ignoreField,
-  restoreField,
+  isIgnored, restoreField,
 } from './utils/ignoreField';
 import { SectionManager } from './components/SectionManager';
 import type { DivisionsPatch } from './utils/sectionOps';
@@ -1315,6 +1315,19 @@ export const App: React.FC = () => {
         <ValidationPanel
           schema={schema}
           onSelectField={(fieldId) => {
+            // A finding can point at a field that is now QUARANTINED (bd mzkw)
+            // -- lint flags persisted before it was ignored still name it. The
+            // editor pane has nothing to render for such an id, so clicking
+            // would silently fall back to the metadata panel with no
+            // explanation (fresh-eyes). Say so instead.
+            if (schema && isIgnored(schema, fieldId)) {
+              window.alert(
+                `"${fieldId}" is currently ignored (set aside, not deleted), so `
+                + 'it has no editor pane. Un-ignore it from the Ignored list at '
+                + 'the bottom of the field list to work on it again.',
+              );
+              return;
+            }
             setViewMode('edit');
             setSelectedFieldId(fieldId);
           }}

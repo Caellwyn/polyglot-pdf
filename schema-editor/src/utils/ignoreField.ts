@@ -111,6 +111,15 @@ export interface FieldDependent {
  * NOTE section.fields[] membership is deliberately NOT a dependent: that is the
  * field's own home, which ignoring relocates by design (and restore puts back).
  *
+ * NOTE `_bakeoff.authoring.<stage>.provenance` -- the field-id-keyed authoring
+ * ownership map fieldRename re-keys -- is ALSO deliberately not a dependent,
+ * and ignoring deliberately leaves its entry in place. Rename must re-key it
+ * because the field persists under a new id; ignoring is TEMPORARY and
+ * reversible, so the entry must survive for restore to bring the field back
+ * with its guidance-authorship record intact. Dropping it would be exactly the
+ * silent data loss the no-delete rule exists to prevent. A stale entry under a
+ * parked id is inert: every consumer looks provenance UP by a live field id.
+ *
  * Id matching is exact-string, matching every other reference walker in the
  * editor (fieldRename's retargetAtom included). Do not add bracket-alias
  * cleverness here: that class of bug lives in runtime VALUE lookups, not in

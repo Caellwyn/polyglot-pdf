@@ -160,6 +160,24 @@ describe('ignoreField / restoreField round-trip (bd mzkw)', () => {
     expect(restoreField(shrunk, 'c').sections[0].fields).toEqual(['a', 'c']);
   });
 
+  it('carries a merged field _ungroup stash through ignore -> restore', () => {
+    // A consolidated (merged) field keeps its ungroup snapshot so it can still
+    // be split after coming back. True by construction (the whole object is
+    // stashed verbatim), but the rubric names it, so pin it.
+    const merged = field('grp', {
+      _ungroup: { sources: [{ id: 'grp_a' }], rewrites: [], sections: [] },
+    } as unknown as Partial<FormField>);
+    const s = ignoreField(schemaWith([field('a'), merged]), 'grp');
+    const stashed = getIgnoredFields(s)[0].field as unknown as Record<string, unknown>;
+    expect(stashed._ungroup).toEqual({
+      sources: [{ id: 'grp_a' }], rewrites: [], sections: [],
+    });
+    const back = restoreField(s, 'grp').fields.find(f => f.id === 'grp');
+    expect((back as unknown as Record<string, unknown>)._ungroup).toEqual(
+      (merged as unknown as Record<string, unknown>)._ungroup,
+    );
+  });
+
   it('is a no-op for an unknown id, in both directions', () => {
     const s = base();
     expect(ignoreField(s, 'nope')).toBe(s);
