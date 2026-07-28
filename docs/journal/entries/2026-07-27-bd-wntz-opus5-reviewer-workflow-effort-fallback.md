@@ -111,7 +111,7 @@ instructions:
   spawns subagents first** -- at haiku/sonnet, plus a mandated Opus final round.
   All are non-Fable spawns that die identically. A Fable-at-`xhigh` closeout would
   have blocked at Step 5.5 and never reached the fallback. Fixed by restating the
-  rule scope-neutrally: every Agent-tool spawn, any model, both steps.
+  rule scope-neutrally: every Agent-tool spawn, any model, **any step**.
 - **Two standing rules contradicted the new one.** The skill's "Hard rules"
   (read-before-anything) and Step 5.6's verdict list both say a subagent
   TIMEOUT/ERROR is "a genuine stop -- surface it," and the latter added "there is
@@ -146,6 +146,28 @@ check of finding 4 used too narrow a grep and appeared to refute it, and only a
 wider read confirmed the reviewer was right. The lesson cuts both ways -- verify
 the reviewer, but verify your own refutation just as hard.
 
+**Round 2 found four more, and the sharpest one was a regression in my own fix.**
+Restating the fallback as "EVERY spawn ... **in Step 5.5 AND Step 5.6**" let the
+trailing clause silently re-narrow the leading "every" -- and closeout has a THIRD
+spawn the enumeration missed: the Haiku `closeout-runner` that drives the
+mechanical tail at Step 6, which is instructed to stop back on any tooling error.
+So the fix for "a spawn site outside the rule's scope" recreated the identical
+defect one step later: a Fable-at-`xhigh` closeout would now clear both reviews
+and then block at the tail. The scope is now stated as "any model, any step,"
+with the three sites named illustratively rather than as the bound. Round 2 also
+caught that the F7 softening had patched the body of `review-flow.md` while its
+header still carried the unconditional "when code production moved to Opus 5"
+claim, and that the three copies of the rule had drifted apart again on scope
+(SKILL.md narrow, CLAUDE.md and review-flow.md broad) -- the same
+non-equivalence round 1 flagged, reintroduced by the edit meant to fix it.
+
+**The generalizable lesson: an enumeration inside a universal claim is a scope
+bug waiting to happen.** "Every X, in A and B" reads as universal and behaves as
+a whitelist. When a rule is meant to be unbounded, name the instances as examples
+("including ..."), never as the boundary -- and when the same rule is duplicated
+across files, re-diff all copies after every edit, because each fix is a fresh
+chance for them to diverge.
+
 The `scripts/` docstrings (finding 5) were outside the bead's enumerated file list but
 inside criterion 2's wording, and are current-state prose, so they were renamed
 too, along with stale comments in `tests/test_closeout_skill.py`.
@@ -162,3 +184,11 @@ it describes the retired Codex-era fallback, which genuinely was 4.8.
   keyed on "if the session is at xhigh" is unimplementable. Key it on the
   observable error instead -- which is why this shipped as a fallback rather
   than a precondition check.
+- **Never bound a universal rule with an enumeration.** "Applies to every spawn,
+  in Step 5.5 and Step 5.6" reads universal but behaves as a whitelist, and it
+  missed the Step 6 `closeout-runner`. Write "at any step (including A, B, C)",
+  not "in A and B".
+- **A rule duplicated across N files needs an N-way diff after EVERY edit.** This
+  rule lives in CLAUDE.md, review-flow.md, and the closeout skill. Round 1 found
+  them non-equivalent on the escalation clause; the round-1 fix made them
+  non-equivalent on scope instead. Each edit is a fresh chance to diverge.

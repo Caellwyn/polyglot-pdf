@@ -486,8 +486,9 @@ Do NOT hand-roll the review cycle. In particular:
   exposes an `effort` option the Agent tool lacks). **This standing permission
   covers a single-agent wrapper only** -- real multi-agent orchestration still
   requires an explicit per-instance go-ahead. **Applies to ANY blocked subagent
-  spawn at any model** (the closeout fresh-eyes rounds at haiku/sonnet as well as
-  the Opus outer reviewer), not just the reviewer. **If the wrapped retry ALSO
+  spawn at any model and any step** (the closeout fresh-eyes rounds at
+  haiku/sonnet, the Opus outer reviewer, and the Haiku `closeout-runner`), not
+  just the reviewer. **If the wrapped retry ALSO
   fails, that is a genuine stop** -- surface it. Remove once the upstream bug is
   fixed.
 - **BOTH review layers run PRE-PR, serial not parallel** (closeout Steps 5.5 + 5.6):
