@@ -193,25 +193,24 @@ export function renameFieldId(
         stage && typeof stage === 'object' && !Array.isArray(stage)
           ? (stage as Record<string, unknown>).provenance
           : undefined;
-      if (
-        prov &&
-        typeof prov === 'object' &&
-        !Array.isArray(prov) &&
-        Object.prototype.hasOwnProperty.call(prov, oldId)
-      ) {
-        const provRec = prov as Record<string, unknown>;
+      const provOk =
+        prov && typeof prov === 'object' && !Array.isArray(prov);
+      const provRec = provOk ? (prov as Record<string, unknown>) : undefined;
+      const hasOld =
+        !!provRec && Object.prototype.hasOwnProperty.call(provRec, oldId);
+      // A stale entry sitting under newId is an ORPHAN in EVERY stage, not
+      // just the one being re-keyed: renameBlockReason guarantees no live
+      // field has newId, so any provenance key == newId is dead data. Drop
+      // it wherever it appears -- otherwise a stage that never tracked oldId
+      // would leave bogus provenance under the renamed field's new id,
+      // reintroducing this bead's own orphan bug cross-stage (outer review).
+      const hasNewOrphan =
+        !!provRec && Object.prototype.hasOwnProperty.call(provRec, newId);
+      if (provRec && (hasOld || hasNewOrphan)) {
         const nextProv: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(provRec)) {
-          // Skip any pre-existing newId entry: renameBlockReason already
-          // guarantees no live FIELD has newId, so such a provenance key is
-          // an ORPHAN (a stale record left under a dead id that nothing
-          // prunes). The live record being renamed in must win; copying the
-          // orphan first would let the rename below overwrite it (fine), but
-          // copying it AFTER would clobber the live one -- so drop it here
-          // and let the oldId->newId assignment be the sole source (bd
-          // polyglot-pdf-fle7: silent record loss on stale-id collision).
-          if (k === newId) continue;
-          nextProv[k === oldId ? newId : k] = v;
+          if (k === newId) continue; // drop the orphan (this or another stage)
+          nextProv[k === oldId ? newId : k] = v; // live record wins on newId
         }
         nextStages[stageName] = {
           ...(stage as Record<string, unknown>),

@@ -166,6 +166,17 @@ describe('renameFieldId retargets every reference (bd 0x10.1)', () => {
       field('header_repeat', { copy_from: 'old_name' } as unknown as Partial<FormField>),
     ], {
       supplements: [{ id: 's', name: 'S', purpose: 'S', fields: ['old_name'] }],
+      // the yli5 deliverable end-to-end: a provenance record keyed on the
+      // old id must not survive the save (bd yli5; the display name above is
+      // chosen to NOT contain the id text, so the whole-JSON grep stays exact)
+      _bakeoff: {
+        authoring: {
+          instructions_enrich: {
+            provenance: { old_name: { source: 'llm-verified', instructions_sha1: 'x' } },
+            flags: [],
+          },
+        },
+      },
     });
     (schema.sections[0] as any).show_if = { field: 'old_name', operator: 'is_not_empty' };
 
@@ -175,6 +186,9 @@ describe('renameFieldId retargets every reference (bd 0x10.1)', () => {
     expect(saved).toContain('"new_name"');
     // The PDF widget binding travelled untouched.
     expect((out.fields[0] as any).pdf_field_name).toBe('topmostSubform.widget[7]');
+    // The provenance record moved with the id (not orphaned under old_name).
+    expect((out as unknown as Record<string, any>)._bakeoff.authoring
+      .instructions_enrich.provenance.new_name).toBeDefined();
   });
 
   it('is identity on a blocked or unchanged rename', () => {
@@ -314,6 +328,34 @@ describe('renameFieldId -- _bakeoff provenance retargeting (bd polyglot-pdf-yli5
     expect(prov.applicant_phone_number).toEqual({ source: 'llm-verified', instructions_sha1: 'LIVE' });
     expect(prov.applicant_phone).toBeUndefined();
     expect(Object.keys(prov)).toEqual(['applicant_phone_number']);
+  });
+
+  it('drops a stale orphan under the target id even in a stage that never tracked the old id (cross-stage; outer review)', () => {
+    // instructions_enrich tracks the renamed field; option_translation does
+    // NOT, but carries a stale leftover under the exact target id from some
+    // earlier unrelated field. The rename must not leave that bogus record
+    // attached to the freshly-renamed field.
+    const schema = schemaWith([field('a'), field('b_gone')], {
+      _bakeoff: {
+        authoring: {
+          instructions_enrich: {
+            provenance: { a: { source: 'llm-verified', instructions_sha1: 'live' } },
+            flags: [],
+          },
+          option_translation: {
+            provenance: { b: { source: 'stale', identity_sha1: 'orphan' } },
+          },
+        },
+      },
+    });
+    const out = renameFieldId(schema, 'a', 'b');
+    const auth = (out as unknown as Record<string, any>)._bakeoff.authoring;
+    // the tracking stage re-keyed correctly
+    expect(auth.instructions_enrich.provenance.b)
+      .toEqual({ source: 'llm-verified', instructions_sha1: 'live' });
+    // the non-tracking stage's stale orphan under 'b' is GONE, not inherited
+    expect(auth.option_translation.provenance.b).toBeUndefined();
+    expect(Object.keys(auth.option_translation.provenance)).toEqual([]);
   });
 
   it('never throws when _bakeoff/authoring/provenance are absent or malformed', () => {
