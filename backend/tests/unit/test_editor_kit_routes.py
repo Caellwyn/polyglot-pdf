@@ -2510,6 +2510,12 @@ def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     model = seen_cmds[0][seen_cmds[0].index("--translation-model") + 1]
     assert model == "gemini-2.5-pro"
     assert "--no-translate-options" not in seen_cmds[0]
+    # The guidance stage's model must ALSO be settings-resolved (bd wsao.6):
+    # without --guidance-model the child falls through raw env vars to the
+    # local claude CLI, absent in the hosted container.
+    assert "--guidance-model" in seen_cmds[0]
+    gmodel = seen_cmds[0][seen_cmds[0].index("--guidance-model") + 1]
+    assert gmodel == "gemini-2.5-pro"
 
     _make_kit(root, "fresh2")
     r = c.post("/api/editor/kits/fresh2/extract",
@@ -2518,3 +2524,15 @@ def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     assert r.status_code == 200, r.text
     assert "--no-translate-options" in seen_cmds[1]
     assert "--translation-model" not in seen_cmds[1]
+    # the two opt-outs are independent: guidance stays ON here
+    assert "--guidance-model" in seen_cmds[1]
+
+    # The guidance kill switch's SERVER-SIDE half (bd wsao.6): unchecking
+    # must actually suppress the LLM stage in the subprocess cmd.
+    _make_kit(root, "fresh3")
+    r = c.post("/api/editor/kits/fresh3/extract",
+               headers={"X-Editor-Token": "auth-tok"},
+               data={"enrich_guidance": "false"})
+    assert r.status_code == 200, r.text
+    assert "--no-enrich-guidance" in seen_cmds[2]
+    assert "--guidance-model" not in seen_cmds[2]

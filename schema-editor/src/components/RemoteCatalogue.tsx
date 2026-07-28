@@ -89,6 +89,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   // checkbox opts OUT for cheap extraction-strategy test runs. The standalone
   // Translate-options action covers already-extracted kits (one at a time).
   const [translateOptionsChecked, setTranslateOptionsChecked] = React.useState(true);
+  const [enrichGuidanceChecked, setEnrichGuidanceChecked] = React.useState(true);
   const [translatingId, setTranslatingId] = React.useState<string | null>(null);
   // Mark-complete drift sweep (bd polyglot-pdf-783r): the id of the kit whose
   // completion is running its server-side re-translation + validation, plus an
@@ -324,6 +325,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       const instructionsPdf = instructionsPdfByKit[kit.id];
       const result = await extractRemoteKit(kit.id, {
         instructionsPdf, translateOptions: translateOptionsChecked,
+        enrichGuidance: enrichGuidanceChecked,
       });
       await refresh();
       // Store-with-issues (bd v96b): a stored-but-imperfect draft surfaces its
@@ -358,7 +360,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
       setExtractingId(null);
     }
   }, [refresh, onAuthError, extractingId, instructionsPdfByKit,
-      translateOptionsChecked]);
+      translateOptionsChecked, enrichGuidanceChecked]);
 
   // bd 2h9j: bake translated option labels into an ALREADY-extracted kit's
   // stored schema, standalone (the decoupled counterpart of the extraction
@@ -819,6 +821,20 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
                         onChange={(e) => setTranslateOptionsChecked(e.target.checked)}
                       />
                       translate options
+                    </label>
+                    <label
+                      className="text-xs text-gray-500 cursor-pointer hover:text-gray-700"
+                      title="Also author booklet-grounded field guidance (instructions + official reference text) during extraction -- the larger of the two LLM add-ons. Uncheck when just testing extraction strategies."
+                    >
+                      <input
+                        type="checkbox"
+                        className="mr-1 align-middle"
+                        data-testid="enrich-guidance-checkbox"
+                        checked={enrichGuidanceChecked}
+                        disabled={busy || extractingId !== null}
+                        onChange={(e) => setEnrichGuidanceChecked(e.target.checked)}
+                      />
+                      enrich guidance
                     </label>
                     <button
                       className="btn-sm btn-primary text-xs"

@@ -427,3 +427,26 @@ def test_rectify_to_empty_flags_as_dropped(monkeypatch):
                and "id=bad" in f["path"]]
     assert len(dropped) == 1 and "rectifier emptied" in dropped[0]["message"]
     assert not [f for f in flags if "id=good" in f["path"]]
+
+
+def test_existing_provenance_locks_out_unrecorded_fields():
+    """Once a kit carries ANY provenance, the tu bootstrap never runs again
+    -- an unrecorded field with /TU-identical text stays human-protected
+    (wsao.6 fresh-eyes round 2: the non-empty-but-non-covering case)."""
+    schema = {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [{"id": "tu_field", "pdf_field_name": "A[0]",
+                    "name": "A", "type": "text",
+                    "help": {"instructions": "Exact TU text."}}],
+        "sections": [], "parts": [],
+        "_bakeoff": {"authoring": {"instructions_enrich": {
+            "provenance": {"some_other_field": {
+                "source": "llm-verified", "instructions_sha1": "x"}}}}},
+    }
+    proposals = {"fields": {"tu_field": {
+        "instructions": "Overwrite attempt.", "details": "",
+        "format_hint": ""}}, "form_details": ""}
+    s = ei.apply_proposals(schema, proposals, "B", [], "m", "j",
+                           tu_map={"A[0]": "Exact TU text."})
+    assert s["written"] == 0 and s["skipped_human"] == 1
+    assert schema["fields"][0]["help"]["instructions"] == "Exact TU text."

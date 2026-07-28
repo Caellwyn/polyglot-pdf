@@ -257,3 +257,207 @@ def test_enrich_empty_instructions_text_returns_zero(tmp_path, monkeypatch):
 def test_parse_instructions_pdf_unreadable_returns_empty(tmp_path):
     """A missing/bad instructions PDF yields "" (no enrichment), never a crash."""
     assert ef._parse_instructions_pdf(str(tmp_path / "nope.pdf")) == ""
+
+
+# --- _enrich_guidance (bd wsao.6: the sprint-16 pipeline stage) ------------- #
+
+import enrich_instructions as _ei_mod
+
+
+def _guidance_schema():
+    return {
+        "form_metadata": {"title": "Test Form", "version": "1"},
+        "fields": [
+            {"id": "f1", "name": "Alpha", "type": "text",
+             "help": {"instructions": "TU text for alpha."},
+             "pdf_field_name": "A[0]"},
+            {"id": "f2", "name": "Beta", "type": "text",
+             "pdf_field_name": "B[0]"},
+        ],
+        "sections": [], "parts": [],
+    }
+
+
+def _structural(schema):
+    return [(f["id"], f["type"], f.get("pdf_field_name"),
+             f.get("options")) for f in schema["fields"]]
+
+
+def test_enrich_guidance_stage_end_to_end(tmp_path, monkeypatch):
+    """The stage authors, verifies, applies, and returns a report whose
+    `flags` is the LIST (not a count) with provenance + written intact --
+    and never perturbs field structure (the (a)-arm invariance of exit
+    criterion 2)."""
+    schema = _guidance_schema()
+    before = _structural(schema)
+    booklet = tmp_path / "instructions.pdf"
+    booklet.write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "BOOKLET TEXT")
+    monkeypatch.setattr(
+        _ei_mod, "enrich_schema",
+        lambda s, b, n, m, c: {"proposals": {"fields": {
+            "f1": {"instructions": "TU text for alpha.",
+                   "details": "", "format_hint": ""},
+            "f2": {"instructions": "Authored beta.",
+                   "details": "", "format_hint": ""}},
+            "form_details": ""}, "tokens": [{"in": 1}]})
+    monkeypatch.setattr(
+        _ei_mod, "verify_and_rectify",
+        lambda *a, **k: [{"severity": "WARNING",
+                          "rule": "instructions-rectified",
+                          "path": "fields (id=f2).help", "message": "m"}])
+    report = ef._enrich_guidance(
+        schema, str(tmp_path / "form.pdf"), str(booklet),
+        {"A[0]": "TU text for alpha."})
+    assert report.get("written") == 2  # f1 upgradeable via tu seed, f2 blank
+    assert isinstance(report.get("flags"), list) and len(report["flags"]) == 1
+    assert report["provenance"]["f2"]["source"] == "llm-verified"
+    assert report["provenance"]["f1"]["source"] == "llm-verified"
+    assert schema["form_metadata"]["booklet_text"] == "BOOKLET TEXT"
+    by_id = {f["id"]: f for f in schema["fields"]}
+    assert by_id["f2"]["help"]["instructions"] == "Authored beta."
+    assert _structural(schema) == before
+
+
+def test_enrich_guidance_tu_mismatch_is_protected(tmp_path, monkeypatch):
+    """A fresh draft whose instructions do NOT match /TU (i.e. text a human
+    or another pass authored) stays protected -- the tu seed only covers
+    exact matches."""
+    schema = _guidance_schema()
+    schema["fields"][0]["help"]["instructions"] = "Hand-authored text."
+    booklet = tmp_path / "instructions.pdf"
+    booklet.write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "B")
+    monkeypatch.setattr(
+        _ei_mod, "enrich_schema",
+        lambda s, b, n, m, c: {"proposals": {"fields": {
+            "f1": {"instructions": "Overwrite attempt.",
+                   "details": "", "format_hint": ""}},
+            "form_details": ""}, "tokens": []})
+    monkeypatch.setattr(_ei_mod, "verify_and_rectify", lambda *a, **k: [])
+    report = ef._enrich_guidance(
+        schema, str(tmp_path / "form.pdf"), str(booklet),
+        {"A[0]": "TU text for alpha."})
+    assert report.get("skipped_human") == 1
+    assert schema["fields"][0]["help"]["instructions"] == \
+        "Hand-authored text."
+
+
+def test_enrich_guidance_failure_falls_back_to_naive(tmp_path, monkeypatch):
+    """LLM stage unavailable => fail-open + the pre-wsao naive substring
+    fallback still runs for an explicit --instructions-pdf."""
+    schema = _guidance_schema()
+    booklet = tmp_path / "instructions.pdf"
+    booklet.write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "B")
+    def _boom(*a, **k):
+        raise RuntimeError("no authoring model")
+    monkeypatch.setattr(_ei_mod, "enrich_schema", _boom)
+    monkeypatch.setattr(ef, "_enrich_instructions_from_pdf",
+                        lambda s, p: 3)
+    report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"),
+                                 str(booklet), {})
+    assert "failed" in report and report["fallback_enriched"] == 3
+
+
+def test_enrich_guidance_no_booklet_skips(tmp_path):
+    schema = _guidance_schema()
+    report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"),
+                                 None, {})
+    assert "skipped" in report
+    assert "help" not in schema["fields"][1]
+
+
+def test_enrich_guidance_judge_unavailable_runs_naive_fallback(tmp_path,
+                                                               monkeypatch):
+    """Credential-less local parity (outer review): the judge-unavailable
+    KEEP path is caught INSIDE verify_and_rectify, so the stage must
+    detect the unavailable flag and still run the naive fallback for an
+    explicit --instructions-pdf -- matching pre-wsao behavior."""
+    schema = _guidance_schema()
+    booklet = tmp_path / "instructions.pdf"
+    booklet.write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "B")
+    monkeypatch.setattr(
+        _ei_mod, "enrich_schema",
+        lambda s, b, n, m, c: {"proposals": {"fields": {
+            "f2": {"instructions": "Authored.", "details": "",
+                   "format_hint": ""}}, "form_details": ""}, "tokens": []})
+    def _unavailable(schema_, proposals, *a, **k):
+        for fid in list(proposals["fields"]):
+            proposals["fields"][fid] = {}
+        proposals["form_details"] = ""
+        return [{"severity": "WARNING",
+                 "rule": "instructions-enrich-unavailable",
+                 "path": "$.fields", "message": "no credentials"}]
+    monkeypatch.setattr(_ei_mod, "verify_and_rectify", _unavailable)
+    monkeypatch.setattr(ef, "_enrich_instructions_from_pdf", lambda s, p: 4)
+    report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"),
+                                 str(booklet), {})
+    assert report.get("unavailable") is True
+    assert report.get("fallback_enriched") == 4
+    assert report.get("written") == 0
+    # the flags list survives for the worklist
+    assert any(f.get("rule") == "instructions-enrich-unavailable"
+               for f in report.get("flags", []))
+
+
+def test_unavailable_fallback_refreshes_tu_provenance(tmp_path, monkeypatch):
+    """Outer review finding 1 (reproduced there): the naive fallback APPENDS
+    to help.instructions AFTER the tu bootstrap hashed the pre-append text;
+    without a refresh the seeded record goes stale and the field is
+    silently human-locked on the next credentialed run. The stage now
+    re-hashes tu-seeded records after the fallback -- and the fallback runs
+    for the AUTO-DISCOVERED booklet (finding 4), not just --instructions-pdf."""
+    import hashlib
+    schema = _guidance_schema()
+    # auto-discovery: booklet named instructions.pdf next to the form,
+    # NO explicit --instructions-pdf passed
+    (tmp_path / "instructions.pdf").write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "B")
+    monkeypatch.setattr(
+        _ei_mod, "enrich_schema",
+        lambda s, b, n, m, c: {"proposals": {"fields": {
+            "f1": {"instructions": "X.", "details": "", "format_hint": ""}},
+            "form_details": ""}, "tokens": []})
+    def _unavailable(schema_, proposals, *a, **k):
+        for fid in list(proposals["fields"]):
+            proposals["fields"][fid] = {}
+        proposals["form_details"] = ""
+        return [{"severity": "WARNING",
+                 "rule": "instructions-enrich-unavailable",
+                 "path": "$.fields", "message": "no credentials"}]
+    monkeypatch.setattr(_ei_mod, "verify_and_rectify", _unavailable)
+    def _append_naive(s, p):
+        f = s["fields"][0]
+        f["help"]["instructions"] += "\n\nAppended booklet passage."
+        return 1
+    monkeypatch.setattr(ef, "_enrich_instructions_from_pdf", _append_naive)
+    report = ef._enrich_guidance(
+        schema, str(tmp_path / "form.pdf"), None,
+        {"A[0]": "TU text for alpha."})
+    assert report.get("fallback_enriched") == 1  # auto-discovered booklet
+    rec = report["provenance"]["f1"]
+    cur = schema["fields"][0]["help"]["instructions"]
+    assert cur.endswith("Appended booklet passage.")
+    assert rec["instructions_sha1"] == \
+        hashlib.sha1(cur.encode("utf-8")).hexdigest()
+
+
+def test_oversize_form_skips_guidance_stage(tmp_path, monkeypatch):
+    """Outer review finding 3: the stage's cost scales fields x booklet and
+    runs inside the extraction subprocess timeout -- oversize forms skip
+    with a pointer to the standalone CLI."""
+    schema = {"form_metadata": {"title": "T"}, "fields": [
+        {"id": f"f{i}", "name": f"F{i}", "type": "text"}
+        for i in range(9)], "sections": [], "parts": []}
+    (tmp_path / "instructions.pdf").write_bytes(b"%PDF-fake")
+    monkeypatch.setenv("GUIDANCE_MAX_FIELDS", "5")
+    monkeypatch.setattr(ef, "_enrich_instructions_from_pdf", lambda s, p: 7)
+    report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"),
+                                 None, {})
+    assert "skipped" in report and "GUIDANCE_MAX_FIELDS" in report["skipped"]
+    # oversize is a DEGRADED path: the naive fallback still runs (reviewer
+    # 2: pre-wsao parity -- the old 3c step enriched oversize forms too)
+    assert report.get("fallback_enriched") == 7
+    assert "help" not in schema["fields"][0]
