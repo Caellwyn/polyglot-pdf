@@ -65,6 +65,9 @@ interface FieldEditorProps {
   // ValidationPanel's report by App), shown as a banner so the author sees why
   // a field is flagged while editing it (bd polyglot-pdf-0x10.6).
   lintFindings?: LintFinding[];
+  // The loaded PDF's page count (bd polyglot-pdf-g63j) so the flagged-reasons
+  // banner can name a field claiming a page the document does not have.
+  pageCount?: number;
 }
 
 // Editable field-id header (bd polyglot-pdf-0x10.1). The id is the schema's
@@ -444,6 +447,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   authorTier = true,
   onLoadUnclaimedWidgets,
   lintFindings,
+  pageCount,
 }) => {
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -478,16 +482,23 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             render amber -- a WARNING-only field showed a green row but a red
             banner before this. */}
         {(() => {
-          const completeness = checkFieldComplete(field);
+          const completeness = checkFieldComplete(field, pageCount);
           const errors = [
             ...completeness.errors,
             ...(lintFindings ?? [])
               .filter(f => f.severity === 'ERROR')
               .map(f => f.message),
           ];
-          const warnings = (lintFindings ?? [])
-            .filter(f => f.severity !== 'ERROR')
-            .map(f => f.message);
+          const warnings = [
+            // The automatic amber reasons (bd polyglot-pdf-g63j): the banner
+            // used to show only errors + lint, so a field flagged amber in the
+            // list -- e.g. a named widget with no drawable position -- gave no
+            // explanation in the pane the author is actually editing in.
+            ...completeness.reviewReasons,
+            ...(lintFindings ?? [])
+              .filter(f => f.severity !== 'ERROR')
+              .map(f => f.message),
+          ];
           if (errors.length === 0 && warnings.length === 0) return null;
           const hasErrors = errors.length > 0;
           return (

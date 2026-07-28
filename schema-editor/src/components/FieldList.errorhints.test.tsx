@@ -64,9 +64,26 @@ describe('FieldList per-field error hints (bd 0x10.6)', () => {
     expect(title).toContain('Help instructions are missing or a placeholder');
   });
 
-  it('leaves a clean, complete field tooltip-less', () => {
-    renderList(schemaWith([completeField('clean')]));
-    expect(screen.getByTestId('field-status-clean')).not.toHaveAttribute('title');
+  // A genuinely clean field: named widget AND a drawable position (bd g63j
+  // added the position diagnostic, so a rect-less field is no longer "clean").
+  const positioned = { pdf_position: { page: 1, x: 10, y: 10, width: 50, height: 12 } };
+
+  it('leaves an un-reviewed clean field free of PROBLEM text (bd g63j)', () => {
+    // It is amber now (nobody has reviewed it), but the tooltip must not
+    // invent a defect: no errors, no review reasons -- the row is simply
+    // awaiting a human.
+    renderList(schemaWith([completeField('clean', positioned)]));
+    const title = screen.getByTestId('field-status-clean').getAttribute('title');
+    expect(title).toBeNull();
+  });
+
+  it('a signed-off field explains its green state, not a problem', () => {
+    renderList(schemaWith([
+      completeField('signed', { ...positioned, _review: { status: 'reviewed_correct' } }),
+    ]));
+    const title = screen.getByTestId('field-status-signed').getAttribute('title') ?? '';
+    expect(title).toContain('Reviewed - correct');
+    expect(title).not.toContain('Missing');
   });
 
   it('a backend lint ERROR turns the row red and lands its message in the tooltip', () => {

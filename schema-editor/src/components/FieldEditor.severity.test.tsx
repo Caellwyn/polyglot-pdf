@@ -19,6 +19,9 @@ const FIELD: FormField = {
   id: 'f1', name: 'f1', type: 'text', pdf_field_name: 'f1[0]',
   read_only: false, spoken_name: 'field one',
   help: { instructions: 'Fill this in.' },
+  // Drawable position too (bd g63j): an un-positioned named field now carries
+  // its own amber reason, which would contaminate the severity assertion.
+  pdf_position: { page: 1, x: 10, y: 10, width: 50, height: 12 },
 } as FormField;
 
 const SCHEMA: FormSchema = {

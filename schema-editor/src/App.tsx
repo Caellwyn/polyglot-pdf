@@ -83,6 +83,11 @@ export const App: React.FC = () => {
   const schemaRef = React.useRef(schema);
   React.useEffect(() => { schemaRef.current = schema; }, [schema]);
   const [selectedFieldId, setSelectedFieldId] = React.useState<string | null>(null);
+  // The loaded PDF's page count, reported by PDFViewer (bd polyglot-pdf-g63j).
+  // Threaded into the field list so a field claiming a page the document does
+  // not have is named as such instead of silently painting nowhere. undefined
+  // until the PDF loads -- the page-range check simply stays quiet until then.
+  const [pdfPageCount, setPdfPageCount] = React.useState<number | undefined>(undefined);
   // Right-pane view mode (bd polyglot-pdf-s4dp.4): 'edit' shows the FieldEditor,
   // 'preview' swaps in the standalone interactive PreviewPane so the author can
   // TEST the form's logic (radio exclusivity, checkbox multi-select, show_if
@@ -1145,6 +1150,7 @@ export const App: React.FC = () => {
               schema={schema}
               selectedFieldId={selectedFieldId}
               onSelectField={setSelectedFieldId}
+              onPageCountChange={setPdfPageCount}
             />
           </div>
 
@@ -1178,6 +1184,7 @@ export const App: React.FC = () => {
                 onClearGroupSelection={clearGroupSelection}
                 onMergeFields={handleMergeFields}
                 lintFindingsByField={lintFindingsByField}
+                pageCount={pdfPageCount}
               />
             </div>
           </div>
@@ -1240,6 +1247,7 @@ export const App: React.FC = () => {
                       ? lintFindingsByField.get(selectedField.id)
                       : undefined
                   }
+                  pageCount={pdfPageCount}
                   onUpdateField={handleUpdateField}
                   onRenameField={handleRenameField}
                   onUnmergeField={handleUnmergeField}

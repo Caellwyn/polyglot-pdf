@@ -23,6 +23,10 @@ function makeSchema(fields: FormField[]): FormSchema {
 const GROUP: FormField = {
   id: 'reasons', name: 'Reasons', spoken_name: 'reasons', type: 'checkbox_group',
   section_id: 's1',
+  // Authored help so the flagged-reasons banner (role="alert") stays absent:
+  // since bd g63j the banner also lists the automatic amber reasons, and a
+  // second alert makes this file's getByRole('alert') ambiguous.
+  help: { instructions: 'Pick every reason that applies.' },
   options: [{ value: 'employment', label: 'Employment',
               pdf_field_name: 'form1[0].reason[0]' }],
 } as unknown as FormField;

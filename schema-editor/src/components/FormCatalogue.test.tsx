@@ -180,13 +180,15 @@ describe('FormCatalogue', () => {
   });
 
   it('shows a per-form review percentage derived from field completion', async () => {
-    // A schema with one fully-complete field -> 100% review.
+    // A schema with one signed-off field -> 100% review. Since bd g63j the
+    // percentage tracks HUMAN sign-off, so the field carries _review.
     const fullSchema = JSON.stringify({
       form_metadata: { form_number: 'T-1' }, sections: [],
       fields: [{
         id: 'f1', name: 'f1', type: 'text', pdf_field_name: 'f1',
         read_only: false, spoken_name: 'first',
         help: { instructions: 'Enter it.' },
+        _review: { status: 'reviewed_correct' },
       }],
     });
     const root = mockRoot([

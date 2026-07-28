@@ -10,6 +10,13 @@ interface PDFViewerProps {
   schema: FormSchema;
   selectedFieldId: string | null;
   onSelectField: (fieldId: string) => void;
+  // Report the loaded document's page count upward (bd polyglot-pdf-g63j) so
+  // the field list can flag a field claiming a page this PDF does not have --
+  // such a field paints nowhere, exactly the invisible failure this bead
+  // removes. The viewer already owns the document, so reporting beats making
+  // App load the PDF a second time just to count pages. Optional: the viewer
+  // works standalone without it.
+  onPageCountChange?: (pageCount: number) => void;
 }
 
 export const PDFViewer: React.FC<PDFViewerProps> = ({
@@ -17,6 +24,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   schema,
   selectedFieldId,
   onSelectField,
+  onPageCountChange,
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const pageRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
@@ -32,6 +40,16 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
   // Load PDF document
   const { document, numPages, isLoading, error } = usePDFDocument(pdfPath);
+
+  // Publish the page count upward whenever it settles (bd g63j). Reports 0
+  // while a document is loading -- including the window right after a kit
+  // switch, when usePDFDocument has reset numPages but the new PDF has not
+  // arrived. Consumers treat 0 as "unknown" and skip the page-range check, so
+  // a newly-opened kit is never judged against the PREVIOUS kit's page count
+  // (fresh-eyes: that stale window produced a transient false verdict).
+  React.useEffect(() => {
+    onPageCountChange?.(numPages);
+  }, [numPages, onPageCountChange]);
 
   // Store a page's unscaled dimensions when it loads. Kept stable (useCallback,
   // no deps) so PDFPage's effect does not re-run every render.

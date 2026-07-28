@@ -71,18 +71,27 @@ describe('reviewStatus.effectiveStatus precedence', () => {
     expect(effectiveStatus(withReviewStatus(amberField(), 'needs_followup'))).toBe('followup');
   });
 
-  it('unreviewed falls through to the automatic amber/green', () => {
+  it('unreviewed is ALWAYS amber -- green is human sign-off only (bd g63j)', () => {
+    // Both the auto-amber field AND the machine-spotless one: nobody has
+    // looked at either, so neither may render green.
     expect(effectiveStatus(amberField())).toBe('review');
-    expect(effectiveStatus(completeField())).toBe('complete');
+    expect(effectiveStatus(completeField())).toBe('review');
+  });
+
+  it('an ERROR still outranks the un-reviewed amber (bd g63j)', () => {
+    // The g63j amendment moves the green/amber line only; red is untouched.
+    expect(effectiveStatus(errorField())).toBe('error');
   });
 });
 
 describe('reviewStatus.isReviewTarget', () => {
-  it('reviewed_correct is NOT a target; needs_followup and auto-amber ARE', () => {
+  it('only reviewed_correct is NOT a target; everything un-signed-off IS', () => {
     expect(isReviewTarget(withReviewStatus(amberField(), 'reviewed_correct'))).toBe(false);
     expect(isReviewTarget(withReviewStatus(completeField(), 'needs_followup'))).toBe(true);
     expect(isReviewTarget(amberField())).toBe(true);
-    expect(isReviewTarget(completeField())).toBe(false);
+    // bd g63j: a machine-spotless but un-reviewed field is still a target --
+    // "Next to review" must stop on it, because nobody has reviewed it.
+    expect(isReviewTarget(completeField())).toBe(true);
   });
 
   it('an ERROR field is a target even when signed off', () => {

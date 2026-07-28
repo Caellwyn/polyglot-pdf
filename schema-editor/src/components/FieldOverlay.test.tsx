@@ -88,7 +88,30 @@ describe('FieldOverlay', () => {
   });
 
   describe('Color Coding', () => {
-    it('should have green border for complete field', () => {
+    it('should have green border for a REVIEWED field (bd g63j)', () => {
+      // Green is human sign-off only: a machine-clean field is not enough.
+      const field = createMockField({
+        spoken_name: 'Complete Field',
+        help: { instructions: 'Help text' },
+        _review: { status: 'reviewed_correct' },
+      });
+
+      const { container } = render(
+        <FieldOverlay
+          field={field}
+          pageHeight={mockPageHeight}
+          scale={mockScale}
+          isSelected={false}
+        />
+      );
+
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.border).toContain('rgb(74, 222, 128)'); // green-400
+    });
+
+    it('should have YELLOW border for an un-reviewed but clean field (bd g63j)', () => {
+      // The maintainer's directive: nobody has looked at this field, so the
+      // overlay must not tell them it is done.
       const field = createMockField({
         spoken_name: 'Complete Field',
         help: { instructions: 'Help text' },
@@ -104,7 +127,7 @@ describe('FieldOverlay', () => {
       );
 
       const overlay = container.querySelector('.field-overlay') as HTMLElement;
-      expect(overlay.style.border).toContain('rgb(74, 222, 128)'); // green-400
+      expect(overlay.style.border).toContain('rgb(250, 204, 21)'); // yellow-400
     });
 
     it('should have yellow border for field needing review', () => {
