@@ -196,3 +196,28 @@ describe('FieldEditor option widget -- mixed-shape + shared-name filtering (bd m
     });
   });
 });
+
+describe('FieldEditor option widget -- select fields have no per-option widget (bd spcu)', () => {
+  it('a select option shows NO widget block (no read-only line, no select)', () => {
+    // select writes its scalar value via the field-level mapping; options
+    // never carry a widget, so the shared-name-kid display must not fire
+    const sel: FormField = {
+      id: 'state', name: 'State', spoken_name: 'state', type: 'select',
+      section_id: 's1', pdf_field_name: 'form1[0].state[0]',
+      options: [
+        { value: 'ca', label: 'California' },
+        { value: 'ny', label: 'New York' },
+      ],
+    } as unknown as FormField;
+    render(
+      <FieldEditor field={sel} schema={makeSchema([sel])}
+        onUpdateField={vi.fn()} authorTier />,
+    );
+    // no reassign select for any option
+    expect(screen.queryByLabelText('Option 1 PDF widget')).toBeNull();
+    // and NOT the misleading shared-name-kid 'widget: X' line either
+    expect(screen.queryByText(/widget: form1\[0\]\.state\[0\]/)).toBeNull();
+    // the internal-value slug (still meaningful for select) is retained
+    expect(screen.getByText('ca')).toBeInTheDocument();
+  });
+});

@@ -1123,15 +1123,23 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             </span>
                           </div>
                         )}
-                        {/* The shape discriminator is PER-OPTION, not
+                        {/* A `select` has NO per-option widget concept: it
+                            writes its scalar value through the field-level
+                            mapping and its options never carry a widget, so
+                            neither the read-only shared-name display nor the
+                            reassign select applies -- render nothing (bd
+                            polyglot-pdf-spcu; the whole block below is
+                            radio/checkbox_group only). */}
+                        {field.type === 'select' ? null :
+                        /* The shape discriminator is PER-OPTION, not
                             per-field: the fill route keys on THIS option's
                             pdf_field_name (truthy -> distinct-name write;
                             falsy -> shared-name on-state write against the
                             field's widget). A radio field can be MIXED (some
                             options distinct-name, some shared-name kids), so a
                             field-level switch would mis-render the minority
-                            shape (bd mrdj fresh-eyes round 2). */}
-                        {(!option.pdf_field_name && field.pdf_field_name) ? (
+                            shape (bd mrdj fresh-eyes round 2). */
+                        (!option.pdf_field_name && field.pdf_field_name) ? (
                           // SHARED-NAME kid: keyed by pdf_on_value against the
                           // FIELD's pdf_field_name; it must NOT gain its own
                           // pdf_field_name (both-keys trips dump-widget-
