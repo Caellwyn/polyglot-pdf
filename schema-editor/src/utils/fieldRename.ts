@@ -4,11 +4,13 @@
  * A field's id is the join key everything else in the schema hangs off:
  * other fields' show_if/require_if atoms (legacy single-atom AND composite
  * all_of/any_of/none_of shapes), section-level show_if, section fields[]
- * membership arrays, copy_to lists, and untyped pass-through structures
+ * membership arrays, copy_to lists, untyped pass-through structures
  * (supplements[].fields survives load -> save without the editor's types
- * knowing it). Renaming must move ALL of them in ONE commit, or the schema
- * dangles -- so the public API returns a fully-rewritten schema the caller
- * commits once (one undo step).
+ * knowing it), AND the field-id-keyed _bakeoff.authoring.<stage>.provenance
+ * ownership maps (bd polyglot-pdf-yli5 -- else a rename orphans the record).
+ * Renaming must move ALL of them in ONE commit, or the schema dangles -- so
+ * the public API returns a fully-rewritten schema the caller commits once
+ * (one undo step).
  *
  * The in-session _ungroup stash is the one structure NOT retargeted: it
  * holds verbatim pre-merge snapshots, and rewriting history is worse than
