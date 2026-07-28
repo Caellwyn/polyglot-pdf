@@ -3,8 +3,9 @@
  * The option's pdf_field_name is a DROPDOWN of real widgets, never a free-text
  * box: an editor may reassign an option to a different real widget but can
  * never invent a pdf_field_name (a typo silently breaks that option's
- * round-trip fill). Choices = current + sibling-option widgets + (hosted mode)
- * the kit's unclaimed widgets.
+ * round-trip fill). Choices = current value + (hosted mode) the kit's
+ * unclaimed widgets, MINUS any widget already claimed by a sibling option
+ * (two options claiming one widget fills wrong -- bd mrdj outer review).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -43,30 +44,61 @@ describe('FieldEditor option backing-widget selector (bd mrdj)', () => {
     expect(sel).not.toHaveAttribute('type', 'text');
   });
 
-  it('offers the current value plus sibling-option widgets as choices (local mode, no loader)', () => {
+  it('offers this option current value but NOT a sibling-claimed widget (local mode)', () => {
     render(
       <FieldEditor field={GROUP} schema={makeSchema([GROUP])}
         onUpdateField={vi.fn()} authorTier />,
     );
     const sel = screen.getByLabelText('Option 1 PDF widget') as HTMLSelectElement;
     const opts = within(sel).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
-    // both in-group widgets are selectable; current is selected
-    expect(opts).toContain('form1[0].r[0]');
-    expect(opts).toContain('form1[0].r[1]');
+    // this option's own widget is selectable/selected...
     expect(sel.value).toBe('form1[0].r[0]');
+    expect(opts).toContain('form1[0].r[0]');
+    // ...but sibling option 2's widget is NOT offered (would be a dup claim)
+    expect(opts).not.toContain('form1[0].r[1]');
   });
 
-  it('reassigning the dropdown updates ONLY that option pdf_field_name to the chosen REAL widget', () => {
+  it('reassigning to an UNCLAIMED widget updates ONLY that option pdf_field_name', async () => {
+    const onLoad = vi.fn().mockResolvedValue([
+      { name: 'form1[0].r[9]', type: 'checkbox', on_value: '9', page: 0 },
+    ]);
     const onUpdateField = vi.fn();
     render(
       <FieldEditor field={GROUP} schema={makeSchema([GROUP])}
-        onUpdateField={onUpdateField} authorTier />,
+        onUpdateField={onUpdateField} authorTier onLoadUnclaimedWidgets={onLoad} />,
     );
     const sel = screen.getByLabelText('Option 1 PDF widget');
-    fireEvent.change(sel, { target: { value: 'form1[0].r[1]' } });
+    fireEvent.focus(sel);
+    await waitFor(() => expect(onLoad).toHaveBeenCalled());
+    await waitFor(() => {
+      const opts = within(sel).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
+      expect(opts).toContain('form1[0].r[9]');
+    });
+    fireEvent.change(sel, { target: { value: 'form1[0].r[9]' } });
     const updated = onUpdateField.mock.calls[0][0] as FormField;
-    expect(updated.options![0].pdf_field_name).toBe('form1[0].r[1]');
+    expect(updated.options![0].pdf_field_name).toBe('form1[0].r[9]');
     expect(updated.options![1].pdf_field_name).toBe('form1[0].r[1]'); // untouched sibling
+  });
+
+  it('EXCLUDES a sibling-claimed widget from the unclaimed loader results too (no dup claim)', async () => {
+    // even if the loader (racily) returns a widget a sibling already claims,
+    // it must not be offered as a choice for this option
+    const onLoad = vi.fn().mockResolvedValue([
+      { name: 'form1[0].r[1]', type: 'checkbox', on_value: '1', page: 0 }, // sibling's
+      { name: 'form1[0].r[9]', type: 'checkbox', on_value: '9', page: 0 }, // free
+    ]);
+    render(
+      <FieldEditor field={GROUP} schema={makeSchema([GROUP])}
+        onUpdateField={vi.fn()} authorTier onLoadUnclaimedWidgets={onLoad} />,
+    );
+    const sel = screen.getByLabelText('Option 1 PDF widget');
+    fireEvent.focus(sel);
+    await waitFor(() => expect(onLoad).toHaveBeenCalled());
+    await waitFor(() => {
+      const opts = within(sel).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
+      expect(opts).toContain('form1[0].r[9]');       // free widget offered
+      expect(opts).not.toContain('form1[0].r[1]');   // sibling's widget excluded
+    });
   });
 
   it('includes unclaimed widgets from the loader (hosted author mode) on focus', async () => {

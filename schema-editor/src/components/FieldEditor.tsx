@@ -446,11 +446,11 @@ const WidgetPicker: React.FC<{
 // never free text.
 const OptionWidgetSelect: React.FC<{
   value: string;                  // this option's current pdf_field_name ('' if none)
-  inGroupNames: string[];         // pdf_field_names referenced by sibling options
+  siblingNames: string[];         // pdf_field_names claimed by OTHER options (excluded)
   onLoadUnclaimedWidgets?: () => Promise<UnclaimedWidget[]>;
   onChange: (name: string) => void;
   ariaLabel: string;
-}> = ({ value, inGroupNames, onLoadUnclaimedWidgets, onChange, ariaLabel }) => {
+}> = ({ value, siblingNames, onLoadUnclaimedWidgets, onChange, ariaLabel }) => {
   const [unclaimed, setUnclaimed] = React.useState<string[] | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -477,16 +477,25 @@ const OptionWidgetSelect: React.FC<{
     }
   }, [onLoadUnclaimedWidgets, unclaimed, loading]);
 
-  // The selectable set: current value + sibling widgets + any loaded unclaimed,
-  // de-duped, stable order (current first so it always shows even mid-load).
+  // The selectable set: this option's CURRENT value + the loaded unclaimed
+  // widgets, MINUS any name already claimed by a sibling option (assigning a
+  // sibling's widget to this option makes two options claim one widget -- a
+  // silent duplicate that fills WRONG, with the last-processed option
+  // overwriting the other's value; the local checkFieldComplete never flags
+  // it and the multiclaim lint is dump-gated so it may not run either; bd
+  // mrdj outer review). De-duped, current-first so it always shows mid-load.
   const choices = React.useMemo(() => {
+    const claimed = new Set(siblingNames);
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const n of [value, ...inGroupNames, ...(unclaimed ?? [])]) {
+    // the current value is always offered even if (pathologically) a sibling
+    // also claims it -- so the author can SEE and change it, not be stuck.
+    for (const n of [value, ...(unclaimed ?? [])]) {
+      if (n && n !== value && claimed.has(n)) continue;
       if (n && !seen.has(n)) { seen.add(n); out.push(n); }
     }
     return out;
-  }, [value, inGroupNames, unclaimed]);
+  }, [value, siblingNames, unclaimed]);
 
   return (
     <div className="mt-1">
@@ -1164,7 +1173,8 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // affordance (its lint ERROR flags it until mapped).
                           <OptionWidgetSelect
                             value={option.pdf_field_name || ''}
-                            inGroupNames={(field.options || [])
+                            siblingNames={(field.options || [])
+                              .filter((_, i) => i !== idx)
                               .map(o => o.pdf_field_name)
                               .filter((n): n is string => !!n)}
                             onLoadUnclaimedWidgets={onLoadUnclaimedWidgets}
