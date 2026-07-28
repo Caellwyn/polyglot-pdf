@@ -284,3 +284,29 @@ describe('FieldEditor option widget -- checkbox_group is never shared-name (bd m
     expect(screen.queryByText(/widget: form1\[0\]\.bad\[0\]/)).toBeNull();
   });
 });
+
+describe('FieldEditor option widget -- shared-name kid with NO on-state is flagged unfillable (bd mrdj outer review B)', () => {
+  it('warns instead of showing a confident widget line when pdf_on_value is missing', () => {
+    // a shared-name radio kid with no pdf_on_value is UNFILLABLE (the fill
+    // route needs a truthy on-state); the old code showed a misleading
+    // 'widget: X' line implying it was mapped.
+    const badKid: FormField = {
+      id: 'r', name: 'R', spoken_name: 'r', type: 'radio',
+      section_id: 's1', pdf_field_name: 'form1[0].r[0]',
+      options: [
+        { value: 'a', label: 'A', pdf_on_value: 'A' },   // fillable
+        { value: 'b', label: 'B' },                       // no on-state: unfillable
+      ],
+    } as unknown as FormField;
+    render(
+      <FieldEditor field={badKid} schema={makeSchema([badKid])}
+        onUpdateField={vi.fn()} authorTier />,
+    );
+    // the well-formed kid shows its on-state
+    expect(screen.getByText(/on: A/)).toBeInTheDocument();
+    // the malformed kid gets a warning, NOT a confident 'widget: X (on: ...)'
+    expect(screen.getByRole('alert')).toHaveTextContent(/not fillable/i);
+    // and no reassign select (still a shared-name shape, just broken)
+    expect(screen.queryByLabelText('Option 2 PDF widget')).toBeNull();
+  });
+});

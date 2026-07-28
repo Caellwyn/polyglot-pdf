@@ -1157,12 +1157,24 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                           // pdf_field_name (both-keys trips dump-widget-
                           // multiclaim + flips the fill branch). Fixed widget,
                           // shown read-only -- no reassign select.
-                          <div className="mt-1 text-gray-500 font-mono">
-                            widget: {field.pdf_field_name}
-                            {option.pdf_on_value
-                              ? ` (on: ${option.pdf_on_value})`
-                              : ''}
-                          </div>
+                          option.pdf_on_value ? (
+                            <div className="mt-1 text-gray-500 font-mono">
+                              widget: {field.pdf_field_name} (on: {option.pdf_on_value})
+                            </div>
+                          ) : (
+                            // A shared-name kid with NO pdf_on_value is
+                            // UNFILLABLE: the fill route requires a truthy
+                            // on-state to write and silently skips it
+                            // otherwise (pdf_fill_routes.py). Don't render a
+                            // confident 'widget: X' line that implies it's
+                            // mapped -- warn instead (bd mrdj outer review B).
+                            // The on-state is set via '+ Add from PDF widgets',
+                            // not editable per-option here.
+                            <div className="mt-1 text-red-600" role="alert">
+                              not fillable: this option needs an on-state
+                              (re-add it via "+ Add from PDF widgets")
+                            </div>
+                          )
                         ) : (
                           // DISTINCT-name option (or an unmapped checkbox_group
                           // option): it carries -- or must acquire -- its own
