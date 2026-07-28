@@ -57,22 +57,20 @@ from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
 from backend import config as _config  # noqa: E402
 
 
+# MODEL-AVAILABILITY EXCEPTION (bd polyglot-pdf-kbi1 + a079): this script drives
+# a 3.1 Live model, and there is NO Vertex 3.1 id (backend/config.py:38 -- the
+# AI Studio id 1008s on Vertex). So unlike the rest of the fleet, this script
+# CANNOT default to Vertex: doing so would guarantee a connect failure. It
+# defaults to the AI Studio path it actually needs and states the reason. Set
+# VERTEXAI=true to force Vertex anyway (it will 1008 until Vertex ships 3.1).
 def _live_adapter_kwargs() -> dict:
-    """Vertex by DEFAULT (maintainer directive 2026-07-12, reaffirmed
-    2026-07-28: AI Studio is not currently available to this project, so a
-    key-defaulting path errors outright). VERTEXAI=true (default) -> ADC +
-    GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY only for a
-    deliberate AI Studio run (kept reachable for future 3.1-Live
-    experimentation -- bd polyglot-pdf-kbi1). Mirrors the sibling spikes'
-    _client() convention and the production adapter's construction."""
-    if os.environ.get("VERTEXAI", "true").lower() == "true":
+    if os.environ.get("VERTEXAI", "").lower() == "true":
         project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        if not project:
-            print(
-                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
-                "default project (gcloud config get-value project).",
-                flush=True,
-            )
+        print(
+            "VERTEXAI=true forced, but this script's 3.1 Live model has no "
+            "Vertex id -- expect a 1008 on connect (bd a079).",
+            flush=True,
+        )
         return {
             "vertexai": True,
             "project": project,
@@ -80,16 +78,25 @@ def _live_adapter_kwargs() -> dict:
         }
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        print(
+            "This script needs a 3.1 Live model, which is AI-Studio-ONLY (no "
+            "Vertex 3.1 id yet), so it requires GEMINI_API_KEY. AI Studio is "
+            "not currently provisioned for this project -- see bd "
+            "polyglot-pdf-kbi1.",
+            flush=True,
+        )
         sys.exit(2)
     return {"api_key": key}
 
 
 def _live_auth_preflight() -> int:
-    """0 when auth is usable. Only the deliberate AI-Studio opt-out needs a
-    key; the DEFAULT Vertex path must never abort for a missing key."""
-    if os.environ.get("VERTEXAI", "true").lower() != "true"             and not os.getenv("GEMINI_API_KEY"):
-        print("VERTEXAI=false but GEMINI_API_KEY not set.")
+    """0 when auth is usable. 3.1 is AI-Studio-only, so the DEFAULT path needs
+    a key; a forced VERTEXAI=true run is allowed through (and will 1008)."""
+    if os.environ.get("VERTEXAI", "").lower() == "true":
+        return 0
+    if not os.getenv("GEMINI_API_KEY"):
+        print("GEMINI_API_KEY not set; this script's 3.1 Live model is "
+              "AI-Studio-only (no Vertex 3.1 id).")
         return 1
     return 0
 

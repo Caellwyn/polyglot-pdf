@@ -62,7 +62,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
 from backend import config as _config  # noqa: E402
-from backend.config import MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD  # noqa: E402
+from backend.config import (  # noqa: E402
+    MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD, MODEL_NATIVE_STANDARD_VERTEX,
+)
 
 
 def _live_adapter_kwargs() -> dict:
@@ -96,7 +98,8 @@ def _live_adapter_kwargs() -> dict:
 def _live_auth_preflight() -> int:
     """0 when auth is usable. Only the deliberate AI-Studio opt-out needs a
     key; the DEFAULT Vertex path must never abort for a missing key."""
-    if os.environ.get("VERTEXAI", "true").lower() != "true"             and not os.getenv("GEMINI_API_KEY"):
+    if (os.environ.get("VERTEXAI", "true").lower() != "true"
+            and not os.getenv("GEMINI_API_KEY")):
         print("VERTEXAI=false but GEMINI_API_KEY not set.")
         return 1
     return 0
@@ -369,8 +372,22 @@ async def main_async(args: argparse.Namespace) -> int:
           f"x {args.repeats} repeats = {total} sessions, {args.turns} turns each\n")
 
     n = 0
+    on_vertex = os.environ.get("VERTEXAI", "true").lower() == "true"
     for tier in model_tiers:
         model_name = MODELS[tier]
+        # The 2.5 native-audio model has a DIFFERENT id on Vertex than on AI
+        # Studio, and the AI Studio id 1008s on Vertex (backend/config.py
+        # MODEL_NATIVE_STANDARD_VERTEX). Swap it on the Vertex path, mirroring
+        # measure_form_session_costs.py. There is NO Vertex 3.1 id, so a 3.1
+        # tier on Vertex is a known-1008 -- warn rather than pretend
+        # (bd polyglot-pdf-kbi1 + a079).
+        if on_vertex:
+            if tier == "2.5":
+                model_name = MODEL_NATIVE_STANDARD_VERTEX
+            elif tier == "3.1":
+                print(f"  [skip-warn] tier 3.1 has no Vertex id -- this cell "
+                      f"will 1008 on connect (set VERTEXAI=false with "
+                      f"GEMINI_API_KEY to run 3.1 on AI Studio).", flush=True)
         for (label, enabled, trigger, window) in configs:
             for rep in range(args.repeats):
                 n += 1
