@@ -25,6 +25,10 @@ interface FieldListProps {
   // report by App) so a flagged row can say WHY it is flagged right where the
   // author is looking, not only in the bottom strip (bd polyglot-pdf-0x10.6).
   lintFindingsByField?: Map<string, LintFinding[]>;
+  // The loaded PDF's page count (bd polyglot-pdf-g63j). When present, a field
+  // whose pdf_position claims a page outside 1..pageCount earns its own amber
+  // reason instead of silently painting nowhere. Absent until the PDF loads.
+  pageCount?: number;
 }
 
 export const FieldList: React.FC<FieldListProps> = ({
@@ -39,6 +43,7 @@ export const FieldList: React.FC<FieldListProps> = ({
   onClearGroupSelection,
   onMergeFields,
   lintFindingsByField,
+  pageCount,
 }) => {
   // Grouping UI is active only when the parent wired the merge callbacks.
   const groupingEnabled = !!onToggleGroupSelection;
@@ -173,18 +178,19 @@ export const FieldList: React.FC<FieldListProps> = ({
     (lintFindingsByField?.get(field.id) ?? []).some(f => f.severity === 'ERROR');
 
   // The row's effective status layers the human review sign-off over the
-  // automatic derivation (bd polyglot-pdf-u8t6): a real ERROR always wins;
-  // otherwise needs_followup -> 'followup', reviewed_correct -> 'complete',
-  // unreviewed falls through to the automatic amber/green.
+  // automatic derivation (bd polyglot-pdf-u8t6, amended by bd g63j): a real
+  // ERROR always wins; otherwise needs_followup -> 'followup',
+  // reviewed_correct -> 'complete' (green), and un-reviewed -> amber ALWAYS
+  // (green is a human's word, never the machine's).
   const getFieldStatus = (field: FormField) =>
-    effectiveStatus(field, fieldHasLintError(field));
+    effectiveStatus(field, fieldHasLintError(field), pageCount);
 
   // Every reason a row is red, amber, or flagged, in plain language, for the
   // icon's tooltip: the human review state (sign-off / follow-up + its note)
   // first, then local completeness errors + review reasons + backend lint
   // findings. Empty for a settled-clean field with no findings.
   const getFieldMessages = (field: FormField): string[] => {
-    const status = checkFieldComplete(field);
+    const status = checkFieldComplete(field, pageCount);
     const lint = lintFindingsByField?.get(field.id) ?? [];
     const review = getReview(field);
     // Cap the note in the native tooltip: the editor's notes textarea is
@@ -348,11 +354,13 @@ export const FieldList: React.FC<FieldListProps> = ({
   // field IS one (bd polyglot-pdf-u8t6) -- both flow through isReviewTarget's
   // effective-status precedence.
   const hasReviewTarget = React.useMemo(
-    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f))),
-    // isReviewTarget is a pure per-field check; the memo keys on the fields
-    // plus the lint findings (a backend ERROR also makes a row a review target).
+    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f), pageCount)),
+    // isReviewTarget is a pure per-field check; the memo keys on the fields,
+    // the lint findings (a backend ERROR also makes a row a review target),
+    // and pageCount (which arrives asynchronously when the PDF finishes
+    // loading and can flip a field into the page-out-of-range reason).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleOrderedFields, lintFindingsByField]
+    [visibleOrderedFields, lintFindingsByField, pageCount]
   );
 
   const jumpToNextReview = React.useCallback(() => {
@@ -363,14 +371,14 @@ export const FieldList: React.FC<FieldListProps> = ({
       : -1;
     for (let step = 1; step <= fields.length; step++) {
       const candidate = fields[(current + step) % fields.length];
-      if (isReviewTarget(candidate, fieldHasLintError(candidate))) {
+      if (isReviewTarget(candidate, fieldHasLintError(candidate), pageCount)) {
         onSelectField(candidate.id);
         return;
       }
     }
     // Everything visible is complete -> nothing to jump to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleOrderedFields, selectedBaseId, onSelectField, lintFindingsByField]);
+  }, [visibleOrderedFields, selectedBaseId, onSelectField, lintFindingsByField, pageCount]);
 
   const moveSelection = React.useCallback(
     (delta: 1 | -1) => {

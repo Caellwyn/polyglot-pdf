@@ -16,6 +16,10 @@ function field(extra: Partial<FormField> = {}): FormField {
     id: 'f1', name: 'F1', type: 'text', pdf_field_name: 'pdf.f1',
     spoken_name: 'field one', section_id: 's1', read_only: false,
     help: { instructions: 'All set.' },
+    // A drawable position: since bd g63j a named-but-unpositioned field earns
+    // its own amber reason (it would paint nowhere on the preview), so a
+    // "clean" fixture needs a real rect.
+    pdf_position: { page: 1, x: 10, y: 10, width: 50, height: 12 },
     ...extra,
   } as unknown as FormField;
 }

@@ -98,13 +98,24 @@ describe('FieldList review status (bd u8t6)', () => {
     expect(onSelectField).toHaveBeenCalledWith('b');
   });
 
-  it('disables "Next to review" when everything is signed off or clean', () => {
+  it('disables "Next to review" only when EVERY field is signed off (bd g63j)', () => {
     const signedOff = completeField('a', {
       spoken_name: undefined, help: undefined,
       _review: { status: 'reviewed_correct' },
     });
-    const clean = completeField('b');
-    renderList(schemaWith([signedOff, clean]));
+    const alsoSignedOff = completeField('b', {
+      _review: { status: 'reviewed_correct' },
+    });
+    renderList(schemaWith([signedOff, alsoSignedOff]));
     expect(screen.getByText('Next to review').closest('button')).toBeDisabled();
+  });
+
+  it('keeps "Next to review" ENABLED while a clean field is un-reviewed (bd g63j)', () => {
+    // The machine likes field 'b', but no human has confirmed it -- there is
+    // still review work to do, so the button must not read as finished.
+    const signedOff = completeField('a', { _review: { status: 'reviewed_correct' } });
+    const untouched = completeField('b');
+    renderList(schemaWith([signedOff, untouched]));
+    expect(screen.getByText('Next to review').closest('button')).toBeEnabled();
   });
 });

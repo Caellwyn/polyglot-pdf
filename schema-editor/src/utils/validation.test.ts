@@ -199,10 +199,78 @@ describe('checkFieldComplete PDF mapping on consolidated groups (bd 0x10.6)', ()
     expect(status.reviewReasons).toEqual([
       'Help instructions are missing or a placeholder',
       'Missing spoken name',
+      // bd g63j: the helper's fields name a widget but carry no position, so
+      // the un-highlightable reason is named too (it was silent before).
+      'PDF widget "bare": No position recorded for this field, so it cannot be '
+        + 'highlighted on the form preview',
     ]);
-    const clean = checkFieldComplete(field('done', complete as Partial<FormField>));
+    const clean = checkFieldComplete(field('done', {
+      ...complete, pdf_position: { page: 1, x: 10, y: 10, width: 50, height: 12 },
+    } as Partial<FormField>));
     expect(clean.reviewReasons).toEqual([]);
     expect(clean.isComplete).toBe(true);
+  });
+});
+
+describe('checkFieldComplete position diagnostics (bd g63j)', () => {
+  const complete = { spoken_name: 'spoken', help: { instructions: 'Done.' } };
+  const rect = { page: 1, x: 10, y: 10, width: 50, height: 12 };
+
+  it('never says "Missing PDF field name" for a field that HAS one', () => {
+    // The misleading message that made two correctly-named W-7 fields read as
+    // phantoms. A named-but-unlocatable field is amber, never that error.
+    const status = checkFieldComplete(field('named', complete as Partial<FormField>));
+    expect(status.errors).toEqual([]);
+    expect(status.reviewReasons.join(' ')).not.toContain('Missing PDF field name');
+    expect(status.reviewReasons.join(' ')).toContain('named');
+  });
+
+  it('distinguishes a degenerate rect from an absent one', () => {
+    const zero = checkFieldComplete(field('zero', {
+      ...complete, pdf_position: { page: 1, x: 5, y: 5, width: 0, height: 12 },
+    } as Partial<FormField>));
+    expect(zero.reviewReasons.join(' ')).toContain('zero size');
+  });
+
+  it('flags a page the PDF does not have -- only when a page count is known', () => {
+    const offDoc = field('off', {
+      ...complete, pdf_position: { ...rect, page: 7 },
+    } as Partial<FormField>);
+    // With a page count: its own distinct wording, naming both numbers.
+    const known = checkFieldComplete(offDoc, 3);
+    expect(known.needsReview).toBe(true);
+    expect(known.reviewReasons.join(' ')).toContain('claims page 7');
+    expect(known.reviewReasons.join(' ')).toContain('3 page(s)');
+    // Without one (schema-only context, no PDF loaded): silent, never an error.
+    expect(checkFieldComplete(offDoc).reviewReasons).toEqual([]);
+  });
+
+  it('page 0 is out of range, not page one (1-based schema convention)', () => {
+    const status = checkFieldComplete(field('zeroth', {
+      ...complete, pdf_position: { ...rect, page: 0 },
+    } as Partial<FormField>), 3);
+    expect(status.reviewReasons.join(' ')).toContain('claims page 0');
+  });
+
+  it('a properly positioned field on a real page is clean', () => {
+    const status = checkFieldComplete(field('good', {
+      ...complete, pdf_position: rect,
+    } as Partial<FormField>), 3);
+    expect(status.reviewReasons).toEqual([]);
+    expect(status.isComplete).toBe(true);
+  });
+
+  it('does not fire on a consolidated choice field (identity is per-option)', () => {
+    const status = checkFieldComplete(field('grp', {
+      ...complete,
+      type: 'radio',
+      pdf_field_name: undefined,
+      options: [
+        { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
+        { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
+      ],
+    } as Partial<FormField>), 3);
+    expect(status.reviewReasons).toEqual([]);
   });
 });
 
@@ -237,10 +305,20 @@ describe('getCompletionStats reflects human review status (bd u8t6)', () => {
     expect(stats).toMatchObject({ complete: 0, needsReview: 0, total: 1 });
   });
 
-  it('unreviewed fields keep the automatic counting', () => {
+  it('un-reviewed fields count as needs-review however clean (bd g63j)', () => {
+    // Both fields are un-reviewed -- one machine-spotless, one auto-amber. The
+    // progress figure answers "how much has a HUMAN reviewed?", so: 0%.
     const stats = getCompletionStats(schemaWith([
       field('done', complete as Partial<FormField>),
       field('amber', {} as Partial<FormField>),
+    ]));
+    expect(stats).toMatchObject({ complete: 0, needsReview: 2, total: 2, percentage: 0 });
+  });
+
+  it('the percentage tracks sign-off progress (bd g63j)', () => {
+    const stats = getCompletionStats(schemaWith([
+      field('signed', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
+      field('untouched', complete as Partial<FormField>),
     ]));
     expect(stats).toMatchObject({ complete: 1, needsReview: 1, total: 2, percentage: 50 });
   });

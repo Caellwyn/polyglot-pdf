@@ -138,6 +138,51 @@ export function hasValidCoordinates(pos: PDFPosition | undefined): boolean {
 }
 
 /**
+ * Why a field would draw NO overlay on the PDF preview, in plain language --
+ * or null when it would draw fine (bd polyglot-pdf-g63j).
+ *
+ * The editor used to fail these silently: a field whose rect is absent/
+ * degenerate, or whose page number does not exist in the document, simply never
+ * matched a rendered page and vanished with no explanation -- which is how two
+ * mis-labeled W-7 fields read as "phantom" for a human. Each mode gets its OWN
+ * wording because each has a DIFFERENT fix: a missing rect means the widget was
+ * never located, while a bad page number means the coordinates exist but point
+ * off the document.
+ *
+ * `pageCount` is optional: schema-only contexts (validation with no PDF loaded)
+ * pass nothing and simply skip the page-range half, exactly as
+ * hasValidCoordinates degrades on an absent position.
+ *
+ * NOTE the page convention: schema pdf_position.page is ONE-BASED (the
+ * extraction pipeline converts the 0-based dump page with an explicit +1), and
+ * PDFViewer renders pages 1..numPages, so a page of 0 -- a rect that never got
+ * that conversion -- is out of range and invisible, not page one.
+ */
+export function overlayBlockReason(
+  pos: PDFPosition | undefined,
+  pageCount?: number,
+): string | null {
+  if (!pos) {
+    return 'No position recorded for this field, so it cannot be highlighted '
+      + 'on the form preview';
+  }
+  if (!hasValidCoordinates(pos)) {
+    return 'This field has no usable position (its recorded rectangle is '
+      + 'missing or has zero size), so it cannot be highlighted on the form '
+      + 'preview';
+  }
+  if (typeof pageCount === 'number' && pageCount > 0) {
+    const page = pos.page;
+    if (typeof page !== 'number' || !Number.isFinite(page)
+        || page < 1 || page > pageCount) {
+      return `This field claims page ${String(page)}, but the form has `
+        + `${pageCount} page(s) -- it can never appear on the preview`;
+    }
+  }
+  return null;
+}
+
+/**
  * Get standard US Letter page dimensions in points
  */
 export const US_LETTER_PAGE: PageDimensions = {

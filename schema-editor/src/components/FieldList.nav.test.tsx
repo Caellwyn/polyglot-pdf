@@ -11,8 +11,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { FieldList } from './FieldList';
 import type { FormSchema, FormField } from '../types/schema';
 
-// checkFieldComplete: complete needs id+type+pdf_field_name, a non-empty
-// spoken_name, and help.instructions without [TODO].
+// A field the review-jump SKIPS. Since bd g63j that means human sign-off
+// (_review.reviewed_correct) -- machine-clean alone no longer counts as done,
+// so these fixtures carry the sign-off alongside the clean contents
+// (id+type+pdf_field_name, non-empty spoken_name, help without [TODO]).
 function completeField(id: string, sectionId: string): FormField {
   return {
     id,
@@ -22,6 +24,7 @@ function completeField(id: string, sectionId: string): FormField {
     spoken_name: `spoken ${id}`,
     section_id: sectionId,
     help: { instructions: 'All set.' },
+    _review: { status: 'reviewed_correct' },
   } as unknown as FormField;
 }
 

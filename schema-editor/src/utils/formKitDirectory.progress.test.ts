@@ -25,10 +25,14 @@ function entry(partial: Partial<CatalogueEntry> & { id: string }): CatalogueEntr
 // A schema fixture whose fields are a mix of complete and incomplete. A field is
 // "complete" per checkFieldComplete when it has id/type/pdf_field_name, a
 // spoken_name, and non-placeholder help.instructions.
+// A field counted as COMPLETE by getCompletionStats. Since bd g63j that means
+// human sign-off (_review.reviewed_correct) -- the progress figure reports how
+// much a person has reviewed, not how much the machine failed to fault.
 function completeField(id: string): FormField {
   return {
     id, name: id, type: 'text', pdf_field_name: id, read_only: false,
     spoken_name: id, help: { instructions: 'Fill this in.' },
+    _review: { status: 'reviewed_correct' },
   } as FormField;
 }
 function incompleteField(id: string): FormField {

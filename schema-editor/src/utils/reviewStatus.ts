@@ -10,13 +10,23 @@
  *   2. HUMAN REVIEW -- field._review.status: unreviewed / reviewed_correct /
  *      needs_followup, set explicitly by an editor.
  *
- * The maintainer-approved interaction is LAYERED (bd polyglot-pdf-u8t6):
+ * The maintainer-approved interaction is LAYERED (bd polyglot-pdf-u8t6, amended
+ * by bd polyglot-pdf-g63j):
  *   - A real ERROR (red) ALWAYS wins -- you cannot sign off a structurally broken
  *     field; those block the publish gate and must be fixed, not noted.
  *   - Otherwise the human review status governs the green-vs-amber band:
- *       needs_followup  -> 'followup' (a flagged target the review-jump stops on)
+ *       needs_followup   -> 'followup' (a flagged target the review-jump stops on)
  *       reviewed_correct -> 'complete' (green, EVEN over an auto-amber)
- *       unreviewed       -> fall through to the automatic status.
+ *       unreviewed       -> 'review' (AMBER) -- ALWAYS, even when the automatic
+ *                           derivation finds nothing wrong.
+ *
+ * That last rule is the g63j amendment (maintainer directive 2026-07-27):
+ * **GREEN MEANS A HUMAN SAID SO.** Before it, a field the machine happened to
+ * like rendered green while nobody had looked at it, which made the editor's
+ * central signal a lie -- an un-reviewed form could look finished. The
+ * automatic checkFieldComplete result is NOT discarded: its reasons still
+ * populate the amber tooltip's WHY-list, and its ERRORS still win outright. It
+ * simply no longer grants green on its own.
  *
  * This key is editor-only metadata: it round-trips because the hosted draft
  * save/lint routes store the raw dict verbatim and the publish gate validates
@@ -78,8 +88,12 @@ export function withReviewNote(field: FormField, note: string): FormField {
  * ERROR anchored to this field (the FieldList already threads these in) -- a
  * lint ERROR is as red as a local completeness error, and red always wins.
  */
-export function effectiveStatus(field: FormField, hasLintError = false): EffectiveStatus {
-  const auto = checkFieldComplete(field);
+export function effectiveStatus(
+  field: FormField,
+  hasLintError = false,
+  pageCount?: number,
+): EffectiveStatus {
+  const auto = checkFieldComplete(field, pageCount);
   // Red always wins -- a broken field cannot be signed off.
   if (auto.errors.length > 0 || hasLintError) return 'error';
 
@@ -87,8 +101,11 @@ export function effectiveStatus(field: FormField, hasLintError = false): Effecti
   if (review === 'needs_followup') return 'followup';
   if (review === 'reviewed_correct') return 'complete';
 
-  // unreviewed -> the automatic amber/green band shows through.
-  return auto.needsReview ? 'review' : 'complete';
+  // unreviewed -> ALWAYS amber (bd g63j). Green is a human's word, not the
+  // machine's: a field nobody has looked at is "needs review" even when the
+  // automatic checks find nothing to complain about. `auto` still governs the
+  // WHY-list (auto.reviewReasons) and, above, the red band.
+  return 'review';
 }
 
 /**
@@ -97,6 +114,10 @@ export function effectiveStatus(field: FormField, hasLintError = false): Effecti
  * settled green field: errors, auto-amber, and human-flagged follow-ups all
  * count; a reviewed_correct field does NOT (bd polyglot-pdf-u8t6).
  */
-export function isReviewTarget(field: FormField, hasLintError = false): boolean {
-  return effectiveStatus(field, hasLintError) !== 'complete';
+export function isReviewTarget(
+  field: FormField,
+  hasLintError = false,
+  pageCount?: number,
+): boolean {
+  return effectiveStatus(field, hasLintError, pageCount) !== 'complete';
 }

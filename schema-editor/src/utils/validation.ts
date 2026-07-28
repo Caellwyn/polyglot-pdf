@@ -1,5 +1,6 @@
 import type { FormSchema, FormField, FieldStatus, ValidationError } from '../types/schema';
 import { normalizeToComposite } from './normalizeToComposite';
+import { overlayBlockReason } from './pdfCoordinates';
 import { isToReviewSection } from './sectionOps';
 
 // Flatten a legacy-or-composite condition to its atomic conditions (bd
@@ -15,9 +16,17 @@ function conditionAtoms(condition: unknown) {
 }
 
 /**
- * Check if a field is complete (has all required info for editor workflow)
+ * Check if a field is complete (has all required info for editor workflow).
+ *
+ * `pageCount` (optional, bd polyglot-pdf-g63j) is the loaded PDF's page count.
+ * When supplied, a field claiming a page outside 1..pageCount earns its own
+ * distinct amber reason; when omitted (schema-only contexts with no PDF
+ * loaded) that half is simply skipped -- never an error.
  */
-export function checkFieldComplete(field: FormField): FieldStatus {
+export function checkFieldComplete(
+  field: FormField,
+  pageCount?: number,
+): FieldStatus {
   const errors: string[] = [];
 
   // Check required properties
@@ -52,13 +61,36 @@ export function checkFieldComplete(field: FormField): FieldStatus {
     field.help?.instructions === undefined;
 
   const hasSpokenName = Boolean(field.spoken_name && field.spoken_name.trim() !== '');
-  const needsReview = hasPlaceholderHelp || !hasSpokenName;
+
+  // Un-highlightable position (bd polyglot-pdf-g63j): a field that NAMES a
+  // widget but has no drawable rect -- or claims a page the PDF does not have
+  // -- shows nothing in the preview. Reported in plain language naming the
+  // widget, NEVER as the false "Missing PDF field name" (a name IS set; that
+  // wrong message is what made two mis-labeled W-7 fields read as phantoms).
+  //
+  // An amber REASON, not a red error: the editor cannot prove the field is
+  // unfillable. The backend filler resolves widgets by NAME, not by the
+  // schema's rect, and extraction can legitimately leave a real widget
+  // rect-less -- so this is "a human should look", not "this is broken".
+  // Scoped to plain (non-choice) fields: a consolidated choice field's
+  // field-level rect is legitimately absent (identity lives per option).
+  const positionProblem =
+    !isChoice && field.pdf_field_name
+      ? overlayBlockReason(field.pdf_position, pageCount)
+      : null;
+
+  const needsReview = hasPlaceholderHelp || !hasSpokenName || positionProblem !== null;
 
   // Name the review reasons so the UI can SAY why a field is amber instead of
   // showing a bare clock icon (bd polyglot-pdf-0x10.6).
   const reviewReasons: string[] = [];
   if (hasPlaceholderHelp) reviewReasons.push('Help instructions are missing or a placeholder');
   if (!hasSpokenName) reviewReasons.push('Missing spoken name');
+  if (positionProblem) {
+    reviewReasons.push(
+      `PDF widget "${field.pdf_field_name}": ${positionProblem}`,
+    );
+  }
 
   return {
     isComplete: errors.length === 0 && !needsReview,
@@ -171,15 +203,20 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
 /**
  * Get completion statistics for schema.
  *
- * Counts the EFFECTIVE status so a human review sign-off is reflected in the
- * same numbers the FieldList icons show (bd polyglot-pdf-u8t6): a field marked
- * reviewed_correct counts as complete even if its automatic derivation is amber,
- * and a needs_followup field counts as needs-review. A real ERROR (local
- * completeness) is neither -- it counts toward total but not complete/needsReview,
- * exactly as before. The layering is inlined (not imported from reviewStatus.ts)
- * to keep validation.ts free of a reviewStatus <-> validation import cycle; the
- * ordering mirrors reviewStatus.effectiveStatus (error wins, then the review
- * status governs the green-vs-amber band).
+ * Counts the EFFECTIVE status so the numbers agree with the FieldList icons and
+ * the PDF overlay (bd polyglot-pdf-u8t6, amended by bd polyglot-pdf-g63j).
+ *
+ * `complete` counts ONLY human sign-off (reviewed_correct) -- the g63j
+ * amendment: green means a human said so, so the progress figure now answers
+ * "how much has a person actually reviewed?", not "how much did the machine
+ * fail to complain about". An un-reviewed field counts as needs-review even
+ * when its automatic derivation is spotless; a needs_followup field likewise. A
+ * real ERROR is neither -- it counts toward total only, exactly as before.
+ *
+ * The layering is inlined (not imported from reviewStatus.ts) to keep
+ * validation.ts free of a reviewStatus <-> validation import cycle; the ordering
+ * mirrors reviewStatus.effectiveStatus (error wins, then the review status
+ * decides). Any change here MUST be mirrored there.
  */
 export function getCompletionStats(schema: FormSchema): {
   complete: number;
@@ -195,13 +232,11 @@ export function getCompletionStats(schema: FormSchema): {
     // Red always wins: an ERROR field is neither complete nor needs-review.
     if (status.errors.length > 0) continue;
     const review = (field as { _review?: { status?: string } })._review?.status;
-    if (review === 'needs_followup') {
-      needsReview++;
-    } else if (review === 'reviewed_correct') {
+    if (review === 'reviewed_correct') {
       complete++;
-    } else if (status.isComplete) {
-      complete++;
-    } else if (status.needsReview) {
+    } else {
+      // unreviewed / needs_followup / malformed -> needs review (bd g63j:
+      // green is human sign-off only; the machine's opinion never grants it).
       needsReview++;
     }
   }

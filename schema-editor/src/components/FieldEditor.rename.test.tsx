@@ -13,6 +13,11 @@ function field(): FormField {
   return {
     id: 'treaty_country', name: 'T', spoken_name: 'treaty country',
     type: 'text', section_id: 's1', read_only: false, pdf_field_name: 't[0]',
+    // Clean help + position so the flagged-reasons banner (itself
+    // role="alert") stays absent -- these tests assert on the rename form's
+    // OWN inline alert, and a second alert makes getByRole ambiguous (bd g63j).
+    help: { instructions: 'Enter the treaty country.' },
+    pdf_position: { page: 1, x: 10, y: 10, width: 50, height: 12 },
   } as unknown as FormField;
 }
 
