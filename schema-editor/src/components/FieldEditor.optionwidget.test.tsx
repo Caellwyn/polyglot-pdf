@@ -87,3 +87,66 @@ describe('FieldEditor option backing-widget selector (bd mrdj)', () => {
     });
   });
 });
+
+describe('FieldEditor option widget -- shared-name radio group (bd mrdj fresh-eyes / 0a4e)', () => {
+  // A shared-name radio group: the FIELD carries pdf_field_name; each option
+  // carries only pdf_on_value (no per-option pdf_field_name). Offering a
+  // reassignable name select here would let an option acquire BOTH keys ->
+  // dump-widget-multiclaim + wrong fill branch.
+  const SHARED: FormField = {
+    id: 'sex', name: 'Sex', spoken_name: 'sex', type: 'radio',
+    section_id: 's1', pdf_field_name: 'form1[0].sex[0]',
+    options: [
+      { value: 'male', label: 'Male', pdf_on_value: 'M' },
+      { value: 'female', label: 'Female', pdf_on_value: 'F' },
+    ],
+  } as unknown as FormField;
+
+  it('shows the field widget + on-state READ-ONLY, not a reassign select', () => {
+    const onLoad = vi.fn().mockResolvedValue([
+      { name: 'form1[0].sex[0]', type: 'radio', on_value: 'X', shared_name: true, page: 0 },
+    ]);
+    render(
+      <FieldEditor field={SHARED} schema={makeSchema([SHARED])}
+        onUpdateField={vi.fn()} authorTier onLoadUnclaimedWidgets={onLoad} />,
+    );
+    // no reassign select for a shared-name kid (neither option's control)
+    expect(screen.queryByLabelText('Option 1 PDF widget')).toBeNull();
+    expect(screen.queryByLabelText('Option 2 PDF widget')).toBeNull();
+    // the fixed field widget + this kid's on-state are shown read-only
+    expect(screen.getByText(/on: M/)).toBeInTheDocument();
+  });
+
+  it('never lets a shared-name kid acquire a per-option pdf_field_name (no both-keys)', () => {
+    // the widget SELECT (the only writer of option.pdf_field_name) is not
+    // rendered for any shared-name kid -- the Review-status select is
+    // unrelated, so assert specifically on the widget-select aria-labels
+    render(
+      <FieldEditor field={SHARED} schema={makeSchema([SHARED])}
+        onUpdateField={vi.fn()} authorTier />,
+    );
+    expect(screen.queryByLabelText('Option 1 PDF widget')).toBeNull();
+    expect(screen.queryByLabelText('Option 2 PDF widget')).toBeNull();
+  });
+});
+
+describe('FieldEditor option widget -- Add Option offers the same select (bd mrdj exit criterion 2)', () => {
+  it('a freshly added option renders the select in the empty state', () => {
+    let current: FormField = { ...GROUP };
+    const onUpdateField = vi.fn((f: FormField) => { current = f; });
+    const { rerender } = render(
+      <FieldEditor field={current} schema={makeSchema([current])}
+        onUpdateField={onUpdateField} authorTier />,
+    );
+    fireEvent.click(screen.getByText('+ Add Option'));
+    // re-render with the field the update produced
+    rerender(
+      <FieldEditor field={current} schema={makeSchema([current])}
+        onUpdateField={onUpdateField} authorTier />,
+    );
+    const sel = screen.getByLabelText('Option 3 PDF widget') as HTMLSelectElement;
+    expect(sel.tagName).toBe('SELECT');
+    expect(sel.value).toBe('');
+    expect(within(sel).getByText('(no widget assigned)')).toBeInTheDocument();
+  });
+});

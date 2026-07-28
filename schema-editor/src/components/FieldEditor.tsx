@@ -1115,19 +1115,37 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             </span>
                           </div>
                         )}
-                        <OptionWidgetSelect
-                          value={option.pdf_field_name || ''}
-                          inGroupNames={(field.options || [])
-                            .map(o => o.pdf_field_name)
-                            .filter((n): n is string => !!n)}
-                          onLoadUnclaimedWidgets={onLoadUnclaimedWidgets}
-                          ariaLabel={`Option ${idx + 1} PDF widget`}
-                          onChange={(name) => {
-                            const newOptions = [...(field.options || [])];
-                            newOptions[idx] = { ...option, pdf_field_name: name };
-                            updateField({ options: newOptions });
-                          }}
-                        />
+                        {field.pdf_field_name ? (
+                          // SHARED-NAME radio group: every kid shares the
+                          // FIELD's one pdf_field_name and differs only by
+                          // pdf_on_value. The option must NOT carry its own
+                          // pdf_field_name -- an option with BOTH keys trips
+                          // dump-widget-multiclaim and flips the fill route to
+                          // the wrong branch (bd polyglot-pdf-mrdj fresh-eyes).
+                          // So the widget here is fixed (the field's); show it
+                          // + the kid's on-state read-only, never a reassign
+                          // select that could inject a per-option name.
+                          <div className="mt-1 text-gray-500 font-mono">
+                            widget: {field.pdf_field_name}
+                            {option.pdf_on_value
+                              ? ` (on: ${option.pdf_on_value})`
+                              : ''}
+                          </div>
+                        ) : (
+                          <OptionWidgetSelect
+                            value={option.pdf_field_name || ''}
+                            inGroupNames={(field.options || [])
+                              .map(o => o.pdf_field_name)
+                              .filter((n): n is string => !!n)}
+                            onLoadUnclaimedWidgets={onLoadUnclaimedWidgets}
+                            ariaLabel={`Option ${idx + 1} PDF widget`}
+                            onChange={(name) => {
+                              const newOptions = [...(field.options || [])];
+                              newOptions[idx] = { ...option, pdf_field_name: name };
+                              updateField({ options: newOptions });
+                            }}
+                          />
+                        )}
                       </details>
                     )}
                   </div>
