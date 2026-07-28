@@ -44,18 +44,21 @@ describe('FieldEditor option backing-widget selector (bd mrdj)', () => {
     expect(sel).not.toHaveAttribute('type', 'text');
   });
 
-  it('offers this option current value but NOT a sibling-claimed widget (local mode)', () => {
+  it('local mode (no loader) offers ONLY this option own current value', () => {
+    // No loader -> `unclaimed` stays null, so the ONLY choice is this
+    // option's own widget. (Sibling exclusion is inherently loader-only:
+    // sibling names can only reach `choices` via the loaded unclaimed list,
+    // never the current-value seed -- the load-bearing exclusion test is the
+    // loader case below. This test pins that local mode leaks NO sibling
+    // name into the choice seed.)
     render(
       <FieldEditor field={GROUP} schema={makeSchema([GROUP])}
         onUpdateField={vi.fn()} authorTier />,
     );
     const sel = screen.getByLabelText('Option 1 PDF widget') as HTMLSelectElement;
     const opts = within(sel).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
-    // this option's own widget is selectable/selected...
     expect(sel.value).toBe('form1[0].r[0]');
-    expect(opts).toContain('form1[0].r[0]');
-    // ...but sibling option 2's widget is NOT offered (would be a dup claim)
-    expect(opts).not.toContain('form1[0].r[1]');
+    expect(opts).toEqual(['form1[0].r[0]']); // exactly one: its own; no sibling
   });
 
   it('reassigning to an UNCLAIMED widget updates ONLY that option pdf_field_name', async () => {
