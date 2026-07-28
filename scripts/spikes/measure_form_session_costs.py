@@ -1817,11 +1817,13 @@ async def _wait_turn(adapter, tracker_field="_session_total_tokens",
 
 
 async def run(args) -> int:
-    # --vertex: run against Vertex AI via ADC instead of the AI Studio API key
-    # (the AI Studio prepaid credits are depleted -- 1011 on connect; the deployed
-    # demo runs Vertex anyway, so this is the deploy-faithful path). google-genai's
-    # Client(vertexai=True, project=..., location=...) reads the ADC file directly;
-    # no GOOGLE_GENAI_USE_VERTEXAI env needed on this constructor-arg path.
+    # Vertex is the DEFAULT (bd polyglot-pdf-kbi1): AI Studio is not currently
+    # available to this project, and the deployed demo runs Vertex anyway, so
+    # this is also the deploy-faithful path. --no-vertex opts back into AI
+    # Studio (needs GEMINI_API_KEY) and is REQUIRED for --model 3.1, which has
+    # no Vertex id. google-genai's Client(vertexai=True, project=...,
+    # location=...) reads the ADC file directly; no GOOGLE_GENAI_USE_VERTEXAI
+    # env needed on this constructor-arg path.
     if args.vertex and args.model == "3.1":
         # 3.1 is AI-Studio-only (backend/config.py: "There is no Vertex 3.1
         # (premium) id yet"); connecting it to Vertex 1008s. Vertex is now the
