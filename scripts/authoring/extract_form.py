@@ -1158,8 +1158,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
 
     translate_options (bd 2h9j): when True (default) a post-pass bakes
     FieldOption.label_translations for every supported spoken language --
-    credential-gated (no Gemini creds -> skipped) and fail-open (extraction
-    never fails because translation failed). translation_model overrides the
+    VERTEX-ONLY with no credential pre-gate (bd f3lm) and fail-open
+    (extraction never fails because translation failed; an auth error
+    surfaces as a failed report). translation_model overrides the
     OPTION_TRANSLATION_MODEL env default (gemini-2.5-pro)."""
     # 1. Deterministic AcroForm dump (to a temp file unless --keep-dump).
     dump_dir = os.path.dirname(os.path.abspath(out_path)) or "."
@@ -1267,8 +1268,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     # 3f. Bake option label_translations for the supported spoken languages
     #     (bd polyglot-pdf-2h9j). After repair so translations key off the
     #     final labels, before validate/lint so the validated artifact is the
-    #     shipped artifact. Fail-open + credential-gated (see the helper);
-    #     --no-translate-options skips it for cheap extraction-strategy runs.
+    #     shipped artifact. Fail-open, VERTEX-ONLY with NO credential pre-gate
+    #     (bd f3lm -- it always attempts Vertex and fails open on an auth
+    #     error); --no-translate-options skips it for cheap extraction runs.
     translation_report = (_bake_option_translations(schema, translation_model)
                           if translate_options else {"skipped": "disabled"})
 
@@ -1475,8 +1477,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-translate-options", dest="translate_options",
                     action="store_false", default=True,
                     help="skip baking option label_translations (bd 2h9j; "
-                         "default ON, credential-gated + fail-open -- turn "
-                         "off for cheap extraction-strategy test runs)")
+                         "default ON, Vertex-only + fail-open, no credential "
+                         "pre-gate -- turn off for cheap extraction-strategy "
+                         "test runs)")
     ap.add_argument("--translation-model", default=None,
                     help="Gemini model for the option-translation bake "
                          "(default: OPTION_TRANSLATION_MODEL env or "
