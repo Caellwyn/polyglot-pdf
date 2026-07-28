@@ -100,8 +100,11 @@ row is ambiguous about which judge produced it.
   shadow the new short keys. Two new tests pin this:
   `test_5_series_models_are_priced_not_unpriced` (mirrors the existing 4.5
   guard) and `test_opus_5_not_shadowed_by_4_series_prefixes`.
-- All seven authoring/bakeoff scripts parse `--help` cleanly (exit 0), and a
-  source-level assertion confirms each carries the expected count of
+- All seven authoring/bakeoff scripts parse `--help` cleanly (exit 0) **under
+  `backend/.venv`** -- on a bare interpreter `eval_extraction.py` and
+  `enrich_instructions.py` exit 1 with `ModuleNotFoundError: pydantic`, the
+  repo's normal venv requirement rather than a regression from this change. A
+  source-level assertion confirms each script carries the expected count of
   `claude-opus-5` occurrences with zero `claude-opus-4-8` remaining.
 - Edited `.py` files byte-verified ASCII-clean (CLAUDE.md scar #6).
 
