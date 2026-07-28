@@ -17,7 +17,7 @@ ground truth -- fix the doc first as a separate commit.
 | [`schema_format.md`](schema_format.md) | The `FormSchema` JSON spec (Form > Parts > Sections > Fields). Owned by [`standards/terminology.md`](standards/terminology.md). |
 | [`doctrine/planning.md`](doctrine/planning.md) | SPEAR (Scope/Plan/Execute/Assess/Resolve) per-epic: Why/How/What ownership, exit rubrics, bead taxonomy, model tiering, parallel execution. |
 | [`doctrine/workflow.md`](doctrine/workflow.md) | Beads cadence, session start/end, the agent-swarm tooling, bead-creation exit-criteria convention. |
-| [`doctrine/review-flow.md`](doctrine/review-flow.md) | The two-layer Claude-based review: pre-PR adversarial fresh-eyes assess loop + Opus-4.8 outer review (no external reviewer). |
+| [`doctrine/review-flow.md`](doctrine/review-flow.md) | The two-layer Claude-based review: pre-PR adversarial fresh-eyes assess loop + Opus-5 outer review (no external reviewer). |
 | [`doctrine/promotion-tiers.md`](doctrine/promotion-tiers.md) | worktree -> local -> dev -> demo promotion (no prod); the gated demo-deploy authority. |
 | [`doctrine/drain-handover.md`](doctrine/drain-handover.md) | R2 clean-drain / handover: PreCompact auto-compaction raises a drain flag; the orchestrator finishes or splits its in-flight bead (tracker is the handoff) and stops claiming new work. |
 | [`beads-setup.md`](beads-setup.md) | One-time beads install + sync wiring (prerequisite for the swarm tooling). |

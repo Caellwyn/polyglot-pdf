@@ -16,7 +16,7 @@ This repo ships through **reviewed PRs into `dev`**, never a local merge to
 - **PR into `dev`** — opened and driven by the `/closeout` skill (NOT
   `gh pr create` by hand). Reviewed in two serial layers, both Claude, BOTH PRE-PR
   (on the local branch) — a fresh-eyes assess loop (Sonnet/Haiku, scored against the
-  bead's exit criteria), then an Opus-4.8 outer review (two independent clearing
+  bead's exit criteria), then an Opus-5 outer review (two independent clearing
   passes) when the change is review-worthy — each looped to clean. Only after both
   clear does the PR open (and close the bead(s), one run). There is NO external
   reviewer (the maintainer's Codex subscription ended 2026-07-08). On CLEAN,
