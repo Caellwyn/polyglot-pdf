@@ -11,6 +11,7 @@ import { renameBlockReason } from './fieldRename';
 import {
   allFieldIds,
   dependentsOf,
+  describeIgnoreBlock,
   getIgnoredFields,
   ignoreBlockReason,
   ignoreField,
@@ -178,6 +179,44 @@ describe('ignoreField / restoreField round-trip (bd mzkw)', () => {
     expect((back as unknown as Record<string, unknown>)._ungroup).toEqual(
       (merged as unknown as Record<string, unknown>)._ungroup,
     );
+  });
+
+  it('strips a parked field _ungroup stash on save, like a live one', () => {
+    // The stash must not ride to disk from EITHER place: ignoreField's
+    // dependents detector justifies not scanning _ungroup on the premise that
+    // stripEditorState removes it on save, and that premise has to hold for a
+    // merged-then-ignored field too (fresh-eyes).
+    const merged = field('grp', {
+      _ungroup: { sources: [{ id: 'grp_a' }], rewrites: [], sections: [] },
+    } as unknown as Partial<FormField>);
+    const s = ignoreField(schemaWith([field('a'), merged]), 'grp');
+    // In memory it is still there (a same-session un-ignore + ungroup stays
+    // lossless)...
+    expect((getIgnoredFields(s)[0].field as unknown as Record<string, unknown>)._ungroup)
+      .toBeDefined();
+    // ...but the SAVED artifact carries no stash, parked or live.
+    const saved = stripEditorState(s);
+    expect((getIgnoredFields(saved)[0].field as unknown as Record<string, unknown>)._ungroup)
+      .toBeUndefined();
+    // ...and the parked field still restores fine from the saved shape.
+    expect(restoreField(saved, 'grp').fields.map(f => f.id)).toEqual(['a', 'grp']);
+  });
+
+  it('does not promise more dependents than there are owners', () => {
+    // One owner referencing through TWO surfaces produced 2 entries but 1
+    // name, printing a "..." that implied unnamed extra fields (fresh-eyes).
+    const s = schemaWith([
+      field('target'),
+      field('owner', {
+        show_if: { field: 'target', operator: 'is_not_empty' },
+        copy_to: ['target'],
+      } as unknown as Partial<FormField>),
+    ]);
+    const deps = dependentsOf(s, 'target');
+    expect(deps).toHaveLength(2);                     // two surfaces...
+    expect(new Set(deps.map(d => d.ownerLabel)).size).toBe(1); // ...one owner
+    const message = describeIgnoreBlock('has-dependents', deps);
+    expect(message).not.toContain('...');
   });
 
   it('is a no-op for an unknown id, in both directions', () => {

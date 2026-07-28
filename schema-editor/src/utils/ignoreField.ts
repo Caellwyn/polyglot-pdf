@@ -132,10 +132,12 @@ export interface FieldDependent {
  *
  * NOTE a live merged field's `_ungroup` stash can itself hold a pre-merge
  * `show_if` naming this field, and that surface is deliberately NOT scanned.
- * It is session-only (stripEditorState removes it on save, so it never reaches
- * a stored kit), the exposure needs merge -> ignore -> ungroup all in one
+ * It is session-only -- stripEditorState removes it on save from BOTH live
+ * fields and parked ones (the parked half was a real leak until bd mzkw's
+ * review; the premise is now true on every path) -- so it never reaches a
+ * stored kit. The exposure needs merge -> ignore -> ungroup all in one
  * session, and the outcome is a dangling condition the `ref-unresolved-field`
- * lint ERROR catches -- visible, not silent. Scanning transient session state
+ * lint ERROR catches: visible, not silent. Scanning transient session state
  * would put the gate's correctness at the mercy of a key that vanishes on
  * save; the durable reference surfaces above are what it guards.
  *
@@ -254,8 +256,14 @@ export function describeIgnoreBlock(
       + 'it would silently drop an answer the form needs.';
   }
   if (reason === 'has-dependents') {
-    const names = Array.from(new Set(deps.map(d => d.ownerLabel))).slice(0, 5);
-    const more = deps.length > names.length ? ', ...' : '';
+    // Compare against DISTINCT owners, not raw entries: one field can depend
+    // through two surfaces at once (e.g. both show_if and copy_to), which used
+    // to make deps.length exceed the name list and print a "..." promising
+    // more affected fields than exist (fresh-eyes). The author fixes owners,
+    // so owners are what the message counts.
+    const owners = Array.from(new Set(deps.map(d => d.ownerLabel)));
+    const names = owners.slice(0, 5);
+    const more = owners.length > names.length ? ', ...' : '';
     return 'Other parts of the form depend on this field '
       + `(${names.join(', ')}${more}). Retarget or remove those references `
       + 'first -- ignoring it would strand them.';
