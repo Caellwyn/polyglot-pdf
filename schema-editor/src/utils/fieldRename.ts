@@ -168,6 +168,59 @@ export function renameFieldId(
 
   const out: FormSchema = { ...schema, fields, sections };
 
+  // Untyped pass-through: _bakeoff.authoring.<stage>.provenance is a
+  // field-id-keyed ownership map (guidance = instructions_enrich, and the
+  // translation re-run checker in flight keys the same way). It is declared
+  // in neither the editor's types nor the retargeting above, so a rename
+  // would ORPHAN the record: the field silently flips machine-owned ->
+  // human-protected and a dangling entry sits under the dead id (bd
+  // polyglot-pdf-yli5). Re-key every such map generically -- any object
+  // named `provenance` under any authoring stage -- so this survives
+  // whatever field-keyed stages exist now or land later, without this
+  // module needing to know each stage's shape.
+  const bakeoff = (schema as unknown as Record<string, unknown>)._bakeoff;
+  const authoring =
+    bakeoff && typeof bakeoff === 'object'
+      ? (bakeoff as Record<string, unknown>).authoring
+      : undefined;
+  if (authoring && typeof authoring === 'object' && !Array.isArray(authoring)) {
+    let touchedAny = false;
+    const nextStages: Record<string, unknown> = {};
+    for (const [stageName, stage] of Object.entries(
+      authoring as Record<string, unknown>,
+    )) {
+      const prov =
+        stage && typeof stage === 'object' && !Array.isArray(stage)
+          ? (stage as Record<string, unknown>).provenance
+          : undefined;
+      if (
+        prov &&
+        typeof prov === 'object' &&
+        !Array.isArray(prov) &&
+        Object.prototype.hasOwnProperty.call(prov, oldId)
+      ) {
+        const provRec = prov as Record<string, unknown>;
+        const nextProv: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(provRec)) {
+          nextProv[k === oldId ? newId : k] = v;
+        }
+        nextStages[stageName] = {
+          ...(stage as Record<string, unknown>),
+          provenance: nextProv,
+        };
+        touchedAny = true;
+      } else {
+        nextStages[stageName] = stage;
+      }
+    }
+    if (touchedAny) {
+      (out as unknown as Record<string, unknown>)._bakeoff = {
+        ...(bakeoff as Record<string, unknown>),
+        authoring: nextStages,
+      };
+    }
+  }
+
   // Untyped pass-through: supplements[].fields is a field-id list the backend
   // integrity-checks, but the editor's FormSchema type does not declare it --
   // it survives load -> {...schema} -> save, so the rename must chase it too.

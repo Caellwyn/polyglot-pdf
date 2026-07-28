@@ -220,3 +220,68 @@ describe('recoverSelectionAfterVanish (bd 6hhc nit 2)', () => {
     expect(recoverSelectionAfterVanish(fields, 1, null)).toBeNull();
   });
 });
+
+describe('renameFieldId -- _bakeoff provenance retargeting (bd polyglot-pdf-yli5)', () => {
+  function schemaWithProvenance(extraStages: Record<string, unknown> = {}) {
+    return schemaWith([field('applicant_phone'), field('other')], {
+      _bakeoff: {
+        authoring: {
+          instructions_enrich: {
+            model: 'm', judge_model: 'j', booklet_sha1: 'b',
+            provenance: {
+              applicant_phone: { source: 'llm-verified', instructions_sha1: 'aaa' },
+              other: { source: 'tu', instructions_sha1: 'bbb' },
+            },
+            flags: [],
+          },
+          ...extraStages,
+        },
+      },
+    });
+  }
+
+  it('re-keys a renamed field in instructions_enrich.provenance (old key gone, sha1 preserved)', () => {
+    const out = renameFieldId(schemaWithProvenance(), 'applicant_phone', 'applicant_phone_number');
+    const prov = (out as unknown as Record<string, any>)._bakeoff.authoring.instructions_enrich.provenance;
+    expect(prov.applicant_phone).toBeUndefined();
+    expect(prov.applicant_phone_number).toEqual({ source: 'llm-verified', instructions_sha1: 'aaa' });
+    expect(prov.other).toEqual({ source: 'tu', instructions_sha1: 'bbb' });
+    // the provenance MAP no longer carries the old key (checked precisely --
+    // a substring scan would false-positive on the new id
+    // "applicant_phone_number" and on name/pdf_field_name, which keep the
+    // old text by design: name is not renamed and the widget key never
+    // changes)
+    expect(Object.keys(prov)).not.toContain('applicant_phone');
+    expect(Object.keys(prov).sort()).toEqual(['applicant_phone_number', 'other']);
+  });
+
+  it('re-keys generically across ANY authoring stage with a field-keyed provenance map', () => {
+    // the translation re-run checker (in flight elsewhere) keys the same way;
+    // this must survive without knowing that stage's shape
+    const out = renameFieldId(schemaWithProvenance({
+      option_translation: {
+        model: 'pro',
+        provenance: { applicant_phone: { source: 'llm', identity_sha1: 'zzz' } },
+      },
+    }), 'applicant_phone', 'renamed');
+    const auth = (out as unknown as Record<string, any>)._bakeoff.authoring;
+    expect(auth.instructions_enrich.provenance.renamed).toBeDefined();
+    expect(auth.option_translation.provenance.renamed).toEqual({ source: 'llm', identity_sha1: 'zzz' });
+    expect(auth.option_translation.provenance.applicant_phone).toBeUndefined();
+  });
+
+  it('is a no-op on _bakeoff when the renamed field has no provenance record', () => {
+    const out = renameFieldId(schemaWithProvenance(), 'other', 'other2');
+    const prov = (out as unknown as Record<string, any>)._bakeoff.authoring.instructions_enrich.provenance;
+    expect(prov.other2).toBeDefined();
+    expect(prov.applicant_phone).toBeDefined(); // untouched
+  });
+
+  it('never throws when _bakeoff/authoring/provenance are absent or malformed', () => {
+    expect(() => renameFieldId(schemaWith([field('a')]), 'a', 'b')).not.toThrow();
+    const weird = schemaWith([field('a')], { _bakeoff: { authoring: { s: 'not-an-object' } } });
+    expect(() => renameFieldId(weird, 'a', 'b')).not.toThrow();
+    const noProv = schemaWith([field('a')], { _bakeoff: { authoring: { s: { model: 'm' } } } });
+    expect(() => renameFieldId(noProv, 'a', 'b')).not.toThrow();
+  });
+});
