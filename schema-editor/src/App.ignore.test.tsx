@@ -1,23 +1,49 @@
 /**
- * Ignore at the App level (bd polyglot-pdf-mzkw): the quarantine commits as ONE
- * schema change, so a single Undo reverses it -- field, section membership and
- * stash together. Pinned because the whole "one Cmd+Z" claim rests on
- * useSchemaHistory's whole-schema snapshots rather than on anything in
- * ignoreField itself.
+ * Ignore/restore/undo through App's REAL handlers (bd polyglot-pdf-mzkw).
  *
- * Heavy children are mocked; the FieldList mock exposes the ignore + restore
- * callbacks so the test drives App's real handlers.
+ * The point of this file is the WIRING, not the pure ops (ignoreField.test.ts
+ * owns those): that App.handleIgnoreField quarantines through commitSchema,
+ * that handleRestoreField brings the field back, and that ONE Ctrl+Z reverses
+ * a quarantine -- field, section membership and stash together -- because the
+ * whole move lands in a single history snapshot.
+ *
+ * An earlier version of this file was VACUOUS: it computed a quarantined
+ * schema locally and never fed it to App, so no-op'ing the handlers still
+ * passed. Every test here now drives App's own callbacks and asserts on
+ * App-rendered state, and each was checked to FAIL when its handler is gutted.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { FormSchema } from './types/schema';
+import type { FormField, FormSchema } from './types/schema';
 
 vi.mock('./components/PDFViewer', () => ({ PDFViewer: () => <div data-testid="pdf" /> }));
 vi.mock('./components/ValidationPanel', () => ({ ValidationPanel: () => <div /> }));
-vi.mock('./components/FieldEditor', () => ({ FieldEditor: () => <div /> }));
+// FieldEditor exposes App's ignore callback the way the real review dropdown
+// does, so the test drives handleIgnoreField itself.
+vi.mock('./components/FieldEditor', () => ({
+  FieldEditor: ({ field, onIgnoreField, ignoreBlocked }: {
+    field: FormField | null;
+    onIgnoreField?: (id: string) => string | null;
+    ignoreBlocked?: string | null;
+  }) => (
+    <div>
+      <span data-testid="editor-field">{field?.id ?? '(none)'}</span>
+      <span data-testid="ignore-blocked">{ignoreBlocked ?? '(allowed)'}</span>
+      <span data-testid="ignore-result">{''}</span>
+      <button onClick={() => {
+        const reason = onIgnoreField?.(field?.id ?? '');
+        const slot = screen.getByTestId('ignore-result');
+        slot.textContent = reason ?? 'ok';
+      }}>
+        ignore-selected
+      </button>
+    </div>
+  ),
+}));
 vi.mock('./components/FieldList', () => ({
-  FieldList: ({ schema, onRestoreField }: {
+  FieldList: ({ schema, onSelectField, onRestoreField }: {
     schema: FormSchema | null;
+    onSelectField: (id: string) => void;
     onRestoreField?: (id: string) => void;
   }) => (
     <div>
@@ -28,8 +54,10 @@ vi.mock('./components/FieldList', () => ({
         {(schema?.sections?.[0]?.fields ?? []).join(',') || '(none)'}
       </span>
       <span data-testid="stash-count">
-        {((schema as unknown as Record<string, unknown>)?._ignored_fields as unknown[] ?? []).length}
+        {(((schema as unknown as Record<string, unknown>)?._ignored_fields as unknown[]) ?? []).length}
       </span>
+      <button onClick={() => onSelectField('f2')}>select-f2</button>
+      <button onClick={() => onSelectField('f3')}>select-f3</button>
       <button onClick={() => onRestoreField?.('f2')}>restore-f2</button>
     </div>
   ),
@@ -48,7 +76,9 @@ const SCHEMA: FormSchema = {
   fields: [
     { id: 'f1', name: 'F1', type: 'text', spoken_name: 'one', section_id: 's1' },
     { id: 'f2', name: 'F2', type: 'text', spoken_name: 'two', section_id: 's1' },
-    { id: 'f3', name: 'F3', type: 'text', spoken_name: 'three', section_id: 's1' },
+    // f3 is REQUIRED, so it exercises the gate through App's own wiring.
+    { id: 'f3', name: 'F3', type: 'text', spoken_name: 'three', section_id: 's1',
+      validation: { required: true } },
   ],
 } as unknown as FormSchema;
 
@@ -71,44 +101,76 @@ async function loadForm() {
     expect(screen.getByTestId('live-ids').textContent).toBe('f1,f2,f3'));
 }
 
+const liveIds = () => screen.getByTestId('live-ids').textContent;
+const sectionIds = () => screen.getByTestId('section-ids').textContent;
+const stashCount = () => screen.getByTestId('stash-count').textContent;
+
 beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true); });
 afterEach(() => vi.clearAllMocks());
 
-describe('App ignore/restore (bd mzkw)', () => {
-  it('un-ignore restores the field, its section slot and the stash together', async () => {
+describe('App ignore/restore/undo wiring (bd mzkw)', () => {
+  it('quarantines through App: field, section slot and stash all move', async () => {
     render(<App />);
     await loadForm();
-
-    // Quarantine f2 by driving App's own handler the way the dropdown does.
-    // (The FieldList mock exposes restore; ignore is reached through the same
-    // App handler the FieldEditor dropdown calls.)
-    const { ignoreField } = await import('./utils/ignoreField');
-    const quarantined = ignoreField(JSON.parse(JSON.stringify(SCHEMA)), 'f2');
-    expect(quarantined.fields.map(f => f.id)).toEqual(['f1', 'f3']);
-    expect(quarantined.sections[0].fields).toEqual(['f1', 'f3']);
-
-    // Restore through App: field returns to its exact slot, stash empties.
-    fireEvent.click(screen.getByText('restore-f2'));
+    fireEvent.click(screen.getByText('select-f2'));
     await waitFor(() =>
-      expect(screen.getByTestId('live-ids').textContent).toBe('f1,f2,f3'));
-    expect(screen.getByTestId('stash-count').textContent).toBe('0');
+      expect(screen.getByTestId('editor-field').textContent).toBe('f2'));
+
+    fireEvent.click(screen.getByText('ignore-selected'));
+
+    await waitFor(() => expect(liveIds()).toBe('f1,f3'));
+    expect(sectionIds()).toBe('f1,f3');
+    expect(stashCount()).toBe('1');
+    // Selection is dropped -- the field has left fields[], so there is no pane.
+    expect(screen.getByTestId('editor-field').textContent).toBe('(none)');
   });
 
-  it('ONE undo reverses a quarantine (field + section + stash)', async () => {
-    // The load-bearing claim: ignoring rewrites three parts of the schema but
-    // commits once, so useSchemaHistory's snapshot makes a single Cmd+Z whole.
-    const { ignoreField } = await import('./utils/ignoreField');
-    const base = JSON.parse(JSON.stringify(SCHEMA)) as FormSchema;
-    const after = ignoreField(base, 'f2');
+  it('ONE Ctrl+Z reverses the whole quarantine', async () => {
+    render(<App />);
+    await loadForm();
+    fireEvent.click(screen.getByText('select-f2'));
+    fireEvent.click(screen.getByText('ignore-selected'));
+    await waitFor(() => expect(liveIds()).toBe('f1,f3'));
 
-    // All three parts moved in the single returned object...
-    expect(after.fields.map(f => f.id)).toEqual(['f1', 'f3']);
-    expect(after.sections[0].fields).toEqual(['f1', 'f3']);
-    expect((after as unknown as Record<string, unknown>)._ignored_fields).toHaveLength(1);
-    // ...and the input is untouched, so the history's previous snapshot IS the
-    // complete pre-ignore state -- which is what makes one undo sufficient.
-    expect(base.fields.map(f => f.id)).toEqual(['f1', 'f2', 'f3']);
-    expect(base.sections[0].fields).toEqual(['f1', 'f2', 'f3']);
-    expect((base as unknown as Record<string, unknown>)._ignored_fields).toBeUndefined();
+    // A single undo, because the move committed as ONE schema snapshot.
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+
+    await waitFor(() => expect(liveIds()).toBe('f1,f2,f3'));
+    expect(sectionIds()).toBe('f1,f2,f3');
+    expect(stashCount()).toBe('0');
+  });
+
+  it('un-ignore through App restores the exact section slot', async () => {
+    render(<App />);
+    await loadForm();
+    fireEvent.click(screen.getByText('select-f2'));
+    fireEvent.click(screen.getByText('ignore-selected'));
+    await waitFor(() => expect(stashCount()).toBe('1'));
+
+    fireEvent.click(screen.getByText('restore-f2'));
+
+    await waitFor(() => expect(stashCount()).toBe('0'));
+    expect(liveIds()).toBe('f1,f3,f2');       // appended to fields[]...
+    expect(sectionIds()).toBe('f1,f2,f3');    // ...but back in its section slot
+  });
+
+  it('App refuses to quarantine a required field, with the reason', async () => {
+    render(<App />);
+    await loadForm();
+    fireEvent.click(screen.getByText('select-f3')); // f3 is required
+    await waitFor(() =>
+      expect(screen.getByTestId('editor-field').textContent).toBe('f3'));
+
+    // The gate is surfaced BEFORE the author acts...
+    expect(screen.getByTestId('ignore-blocked').textContent)
+      .toContain('marked required');
+
+    // ...and the handler refuses even if called anyway.
+    fireEvent.click(screen.getByText('ignore-selected'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ignore-result').textContent)
+        .toContain('marked required'));
+    expect(liveIds()).toBe('f1,f2,f3');
+    expect(stashCount()).toBe('0');
   });
 });

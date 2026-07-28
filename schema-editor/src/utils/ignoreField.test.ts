@@ -7,7 +7,9 @@
 import { describe, it, expect } from 'vitest';
 import type { FormField, FormSchema } from '../types/schema';
 import { stripEditorState } from './fieldGrouping';
+import { renameBlockReason } from './fieldRename';
 import {
+  allFieldIds,
   dependentsOf,
   getIgnoredFields,
   ignoreBlockReason,
@@ -189,6 +191,25 @@ describe('ignoreField / restoreField round-trip (bd mzkw)', () => {
     const snapshot = JSON.parse(JSON.stringify(s));
     ignoreField(s, 'b');
     expect(JSON.parse(JSON.stringify(s))).toEqual(snapshot);
+  });
+});
+
+describe('a parked id is still OWNED (bd mzkw)', () => {
+  it('rename refuses an id that belongs to an ignored field', () => {
+    // The corruption path fresh-eyes found: park a broken field, rename its
+    // replacement to the parked id, un-ignore -> two fields share one id.
+    const s = ignoreField(schemaWith([field('a'), field('b')]), 'b');
+    expect(allFieldIds(s).has('b')).toBe(true);  // parked, but still owned
+    const reason = renameBlockReason(s, 'a', 'b');
+    expect(reason).toContain('ignored field');
+    // ...and the normal duplicate message still covers a LIVE collision.
+    const live = schemaWith([field('a'), field('b')]);
+    expect(renameBlockReason(live, 'a', 'b')).toContain('already exists');
+  });
+
+  it('allFieldIds spans live and parked fields', () => {
+    const s = ignoreField(schemaWith([field('a'), field('b'), field('c')]), 'b');
+    expect([...allFieldIds(s)].sort()).toEqual(['a', 'b', 'c']);
   });
 });
 

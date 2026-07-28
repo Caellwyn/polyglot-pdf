@@ -97,6 +97,39 @@ field quarantined cleanly (132 -> 131 fields, one stash entry, completion total
 dropped to match); and restore came back byte-identical in both fields and
 sections.
 
+## Review rounds
+
+Three rounds. The headline finding was the author's own bad test: the
+`App.ignore.test.tsx` added in round 1 to close the undo gap was VACUOUS -- the
+reviewer no-op'd `handleRestoreField` and it still passed, because it computed a
+quarantined schema locally and never fed it to App. Rewritten to drive App's own
+callbacks (the FieldEditor mock now exposes `onIgnoreField` the way the real
+dropdown does) and assert on App-rendered state, then mutation-verified: gutting
+`handleIgnoreField` fails 3 tests, `handleRestoreField` fails 1,
+`useSchemaHistory.undo` fails exactly the Ctrl+Z test.
+
+Also fixed: quarantining creates a SECOND id namespace, but `renameBlockReason`
+consulted only live fields -- so "park a broken `date_of_birth`, rename its
+replacement to `date_of_birth`, un-ignore" produced two fields with one id. New
+`allFieldIds()` spans live + parked; rename refuses a parked id with a message
+naming the cause.
+
+Also pinned (round-2 blocker): the "backend tolerates the stash" claim -- the one
+load-bearing assumption outside this feature's own suite, and a sibling model in
+form_models.py already sets `extra="forbid"` -- now has two backend tests, which
+the reviewer mutation-verified by adding that very config and watching them fail.
+
+## Closeout notes
+
+- Doc-freshness: every STALE doc flagged is a backend/frontend doc stale vs
+  OTHER recent dev commits; none cites this branch's touched files. No doc
+  update owed.
+- Beads audit: `polyglot-pdf-btbi` (W-7 require_if residuals) is stale
+  in_progress -- the MAINTAINER's own claim, plausibly moot now that they
+  re-extracted W-7 through the fixed pipeline. Left for their call.
+- This branch is STACKED on C3 (bd g63j, PR #502), so its commit count includes
+  C3's; merging #502 first collapses the diff to C4's own commits.
+
 ## Robustness note
 
 The first App-level run surfaced `TypeError: schema.sections is not iterable` --

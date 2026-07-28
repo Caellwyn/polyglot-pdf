@@ -75,6 +75,25 @@ export function isIgnored(schema: FormSchema, fieldId: string): boolean {
   return getIgnoredFields(schema).some(e => e.field.id === fieldId);
 }
 
+/**
+ * Every field id currently in use, LIVE OR PARKED (bd polyglot-pdf-mzkw).
+ *
+ * Quarantining creates a second id namespace: `schema.fields` no longer holds
+ * every id the schema owns. Anything that mints or validates an id must consult
+ * both, or a parked id can be handed to a live field and then collide the
+ * moment the parked one is restored -- e.g. park a broken `date_of_birth`,
+ * rename its replacement to `date_of_birth`, un-ignore, and the schema now has
+ * two fields with one id (fresh-eyes).
+ */
+export function allFieldIds(schema: FormSchema): Set<string> {
+  const ids = new Set<string>();
+  for (const f of (Array.isArray(schema?.fields) ? schema.fields : [])) {
+    if (typeof f?.id === 'string') ids.add(f.id);
+  }
+  for (const e of getIgnoredFields(schema)) ids.add(e.field.id);
+  return ids;
+}
+
 // --------------------------------------------------------------------------
 // Dependents: what would break if this field vanished?
 // --------------------------------------------------------------------------
@@ -110,6 +129,15 @@ export interface FieldDependent {
  *
  * NOTE section.fields[] membership is deliberately NOT a dependent: that is the
  * field's own home, which ignoring relocates by design (and restore puts back).
+ *
+ * NOTE a live merged field's `_ungroup` stash can itself hold a pre-merge
+ * `show_if` naming this field, and that surface is deliberately NOT scanned.
+ * It is session-only (stripEditorState removes it on save, so it never reaches
+ * a stored kit), the exposure needs merge -> ignore -> ungroup all in one
+ * session, and the outcome is a dangling condition the `ref-unresolved-field`
+ * lint ERROR catches -- visible, not silent. Scanning transient session state
+ * would put the gate's correctness at the mercy of a key that vanishes on
+ * save; the durable reference surfaces above are what it guards.
  *
  * NOTE `_bakeoff.authoring.<stage>.provenance` -- the field-id-keyed authoring
  * ownership map fieldRename re-keys -- is ALSO deliberately not a dependent,
