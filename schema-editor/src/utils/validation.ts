@@ -72,10 +72,28 @@ export function checkFieldComplete(
   // unfillable. The backend filler resolves widgets by NAME, not by the
   // schema's rect, and extraction can legitimately leave a real widget
   // rect-less -- so this is "a human should look", not "this is broken".
-  // Scoped to plain (non-choice) fields: a consolidated choice field's
-  // field-level rect is legitimately absent (identity lives per option).
+  //
+  // SCOPING -- deliberately NOT the same as the mapping check above, which is
+  // gated on !isChoice because a consolidated group's field-level NAME is
+  // legitimately absent (identity lives per option). Position is a different
+  // question: PDFViewer draws an overlay from `field.pdf_position` for ANY
+  // field that has one, choice types included (the shipped i-90 has several
+  // single-widget radios with real field-level rects). So the check runs:
+  //   - whenever the field CARRIES a position, of any type; and
+  //   - for a named NON-CHOICE field that carries none at all.
+  // Both are cases where the author would otherwise stare at a field that
+  // paints nowhere with no explanation.
+  //
+  // A named CHOICE field with no field-level rect is deliberately silent (the
+  // !isChoice on the second clause): that is a true shared-name AcroForm radio
+  // group -- one name, rects per option -- and PDFViewer never draws option
+  // rects, so flagging it would fire on every real radio group in every kit
+  // rather than name a defect. A consolidated group with neither name nor
+  // rect is likewise silent.
+  const hasOwnPosition = field.pdf_position !== undefined;
+  const namedButPositionless = Boolean(field.pdf_field_name) && !hasOwnPosition && !isChoice;
   const positionProblem =
-    !isChoice && field.pdf_field_name
+    hasOwnPosition || namedButPositionless
       ? overlayBlockReason(field.pdf_position, pageCount)
       : null;
 
@@ -87,9 +105,12 @@ export function checkFieldComplete(
   if (hasPlaceholderHelp) reviewReasons.push('Help instructions are missing or a placeholder');
   if (!hasSpokenName) reviewReasons.push('Missing spoken name');
   if (positionProblem) {
-    reviewReasons.push(
-      `PDF widget "${field.pdf_field_name}": ${positionProblem}`,
-    );
+    // Name the widget when the field carries one; a choice group with a
+    // field-level rect but no field-level name is identified by its own id.
+    const subject = field.pdf_field_name
+      ? `PDF widget "${field.pdf_field_name}"`
+      : `Field "${field.id}"`;
+    reviewReasons.push(`${subject}: ${positionProblem}`);
   }
 
   return {

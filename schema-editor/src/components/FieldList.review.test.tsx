@@ -118,4 +118,19 @@ describe('FieldList review status (bd u8t6)', () => {
     renderList(schemaWith([signedOff, untouched]));
     expect(screen.getByText('Next to review').closest('button')).toBeEnabled();
   });
+
+  it('shows the AMBER icon on an un-reviewed clean row (bd g63j)', () => {
+    // The list surface's own positive pin: without it, a regression mapping
+    // the 'review' status back to the green check would pass the whole suite
+    // (the other amber assertions here are negative -- fresh-eyes).
+    const signedOff = completeField('a', { _review: { status: 'reviewed_correct' } });
+    const untouched = completeField('b');
+    renderList(schemaWith([signedOff, untouched]));
+    const amber = screen.getByTestId('field-status-b');
+    expect(amber.querySelector('svg.text-yellow-600')).not.toBeNull();
+    expect(amber.querySelector('svg.text-green-600')).toBeNull();
+    // ...and the signed-off row is genuinely green, so the two are distinct.
+    const green = screen.getByTestId('field-status-a');
+    expect(green.querySelector('svg.text-green-600')).not.toBeNull();
+  });
 });

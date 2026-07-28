@@ -41,9 +41,14 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   // Load PDF document
   const { document, numPages, isLoading, error } = usePDFDocument(pdfPath);
 
-  // Publish the page count upward whenever it settles (bd g63j).
+  // Publish the page count upward whenever it settles (bd g63j). Reports 0
+  // while a document is loading -- including the window right after a kit
+  // switch, when usePDFDocument has reset numPages but the new PDF has not
+  // arrived. Consumers treat 0 as "unknown" and skip the page-range check, so
+  // a newly-opened kit is never judged against the PREVIOUS kit's page count
+  // (fresh-eyes: that stale window produced a transient false verdict).
   React.useEffect(() => {
-    if (numPages > 0) onPageCountChange?.(numPages);
+    onPageCountChange?.(numPages);
   }, [numPages, onPageCountChange]);
 
   // Store a page's unscaled dimensions when it loads. Kept stable (useCallback,

@@ -173,7 +173,11 @@ export function overlayBlockReason(
   }
   if (typeof pageCount === 'number' && pageCount > 0) {
     const page = pos.page;
-    if (typeof page !== 'number' || !Number.isFinite(page)
+    // Integer required: PDFViewer matches pages with exact equality against
+    // 1..numPages, so a fractional page (only reachable by hand-editing the
+    // JSON) matches nothing and paints nowhere -- the very silent void this
+    // function exists to name (fresh-eyes).
+    if (typeof page !== 'number' || !Number.isInteger(page)
         || page < 1 || page > pageCount) {
       return `This field claims page ${String(page)}, but the form has `
         + `${pageCount} page(s) -- it can never appear on the preview`;

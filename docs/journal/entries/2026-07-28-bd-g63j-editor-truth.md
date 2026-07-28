@@ -70,7 +70,36 @@ conversion -- is out of range and invisible, not page one. Pinned by a test.
   under g63j that now means signed off, so they carry `_review` (and, where the
   test asserts a clean banner/tooltip, a drawable position). No assertion was
   weakened -- each fixture was updated to still mean what its test says.
-- Full schema-editor suite green (57 files, 832 tests); tsc clean.
+- Full schema-editor suite green (58 files, 838 tests after the review rounds);
+  tsc clean.
+
+## Review rounds
+
+Three gaps and two nits found and fixed before the PR:
+
+1. (blocker) The position check inherited the MAPPING check's `!isChoice` gate
+   without re-deriving its scoping. Those answer different questions -- a
+   consolidated group's field-level NAME is legitimately absent, but PDFViewer
+   draws an overlay from `field.pdf_position` for ANY field that has one. The
+   shipped i-90 carries several single-widget radios with real field-level
+   rects, so this reproduced the bead's own target bug for that family.
+2. (nit) `pdfPageCount` went stale across kit switches, judging a new kit's
+   fields against the previous kit's page count. PDFViewer now publishes
+   unconditionally including 0 = "unknown".
+3. (nit) The amber icon was pinned only by ABSENCE elsewhere, so a regression
+   mapping it to the green check would have passed the whole suite. Now pinned
+   positively -- and the reviewer confirmed by mutation probe that both the
+   amber logic and the icon mapping now fail tests when broken.
+4. (nit) The scoping comment claimed named fields were always covered, but the
+   code exempts a named CHOICE field with no field-level rect (a true
+   shared-name radio group -- flagging it would fire on every real group).
+   Comment corrected and the cell pinned.
+5. (nit) A fractional page passed the range check yet can never match a
+   rendered page. Now requires an integer.
+
+A sweep of the three shipped kits confirmed this is not noisy: w7 and i-90
+produce zero new position warnings; f1040 produces four, all true positives
+(the same fields already filed as bd polyglot-pdf-lha9).
 
 ## Live verification
 

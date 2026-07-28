@@ -261,6 +261,8 @@ describe('checkFieldComplete position diagnostics (bd g63j)', () => {
   });
 
   it('does not fire on a consolidated choice field (identity is per-option)', () => {
+    // No field-level position AND no field-level name: its rects live on the
+    // options, so there is nothing at this level to diagnose.
     const status = checkFieldComplete(field('grp', {
       ...complete,
       type: 'radio',
@@ -271,6 +273,74 @@ describe('checkFieldComplete position diagnostics (bd g63j)', () => {
       ],
     } as Partial<FormField>), 3);
     expect(status.reviewReasons).toEqual([]);
+  });
+
+  it('DOES fire on a choice field that carries its own bad position', () => {
+    // Fresh-eyes catch: single-widget radios with a real field-level rect
+    // exist in the shipped i-90, and PDFViewer draws overlays from
+    // field.pdf_position for ANY field that has one -- so skipping the check
+    // for choice types reproduced this bead's own target bug for that family.
+    const status = checkFieldComplete(field('single_radio', {
+      ...complete,
+      type: 'radio',
+      pdf_field_name: 'r[0]',
+      pdf_position: { page: 99, x: 1, y: 1, width: 10, height: 10 },
+      options: [
+        { value: 'a', label: 'A' },
+        { value: 'b', label: 'B' },
+      ],
+    } as Partial<FormField>), 3);
+    expect(status.reviewReasons.join(' ')).toContain('claims page 99');
+  });
+
+  it('names the field id when a positioned choice field has no field-level name', () => {
+    const status = checkFieldComplete(field('nameless_grp', {
+      ...complete,
+      type: 'checkbox_group',
+      pdf_field_name: undefined,
+      pdf_position: { page: 42, x: 1, y: 1, width: 10, height: 10 },
+      options: [
+        { value: 'a', label: 'A', pdf_field_name: 'a[0]' },
+        { value: 'b', label: 'B', pdf_field_name: 'b[0]' },
+      ],
+    } as Partial<FormField>), 3);
+    expect(status.reviewReasons.join(' ')).toContain('Field "nameless_grp"');
+    expect(status.reviewReasons.join(' ')).toContain('claims page 42');
+  });
+
+  it('stays silent for a NAMED choice field with no field-level rect', () => {
+    // A true shared-name AcroForm radio group: one name, rects per option.
+    // PDFViewer never draws option rects, so flagging this would fire on every
+    // real radio group rather than name a defect (fresh-eyes: pin the cell the
+    // scoping comment now spells out).
+    const status = checkFieldComplete(field('shared_radio', {
+      ...complete,
+      type: 'radio',
+      pdf_field_name: 'g[0]',
+      pdf_position: undefined,
+      options: [
+        { value: 'a', label: 'A', pdf_on_value: '1' },
+        { value: 'b', label: 'B', pdf_on_value: '2' },
+      ],
+    } as Partial<FormField>), 3);
+    expect(status.reviewReasons).toEqual([]);
+  });
+
+  it('flags a fractional page -- it can never match a rendered page', () => {
+    const status = checkFieldComplete(field('fractional', {
+      ...complete, pdf_position: { ...rect, page: 1.5 },
+    } as Partial<FormField>), 3);
+    expect(status.reviewReasons.join(' ')).toContain('claims page 1.5');
+  });
+
+  it('treats a page count of 0 as unknown (PDF still loading)', () => {
+    // PDFViewer reports 0 while a document loads, including right after a kit
+    // switch -- the new kit's fields must not be judged against the old kit's
+    // count, so 0 means "skip the page-range half" (fresh-eyes).
+    const offDoc = field('off', {
+      ...complete, pdf_position: { ...rect, page: 7 },
+    } as Partial<FormField>);
+    expect(checkFieldComplete(offDoc, 0).reviewReasons).toEqual([]);
   });
 });
 
