@@ -435,6 +435,92 @@ const WidgetPicker: React.FC<{
   );
 };
 
+// The per-option backing-widget selector (bd polyglot-pdf-mrdj). Replaces a
+// free-text pdf_field_name box: a typo or invented name silently broke that
+// option's round-trip fill (the fill route writes widgets BY pdf_field_name,
+// so an unknown name just never fills). The editor may REASSIGN an option to a
+// different REAL widget but can never invent a name.
+//
+// Choices are the union of (a) every pdf_field_name already referenced by this
+// field's options -- so the current value is always selectable and the author
+// can reassign within the group -- and (b) the kit's unclaimed button widgets
+// (hosted author mode only, loaded lazily on first open). Local mode with no
+// backend dump still gets (a): reassignment among the group's existing widgets,
+// never free text.
+const OptionWidgetSelect: React.FC<{
+  value: string;                  // this option's current pdf_field_name ('' if none)
+  siblingNames: string[];         // pdf_field_names claimed by OTHER options (excluded)
+  onLoadUnclaimedWidgets?: () => Promise<UnclaimedWidget[]>;
+  onChange: (name: string) => void;
+  ariaLabel: string;
+}> = ({ value, siblingNames, onLoadUnclaimedWidgets, onChange, ariaLabel }) => {
+  const [unclaimed, setUnclaimed] = React.useState<string[] | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const loadUnclaimed = React.useCallback(async () => {
+    if (!onLoadUnclaimedWidgets || unclaimed !== null || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const ws = await onLoadUnclaimedWidgets();
+      // EXCLUDE shared-name widgets: a shared-AcroForm-name radio group has N
+      // same-named kids disambiguated only by on_value, so assigning its bare
+      // name to a single option's pdf_field_name would fill the WRONG kid
+      // deterministically (the fill route's find_widget(name) returns the
+      // first match, no on-state disambiguation). Such widgets belong to a
+      // group via the field-level pdf_field_name + option pdf_on_value, never
+      // a per-option pdf_field_name (bd mrdj fresh-eyes round 2).
+      setUnclaimed(Array.from(new Set(
+        ws.filter(w => !w.shared_name).map(w => w.name))));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load PDF widgets');
+    } finally {
+      setLoading(false);
+    }
+  }, [onLoadUnclaimedWidgets, unclaimed, loading]);
+
+  // The selectable set: this option's CURRENT value + the loaded unclaimed
+  // widgets, MINUS any name already claimed by a sibling option (assigning a
+  // sibling's widget to this option makes two options claim one widget -- a
+  // silent duplicate that fills WRONG, with the last-processed option
+  // overwriting the other's value; the local checkFieldComplete never flags
+  // it and the multiclaim lint is dump-gated so it may not run either; bd
+  // mrdj outer review). De-duped, current-first so it always shows mid-load.
+  const choices = React.useMemo(() => {
+    const claimed = new Set(siblingNames);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    // the current value is always offered even if (pathologically) a sibling
+    // also claims it -- so the author can SEE and change it, not be stuck.
+    for (const n of [value, ...(unclaimed ?? [])]) {
+      if (n && n !== value && claimed.has(n)) continue;
+      if (n && !seen.has(n)) { seen.add(n); out.push(n); }
+    }
+    return out;
+  }, [value, siblingNames, unclaimed]);
+
+  return (
+    <div className="mt-1">
+      <select
+        className="input input-sm w-full font-mono"
+        value={value}
+        aria-label={ariaLabel}
+        onFocus={() => void loadUnclaimed()}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {/* An empty current value stays selectable but is not a real widget. */}
+        {!value && <option value="">(no widget assigned)</option>}
+        {choices.map(name => (
+          <option key={name} value={name}>{name}</option>
+        ))}
+      </select>
+      {loading && <p className="text-xs text-gray-400 mt-0.5">Loading widgets...</p>}
+      {error && <p className="text-xs text-red-600 mt-0.5" role="alert">{error}</p>}
+    </div>
+  );
+};
+
 export const FieldEditor: React.FC<FieldEditorProps> = ({
   field,
   schema,
@@ -1057,18 +1143,72 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             </span>
                           </div>
                         )}
-                        <input
-                          type="text"
-                          className="input input-sm mt-1 w-full font-mono"
-                          value={option.pdf_field_name || ''}
-                          onChange={(e) => {
-                            const newOptions = [...(field.options || [])];
-                            newOptions[idx] = { ...option, pdf_field_name: e.target.value };
-                            updateField({ options: newOptions });
-                          }}
-                          placeholder="pdf_field_name (widget backing this option)"
-                          aria-label={`Option ${idx + 1} PDF widget`}
-                        />
+                        {/* A `select` has NO per-option widget concept: it
+                            writes its scalar value through the field-level
+                            mapping and its options never carry a widget, so
+                            neither the read-only display nor the reassign
+                            select applies -- render nothing (bd
+                            polyglot-pdf-spcu). */}
+                        {field.type === 'select' ? null :
+                        /* The shared-name shape (field-level pdf_field_name +
+                            option pdf_on_value) is RADIO-ONLY: a checkbox_group
+                            forbids a field-level name entirely, so a
+                            checkbox_group option with no own pdf_field_name is
+                            genuinely UNFILLABLE, not shared-name (v2 model
+                            form_models.py:821-843; outer review). Gate the
+                            read-only shared-name display to radio; a
+                            checkbox_group option keeps the reassign select so
+                            the author can map its own widget. The discriminator
+                            is per-OPTION so a MIXED radio field renders each
+                            option by its true shape (bd mrdj round 2). */
+                        (field.type === 'radio'
+                          && !option.pdf_field_name && field.pdf_field_name) ? (
+                          // SHARED-NAME radio kid: keyed by pdf_on_value against
+                          // the FIELD's pdf_field_name; it must NOT gain its own
+                          // pdf_field_name (both-keys trips dump-widget-
+                          // multiclaim + flips the fill branch). Fixed widget,
+                          // shown read-only -- no reassign select.
+                          option.pdf_on_value ? (
+                            <div className="mt-1 text-gray-500 font-mono">
+                              widget: {field.pdf_field_name} (on: {option.pdf_on_value})
+                            </div>
+                          ) : (
+                            // A shared-name kid with NO pdf_on_value is
+                            // UNFILLABLE: the fill route requires a truthy
+                            // on-state to write and silently skips it
+                            // otherwise (pdf_fill_routes.py). Don't render a
+                            // confident 'widget: X' line that implies it's
+                            // mapped -- warn instead (bd mrdj outer review B).
+                            // The on-state is set via '+ Add from PDF widgets',
+                            // not editable per-option here.
+                            <div className="mt-1 text-red-600" role="alert">
+                              not fillable: this option needs an on-state
+                              (re-add it via "+ Add from PDF widgets")
+                            </div>
+                          )
+                        ) : (
+                          // DISTINCT-name option (or an unmapped checkbox_group
+                          // option): it carries -- or must acquire -- its own
+                          // pdf_field_name. Reassignable among real widgets,
+                          // never free text. OptionWidgetSelect shows
+                          // '(no widget assigned)' for an unmapped option, which
+                          // for a checkbox_group is the correct 'assign a widget'
+                          // affordance (its lint ERROR flags it until mapped).
+                          <OptionWidgetSelect
+                            value={option.pdf_field_name || ''}
+                            siblingNames={(field.options || [])
+                              .filter((_, i) => i !== idx)
+                              .map(o => o.pdf_field_name)
+                              .filter((n): n is string => !!n)}
+                            onLoadUnclaimedWidgets={onLoadUnclaimedWidgets}
+                            ariaLabel={`Option ${idx + 1} PDF widget`}
+                            onChange={(name) => {
+                              const newOptions = [...(field.options || [])];
+                              newOptions[idx] = { ...option, pdf_field_name: name };
+                              updateField({ options: newOptions });
+                            }}
+                          />
+                        )}
                       </details>
                     )}
                   </div>
