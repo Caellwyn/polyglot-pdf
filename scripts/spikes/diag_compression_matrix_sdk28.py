@@ -64,6 +64,44 @@ from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
 from backend import config as _config  # noqa: E402
 from backend.config import MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD  # noqa: E402
 
+
+def _live_adapter_kwargs() -> dict:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12, reaffirmed
+    2026-07-28: AI Studio is not currently available to this project, so a
+    key-defaulting path errors outright). VERTEXAI=true (default) -> ADC +
+    GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY only for a
+    deliberate AI Studio run (kept reachable for future 3.1-Live
+    experimentation -- bd polyglot-pdf-kbi1). Mirrors the sibling spikes'
+    _client() convention and the production adapter's construction."""
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return {
+            "vertexai": True,
+            "project": project,
+            "location": os.environ.get("VERTEX_LOCATION", "us-central1"),
+        }
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return {"api_key": key}
+
+
+def _live_auth_preflight() -> int:
+    """0 when auth is usable. Only the deliberate AI-Studio opt-out needs a
+    key; the DEFAULT Vertex path must never abort for a missing key."""
+    if os.environ.get("VERTEXAI", "true").lower() != "true"             and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
+        return 1
+    return 0
+
+
 # Reuse the single-config probe's synth/prompts/settings helpers (same dir, not a
 # package -- load by path so the two scripts cannot drift apart).
 _diag_path = Path(__file__).resolve().parent / "diag_compression_usage.py"
@@ -158,7 +196,7 @@ async def _drive_run(model_name: str, label: str, settings, n_turns: int,
         "api_version": None,
     }
     try:
-        adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
+        adapter = LiveAIGemini(model=model_name, **_live_adapter_kwargs())
         adapter.set_session_context(form_session_id=f"matrix-{label}", form_id="DIAG")
         adapter._log = _LogTap(adapter._log, log_sink)
         adapter._on_raw_usage = lambda u: usage_dumps.append(_diag._dump_usage(u))
@@ -294,8 +332,7 @@ def _summarize(records: list[dict]) -> None:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set; cannot run.")
+    if _live_auth_preflight():
         return 1
     try:
         for p in _diag.PROMPTS[: min(args.turns, len(_diag.PROMPTS))]:

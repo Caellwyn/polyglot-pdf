@@ -78,6 +78,44 @@ from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
 from backend import config as _config  # noqa: E402
 
 
+def _live_adapter_kwargs() -> dict:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12, reaffirmed
+    2026-07-28: AI Studio is not currently available to this project, so a
+    key-defaulting path errors outright). VERTEXAI=true (default) -> ADC +
+    GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY only for a
+    deliberate AI Studio run (kept reachable for future 3.1-Live
+    experimentation -- bd polyglot-pdf-kbi1). Mirrors the sibling spikes'
+    _client() convention and the production adapter's construction."""
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return {
+            "vertexai": True,
+            "project": project,
+            "location": os.environ.get("VERTEX_LOCATION", "us-central1"),
+        }
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return {"api_key": key}
+
+
+def _live_auth_preflight() -> int:
+    """0 when auth is usable. Only the deliberate AI-Studio opt-out needs a
+    key; the DEFAULT Vertex path must never abort for a missing key."""
+    if os.environ.get("VERTEXAI", "true").lower() != "true"             and not os.getenv("GEMINI_API_KEY"):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
+        return 1
+    return 0
+
+
+
 def _patch_vad_bug_for_sweep(settings) -> None:
     """Neutralize the VAD sensitivity/padding fields on a Settings instance so the
     adapter sends only {disabled: True} (bd polyglot-pdf-p1t -- the API rejects
@@ -166,7 +204,7 @@ async def _drive_session(form_session_id: str, n_turns: int) -> list[float]:
     Returns the per-turn response latency in seconds (send_activity_end -> first
     audio-out chunk). get_settings() must already be patched for this configuration.
     """
-    adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=MODEL)
+    adapter = LiveAIGemini(model=MODEL, **_live_adapter_kwargs())
     adapter.set_session_context(form_session_id=form_session_id, form_id="SWEEP")
 
     # Latency capture: the harness owns on_audio, so we timestamp the first audio-out
@@ -333,8 +371,7 @@ def _configs(args: argparse.Namespace) -> list[tuple[str, bool, int, int]]:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set; cannot run the live sweep.")
+    if _live_auth_preflight():
         return 1
 
     # Pre-synthesize clips up front so a gTTS/network failure fails clearly BEFORE we

@@ -1822,15 +1822,24 @@ async def run(args) -> int:
     # demo runs Vertex anyway, so this is the deploy-faithful path). google-genai's
     # Client(vertexai=True, project=..., location=...) reads the ADC file directly;
     # no GOOGLE_GENAI_USE_VERTEXAI env needed on this constructor-arg path.
-    if not args.vertex and not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set; cannot run (or pass --vertex to use ADC).")
-        return 1
     if args.vertex and args.model == "3.1":
         # 3.1 is AI-Studio-only (backend/config.py: "There is no Vertex 3.1
-        # (premium) id yet"); connecting it to Vertex 1008s. Fail fast with the
-        # reason instead of a cryptic mid-run close (Codex PR #321).
-        print("--vertex is not available for --model 3.1: the 3.1 Live model has "
-              "no Vertex id (AI-Studio-only as of 2026-06). Use --model 2.5.")
+        # (premium) id yet"); connecting it to Vertex 1008s. Vertex is now the
+        # DEFAULT (bd kbi1), so a bare `--model 3.1` must fall BACK to AI
+        # Studio rather than fail on a default the user never chose -- an
+        # EXPLICIT --vertex with 3.1 is still a contradiction we refuse.
+        if "--vertex" in sys.argv:
+            print("--vertex is not available for --model 3.1: the 3.1 Live "
+                  "model has no Vertex id (AI-Studio-only as of 2026-06). "
+                  "Use --model 2.5, or --no-vertex with GEMINI_API_KEY.")
+            return 1
+        print("--model 3.1 has no Vertex id; falling back to the AI Studio "
+              "path (needs GEMINI_API_KEY).", flush=True)
+        args.vertex = False
+    if not args.vertex and not os.getenv("GEMINI_API_KEY"):
+        print("GEMINI_API_KEY not set; cannot run "
+              "(the AI Studio path needs a key; Vertex is the default -- "
+              "drop --no-vertex, or use --model 2.5).")
         return 1
     # --events unhappy is the E3 scenario and is meant to run on --path
     # unhappy globally (see the mix=0 comment below: "E3 runs --path unhappy
@@ -2985,12 +2994,20 @@ def main() -> int:
     ap.add_argument("--window", type=int, default=9_000,
                     help="sliding-window target_tokens; must exceed the SI "
                          "base for any evictable mass to exist")
-    ap.add_argument("--vertex", action="store_true",
-                    help="use Vertex AI via ADC (deploy-faithful; the AI Studio "
-                         "prepaid credits are depleted). Project/location from "
-                         "GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION, defaulting "
-                         "to the demo project. On 2.5 this also swaps to the "
-                         "Vertex model id (MODEL_NATIVE_STANDARD_VERTEX).")
+    # Vertex is the DEFAULT (bd polyglot-pdf-kbi1; AI Studio is not currently
+    # available to this project, so defaulting to the key path errored
+    # outright). --no-vertex keeps the AI-Studio route reachable for a
+    # deliberate run (e.g. future 3.1-Live experimentation on purchased
+    # credits), and 3.1 still REQUIRES it -- see the --model 3.1 guard in run().
+    ap.add_argument("--vertex", action=argparse.BooleanOptionalAction,
+                    default=True,
+                    help="use Vertex AI via ADC (DEFAULT; deploy-faithful). "
+                         "Project/location from GOOGLE_CLOUD_PROJECT / "
+                         "GOOGLE_CLOUD_LOCATION, defaulting to the demo "
+                         "project. On 2.5 this also swaps to the Vertex model "
+                         "id (MODEL_NATIVE_STANDARD_VERTEX). Pass --no-vertex "
+                         "with GEMINI_API_KEY for a deliberate AI Studio run "
+                         "(required for --model 3.1, which has no Vertex id).")
     ap.add_argument("--continuous", action="store_true",
                     help="ONE uninterrupted DTI session over the whole plan -- no "
                          "section resets (bd polyglot-pdf-ctu8 candidate arm). Only "
