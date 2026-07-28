@@ -2,6 +2,7 @@ import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
 import { checkFieldComplete } from '../utils/validation';
 import { effectiveStatus, getReview, isReviewTarget } from '../utils/reviewStatus';
+import { getIgnoredFields } from '../utils/ignoreField';
 import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
 import { isToReviewSection } from '../utils/sectionOps';
 import type { LintFinding } from '../utils/remoteKitStore';
@@ -29,6 +30,9 @@ interface FieldListProps {
   // whose pdf_position claims a page outside 1..pageCount earns its own amber
   // reason instead of silently painting nowhere. Absent until the PDF loads.
   pageCount?: number;
+  // Un-ignore a quarantined field (bd polyglot-pdf-mzkw). Absent -> the grey
+  // Ignored bucket renders read-only.
+  onRestoreField?: (fieldId: string) => void;
 }
 
 export const FieldList: React.FC<FieldListProps> = ({
@@ -44,7 +48,12 @@ export const FieldList: React.FC<FieldListProps> = ({
   onMergeFields,
   lintFindingsByField,
   pageCount,
+  onRestoreField,
 }) => {
+  // Quarantined fields (bd mzkw): read from the stash, rendered in their own
+  // grey group, and deliberately absent from every other list computation.
+  const ignoredEntries = React.useMemo(() => getIgnoredFields(schema), [schema]);
+  const [ignoredExpanded, setIgnoredExpanded] = React.useState(false);
   // Grouping UI is active only when the parent wired the merge callbacks.
   const groupingEnabled = !!onToggleGroupSelection;
   const groupSelectionSet = React.useMemo(() => new Set(groupSelection), [groupSelection]);
@@ -835,6 +844,80 @@ export const FieldList: React.FC<FieldListProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Ignored (grey) bucket -- quarantined fields (bd polyglot-pdf-mzkw).
+            Sourced from the _ignored_fields stash, NOT from schema.fields, so
+            these rows are deliberately outside visibleOrderedFields: the review
+            jump never stops on them and they count toward nothing. They stay
+            VISIBLE (and un-ignorable in one click) precisely because ignoring
+            is reversible -- an invisible escape hatch would be a delete. */}
+        {ignoredEntries.length > 0 && (
+          <div className="bg-white rounded-md shadow-sm opacity-75">
+            <button
+              className="w-full flex items-center gap-2 p-2 text-left hover:bg-gray-50 transition-colors"
+              onClick={() => setIgnoredExpanded(v => !v)}
+              aria-expanded={ignoredExpanded}
+            >
+              <svg
+                className={`w-4 h-4 text-gray-500 transition-transform ${
+                  ignoredExpanded ? 'transform rotate-90' : ''
+                }`}
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="text-sm font-medium flex-1 text-gray-500">
+                Ignored -- not on this form
+              </span>
+              <span className="text-xs text-gray-400">({ignoredEntries.length})</span>
+            </button>
+            {ignoredExpanded && (
+              <div className="border-t border-gray-100">
+                {ignoredEntries.map(entry => (
+                  <div
+                    key={entry.field.id}
+                    className="flex items-center gap-2 p-2 pl-5 text-sm"
+                    data-testid={`ignored-row-${entry.field.id}`}
+                  >
+                    <span
+                      title={entry.field._review?.note
+                        ? `Ignored: ${entry.field._review.note}`
+                        : 'Ignored -- set aside, not deleted'}
+                      data-testid={`field-status-${entry.field.id}`}
+                    >
+                      {/* Grey status dot: parked, neither done nor broken. */}
+                      <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </span>
+                    <span className="flex-1 truncate text-gray-500 font-mono text-xs">
+                      {entry.field.id}
+                    </span>
+                    {onRestoreField && (
+                      <button
+                        type="button"
+                        className="btn-sm btn-secondary"
+                        onClick={() => onRestoreField(entry.field.id)}
+                        title="Bring this field back to its original place"
+                      >
+                        Un-ignore
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

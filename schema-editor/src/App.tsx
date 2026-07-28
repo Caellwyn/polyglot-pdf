@@ -39,6 +39,10 @@ import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGroupin
 import {
   recoverSelectionAfterVanish, renameBlockReason, renameFieldId,
 } from './utils/fieldRename';
+import {
+  dependentsOf, describeIgnoreBlock, ignoreBlockReason, ignoreField,
+  restoreField,
+} from './utils/ignoreField';
 import { SectionManager } from './components/SectionManager';
 import type { DivisionsPatch } from './utils/sectionOps';
 import { useSchemaHistory } from './hooks/useSchemaHistory';
@@ -387,6 +391,30 @@ export const App: React.FC = () => {
     commitSchema(renameFieldId(schema, oldId, trimmed));
     setSelectedFieldId(prev => (prev === oldId ? trimmed : prev));
     return null;
+  }, [schema, commitSchema]);
+
+  // Quarantine a field into the _ignored_fields stash (bd polyglot-pdf-mzkw).
+  // Structural, so it cannot ride the single-field onUpdateField patch the
+  // review dropdown otherwise uses: it rewrites fields[], the section, AND the
+  // stash -- committed as ONE schema so a single Cmd+Z reverses it. Returns a
+  // human-readable block reason (the caller shows it) or null on success.
+  // Selection is dropped: the ignored field leaves fields[], so the editor
+  // pane would have nothing to render for it.
+  const handleIgnoreField = React.useCallback((fieldId: string): string | null => {
+    if (!schema) return 'No schema loaded.';
+    const reason = ignoreBlockReason(schema, fieldId);
+    if (reason) return describeIgnoreBlock(reason, dependentsOf(schema, fieldId));
+    commitSchema(ignoreField(schema, fieldId));
+    setSelectedFieldId(prev => (prev === fieldId ? null : prev));
+    return null;
+  }, [schema, commitSchema]);
+
+  // Un-ignore: restore a quarantined field to its exact former place and
+  // select it, so the author lands on what they just brought back.
+  const handleRestoreField = React.useCallback((fieldId: string) => {
+    if (!schema) return;
+    commitSchema(restoreField(schema, fieldId));
+    setSelectedFieldId(fieldId);
   }, [schema, commitSchema]);
 
   // Update form-level metadata (version, edition, OMB, expiration -- bd
@@ -1185,6 +1213,7 @@ export const App: React.FC = () => {
                 onMergeFields={handleMergeFields}
                 lintFindingsByField={lintFindingsByField}
                 pageCount={pdfPageCount}
+                onRestoreField={handleRestoreField}
               />
             </div>
           </div>
@@ -1248,6 +1277,14 @@ export const App: React.FC = () => {
                       : undefined
                   }
                   pageCount={pdfPageCount}
+                  onIgnoreField={handleIgnoreField}
+                  ignoreBlocked={(() => {
+                    if (!selectedField) return null;
+                    const reason = ignoreBlockReason(schema, selectedField.id);
+                    return reason
+                      ? describeIgnoreBlock(reason, dependentsOf(schema, selectedField.id))
+                      : null;
+                  })()}
                   onUpdateField={handleUpdateField}
                   onRenameField={handleRenameField}
                   onUnmergeField={handleUnmergeField}
