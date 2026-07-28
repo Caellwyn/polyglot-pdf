@@ -666,6 +666,27 @@ class TestCost:
         assert c["subagent_total"] == 15.0      # sonnet output 15/MTok
         assert c["unpriced_models"] == []
 
+    def test_5_series_models_are_priced_not_unpriced(self):
+        # Opus 5 / Sonnet 5 are the current default tiers for code production and
+        # subagents (bd polyglot-pdf-sw8h). They MUST be priced -- an unpriced id
+        # is silently costed at $0, which would under-report exactly the sessions
+        # we now run most. Dated ids resolve via longest-prefix match.
+        c = ledger.compute_cost({
+            "orchestrator": {"claude-opus-5": {"output_tokens": 1_000_000}},
+            "subagent": {"claude-sonnet-5-20260701": {"output_tokens": 1_000_000}},
+        })
+        assert c["orchestrator_total"] == 25.0  # opus 5 output 25/MTok
+        assert c["subagent_total"] == 15.0      # sonnet 5 output 15/MTok (standard, not intro)
+        assert c["unpriced_models"] == []
+
+    def test_opus_5_not_shadowed_by_4_series_prefixes(self):
+        # Guards the longest-prefix resolver: "claude-opus-5" must not collide
+        # with any "claude-opus-4-*" key, and vice versa.
+        assert ledger._price_for_model("claude-opus-5")["input"] == 5.00
+        assert ledger._price_for_model("claude-sonnet-5")["input"] == 3.00
+        assert ledger._price_for_model("claude-sonnet-4-6")["input"] == 3.00
+        assert ledger._price_for_model("claude-fable-5")["input"] == 10.00
+
     def test_unknown_model_is_zero_and_flagged_not_crash(self):
         c = ledger.compute_cost(
             {"orchestrator": {"claude-mystery-9": {"output_tokens": 1_000_000}}}

@@ -141,5 +141,5 @@ def test_provider_rejects_non_gemini_model_before_any_client(
     provider, calls = provider_with_stubbed_genai
     monkeypatch.setenv("VERTEXAI", "true")
     with pytest.raises(ValueError, match="gemini"):
-        provider.run("prompt", "claude-opus-4-8", None)
+        provider.run("prompt", "claude-opus-5", None)
     assert "client_kwargs" not in calls  # never reached the SDK

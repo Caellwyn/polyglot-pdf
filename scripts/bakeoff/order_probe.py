@@ -315,7 +315,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--truth", required=True)
     ap.add_argument("--pages", required=True, help="comma-separated 0-based pages")
     ap.add_argument("--outdir", required=True)
-    ap.add_argument("--model", default="claude-opus-4-8")
+    ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--dpi", type=int, default=150)
     ap.add_argument("--blind-legend", action="store_true",
                     help="hide field NAMES from the legend so the model must "

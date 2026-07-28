@@ -172,7 +172,7 @@ class GeminiProvider:
     def run(self, prompt: str, model: str, pdf_path: Optional[str]) -> ProviderResult:
         # Fail loud on a non-Gemini model name routed here (Codex r2) BEFORE any
         # SDK import/network call: with EXTRACTOR_PROVIDER=gemini but no --model,
-        # the default "claude-opus-4-8" would otherwise be sent to google-genai,
+        # the default "claude-opus-5" would otherwise be sent to google-genai,
         # which rejects it with an opaque error. Tell the caller how to fix it.
         if not model.lower().startswith("gemini"):
             raise ValueError(
