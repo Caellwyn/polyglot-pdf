@@ -46,6 +46,13 @@ Rules (stable ids; one finding per violation site):
 - dump-widget-unclaimed WARNING (dump only) a fillable PDF widget that NO field
                                 maps to (extraction dropped it -- unfillable
                                 through the app); buttons + barcodes excluded
+- field-unbacked        ERROR   (source=pdf) a field whose type carries its OWN
+                                widget identity but has NO pdf_field_name at
+                                all -- un-fillable, un-verifiable, un-fixable
+                                (bd polyglot-pdf-xazf; needs no dump)
+- field-claim-unresolvable ERROR (dump only) a field/option pdf_field_name that
+                                resolves to ZERO dump widgets -- previously
+                                silently DROPPED by the claims walk (bd xazf)
 - readonly-conditional-no-unlock WARNING a read_only field shown/required by a
                                 condition but with no unlock_method -- it is
                                 permanently non-fillable when shown
@@ -104,6 +111,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.models import conditional_vocabulary as vocab
 from backend.services import guidance_contract
+# Single source for "which field types legitimately carry NO field-level
+# pdf_field_name" (identity lives per-option/column/slot) -- shared with the
+# repair pass's no-name check so the two ledger gates can never drift
+# (bd polyglot-pdf-l1a9 / xazf). Import is cycle-safe: schema_repair imports
+# only vocab/form_models/controls_fields_mirror, never this module.
+from backend.services.schema_repair import FIELD_LEVEL_NAME_EXEMPT_TYPES
 
 SEVERITY_ERROR = "ERROR"
 SEVERITY_WARNING = "WARNING"
@@ -637,6 +650,67 @@ def _check_dump_claims(
         ))
 
 
+def _check_field_backing(
+    fields: List[Dict[str, Any]],
+    schema: Dict[str, Any],
+    dump: Optional[Dict[str, Any]],
+    out: List[LintFinding],
+) -> None:
+    """The publish-gate ledger backstop (bd polyglot-pdf-xazf, sprint 17).
+
+    Extraction-time repair hard-fails these defects (bd l1a9), but a HUMAN can
+    reintroduce either into a stored draft after repair passed -- so the
+    mark-complete gate must catch them too.
+
+    field-unbacked (ERROR, schema-only -- fires with NO dump): a source=pdf
+    field whose type carries its own widget identity (outside
+    FIELD_LEVEL_NAME_EXEMPT_TYPES) but has no pdf_field_name at all.
+
+    field-claim-unresolvable (ERROR, DUMP-GATED): a field/option claim that
+    resolves to zero dump widgets -- _check_dump_claims' register() walk
+    silently drops these (its claims map only ever gains RESOLVED names), which
+    is exactly how the original phantom-field confusion stayed invisible. Like
+    every dump-* rule, this is structurally silent on the dump-less /lint
+    route (it POSTs a bare schema, no kit id -- accepted asymmetry); the
+    mark-complete gate loads the kit dump and is the enforcing call site.
+    """
+    is_pdf = str(schema.get("source")) == "pdf"
+    if is_pdf:
+        for i, f in enumerate(fields):
+            if str(f.get("type")) in FIELD_LEVEL_NAME_EXEMPT_TYPES:
+                continue
+            if not f.get("pdf_field_name"):
+                out.append(LintFinding(
+                    SEVERITY_ERROR, "field-unbacked",
+                    f"fields[{i}] (id={f.get('id')})",
+                    f"field {f.get('id')!r} (type={f.get('type')!r}) names no "
+                    "PDF widget at all -- it can never be filled or verified; "
+                    "bind it to a real widget or mark it ignored",
+                ))
+
+    if dump is None:
+        return
+    dump_names = _dump_names(dump)
+    if not dump_names:
+        return
+    for i, f in enumerate(fields):
+        claims: List[Tuple[Any, str]] = [(f.get("pdf_field_name"), "field")]
+        options = f.get("options")
+        if isinstance(options, list):
+            for j, o in enumerate(options):
+                if isinstance(o, dict):
+                    claims.append((o.get("pdf_field_name"), f"option[{j}]"))
+        for claim, kind in claims:
+            if (isinstance(claim, str) and claim
+                    and not _match_dump_names(claim, dump_names)):
+                out.append(LintFinding(
+                    SEVERITY_ERROR, "field-claim-unresolvable",
+                    f"fields[{i}] (id={f.get('id')}) {kind}",
+                    f"pdf_field_name {claim!r} resolves to zero AcroForm "
+                    "widgets in this PDF -- the claim points at nothing",
+                ))
+
+
 # ---------------------------------------------------------------------------
 # Entry point.
 # ---------------------------------------------------------------------------
@@ -835,6 +909,10 @@ def lint_schema(
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)
+
+    # Ledger backstop (bd xazf): field-unbacked fires dump-less; the
+    # unresolvable-claim half is dump-gated inside (accepted dump-* asymmetry).
+    _check_field_backing(fields, schema, dump, out)
 
     return out
 

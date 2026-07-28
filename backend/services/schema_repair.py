@@ -48,6 +48,22 @@ from backend.services import controls_fields_mirror as cfm
 
 _CHOICE_TYPES = frozenset({"select", "radio", "checkbox_group"})
 _GROUP_MEMBERSHIP_TYPES = frozenset({"checkbox_group", "checkbox"})
+
+# Field types whose widget identity legitimately lives BELOW the field level --
+# per-option (choice types), per-column (table), or per-slot (address_group) --
+# so a missing FIELD-level pdf_field_name is not a defect for them. Everything
+# else on a source=pdf schema must name its own widget: a field with no widget
+# ref at all is un-fillable and un-verifiable, and a human cannot fix it in the
+# editor (there is nothing to bind it to) -- the sprint-17 MUST-FIX invariant
+# (bd polyglot-pdf-l1a9; epic did2). Shared with schema_lint's field-unbacked
+# rule (bd polyglot-pdf-xazf) -- single source, no drift. NOTE: table and
+# address_group are enumerated-but-unverified exemptions (zero instances in
+# current kits); re-check the first time either appears in a real extraction.
+FIELD_LEVEL_NAME_EXEMPT_TYPES = frozenset({
+    "select", "radio", "checkbox_group",  # per-option identity
+    "table",                              # per-column identity (TableColumn)
+    "address_group",                      # per-slot identity (address_fields)
+})
 _NO_VALUE_OPS = frozenset(
     n for n, s in vocab.OPERATORS.items() if s.value_arity == "none"
 )
@@ -587,6 +603,37 @@ def _check_widgets_exist(fields: List[dict], dump: dict) -> None:
             "invent mappings): " + "; ".join(hallucinated[:10]))
 
 
+def _check_no_name_non_choice(fields: List[dict], is_pdf: bool) -> None:
+    """A source=pdf field of a type that carries its OWN widget identity
+    (everything outside FIELD_LEVEL_NAME_EXEMPT_TYPES) but has NO
+    pdf_field_name at all is un-fillable, un-verifiable, and un-fixable by a
+    human in the editor -- the ledger gap _check_widgets_exist cannot see (it
+    only checks claims that EXIST). Fail loudly, same contract as the
+    hallucinated-widget check: repair must never paper over a phantom field
+    (bd polyglot-pdf-l1a9; the W-7 'phantom signature fields' epic). Runs
+    AFTER checkbox-shape normalization so a lone-option checkbox whose name
+    legitimately lives on its option (and gets lifted to the field) is not a
+    false positive. type=signature is deliberately NOT exempt: the
+    deterministic dump maps a real signature widget to `text`, so a
+    signature-typed field is always an LLM inference -- name-less means it
+    invented a field with nothing behind it."""
+    if not is_pdf:
+        return
+    unnamed = []
+    for f in fields:
+        if not isinstance(f, dict):
+            continue
+        if str(f.get("type")) in FIELD_LEVEL_NAME_EXEMPT_TYPES:
+            continue
+        if not f.get("pdf_field_name"):
+            unnamed.append(f"{f.get('id')} (type={f.get('type')})")
+    if unnamed:
+        raise RepairError(
+            "draft has field(s) with no PDF widget name at all -- repair "
+            "cannot invent one (the extraction should have named or refused "
+            "these): " + "; ".join(unnamed[:10]))
+
+
 # --------------------------------------------------------------------------- #
 # Step 4: strict-model validity fixes the LLM keeps getting wrong
 # (bd polyglot-pdf-n3mn -- surfaced by the 6s71 paid verification run).
@@ -896,6 +943,13 @@ def repair(schema: dict, dump: Optional[dict] = None) -> Tuple[dict, List[dict]]
                 if isinstance(s, dict)]
     _retarget_unwrapped_conditions(fields, sections, standalone_old_value,
                                    repairs)
+
+    # Ledger gap the hallucination check cannot see: a field with NO widget
+    # name at all (bd polyglot-pdf-l1a9). AFTER checkbox normalization (which
+    # lifts a lone option's name onto its field) so the legitimate lone-option
+    # idiom is not a false positive. Schema-only -- needs no dump.
+    _check_no_name_non_choice(fields,
+                              str(repaired.get("source", "")) == "pdf")
 
     resolution = _mint_slugs(fields, repairs)
     fields_by_id = {str(f.get("id")): f for f in fields}

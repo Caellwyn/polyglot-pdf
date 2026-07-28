@@ -33,7 +33,7 @@ def test_broken_schema_reports_findings_as_plain_dicts():
     schema = {
         "source": "pdf",
         "fields": [
-            {"id": "dep", "type": "text",
+            {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
              "show_if": {"field": "ghost", "operator": "is_selected"}},
         ],
     }
@@ -62,7 +62,7 @@ def test_repair_schema_report_counts_exclude_the_summary_entry():
                 {"value": "alpha", "label": "Alpha", "pdf_field_name": "a[0]"},
                 {"value": "beta", "label": "Beta", "pdf_field_name": "b[0]"},
             ]},
-            {"id": "dep", "type": "text",
+            {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
              "show_if": {"field": "grp", "operator": "is_selected",
                          "value": "alpha"}},
         ],

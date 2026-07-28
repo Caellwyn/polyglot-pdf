@@ -117,7 +117,7 @@ def test_repair_is_idempotent_on_both_fixtures():
 def test_unknown_operator_is_dropped_with_recorded_error():
     fields = [
         _group(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "sparkles", "value": "alpha"}},
     ]
     repaired, repairs = repair(_schema(fields))
@@ -134,7 +134,7 @@ def test_unknown_operator_is_dropped_with_recorded_error():
 def test_unresolvable_value_drops_the_condition():
     fields = [
         _group(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "includes", "value": "ghost"}},
     ]
     repaired, repairs = repair(_schema(fields))
@@ -158,7 +158,7 @@ def test_is_selected_aliases_to_registry_valid_membership():
     for ftype in ("checkbox_group", "checkbox"):
         fields = [
             _group(ftype=ftype),
-            {"id": "dep", "type": "text",
+            {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
              "show_if": {"field": "grp", "operator": "is_selected",
                          "value": "alpha"}},
         ]
@@ -173,7 +173,7 @@ def test_is_selected_aliases_to_registry_valid_membership():
 def test_contains_any_becomes_any_of_membership():
     fields = [
         _group(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "contains_any",
                      "value": ["alpha[0]", "beta[0]"]}},  # widget-leaf values
     ]
@@ -191,7 +191,7 @@ def test_or_pseudo_group_with_option_id_resolves():
     # value: "1", option_id: <widget path>}]}.
     fields = [
         _group(ftype="radio"),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"operator": "or", "conditions": [
              {"field": "grp", "operator": "equals", "value": "1",
               "option_id": "top[0].alpha[0]"},
@@ -215,7 +215,7 @@ def test_unresolvable_option_id_drops_instead_of_guessing_via_value():
     rewire the condition."""
     fields = [
         _group(ftype="radio"),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"operator": "or", "conditions": [
              # option_id names a widget that is not one of grp's options,
              # while value happens to equal a VALID sibling slug.
@@ -234,7 +234,7 @@ def test_unresolvable_option_id_drops_instead_of_guessing_via_value():
 def test_contains_on_group_trigger_gets_membership_reading():
     fields = [
         _group(ftype="checkbox"),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "contains", "value": "alpha"}},
     ]
     repaired, _ = repair(_schema(fields))
@@ -257,7 +257,7 @@ def test_slug_minting_rewrites_conditional_references():
             {"value": "1", "label": "First Reason", "pdf_field_name": "c1[0]"},
             {"value": "1", "label": "Second Reason", "pdf_field_name": "c2[0]"},
         ]},
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "includes", "value": "c2[0]"}},
     ]
     repaired, repairs = repair(_schema(fields))
@@ -279,7 +279,7 @@ def test_colliding_alias_never_mis_resolves():
             {"value": "1", "label": "First Reason", "pdf_field_name": "c1[0]"},
             {"value": "1", "label": "Second Reason", "pdf_field_name": "c2[0]"},
         ]},
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "includes", "value": "1"}},
     ]
     repaired, repairs = repair(_schema(fields))
@@ -300,7 +300,7 @@ def test_colliding_labels_also_drop_ambiguous_references():
             {"value": "opt_a", "label": "Other", "pdf_field_name": "c1[0]"},
             {"value": "opt_b", "label": "Other", "pdf_field_name": "c2[0]"},
         ]},
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "includes", "value": "Other"}},
     ]
     repaired, repairs = repair(_schema(fields))
@@ -340,6 +340,66 @@ def test_repair_never_mutates_its_input():
     snapshot = copy.deepcopy(original)
     repair(original)
     assert original == snapshot
+
+
+# --------------------------------------------------------------------------- #
+# No-name ledger check (bd polyglot-pdf-l1a9): a source=pdf field whose type
+# carries its OWN widget identity but has no pdf_field_name at all is a
+# phantom -- un-fillable, un-verifiable, un-fixable. RepairError, never a
+# silent pass. Exempt types (identity lives below the field level) pass.
+# --------------------------------------------------------------------------- #
+
+def _named_text(fid="named", name="topmost[0].f1_01[0]"):
+    return {"id": fid, "type": "text", "pdf_field_name": name}
+
+
+def test_no_name_text_and_signature_raise():
+    fields = [
+        _named_text(),
+        {"id": "ghost_text", "type": "text"},
+        {"id": "ghost_sig", "type": "signature"},
+    ]
+    with pytest.raises(RepairError) as exc:
+        repair(_schema(fields))
+    msg = str(exc.value)
+    assert "ghost_text" in msg and "ghost_sig" in msg
+    assert "no PDF widget name" in msg
+
+
+def test_no_name_exempt_types_pass():
+    # Identity lives below the field level for these: options (choice types),
+    # columns (table), slots (address_group) -- a missing FIELD-level name is
+    # legitimate, not a phantom.
+    fields = [
+        _group(),  # checkbox_group with per-option names, no field-level name
+        {"id": "tbl", "type": "table",
+         "columns": [{"id": "c1", "pdf_field_name": "t[0].c1[0]"}]},
+        {"id": "addr", "type": "address_group",
+         "address_fields": {"street": "street_f"}},
+        _named_text("street_f", "topmost[0].street[0]"),
+    ]
+    repaired, _ = repair(_schema(fields))
+    assert [f["id"] for f in repaired["fields"]] == [
+        "grp", "tbl", "addr", "street_f"]
+
+
+def test_no_name_check_skipped_for_non_pdf_source():
+    fields = [{"id": "ghost", "type": "text"}]
+    repaired, _ = repair({"source": "web", "fields": fields})
+    assert repaired["fields"][0]["id"] == "ghost"
+
+
+def test_lone_option_checkbox_lift_still_passes_no_name_check():
+    # A checkbox with exactly one named option is the legitimate lone-option
+    # idiom: normalization lifts the option's name onto the field BEFORE the
+    # no-name check runs, so it must not false-positive.
+    fields = [{
+        "id": "consent", "type": "checkbox",
+        "options": [{"value": "yes", "label": "Yes",
+                     "pdf_field_name": "top[0].consent[0]"}],
+    }]
+    repaired, _ = repair(_schema(fields))
+    assert repaired["fields"][0]["pdf_field_name"] == "top[0].consent[0]"
 
 
 # --------------------------------------------------------------------------- #

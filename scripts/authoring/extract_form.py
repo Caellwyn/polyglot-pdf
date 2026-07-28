@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import tempfile
+from datetime import datetime, timezone
 
 import fitz  # PyMuPDF -- page-1 text + doc.metadata for version extraction.
 
@@ -805,6 +806,73 @@ def _normalize_for_schema(schema: dict) -> dict:
     return schema
 
 
+# Extractor identity stamped into extraction_info (bd polyglot-pdf-l1a9). Bump
+# on a breaking change to the pipeline's output shape, not on routine edits.
+EXTRACTOR_VERSION = "extract_form-v1"
+
+
+def _stamp_extraction_info(schema: dict) -> None:
+    """Stamp fresh extraction provenance (bd polyglot-pdf-l1a9).
+
+    No modern writer existed for extraction_info (only the retired
+    prior_extractor stamped placeholders), so every extracted kit failed the
+    publish gate's "extraction_info required for PDF forms" check (HTTP 422 at
+    mark-complete) -- the actual W-7 blocker the sprint-17 forensics found.
+    Always stamped fresh: a new extraction IS new provenance.
+
+    extraction_confidence uses the documented 0.0 = "not a measured quantity"
+    convention: the ledger (field<->widget claims) is deterministic, but the
+    LLM's labels always need human review -- which is what
+    manual_review_required=True states. The model has no unknown-sentinel for
+    the float (changing it is out of sprint-17 scope).
+    """
+    schema["extraction_info"] = {
+        "extracted_at": datetime.now(timezone.utc).isoformat(),
+        "extraction_confidence": 0.0,
+        "extractor_version": EXTRACTOR_VERSION,
+        "manual_review_required": True,
+    }
+
+
+def _check_dump_coverage(schema: dict, dump: dict | None) -> list[str]:
+    """Fillable dump widgets claimed by NO field/option, post-backfill (bd
+    polyglot-pdf-l1a9).
+
+    _backfill_unclaimed_widgets deterministically claims every fillable widget
+    the LLM missed, so by the time this runs an unclaimed fillable widget means
+    the PIPELINE itself failed -- fail loudly (the caller records it, prints
+    COVERAGE-FAILED, and the tri-state exit classifies the draft as ISSUES),
+    never ship it silently. Buttons/barcodes are excluded via schema_lint's
+    is_fillable_widget, and claims resolve with the same exact-or-dot-suffix
+    rule as the lint dump rules (_match_dump_names) -- one matching convention,
+    no drift. Returns sorted unclaimed names; [] when covered OR when the dump/
+    lint module is unavailable (same graceful-import contract as the sibling
+    helpers)."""
+    if not dump:
+        return []
+    try:
+        sys.path.insert(0, _REPO)
+        from backend.services.schema_lint import (  # noqa: E402
+            _match_dump_names, is_fillable_widget,
+        )
+    except Exception:  # pragma: no cover - env-dependent
+        return []
+    names = [e.get("name") for e in (dump.get("fields") or [])
+             if isinstance(e, dict) and isinstance(e.get("name"), str)]
+    claimed: set[str] = set()
+    for f in (schema.get("fields") or []):
+        if not isinstance(f, dict):
+            continue
+        for claim in [f.get("pdf_field_name")] + [
+            o.get("pdf_field_name") for o in (f.get("options") or [])
+            if isinstance(o, dict)
+        ]:
+            if isinstance(claim, str) and claim:
+                claimed.update(_match_dump_names(claim, names))
+    return sorted(n for n in names
+                  if n not in claimed and is_fillable_widget(dump, n))
+
+
 def _validate_schema(schema: dict) -> tuple[bool, str]:
     """Validate the draft against the canonical Pydantic FormSchema, if importable.
 
@@ -1194,6 +1262,16 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     _normalize_for_schema(schema)
     schema, repair_report = _repair_schema(schema, dump_data)
 
+    # 4b. Post-backfill coverage ledger (bd polyglot-pdf-l1a9): every fillable
+    #     dump widget must be claimed by SOME field/option. Backfill (3d) claims
+    #     everything the LLM missed, so anything unclaimed HERE means the
+    #     pipeline itself failed -- loud stderr + provenance record; the
+    #     tri-state exit classifies the draft as ISSUES (never a silent ship).
+    unclaimed_fillable = _check_dump_coverage(schema, dump_data)
+    if unclaimed_fillable:
+        print("COVERAGE-FAILED: fillable widgets claimed by no field: "
+              + "; ".join(unclaimed_fillable[:10]), file=sys.stderr)
+
     # 3f. Bake option label_translations for the supported spoken languages
     #     (bd polyglot-pdf-2h9j). After repair so translations key off the
     #     final labels, before validate/lint so the validated artifact is the
@@ -1213,6 +1291,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
                        if enrich_guidance else {"skipped": "disabled"})
     instructions_enriched = guidance_report.get("fallback_enriched", 0)
 
+    # 4c. Extraction provenance (bd polyglot-pdf-l1a9): stamped BEFORE validate
+    #     so the validated artifact is the stored artifact -- absence of this
+    #     stanza is exactly what 422'd every kit at the publish gate.
+    _stamp_extraction_info(schema)
+
     ok, detail = _validate_schema(schema)
     lint_report = _lint_schema(schema, dump_data)
     schema.setdefault("_bakeoff", {})["authoring"] = {
@@ -1226,6 +1309,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         "instructions_enriched": instructions_enriched,
         "group_completion": group_completion,
         "widgets_backfilled": widgets_backfilled,
+        # Post-backfill coverage ledger (bd l1a9): [] on a healthy run; any
+        # entry is a pipeline failure the exit code surfaces as ISSUES.
+        "coverage": {"unclaimed_fillable": unclaimed_fillable},
         # The derived-division record (bd 6cfu.2): strategy + cap actually
         # used, and the 'To review' section/field ids the editor gates on.
         "division": division,
@@ -1350,7 +1436,16 @@ def _classify_exit(schema: dict) -> int:
     valid = bool(authoring.get("schema_valid"))
     lint = authoring.get("lint") or {}
     lint_errors = lint.get("errors", 0) or 0
-    if valid and lint_errors == 0:
+    # A failed repair (RepairError degraded to a report -- e.g. hallucinated
+    # widgets, no-name fields) or a post-backfill coverage failure is an ISSUES
+    # draft even when Pydantic validates and lint shows no ERROR -- both were
+    # previously invisible to this classification, so a draft that failed
+    # repair could exit 0 VALID (bd polyglot-pdf-l1a9).
+    repair_failed = bool((authoring.get("repair") or {}).get("failed"))
+    coverage_gap = bool(
+        ((authoring.get("coverage") or {}).get("unclaimed_fillable")) or []
+    )
+    if valid and lint_errors == 0 and not repair_failed and not coverage_gap:
         return EXIT_VALID
     return EXIT_ISSUES
 
