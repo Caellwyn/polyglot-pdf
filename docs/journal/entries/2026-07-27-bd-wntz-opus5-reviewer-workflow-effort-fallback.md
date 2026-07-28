@@ -100,6 +100,58 @@ bead. Two `stronger tier` mentions describing the bd `bo4m` regression were
 likewise left intact -- there, a stronger tier genuinely did catch what Sonnet
 missed.
 
+## The fresh-eyes round (what the first draft got wrong)
+
+The pre-PR assessor returned `GAPS-FOUND (8)` on the first draft and was right
+about seven of them. The valuable ones were not typos -- they were **rule
+conflicts**, the failure mode that matters most when the artifact IS a set of
+instructions:
+
+- **The fallback was scoped to the Opus reviewer (Step 5.6) only, but Step 5.5
+  spawns subagents first** -- at haiku/sonnet, plus a mandated Opus final round.
+  All are non-Fable spawns that die identically. A Fable-at-`xhigh` closeout would
+  have blocked at Step 5.5 and never reached the fallback. Fixed by restating the
+  rule scope-neutrally: every Agent-tool spawn, any model, both steps.
+- **Two standing rules contradicted the new one.** The skill's "Hard rules"
+  (read-before-anything) and Step 5.6's verdict list both say a subagent
+  TIMEOUT/ERROR is "a genuine stop -- surface it," and the latter added "there is
+  no further fallback," which the new block made false. An orchestrator reading
+  top-down would escalate the exact failure this bead exists to absorb. Both now
+  carry the effort-400 carve-out.
+- **The three copies of the rule were not equivalent** -- the SKILL.md copy (the
+  file CLAUDE.md calls the source of truth) was missing the "not a `BLOCKED`
+  verdict, does not escalate" clause that the other two had.
+- **No terminal branch.** The fallback read as unconditionally curative; combined
+  with "do not escalate," an orchestrator whose wrapped retry also failed had no
+  instruction, and the nearest one said not to stop. All three copies now end with:
+  if the wrapped retry also fails, that IS a genuine stop.
+- **A third historical-tense error** at `review-flow.md:135` -- the same sed
+  damage as the two already fixed, missed because the initial verification grep
+  was too narrow. The reviewer found it; my own check had returned a false
+  all-clear.
+- **A tier claim that contradicted bd dgoa.** The rewritten rationale still opened
+  with "a tier above the Sonnet fresh-eyes that cleared the rubric" -- but dgoa
+  requires the *clearing* fresh-eyes round to run on Opus, so the pass that clears
+  is not Sonnet. Reworded to drop tier superiority entirely.
+- **An over-claim about tiering.** The draft asserted "code production moved to
+  Opus 5" as settled fact, but the canonical tiering table (`planning.md:137`,
+  CLAUDE.md) still says Sonnet for execution. Rather than unilaterally rewrite the
+  tiering doctrine (a maintainer call, not this bead's scope), the claim was
+  softened to the conditional that is actually true: "when the author ran on Opus,
+  the outer reviewer is the same tier."
+
+Every finding was verified against the files before being acted on rather than
+taken on faith. That mattered in one case in the reviewer's favour: my first
+check of finding 4 used too narrow a grep and appeared to refute it, and only a
+wider read confirmed the reviewer was right. The lesson cuts both ways -- verify
+the reviewer, but verify your own refutation just as hard.
+
+The `scripts/` docstrings (finding 5) were outside the bead's enumerated file list but
+inside criterion 2's wording, and are current-state prose, so they were renamed
+too, along with stale comments in `tests/test_closeout_skill.py`.
+`tests/test_pr_review_watcher.py:1456` was deliberately left saying "Opus-4.8" --
+it describes the retired Codex-era fallback, which genuinely was 4.8.
+
 ## Scar tissue
 
 - **A model-name rename is not a safe find-and-replace in a repo that keeps a

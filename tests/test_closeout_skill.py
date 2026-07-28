@@ -12,7 +12,7 @@ body invariants that, if broken, would silently change how the skill runs:
   - It must reference the deterministic scripts it wraps (the three step-2
     scripts + check_doc_freshness), so a rename without a skill update is caught.
   - It must encode the Claude-only review flow (2026-07-08): a Sonnet/Haiku
-    fresh-eyes inner loop (pre-PR, looped to NO-GAPS) and an Opus-4.8 outer review
+    fresh-eyes inner loop (pre-PR, looped to NO-GAPS) and an Opus-5 outer review
     (two independent clearing passes), then open a non-draft PR and make the merge
     decision: auto-merge a routine low-risk PR that reviewed CLEAN, else ping the
     maintainer for a consequence-bearing one (bd 16pj). There is NO external
@@ -116,7 +116,7 @@ def test_covers_doc_freshness_step(skill_text):
 
 def test_opens_normal_pr_and_claude_reviews(body):
     # The flow opens a NORMAL PR and reviews it entirely with Claude: a fresh-eyes
-    # inner loop (pre-PR) and an Opus-4.8 outer review. Pin against the BODY so the
+    # inner loop (pre-PR) and an Opus-5 outer review. Pin against the BODY so the
     # operative instruction is checked, not a description mention.
     lo = body.lower()
     assert "gh pr create" in body
@@ -143,12 +143,12 @@ def test_no_draft_pr(body):
 
 
 def test_outer_review_loops_until_clean(body):
-    # The Opus-4.8 outer review is not one-shot: fix -> re-spawn until two
+    # The Opus-5 outer review is not one-shot: fix -> re-spawn until two
     # independent Opus passes both clear (NO-GAPS on the identical diff). Assert
     # against the BODY so the operative loop instruction is pinned. Review is
     # entirely Claude-based -- there is NO external reviewer and NO bot-trigger.
     lo = body.lower()
-    assert "opus" in lo, "skill body must name the Opus-4.8 outer reviewer"
+    assert "opus" in lo, "skill body must name the Opus-5 outer reviewer"
     assert re.search(r"(until|loop)[^\n]*(clean|no-gaps)", lo), \
         "skill body must loop the outer review until it clears"
     assert "two independent" in lo, \

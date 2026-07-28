@@ -41,7 +41,7 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 - **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. BOTH review layers run PRE-PR: the fresh-eyes inner loop (Step 5.5) and the Opus-5 outer review (Step 5.6, review-worthy PRs only), both looped to clean on the LOCAL branch. Only then does Step 6 open the PR, close the bead(s), and make the merge decision (Step 6.2): a routine low-risk PR that reviewed CLEAN auto-merges; a consequence-bearing one is pinged to the maintainer. Do NOT idle waiting for a "go" to open the PR.
 - **NEVER use a draft PR + ready-flip.** A draft adds a state flip for no benefit. Always open normal.
 - **Merge is autonomous for routine low-risk PRs; the maintainer's for consequence-bearing ones (autonomy increase 2026-07-04).** Once the review is CLEAN and CI is green, apply the auto-merge rule (CLAUDE.md "Auto-merge vs. maintainer merge"): if the PR is NOT consequence-bearing, **run `gh pr merge` yourself** (Step 6.2). If it IS consequence-bearing -- proves the bead direction impossible / substantially changes an approved plan / affects operational cost / affects user-facing features / risks downstream disruption / needs substantial multi-surface rework -- do NOT merge; **ping the maintainer** that the PR is clean and ready for their merge. When unsure which side of the line, treat it as consequence-bearing and ping. Force-push and `bd dolt push --force` stay barred regardless.
-- **Loop the Opus-5 outer review until two independent passes both clear (PRE-PR, only if review-worthy).** This runs on the LOCAL branch BEFORE the PR opens (Step 5.6). After a fix, re-spawn the Opus reviewer on the updated local diff; a fix found by EITHER of the two independent reviews invalidates both clears and re-runs both. The review is CLEAN only when two independent Opus passes (the primary looped review + a second independent confirming review -- fresh Opus, or Sonnet if a 2nd Opus is unavailable) both return `NO-GAPS` on the identical final diff. The reviewers are **subagents whose STATUS lines you read directly** -- there is no bot watcher. **Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean** -- surface it (a failure of the last-resort reviewer is a genuine stop). A change that skipped review per the Step 5.6 gate has no outer loop at all.
+- **Loop the Opus-5 outer review until two independent passes both clear (PRE-PR, only if review-worthy).** This runs on the LOCAL branch BEFORE the PR opens (Step 5.6). After a fix, re-spawn the Opus reviewer on the updated local diff; a fix found by EITHER of the two independent reviews invalidates both clears and re-runs both. The review is CLEAN only when two independent Opus passes (the primary looped review + a second independent confirming review -- fresh Opus, or Sonnet if a 2nd Opus is unavailable) both return `NO-GAPS` on the identical final diff. The reviewers are **subagents whose STATUS lines you read directly** -- there is no bot watcher. **Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean** -- surface it (a failure of the last-resort reviewer is a genuine stop). **One exception:** an effort-unsupported `400` on the spawn ITSELF is a transport failure, not a missing verdict -- take the effort-400 Workflow fallback in Step 5.6 (it applies to every spawn in Steps 5.5 and 5.6) and do NOT surface it, unless the wrapped retry also fails. A change that skipped review per the Step 5.6 gate has no outer loop at all.
 - **The outer review is read directly, not watched by a script.** `pr_review_watcher.py` was the GitHub-bot (Codex) path and is retired -- do NOT launch it for the outer review. There is no background watch to leave running, no `--since` floor, no ack window.
 - **All beads writes go through `scripts/bd_safe.py`** (or direct `bd` with pull/push bracketing). Beads writes are main-thread only -- that's you, the orchestrator, not a subagent.
 - **Run every git command with `git -C "<worktree-abs-path>"`** if you're in a worktree -- a bare `cd` can land you in the main repo's checkout (the shell cwd resets between tool calls).
@@ -323,6 +323,11 @@ THEN proceed to Step 6 (open the PR).
      `model: sonnet`; count it for `--haiku-escalations`.
    - **A subagent TIMEOUT/ERROR** (no verdict returned) -> **surface to the
      maintainer; NEVER silently skip the assess.** Silence is not `NO-GAPS`.
+     **Exception -- the effort-400:** if the spawn itself failed with an
+     effort-unsupported `400` (see the effort-400 fallback in Step 5.6, which
+     applies to these Step 5.5 spawns too, at haiku/sonnet/opus alike), that is a
+     transport failure -- retry it wrapped in a one-agent Workflow with
+     `effort: 'high'` and carry on; surface only if the wrapped retry also fails.
 4. **Loop-stop rule -- OUTCOME-based, no round cap** (maintainer directive
    2026-07-04; the former `MAX_FRESH_EYES_ROUNDS = 3` is retired). Keep spawning
    fresh-eyes and fixing as long as each round's gaps are **correct and blocking.**
@@ -395,27 +400,37 @@ retired dead path.
 
 **The primary review: spawn the `fresh-eyes-reviewer` agent with `model: opus`** (its adversarial gap-exhaustion SI is exactly the outer-review mandate). The prompt MUST (a) include the bead's `## Exit criteria` verbatim; (b) name the branch; (c) tell it to read the REAL LOCAL diff (`git diff origin/dev...HEAD`), never a summary; (d) NOT mention Haiku (it is the strong model -- the self-escalation clause stays dormant). Read its STATUS line:
 
-> **Spawn-failure fallback -- the effort-400 (added 2026-07-27).** If the Agent-tool
-> spawn above fails with `400 output_config.effort 'xhigh' is not supported when
-> thinking is disabled on this model. Use effort 'high' or below, or enable
+> **Spawn-failure fallback -- the effort-400 (added 2026-07-27). This applies to
+> EVERY Agent-tool subagent spawn in closeout, at ANY model, in Step 5.5 AND Step
+> 5.6.** If a spawn fails with `400 output_config.effort 'xhigh' is not supported
+> when thinking is disabled on this model. Use effort 'high' or below, or enable
 > thinking.` (or a functionally similar effort-unsupported 400), the spawn was
 > killed by the SESSION's effort setting, which subagents inherit and which you
-> cannot read. **Do not treat this as a review failure and do not downgrade the
-> reviewer to Sonnet.** Retry the SAME single spawn -- same agent, same prompt,
-> same `model: opus` -- wrapped in a **one-agent Workflow** whose `agent()` call
-> passes `effort: 'high'` explicitly (the Workflow tool exposes an `effort` option
-> the Agent tool lacks; verified working 2026-07-27). Read the returned verdict
-> exactly as you would an inline STATUS line. **This fallback authorizes a
-> SINGLE-agent wrapper only** -- it is a transport workaround for one blocked
-> spawn, not an opt-in to multi-agent orchestration, which still requires the
-> maintainer's explicit go-ahead. Delete this fallback once the underlying bug is
-> fixed upstream.
+> cannot read.
+>
+> **This is a TRANSPORT failure, not a review failure.** It is NOT a `BLOCKED`
+> verdict, it is NOT the "subagent ERROR / no verdict" case that escalates, and it
+> does NOT justify downgrading the reviewer to a cheaper model. Do not surface it
+> to the maintainer.
+>
+> Retry the SAME single spawn -- same agent, same prompt, same model -- wrapped in
+> a **one-agent Workflow** whose `agent()` call passes `effort: 'high'` explicitly
+> (the Workflow tool exposes an `effort` option the Agent tool lacks; verified
+> working 2026-07-27). Read the returned verdict exactly as you would an inline
+> STATUS line. **This authorizes a SINGLE-agent wrapper only** -- a transport
+> workaround for one blocked spawn, not an opt-in to multi-agent orchestration,
+> which still requires the maintainer's explicit go-ahead.
+>
+> **If the Workflow-wrapped retry ALSO fails, that IS a genuine stop** -- surface it
+> to the maintainer. Never proceed to Step 6 without the outer review on a
+> review-worthy change. Delete this whole fallback once the underlying bug is fixed
+> upstream.
 
 - **`NO-GAPS`** -> the PRIMARY review is CLEAN, but that is only ONE of the two required passes. **Now run the second independent confirming review** (fresh Opus spawn, or fresh Sonnet if a second Opus is unavailable) on the SAME final commit, with the same prompt requirements (a)-(d):
   - **Second review `NO-GAPS`** -> the two-reviewer gate is met (the **adversarial clear**). The review is done; **go to Step 6** to open the PR + close the bead(s) + make the merge decision. The merge ping (Step 6) MUST note that TWO independent reviews cleared it (naming the second reviewer's model).
   - **Second review `GAPS-FOUND`** -> its correct blockers are real (the first reviewer missed them -- exactly why two are required). Fix inline / defer true nits, commit, then **BOTH reviews must clear again on the new diff** (a fix invalidates the prior clear): re-spawn the primary Opus loop to `NO-GAPS`, then the second confirming review, until two independent passes agree on the identical final diff. (No push -- the PR does not exist yet; this all happens on the local branch.)
 - **`GAPS-FOUND (n)`** -> fix blockers inline / defer true nits (the nit-vs-blocker rule below), commit, then **re-spawn the Opus review** on the updated local diff. This is the loop. Re-run the test suite (Step 4) after any code fix. (No push -- pre-PR.)
-- **`BLOCKED` / a subagent TIMEOUT or ERROR (no verdict)** -> surface to the maintainer. A failure of the last-resort reviewer is a genuine stop (there is no further fallback), so this is the one branch that escalates. **Never** interpret a missing verdict as CLEAN.
+- **`BLOCKED` / a subagent TIMEOUT or ERROR (no verdict)** -> surface to the maintainer. A failure of the last-resort reviewer is a genuine stop (no further fallback, EXCEPT the effort-400 Workflow retry above -- take that first when the failure is an effort-unsupported 400, and surface only if it too fails), so this is the one branch that escalates. **Never** interpret a missing verdict as CLEAN.
 
 ### The nit-vs-blocker decision rule (A/B arm C -- bd polyglot-pdf-hrn.5)
 

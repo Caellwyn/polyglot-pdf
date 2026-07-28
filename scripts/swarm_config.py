@@ -16,7 +16,7 @@ suffix from the FULL id at runtime, so this is only used for help text and
 validation hints.
 
 (There is NO external PR reviewer and no reviewer-slug config. Review is entirely
-Claude-based and runs PRE-PR -- a fresh-eyes inner loop then an Opus-4.8 outer
+Claude-based and runs PRE-PR -- a fresh-eyes inner loop then an Opus-5 outer
 review, both on the local branch, before the PR opens (see
 `docs/doctrine/review-flow.md`). The OpenAI Codex reviewer -- and Copilot before
 it -- are retired (the maintainer's Codex subscription ended 2026-07-08); no bot
