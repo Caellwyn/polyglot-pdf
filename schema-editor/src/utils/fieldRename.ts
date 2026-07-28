@@ -4,11 +4,13 @@
  * A field's id is the join key everything else in the schema hangs off:
  * other fields' show_if/require_if atoms (legacy single-atom AND composite
  * all_of/any_of/none_of shapes), section-level show_if, section fields[]
- * membership arrays, copy_to lists, and untyped pass-through structures
+ * membership arrays, copy_to lists, untyped pass-through structures
  * (supplements[].fields survives load -> save without the editor's types
- * knowing it). Renaming must move ALL of them in ONE commit, or the schema
- * dangles -- so the public API returns a fully-rewritten schema the caller
- * commits once (one undo step).
+ * knowing it), AND the field-id-keyed _bakeoff.authoring.<stage>.provenance
+ * ownership maps (bd polyglot-pdf-yli5 -- else a rename orphans the record).
+ * Renaming must move ALL of them in ONE commit, or the schema dangles -- so
+ * the public API returns a fully-rewritten schema the caller commits once
+ * (one undo step).
  *
  * The in-session _ungroup stash is the one structure NOT retargeted: it
  * holds verbatim pre-merge snapshots, and rewriting history is worse than
@@ -167,6 +169,67 @@ export function renameFieldId(
   });
 
   const out: FormSchema = { ...schema, fields, sections };
+
+  // _bakeoff is typed as an opaque Record on FormSchema, but its inner
+  // authoring.<stage>.provenance is a field-id-keyed ownership map (guidance
+  // = instructions_enrich; the translation re-run checker in flight keys the
+  // same way). That inner shape is opaque to the retargeting above, so a
+  // rename would ORPHAN the record: the field silently flips machine-owned
+  // -> human-protected and a dangling entry sits under the dead id (bd
+  // polyglot-pdf-yli5). Re-key every such map generically -- any object
+  // named `provenance` under any authoring stage -- so this survives
+  // whatever field-keyed stages exist now or land later, without this
+  // module needing to know each stage's shape.
+  const bakeoff = (schema as unknown as Record<string, unknown>)._bakeoff;
+  const authoring =
+    bakeoff && typeof bakeoff === 'object'
+      ? (bakeoff as Record<string, unknown>).authoring
+      : undefined;
+  if (authoring && typeof authoring === 'object' && !Array.isArray(authoring)) {
+    let touchedAny = false;
+    const nextStages: Record<string, unknown> = {};
+    for (const [stageName, stage] of Object.entries(
+      authoring as Record<string, unknown>,
+    )) {
+      const prov =
+        stage && typeof stage === 'object' && !Array.isArray(stage)
+          ? (stage as Record<string, unknown>).provenance
+          : undefined;
+      const provOk =
+        prov && typeof prov === 'object' && !Array.isArray(prov);
+      const provRec = provOk ? (prov as Record<string, unknown>) : undefined;
+      const hasOld =
+        !!provRec && Object.prototype.hasOwnProperty.call(provRec, oldId);
+      // A stale entry sitting under newId is an ORPHAN in EVERY stage, not
+      // just the one being re-keyed: renameBlockReason guarantees no live
+      // field has newId, so any provenance key == newId is dead data. Drop
+      // it wherever it appears -- otherwise a stage that never tracked oldId
+      // would leave bogus provenance under the renamed field's new id,
+      // reintroducing this bead's own orphan bug cross-stage (outer review).
+      const hasNewOrphan =
+        !!provRec && Object.prototype.hasOwnProperty.call(provRec, newId);
+      if (provRec && (hasOld || hasNewOrphan)) {
+        const nextProv: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(provRec)) {
+          if (k === newId) continue; // drop the orphan (this or another stage)
+          nextProv[k === oldId ? newId : k] = v; // live record wins on newId
+        }
+        nextStages[stageName] = {
+          ...(stage as Record<string, unknown>),
+          provenance: nextProv,
+        };
+        touchedAny = true;
+      } else {
+        nextStages[stageName] = stage;
+      }
+    }
+    if (touchedAny) {
+      (out as unknown as Record<string, unknown>)._bakeoff = {
+        ...(bakeoff as Record<string, unknown>),
+        authoring: nextStages,
+      };
+    }
+  }
 
   // Untyped pass-through: supplements[].fields is a field-id list the backend
   // integrity-checks, but the editor's FormSchema type does not declare it --
