@@ -367,12 +367,25 @@ async def main_async(args: argparse.Namespace) -> int:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    total = len(model_tiers) * len(configs) * args.repeats
-    print(f"genai={genai_version}; matrix = {model_tiers} x {[c[0] for c in configs]} "
-          f"x {args.repeats} repeats = {total} sessions, {args.turns} turns each\n")
+    on_vertex = os.environ.get("VERTEXAI", "true").lower() == "true"
+    # Count only the tiers that will actually RUN: on the Vertex path the
+    # no-Vertex-id tiers are skipped below, and counting them made the
+    # progress ratio stall short of its total (e.g. [15/30] then done),
+    # reading as a crashed run (bd kbi1 outer review).
+    def _will_run(tier: str) -> bool:
+        return (not on_vertex) or tier == "2.5" or getattr(
+            args, "force_doomed_tiers", False)
+
+    running_tiers = [t for t in model_tiers if _will_run(t)]
+    skipped_tiers = [t for t in model_tiers if t not in running_tiers]
+    total = len(running_tiers) * len(configs) * args.repeats
+    print(f"genai={genai_version}; matrix = {running_tiers} x "
+          f"{[c[0] for c in configs]} x {args.repeats} repeats = {total} "
+          f"sessions, {args.turns} turns each"
+          + (f"  (skipping {skipped_tiers}: no Vertex id)"
+             if skipped_tiers else "") + "\n")
 
     n = 0
-    on_vertex = os.environ.get("VERTEXAI", "true").lower() == "true"
     for tier in model_tiers:
         model_name = MODELS[tier]
         # The 2.5 native-audio model has a DIFFERENT id on Vertex than on AI

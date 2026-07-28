@@ -1833,9 +1833,12 @@ async def run(args) -> int:
         # (--vert, --verte), silently overriding an explicit ask instead of
         # refusing it (bd kbi1 round 2). Match any unambiguous prefix of the
         # real flag, which is exactly what argparse itself accepts.
+        # argparse accepts ANY unambiguous prefix, down to "--v" -- an earlier
+        # fix stopped at "--vert" and still missed --v/--ve/--ver (bd kbi1
+        # outer review). Treat every prefix of "--vertex" longer than "--" as
+        # explicit; "--no-vertex" is a different string and never matches.
         explicit_vertex = any(
-            a == "--vertex" or (a.startswith("--vert") and "--vertex".startswith(a))
-            for a in sys.argv)
+            len(a) > 2 and "--vertex".startswith(a) for a in sys.argv)
         if explicit_vertex:
             print("--vertex is not available for --model 3.1: the 3.1 Live "
                   "model has no Vertex id (AI-Studio-only as of 2026-06). "
