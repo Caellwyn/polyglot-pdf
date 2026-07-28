@@ -461,7 +461,15 @@ const OptionWidgetSelect: React.FC<{
     setError(null);
     try {
       const ws = await onLoadUnclaimedWidgets();
-      setUnclaimed(Array.from(new Set(ws.map(w => w.name))));
+      // EXCLUDE shared-name widgets: a shared-AcroForm-name radio group has N
+      // same-named kids disambiguated only by on_value, so assigning its bare
+      // name to a single option's pdf_field_name would fill the WRONG kid
+      // deterministically (the fill route's find_widget(name) returns the
+      // first match, no on-state disambiguation). Such widgets belong to a
+      // group via the field-level pdf_field_name + option pdf_on_value, never
+      // a per-option pdf_field_name (bd mrdj fresh-eyes round 2).
+      setUnclaimed(Array.from(new Set(
+        ws.filter(w => !w.shared_name).map(w => w.name))));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load PDF widgets');
     } finally {
@@ -1115,16 +1123,20 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                             </span>
                           </div>
                         )}
-                        {field.pdf_field_name ? (
-                          // SHARED-NAME radio group: every kid shares the
-                          // FIELD's one pdf_field_name and differs only by
-                          // pdf_on_value. The option must NOT carry its own
-                          // pdf_field_name -- an option with BOTH keys trips
-                          // dump-widget-multiclaim and flips the fill route to
-                          // the wrong branch (bd polyglot-pdf-mrdj fresh-eyes).
-                          // So the widget here is fixed (the field's); show it
-                          // + the kid's on-state read-only, never a reassign
-                          // select that could inject a per-option name.
+                        {/* The shape discriminator is PER-OPTION, not
+                            per-field: the fill route keys on THIS option's
+                            pdf_field_name (truthy -> distinct-name write;
+                            falsy -> shared-name on-state write against the
+                            field's widget). A radio field can be MIXED (some
+                            options distinct-name, some shared-name kids), so a
+                            field-level switch would mis-render the minority
+                            shape (bd mrdj fresh-eyes round 2). */}
+                        {(!option.pdf_field_name && field.pdf_field_name) ? (
+                          // SHARED-NAME kid: keyed by pdf_on_value against the
+                          // FIELD's pdf_field_name; it must NOT gain its own
+                          // pdf_field_name (both-keys trips dump-widget-
+                          // multiclaim + flips the fill branch). Fixed widget,
+                          // shown read-only -- no reassign select.
                           <div className="mt-1 text-gray-500 font-mono">
                             widget: {field.pdf_field_name}
                             {option.pdf_on_value
@@ -1132,6 +1144,9 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                               : ''}
                           </div>
                         ) : (
+                          // DISTINCT-name option: it carries its own
+                          // pdf_field_name (or the field has none, so it must).
+                          // Reassignable among real widgets, never free text.
                           <OptionWidgetSelect
                             value={option.pdf_field_name || ''}
                             inGroupNames={(field.options || [])

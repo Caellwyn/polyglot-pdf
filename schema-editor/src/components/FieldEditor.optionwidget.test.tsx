@@ -150,3 +150,49 @@ describe('FieldEditor option widget -- Add Option offers the same select (bd mrd
     expect(within(sel).getByText('(no widget assigned)')).toBeInTheDocument();
   });
 });
+
+describe('FieldEditor option widget -- mixed-shape + shared-name filtering (bd mrdj fresh-eyes round 2)', () => {
+  it('a MIXED radio field renders each option by its OWN shape (per-option, not per-field)', () => {
+    // field carries a field-level pdf_field_name AND has one distinct-name
+    // option (its own pdf_field_name) plus one shared-name kid (pdf_on_value
+    // only). Each must render by its own shape, not a field-level switch.
+    const mixed: FormField = {
+      id: 'mix', name: 'Mix', spoken_name: 'mix', type: 'radio',
+      section_id: 's1', pdf_field_name: 'form1[0].shared[0]',
+      options: [
+        { value: 'own', label: 'Own', pdf_field_name: 'form1[0].distinct[0]' },
+        { value: 'kid', label: 'Kid', pdf_on_value: 'K' },
+      ],
+    } as unknown as FormField;
+    render(
+      <FieldEditor field={mixed} schema={makeSchema([mixed])}
+        onUpdateField={vi.fn()} authorTier />,
+    );
+    // option 1 (distinct-name) gets the reassign select showing ITS widget
+    const sel = screen.getByLabelText('Option 1 PDF widget') as HTMLSelectElement;
+    expect(sel.tagName).toBe('SELECT');
+    expect(sel.value).toBe('form1[0].distinct[0]');
+    // option 2 (shared-name kid) gets read-only, no select, its on-state shown
+    expect(screen.queryByLabelText('Option 2 PDF widget')).toBeNull();
+    expect(screen.getByText(/on: K/)).toBeInTheDocument();
+  });
+
+  it('the reassign dropdown EXCLUDES shared-name widgets from the loader', async () => {
+    const onLoad = vi.fn().mockResolvedValue([
+      { name: 'form1[0].distinct[9]', type: 'radio', on_value: 'A', shared_name: false, page: 0 },
+      { name: 'form1[0].shared[0]', type: 'radio', on_value: 'B', shared_name: true, page: 0 },
+    ]);
+    render(
+      <FieldEditor field={GROUP} schema={makeSchema([GROUP])}
+        onUpdateField={vi.fn()} authorTier onLoadUnclaimedWidgets={onLoad} />,
+    );
+    const sel = screen.getByLabelText('Option 1 PDF widget');
+    fireEvent.focus(sel);
+    await waitFor(() => expect(onLoad).toHaveBeenCalled());
+    await waitFor(() => {
+      const opts = within(sel).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
+      expect(opts).toContain('form1[0].distinct[9]');    // distinct-name: offered
+      expect(opts).not.toContain('form1[0].shared[0]');  // shared-name: excluded
+    });
+  });
+});
