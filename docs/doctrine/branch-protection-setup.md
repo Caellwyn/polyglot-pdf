@@ -39,7 +39,7 @@ Effective rules, verified via `gh api repos/.../rules/branches/dev`:
 
 Human approval is **not** required (count 0), and there is no ruleset-level
 review gate — the review gate is procedural (the
-[review-flow](review-flow.md): loop the Opus-4.8 outer review to clean, then apply
+[review-flow](review-flow.md): loop the Opus-5 outer review to clean, then apply
 the auto-merge-vs-ping rule — a routine low-risk PR that reviewed CLEAN with green
 checks is merged autonomously via `gh pr merge`, while a consequence-bearing PR
 is pinged to the maintainer, whose merge it remains; see CLAUDE.md "Auto-merge
@@ -68,7 +68,7 @@ To recreate from scratch, POST the JSON in the journal entry to
 There is **no external model reviewer** anymore. The repo previously used GitHub
 Copilot, then OpenAI Codex, as an automated PR reviewer; both are retired (the
 maintainer's Codex subscription ended 2026-07-08). Review is now entirely
-Claude-based -- an Opus-4.8 outer review run as orchestrator-driven subagents (see
+Claude-based -- an Opus-5 outer review run as orchestrator-driven subagents (see
 [`review-flow.md`](review-flow.md)) -- so no bot reads `.github/copilot-instructions.md`
 or the "If you are reviewing a PR" section of [`AGENTS.md`](../../AGENTS.md); those
 files are kept only as inert history. There is nothing to configure at the
