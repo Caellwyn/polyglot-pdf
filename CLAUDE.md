@@ -69,7 +69,7 @@ closed); the cited code path is the ground truth when a doc and the code disagre
 2. **Every PR ships through `/closeout`, and BOTH review layers run PRE-PR:** commit,
    then closeout runs the **fresh-eyes assess loop** (Sonnet/Haiku, scored against
    the bead's exit criteria, looped to no-gap, with a guaranteed Opus final round),
-   **then** the **Opus-4.8 outer review** (review-worthy changes only) -- both on the
+   **then** the **Opus-5 outer review** (review-worthy changes only) -- both on the
    LOCAL branch, serial not parallel. Only AFTER both loops clear does closeout open a
    normal PR, close the bead(s), and make the merge decision. **Review is entirely
    Claude-based; there is NO external reviewer** (the maintainer's OpenAI Codex
@@ -186,7 +186,7 @@ takes the product-owner seat, not the engineering-lead seat: routine, low-risk P
 that a **separate model -- including an adversarial one -- has reviewed CLEAN** are
 **merged autonomously**, not handed back for a click. You run `gh pr merge` yourself
 when **ALL** of these hold:
-   - **An adversarial reviewer cleared the diff.** The Opus-4.8 outer review
+   - **An adversarial reviewer cleared the diff.** The Opus-5 outer review
      returned `NO-GAPS` -- and because it is the only independent adversarial gate,
      it requires **TWO independent clearing reviews**, not one (the primary looped
      Opus review + a second independent confirming review on the identical diff; bd
@@ -194,7 +194,7 @@ when **ALL** of these hold:
      [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). (This is the
      former Codex-unavailable fallback, now the always-on primary -- there is NO
      external reviewer; the maintainer's Codex subscription ended 2026-07-08.) A
-     separate, stronger-tier model, adversarially, found it clean -- twice. **A
+     separate, independent model instance, adversarially, found it clean -- twice. **A
      review-SKIPPED PR does NOT satisfy this** -- no adversarial review ran, so it
      pings (below).
    - **CI / required status checks are green.**
@@ -456,7 +456,7 @@ Do NOT hand-roll the review cycle. In particular:
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
   review + telemetry setup and tempts hand-polling).
-- **The Opus-4.8 outer review handles review-worthy changes PRE-PR -- there is NO
+- **The Opus-5 outer review handles review-worthy changes PRE-PR -- there is NO
   external reviewer.** Review is entirely Claude-based (the maintainer's OpenAI Codex
   subscription ended 2026-07-08; Codex succeeded Copilot at the earlier
   credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). The orchestrator
@@ -474,6 +474,23 @@ Do NOT hand-roll the review cycle. In particular:
   from the subagent result -- there is no GitHub bot to poll, so the old
   `pr_review_watcher.py` background-watch loop does not run for the outer review.
   Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean -- surface it.
+- **If a subagent spawn dies with the effort-400, fall back to a one-agent Workflow**
+  (standing permission, maintainer directive 2026-07-27). Subagents inherit the
+  SESSION's effort setting, which you cannot read; from a Fable session at `xhigh`,
+  an Agent-tool spawn of a non-Fable model fails with `400 output_config.effort
+  'xhigh' is not supported when thinking is disabled on this model.` **That is a
+  transport failure, not a review failure** -- it is not a `BLOCKED` verdict, it is
+  not the "subagent ERROR" case that escalates, and it does not justify downgrading
+  the reviewer to a cheaper model. Retry the SAME single spawn wrapped in a
+  one-agent Workflow whose `agent()` passes `effort: 'high'` (the Workflow tool
+  exposes an `effort` option the Agent tool lacks). **This standing permission
+  covers a single-agent wrapper only** -- real multi-agent orchestration still
+  requires an explicit per-instance go-ahead. **Applies to ANY blocked subagent
+  spawn at any model and any step** (the closeout fresh-eyes rounds at
+  haiku/sonnet, the Opus outer reviewer, and the Haiku `closeout-runner`), not
+  just the reviewer. **If the wrapped retry ALSO
+  fails, that is a genuine stop** -- surface it. Remove once the upstream bug is
+  fixed.
 - **BOTH review layers run PRE-PR, serial not parallel** (closeout Steps 5.5 + 5.6):
   the fresh-eyes assess loop first (scored against the bead's exit criteria,
   re-spawned until no gap, final clearing round on Opus), THEN the Opus outer review

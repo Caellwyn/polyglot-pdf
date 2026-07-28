@@ -59,7 +59,7 @@ gh api repos/<OWNER>/<REPO> --jq .allow_auto_merge    # expect: false
 This ruleset requires PRs into `dev` and blocks deletion / force-pushes.
 
 **Code review is NOT configured here, and there is NO external reviewer.** Review
-is entirely Claude-based -- a fresh-eyes inner loop plus an Opus-4.8 outer review,
+is entirely Claude-based -- a fresh-eyes inner loop plus an Opus-5 outer review,
 run as orchestrator-driven subagents by the closeout skill, not any GitHub app or
 ruleset rule. The former `copilot_code_review` ruleset rule (and its successor, the
 OpenAI Codex GitHub app) are both retired (bd `polyglot-pdf-hrn.8`/`hrn.9` for the
@@ -145,7 +145,7 @@ You should see the "To Dev" ruleset `active` with `pull_request`, `deletion`, an
 ## Notes
 
 - **Code review is Claude-based and procedural, not a ruleset.** The fresh-eyes +
-  Opus-4.8 outer review runs in the closeout skill; there is nothing to configure
+  Opus-5 outer review runs in the closeout skill; there is nothing to configure
   in a branch ruleset for it, and no external reviewer (Copilot and Codex both
   retired -- bd `polyglot-pdf-hrn.8`/`hrn.9`; Codex ended 2026-07-08). Do not add a
   `copilot_code_review` rule.
