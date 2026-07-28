@@ -73,7 +73,7 @@ def _rules(findings):
 def test_unknown_operator_trips_once():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "picker", "operator": "is_selected", "value": "alpha"}},
     ]
     findings = lint_schema(_schema(fields))
@@ -86,7 +86,7 @@ def test_unknown_operator_trips_once():
 def test_value_arity_trips_once():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          # `in` requires a LIST value; a scalar is the arity violation.
          "show_if": {"field": "picker", "operator": "in", "value": "alpha"}},
     ]
@@ -136,7 +136,7 @@ def test_option_value_slug_trips_once_v2_only():
 
 def test_ref_unresolved_field_trips_once():
     fields = [
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "ghost", "operator": "is_not_empty"}},
     ]
     findings = lint_schema(_schema(fields))
@@ -146,8 +146,8 @@ def test_ref_unresolved_field_trips_once():
 
 def test_operator_trigger_trips_once():
     fields = [
-        {"id": "freetext", "type": "text"},
-        {"id": "dep", "type": "text",
+        {"id": "freetext", "type": "text", "pdf_field_name": "freetext[0]"},
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          # includes is a checkbox_group membership operator; a text trigger
          # has no evaluator branch for it (Codex PR #302).
          "show_if": {"field": "freetext", "operator": "includes", "value": "x"}},
@@ -163,7 +163,7 @@ def test_v1_is_checked_on_option_bearing_trigger_is_tolerated():
     fields = [
         {"id": "grp", "type": "radio",
          "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}]},
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "grp", "operator": "is_checked"}},
     ]
     assert _lint_structural(_schema(fields)) == []
@@ -174,7 +174,7 @@ def test_v1_is_checked_on_option_bearing_trigger_is_tolerated():
 def test_ref_option_value_trips_once():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "picker", "operator": "equals", "value": "zzz"}},
     ]
     findings = lint_schema(_schema(fields))
@@ -183,7 +183,7 @@ def test_ref_option_value_trips_once():
 
 def test_condition_malformed_trips_once():
     fields = [
-        {"id": "dep", "type": "text", "show_if": "when the moon is full"},
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]", "show_if": "when the moon is full"},
     ]
     findings = lint_schema(_schema(fields))
     assert _rules(findings) == ["condition-malformed"]
@@ -192,7 +192,7 @@ def test_condition_malformed_trips_once():
 def test_composite_depth_trips_once():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"all_of": [
              {"any_of": [{"field": "picker", "operator": "equals", "value": "alpha"}]},
          ]}},
@@ -203,9 +203,9 @@ def test_composite_depth_trips_once():
 
 def test_show_if_cycle_warns_once():
     fields = [
-        {"id": "a", "type": "text",
+        {"id": "a", "type": "text", "pdf_field_name": "a[0]",
          "show_if": {"field": "b", "operator": "is_not_empty"}},
-        {"id": "b", "type": "text",
+        {"id": "b", "type": "text", "pdf_field_name": "b[0]",
          "show_if": {"field": "a", "operator": "is_not_empty"}},
     ]
     findings = lint_schema(_schema(fields))
@@ -300,7 +300,7 @@ def test_groups_of_one_field_plus_own_option_claim_is_benign():
 def test_empty_string_value_is_the_v1_emptiness_idiom_not_a_bad_option_ref():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "picker", "operator": "not_equals", "value": ""}},
     ]
     assert _lint_structural(_schema(fields)) == []
@@ -309,7 +309,7 @@ def test_empty_string_value_is_the_v1_emptiness_idiom_not_a_bad_option_ref():
 def test_vestigial_value_on_no_value_operator_is_tolerated_on_v1_only():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "picker", "operator": "is_not_empty", "value": "x"}},
     ]
     # v1: the operator ignores the stray value -- tolerated.
@@ -324,7 +324,7 @@ def test_empty_composite_buckets_are_malformed():
     # ConditionGroup requires at least one non-empty bucket; the raw-draft
     # path must report the same shape instead of passing it clean.
     fields = [
-        {"id": "dep", "type": "text", "show_if": {"all_of": []}},
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]", "show_if": {"all_of": []}},
     ]
     findings = lint_schema(_schema(fields))
     assert _rules(findings) == ["condition-malformed"]
@@ -344,7 +344,7 @@ def test_plain_string_options_get_value_hygiene_checks():
     # And condition values resolve against string options too.
     fields = [
         {"id": "p", "type": "select", "options": ["alpha", "beta"]},
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "p", "operator": "equals", "value": "alpha"}},
     ]
     assert _lint_structural(_schema(fields)) == []
@@ -464,7 +464,7 @@ def test_stale_controls_fields_on_a_v2_kit_is_a_lint_error():
 
 def test_stale_conditional_fields_on_a_v2_kit_is_a_lint_error():
     fields = [
-        {"id": "trigger", "type": "text", "conditional_fields": ["dep"]},
+        {"id": "trigger", "type": "text", "pdf_field_name": "trigger[0]", "conditional_fields": ["dep"]},
     ]
     findings = lint_schema(_schema(fields, version="2"))
     assert "legacy-trigger-side-logic" in _rules(findings)
@@ -475,7 +475,7 @@ def test_top_level_required_on_a_v2_kit_is_a_lint_error():
     # isFieldRequired reader consume); a top-level required is read by no consumer
     # and the field is silently optional (bd polyglot-pdf-a1ql).
     fields = [
-        {"id": "acct", "type": "text", "required": True},
+        {"id": "acct", "type": "text", "pdf_field_name": "acct[0]", "required": True},
     ]
     findings = lint_schema(_schema(fields, version="2"))
     assert "required-top-level" in _rules(findings)
@@ -485,7 +485,7 @@ def test_top_level_required_on_a_v2_kit_is_a_lint_error():
 def test_validation_required_on_a_v2_kit_is_clean():
     # The canonical location does NOT trip the rule.
     fields = [
-        {"id": "acct", "type": "text", "validation": {"required": True}},
+        {"id": "acct", "type": "text", "pdf_field_name": "acct[0]", "validation": {"required": True}},
     ]
     findings = lint_schema(_schema(fields, version="2"))
     assert "required-top-level" not in _rules(findings)
@@ -496,7 +496,7 @@ def test_top_level_required_on_a_v1_draft_is_NOT_flagged():
     # v2-stamped, so it is not yet held to the canonical shape (mirrors the
     # controls_fields v1 tolerance below).
     fields = [
-        {"id": "acct", "type": "text", "required": True},
+        {"id": "acct", "type": "text", "pdf_field_name": "acct[0]", "required": True},
     ]
     findings = lint_schema(_schema(fields))  # no version -> v1 draft
     assert "required-top-level" not in _rules(findings)
@@ -521,7 +521,7 @@ def test_controls_fields_on_a_v1_draft_is_NOT_flagged():
 def test_composite_v2_group_with_valid_atoms_is_clean():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {
              "all_of": [{"field": "picker", "operator": "equals", "value": "alpha"}],
              "none_of": [{"field": "picker", "operator": "equals", "value": "beta"}],
@@ -544,7 +544,7 @@ def test_non_list_options_never_crash_any_pass():
     fields = [
         {"id": "weird", "type": "select", "options": 5,
          "pdf_field_name": "w[0]"},
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "weird", "operator": "equals", "value": "x"}},
     ]
     dump = {"fields": [{"name": "top[0].w[0]"}]}
@@ -556,9 +556,12 @@ def test_long_acyclic_show_if_chain_does_not_overflow():
     # Codex PR #302 round 2: recursive DFS hit Python's recursion limit on
     # long chains; the iterative walk must handle depth > 1000 and stay quiet.
     n = 2000
-    fields = [{"id": "f0", "type": "text"}]
+    # Every synthetic field carries a widget name: under the sprint-17 ledger
+    # rules a name-less text field is itself a defect (field-unbacked), and
+    # this test pins ONLY the deep-chain walk staying quiet.
+    fields = [{"id": "f0", "type": "text", "pdf_field_name": "f0[0]"}]
     fields += [
-        {"id": f"f{i}", "type": "text",
+        {"id": f"f{i}", "type": "text", "pdf_field_name": f"f{i}[0]",
          "show_if": {"field": f"f{i-1}", "operator": "is_not_empty"}}
         for i in range(1, n)
     ]
@@ -715,7 +718,7 @@ def test_field_id_of_returns_none_for_unanchored_paths():
 def test_as_dict_carries_the_derived_field_id():
     fields = [
         _select(),
-        {"id": "dep", "type": "text",
+        {"id": "dep", "type": "text", "pdf_field_name": "dep[0]",
          "show_if": {"field": "picker", "operator": "is_selected", "value": "alpha"}},
     ]
     findings = lint_schema(_schema(fields))
@@ -757,8 +760,8 @@ def test_to_review_field_trips_once_per_field():
     # gate blocks on it); the section entry listing the same field does NOT
     # double-report.
     s = _schema([
-        {"id": "f1", "type": "text", "section_id": "sec_to_review_p1"},
-        {"id": "f2", "type": "text", "section_id": "sec_real"},
+        {"id": "f1", "type": "text", "pdf_field_name": "f1[0]", "section_id": "sec_to_review_p1"},
+        {"id": "f2", "type": "text", "pdf_field_name": "f2[0]", "section_id": "sec_real"},
     ])
     s["sections"] = [
         {"id": "sec_to_review_p1", "label": "To review", "order": 1,
@@ -773,7 +776,7 @@ def test_to_review_field_trips_once_per_field():
 
 def test_to_review_unplaced_section_id_also_trips():
     s = _schema([
-        {"id": "f1", "type": "text", "section_id": "sec_to_review_unplaced"},
+        {"id": "f1", "type": "text", "pdf_field_name": "f1[0]", "section_id": "sec_to_review_unplaced"},
     ])
     findings = [f for f in lint_schema(s) if f.rule == "to-review-pending"]
     assert len(findings) == 1
@@ -783,7 +786,7 @@ def test_to_review_stale_section_list_trips_section_level():
     # The field was re-pointed to a real section but the to-review section's
     # fields[] list still names it: one section-level finding.
     s = _schema([
-        {"id": "f1", "type": "text", "section_id": "sec_real"},
+        {"id": "f1", "type": "text", "pdf_field_name": "f1[0]", "section_id": "sec_real"},
     ])
     s["sections"] = [
         {"id": "sec_to_review_p1", "label": "To review", "order": 1,
@@ -799,7 +802,7 @@ def test_emptied_to_review_section_is_clean():
     # An emptied to-review section (fields re-filed, list emptied) no longer
     # blocks -- the reviewer may delete it or leave the empty husk.
     s = _schema([
-        {"id": "f1", "type": "text", "section_id": "sec_real"},
+        {"id": "f1", "type": "text", "pdf_field_name": "f1[0]", "section_id": "sec_real"},
     ])
     s["sections"] = [
         {"id": "sec_to_review_p1", "label": "To review", "order": 1,
@@ -811,7 +814,7 @@ def test_emptied_to_review_section_is_clean():
 
 def test_ordinary_sections_never_trip_to_review():
     s = _schema([
-        {"id": "f1", "type": "text", "section_id": "sec_normal"},
+        {"id": "f1", "type": "text", "pdf_field_name": "f1[0]", "section_id": "sec_normal"},
     ])
     s["sections"] = [
         {"id": "sec_normal", "label": "Normal", "order": 1, "fields": ["f1"]},
@@ -898,3 +901,75 @@ def test_translation_flags_malformed_slots_are_ignored():
         if bakeoff is not None:
             s["_bakeoff"] = bakeoff
         assert _lint_structural(s) == []
+
+
+# --------------------------------------------------------------------------- #
+# Ledger backstop rules (bd polyglot-pdf-xazf, sprint 17): the publish gate's
+# catch for defects a human can hand-edit into a stored draft after the
+# extraction-time repair checks (bd l1a9) already passed.
+# --------------------------------------------------------------------------- #
+
+def test_field_unbacked_fires_dump_less():
+    # No dump at all: the rule is schema-only, unlike the dump-* family.
+    fields = [{"id": "ghost", "type": "text"}]
+    findings = _lint_structural(_schema(fields))
+    assert [f.rule for f in findings] == ["field-unbacked"]
+    assert "ghost" in findings[0].message
+    assert findings[0].severity == SEVERITY_ERROR
+
+
+def test_field_unbacked_exempts_below_field_identity_types():
+    # Choice options / table columns / address slots carry the identity; a
+    # missing FIELD-level name is legitimate for these.
+    fields = [
+        {"id": "grp", "type": "radio", "options": [
+            {"value": "a", "label": "A", "pdf_field_name": "a[0]"},
+            {"value": "b", "label": "B", "pdf_field_name": "b[0]"},
+        ]},
+        {"id": "tbl", "type": "table"},
+        {"id": "addr", "type": "address_group"},
+    ]
+    assert _lint_structural(_schema(fields)) == []
+
+
+def test_field_unbacked_skipped_for_non_pdf_source():
+    findings = _lint_structural({"source": "web",
+                                 "fields": [{"id": "x", "type": "text"}]})
+    assert findings == []
+
+
+def test_field_claim_unresolvable_fires_with_dump():
+    # One field claims a widget the PDF does not have while a sibling claims
+    # the real one (so dump-widget-unclaimed stays quiet and this test pins
+    # exactly the new rule).
+    fields = [
+        {"id": "real", "type": "text", "pdf_field_name": "f1[0]"},
+        {"id": "phantom", "type": "text", "pdf_field_name": "nothing[0]"},
+    ]
+    dump = {"fields": [{"name": "top[0].f1[0]"}]}
+    findings = _lint_structural(_schema(fields), dump)
+    assert [f.rule for f in findings] == ["field-claim-unresolvable"]
+    assert "nothing[0]" in findings[0].message
+    assert findings[0].severity == SEVERITY_ERROR
+    # The path embeds "(id=...)" so the ValidationPanel can click-to-focus.
+    assert field_id_of(findings[0].path) == "phantom"
+
+
+def test_field_claim_unresolvable_is_genuinely_dump_gated():
+    # The same phantom claim WITHOUT a dump: structurally silent (the /lint
+    # route has no kit dump -- the mark-complete gate is the enforcing site).
+    fields = [{"id": "phantom", "type": "text", "pdf_field_name": "nothing[0]"}]
+    assert _lint_structural(_schema(fields)) == []
+
+
+def test_option_claim_unresolvable_names_the_option():
+    fields = [
+        {"id": "grp", "type": "radio", "options": [
+            {"value": "a", "label": "A", "pdf_field_name": "a[0]"},
+            {"value": "b", "label": "B", "pdf_field_name": "ghost[0]"},
+        ]},
+    ]
+    dump = {"fields": [{"name": "top[0].a[0]"}]}
+    findings = _lint_structural(_schema(fields), dump)
+    assert [f.rule for f in findings] == ["field-claim-unresolvable"]
+    assert "option[1]" in findings[0].path

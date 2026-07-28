@@ -50,8 +50,11 @@ VALID_SCHEMA = {
         # help.instructions authored so this fixture is CLEAN under the
         # wsao.3 guidance-coverage lint too (a guidance-less field now
         # legitimately carries the aggregated coverage WARNING).
+        # pdf_field_name present: under the sprint-17 ledger rules (bd xazf) a
+        # source=pdf text field naming NO widget is a field-unbacked lint
+        # ERROR, and this fixture must stay CLEAN for the gate tests.
         {"id": "f1", "name": "Field 1", "spoken_name": "field one",
-         "type": "text", "section_id": "s1",
+         "type": "text", "section_id": "s1", "pdf_field_name": "f1[0]",
          "help": {"instructions": "Enter the value shown on your notice."}}
     ],
     "extraction_info": {
@@ -2180,7 +2183,10 @@ def test_mark_complete_publish_gate_refuses_to_review_fields(client):
          "fields": ["stray"]})
     pending["fields"].append(
         {"id": "stray", "name": "Stray", "spoken_name": "stray",
-         "type": "text", "section_id": "sec_to_review_p1"})
+         "type": "text", "section_id": "sec_to_review_p1",
+         # Named so the ledger rule (field-unbacked, bd xazf) stays quiet --
+         # this test pins ONLY the to-review-pending gate.
+         "pdf_field_name": "stray[0]"})
     _make_kit(root, "pending", schema=pending)
     r = c.post(
         "/api/editor/kits/pending/status",
@@ -2209,6 +2215,30 @@ def test_mark_complete_publish_gate_refuses_to_review_fields(client):
         json={"status": "complete"},
     )
     assert r2.status_code == 200, r2.text
+
+
+def test_mark_complete_publish_gate_refuses_unbacked_field(client):
+    """bd polyglot-pdf-xazf (sprint 17): a hand-edited draft carrying a field
+    that names NO PDF widget at all (field-unbacked lint ERROR) cannot be
+    marked complete -- the ledger backstop for what a human reintroduces
+    after extraction-time repair (bd l1a9) already passed."""
+    c, _store, root = client
+    unbacked = json.loads(json.dumps(VALID_SCHEMA))  # deep copy
+    unbacked["sections"][0]["fields"].append("ghost")
+    unbacked["fields"].append(
+        {"id": "ghost", "name": "Ghost", "spoken_name": "ghost",
+         "type": "text", "section_id": "s1",
+         "help": {"instructions": "A field with no widget behind it."}})
+    _make_kit(root, "unbacked", schema=unbacked)
+    r = c.post(
+        "/api/editor/kits/unbacked/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+    assert r.status_code == 409, r.text
+    detail = r.json()["detail"]
+    assert "field-unbacked" in detail
+    assert "ghost" in detail
 
 
 # --- POST /kits/{id}/translate-options (bd polyglot-pdf-2h9j) ------------------
