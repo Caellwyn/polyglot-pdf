@@ -388,14 +388,23 @@ async def main_async(args: argparse.Namespace) -> int:
                 # EVERY other tier is an AI-Studio-shaped id: 3.1 has no Vertex
                 # equivalent, and the 2.5-latest / 2.5-0925 aliases are
                 # unverified AI Studio strings. Passing any of them to a Vertex
-                # client 1008s on connect, so warn per cell rather than let it
-                # fail cryptically (bd polyglot-pdf-kbi1 round 2; the alias
-                # tiers were missed in round 1's fix).
+                # client 1008s on connect. SKIP the cell rather than burn
+                # --repeats live sessions that are known in advance to fail --
+                # the experimentation doctrine bars knowingly-doomed live
+                # spend (bd polyglot-pdf-kbi1 round 3). --force-doomed-tiers
+                # runs them anyway (e.g. to re-verify an alias hypothesis).
                 why = ("has no Vertex id" if tier == "3.1"
                        else "is an unverified AI-Studio-only alias")
-                print(f"  [warn] tier {tier} {why} -- this cell will 1008 on "
-                      f"the Vertex path (set VERTEXAI=false with "
-                      f"GEMINI_API_KEY to run it on AI Studio).", flush=True)
+                if not getattr(args, "force_doomed_tiers", False):
+                    print(f"  [skip] tier {tier} {why} -- skipping "
+                          f"{len(configs) * args.repeats} session(s) that "
+                          f"would 1008 on the Vertex path (set VERTEXAI=false "
+                          f"with GEMINI_API_KEY to run it on AI Studio, or "
+                          f"--force-doomed-tiers to attempt anyway).",
+                          flush=True)
+                    continue
+                print(f"  [warn] tier {tier} {why} -- attempting anyway "
+                      f"(--force-doomed-tiers); expect 1008.", flush=True)
         for (label, enabled, trigger, window) in configs:
             for rep in range(args.repeats):
                 n += 1
@@ -445,6 +454,11 @@ def main() -> int:
                          "VERTEXAI=false plus GEMINI_API_KEY.")
     ap.add_argument("--configs", default="off,on-inert,on-live",
                     help="comma list of: off,on-inert,on-live")
+    ap.add_argument("--force-doomed-tiers", action="store_true",
+                    help="on the Vertex path, still attempt tiers with no "
+                         "Vertex id (3.1, the 2.5-* aliases) instead of "
+                         "skipping them -- they are expected to 1008 "
+                         "(bd polyglot-pdf-kbi1).")
     ap.add_argument("--repeats", type=int, default=5)
     ap.add_argument("--turns", type=int, default=20,
                     help="20 minimum for eviction verdicts: compression is async "
