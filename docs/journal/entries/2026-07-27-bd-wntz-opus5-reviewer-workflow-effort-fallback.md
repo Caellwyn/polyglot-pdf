@@ -174,6 +174,28 @@ too, along with stale comments in `tests/test_closeout_skill.py`.
 `tests/test_pr_review_watcher.py:1456` was deliberately left saying "Opus-4.8" --
 it describes the retired Codex-era fallback, which genuinely was 4.8.
 
+## Review record
+
+**Fresh-eyes assess loop: 3 rounds to `NO-GAPS`** (final clearing round on Opus,
+per bd dgoa). Round 1: `GAPS-FOUND (8)`, 7 adopted. Round 2: `GAPS-FOUND (4)`, all
+4 adopted -- including the regression that round 1's own fix introduced. Round 3:
+`NO-GAPS`, all three exit criteria PASS. The round-3 pass independently
+enumerated every delegation point in the closeout skill to confirm no fourth
+spawn site exists, and verified that neither delegated agent
+(`closeout-runner`, `fresh-eyes-reviewer`) can nest a spawn -- neither has the
+Agent tool.
+
+**Outer Opus review: SKIPPED under the Step 5.6 review-worthiness gate.** The
+diff touches three non-`.md` files (`scripts/closeout_finish.py`,
+`scripts/swarm_config.py`, `tests/test_closeout_skill.py`), but every changed
+line is a comment, a docstring, or one assertion *message* -- zero executable
+statements, so the diff cannot introduce a runtime/logic regression. The
+fresh-eyes `NO-GAPS` is this change's review record.
+
+Full backend suite: 1314 passed, 1 skipped. Closeout-skill + harness-ledger
+suites: 61 passed. The three edited `.py`/test files were byte-verified
+ASCII-clean (CLAUDE.md scar #6).
+
 ## Scar tissue
 
 - **A model-name rename is not a safe find-and-replace in a repo that keeps a
