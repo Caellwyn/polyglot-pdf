@@ -41,6 +41,11 @@ import type {
   ConditionalDisplay,
   FieldCondition,
 } from '../types/schema';
+// One source for the quarantine stash key (bd polyglot-pdf-mzkw): stripEditorState
+// must reach into the same key ignoreField writes, and a duplicate literal here
+// would desync silently on a rename. One-way import -- ignoreField never imports
+// this module, so no cycle.
+import { IGNORED_FIELDS_KEY } from './ignoreField';
 
 // Field types that can participate in a merge group. A consolidated options[]
 // field is a single-select group, so only radio/checkbox source fields qualify.
@@ -186,7 +191,7 @@ export function stripEditorState(schema: FormSchema): FormSchema {
   // detector relies on ("_ungroup is session-only, stripped on save, so it can
   // never strand a reference in a stored kit"). Strip it there too, so the
   // premise is true on every path.
-  const ignored = (schema as unknown as Record<string, unknown>)._ignored_fields;
+  const ignored = (schema as unknown as Record<string, unknown>)[IGNORED_FIELDS_KEY];
   let nextIgnored = ignored;
   if (Array.isArray(ignored)) {
     nextIgnored = ignored.map(entry => {
@@ -199,7 +204,7 @@ export function stripEditorState(schema: FormSchema): FormSchema {
 
   if (!touched) return schema;
   const out = { ...schema, fields } as unknown as Record<string, unknown>;
-  if (Array.isArray(ignored)) out._ignored_fields = nextIgnored;
+  if (Array.isArray(ignored)) out[IGNORED_FIELDS_KEY] = nextIgnored;
   return out as unknown as FormSchema;
 }
 

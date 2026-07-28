@@ -38,8 +38,11 @@ import { conditionAtoms } from './validation';
 
 /** Top-level stash key. Underscore-prefixed like `_review` / `_ungroup` /
  * `_bakeoff` -- the convention for editor-and-provenance data the runtime
- * ignores. */
-const STASH_KEY = '_ignored_fields';
+ * ignores. EXPORTED because stripEditorState (fieldGrouping.ts) must reach
+ * into the same stash on save: a bare duplicate literal there would desync
+ * silently on a rename, with no compiler error (fresh-eyes). */
+export const IGNORED_FIELDS_KEY = '_ignored_fields';
+const STASH_KEY = IGNORED_FIELDS_KEY;
 
 /** One quarantined field plus what it takes to restore it exactly. */
 export interface IgnoredFieldEntry {
@@ -262,6 +265,12 @@ export function describeIgnoreBlock(
     // more affected fields than exist (fresh-eyes). The author fixes owners,
     // so owners are what the message counts.
     const owners = Array.from(new Set(deps.map(d => d.ownerLabel)));
+    // Defensive: the signature allows a reason/deps mismatch a future caller
+    // could produce, and "depend on this field ()." reads as a bug.
+    if (owners.length === 0) {
+      return 'Other parts of the form depend on this field. Retarget or remove '
+        + 'those references first -- ignoring it would strand them.';
+    }
     const names = owners.slice(0, 5);
     const more = owners.length > names.length ? ', ...' : '';
     return 'Other parts of the form depend on this field '

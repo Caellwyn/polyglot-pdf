@@ -123,6 +123,30 @@ describe('FieldEditor Ignored option (bd mzkw)', () => {
     expect(screen.getByText(/marked required/)).toBeInTheDocument();
   });
 
+  it('does not carry one field block reason onto the NEXT field', () => {
+    // Without key={field.id} the review editor keeps its local error state
+    // across a selection change, so field A's "depends on..." message would sit
+    // under field B -- blaming a field that may have no dependents at all
+    // (fresh-eyes; the id header two lines above guards the same class of bug).
+    const a = field({ id: 'a' });
+    const b = field({ id: 'b' });
+    const blocked = vi.fn(() => 'Other parts of the form depend on this field (x).');
+    const { rerender } = render(
+      <FieldEditor field={a} schema={schemaWith(a)} onUpdateField={vi.fn()}
+                   onIgnoreField={blocked} />,
+    );
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    selectStatus('__ignore__');
+    expect(screen.getByRole('alert')).toHaveTextContent('depend on this field');
+
+    // Select a DIFFERENT field whose ignore is allowed: no stale alert.
+    rerender(
+      <FieldEditor field={b} schema={schemaWith(b)} onUpdateField={vi.fn()}
+                   onIgnoreField={vi.fn(() => null)} />,
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('surfaces a block reason returned by the handler', () => {
     const f = field();
     render(

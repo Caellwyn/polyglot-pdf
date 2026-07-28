@@ -666,8 +666,14 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
           );
         })()}
 
-        {/* Human review sign-off + notes (bd polyglot-pdf-u8t6). */}
+        {/* Human review sign-off + notes (bd polyglot-pdf-u8t6).
+            key={field.id} remounts it on selection change, exactly as the id
+            header above does: it holds a local ignoreError, and without the
+            remount a block reason earned by THIS field would still be on
+            screen under the NEXT one, blaming a field that may have no
+            dependents at all (bd mzkw, fresh-eyes). */}
         <FieldReviewEditor
+          key={field.id}
           field={field}
           onUpdateField={onUpdateField}
           onIgnoreField={onIgnoreField}
