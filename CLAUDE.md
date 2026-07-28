@@ -474,18 +474,22 @@ Do NOT hand-roll the review cycle. In particular:
   from the subagent result -- there is no GitHub bot to poll, so the old
   `pr_review_watcher.py` background-watch loop does not run for the outer review.
   Never treat a subagent TIMEOUT/ERROR (no verdict returned) as clean -- surface it.
-- **If an Opus spawn dies with the effort-400, fall back to a one-agent Workflow**
+- **If a subagent spawn dies with the effort-400, fall back to a one-agent Workflow**
   (standing permission, maintainer directive 2026-07-27). Subagents inherit the
   SESSION's effort setting, which you cannot read; from a Fable session at `xhigh`,
-  an Agent-tool spawn of an Opus reviewer fails with `400 output_config.effort
+  an Agent-tool spawn of a non-Fable model fails with `400 output_config.effort
   'xhigh' is not supported when thinking is disabled on this model.` **That is a
-  transport failure, not a review failure** -- do not escalate it, and do not
-  downgrade the reviewer to Sonnet. Retry the SAME single spawn wrapped in a
+  transport failure, not a review failure** -- it is not a `BLOCKED` verdict, it is
+  not the "subagent ERROR" case that escalates, and it does not justify downgrading
+  the reviewer to a cheaper model. Retry the SAME single spawn wrapped in a
   one-agent Workflow whose `agent()` passes `effort: 'high'` (the Workflow tool
   exposes an `effort` option the Agent tool lacks). **This standing permission
   covers a single-agent wrapper only** -- real multi-agent orchestration still
-  requires an explicit per-instance go-ahead. Applies to any blocked Opus spawn,
-  not just the reviewer. Remove once the upstream bug is fixed.
+  requires an explicit per-instance go-ahead. **Applies to ANY blocked subagent
+  spawn at any model** (the closeout fresh-eyes rounds at haiku/sonnet as well as
+  the Opus outer reviewer), not just the reviewer. **If the wrapped retry ALSO
+  fails, that is a genuine stop** -- surface it. Remove once the upstream bug is
+  fixed.
 - **BOTH review layers run PRE-PR, serial not parallel** (closeout Steps 5.5 + 5.6):
   the fresh-eyes assess loop first (scored against the bead's exit criteria,
   re-spawned until no gap, final clearing round on Opus), THEN the Opus outer review

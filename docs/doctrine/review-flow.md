@@ -132,7 +132,7 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   OpenAI Codex (`chatgpt-codex-connector[bot]`) as the outer review -- itself the
   successor to GitHub Copilot (bd hrn.8/hrn.9) after the prepaid Copilot credits
   were exhausted. The maintainer's Codex subscription has now ended, so the repo
-  uses NO external reviewer at all. The Opus-5 review that already existed as the
+  uses NO external reviewer at all. The Opus review that already existed as the
   fallback for when Codex was unavailable is now the ALWAYS-ON primary outer review
   (the maintainer's framing: "Codex will always be unavailable, so the fallback
   becomes the primary; that is the only change"). The Codex-specific machinery --
@@ -154,10 +154,10 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   they close the bead and feed the merge decision (auto-merge a routine low-risk PR,
   else ping -- and whichever happens, the note to the maintainer records that two
   reviews cleared it + the second reviewer's model). **Why Opus-5:** it is the most
-  capable reviewer routinely available, and it is a tier above the Sonnet fresh-eyes
-  that cleared the rubric pre-PR. Note that since code production moved to Opus 5
-  (2026-07-27), the outer reviewer is often the SAME tier as the author -- the gate
-  does NOT rest on out-ranking the author. It rests on **independence**: a fresh
+  capable reviewer routinely available. The gate does **NOT** rest on out-ranking
+  either the author or the fresh-eyes pass -- the final fresh-eyes clearing round is
+  itself Opus (bd dgoa, above), and when the author ran on Opus the outer reviewer is
+  the SAME tier as both. It rests on **independence**: a fresh
   subagent with no shared context, prompted adversarially, reading the real diff --
   and on **two independent passes** having to agree, so a single reviewer's blind
   spot is not the whole gate. **Why not just trust the pre-PR fresh-eyes `NO-GAPS`:**
@@ -168,18 +168,23 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   (Codex) path, now retired.
 - **Spawn-failure fallback: the effort-400 (2026-07-27).** Subagents inherit the
   SESSION's reasoning-effort setting, and the orchestrator cannot read that setting.
-  When the session is Fable at `xhigh`, an Agent-tool spawn of an Opus reviewer dies
+  When the session is Fable at `xhigh`, an Agent-tool spawn of a non-Fable model dies
   with `400 output_config.effort 'xhigh' is not supported when thinking is disabled
   on this model. Use effort 'high' or below, or enable thinking.` **That 400 is a
   transport failure, not a review failure or a `BLOCKED` verdict** -- it does not
-  escalate, and it does NOT justify downgrading the reviewer to Sonnet. Retry the
-  same single spawn wrapped in a **one-agent Workflow** whose `agent()` call passes
-  `effort: 'high'` explicitly; the Workflow tool exposes an `effort` option the Agent
-  tool lacks (verified by controlled A/B 2026-07-27: `{model: 'opus', effort:
-  'high'}` succeeded while an identical spawn inheriting `xhigh` took the 400). The
+  escalate, and it does NOT justify downgrading the reviewer to a cheaper model.
+  Retry the same single spawn wrapped in a **one-agent Workflow** whose `agent()`
+  call passes `effort: 'high'` explicitly; the Workflow tool exposes an `effort`
+  option the Agent tool lacks (verified by controlled A/B 2026-07-27: `{model:
+  'opus', effort: 'high'}` succeeded while an identical spawn inheriting `xhigh`
+  took the 400). **This covers EVERY subagent spawn in the flow, at any model** --
+  the inner fresh-eyes rounds routed to haiku/sonnet as well as the Opus outer
+  reviewer -- since all of them are non-Fable spawns that fail identically. The
   standing permission covers a **single-agent wrapper only** -- genuine multi-agent
-  orchestration still needs the maintainer's explicit opt-in. Retire this fallback
-  when the upstream bug is fixed.
+  orchestration still needs the maintainer's explicit opt-in. **If the wrapped retry
+  also fails, that IS a genuine stop:** surface it, and never open the PR without
+  the outer review on a review-worthy change. Retire this fallback when the upstream
+  bug is fixed.
 - **Review-worthiness gate.** The orchestrator decides per-PR whether the diff can
   contain a runtime/logic regression. Docs-only / `.beads`-only / journal-only /
   trivial PRs skip the outer Opus review entirely -- reviewing them spends review
