@@ -221,3 +221,31 @@ describe('FieldEditor option widget -- select fields have no per-option widget (
     expect(screen.getByText('ca')).toBeInTheDocument();
   });
 });
+
+describe('FieldEditor option widget -- checkbox_group is never shared-name (bd mrdj outer review)', () => {
+  it('an unmapped checkbox_group option gets the reassign select, not a fake shared-name display', () => {
+    // v2 forbids a field-level pdf_field_name on checkbox_group; an option
+    // with no own pdf_field_name is genuinely UNFILLABLE, so it must get the
+    // 'assign a widget' select, never a misleading 'widget: X' read-only line.
+    // (This fixture is a malformed/legacy shape -- field-level name present --
+    // exactly the case the outer review flagged as mis-rendered.)
+    const cg: FormField = {
+      id: 'cg', name: 'CG', spoken_name: 'cg', type: 'checkbox_group',
+      section_id: 's1', pdf_field_name: 'form1[0].bad[0]',
+      options: [
+        { value: 'x', label: 'X' },                              // unmapped
+        { value: 'y', label: 'Y', pdf_field_name: 'form1[0].y[0]' },
+      ],
+    } as unknown as FormField;
+    render(
+      <FieldEditor field={cg} schema={makeSchema([cg])}
+        onUpdateField={vi.fn()} authorTier />,
+    );
+    // the unmapped option gets the reassign select in the empty state
+    const sel = screen.getByLabelText('Option 1 PDF widget') as HTMLSelectElement;
+    expect(sel.tagName).toBe('SELECT');
+    expect(sel.value).toBe('');
+    // and NOT the shared-name read-only line pointing at the (invalid) field name
+    expect(screen.queryByText(/widget: form1\[0\]\.bad\[0\]/)).toBeNull();
+  });
+});

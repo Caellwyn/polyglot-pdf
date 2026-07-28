@@ -1126,22 +1126,25 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         {/* A `select` has NO per-option widget concept: it
                             writes its scalar value through the field-level
                             mapping and its options never carry a widget, so
-                            neither the read-only shared-name display nor the
-                            reassign select applies -- render nothing (bd
-                            polyglot-pdf-spcu; the whole block below is
-                            radio/checkbox_group only). */}
+                            neither the read-only display nor the reassign
+                            select applies -- render nothing (bd
+                            polyglot-pdf-spcu). */}
                         {field.type === 'select' ? null :
-                        /* The shape discriminator is PER-OPTION, not
-                            per-field: the fill route keys on THIS option's
-                            pdf_field_name (truthy -> distinct-name write;
-                            falsy -> shared-name on-state write against the
-                            field's widget). A radio field can be MIXED (some
-                            options distinct-name, some shared-name kids), so a
-                            field-level switch would mis-render the minority
-                            shape (bd mrdj fresh-eyes round 2). */
-                        (!option.pdf_field_name && field.pdf_field_name) ? (
-                          // SHARED-NAME kid: keyed by pdf_on_value against the
-                          // FIELD's pdf_field_name; it must NOT gain its own
+                        /* The shared-name shape (field-level pdf_field_name +
+                            option pdf_on_value) is RADIO-ONLY: a checkbox_group
+                            forbids a field-level name entirely, so a
+                            checkbox_group option with no own pdf_field_name is
+                            genuinely UNFILLABLE, not shared-name (v2 model
+                            form_models.py:821-843; outer review). Gate the
+                            read-only shared-name display to radio; a
+                            checkbox_group option keeps the reassign select so
+                            the author can map its own widget. The discriminator
+                            is per-OPTION so a MIXED radio field renders each
+                            option by its true shape (bd mrdj round 2). */
+                        (field.type === 'radio'
+                          && !option.pdf_field_name && field.pdf_field_name) ? (
+                          // SHARED-NAME radio kid: keyed by pdf_on_value against
+                          // the FIELD's pdf_field_name; it must NOT gain its own
                           // pdf_field_name (both-keys trips dump-widget-
                           // multiclaim + flips the fill branch). Fixed widget,
                           // shown read-only -- no reassign select.
@@ -1152,9 +1155,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                               : ''}
                           </div>
                         ) : (
-                          // DISTINCT-name option: it carries its own
-                          // pdf_field_name (or the field has none, so it must).
-                          // Reassignable among real widgets, never free text.
+                          // DISTINCT-name option (or an unmapped checkbox_group
+                          // option): it carries -- or must acquire -- its own
+                          // pdf_field_name. Reassignable among real widgets,
+                          // never free text. OptionWidgetSelect shows
+                          // '(no widget assigned)' for an unmapped option, which
+                          // for a checkbox_group is the correct 'assign a widget'
+                          // affordance (its lint ERROR flags it until mapped).
                           <OptionWidgetSelect
                             value={option.pdf_field_name || ''}
                             inGroupNames={(field.options || [])
