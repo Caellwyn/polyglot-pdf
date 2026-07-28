@@ -957,16 +957,12 @@ def _bake_option_translations(schema: dict, model: str | None = None) -> dict:
 
     FAIL-OPEN by contract: extraction NEVER fails because translation failed --
     any error is returned as a report dict, never raised (same graceful-degrade
-    contract as _lint_schema). Skipped outright when no Gemini credentials are
-    present (the local claude-CLI-only dev path); the gate mirrors the hosted
-    route's "configured" check and llm_providers.py's auth split: VERTEXAI=true
-    -> Vertex/ADC, else GEMINI_API_KEY.
+    contract as _lint_schema). VERTEX-ONLY (maintainer directive 2026-07-28;
+    bd polyglot-pdf-f3lm / w99b): the AI Studio gate is closed, so there is no
+    GEMINI_API_KEY path and no credential pre-gate -- a bare local run uses
+    ADC, the hosted route its service account, and an auth failure surfaces
+    through the fail-open handler below like any other error.
     """
-    vertex = os.getenv("VERTEXAI", "").lower() == "true"
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not (vertex or api_key):
-        return {"skipped": "no gemini credentials (set VERTEXAI=true or "
-                           "GEMINI_API_KEY)"}
     try:
         import asyncio  # noqa: E402 -- authoring script stays sync elsewhere
         sys.path.insert(0, _REPO)
@@ -981,15 +977,11 @@ def _bake_option_translations(schema: dict, model: str | None = None) -> dict:
         # chain is disabled so a deliberately chosen tier fails loud (and
         # fail-open catches it) instead of silently degrading to lite.
         thinking = 512 if "pro" in model else None
-        if vertex:
-            text_ai = TextAIGemini(
-                model=model, vertexai=True,
-                project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-                location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
-                fallback_models=(), thinking_budget=thinking)
-        else:
-            text_ai = TextAIGemini(model=model, api_key=api_key,
-                                   fallback_models=(), thinking_budget=thinking)
+        text_ai = TextAIGemini(
+            model=model, vertexai=True,
+            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            fallback_models=(), thinking_budget=thinking)
         languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
                      if n != "english"}
         report = asyncio.run(bake_label_translations(schema, text_ai, languages))
@@ -1166,8 +1158,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
 
     translate_options (bd 2h9j): when True (default) a post-pass bakes
     FieldOption.label_translations for every supported spoken language --
-    credential-gated (no Gemini creds -> skipped) and fail-open (extraction
-    never fails because translation failed). translation_model overrides the
+    VERTEX-ONLY with no credential pre-gate (bd f3lm) and fail-open
+    (extraction never fails because translation failed; an auth error
+    surfaces as a failed report). translation_model overrides the
     OPTION_TRANSLATION_MODEL env default (gemini-2.5-pro)."""
     # 1. Deterministic AcroForm dump (to a temp file unless --keep-dump).
     dump_dir = os.path.dirname(os.path.abspath(out_path)) or "."
@@ -1275,8 +1268,9 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     # 3f. Bake option label_translations for the supported spoken languages
     #     (bd polyglot-pdf-2h9j). After repair so translations key off the
     #     final labels, before validate/lint so the validated artifact is the
-    #     shipped artifact. Fail-open + credential-gated (see the helper);
-    #     --no-translate-options skips it for cheap extraction-strategy runs.
+    #     shipped artifact. Fail-open, VERTEX-ONLY with NO credential pre-gate
+    #     (bd f3lm -- it always attempts Vertex and fails open on an auth
+    #     error); --no-translate-options skips it for cheap extraction runs.
     translation_report = (_bake_option_translations(schema, translation_model)
                           if translate_options else {"skipped": "disabled"})
 
@@ -1380,10 +1374,10 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
               f"fallback enriched {guidance_report.get('fallback_enriched', 0)}"
               f" field(s)", file=sys.stderr)
     elif guidance_report.get("unavailable"):
-        print("guidance: JUDGE UNAVAILABLE (no gemini credentials -- set "
-              "VERTEXAI=true or GEMINI_API_KEY, or pass "
-              "--no-enrich-guidance) -- authored guidance dropped per the "
-              "KEEP rule; naive fallback enriched "
+        print("guidance: JUDGE UNAVAILABLE (the Vertex judge call failed -- "
+              "check ADC / GOOGLE_CLOUD_PROJECT for the polyglot-demo "
+              "project, or pass --no-enrich-guidance) -- authored guidance "
+              "dropped per the KEEP rule; naive fallback enriched "
               f"{guidance_report.get('fallback_enriched', 0)} field(s)",
               file=sys.stderr)
     else:
@@ -1483,8 +1477,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-translate-options", dest="translate_options",
                     action="store_false", default=True,
                     help="skip baking option label_translations (bd 2h9j; "
-                         "default ON, credential-gated + fail-open -- turn "
-                         "off for cheap extraction-strategy test runs)")
+                         "default ON, Vertex-only + fail-open, no credential "
+                         "pre-gate -- turn off for cheap extraction-strategy "
+                         "test runs)")
     ap.add_argument("--translation-model", default=None,
                     help="Gemini model for the option-translation bake "
                          "(default: OPTION_TRANSLATION_MODEL env or "

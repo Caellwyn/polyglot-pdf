@@ -37,6 +37,23 @@ from typing import Any, Callable, Dict, Optional, Protocol
 ProviderResult = tuple[dict, dict]
 
 
+def _vertex_gemini_client(http_opts):
+    """Build the google-genai client for a gemini call. VERTEX-ONLY: every
+    gemini call lands on Vertex (ADC + GOOGLE_CLOUD_PROJECT) on the tracked
+    billing project -- there is NO AI Studio / GEMINI_API_KEY path (maintainer
+    directive 2026-07-28: the AI Studio gate is closed; bd polyglot-pdf-f3lm /
+    w99b). A bare local run uses ADC directly; the hosted Cloud Run extractor
+    uses its service account. GOOGLE_CLOUD_PROJECT unset falls back to ADC's
+    own default project, matching the fleet-wide probe convention."""
+    from google import genai  # lazy
+    return genai.Client(
+        vertexai=True,
+        project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+        location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+        http_options=http_opts,
+    )
+
+
 class LLMProvider(Protocol):
     """Transport for one LLM backend. Implementations own ONLY how the prompt
     reaches a model and how the response becomes a (schema, token_info) pair."""
@@ -147,7 +164,7 @@ class ClaudeCliProvider:
 
 
 class GeminiProvider:
-    """Gemini backend (paid, google-genai SDK, GEMINI_API_KEY). Kept as a
+    """Gemini backend (paid, google-genai SDK, Vertex-only). Kept as a
     fallback for when external help is hired and the Gemini path is useful."""
 
     name = "gemini"
@@ -163,38 +180,12 @@ class GeminiProvider:
                 "Set EXTRACTOR_MODEL (e.g. gemini-2.5-flash) alongside "
                 "EXTRACTOR_PROVIDER=gemini, or pass --model.")
 
-        from google import genai  # lazy: only needed for the gemini path
-        from google.genai import types
+        from google.genai import types  # lazy: only needed for the gemini path
         extract_json, normalize_schema = _parse_helpers()
 
         timeout_ms = int(os.getenv("BAKEOFF_GEMINI_TIMEOUT_MS", "600000"))
-        http_opts = types.HttpOptions(timeout=timeout_ms)
-        # Auth: Vertex AI (ADC / service account, no API key) when VERTEXAI is
-        # set -- this is how the hosted extractor runs on Cloud Run, which has a
-        # service account but no GEMINI_API_KEY (bd polyglot-pdf-92qe). Otherwise
-        # (local dev / the offline bakeoff harness) fall back to the AI Studio
-        # key. The gemini-2.5 model ids resolve identically on Vertex (verified
-        # against the demo project's ADC), so no model-name remap is needed.
-        # Mirrors the live voice adapter's Vertex client construction. The
-        # truthy test (`.lower() == "true"`) is the same one backend/config.py
-        # uses; the only intentional difference is the default when VERTEXAI is
-        # UNSET -- config defaults it True (a deployed backend is Vertex), this
-        # defaults to the key path (a bare local/bakeoff run uses the key). The
-        # hosted route pins VERTEXAI into this subprocess's env from
-        # settings.VERTEXAI, so that default-polarity gap can never surface on
-        # the path that matters (bd polyglot-pdf-fyq4).
-        if os.getenv("VERTEXAI", "").lower() == "true":
-            client = genai.Client(
-                vertexai=True,
-                project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-                location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
-                http_options=http_opts,
-            )
-        else:
-            client = genai.Client(
-                api_key=os.environ["GEMINI_API_KEY"],
-                http_options=http_opts,
-            )
+        client = _vertex_gemini_client(
+            types.HttpOptions(timeout=timeout_ms))
         contents: list = []
         if pdf_path:
             contents.append(types.Part.from_bytes(
@@ -329,21 +320,12 @@ def run_json_gemini(prompt: str, model: str) -> tuple[dict, dict]:
     if not model.lower().startswith("gemini"):
         raise ValueError(
             f"the gemini runner needs a gemini-* model, got {model!r}")
-    from google import genai  # lazy
-    from google.genai import types
+    from google.genai import types  # lazy
 
     timeout_ms = int(os.getenv("BAKEOFF_GEMINI_TIMEOUT_MS", "600000"))
-    http_opts = types.HttpOptions(timeout=timeout_ms)
-    if os.getenv("VERTEXAI", "").lower() == "true":
-        client = genai.Client(
-            vertexai=True,
-            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
-            http_options=http_opts,
-        )
-    else:
-        client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
-                              http_options=http_opts)
+    # VERTEX-ONLY (maintainer directive 2026-07-28; bd f3lm/w99b): no AI
+    # Studio / GEMINI_API_KEY path -- a bare local run uses ADC.
+    client = _vertex_gemini_client(types.HttpOptions(timeout=timeout_ms))
     config_kwargs: Dict[str, Any] = dict(
         response_mime_type="application/json",
         temperature=0.0,

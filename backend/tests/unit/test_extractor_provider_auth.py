@@ -1,11 +1,19 @@
-"""Provider-level auth selection for the Gemini extractor (bd polyglot-pdf-fyq4).
+"""Provider-level auth for the Gemini extractor (bd polyglot-pdf-fyq4;
+VERTEX-ONLY since bd polyglot-pdf-f3lm).
 
-The hosted extractor authenticates to Gemini via Vertex/ADC on Cloud Run (no
-GEMINI_API_KEY) but via an AI Studio key locally. That choice lives in
-scripts/bakeoff/llm_providers.py's GeminiProvider.run(); the route-level tests
-in test_editor_kit_routes.py cover the config GATE, but this pins the PROVIDER's
+Every gemini call goes through Vertex on the tracked billing project -- there
+is NO AI Studio / GEMINI_API_KEY path (maintainer directive 2026-07-28: the
+AI Studio gate is closed). That construction lives in
+scripts/bakeoff/llm_providers.py's _vertex_gemini_client(), shared by
+GeminiProvider.run() and run_json_gemini(); the route-level tests in
+test_editor_kit_routes.py cover the config GATE, but this pins the PROVIDER's
 own client construction directly, by stubbing genai.Client and asserting which
-kwargs it receives under each VERTEXAI state -- no network, no real SDK call.
+kwargs it receives -- no network, no real SDK call.
+
+These tests previously pinned a dual-path (VERTEXAI=true -> Vertex, else an
+AI Studio key); they now pin the INVERSE invariant -- Vertex regardless of
+the VERTEXAI env, and never an api_key -- so a regression that reintroduces
+the key path fails here.
 """
 import importlib.util
 import pathlib
@@ -89,30 +97,41 @@ def test_provider_uses_vertex_when_VERTEXAI_true_and_no_key(
     assert "api_key" not in kw  # no key demanded on the Vertex path
 
 
-def test_provider_uses_api_key_when_VERTEXAI_unset(
+def test_provider_uses_vertex_even_when_VERTEXAI_UNSET(
     provider_with_stubbed_genai, monkeypatch
 ):
+    """The bug this fixed (bd f3lm): VERTEXAI unset used to mean "AI Studio
+    key", so a bare local run with ADC decided it had no credentials and
+    dropped guidance. Vertex is now unconditional -- a present key is
+    IGNORED, never used to build the client."""
     provider, calls = provider_with_stubbed_genai
-    monkeypatch.delenv("VERTEXAI", raising=False)  # unset -> key path (local dev)
-    monkeypatch.setenv("GEMINI_API_KEY", "local-key")
+    monkeypatch.delenv("VERTEXAI", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "local-key")  # must be ignored
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-x")
 
     provider.run("prompt", "gemini-2.5-flash", None)
 
     kw = calls["client_kwargs"]
-    assert kw.get("api_key") == "local-key"
-    assert "vertexai" not in kw
+    assert kw.get("vertexai") is True
+    assert kw.get("project") == "proj-x"
+    assert "api_key" not in kw  # the AI Studio gate is CLOSED
 
 
-def test_provider_key_path_KeyErrors_without_a_key(
+def test_provider_uses_vertex_even_when_VERTEXAI_false_and_no_key(
     provider_with_stubbed_genai, monkeypatch
 ):
-    # Unchanged pre-fix behavior: the non-Vertex path still requires the key.
-    provider, _calls = provider_with_stubbed_genai
+    """Even the explicit VERTEXAI=false opt-out no longer routes to AI Studio
+    (the directive removed the escape hatch, not just the default), and a
+    missing key no longer KeyErrors -- there is no key path to fail."""
+    provider, calls = provider_with_stubbed_genai
     monkeypatch.setenv("VERTEXAI", "false")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-    with pytest.raises(KeyError):
-        provider.run("prompt", "gemini-2.5-pro", None)
+    provider.run("prompt", "gemini-2.5-pro", None)
+
+    kw = calls["client_kwargs"]
+    assert kw.get("vertexai") is True
+    assert "api_key" not in kw
 
 
 def test_provider_rejects_non_gemini_model_before_any_client(
