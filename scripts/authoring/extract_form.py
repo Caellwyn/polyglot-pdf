@@ -957,16 +957,12 @@ def _bake_option_translations(schema: dict, model: str | None = None) -> dict:
 
     FAIL-OPEN by contract: extraction NEVER fails because translation failed --
     any error is returned as a report dict, never raised (same graceful-degrade
-    contract as _lint_schema). Skipped outright when no Gemini credentials are
-    present (the local claude-CLI-only dev path); the gate mirrors the hosted
-    route's "configured" check and llm_providers.py's auth split: VERTEXAI=true
-    -> Vertex/ADC, else GEMINI_API_KEY.
+    contract as _lint_schema). VERTEX-ONLY (maintainer directive 2026-07-28;
+    bd polyglot-pdf-f3lm / w99b): the AI Studio gate is closed, so there is no
+    GEMINI_API_KEY path and no credential pre-gate -- a bare local run uses
+    ADC, the hosted route its service account, and an auth failure surfaces
+    through the fail-open handler below like any other error.
     """
-    vertex = os.getenv("VERTEXAI", "").lower() == "true"
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not (vertex or api_key):
-        return {"skipped": "no gemini credentials (set VERTEXAI=true or "
-                           "GEMINI_API_KEY)"}
     try:
         import asyncio  # noqa: E402 -- authoring script stays sync elsewhere
         sys.path.insert(0, _REPO)
@@ -981,15 +977,11 @@ def _bake_option_translations(schema: dict, model: str | None = None) -> dict:
         # chain is disabled so a deliberately chosen tier fails loud (and
         # fail-open catches it) instead of silently degrading to lite.
         thinking = 512 if "pro" in model else None
-        if vertex:
-            text_ai = TextAIGemini(
-                model=model, vertexai=True,
-                project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-                location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
-                fallback_models=(), thinking_budget=thinking)
-        else:
-            text_ai = TextAIGemini(model=model, api_key=api_key,
-                                   fallback_models=(), thinking_budget=thinking)
+        text_ai = TextAIGemini(
+            model=model, vertexai=True,
+            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            fallback_models=(), thinking_budget=thinking)
         languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
                      if n != "english"}
         report = asyncio.run(bake_label_translations(schema, text_ai, languages))
@@ -1380,10 +1372,10 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
               f"fallback enriched {guidance_report.get('fallback_enriched', 0)}"
               f" field(s)", file=sys.stderr)
     elif guidance_report.get("unavailable"):
-        print("guidance: JUDGE UNAVAILABLE (no gemini credentials -- set "
-              "VERTEXAI=true or GEMINI_API_KEY, or pass "
-              "--no-enrich-guidance) -- authored guidance dropped per the "
-              "KEEP rule; naive fallback enriched "
+        print("guidance: JUDGE UNAVAILABLE (the Vertex judge call failed -- "
+              "check ADC / GOOGLE_CLOUD_PROJECT for the polyglot-demo "
+              "project, or pass --no-enrich-guidance) -- authored guidance "
+              "dropped per the KEEP rule; naive fallback enriched "
               f"{guidance_report.get('fallback_enriched', 0)} field(s)",
               file=sys.stderr)
     else:
