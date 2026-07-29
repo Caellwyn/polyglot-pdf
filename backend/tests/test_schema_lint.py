@@ -1102,3 +1102,21 @@ def test_pure_option_reorder_does_NOT_flag_but_real_changes_do():
         dict(base, options=[{"label": "Yes", "value": "y"}]),         # removed
     ):
         assert len(_stale(lint_schema(_identity_schema(changed, baked)))) == 1
+
+
+def test_a_kit_baked_before_identity_tracking_never_reads_stale():
+    """REAL-KIT SAFETY (bd anim outer review round 2): the shipped w7 kit's 44
+    provenance records predate identity tracking and carry NO identity_sha1.
+    The rule must stay silent for them -- otherwise changing the hash formula
+    (as the reorder fix did) would light up every previously-baked field at
+    once, the mass false alarm that destroys the gate's credibility."""
+    import json, pathlib
+    kit = pathlib.Path(__file__).resolve().parents[2] / "form-kits" / "w7" / "schema.json"
+    if not kit.exists():          # kit not present in this checkout
+        return
+    schema = json.loads(kit.read_text(encoding="utf-8"))
+    hits = [f for f in lint_schema(schema)
+            if f.rule == "guidance-identity-stale"]
+    assert hits == [], (
+        "a kit baked before identity tracking must never read stale; "
+        f"got {len(hits)} findings")
