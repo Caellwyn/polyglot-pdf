@@ -15,6 +15,11 @@
  * The state grammar, and why each state looks the way it does:
  *
  *   idle       Warm, awake, barely breathing. Rays turn very slowly.
+ *   connecting Coming up, or recovering. The disc pulses gently while the rays
+ *              stay faint and still: alive-but-waiting. Deliberately distinct
+ *              from idle -- a reconnecting session must never look like one
+ *              that never started (bd polyglot-pdf-bxng), and on the collapsed
+ *              mobile FAB this avatar is the ONLY status the user can see.
  *   listening  The rays STOP DEAD and breathe in length with mic energy.
  *              Stillness is the correct grammar for attention -- a thing that
  *              keeps moving while you talk looks busy with something else.
@@ -63,7 +68,7 @@ const SLOW_ALPHA = 0.075
  */
 
 export interface SolProps {
-	/** Which of the six states to render. */
+	/** Which of the seven states to render. */
 	state: SolState
 	/**
 	 * Live MIC amplitude, 0-100 (the capture worklet's smoothed RMS scale).

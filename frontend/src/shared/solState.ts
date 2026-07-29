@@ -2,7 +2,7 @@
  * solState -- the pure status -> Sol-state mapping (bd polyglot-pdf-2p4y).
  *
  * Sol is the single avatar that replaced the connection dot, the level meter and
- * the mobile pulsing circle. It has SIX visual states; the app, however, carries
+ * the mobile pulsing circle. It has SEVEN visual states; the app, however, carries
  * session state in three separate loosely-typed signals:
  *
  *   - `status`   a string that is NOT the ConnectionStatus union in practice --
@@ -91,7 +91,7 @@ function isConnecting(s: string): boolean {
 }
 
 /**
- * Map the app's session signals onto one of Sol's six states.
+ * Map the app's session signals onto one of Sol's seven states.
  *
  * Precedence, highest first:
  *   1. paused   -- an explicit user choice; it outranks everything, because
