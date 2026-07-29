@@ -120,15 +120,49 @@ def test_contract_advertises_every_scorer_graded_key():
     # scorer no longer grades either as a relationship-recall key (bd
     # polyglot-pdf-d9lz reconciled schema_score.rel_keys to v2), so this coupling
     # list must not require the contract to advertise them.
+    # ALSO EXCLUDES pdf_position (bd polyglot-pdf-icyi): the contract now
+    # deliberately FORBIDS it, because widget geometry is read straight from the
+    # PDF's AcroForm widgets after extraction and overwrites anything the model
+    # emits -- a model transcribing coordinates rounds them and its page base is
+    # non-deterministic (that shipped a real bug: 48 of 54 w7 fields on page 0,
+    # every text overlay invisible). This coupling list is "keys an arm must be
+    # ASKED for", and pdf_position is no longer one; the scorer half was
+    # reconciled to match (schema_score._pos_match treats an absent DRAFT
+    # position as not-applicable rather than a miss, pinned in
+    # test_schema_score_derivation.py). Leaving it in this list would have
+    # passed vacuously -- the substring survives inside the forbidding comment
+    # -- which is exactly the false green a coupling test must not give.
     contract = sc.render_contract()
     scored_keys = [
-        "pdf_position", "max_length", "read_only", "multiline",  # attributes
+        "max_length", "read_only", "multiline",                  # attributes
         "show_if", "require_if", "copy_to",                      # relationships
         "conditional_behavior", "conditional_logic",
         "overflow_to_supplement", "multi_entry",                 # structure/overflow
     ]
     missing = [k for k in scored_keys if k not in contract]
     assert not missing, f"contract dropped scorer-graded keys: {missing}"
+
+
+def test_contract_FORBIDS_pdf_position_and_says_so_in_the_rules():
+    """bd polyglot-pdf-icyi: pdf_position must be declared derived-and-discarded,
+    the same way parts/sections/section_id already are -- and on the surface the
+    model actually follows. A bare absence from the FIELD SHAPE block is weaker
+    than the RULES-level prohibition its siblings get: a model that emits it
+    anyway still costs a paid extraction run (fresh-eyes)."""
+    contract = sc.render_contract()
+    # not offered as an emittable key...
+    assert '"pdf_position": {{' not in contract
+    assert '"pdf_position": {' not in contract
+    # ...and explicitly forbidden, in the same breath as its siblings
+    assert "Do NOT emit" in contract
+    lowered = contract.lower()
+    assert "pdf_position" in lowered
+    forbidding = [ln for ln in contract.splitlines()
+                  if "pdf_position" in ln.lower()]
+    assert forbidding, "pdf_position vanished entirely -- say WHY, or an arm re-adds it"
+    assert any("do not emit" in ln.lower() for ln in forbidding), (
+        "pdf_position is mentioned but not forbidden: "
+        f"{forbidding}")
 
 
 def test_contract_allows_multi_bucket_composite_conditions():

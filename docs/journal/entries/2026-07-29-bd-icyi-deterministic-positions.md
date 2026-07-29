@@ -97,9 +97,66 @@ Two gaps found, **both adopted** (neither deferred):
    now pinned.
 
 Also noted and NOT flagged as blocking: `_complete_grouped_families` appends
-options with no `pdf_position` at all (pre-existing, untouched by this diff);
-and the fallback's "any page==0 -> shift all" rule is form-wide and blunt, but
-unreachable on AcroForms and documented as an accepted tradeoff.
+options with no `pdf_position` at all (pre-existing, untouched by this diff --
+filed by the reviewer as bd polyglot-pdf-tz7a); and the fallback's "any
+page==0 -> shift all" rule is form-wide and blunt, but unreachable on AcroForms
+and documented as an accepted tradeoff.
+
+The Opus clearing round then found five more, **four adopted**:
+
+3. **The bug this bead exists to kill was still reachable.** A 0-based page
+   arriving as `0.0` or `"0"` -- ordinary JSON from a model -- was neither
+   normalized nor reported: the gate tested `page == 0` (True for `0.0`, False
+   for `"0"`) and the shift loop then required `isinstance(page, int)`. So
+   `0.0` tripped the gate WITHOUT shifting and `"0"` did neither, and
+   `PDFPosition` coerces both to a bare `0` downstream. Worse, my own comment
+   excused the skip as "non-integer page is a different defect; lint names it"
+   -- **which is false**: no lint rule reads `pdf_position` at all
+   (`manifest_service` and `secretary_context` are its only backend readers and
+   both STRIP it). Fixed with `_as_page_int`, which normalizes every integral
+   form and writes a real `int`; the false claim is deleted and replaced with
+   why.
+4. **An aliased position dict shifted twice**, landing two pages off -- the
+   mirror image of the very off-the-document hazard the identity-exempt set
+   exists to prevent. Collection now dedupes by identity too. Unreachable via
+   `json.loads`, but the function is documented as standalone-callable.
+5. **The `backfill_option_positions.py` CLI's `--check` exit code inverted.**
+   Its change-detector was `fields_filled + options_filled > 0` -- a count of
+   DERIVATIONS -- and since every resolvable rect now re-derives, that was
+   permanently true: `--check` reported "needs patching" (exit 1) for every
+   kit including a fully-positioned one, and the documented exit 0 became
+   unreachable. That matters because journal entries record "`--check` exits 0"
+   as the passing criterion for kit-position work. Now compares the positions
+   themselves; the docstring's idempotence claim was rewritten to say
+   idempotent-in-effect (re-derives, computes identical values, writes nothing)
+   rather than idempotent-by-skipping.
+6. **A coupling test passing vacuously.** `test_contract_advertises_every_scorer_graded_key`
+   exists to catch the contract NARROWING below what the scorer grades -- and
+   this diff narrows it deliberately. It passed only because the substring
+   `pdf_position` survived inside my forbidding comment. Removed from that
+   list (with the reason), and replaced by a test asserting the contract
+   actively FORBIDS the key.
+7. Finding 5 (low, adopted): `pdf_position`'s prohibition lived only as an
+   inline comment in the JSON shape block, while `parts`/`sections` get a
+   RULES-level bullet -- the surface a model actually follows. Added the
+   parallel bullet, so the mirroring the design claims is real.
+
+### One thing the fixes surfaced, deliberately NOT fixed here
+
+Running the corrected CLI over the COMMITTED i-90 kit reports a real
+difference, which is the detector working. 115 of the 123 changed positions are
+harmless float churn (committed kits store raw PyMuPDF floats like
+`293.99798583984375`; the dump rounds to one decimal). But **8 are real moves
+of 42-108pt**, all on choice fields with no field-level `pdf_field_name`, whose
+field-level rect is defined as "the first option's widget". Example
+`p3_checkbox4[1]`: options are `select_no` (real widget x=259.75) then
+`select_yes` (x=215.54); the committed rect is 215.54 while a re-derive yields
+259.75 -- the new value matches the documented first-option rule, the committed
+one does not. Both are real widget rects, so this is arguably a CORRECTION, but
+it moves committed data on the rect a choice field's preview paints, and two of
+the eight move ~108pt vertically into a different form row. That needs eyes on
+the rendered overlay before any kit is rewritten, and this bead rewrote no
+committed kit. Filed as **bd polyglot-pdf-ks1y**.
 
 ## Lessons
 
@@ -127,6 +184,21 @@ not exist inside the worktree, so the guard never saw it. Added a second pin
 that drives the exact production shape through `_backfill_positions` directly;
 reverting the trust inversion now fails 2 tests. A guard whose teeth you have
 not verified is decoration.
+
+**"A different layer will catch it" is a claim, not a fact -- check it before
+writing it in a comment.** I skipped normalizing a non-`int` page and justified
+it with "lint names it". No lint rule reads `pdf_position` at all. The comment
+made a reviewer's job harder and would have made a future maintainer's job
+worse, because it reads as a deliberate division of responsibility rather than
+an oversight. If you cite another layer as the backstop, grep for it.
+
+**Inverting a trust rule silently redefines every change-detector built on it.**
+Three separate consumers keyed off "did the back-fill fill anything?" as a proxy
+for "is there work to do": the CLI's exit code, its docstring's idempotence
+promise, and a coupling test's key list. Making the derivation unconditional
+made that proxy permanently true, so all three quietly inverted meaning. When a
+"was it needed?" flag becomes "did it run?", search for everyone reading the
+flag.
 
 **A marker key stamped onto data leaks.** The first draft tagged deterministic
 rects with a `_deterministic_rect` key so the normalization pass could tell

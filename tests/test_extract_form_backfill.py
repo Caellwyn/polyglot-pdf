@@ -370,6 +370,53 @@ def test_model_page_zero_base_is_shifted_not_discarded():
     assert schema["fields"][2]["options"][0]["pdf_position"]["page"] == 1
 
 
+@pytest.mark.parametrize("raw", [0, 0.0, "0", " 0 "])
+def test_a_zero_page_normalizes_whatever_JSON_TYPE_it_arrives_as(raw):
+    """THE BUG THIS BEAD EXISTS TO KILL, reachable through the fallback until now
+    (bd polyglot-pdf-icyi, fresh-eyes Opus round).
+
+    A model returns raw JSON, so a 0-based page can arrive as 0, 0.0 or "0" --
+    all three mean page one under the model's base, and all three paint NOWHERE
+    if they survive (the editor matches 1..numPages by exact equality, and
+    PDFPosition coerces 0.0/"0" to a bare 0). The first version gated on
+    `page == 0` (True for 0.0, False for "0") then shifted only `int`, so 0.0
+    tripped the gate WITHOUT shifting and "0" did neither -- shipping an
+    unnormalized page 0 silently, on the very code path added to prevent it. The
+    skip was excused as "lint names it", which is false: no lint rule reads
+    pdf_position at all."""
+    schema = {"fields": [{"id": "a", "pdf_position": {
+        "page": raw, "x": 1, "y": 2, "width": 3, "height": 4}}]}
+    assert ef._normalize_model_page_base(schema) == 1
+    # a REAL int, so downstream page matching (exact equality) works
+    assert schema["fields"][0]["pdf_position"]["page"] == 1
+
+
+@pytest.mark.parametrize("raw", ["abc", None, 1.5, True, [], {}])
+def test_a_non_integral_page_is_left_alone_and_never_crashes(raw):
+    """Only INTEGRAL pages shift; anything else has no sane +1 and is left as-is
+    (a second field carries the page 0 that arms the pass)."""
+    schema = {"fields": [
+        {"id": "junk", "pdf_position": {"page": raw, "x": 1, "y": 2,
+                                        "width": 3, "height": 4}},
+        {"id": "armer", "pdf_position": {"page": 0, "x": 1, "y": 2,
+                                         "width": 3, "height": 4}},
+    ]}
+    ef._normalize_model_page_base(schema)          # must not raise
+    assert schema["fields"][0]["pdf_position"]["page"] == raw
+    assert schema["fields"][1]["pdf_position"]["page"] == 1
+
+
+def test_an_ALIASED_position_dict_is_shifted_only_once():
+    """One dict referenced from two fields must not shift twice -- two pages off
+    is exactly the off-the-document failure the exempt set exists to prevent
+    (fresh-eyes Opus round). Collection dedupes by identity."""
+    shared = {"page": 0, "x": 1, "y": 2, "width": 3, "height": 4}
+    schema = {"fields": [{"id": "a", "pdf_position": shared},
+                         {"id": "b", "pdf_position": shared}]}
+    assert ef._normalize_model_page_base(schema) == 1
+    assert shared["page"] == 1
+
+
 def test_model_pages_are_untouched_when_none_is_zero():
     """Already 1-based: shifting would push the last page off the document."""
     schema = {"fields": [{"id": "a", "pdf_position": {

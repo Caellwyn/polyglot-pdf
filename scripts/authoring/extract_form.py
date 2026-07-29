@@ -81,6 +81,37 @@ def _has_usable_position(pos: object) -> bool:
         return False
 
 
+def _as_page_int(value: object) -> int | None:
+    """An INTEGRAL page number as an int, else None.
+
+    A model returns raw JSON, so a 0-based page can arrive as 0, 0.0 or "0".
+    All three mean "page one" under the model's base, and all three paint
+    NOWHERE if they survive: the editor's PDF viewer matches pages 1..numPages
+    by exact equality, and PDFPosition coerces 0.0 / "0" to a bare 0.
+
+    An earlier version of the normalizer gated on `page == 0` (True for 0.0,
+    False for "0") and then shifted only `isinstance(page, int)` -- so 0.0
+    tripped the gate without being shifted and "0" did neither. Both shipped an
+    unnormalized 0-based page silently: the exact bug this bead exists to kill,
+    surviving the code path added to prevent it. That skip was justified in a
+    comment claiming "lint names it", which is FALSE -- no lint rule reads
+    pdf_position at all (manifest_service and secretary_context are its only
+    backend readers, and both STRIP it). So every integral form normalizes here
+    (bd polyglot-pdf-icyi, fresh-eyes Opus round)."""
+    if isinstance(value, bool):
+        return None                      # True/False are ints in Python
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _normalize_model_page_base(schema: dict, deterministic: object = None) -> int:
     """Normalize MODEL-SUPPLIED pdf_position pages from 0-based to 1-based.
 
@@ -108,6 +139,12 @@ def _normalize_model_page_base(schema: dict, deterministic: object = None) -> in
     all four real kits carry non-degenerate rects)."""
     exempt = deterministic or frozenset()
     model_positions: list[dict] = []
+    # Dedupe BY IDENTITY: an aliased position dict (one object referenced from
+    # two fields) would otherwise be collected twice and shifted twice, landing
+    # two pages off -- re-creating the very off-the-document failure the exempt
+    # set exists to prevent. Not reachable from json.loads output, but this
+    # function is documented as standalone-callable (fresh-eyes).
+    seen_ids: set = set()
     for field in schema.get("fields", []) or []:
         if not isinstance(field, dict):
             continue
@@ -116,18 +153,19 @@ def _normalize_model_page_base(schema: dict, deterministic: object = None) -> in
                       if isinstance(o, dict)]):
             if not isinstance(pos, dict):
                 continue
-            if id(pos) in exempt:
-                continue  # deterministic rect: already 1-based, leave alone
+            if id(pos) in exempt or id(pos) in seen_ids:
+                continue  # deterministic rect (already 1-based), or an alias
+            seen_ids.add(id(pos))
             model_positions.append(pos)
 
-    if not any(p.get("page") == 0 for p in model_positions):
+    pages = [(pos, _as_page_int(pos.get("page"))) for pos in model_positions]
+    if not any(page == 0 for _, page in pages):
         return 0
     shifted = 0
-    for pos in model_positions:
-        page = pos.get("page")
-        if isinstance(page, bool) or not isinstance(page, int):
-            continue  # non-integer page is a different defect; lint names it
-        pos["page"] = page + 1
+    for pos, page in pages:
+        if page is None:
+            continue  # genuinely non-integral: nothing sane to shift it to
+        pos["page"] = page + 1   # writes a real int, so 0.0 / "0" normalize too
         shifted += 1
     return shifted
 

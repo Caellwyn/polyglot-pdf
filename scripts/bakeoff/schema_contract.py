@@ -293,6 +293,10 @@ RULES:
 - Do NOT emit parts, sections, or field section_id -- form divisions are
   derived deterministically from the PDF after extraction (bd 6cfu.2), so any
   boundaries you produce are overwritten.
+- Do NOT emit pdf_position -- widget geometry is read straight from the PDF's
+  own AcroForm widgets after extraction and overwrites anything you send, so
+  transcribing coordinates only loses precision. Spend that effort on getting
+  pdf_field_name exactly right: it is the key the position is looked up by.
 - Recover conditional logic from the PRINTED instructions on the page, not
   guesses. Express a "show / require this field when X" dependency as show_if /
   require_if ON THE DEPENDENT FIELD. For a read-only field a choice unlocks, put

@@ -12,10 +12,14 @@ and the extraction pipeline): option pdf_field_name -> widget group
 shared-field-name radio/combo shape; anything unresolvable is REPORTED, never
 guessed.
 
-Idempotent: a usable (positive-w/h) pdf_position is never re-derived, so a
-second run is a no-op. The dump is regenerated in memory from the kit's
-form.pdf on every run (acroform_dump.dump_pdf is deterministic PyMuPDF output;
-no dump files are committed).
+Idempotent IN EFFECT, not by skipping: since bd polyglot-pdf-icyi the
+deterministic widget rect OWNS pdf_position, so every resolvable field/option is
+RE-DERIVED on every run -- but the dump is deterministic PyMuPDF output, so a
+second run computes byte-identical values and writes nothing. "Would this change
+the file?" is therefore answered by COMPARING positions before/after, never by
+counting derivations (counting made --check exit 1 forever, even on a fully
+positioned kit, and made exit 0 unreachable). The dump is regenerated in memory
+from the kit's form.pdf on every run; no dump files are committed.
 
 ASCII only (cp1252 safe); writes json with ensure_ascii (same convention as
 extract_form.py, matching the committed schema files).
@@ -53,12 +57,49 @@ sys.modules.setdefault("extract_form", _ef)
 _spec.loader.exec_module(_ef)
 
 
+def _position_map(schema: dict) -> dict:
+    """Every pdf_position in the schema, keyed by where it lives.
+
+    The change-detector's input (bd polyglot-pdf-icyi). Keyed by field id plus
+    option value so a moved/renamed entry counts as a difference rather than
+    silently cancelling out against a sibling."""
+    out: dict = {}
+    for field in schema.get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        fid = field.get("id")
+        out[(fid, None)] = field.get("pdf_position")
+        for opt in field.get("options") or []:
+            if isinstance(opt, dict):
+                out[(fid, opt.get("value"))] = opt.get("pdf_position")
+    return out
+
+
+def _positions_differ(before: dict, after: dict) -> bool:
+    """Did any pdf_position actually change (added, removed, or moved)?
+
+    Replaces the old `fields_filled + options_filled > 0` test, which counted
+    DERIVATIONS -- and since the deterministic rect now always re-derives, that
+    was permanently true (bd polyglot-pdf-icyi, fresh-eyes Opus round)."""
+    return _position_map(before) != _position_map(after)
+
+
 def backfill_kit(schema_path: str, pdf_path: str, check: bool) -> int:
     """Run the shared backfill against one schema+pdf pair. Returns the exit code."""
     with open(schema_path, encoding="utf-8") as fh:
         schema = json.load(fh)
 
     dump = acroform_dump.dump_pdf(pdf_path)
+    # Snapshot BEFORE the pass so "changed" can mean "the file would actually
+    # differ" rather than "a derivation ran" (bd polyglot-pdf-icyi): since the
+    # deterministic rect now wins unconditionally, every resolvable field and
+    # option is re-derived on EVERY run, so counting derivations made `changed`
+    # permanently true -- which pegged `--check` at exit 1 ("needs patching")
+    # for every kit, including a fully-positioned one, and made the documented
+    # exit 0 unreachable. Deep-copied via json round-trip: the pass mutates the
+    # position dicts in place.
+    before = json.loads(json.dumps(schema))
+
     # _backfill_positions takes a dump PATH (the extraction pipeline hands it a
     # temp file); mirror that instead of forking the signature.
     fd, dump_path = tempfile.mkstemp(suffix=".json")
@@ -72,7 +113,7 @@ def backfill_kit(schema_path: str, pdf_path: str, check: bool) -> int:
     fields_filled = result["fields_filled"]
     options_filled = result["options_filled"]
     unmatched = result["unmatched"]
-    changed = fields_filled + options_filled > 0
+    changed = _positions_differ(before, schema)
 
     mode = "CHECK" if check else "PATCH"
     print(f"[{mode}] {schema_path}: fields_filled={fields_filled} "
