@@ -689,15 +689,25 @@ class TestCost:
 
     def test_5_series_point_release_inherits_the_5_rate(self):
         # DOCUMENTS a known limitation rather than asserting desired behavior.
-        # The 5-series keys are bare ("claude-opus-5"), so unlike the 4-series
-        # keys they ARE a prefix of a future point release: a hypothetical
-        # claude-opus-5-1 resolves to Opus 5's rate instead of landing in
-        # unpriced_models. If 5.1 ships at a DIFFERENT price, this silently
-        # reports a wrong number rather than a flagged zero -- add an explicit
-        # row for it at that point. This test exists so that change is a
-        # deliberate edit here, not a surprise in a telemetry row.
+        #
+        # Prefix inheritance is NOT unique to the 5-series keys -- it is how the
+        # resolver works for every key (claude-opus-4-80 would inherit
+        # claude-opus-4-8's rate the same way). The asymmetry is about the NEXT
+        # MINOR of each series: an Opus 5 point release (claude-opus-5-1) is a
+        # prefix-extension of the bare "claude-opus-5" key and silently inherits
+        # its rate, whereas the next 4-series minor (claude-opus-4-9) matches no
+        # key at all and correctly lands in unpriced_models.
+        #
+        # So if a 5.x point release ships at a DIFFERENT price, this reports a
+        # silently wrong number rather than a flagged zero. Add an explicit row
+        # for it at that point. This test exists so that is a deliberate edit
+        # here, not a surprise in a telemetry row.
         assert ledger._price_for_model("claude-opus-5-1")["input"] == 5.00
         assert ledger._price_for_model("claude-sonnet-5-2")["input"] == 3.00
+        # The contrast that motivates the warning, pinned so it cannot rot:
+        assert ledger._price_for_model("claude-opus-4-9") is None
+        # ...and the mechanism is general, not 5-series-specific:
+        assert ledger._price_for_model("claude-opus-4-80")["input"] == 5.00
 
     def test_unknown_model_is_zero_and_flagged_not_crash(self):
         c = ledger.compute_cost(
