@@ -704,6 +704,24 @@ class TestCost:
         assert c["total"] == 9.75
         assert c["cache_write_ttl_source"] == "measured"
 
+    def test_negative_token_counts_are_clamped_not_blended(self):
+        """A negative bucket must be contained, not propagated.
+
+        The wire never sends negative token counts, but a hand-built or
+        future-schema row could. Unclamped, {flat: 1000, 1h: -500} would blend
+        the effective rate (pricing 1000 net tokens as if -500 were charged at
+        2.0x) AND surface -500 as a reported token count.
+        """
+        c = ledger.compute_cost({"orchestrator": {"claude-sonnet-4-6": {
+            "cache_creation_input_tokens": 1000,
+            "cache_creation_1h_input_tokens": -500,
+        }}})
+        # 1000 tokens, all unattributed -> 5m rate: 1000 * 3/1e6 * 1.25
+        assert c["total"] == round(1000 * (3.0 / 1_000_000) * 1.25, 6)
+        assert c["cache_write_tokens_1h"] == 0      # never negative
+        assert c["cache_write_tokens_5m"] == 1000
+        assert c["cache_write_ttl_source"] == "assumed-5m"
+
     def test_ttl_source_not_derived_from_cross_model_global_sums(self):
         """bd polyglot-pdf-uksl: the label must reflect what was actually priced.
 

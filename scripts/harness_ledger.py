@@ -169,10 +169,15 @@ def _split_cache_writes(counts: dict) -> tuple[int, int, int]:
 
     Returning the assumed bucket SEPARATELY (rather than folded into 5m) is what
     lets compute_cost label a session honestly -- see its ttl_source block.
+
+    Every bucket is clamped at 0. Token counts off the wire are never negative,
+    but a hand-built or future-schema row could be -- and an unclamped negative
+    would both blend the effective rate and surface as a negative token count in
+    the reported diagnostic, rather than being contained here.
     """
-    flat = counts.get("cache_creation_input_tokens", 0) or 0
-    m_1h = counts.get("cache_creation_1h_input_tokens", 0) or 0
-    m_5m = counts.get("cache_creation_5m_input_tokens", 0) or 0
+    flat = max(0, counts.get("cache_creation_input_tokens", 0) or 0)
+    m_1h = max(0, counts.get("cache_creation_1h_input_tokens", 0) or 0)
+    m_5m = max(0, counts.get("cache_creation_5m_input_tokens", 0) or 0)
     assumed = max(0, flat - (m_1h + m_5m))
     return m_1h, m_5m, assumed
 
@@ -207,6 +212,14 @@ def compute_cost(models: dict | None) -> dict:
     $0 and is flagged, never crashes).
 
     `models` shape (from parse_transcript): {actor: {model_id: {<token counts>}}}.
+
+    NOTE on the `cache_write_tokens_*` fields: they describe the whole
+    TRANSCRIPT, including models absent from MODEL_PRICES_PER_MTOK (those wrote
+    the tokens even though they contribute $0 and are listed in
+    `unpriced_models`). So they can EXCEED the tokens reflected in `total`, and
+    cross-multiplying them by the cache multipliers will not reconcile to
+    `total` whenever `unpriced_models` is non-empty -- measured at 52% of
+    cache-write tokens on one real transcript. Check `unpriced_models` first.
     """
     out = {"orchestrator": {}, "subagent": {}, "by_model": {}, "unpriced_models": []}
     actor_totals = {"orchestrator": 0.0, "subagent": 0.0}
