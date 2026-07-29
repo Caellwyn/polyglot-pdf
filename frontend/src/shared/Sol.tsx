@@ -186,6 +186,19 @@ export function Sol({
 			el.style.setProperty('--eb', '0')
 			return
 		}
+		// Reduced motion overrides every rule these two variables feed (the
+		// transforms with !important, the opacities by later-source equal
+		// specificity), so the loop would run a per-frame FFT copy and two style
+		// writes for zero visual effect -- on exactly the low-power and
+		// accessibility-configured devices most likely to set this.
+		if (
+			typeof window !== 'undefined' &&
+			window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+		) {
+			el.style.setProperty('--e', '0')
+			el.style.setProperty('--eb', '0')
+			return
+		}
 		// Which voice are we visualising? Speaking reads the AI's output level;
 		// listening reads the mic. Using the mic for both would leave the speaking
 		// halo flat, since the user is silent while the assistant talks.
@@ -334,6 +347,22 @@ export const SOL_PLACEMENT_CSS = `
   overflow: visible;
 }
 .vff-fab:active .vff-fab-sol { transform: scale(0.9); }
+
+/* Screen-reader-only. Sol says everything in pictures, which is the point -- but
+   that leaves assistive tech with nothing, so its state is mirrored into a
+   visually-hidden live region. Clip rather than display:none / visibility:hidden,
+   both of which remove the node from the accessibility tree entirely. */
+.vff-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 `
 
 /**
@@ -400,10 +429,19 @@ export const SOL_CSS = `
 .sol[data-state="connecting"] .rays { opacity: .3; }
 .sol[data-state="connecting"] .rayA,
 .sol[data-state="connecting"] .rayB { animation-play-state: paused; }
-.sol[data-state="connecting"] .corona { opacity: .5; animation: sol-pulse 1.9s ease-in-out infinite; }
+/* The corona pulses in SIZE ONLY. It must not borrow sol-pulse, which also
+   animates opacity: an animated declaration outranks a normal one, so the .5
+   below would never apply and the corona would swing 0.78-1.0 -- BRIGHTER than
+   idle's steady .85, turning the quietest state into the most eye-catching one.
+   It would also have jumped to .5 under reduced motion (where the animation is
+   killed and the declaration finally lands), so the same state rendered at two
+   very different brightnesses depending on a user preference. */
+.sol[data-state="connecting"] .corona { opacity: .5; animation: sol-pulse-size 1.9s ease-in-out infinite; }
 .sol[data-state="connecting"] .disc { animation: sol-pulse 1.9s ease-in-out infinite; }
 @keyframes sol-pulse { 0%, 100% { transform: scale(.94); opacity: .78; }
   50% { transform: scale(1.04); opacity: 1; } }
+@keyframes sol-pulse-size { 0%, 100% { transform: scale(.94); }
+  50% { transform: scale(1.04); } }
 
 /* LISTENING -- the rays stop dead, then breathe in length with your voice.
    It listens with its rays. The disc holds perfectly still. */

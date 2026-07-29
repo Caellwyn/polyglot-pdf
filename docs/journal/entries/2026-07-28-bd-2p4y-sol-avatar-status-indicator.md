@@ -126,6 +126,34 @@ Three lessons worth keeping:
    have caught this collapse automatically, where a hand-written per-state
    assertion did not.
 
+## The uniqueness sweep proved the wrong thing
+
+The `connecting` state, added to fix the bxng collapse above, shipped with a
+second bug that the fingerprint sweep was structurally incapable of catching --
+and which a second, independent Opus review found by reading the CSS cascade.
+
+I reused the disc's `sol-pulse` keyframes for the corona. Those keyframes animate
+`opacity` as well as `transform`, and **an animated declaration outranks a normal
+one**, so the `opacity: .5` sitting on the very same line never applied. The
+corona swung 0.78-1.0 against idle's steady 0.85 -- meaning `connecting`, the
+state whose entire brief is "quietly waiting", rendered as the *brightest* state
+Sol has. Worse, `prefers-reduced-motion` kills the animation, at which point the
+`.5` finally landed: the same state rendered at two brightnesses ~2x apart
+depending on a user preference.
+
+Measured before the fix (driving the frozen animation clock by hand):
+`0ms 0.78 -> 950ms 1.0 -> 1900ms 0.78`, versus idle's flat `0.85`.
+After giving the corona its own transform-only keyframes: a steady `0.5` across
+the whole cycle, in both motion modes, with the size pulse intact.
+
+**The lesson is about the guard, not the bug.** I had added a browser sweep
+asserting that no two states share a computed-style fingerprint, and treated it
+as covering the visual layer. It passed here -- because `connecting` was still
+*different from* every other state. It was just different in the wrong
+direction. A uniqueness check answers "are these distinguishable?", never "is
+this one what it claims to be." Both questions need asking, and only the first
+one is cheap to automate.
+
 ## The precedence rule
 
 `paused > offline > speaking > thinking > listening > idle`, with the three
@@ -184,7 +212,14 @@ pulse, which motion-off would otherwise erase entirely).
 Verified structurally rather than by inspection: a browser sweep fingerprints
 every state on ten computed properties and asserts **no two states collide**,
 with motion on and with the shipped `prefers-reduced-motion` rules applied.
-Both sets came back with **zero collisions** across all seven states.
+Both sets came back with **zero collisions** across all seven states. (See the
+corona section above for what that sweep provably does NOT cover.)
+
+The amplitude loop also **exits early under reduced motion** rather than running
+anyway: every rule `--e` / `--eb` feed is overridden there, so the loop would
+otherwise run a per-frame FFT copy and two style writes for no visual effect --
+on precisely the low-power and accessibility-configured devices most likely to
+have set the preference.
 
 ## What was deliberately KEPT
 
@@ -200,20 +235,27 @@ demo hang invisibly on 2026-06-10. The mobile FAB's green mic-activity badge (bd
 
 ## Verification
 
-Frontend **1099 passing** (up 18, all new), backend **1323 passed / 1 skipped**,
-`tsc --noEmit` clean.
+Frontend **1113 passing** (up 32 from the 1081 baseline, all new), backend
+**1323 passed / 1 skipped**, `tsc --noEmit` clean.
 
 Beyond the suite, the real component was driven in a browser via a dev-only
 harness (`frontend/sol-preview.html` + `src/dev/solPreview.tsx`; the deployed
 `vite.config.schema.ts` declares a single explicit `input`, so it cannot ship):
-all 24 instances rendered, 72 gradient ids unique with zero cross-instance
-`url(#...)` references, and the amplitude response was swept at
-`--e`/`--eb` = 0 / 0.5 / 1 to confirm the geometry moves and the brightness cap
-holds.
+all 28 instances rendered, 84 gradient ids unique (112 `defs` ids including the
+crescent masks) with zero cross-instance `url(#...)` references, and the
+amplitude response was swept at `--e`/`--eb` = 0 / 0.5 / 1 to confirm the
+geometry moves and the brightness cap holds.
 
-Two bugs were found and fixed *by* that browser pass, neither of which any unit
-test would have caught: the disc over-scaling (13% -> 5.5%) and the
-reduced-motion state collapse.
+Three bugs were found and fixed *by* that browser pass, none of which any unit
+test would have caught: the disc over-scaling (13% -> 5.5%), the reduced-motion
+state collapse, and the `connecting` corona inversion (below).
+
+**These numbers are the ones that shipped.** An earlier draft of this section
+carried counts measured three commits before the branch was done -- 1099 tests,
+24 instances, 72 gradients -- and each was already stale when written. That is a
+worse failure than it looks: the browser pass is the ONLY evidence offered for
+the visual claims, so a demonstrably wrong count there invites a reader to
+discount the whole section. Re-measured against the final tree.
 
 A caveat worth stating plainly: the Browser pane would not composite frames in
 this session, so **no human has visually eyeballed Sol yet** -- every claim above
@@ -242,7 +284,7 @@ being fed `micEnergy`.
 
 The mic is near-silent precisely when the assistant is talking. Every unit test
 passed, the CSS moved correctly under a synthetic amplitude, and the state
-machine was right -- but in production the most distinctive of Sol's six states
+machine was right -- but in production the most distinctive of Sol's states
 would have sat visually dead, which is exactly the failure mode the FAB's old
 fixed-rate pulse was being replaced *for*.
 
@@ -263,6 +305,24 @@ Measured in a browser against the real `createAudioManager`, playing a
 during, 0 again after the clip ends.** The analyser is lazily built per playback
 context and dropped in `cleanup()`, since the context is closed and recreated
 across reconnects.
+
+## Screen readers get the state, without being talked over
+
+Sol says everything in pictures, which is the point -- and leaves assistive tech
+with nothing. On the collapsed mobile FAB that is the whole status.
+
+The first attempt put the state in the FAB's `aria-label`
+(`"Listening -- tap to open voice controls"`). A second Opus review flagged the
+consequence: screen readers re-announce the accessible name of the **focused**
+element when it changes, and Sol's state changes several times per turn -- so a
+keyboard user parked on the FAB would have the control read over them, on every
+transition, while the assistant was speaking.
+
+Split in two instead: the button keeps a **static** name (`"Open voice
+controls"`), and the changing state lives in a visually-hidden
+`role="status" aria-live="polite"` span beside it. Polite never interrupts, and a
+live region announces without stealing the control's name. The desktop instance
+needs none of this -- it is not focusable and sits next to visible status text.
 
 ## Follow-ups not taken
 

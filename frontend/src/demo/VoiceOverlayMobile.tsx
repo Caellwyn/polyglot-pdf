@@ -1185,7 +1185,14 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				role="button"
 				tabIndex={0}
 				aria-expanded={isExpanded}
-				aria-label={`${SOL_STATE_LABEL[solState]} -- tap to ${isExpanded ? 'close' : 'open'} voice controls`}
+				// STATIC name. Sol's state must NOT live in the accessible name:
+				// screen readers re-announce the name of the FOCUSED element when it
+				// changes, so a keyboard user parked on the FAB would get the label
+				// re-read on every turn transition (idle -> listening -> thinking ->
+				// speaking), talking over the assistant. The changing state goes to
+				// the polite live region below instead, which announces without
+				// stealing the button's name.
+				aria-label={`${isExpanded ? 'Close' : 'Open'} voice controls`}
 			>
 				{/* Mic-activity badge (bd polyglot-pdf-8v53): green dot while audio is
 				    actually reaching the backend. Gated on `isListening && micSending`
@@ -1208,6 +1215,14 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 					className="vff-fab-sol"
 					decorative
 				/>
+				{/* Sol carries the status VISUALLY and is aria-hidden; this is its
+				    non-visual equivalent. Polite (never interrupts the assistant) and
+				    separate from the button's name, so state changes are announced
+				    without re-reading the control on every turn. It is the only
+				    status a screen-reader user has while the panel is collapsed. */}
+				<span className="vff-sr-only" role="status" aria-live="polite">
+					{SOL_STATE_LABEL[solState]}
+				</span>
 			</div>
 
 			{/* Expanded Panel */}

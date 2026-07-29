@@ -29,6 +29,11 @@ describe('deriveSolState -- status coverage', () => {
     ['switching_section', 'connecting'],
     ['reconnecting', 'connecting'],
     ['reconnecting (2/5)', 'connecting'],
+    // The real literal from VoiceOverlay.tsx's section-reconnect path. Its SHAPE
+    // is the point: capitalised, multi-word, numeric suffix -- the one producer
+    // an `isConnecting` refactor to an exact-match/enum switch would silently
+    // drop, sending a live reconnect back to looking like a cold session.
+    ['Reconnecting to section 3', 'connecting'],
     ['paused', 'paused'],
     ['disconnected', 'offline'],
     ['error', 'offline'],
