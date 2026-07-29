@@ -157,23 +157,24 @@ def _price_for_model(model_id: str) -> dict | None:
     return best[1] if best else None
 
 
-def _split_cache_writes(counts: dict) -> tuple[int, int]:
-    """Split cache-creation tokens into (1h, 5m) buckets.
+def _split_cache_writes(counts: dict) -> tuple[int, int, int]:
+    """Split cache-creation tokens into (measured_1h, measured_5m, assumed_5m).
 
-    Prefers the per-TTL fields parsed off `usage.cache_creation`. Any flat
-    `cache_creation_input_tokens` not accounted for by those buckets is a legacy
-    record with no breakdown -- it falls back to 5m, preserving the historical
-    pricing of rows written before the split existed rather than re-pricing them
-    upward. Returns (tokens_1h, tokens_5m).
+    The first two come from the per-TTL fields parsed off `usage.cache_creation`
+    -- i.e. the transcript stated the TTL. The third is any flat
+    `cache_creation_input_tokens` those buckets do not account for: a legacy
+    record with no breakdown, or a TTL kind we do not model yet. It is priced at
+    the 5m rate, preserving the historical pricing of rows written before the
+    split existed rather than silently re-pricing them upward.
+
+    Returning the assumed bucket SEPARATELY (rather than folded into 5m) is what
+    lets compute_cost label a session honestly -- see its ttl_source block.
     """
     flat = counts.get("cache_creation_input_tokens", 0) or 0
-    t_1h = counts.get("cache_creation_1h_input_tokens", 0) or 0
-    t_5m = counts.get("cache_creation_5m_input_tokens", 0) or 0
-    known = t_1h + t_5m
-    # Unattributed remainder (legacy shape, or a TTL kind we don't model yet).
-    if flat > known:
-        t_5m += flat - known
-    return t_1h, t_5m
+    m_1h = counts.get("cache_creation_1h_input_tokens", 0) or 0
+    m_5m = counts.get("cache_creation_5m_input_tokens", 0) or 0
+    assumed = max(0, flat - (m_1h + m_5m))
+    return m_1h, m_5m, assumed
 
 
 def _cost_for_counts(counts: dict, rate: dict) -> float:
@@ -189,13 +190,13 @@ def _cost_for_counts(counts: dict, rate: dict) -> float:
     inp = counts.get("input_tokens", 0) or 0
     out = counts.get("output_tokens", 0) or 0
     cache_read = counts.get("cache_read_input_tokens", 0) or 0
-    write_1h, write_5m = _split_cache_writes(counts)
+    write_1h, write_5m, write_assumed = _split_cache_writes(counts)
     return (
         inp * in_rate
         + out * out_rate
         + cache_read * in_rate * CACHE_READ_MULTIPLIER
         + write_1h * in_rate * CACHE_WRITE_MULTIPLIER_1H
-        + write_5m * in_rate * CACHE_WRITE_MULTIPLIER_5M
+        + (write_5m + write_assumed) * in_rate * CACHE_WRITE_MULTIPLIER_5M
     )
 
 
@@ -211,6 +212,9 @@ def compute_cost(models: dict | None) -> dict:
     actor_totals = {"orchestrator": 0.0, "subagent": 0.0}
     by_model: dict = {}
     unpriced: set = set()
+    # Cache-write buckets, accumulated from the SAME per-model split that prices
+    # them, so the reported ttl_source can never disagree with what was charged.
+    measured_1h = measured_5m = assumed_5m = 0
 
     for actor in ("orchestrator", "subagent"):
         for model_id, counts in ((models or {}).get(actor) or {}).items():
@@ -219,6 +223,13 @@ def compute_cost(models: dict | None) -> dict:
             # future-schema row might) -- treat it as zero rather than raising.
             if not isinstance(counts, dict):
                 counts = {}
+            # Accumulate the cache-write buckets for EVERY model, priced or not:
+            # an unpriced model still wrote cache tokens, and the diagnostic
+            # describes the transcript, not just the billable part of it.
+            m1h, m5m, a5m = _split_cache_writes(counts)
+            measured_1h += m1h
+            measured_5m += m5m
+            assumed_5m += a5m
             rate = _price_for_model(model_id)
             if rate is None:
                 unpriced.add(model_id)
@@ -236,30 +247,30 @@ def compute_cost(models: dict | None) -> dict:
     out["unpriced_models"] = sorted(unpriced)
 
     # Report what the cache writes ACTUALLY were rather than a fixed assumption
-    # (bd polyglot-pdf-aefl). "measured" means the transcript carried the
-    # usage.cache_creation TTL breakdown; "assumed-5m" means it did not and the
-    # legacy fallback priced those tokens at 1.25x. Both can be true at once in
-    # a mixed transcript, hence the explicit "mixed" value.
-    tot_1h = tot_5m = tot_flat = 0
-    for actor in ("orchestrator", "subagent"):
-        for counts in ((models or {}).get(actor) or {}).values():
-            if not isinstance(counts, dict):
-                continue
-            tot_1h += counts.get("cache_creation_1h_input_tokens", 0) or 0
-            tot_5m += counts.get("cache_creation_5m_input_tokens", 0) or 0
-            tot_flat += counts.get("cache_creation_input_tokens", 0) or 0
-    unattributed = max(0, tot_flat - (tot_1h + tot_5m))
-    if tot_flat == 0:
-        ttl_source = "none"          # no cache writes at all
-    elif unattributed == 0:
-        ttl_source = "measured"
-    elif tot_1h + tot_5m == 0:
+    # (bd polyglot-pdf-aefl). "measured" means every cache-write token came from
+    # the usage.cache_creation TTL breakdown; "assumed-5m" means none did and the
+    # legacy fallback priced them all at 1.25x; "mixed" means both happened.
+    #
+    # These totals are accumulated from the SAME per-model _split_cache_writes
+    # calls that did the pricing (see the loop above), never re-derived from
+    # global sums. Re-deriving globally is wrong in two ways that both mislabel
+    # real transcripts: one model's measured tokens cancel another's assumed
+    # ones, and a record with a breakdown but a zero flat field (93 such records
+    # / 1.1M tokens observed in one live session) reads as "no cache writes at
+    # all" on a real, non-zero cost.
+    if measured_1h == 0 and assumed_5m == 0 and measured_5m == 0:
+        ttl_source = "none"          # genuinely no cache writes
+    elif assumed_5m == 0:
+        ttl_source = "measured"      # every write token came from a breakdown
+    elif measured_1h == 0 and measured_5m == 0:
         ttl_source = "assumed-5m"    # wholly legacy transcript
     else:
         ttl_source = "mixed"
     out["cache_write_ttl_source"] = ttl_source
-    out["cache_write_tokens_1h"] = tot_1h
-    out["cache_write_tokens_5m"] = tot_5m + unattributed
+    out["cache_write_tokens_1h"] = measured_1h
+    out["cache_write_tokens_5m"] = measured_5m + assumed_5m
+    # Split out so a reader can tell a measured 5m write from a fallback guess.
+    out["cache_write_tokens_5m_assumed"] = assumed_5m
     return out
 
 
