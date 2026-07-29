@@ -94,3 +94,36 @@ describe('FieldEditor guidance staleness gate (bd anim criterion 1)', () => {
     expect(container.textContent ?? '').not.toContain('[identity:');
   });
 });
+
+describe('the DISPLAY pins to current identity too (round-3 regression)', () => {
+  it('a stale ack from an EARLIER drift renders UNCHECKED, not already-confirmed', () => {
+    // acked at H2, then edited again -- the backend now reports H3. A naive
+    // "some ack exists" check rendered this ticked, telling the reviewer they
+    // had already confirmed content they have never seen.
+    const ackedAtOldIdentity = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: 'OLD-H2' },
+    } as FormField;
+    render(
+      <FieldEditor field={ackedAtOldIdentity} schema={makeSchema(ackedAtOldIdentity)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    const box = screen.getByTestId('guidance-ack-checkbox') as HTMLInputElement;
+    expect(box.checked).toBe(false);                       // must re-ask
+    const ta = screen.getByPlaceholderText(/Instructions for filling out this field/);
+    expect(ta.className).toMatch(/ring-2/);                // and stay highlighted
+    expect(screen.getByText(/Required before this field can be marked/))
+      .toBeInTheDocument();
+  });
+
+  it('an ack for the CURRENT identity renders checked', () => {
+    const ackedNow = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
+    } as FormField;
+    render(
+      <FieldEditor field={ackedNow} schema={makeSchema(ackedNow)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect((screen.getByTestId('guidance-ack-checkbox') as HTMLInputElement).checked)
+      .toBe(true);
+  });
+});

@@ -18,7 +18,8 @@ import { moveFieldToSection } from '../utils/sectionOps';
 import { checkFieldComplete } from '../utils/validation';
 import { getReview, withGuidanceAck, withReviewNote, withReviewStatus }
   from '../utils/reviewStatus';
-import { GUIDANCE_STALE_RULE, currentIdentity } from '../utils/guidanceStaleness';
+import { GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged }
+  from '../utils/guidanceStaleness';
 import type { FieldReviewStatus } from '../types/schema';
 import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
 
@@ -911,7 +912,14 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             // click; re-authoring stays a deliberate, separate action.
             const staleFinding = (lintFindings ?? []).find(
               f => f.rule === GUIDANCE_STALE_RULE);
-            const acked = !!field._review?.guidance_ack_sha1;
+            // Pin the DISPLAY to the current identity, exactly as the write
+            // path and the row gate do. A naive "some ack exists" check
+            // rendered the box already-ticked after a SECOND drift -- showing
+            // content as reviewed that the human has never seen, which is the
+            // permanent-waiver hole surviving in the one surface a reviewer
+            // actually reads (bd anim fresh-eyes round 3).
+            const identity = currentIdentity(lintFindings, field.id);
+            const acked = isAcknowledged(field, identity);
             const stale = !!staleFinding && !acked;
             return (
               <div>
@@ -944,7 +952,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         checked={acked}
                         onChange={(e) =>
                           onUpdateField(withGuidanceAck(
-                            field, currentIdentity(lintFindings, field.id), e.target.checked))
+                            field, identity, e.target.checked))
                         }
                       />
                       <span>
