@@ -118,16 +118,25 @@ that this very entry had pre-declared "round 5 cleared" before round 5 ran
 to gate-blind with the suite green (fixed at the type level: the findings
 argument is now required, so the revert fails tsc), and that a field whose
 guidance a human emptied post-bake still gated with copy about text that no
-longer exists (the rule now skips guidance-less fields). The final verdict
-line below is written only after its round actually ran.
+longer exists (the rule now skips guidance-less fields). Round 6 cleared:
+NO-GAPS, with the reviewer running both full suites itself, lint-sweeping
+all three real kits (w7 / f1040 / i-90 -- zero stale hits, no mass false
+alarm), and filing its two remaining discoveries as out-of-scope beads
+rather than rubric gaps. (This paragraph was written AFTER round 6 ran.)
 
 Beads: polyglot-pdf-2onl (catalogue scan % stays gate-blind -- no lint
 findings at scan time), polyglot-pdf-ug5n (Repair-all value re-mint
-manufactures ack prompts; needs a design call), polyglot-pdf-w028 (filed by
-a reviewer, closed in-PR -- the formula stops being freely changeable once
-a kit ships with baked hashes). Pre-existing: polyglot-pdf-l7u0
+manufactures ack prompts; needs a design call), polyglot-pdf-79tz (an
+App.hosted.test.tsx order-dependent flake observed once, not caused by this
+branch), polyglot-pdf-hii0 (the "why flagged" banner keeps demanding the
+ack after it is given), polyglot-pdf-stkz (field.type is outside the hash
+-- a deliberate scope question: type is answer-shape, not voice-facing, and
+may deserve its own rule; NOTE the formula stays freely changeable only
+until the first kit bakes with identity hashes). Closed in-PR:
+polyglot-pdf-w028 (spoken_label). Pre-existing: polyglot-pdf-l7u0
 (FieldOverlay ignores lint + gate).
 
-Final state: full backend suite 2316 passed; editor suite green (the
-worktree full-run exit-1 is fork-startup noise -- counts are authoritative
-locally, Linux CI authoritative overall); tsc clean.
+Final state: full backend suite 2317 passed; editor suite 940 passed across
+66 files (the worktree full-run "Timeout starting forks runner" noise is
+fork-pool startup, not failures -- counts are authoritative locally, Linux
+CI authoritative overall); tsc clean.
