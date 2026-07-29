@@ -408,7 +408,15 @@ def identity_payload(field: dict) -> str:
     (internal slugs), and plumbing (pdf_field_name, positions, conditions) --
     changing those does not make authored guidance wrong, and hashing them
     would manufacture false staleness that trains editors to click through the
-    gate."""
+    gate.
+
+    Option labels are SORTED, so a pure REORDER (same labels, different display
+    order) does not re-raise the gate -- the assistant still says the same
+    words (maintainer decision 2026-07-29). Adding, removing or editing a label
+    still changes the multiset and flags correctly. ACCEPTED TRADEOFF: guidance
+    that describes option ORDER ("choose the first option") would not be
+    re-flagged by a reorder alone; the option-order-dependent phrasing the
+    contract discourages anyway is the thin case this misses."""
     if not isinstance(field, dict):
         return "[]"
     opts = field.get("options")
@@ -422,7 +430,7 @@ def identity_payload(field: dict) -> str:
     return json.dumps(
         [name if isinstance(name, str) else "",
          spoken if isinstance(spoken, str) else "",
-         labels],
+         sorted(labels)],   # order-insensitive: see the docstring
         ensure_ascii=False, separators=(",", ":"))
 
 

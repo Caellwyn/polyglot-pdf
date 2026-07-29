@@ -1076,3 +1076,29 @@ def test_each_edit_reports_a_DIFFERENT_current_identity():
     p1 = _stale(lint_schema(_identity_schema(dict(f, spoken_name="v2"), baked)))[0].path
     p2 = _stale(lint_schema(_identity_schema(dict(f, spoken_name="v3"), baked)))[0].path
     assert p1 != p2
+
+
+def test_pure_option_reorder_does_NOT_flag_but_real_changes_do():
+    """Maintainer decision 2026-07-29: reordering options with identical
+    labels must NOT re-raise the gate -- the assistant says the same words, and
+    a needless prompt trains editors to click through. Adding, removing or
+    editing a label still flags."""
+    from backend.services import guidance_contract as gc
+    base = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+            "options": [{"label": "Yes", "value": "y"},
+                        {"label": "No", "value": "n"}],
+            "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+
+    reordered = dict(base, options=[{"label": "No", "value": "n"},
+                                    {"label": "Yes", "value": "y"}])
+    assert _stale(lint_schema(_identity_schema(reordered, baked))) == []
+
+    for changed in (
+        dict(base, options=[{"label": "Yes please", "value": "y"},
+                            {"label": "No", "value": "n"}]),          # edited
+        dict(base, options=base["options"] + [{"label": "Maybe",
+                                               "value": "m"}]),       # added
+        dict(base, options=[{"label": "Yes", "value": "y"}]),         # removed
+    ):
+        assert len(_stale(lint_schema(_identity_schema(changed, baked)))) == 1

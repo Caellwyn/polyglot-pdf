@@ -461,3 +461,27 @@ def test_oversize_form_skips_guidance_stage(tmp_path, monkeypatch):
     # 2: pre-wsao parity -- the old 3c step enriched oversize forms too)
     assert report.get("fallback_enriched") == 7
     assert "help" not in schema["fields"][0]
+
+
+def test_pipeline_report_carries_unmatched_proposal_ids(tmp_path, monkeypatch):
+    """bd anim outer review: the count exists to make a systematic model
+    id-echo failure VISIBLE. The CLI printed it but the pipeline report
+    dropped it -- and the hosted pipeline is the path that runs in
+    production."""
+    schema = _guidance_schema()
+    (tmp_path / "instructions.pdf").write_bytes(b"%PDF-fake")
+    monkeypatch.setattr(_ei_mod, "booklet_text", lambda p: "B")
+    monkeypatch.setattr(
+        _ei_mod, "enrich_schema",
+        lambda s, b, n, m, c: {"proposals": {"fields": {
+            "f1": {"instructions": "Real.", "details": "", "format_hint": ""},
+            "ghost_id": {"instructions": "Hallucinated.", "details": "",
+                         "format_hint": ""}},
+            "form_details": ""}, "tokens": []})
+    monkeypatch.setattr(_ei_mod, "verify_and_rectify", lambda *a, **k: [])
+    report = ef._enrich_guidance(schema, str(tmp_path / "form.pdf"), None,
+                                 {"A[0]": "tu"})
+    assert report.get("unmatched_proposal_ids") == ["ghost_id"]
+    # f1 carries pre-existing instructions with no provenance record, so the
+    # ownership guard correctly protects it (written == 0). The point of this
+    # test is the unmatched count reaching the pipeline report, not the write.

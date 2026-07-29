@@ -67,6 +67,7 @@ const RULE_LABELS: Record<string, string> = {
   'help-details-headings-missing': 'Details missing headings',
   // Guidance verify-loop flags (bd wsao.5), re-emitted from the persisted
   // bake report -- the instructions_enrich analog of the translation flags.
+  'guidance-identity-stale': 'Guidance may be out of date',
   'instructions-rectified': 'Guidance revised by verify loop',
   'instructions-ungrounded-dropped': 'Guidance dropped (failed judge)',
   'instructions-enrich-unavailable': 'Guidance judge unavailable',
