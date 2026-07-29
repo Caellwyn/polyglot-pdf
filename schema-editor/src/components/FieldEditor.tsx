@@ -911,7 +911,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             // rename must not cost an LLM call, so confirming is one free
             // click; re-authoring stays a deliberate, separate action.
             const staleFinding = (lintFindings ?? []).find(
-              f => f.rule === GUIDANCE_STALE_RULE);
+              // Scope by field id like currentIdentity below: the sole caller
+              // passes a pre-scoped array today, but this component's prop type
+              // invites a whole-schema list, and an unscoped match would amber
+              // EVERY field once ANY field drifts (fresh-eyes, closeout round 1).
+              f => f.rule === GUIDANCE_STALE_RULE && f.field_id === field.id);
             // Pin the DISPLAY to the current identity, exactly as the write
             // path and the row gate do. A naive "some ack exists" check
             // rendered the box already-ticked after a SECOND drift -- showing

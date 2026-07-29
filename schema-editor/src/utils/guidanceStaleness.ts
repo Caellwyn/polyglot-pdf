@@ -111,3 +111,25 @@ export function needsGuidanceAck(
   if (!staleIds.has(field.id)) return false;
   return !isAcknowledged(field, current);
 }
+
+/**
+ * Whole-schema aggregation of needsGuidanceAck: the ids of every field whose
+ * guidance drifted and has no acknowledgment for its CURRENT content. This is
+ * what the completion counters consume (getCompletionStats), so the kit-wide
+ * "% reviewed" can never report a field complete while its row sits amber
+ * behind the gate -- the progress figure and the FieldList icons must tell the
+ * same story (bd anim fresh-eyes finding, closeout round 1).
+ */
+export function needsAckFieldIds(
+  fields: FormField[] | undefined,
+  findings: LintFinding[] | undefined,
+): Set<string> {
+  const out = new Set<string>();
+  const stale = staleFieldIds(findings);
+  if (stale.size === 0) return out;
+  for (const f of fields ?? []) {
+    if (!f || !stale.has(f.id)) continue;
+    if (!isAcknowledged(f, currentIdentity(findings, f.id))) out.add(f.id);
+  }
+  return out;
+}

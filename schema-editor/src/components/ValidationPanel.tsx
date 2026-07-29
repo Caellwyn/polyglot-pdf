@@ -1,6 +1,7 @@
 import React from 'react';
 import type { FormSchema } from '../types/schema';
 import { getCompletionStats, validateSchema } from '../utils/validation';
+import { needsAckFieldIds } from '../utils/guidanceStaleness';
 import {
   AuthError,
   isHostedMode,
@@ -105,10 +106,19 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   onRepairAll,
   onReport,
 }) => {
-  const stats = React.useMemo(() => getCompletionStats(schema), [schema]);
   const hosted = React.useMemo(isHostedMode, []);
 
   const [report, setReport] = React.useState<LintReport | null>(null);
+  // The completion figure honours the guidance-ack gate (bd anim): a
+  // reviewed_correct field whose guidance drifted un-acknowledged renders
+  // amber in the FieldList, so it must not count complete here either --
+  // before the (async, hosted) report lands the figure is gate-blind for that
+  // one render cycle, same as every other lint-fed surface.
+  const stats = React.useMemo(
+    () => getCompletionStats(
+      schema, needsAckFieldIds(schema.fields, report?.findings)),
+    [schema, report],
+  );
   const [lintError, setLintError] = React.useState<string | null>(null);
   const [linting, setLinting] = React.useState(false);
   const [repairing, setRepairing] = React.useState(false);

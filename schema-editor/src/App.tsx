@@ -35,6 +35,7 @@ import {
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
 import { getCompletionStats } from './utils/validation';
+import { needsAckFieldIds } from './utils/guidanceStaleness';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
 import {
   recoverSelectionAfterVanish, renameBlockReason, renameFieldId,
@@ -55,8 +56,12 @@ import type { FormField, FormConfig, FormSchema, FormSection } from './types/sch
 // PR #263).
 function liveStats(
   schema: FormSchema,
+  lintFindings?: LintFinding[],
 ): { percent: number; complete: number; total: number; version: KitVersionInfo } {
-  const s = getCompletionStats(schema);
+  // The guidance-ack gate (bd anim) demotes a drifted reviewed_correct field
+  // to amber in the FieldList; the catalogue bar's live % must agree.
+  const s = getCompletionStats(
+    schema, needsAckFieldIds(schema.fields, lintFindings));
   return {
     percent: s.percentage, complete: s.complete, total: s.total,
     version: versionInfoFromSchema(schema),
@@ -996,7 +1001,7 @@ export const App: React.FC = () => {
             onAuthError={handleAuthExpired}
             liveProgress={
               selectedKitId && schema
-                ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema) }
+                ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema, lintFindings) }
                 : null
             }
           />
@@ -1014,7 +1019,7 @@ export const App: React.FC = () => {
               // edit still shows live on the open card, but is not remembered after
               // the kit closes (else a discarded edit would leave phantom progress).
               selectedKitId && schema
-                ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema) }
+                ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema, lintFindings) }
                 : null
             }
           />

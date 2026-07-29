@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged,
-  needsGuidanceAck, staleFieldIds,
+  needsAckFieldIds, needsGuidanceAck, staleFieldIds,
 } from './guidanceStaleness';
 import { effectiveStatus, withGuidanceAck } from './reviewStatus';
 import type { FormField } from '../types/schema';
@@ -145,5 +145,27 @@ describe('staleFieldIds uses the centralized field_id (bd h76m.11)', () => {
   it('ignores a finding with a null field_id', () => {
     expect(staleFieldIds([{ severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
       path: 'p', message: 'm', field_id: null }]).size).toBe(0);
+  });
+});
+
+describe('needsAckFieldIds (the completion counters aggregation)', () => {
+  it('collects stale fields lacking an ack for their CURRENT identity', () => {
+    const unacked = field();
+    const acked = withGuidanceAck(
+      field({ id: 'other' } as Partial<FormField>), 'H2', true);
+    const findings: LintFinding[] = [staleFinding, {
+      severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+      path: 'fields (id=other).help[identity:H2]',
+      message: 'identity changed', field_id: 'other',
+    }];
+    // `phone` is stale and un-acked -> in. `other` is stale but acked for its
+    // current identity -> out. The set is what getCompletionStats consumes.
+    expect([...needsAckFieldIds([unacked, acked], findings)]).toEqual(['phone']);
+  });
+
+  it('is empty with no stale findings, and never throws on undefined input', () => {
+    expect(needsAckFieldIds(undefined, [staleFinding]).size).toBe(0);
+    expect(needsAckFieldIds([field()], []).size).toBe(0);
+    expect(needsAckFieldIds([field()], undefined).size).toBe(0);
   });
 });
