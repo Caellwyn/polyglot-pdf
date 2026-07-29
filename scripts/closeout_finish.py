@@ -127,7 +127,7 @@ class RebaseConflict(Exception):
 
 
 # --------------------------------------------------------------------------- #
-# The single subprocess seam. ALL git/gh/bd/ledger calls go through here so the
+# The single subprocess seam. ALL git/gh/bd calls go through here so the
 # unit tests can monkeypatch one function (the bd_safe._run idiom).
 # --------------------------------------------------------------------------- #
 def _run(cmd: list[str], *, cwd: str | None = None,

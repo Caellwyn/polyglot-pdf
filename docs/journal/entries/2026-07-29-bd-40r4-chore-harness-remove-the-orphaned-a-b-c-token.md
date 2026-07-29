@@ -40,7 +40,8 @@ and 20 unset. Sessions were labeling themselves with a baseline arm for a trial 
 had already concluded, and a ninth of them did not bother at all.
 
 **Removed:**
-- `scripts/harness_ledger.py` (972 lines) and `tests/test_harness_ledger.py` (49 tests).
+- `scripts/harness_ledger.py` (972 lines) and `tests/test_harness_ledger.py`
+  (983 lines, 65 test functions).
 - `closeout_finish.py`: the `telemetry()` and `commit_push_telemetry()` steps, the
   seven counter flags (`--arm`, `--cost-category`, `--copilot-rounds`,
   `--maintainer-touchpoints`, `--deferred-nits`, `--haiku-escalations`,
@@ -104,12 +105,23 @@ the stale instruction just quietly misleads the next reader):
 3. **Round 3 (Opus, the clearing round):** three more --
    (a) `CLAUDE.md` still named "telemetry setup" (above);
    (b) **deleting the `.beads/experiment_state.json` ignore rule would have wedged
-   the next closeout.** The cache file still existed on disk in the main checkout,
-   so un-ignoring it would surface it as untracked, and `closeout_prep.py` turns
-   any `git status --short` output into `working tree is DIRTY`. Resolved by
-   deleting the stale file *and* **keeping the ignore rule** -- other checkouts may
-   still hold their own copy, and the rule costs nothing;
+   the next closeout.** The cache file still existed on disk, so un-ignoring it
+   would surface it as untracked, and `closeout_prep.py` turns any
+   `git status --short` output into `working tree is DIRTY (commit or stash before
+   closeout)` -- blocking Step 0 on a phantom file, and inviting a `git add -A`
+   reflex to commit the dead cache. Resolved by deleting the stale file *and*
+   **keeping the ignore rule**;
    (c) the now-dead `_utcnow()` helper.
+4. **Round 4 (Opus, re-clear):** four more -- a present-tense `.gitattributes`
+   comment still claiming rows "are now written" per closeout; the
+   subprocess-seam banner in `closeout_finish.py` still reading "git/gh/bd/ledger"
+   while its test-file counterpart had already been corrected; and two journal
+   inaccuracies (this entry claimed the deleted test file had 49 tests -- it has
+   **65**; the 49 was carried over from hrn.17's entry, not counted from this
+   file). Round 4 also **measured the real blast radius of (b)**: not just the main
+   checkout but **17 worktrees** under `.claude/worktrees/` still hold their own
+   copy of the cache, so the retained ignore rule protects 17 future closeouts,
+   not one.
 
 ## Lessons
 
@@ -134,13 +146,22 @@ the stale instruction just quietly misleads the next reader):
   checkout that has one. Deleting it converts a harmless leftover file into an
   untracked entry, which `closeout_prep.py` reports as a DIRTY working tree --
   blocking the next closeout on a phantom, and inviting a `git add -A` reflex to
-  commit the dead cache. Delete the file; keep the ignore line. Generalizes to any
-  gitignored derived artifact whose producer is being retired.
-- **A grep-based removal sweep must enumerate every removed NAME, not the concept.**
-  Two of the three gaps survived a sweep that searched `--arm` and `telemetry` but
-  not `--haiku-escalations`, and a claim about CLAUDE.md was written from a sweep
-  that never covered CLAUDE.md. Enumerate the identifiers, and state which paths the
-  sweep actually ran over.
+  commit the dead cache. **Measured exposure here: 17 worktrees under
+  `.claude/worktrees/` still hold a copy** (`find .claude/worktrees -maxdepth 3
+  -name experiment_state.json | wc -l`), so the rule guards 17 future closeouts --
+  do not delete it just because the main checkout looks clean. Delete the file;
+  keep the ignore line. Generalizes to any gitignored derived artifact whose
+  producer is being retired.
+- **A grep-based removal sweep must enumerate every removed NAME, and every file
+  TYPE.** Gaps survived a sweep that searched `--arm`/`telemetry` but not
+  `--haiku-escalations`; a claim about CLAUDE.md was written from a sweep that never
+  covered CLAUDE.md; and `.gitattributes` (a dotfile matched by no `--include=*.ext`
+  filter) kept describing the deleted system in the present tense. Enumerate the
+  identifiers, include dotfiles, and state which paths the sweep actually ran over.
+- **Numbers copied from a neighbouring doc are not verified numbers.** This entry's
+  "49 tests" was carried over from the prior epic's journal entry rather than
+  counted from the file being deleted (the real count is 65). If a figure appears in
+  a journal entry, it should come from a command run against the artifact.
 
 ## Doc freshness
 
@@ -166,12 +187,16 @@ historical planning document rather than per-session overhead.
 ## Files touched
 
 - `scripts/harness_ledger.py` -- DELETED (972 lines).
-- `tests/test_harness_ledger.py` -- DELETED (983 lines, 49 tests).
+- `tests/test_harness_ledger.py` -- DELETED (983 lines, 65 test functions).
 - `scripts/closeout_finish.py` -- removed both telemetry steps, the seven counter
   flags, the `telemetry` output key, the dry-run ledger preview, and the dead
   `_utcnow()` helper + its `datetime`/`timezone` imports; docstring rewritten
   (Steps 5-7 -> Steps 5-6).
 - `CLAUDE.md` -- struck "+ telemetry" from the `/closeout` OWNS PR creation bullet.
+- `.gitattributes` -- comment rewritten from the present tense ("rows are now
+  written per closeout") to describe a retired system. The
+  `docs/journal/harness_ledger.jsonl merge=union` driver line is KEPT: it still
+  governs merges of the retained archive.
 - `.claude/skills/closeout/SKILL.md` -- Step 7 removed in full; A/B arm scaffolding
   stripped from Steps 5.5.b / 5.6 and the merge-conflict + nit-rule headings.
 - `.claude/agents/closeout-runner.md` -- counter contract, invocation flags,
