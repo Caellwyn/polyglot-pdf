@@ -66,11 +66,21 @@ export interface SolProps {
 	/** Which of the six states to render. */
 	state: SolState
 	/**
-	 * Live amplitude, 0-100 (the audio worklet's smoothed RMS scale). Drives the
-	 * listening ray-breathing and the speaking halo. Ignored in states that do
-	 * not use it.
+	 * Live MIC amplitude, 0-100 (the capture worklet's smoothed RMS scale).
+	 * Drives the listening ray-breathing. Ignored in states that do not use it.
 	 */
 	energy?: number
+	/**
+	 * Live AI-OUTPUT amplitude, 0-100 (same scale), pulled per frame. Drives the
+	 * speaking halo.
+	 *
+	 * This is a separate input on purpose: during the assistant's turn the mic is
+	 * near-silent, so feeding `energy` into the speaking state would leave it
+	 * visually dead. Supplied as a GETTER rather than a value because the level
+	 * changes every frame and threading it through React state would re-render
+	 * the whole SVG ~50x/sec.
+	 */
+	getOutputEnergy?: () => number
 	/** Rendered pixel size. The motion multiplier scales inversely (see --k). */
 	size?: number
 	/**
@@ -131,6 +141,7 @@ let solInstanceSeq = 0
 export function Sol({
 	state,
 	energy = 0,
+	getOutputEnergy,
 	size = 56,
 	motionScale,
 	className = '',
@@ -155,6 +166,10 @@ export function Sol({
 	 */
 	const energyRef = useRef(0)
 	energyRef.current = Math.max(0, Math.min(1, energy / 100))
+	// Keep the getter in a ref so a caller passing an inline arrow does not
+	// restart the animation loop on every render.
+	const outputRef = useRef(getOutputEnergy)
+	outputRef.current = getOutputEnergy
 
 	useEffect(() => {
 		const el = svgRef.current
@@ -166,11 +181,18 @@ export function Sol({
 			el.style.setProperty('--eb', '0')
 			return
 		}
+		// Which voice are we visualising? Speaking reads the AI's output level;
+		// listening reads the mic. Using the mic for both would leave the speaking
+		// halo flat, since the user is silent while the assistant talks.
+		const speaking = state === 'speaking'
 		let fast = 0
 		let slow = 0
 		let raf = 0
 		const tick = () => {
-			const target = energyRef.current
+			const raw = speaking
+				? (outputRef.current?.() ?? 0) / 100
+				: energyRef.current
+			const target = Math.max(0, Math.min(1, raw))
 			fast += (target - fast) * FAST_ALPHA
 			slow += (fast - slow) * SLOW_ALPHA
 			el.style.setProperty('--e', fast.toFixed(3))

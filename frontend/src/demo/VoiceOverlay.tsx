@@ -1451,6 +1451,13 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// rule (paused > offline > speaking > thinking > listening > idle).
 	const solSpeaking = useGeminiSpeaking(connectionManager?.getAudioManager?.())
 	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
+	// Sol reads the AI's OUTPUT level for its speaking halo (the mic is silent
+	// while the assistant talks). Resolved per call rather than captured, since
+	// the audio manager is recreated across reconnects.
+	const getSolOutputEnergy = React.useCallback(
+		() => connectionManagerRef.current?.getAudioManager?.()?.getOutputEnergy?.() ?? 0,
+		[]
+	)
 
 	// Debug logging removed - was causing 100+ logs per second in development mode
 
@@ -1482,6 +1489,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 						<Sol
 							state={solState}
 							energy={micEnergy}
+							getOutputEnergy={getSolOutputEnergy}
 							size={40}
 							className="vff-sol"
 						/>

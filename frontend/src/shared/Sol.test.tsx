@@ -12,7 +12,7 @@
 //     unmounts, which is exactly the bug per-instance ids exist to prevent;
 //   - the accessible name is present (or correctly suppressed when decorative).
 import { render, cleanup } from '@testing-library/react'
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { Sol } from './Sol'
 import type { SolState } from './solState'
 
@@ -104,5 +104,33 @@ describe('Sol rendering', () => {
     const svg = container.querySelector('[data-testid="sol-avatar"]') as HTMLElement
     expect(svg.style.getPropertyValue('--e')).toBe('0')
     expect(svg.style.getPropertyValue('--eb')).toBe('0')
+  })
+
+  it('reads OUTPUT energy while speaking and MIC energy while listening', async () => {
+    // The mic is near-silent while the assistant talks, so the speaking halo must
+    // not be driven by `energy` -- if it were, the state would look dead.
+    const getOutputEnergy = vi.fn(() => 80)
+
+    const { rerender } = render(
+      <Sol state="speaking" energy={0} getOutputEnergy={getOutputEnergy} />
+    )
+    // Let the rAF loop run a frame.
+    await new Promise(r => requestAnimationFrame(() => r(null)))
+    expect(getOutputEnergy).toHaveBeenCalled()
+
+    // Listening must NOT consult the output getter -- it visualises the user.
+    getOutputEnergy.mockClear()
+    rerender(<Sol state="listening" energy={50} getOutputEnergy={getOutputEnergy} />)
+    await new Promise(r => requestAnimationFrame(() => r(null)))
+    await new Promise(r => requestAnimationFrame(() => r(null)))
+    expect(getOutputEnergy).not.toHaveBeenCalled()
+  })
+
+  it('survives a missing output getter (pre-connect / mocked managers)', async () => {
+    const { container } = render(<Sol state="speaking" energy={0} />)
+    await new Promise(r => requestAnimationFrame(() => r(null)))
+    const svg = container.querySelector('[data-testid="sol-avatar"]') as HTMLElement
+    // No getter -> treated as silence, not NaN (which would break every calc()).
+    expect(Number.isNaN(parseFloat(svg.style.getPropertyValue('--e')))).toBe(false)
   })
 })

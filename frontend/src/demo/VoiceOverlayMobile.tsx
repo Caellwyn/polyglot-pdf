@@ -1121,6 +1121,13 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 	// Same pure mapping as desktop (../shared/solState).
 	const solSpeaking = useGeminiSpeaking(connectionManager?.getAudioManager?.())
 	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
+	// Sol reads the AI's OUTPUT level for its speaking halo (the mic is silent
+	// while the assistant talks). Resolved per call rather than captured, since
+	// the audio manager is recreated across reconnects.
+	const getSolOutputEnergy = React.useCallback(
+		() => connectionManagerRef.current?.getAudioManager?.()?.getOutputEnergy?.() ?? 0,
+		[]
+	)
 
 	return (
 		<>
@@ -1188,6 +1195,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				<Sol
 					state={solState}
 					energy={micEnergy}
+					getOutputEnergy={getSolOutputEnergy}
 					size={56}
 					className="vff-fab-sol"
 					decorative
@@ -1211,6 +1219,7 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 							<Sol
 								state={solState}
 								energy={micEnergy}
+								getOutputEnergy={getSolOutputEnergy}
 								size={34}
 								className="vff-sol"
 							/>

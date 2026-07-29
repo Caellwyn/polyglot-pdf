@@ -41,10 +41,19 @@ export interface AudioManager {
 	setNativeVad: (enabled: boolean) => void // bd polyglot-pdf-333: stream continuous ungated audio for Gemini's own VAD
 	// Subscribe to the live mic-energy stream the worklet already posts (bd
 	// polyglot-pdf-s3zv). Reuses the worklet's smoothed RMS (0-100) rather than
-	// adding a separate AnalyserNode. `sending` is whether THIS frame actually
-	// passed the send gate (so a UI can distinguish "mic alive but gated/silent"
-	// from a dead mic). Pass null to unsubscribe.
+	// adding an AnalyserNode on the CAPTURE path. `sending` is whether THIS frame
+	// actually passed the send gate (so a UI can distinguish "mic alive but
+	// gated/silent" from a dead mic). Pass null to unsubscribe.
+	// (The PLAYBACK path has no worklet, so output level does use an analyser --
+	// see getOutputEnergy below.)
 	setEnergyCallback: (callback: ((energy: number, sending: boolean) => void) | null) => void
+	// Instantaneous amplitude of the AI's OUTPUT audio, 0-100, on the same scale
+	// as the mic energy above (bd polyglot-pdf-2p4y). Returns 0 when nothing is
+	// playing. Unlike the mic path there is no worklet here, so this reads an
+	// AnalyserNode on the playback chain; it is a pull API (call it from a rAF
+	// loop) rather than a subscription, because the only consumer is an avatar
+	// that already animates per-frame.
+	getOutputEnergy: () => number
 	destroy: () => void
 }
 
@@ -169,6 +178,55 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 	// Track if Gemini is currently speaking (for barge-in detection)
 	let geminiIsSpeaking = false
+
+	/**
+	 * Output-amplitude tap for the avatar (bd polyglot-pdf-2p4y).
+	 *
+	 * The mic path gets its RMS free from the capture worklet, but the playback
+	 * path has no worklet -- chunks are scheduled straight onto BufferSources --
+	 * so measuring the AI's voice needs an AnalyserNode spliced between the
+	 * sources and the destination. Without it Sol's "speaking" state would be
+	 * driven by MIC energy, which is near-silent precisely when the assistant is
+	 * talking, leaving the state visually dead.
+	 *
+	 * Lazily built against whichever playback context is live, and rebuilt if
+	 * that context is replaced (it is recreated after a close/destroy).
+	 */
+	let outputAnalyser: AnalyserNode | null = null
+	let outputAnalyserCtx: AudioContext | null = null
+	// Explicitly backed by ArrayBuffer (not ArrayBufferLike): getByteTimeDomainData
+	// rejects a possibly-SharedArrayBuffer view under the DOM lib's typings.
+	let outputBuf: Uint8Array<ArrayBuffer> | null = null
+
+	function getOutputAnalyser(ctx: AudioContext): AnalyserNode {
+		if (outputAnalyser && outputAnalyserCtx === ctx) return outputAnalyser
+		const analyser = ctx.createAnalyser()
+		// Small FFT: we only want a level, not a spectrum, and this keeps the
+		// per-frame copy cheap.
+		analyser.fftSize = 256
+		analyser.connect(ctx.destination)
+		outputAnalyser = analyser
+		outputAnalyserCtx = ctx
+		outputBuf = new Uint8Array(new ArrayBuffer(analyser.fftSize))
+		return analyser
+	}
+
+	/**
+	 * Instantaneous output level, 0-100, matching the mic-energy scale so a UI can
+	 * feed either into the same visualisation. Returns 0 when nothing is playing,
+	 * so a consumer polling every frame does not need its own silence check.
+	 */
+	function getOutputEnergy(): number {
+		if (!geminiIsSpeaking || !outputAnalyser || !outputBuf) return 0
+		outputAnalyser.getByteTimeDomainData(outputBuf)
+		let sum = 0
+		for (let i = 0; i < outputBuf.length; i++) {
+			const v = (outputBuf[i] - 128) / 128
+			sum += v * v
+		}
+		// Same *100 scaling the capture worklet applies to its RMS.
+		return Math.min(100, Math.sqrt(sum / outputBuf.length) * 100)
+	}
 
 	/**
 	 * Start recording audio from microphone
@@ -479,7 +537,11 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 
 			const source = ctx.createBufferSource()
 			source.buffer = audioBuffer
-			source.connect(ctx.destination)
+			// Through the analyser rather than straight to the destination, so the
+			// avatar can read the AI's real output level (bd polyglot-pdf-2p4y). The
+			// analyser is a pass-through -- it does not alter the signal -- and is
+			// itself connected to ctx.destination.
+			source.connect(getOutputAnalyser(ctx))
 			source.start(startAt)
 
 			// Track this source so it can be stopped during barge-in
@@ -649,6 +711,12 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 			}
 			nodes.playbackContext = null
 		}
+
+		// The analyser belonged to the context we just closed; drop it so the next
+		// playback rebuilds one against the fresh context (bd polyglot-pdf-2p4y).
+		outputAnalyser = null
+		outputAnalyserCtx = null
+		outputBuf = null
 
 		// Drop the energy subscriber on teardown so a destroyed manager holds no
 		// reference into the overlay (bd polyglot-pdf-s3zv).
@@ -838,6 +906,7 @@ export function createAudioManager(existingStream?: MediaStream): AudioManager {
 		setPTTMode,
 		setNativeVad,
 		setEnergyCallback,
+		getOutputEnergy,
 		destroy,
 	}
 }
