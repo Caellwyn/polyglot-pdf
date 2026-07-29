@@ -1186,11 +1186,18 @@ def _check_guidance_identity_drift(
             continue  # pre-anim bake: nothing to be stale against
         if baked == guidance_contract.identity_sha1(field):
             continue
+        # The message carries the CURRENT identity hash so the editor can pin a
+        # human's acknowledgment to the exact content they read. Pinning to the
+        # BAKED hash instead would be a permanent waiver: the baked value does
+        # not change when the user edits, so one ack would silently cover every
+        # later edit until the next re-bake (bd anim fresh-eyes finding 1).
+        current = guidance_contract.identity_sha1(field)
         out.append(LintFinding(
             SEVERITY_WARNING, "guidance-identity-stale",
             f"fields (id={fid}).help",
             "this field's name / spoken name / option labels changed since its "
             "guidance was written, so the guidance may no longer match what "
             "the assistant says -- confirm it still reads correctly (or "
-            "re-author it) before marking the field reviewed",
+            f"re-author it) before marking the field reviewed [identity:"
+            f"{current}]",
         ))

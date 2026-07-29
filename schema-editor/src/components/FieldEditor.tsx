@@ -18,7 +18,7 @@ import { moveFieldToSection } from '../utils/sectionOps';
 import { checkFieldComplete } from '../utils/validation';
 import { getReview, withGuidanceAck, withReviewNote, withReviewStatus }
   from '../utils/reviewStatus';
-import { GUIDANCE_STALE_RULE, bakedIdentity } from '../utils/guidanceStaleness';
+import { GUIDANCE_STALE_RULE, currentIdentity } from '../utils/guidanceStaleness';
 import type { FieldReviewStatus } from '../types/schema';
 import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
 
@@ -944,7 +944,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         checked={acked}
                         onChange={(e) =>
                           onUpdateField(withGuidanceAck(
-                            field, bakedIdentity(schema, field.id), e.target.checked))
+                            field, currentIdentity(lintFindings, field.id), e.target.checked))
                         }
                       />
                       <span>

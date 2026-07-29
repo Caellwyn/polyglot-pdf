@@ -1,6 +1,6 @@
 import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
-import { bakedIdentity, needsGuidanceAck, staleFieldIds }
+import { currentIdentity, needsGuidanceAck, staleFieldIds }
   from '../utils/guidanceStaleness';
 import { checkFieldComplete } from '../utils/validation';
 import { effectiveStatus, getReview, isReviewTarget } from '../utils/reviewStatus';
@@ -200,7 +200,7 @@ export const FieldList: React.FC<FieldListProps> = ({
     needsGuidanceAck(
       field,
       staleFieldIds(lintFindingsByField?.get(field.id)),
-      bakedIdentity(schema, field.id),
+      currentIdentity(lintFindingsByField?.get(field.id), field.id),
     );
 
   const getFieldStatus = (field: FormField) =>
@@ -376,7 +376,7 @@ export const FieldList: React.FC<FieldListProps> = ({
   // field IS one (bd polyglot-pdf-u8t6) -- both flow through isReviewTarget's
   // effective-status precedence.
   const hasReviewTarget = React.useMemo(
-    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f), pageCount)),
+    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f), pageCount, guidanceAckPending(f))),
     // isReviewTarget is a pure per-field check; the memo keys on the fields,
     // the lint findings (a backend ERROR also makes a row a review target),
     // and pageCount (which arrives asynchronously when the PDF finishes
@@ -393,7 +393,8 @@ export const FieldList: React.FC<FieldListProps> = ({
       : -1;
     for (let step = 1; step <= fields.length; step++) {
       const candidate = fields[(current + step) % fields.length];
-      if (isReviewTarget(candidate, fieldHasLintError(candidate), pageCount)) {
+      if (isReviewTarget(candidate, fieldHasLintError(candidate), pageCount,
+                        guidanceAckPending(candidate))) {
         onSelectField(candidate.id);
         return;
       }

@@ -5,8 +5,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  GUIDANCE_STALE_RULE, bakedIdentity, isAcknowledged, needsGuidanceAck,
-  staleFieldIds,
+  GUIDANCE_STALE_RULE, bakedIdentity, currentIdentity, isAcknowledged,
+  needsGuidanceAck, staleFieldIds,
 } from './guidanceStaleness';
 import { effectiveStatus, withGuidanceAck } from './reviewStatus';
 import type { FormField, FormSchema } from '../types/schema';
@@ -38,7 +38,8 @@ function schemaWith(f: FormField, identity?: string): FormSchema {
 
 const staleFinding: LintFinding = {
   severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
-  path: 'fields (id=phone).help', message: 'identity changed', field_id: 'phone',
+  path: 'fields (id=phone).help', message: `identity changed [identity:${BAKED}]`,
+  field_id: 'phone',
 };
 
 describe('staleFieldIds', () => {
@@ -124,5 +125,50 @@ describe('withGuidanceAck serialization', () => {
       BAKED, true);
     const cleared = withGuidanceAck(withNote, BAKED, false);
     expect(cleared._review).toEqual({ status: 'needs_followup', note: 'check me' });
+  });
+});
+
+describe('the ack pins to CURRENT content, never the frozen bake (fresh-eyes finding 1)', () => {
+  const finding = (identity: string): LintFinding => ({
+    severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+    path: 'fields (id=phone).help',
+    message: `changed [identity:${identity}]`, field_id: 'phone',
+  });
+
+  it('reads the current identity out of the finding message', () => {
+    expect(currentIdentity([finding('deadbeef')], 'phone')).toBe('deadbeef');
+    expect(currentIdentity([finding('deadbeef')], 'other')).toBeUndefined();
+    expect(currentIdentity([], 'phone')).toBeUndefined();
+  });
+
+  it('a SECOND drift after an ack re-raises the gate (no permanent waiver)', () => {
+    // drift 1: backend reports identity H2; the human acknowledges THAT.
+    const acked = withGuidanceAck(field(), 'H2', true);
+    expect(needsGuidanceAck(acked, staleFieldIds([finding('H2')]), 'H2'))
+      .toBe(false);                                   // satisfied for H2
+    // drift 2: the human edits again -- the backend now reports H3. The BAKED
+    // hash never moved, so pinning to it would have silently kept the ack
+    // valid. Pinning to the CURRENT identity correctly re-raises.
+    expect(needsGuidanceAck(acked, staleFieldIds([finding('H3')]), 'H3'))
+      .toBe(true);
+  });
+
+  it('re-acknowledging the new content satisfies it again', () => {
+    const reAcked = withGuidanceAck(withGuidanceAck(field(), 'H2', true), 'H3', true);
+    expect(needsGuidanceAck(reAcked, staleFieldIds([finding('H3')]), 'H3')).toBe(false);
+  });
+});
+
+describe('staleFieldIds uses the centralized field_id (bd h76m.11)', () => {
+  it('reads field_id, not a re-parse of path', () => {
+    const odd: LintFinding = {
+      severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+      path: 'some/other/shape', message: 'x [identity:zz]', field_id: 'weird)id',
+    };
+    expect([...staleFieldIds([odd])]).toEqual(['weird)id']);
+  });
+  it('ignores a finding with a null field_id', () => {
+    expect(staleFieldIds([{ severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+      path: 'p', message: 'm', field_id: null }]).size).toBe(0);
   });
 });

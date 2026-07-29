@@ -56,8 +56,10 @@ export function staleFieldIds(findings: LintFinding[] | undefined): Set<string> 
   const out = new Set<string>();
   for (const f of findings ?? []) {
     if (!f || f.rule !== GUIDANCE_STALE_RULE) continue;
-    const m = /\(id=([^)]+)\)/.exec(f.path ?? '');
-    if (m) out.add(m[1]);
+    // Use the CENTRALIZED field_id the backend already derived -- bd h76m.11
+    // deliberately moved that parse into Python so the frontend would not fork
+    // a second regex that can drift from it.
+    if (f.field_id) out.add(f.field_id);
   }
   return out;
 }
@@ -97,29 +99,50 @@ export function bakedIdentity(
 }
 
 /**
- * Has a human acknowledged the guidance for this field's CURRENT state?
+ * The field's CURRENT identity hash, as reported by the backend in the
+ * staleness finding's message (`[identity:<hash>]`).
  *
- * The acknowledgment stores the hash it was given for. On a LATER edit the
- * backend re-bakes/re-flags against a new identity, so the stored ack no longer
- * matches and the gate re-raises -- an ack is not a permanent waiver.
- * `baked` is the hash currently recorded for the field; pass undefined when
- * none is recorded (then any ack is honoured, since nothing is being gated).
+ * This -- NOT the baked hash -- is what an acknowledgment pins to. The baked
+ * value is frozen at bake time and does not change when a human edits, so
+ * pinning an ack to it would make one click a permanent waiver covering every
+ * later edit until the next re-bake (bd anim fresh-eyes finding 1). The
+ * current hash changes on every material edit, so each new drift re-raises the
+ * gate, which is the whole point of the feature.
  */
-export function isAcknowledged(field: FormField, baked?: string): boolean {
-  const ack = field._review?.guidance_ack_sha1;
-  if (typeof ack !== 'string' || !ack) return false;
-  return baked === undefined || ack === baked;
+export function currentIdentity(findings: LintFinding[] | undefined,
+                                fieldId: string): string | undefined {
+  for (const f of findings ?? []) {
+    if (!f || f.rule !== GUIDANCE_STALE_RULE) continue;
+    if (f.field_id !== fieldId) continue;   // centralized id (bd h76m.11)
+    const hm = /\[identity:([0-9a-f]+)\]/.exec(f.message ?? '');
+    if (hm) return hm[1];
+  }
+  return undefined;
 }
 
 /**
- * The gate: this field's guidance drifted and nobody has acknowledged it.
- * `staleIds` comes from staleFieldIds(lintFindings).
+ * Has a human acknowledged the guidance for the field's CURRENT content?
+ *
+ * `current` is the identity the backend is flagging right now. An ack recorded
+ * against a DIFFERENT identity means the human confirmed older content, so the
+ * gate re-raises -- an ack is never a permanent waiver. With no current
+ * identity available nothing is being gated, so any ack is honoured.
+ */
+export function isAcknowledged(field: FormField, current?: string): boolean {
+  const ack = field._review?.guidance_ack_sha1;
+  if (typeof ack !== 'string' || !ack) return false;
+  return current === undefined || ack === current;
+}
+
+/**
+ * The gate: this field's guidance drifted and nobody has acknowledged THIS
+ * version of it. `staleIds` / `current` both come from the backend findings.
  */
 export function needsGuidanceAck(
   field: FormField,
   staleIds: Set<string>,
-  baked?: string,
+  current?: string,
 ): boolean {
   if (!staleIds.has(field.id)) return false;
-  return !isAcknowledged(field, baked);
+  return !isAcknowledged(field, current);
 }

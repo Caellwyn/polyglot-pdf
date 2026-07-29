@@ -165,6 +165,13 @@ export function isReviewTarget(
   field: FormField,
   hasLintError = false,
   pageCount?: number,
+  needsGuidanceAck = false,
 ): boolean {
-  return effectiveStatus(field, hasLintError, pageCount) !== 'complete';
+  // Must pass the guidance gate through too (bd anim): a reviewed_correct
+  // field with un-acknowledged stale guidance renders amber via
+  // effectiveStatus, so the review-jump has to STOP on it -- otherwise "next
+  // to review: nothing left" would lie about a row the author can plainly see
+  // is flagged.
+  return effectiveStatus(field, hasLintError, pageCount, needsGuidanceAck)
+    !== 'complete';
 }
