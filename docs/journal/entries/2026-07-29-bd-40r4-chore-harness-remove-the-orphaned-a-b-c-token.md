@@ -95,8 +95,8 @@ which loses the two obsolete telemetry classes but gains the 8 new guards) = 912
 A shrinking suite is the expected shape when the thing under test is being removed;
 the guards are what keep the removal from silently regressing.
 
-**The review loop ran EIGHT rounds and caught 16 gaps** -- **not one of them a
-functional code defect.** Every single finding was a dangling *instruction*, a stale
+**The review loop ran NINE rounds and caught 19 gaps** (1+1+3+4+1+3+3+1+2) --
+**not one of them a functional code defect.** Every single finding was a dangling *instruction*, a stale
 *comment*, a drifted *test fixture*, or a wrong *number in this entry*. That is the
 characteristic failure mode of a removal like this: deleted code fails loudly and
 immediately, but the prose that described it just quietly misleads the next reader,
@@ -174,6 +174,18 @@ config first, then comments, then documentation accuracy:
    cost arm B exists to avoid" on line 24, after re-grepping the whole file for
    *every* experiment word (`arm`, `A/B`, `experiment`, `sprint plan`, `counter`)
    rather than the one term that first matched.
+9. **Round 9 (Opus, the clearing round):** two findings, the first of which is this
+   entry's own lesson biting back --
+   (a) **`docs/doctrine/review-flow.md:224` still listed "ledger rows" as a live
+   append-only merge-conflict class**, diverging from its mirror at `SKILL.md:483`,
+   which lists journal entries / CHANGELOG / "Related" lists and no ledger. That is
+   the *same defect class* as R7a, in the *same file*, one section below the clause
+   R7 fixed -- caught by neither because each fix targeted the matched line rather
+   than re-reading the file;
+   (b) the tally in this very section said "16 gaps" while the rounds it enumerates
+   summed to 17 -- failing the "make any multi-part count sum to its stated total"
+   rule this entry prescribes two sections later. Now stated with the addends shown
+   so the arithmetic is checkable at a glance.
 
 ## Lessons
 
@@ -220,14 +232,15 @@ config first, then comments, then documentation accuracy:
   contradicting each other on the identical rule, with the *authoritative* copy
   holding the stale text. After editing a rule in a skill, grep the doctrine docs
   for the same sentence (and vice versa).
-- **Once a file is open for a stale-reference fix, re-sweep the WHOLE file.** The
-  loop's last finding was a second stale passage in `pick_review_model.py` sitting
-  four lines from one already rewritten -- missed because the fix targeted the
-  single line that matched the search term ("ledger") instead of re-reading the file
-  for every way the retired thing gets named. Fixing the grep hit is not the same as
-  fixing the file: after the first hit lands, re-grep that file for the full
-  vocabulary (`arm`, `A/B`, `experiment`, `counter`, the plan it cites) before
-  moving on.
+- **Once a file is open for a stale-reference fix, re-sweep the WHOLE file.** This
+  cost TWO separate rounds. R8 found a second stale passage in
+  `pick_review_model.py` four lines from one already rewritten; R9 then found a
+  second stale passage in `docs/doctrine/review-flow.md` one section below the
+  clause R7 had fixed. Both were missed the same way: the fix targeted the line that
+  matched the search term instead of re-reading the file for every way the retired
+  thing gets named. **Fixing the grep hit is not the same as fixing the file** --
+  after the first hit lands, re-grep that file for the full vocabulary (`arm`,
+  `A/B`, `experiment`, `counter`, `ledger`, the plan it cites) before moving on.
 - **Every figure in a journal entry must come from a command run against the
   artifact -- and the review loop should check the arithmetic.** THREE separate
   numeric/factual claims in this one entry were wrong on first writing: "49 tests"
@@ -269,8 +282,10 @@ historical planning document rather than per-session overhead.
   `_utcnow()` helper + its `datetime`/`timezone` imports; docstring rewritten
   (Steps 5-7 -> Steps 5-6).
 - `CLAUDE.md` -- struck "+ telemetry" from the `/closeout` OWNS PR creation bullet.
-- `docs/doctrine/review-flow.md` -- struck the "or the A/B cost accounting" clause
-  so the doctrine doc matches its mirror at `SKILL.md:350`.
+- `docs/doctrine/review-flow.md` -- two fixes, both restoring parity with the
+  `SKILL.md` mirror: struck the "or the A/B cost accounting" clause (line 119), and
+  dropped "or ledger rows" from the append-only merge-conflict class (line 224),
+  which now matches the skill's list of journal entries / CHANGELOG / "Related".
 - `scripts/pick_review_model.py` -- COMMENT ONLY (arm B behavior untouched, verified
   by `git diff | grep -v '^[+-]#'` returning nothing): the threshold note no longer
   points a future tuner at the deleted ledger; the module docstring no longer frames

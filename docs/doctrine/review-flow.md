@@ -221,7 +221,7 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
 - **Resolve mechanical merge conflicts inline; escalate only structural ones.**
   When the loop's rebase hits a conflict, the orchestrator decides it -- it is not
   an automatic escalation. **Mechanical / ordering** conflicts (append-only journal
-  or ledger rows, changelog interleaving, independent additions to the same
+  entries, changelog interleaving, independent additions to the same
   list/table) are resolved inline by **keeping both sides** in a sensible order,
   then re-reading the merged region to confirm both intents survived. **Escalate
   (STOP and ask) only on genuine structural incompatibility** -- the two sides
