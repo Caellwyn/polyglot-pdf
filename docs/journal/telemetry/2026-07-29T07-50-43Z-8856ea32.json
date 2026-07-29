@@ -1,0 +1,113 @@
+{
+  "recorded_at": "2026-07-29T07:50:43Z",
+  "session_id": "8856ea32-2e0f-4782-b594-3517442310ee",
+  "beads": [
+    "polyglot-pdf-anim"
+  ],
+  "arm": "A",
+  "cost_category": "production",
+  "wall_clock": {
+    "first_ts": "2026-07-29T04:45:15.640Z",
+    "last_ts": "2026-07-29T07:50:38.528Z"
+  },
+  "tokens": {
+    "orchestrator": {
+      "input_tokens": 13528,
+      "output_tokens": 658827,
+      "cache_read_input_tokens": 91016272,
+      "cache_creation_input_tokens": 6371573,
+      "cache_creation_1h_input_tokens": 6371573,
+      "cache_creation_5m_input_tokens": 0,
+      "cache_creation_assumed_input_tokens": 0
+    },
+    "subagent": {
+      "input_tokens": 21692,
+      "output_tokens": 41816,
+      "cache_read_input_tokens": 47480288,
+      "cache_creation_input_tokens": 1212272,
+      "cache_creation_1h_input_tokens": 0,
+      "cache_creation_5m_input_tokens": 1212272,
+      "cache_creation_assumed_input_tokens": 0
+    },
+    "total": {
+      "input_tokens": 35220,
+      "output_tokens": 700643,
+      "cache_read_input_tokens": 138496560,
+      "cache_creation_input_tokens": 7583845,
+      "cache_creation_1h_input_tokens": 6371573,
+      "cache_creation_5m_input_tokens": 1212272,
+      "cache_creation_assumed_input_tokens": 0
+    }
+  },
+  "models": {
+    "orchestrator": {
+      "claude-fable-5": {
+        "input_tokens": 13528,
+        "output_tokens": 658827,
+        "cache_read_input_tokens": 91016272,
+        "cache_creation_input_tokens": 6371573,
+        "cache_creation_1h_input_tokens": 6371573,
+        "cache_creation_5m_input_tokens": 0,
+        "cache_creation_assumed_input_tokens": 0
+      }
+    },
+    "subagent": {
+      "claude-sonnet-5": {
+        "input_tokens": 21692,
+        "output_tokens": 41816,
+        "cache_read_input_tokens": 47480288,
+        "cache_creation_input_tokens": 1212272,
+        "cache_creation_1h_input_tokens": 0,
+        "cache_creation_5m_input_tokens": 1212272,
+        "cache_creation_assumed_input_tokens": 0
+      },
+      "<synthetic>": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_creation_1h_input_tokens": 0,
+        "cache_creation_5m_input_tokens": 0,
+        "cache_creation_assumed_input_tokens": 0
+      }
+    }
+  },
+  "cost_usd": {
+    "orchestrator": {
+      "claude-fable-5": 251.524362
+    },
+    "subagent": {
+      "claude-sonnet-5": 19.482422,
+      "<synthetic>": 0.0
+    },
+    "by_model": {
+      "claude-fable-5": 251.524362,
+      "claude-sonnet-5": 19.482422,
+      "<synthetic>": 0.0
+    },
+    "unpriced_models": [
+      "<synthetic>"
+    ],
+    "orchestrator_total": 251.524362,
+    "subagent_total": 19.482422,
+    "total": 271.006784,
+    "cache_write_ttl_source": "measured",
+    "cache_write_tokens_1h": 6371573,
+    "cache_write_tokens_5m": 1212272,
+    "cache_write_tokens_5m_assumed": 0
+  },
+  "subagent_models": [
+    "<synthetic>",
+    "claude-sonnet-5"
+  ],
+  "assistant_turns": {
+    "orchestrator": 367,
+    "subagent": 372
+  },
+  "phase_tokens": null,
+  "copilot_rounds": 7,
+  "maintainer_touchpoints": 1,
+  "deferred_nits": 0,
+  "haiku_escalations": 0,
+  "errors_shipped": 0
+}
