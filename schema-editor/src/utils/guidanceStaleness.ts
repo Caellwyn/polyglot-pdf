@@ -135,8 +135,15 @@ export function needsAckFieldIds(
   const stale = staleFieldIds(findings);
   if (stale.size === 0) return out;
   for (const f of fields ?? []) {
-    if (!f || !stale.has(f.id)) continue;
-    if (!isAcknowledged(f, currentIdentity(findings, f.id))) out.add(f.id);
+    if (!f) continue;
+    // Delegate to the SAME per-field gate the FieldList row uses --
+    // including its unparseable-identity fail-open -- so the counters and
+    // the icons can never disagree (Opus round 2: the fail-open guard was
+    // added to the row gate but hand-mirrored logic here missed it,
+    // splitting the "% reviewed" figure from the rows it summarizes).
+    if (needsGuidanceAck(f, stale, currentIdentity(findings, f.id))) {
+      out.add(f.id);
+    }
   }
   return out;
 }

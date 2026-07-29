@@ -191,18 +191,45 @@ describe('the ack survives the other _review writers (fresh-eyes, closeout round
 });
 
 describe('needsAckFieldIds (the completion counters aggregation)', () => {
+  // Identities here MUST be hex: currentIdentity's production regex only
+  // matches [identity:<hex>], so a non-hex literal silently parses to
+  // undefined and every assertion passes through the fail-open branch
+  // instead of the comparison it claims to pin (Opus round 2: the first
+  // version of this block was exactly that -- vacuously green).
+  const hexFinding = (id: string, identity: string): LintFinding => ({
+    severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+    path: `fields (id=${id}).help[identity:${identity}]`,
+    message: 'identity changed', field_id: id,
+  });
+
   it('collects stale fields lacking an ack for their CURRENT identity', () => {
     const unacked = field();
     const acked = withGuidanceAck(
-      field({ id: 'other' } as Partial<FormField>), 'H2', true);
-    const findings: LintFinding[] = [staleFinding, {
-      severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
-      path: 'fields (id=other).help[identity:H2]',
-      message: 'identity changed', field_id: 'other',
-    }];
+      field({ id: 'other' } as Partial<FormField>), 'beef22', true);
+    const findings = [hexFinding('phone', 'abc123'),
+                      hexFinding('other', 'beef22')];
     // `phone` is stale and un-acked -> in. `other` is stale but acked for its
     // current identity -> out. The set is what getCompletionStats consumes.
     expect([...needsAckFieldIds([unacked, acked], findings)]).toEqual(['phone']);
+  });
+
+  it('an ack for a SUPERSEDED identity stays IN the set (no permanent waiver)', () => {
+    const staleAcked = withGuidanceAck(field(), 'aaa000', true);
+    expect([...needsAckFieldIds([staleAcked], [hexFinding('phone', 'abc123')])])
+      .toEqual(['phone']);
+  });
+
+  it('an UNPARSEABLE identity fails open in the counters too (row parity)', () => {
+    // Same fail-open as needsGuidanceAck: the % figure and the row icons
+    // must tell the same story even on a malformed finding path.
+    const reviewed = field({
+      _review: { status: 'reviewed_correct' },
+    } as Partial<FormField>);
+    const unparseable: LintFinding = {
+      severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+      path: 'fields (id=phone).help', message: 'x', field_id: 'phone',
+    };
+    expect(needsAckFieldIds([reviewed], [unparseable]).size).toBe(0);
   });
 
   it('is empty with no stale findings, and never throws on undefined input', () => {

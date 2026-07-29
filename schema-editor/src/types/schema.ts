@@ -128,9 +128,12 @@ export interface FieldReview {
   note?: string;
   // A human's confirmation that the authored guidance still reads correctly
   // for THIS field identity, after the backend flagged it as drifted
-  // (guidance-identity-stale; bd polyglot-pdf-anim). Stores the baked
-  // identity hash it was given for, so a LATER edit re-raises the gate --
-  // an acknowledgment is not a permanent waiver.
+  // (guidance-identity-stale; bd polyglot-pdf-anim). Stores the CURRENT
+  // identity hash the backend reported at ack time -- NEVER the frozen
+  // bake-time hash, which does not move when a human edits (pinning to it
+  // was the round-1 permanent-waiver bug). Because this value tracks
+  // content, a LATER edit mismatches it and re-raises the gate -- an
+  // acknowledgment is not a permanent waiver.
   guidance_ack_sha1?: string;
 }
 
