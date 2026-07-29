@@ -491,13 +491,27 @@ def parse_transcript(transcript: Path) -> dict:
         # genuinely legacy record on the same model, an aggregate-level
         # subtraction cancels the legacy tokens to zero -- pricing them at $0 and
         # reporting "measured". Bucketing per record makes that impossible.
+        #
+        # The remainder is anchored on the LARGER of the flat count and the
+        # breakdown's own total, so a TTL kind we do not model yet still gets
+        # priced (bd polyglot-pdf-41c1). Anchoring on the flat field alone drops
+        # such tokens to $0 whenever the flat field is also 0 -- and a non-zero
+        # breakdown beside a zero flat field is a real shape, not a hypothetical
+        # (167 such records in the local corpus). An unknown kind is charged at
+        # the conservative 5m rate and surfaces as "assumed-5m"/"mixed" rather
+        # than vanishing while the block claims there were no cache writes.
         cache_creation = usage.get("cache_creation")
         flat_cc = max(0, usage.get("cache_creation_input_tokens") or 0)
-        rec_1h = rec_5m = 0
+        rec_1h = rec_5m = other_cc = 0
         if isinstance(cache_creation, dict):
             rec_1h = max(0, cache_creation.get("ephemeral_1h_input_tokens") or 0)
             rec_5m = max(0, cache_creation.get("ephemeral_5m_input_tokens") or 0)
-        rec_assumed = max(0, flat_cc - (rec_1h + rec_5m))
+            for key, val in cache_creation.items():
+                if key in ("ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens"):
+                    continue
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    other_cc += max(0, int(val))
+        rec_assumed = max(0, max(flat_cc, rec_1h + rec_5m + other_cc) - (rec_1h + rec_5m))
         for dst, val in (
             ("cache_creation_1h_input_tokens", rec_1h),
             ("cache_creation_5m_input_tokens", rec_5m),

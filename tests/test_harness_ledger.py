@@ -162,6 +162,28 @@ class TestParseTranscript:
         assert c["cache_write_tokens_1h"] == 1_000_000
         assert c["cache_write_tokens_5m_assumed"] == 1_000_000
 
+    def test_unmodelled_ttl_kind_is_priced_not_dropped(self, tmp_path):
+        """bd polyglot-pdf-41c1: a future TTL kind must not vanish.
+
+        Anchoring the remainder on the flat field ALONE drops an unmodelled kind
+        to $0 whenever the flat field is also 0 -- and a non-zero breakdown
+        beside a zero flat field is a real shape (167 such records in the local
+        corpus), so the two conditions co-occur. The block then reported "none"
+        ("no cache writes at all") on a real charge.
+
+        An unknown kind is charged at the conservative 5m rate and surfaces as
+        assumed, rather than being silently priced at zero.
+        """
+        usage = _usage(cc=0)
+        usage["cache_creation"] = {"ephemeral_12h_input_tokens": 5_000_000}
+        t = _write_transcript(tmp_path, [_assistant(usage, model="claude-sonnet-4-6")])
+        c = ledger.compute_cost(ledger.parse_transcript(t)["models"])
+
+        # 5M at sonnet's 3/MTok input, 1.25x = $18.75.
+        assert c["total"] == 18.75
+        assert c["cache_write_ttl_source"] == "assumed-5m"
+        assert c["cache_write_tokens_5m_assumed"] == 5_000_000
+
     def test_wall_clock_span(self, tmp_path):
         records = [
             {"type": "user", "sessionId": "sess-fixture", "timestamp": "2026-06-01T00:00:00Z"},
