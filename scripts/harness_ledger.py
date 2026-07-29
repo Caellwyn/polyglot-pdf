@@ -123,11 +123,25 @@ MODEL_PRICES_PER_MTOK = {
 
 # Prompt-cache multipliers applied to the BASE INPUT rate (shared/prompt-caching.md):
 #   read  -> 0.1x; write -> 1.25x at 5-minute TTL, 2.0x at 1-hour TTL.
-# The ledger rows do NOT record which TTL a cache write used; Claude Code's
-# default cache is the 5-MINUTE TTL, so we price cache_creation at 1.25x and
-# document the assumption rather than over-charging at the 1h rate.
+#
+# Transcript records DO carry the TTL split, in `usage.cache_creation`
+# (`ephemeral_1h_input_tokens` / `ephemeral_5m_input_tokens`), so we price each
+# bucket at its own multiplier instead of assuming one global TTL (bd
+# polyglot-pdf-aefl). MEASURED 2026-07-28 across 1,480 usage-bearing records in
+# the three most recent sessions: 26,512,214 cache-creation tokens, ALL of them
+# ephemeral_1h and zero ephemeral_5m -- the previous flat 1.25x assumption
+# under-reported every one of them by 37.5%.
+#
+# Legacy fallback: a record with the flat `cache_creation_input_tokens` but no
+# `cache_creation` breakdown (older transcript layout) is bucketed to 5m, which
+# preserves the historical pricing of already-written rows rather than silently
+# re-pricing them upward. compute_cost reports which happened via
+# `cache_write_ttl_source`.
 CACHE_READ_MULTIPLIER = 0.1
-CACHE_WRITE_MULTIPLIER = 1.25  # 5-minute TTL (Claude Code default)
+CACHE_WRITE_MULTIPLIER_5M = 1.25   # 5-minute TTL
+CACHE_WRITE_MULTIPLIER_1H = 2.0    # 1-hour TTL (what Claude Code actually uses)
+# Back-compat alias: some callers/tests referenced the old single constant.
+CACHE_WRITE_MULTIPLIER = CACHE_WRITE_MULTIPLIER_5M
 
 
 def _price_for_model(model_id: str) -> dict | None:
@@ -143,24 +157,45 @@ def _price_for_model(model_id: str) -> dict | None:
     return best[1] if best else None
 
 
+def _split_cache_writes(counts: dict) -> tuple[int, int]:
+    """Split cache-creation tokens into (1h, 5m) buckets.
+
+    Prefers the per-TTL fields parsed off `usage.cache_creation`. Any flat
+    `cache_creation_input_tokens` not accounted for by those buckets is a legacy
+    record with no breakdown -- it falls back to 5m, preserving the historical
+    pricing of rows written before the split existed rather than re-pricing them
+    upward. Returns (tokens_1h, tokens_5m).
+    """
+    flat = counts.get("cache_creation_input_tokens", 0) or 0
+    t_1h = counts.get("cache_creation_1h_input_tokens", 0) or 0
+    t_5m = counts.get("cache_creation_5m_input_tokens", 0) or 0
+    known = t_1h + t_5m
+    # Unattributed remainder (legacy shape, or a TTL kind we don't model yet).
+    if flat > known:
+        t_5m += flat - known
+    return t_1h, t_5m
+
+
 def _cost_for_counts(counts: dict, rate: dict) -> float:
     """USD cost for one model's token counts at the given {input, output} rate.
 
     counts keys: input_tokens (uncached remainder), output_tokens,
-    cache_read_input_tokens (priced at 0.1x input), cache_creation_input_tokens
-    (priced at 1.25x input, the 5-minute-TTL assumption).
+    cache_read_input_tokens (priced at 0.1x input), and cache-creation tokens
+    priced per TTL bucket -- 1h at 2.0x input, 5m at 1.25x (see
+    _split_cache_writes for the legacy fallback).
     """
     in_rate = rate["input"] / 1_000_000
     out_rate = rate["output"] / 1_000_000
     inp = counts.get("input_tokens", 0) or 0
     out = counts.get("output_tokens", 0) or 0
     cache_read = counts.get("cache_read_input_tokens", 0) or 0
-    cache_write = counts.get("cache_creation_input_tokens", 0) or 0
+    write_1h, write_5m = _split_cache_writes(counts)
     return (
         inp * in_rate
         + out * out_rate
         + cache_read * in_rate * CACHE_READ_MULTIPLIER
-        + cache_write * in_rate * CACHE_WRITE_MULTIPLIER
+        + write_1h * in_rate * CACHE_WRITE_MULTIPLIER_1H
+        + write_5m * in_rate * CACHE_WRITE_MULTIPLIER_5M
     )
 
 
@@ -199,7 +234,32 @@ def compute_cost(models: dict | None) -> dict:
     out["subagent_total"] = round(actor_totals["subagent"], 6)
     out["total"] = round(actor_totals["orchestrator"] + actor_totals["subagent"], 6)
     out["unpriced_models"] = sorted(unpriced)
-    out["cache_write_ttl_assumed"] = "5m"  # see CACHE_WRITE_MULTIPLIER note
+
+    # Report what the cache writes ACTUALLY were rather than a fixed assumption
+    # (bd polyglot-pdf-aefl). "measured" means the transcript carried the
+    # usage.cache_creation TTL breakdown; "assumed-5m" means it did not and the
+    # legacy fallback priced those tokens at 1.25x. Both can be true at once in
+    # a mixed transcript, hence the explicit "mixed" value.
+    tot_1h = tot_5m = tot_flat = 0
+    for actor in ("orchestrator", "subagent"):
+        for counts in ((models or {}).get(actor) or {}).values():
+            if not isinstance(counts, dict):
+                continue
+            tot_1h += counts.get("cache_creation_1h_input_tokens", 0) or 0
+            tot_5m += counts.get("cache_creation_5m_input_tokens", 0) or 0
+            tot_flat += counts.get("cache_creation_input_tokens", 0) or 0
+    unattributed = max(0, tot_flat - (tot_1h + tot_5m))
+    if tot_flat == 0:
+        ttl_source = "none"          # no cache writes at all
+    elif unattributed == 0:
+        ttl_source = "measured"
+    elif tot_1h + tot_5m == 0:
+        ttl_source = "assumed-5m"    # wholly legacy transcript
+    else:
+        ttl_source = "mixed"
+    out["cache_write_ttl_source"] = ttl_source
+    out["cache_write_tokens_1h"] = tot_1h
+    out["cache_write_tokens_5m"] = tot_5m + unattributed
     return out
 
 
@@ -321,6 +381,13 @@ def parse_transcript(transcript: Path) -> dict:
             "output_tokens": 0,
             "cache_read_input_tokens": 0,
             "cache_creation_input_tokens": 0,
+            # Per-TTL split of the line above, read off usage.cache_creation
+            # (bd polyglot-pdf-aefl). These are a BREAKDOWN of
+            # cache_creation_input_tokens, not additional tokens -- never sum
+            # them with it. Absent on legacy records, which leaves them 0 and
+            # sends the flat count down the assumed-5m fallback.
+            "cache_creation_1h_input_tokens": 0,
+            "cache_creation_5m_input_tokens": 0,
         }
 
     tokens_by_actor: dict[str, dict] = {"orchestrator": _zero(), "subagent": _zero()}
@@ -371,6 +438,20 @@ def parse_transcript(transcript: Path) -> dict:
             val = usage.get(field) or 0
             tokens_by_actor[actor][field] += val
             models_by_actor[actor][model][field] += val
+
+        # Per-TTL cache-write split (bd polyglot-pdf-aefl). Newer records carry
+        # usage.cache_creation = {ephemeral_1h_input_tokens, ephemeral_5m_...};
+        # older ones omit it, and those tokens stay attributed only to the flat
+        # field above so _split_cache_writes routes them to the 5m fallback.
+        cache_creation = usage.get("cache_creation")
+        if isinstance(cache_creation, dict):
+            for src, dst in (
+                ("ephemeral_1h_input_tokens", "cache_creation_1h_input_tokens"),
+                ("ephemeral_5m_input_tokens", "cache_creation_5m_input_tokens"),
+            ):
+                val = cache_creation.get(src) or 0
+                tokens_by_actor[actor][dst] += val
+                models_by_actor[actor][model][dst] += val
 
     for rec in _iter_records(transcript):
         _accumulate(rec, anchor_meta=True)
