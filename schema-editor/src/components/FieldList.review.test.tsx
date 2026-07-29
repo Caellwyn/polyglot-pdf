@@ -134,3 +134,56 @@ describe('FieldList review status (bd u8t6)', () => {
     expect(green.querySelector('svg.text-green-600')).not.toBeNull();
   });
 });
+
+describe('the guidance staleness gate blocks green in the LIST (bd anim)', () => {
+  // THE row-level blocking pin for exit criterion 1: before this block,
+  // deleting the needsGuidanceAck argument out of getFieldStatus left the
+  // entire suite green (Opus round 4) -- the gate could be dead in the UI
+  // with every pure-function test still passing.
+  const staleFinding: LintFinding = {
+    severity: 'WARNING', rule: 'guidance-identity-stale',
+    path: 'fields (id=gated).help[identity:abc123]',
+    message: 'guidance may be out of date', field_id: 'gated',
+  };
+
+  it('a reviewed_correct field with un-acked drift renders AMBER, not green', () => {
+    const gated = completeField('gated', {
+      _review: { status: 'reviewed_correct' },
+    });
+    renderList(schemaWith([gated]), {
+      lintFindingsByField: new Map([['gated', [staleFinding]]]),
+    });
+    const icon = screen.getByTestId('field-status-gated');
+    expect(icon.querySelector('svg.text-yellow-600')).not.toBeNull();
+    expect(icon.querySelector('svg.text-green-600')).toBeNull();
+    // the tooltip's FIRST line explains the amber icon it sits on, ahead of
+    // the (superseded-for-now) sign-off line (Opus round 4 finding 3)
+    const title = icon.getAttribute('title') ?? '';
+    expect(title.startsWith('Guidance changed after this field was reviewed'))
+      .toBe(true);
+    expect(title).toContain('Reviewed - correct');
+  });
+
+  it('the SAME field renders green once the ack pins the current identity', () => {
+    const acked = completeField('gated', {
+      _review: { status: 'reviewed_correct', guidance_ack_sha1: 'abc123' },
+    });
+    renderList(schemaWith([acked]), {
+      lintFindingsByField: new Map([['gated', [staleFinding]]]),
+    });
+    const icon = screen.getByTestId('field-status-gated');
+    expect(icon.querySelector('svg.text-green-600')).not.toBeNull();
+    expect(icon.querySelector('svg.text-yellow-600')).toBeNull();
+  });
+
+  it('"Next to review" stops on the gated field', () => {
+    const onSelectField = vi.fn();
+    const gated = completeField('gated', { _review: { status: 'reviewed_correct' } });
+    renderList(schemaWith([gated]), {
+      onSelectField,
+      lintFindingsByField: new Map([['gated', [staleFinding]]]),
+    });
+    fireEvent.click(screen.getByText('Next to review'));
+    expect(onSelectField).toHaveBeenCalledWith('gated');
+  });
+});

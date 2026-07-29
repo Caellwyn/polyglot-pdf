@@ -53,8 +53,9 @@ import type { FormField, FormConfig, FormSchema, FormSection } from './types/sch
 // complete/total counts, so the bar AND its hover detail both track edits).
 // Also carries the live version summary so an in-session metadata edit refreshes
 // the card's version line instead of showing the stale disk-scan value (Codex
-// PR #263).
-function liveStats(
+// PR #263). Exported for App.liveStats.test.ts, which pins the lintFindings
+// argument reaching the guidance-ack gate (Opus round 4).
+export function liveStats(
   schema: FormSchema,
   lintFindings?: LintFinding[],
 ): { percent: number; complete: number; total: number; version: KitVersionInfo } {

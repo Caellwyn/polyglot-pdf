@@ -226,8 +226,16 @@ export const FieldList: React.FC<FieldListProps> = ({
         review.note ? `Needs follow-up: ${noteForTooltip(review.note)}` : 'Marked needs follow-up',
       );
     } else if (review.status === 'reviewed_correct') {
-      // A signed-off field shows green; surface the sign-off (and any note) so
-      // the tooltip still explains WHY it is green rather than looking untouched.
+      // A signed-off field shows green -- unless un-acknowledged guidance
+      // drift demotes it to amber (bd anim). Lead the tooltip with whichever
+      // state the ICON shows, so its first line never contradicts an amber
+      // clock sitting right next to it (Opus round 4); the sign-off (and any
+      // note) still follows so the row never looks untouched.
+      if (guidanceAckPending(field)) {
+        reviewMessages.push(
+          'Guidance changed after this field was reviewed -- confirm it '
+          + 'still reads correctly (see Instructions)');
+      }
       reviewMessages.push(
         review.note ? `Reviewed - correct: ${noteForTooltip(review.note)}` : 'Reviewed - correct',
       );

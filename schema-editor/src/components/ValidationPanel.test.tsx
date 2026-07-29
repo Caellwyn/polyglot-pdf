@@ -272,3 +272,44 @@ describe('ValidationPanel onReport mirror (bd 0x10.6)', () => {
     expect(lintSchema).not.toHaveBeenCalled();
   });
 });
+
+describe('the completion stats honour the guidance-ack gate (bd anim)', () => {
+  // Pins the PANEL-level wiring (stats memo consumes the lint report): before
+  // this, reverting the memo to gate-blind getCompletionStats(schema) kept
+  // the whole suite green (Opus round 4).
+  const gatedField = {
+    id: 'gated', name: 'G', type: 'text', spoken_name: 'g',
+    pdf_field_name: 'G[0]', section_id: 's1',
+    help: { instructions: 'x' },
+  };
+  const staleFinding = {
+    severity: 'WARNING' as const, rule: 'guidance-identity-stale',
+    path: 'fields (id=gated).help[identity:abc123]', field_id: 'gated',
+    message: 'guidance may be out of date',
+  };
+  const schemaWithReview = (review: object) => ({
+    ...SCHEMA,
+    fields: [{ ...gatedField, _review: review }],
+  } as unknown as FormSchema);
+
+  it('a reviewed_correct field with un-acked drift is NOT counted complete', async () => {
+    lintSchema.mockResolvedValue(report([staleFinding]));
+    render(<ValidationPanel schema={schemaWithReview({ status: 'reviewed_correct' })}
+      onSelectField={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByText(/0 complete, 1 need review/)).toBeInTheDocument(),
+    );
+  });
+
+  it('the SAME field counts complete once acked for the current identity', async () => {
+    lintSchema.mockResolvedValue(report([staleFinding]));
+    render(<ValidationPanel
+      schema={schemaWithReview({
+        status: 'reviewed_correct', guidance_ack_sha1: 'abc123',
+      })}
+      onSelectField={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByText(/1 complete, 0 need review/)).toBeInTheDocument(),
+    );
+  });
+});

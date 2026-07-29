@@ -423,8 +423,8 @@ def identity_payload(field: dict) -> str:
     first option") is not re-flagged by a reorder alone; the contract
     discourages that phrasing anyway.
 
-    WHY the value rides in the pair (bd anim handoff decision): with bare
-    sorted labels, a label SWAP -- "Married" and "Single" trading places while
+    WHY the value rides in each binding (bd anim handoff decision): with
+    bare sorted texts, a SWAP -- "Married" and "Single" trading places while
     their values stay put -- hashed identically, so the one identity drift
     that makes the assistant's unchanged words select a DIFFERENT stored
     answer never flagged. That is not stale wording; it is a wrong answer on
