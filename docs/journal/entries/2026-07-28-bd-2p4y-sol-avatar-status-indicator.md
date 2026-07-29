@@ -168,12 +168,23 @@ the code on purpose and confirming a red test:
 | reduced-motion guard inverted | 3 tests |
 | corona reverted to `sol-pulse` | 1 test |
 | live region nested back inside the button | 1 test |
+| connecting corona set BRIGHTER than idle (`.5` -> `.95`) | 2 tests |
 
-The last row earned its place immediately. Restoring the source after that
-mutation, a `git checkout` pulled from the **index** -- which still held the
+The last row is there because a review caught the guard that was *supposed* to
+cover it doing nothing. A test named "connecting stays dimmer than idle"
+asserted only idle's value and left the actual comparison in a code comment --
+so setting connecting to `.95` would have passed it. It now parses both values
+and compares them numerically, and the mutation above confirms it fails. A test
+name is documentation; one that promises a comparison it does not perform is
+worse than no test, because it stops anyone from adding a real one.
+
+The live-region row earned its place immediately too. Restoring the source after
+that mutation, a `git checkout` pulled from the **index** -- which still held the
 pre-fix nested version -- silently reverting the accessibility fix I had just
-made. The test caught it on the next run. A guard that has never been seen to
-fail is a guess; these have each been seen to fail exactly once, on purpose.
+made. The test caught it on the next run.
+
+A guard that has never been seen to fail is a guess; these have each been seen to
+fail exactly once, on purpose.
 
 ## The precedence rule
 

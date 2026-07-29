@@ -19,9 +19,17 @@ import type { SolState } from './solState'
 afterEach(cleanup)
 
 /**
- * Force the prefers-reduced-motion answer for one test. jsdom supplies a
- * matchMedia that always reports `matches: false`, so the normal path is live by
- * default and only the reduced case needs stubbing.
+ * Force the prefers-reduced-motion answer for one test.
+ *
+ * jsdom does NOT implement matchMedia at all -- `typeof window.matchMedia` is
+ * `'undefined'` here and calling it throws (measured, not assumed). The
+ * component uses `window.matchMedia?.(...)`, whose optional chain short-circuits
+ * the whole expression to `undefined`, leaving the guard falsy -- which is why
+ * the ~13 other tests in this file exercise the normal (non-reduced) path
+ * without stubbing anything.
+ *
+ * That optional chain is therefore LOAD-BEARING, not defensive decoration:
+ * removing it would make every amplitude test in this file throw.
  */
 function stubReducedMotion(matches: boolean) {
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -217,8 +225,22 @@ describe('Sol stylesheet invariants', () => {
   })
 
   it('connecting stays dimmer than idle -- the whole point of the state', () => {
-    const idle = SOL_CSS.match(/\.sol \.corona\s*\{[^}]*\}/)![0]
-    expect(idle).toContain('opacity: .85')
-    // .5 (connecting) < .85 (idle): quieter, not louder.
+    // Parse BOTH values and compare them numerically. Asserting only idle's .85
+    // (and leaving the relation in a comment) would let connecting be set to
+    // .95 and still pass -- reintroducing the exact "connecting is brighter than
+    // idle" inversion this round exists to prevent.
+    const opacityOf = (rule: string) => {
+      const m = rule.match(/opacity:\s*(\.?\d*\.?\d+)/)
+      expect(m).toBeTruthy()
+      return parseFloat(m![1])
+    }
+    const idleRule = SOL_CSS.match(/\.sol \.corona\s*\{[^}]*\}/)![0]
+    const connectingRule = SOL_CSS.match(
+      /\.sol\[data-state="connecting"\]\s*\.corona\s*\{[^}]*\}/
+    )![0]
+
+    const idle = opacityOf(idleRule)
+    const connecting = opacityOf(connectingRule)
+    expect(connecting).toBeLessThan(idle)
   })
 })
