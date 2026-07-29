@@ -72,13 +72,8 @@ import { SOL_STATE_LABEL } from './solState'
 const FAST_ALPHA = 0.14
 const SLOW_ALPHA = 0.075
 
-/**
- * The amplitude swing on LISTENING's disc is capped deliberately: it moves ~6%
- * and brightens ~7%, nowhere near a flash hazard, which matters a great deal on
- * a large bright shape. The visible work there is done by the rings, which cost
- * no luminance. (Speaking has no disc rule at all -- see the listening/speaking
- * blocks below for what each state's amplitude actually drives.)
- */
+/* The flash-hazard cap on listening's disc scale/brightness is documented where
+   it applies, next to the .disc rule in the LISTENING block below. */
 
 export interface SolProps {
 	/** Which of the seven states to render. */
@@ -564,9 +559,18 @@ export const SOL_CSS = `
      amplitude-driven one -- otherwise the cue vanishes completely. */
   .sol[data-state="listening"] .ring { opacity: .55; }
   .sol[data-state="listening"] .ring2 { opacity: .35; }
-  /* Connecting: the grow-and-snap IS the cue, so pin the disc at its smallest,
-     dimmest point -- still obviously "not the resting state", without motion. */
-  .sol[data-state="connecting"] .disc { transform: scale(.1) !important; opacity: .8; }
-  .sol[data-state="connecting"] .corona { transform: scale(.1) !important; opacity: .2; }
+  /* Connecting: the grow-and-snap IS the cue, so pin the disc SHRUNKEN -- but
+     NOT at the animation's 10% low point, which is a 1.6px speck at the 40px
+     status row and 2.3px on the 56px FAB. That would erase the state's only
+     static cue and make connecting indistinguishable from idle for a
+     reduced-motion user (re-breaking bd polyglot-pdf-bxng on the collapsed FAB,
+     where Sol is the ONLY status there is). .72 reads as clearly smaller than
+     idle's full-size disc while staying a visible disc at every shipped size
+     (11.8px / 16.6px / 35.4px at 40 / 56 / 120px). The keyframe low point and
+     the static pin answer different questions -- "where does the motion start"
+     vs "what stays legible when there is no motion" -- so they must be chosen
+     separately, not copied from each other. */
+  .sol[data-state="connecting"] .disc { transform: scale(.72) !important; opacity: .8; }
+  .sol[data-state="connecting"] .corona { transform: scale(.72) !important; opacity: .35; }
 }
 `

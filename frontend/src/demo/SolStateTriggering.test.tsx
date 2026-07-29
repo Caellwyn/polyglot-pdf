@@ -80,12 +80,22 @@ function makeMockManager(
   status: string,
   opts?: { sendingMic?: boolean; speaking?: boolean },
 ): ConnectionManager {
+  // Cleared on unsubscribe (cb === null) and by the suite's fake-timer reset.
+  let energyTimer: number | null = null
   const audioManager = {
     setPTTMode: vi.fn(), setVADActive: vi.fn(), setNativeVad: vi.fn(),
     setEnergyCallback: vi.fn((cb: ((energy: number, sending: boolean) => void) | null) => {
-      // Push one frame immediately, as the worklet would. Energy is non-zero so
-      // the amplitude-driven properties have something to react to.
-      if (cb && opts?.sendingMic) cb(45, true)
+      // Model the worklet's CONTINUOUS delivery (~50x/sec), not a single frame.
+      // The overlay treats a frame older than 250ms as stale and decays energy
+      // to 0, so a one-shot push makes amplitude assertions flaky-by-design:
+      // they pass if checked immediately and fail once the clock advances past
+      // the staleness window. Keeping a repeating emitter is what the real audio
+      // path does and is what lets --e actually climb.
+      if (energyTimer !== null) { clearInterval(energyTimer); energyTimer = null }
+      if (cb && opts?.sendingMic) {
+        cb(45, true)
+        energyTimer = setInterval(() => cb(45, true), 20) as unknown as number
+      }
     }),
     isSpeaking: vi.fn(() => opts?.speaking ?? false),
     getOutputEnergy: vi.fn(() => (opts?.speaking ? 60 : 0)),
@@ -133,6 +143,20 @@ function makeMockManager(
  */
 async function advanceOneFrame() {
   await act(async () => { vi.advanceTimersByTime(32) })
+}
+
+/**
+ * Let amplitude propagate all the way to a CSS variable. Two hops are involved,
+ * each on its own rAF loop: the overlay publishes `micEnergy` state from the
+ * worklet frame, THEN Sol's own loop exponentially smooths that into --e
+ * (`fast += (target - fast) * 0.14`). One frame moves --e barely off zero, so a
+ * single tick is not enough to assert "amplitude is flowing" -- give it enough
+ * frames for the smoothing to climb clear of zero.
+ */
+async function advanceFrames(n = 20) {
+  for (let i = 0; i < n; i++) {
+    await act(async () => { vi.advanceTimersByTime(16) })
+  }
 }
 
 function stubEnv() {
@@ -259,14 +283,36 @@ describe('Sol state triggering through the DESKTOP overlay', () => {
     expect(solState(container)).toBe('offline')
   })
 
-  it('Sol is fed the live mic energy value, not a constant', () => {
-    // The energy prop must actually be wired -- a hardcoded 0 would leave every
-    // amplitude-driven animation flat in production while all state tests pass.
+  it('Sol is fed the live MIC energy value, not a constant', async () => {
+    // Asserts on --e, the variable every amplitude-driven listening rule reads.
+    // An earlier version of this test checked --k instead, which is derived
+    // purely from the `size` prop and set unconditionally in every state -- so
+    // it passed even with `energy={0}` hardcoded in the overlay, i.e. it pinned
+    // nothing it claimed to. Mutation-checked: substituting energy={0} in
+    // VoiceOverlay.tsx must fail this.
     const { container } = renderDesktop('connected', { sendingMic: true })
+    await advanceFrames()
     const svg = container.querySelector('[data-testid="sol-avatar"]') as HTMLElement
-    // --k is always set; --e/--eb are written by the rAF loop, which jsdom does
-    // run. Presence of the custom property proves the loop armed for this state.
-    expect(svg.style.getPropertyValue('--k')).not.toBe('')
+    expect(svg.getAttribute('data-state')).toBe('listening')
+    // The mock worklet frame carries energy 45, so the smoothed value must climb
+    // above zero once the loop has run.
+    expect(parseFloat(svg.style.getPropertyValue('--e'))).toBeGreaterThan(0)
+  })
+
+  it('Sol is fed the live AI-OUTPUT energy getter while speaking', async () => {
+    // The highest-value wire on this branch and previously unpinned: post-swap,
+    // speaking's ENTIRE visible animation (ray length, from --e) comes from
+    // getOutputEnergy. Sol falls back to `?? 0` when the prop is missing, so a
+    // dropped prop yields a silently STATIC speaking avatar with no error --
+    // exactly the bug that shipped in the dev preview. Mutation-checked:
+    // deleting getOutputEnergy from the overlay's <Sol> must fail this.
+    const { container } = renderDesktop('connected', { speaking: true })
+    act(() => { window.vffOnAudioPlaybackStart!() })
+    await advanceFrames()
+    const svg = container.querySelector('[data-testid="sol-avatar"]') as HTMLElement
+    expect(svg.getAttribute('data-state')).toBe('speaking')
+    // The mock returns 60 while speaking; a missing prop would leave this at 0.
+    expect(parseFloat(svg.style.getPropertyValue('--e'))).toBeGreaterThan(0)
   })
 })
 
@@ -334,6 +380,33 @@ describe('Sol state triggering through the MOBILE overlay', () => {
     expect(all.length).toBeGreaterThanOrEqual(2)
     expect(new Set(all).size).toBe(1)
     expect(all[0]).toBe('listening')
+  })
+
+  it('the FAB Sol is fed the live AI-OUTPUT energy getter while speaking', async () => {
+    // Mobile mounts TWO Sols and both need the getter; the FAB is the one that
+    // matters most, being the only status visible while collapsed.
+    const { container } = renderMobile('connected', { speaking: true })
+    act(() => { window.vffOnAudioPlaybackStart!() })
+    await advanceFrames()
+    const svg = container.querySelector('.vff-fab [data-testid="sol-avatar"]') as HTMLElement
+    expect(svg.getAttribute('data-state')).toBe('speaking')
+    expect(parseFloat(svg.style.getPropertyValue('--e'))).toBeGreaterThan(0)
+  })
+
+  it('the expanded panel Sol also gets a live amplitude source', async () => {
+    // The third shipped mount site. Pinned separately because a dropped prop on
+    // just this one would leave the panel static while the FAB animated.
+    const { container } = renderMobile('connected', { speaking: true })
+    const fab = container.querySelector('.vff-fab') as HTMLElement
+    fireEvent.click(fab)
+    act(() => { window.vffOnAudioPlaybackStart!() })
+    await advanceFrames()
+    const panelSol = container.querySelector(
+      '.vff-panel-mobile [data-testid="sol-avatar"]'
+    ) as HTMLElement
+    expect(panelSol).toBeTruthy()
+    expect(panelSol.getAttribute('data-state')).toBe('speaking')
+    expect(parseFloat(panelSol.style.getPropertyValue('--e'))).toBeGreaterThan(0)
   })
 
   it('the screen-reader status text tracks the same state as the avatar', () => {

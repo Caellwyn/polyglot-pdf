@@ -320,3 +320,79 @@ describe('Sol stylesheet invariants', () => {
     expect(Math.max(...opacities)).toBeLessThan(idle)
   })
 })
+
+describe('reduced-motion legibility pins', () => {
+  // The @media (prefers-reduced-motion: reduce) block is the SOLE legibility
+  // guarantee for the four motion-dependent states, and it had zero coverage --
+  // which is exactly why a regression shipped in it: the `connecting` disc pin
+  // was mechanically updated to match the animation's new 10% low point, making
+  // it a ~1.6px speck at the 40px status row and erasing the only cue that
+  // distinguishes `connecting` from `idle` when the clock is stopped.
+  //
+  // The keyframe low point and the static pin answer different questions --
+  // "where does the motion start" vs "what stays legible without motion" -- so
+  // copying one from the other is the bug this block guards.
+  function reducedMotionBlock(): string {
+    const start = SOL_CSS.indexOf('@media (prefers-reduced-motion: reduce)')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const open = SOL_CSS.indexOf('{', start)
+    let depth = 0
+    for (let i = open; i < SOL_CSS.length; i++) {
+      if (SOL_CSS[i] === '{') depth++
+      else if (SOL_CSS[i] === '}') {
+        depth--
+        if (depth === 0) return SOL_CSS.slice(start, i + 1)
+      }
+    }
+    throw new Error('unterminated reduced-motion media block')
+  }
+
+  // Disc radius and viewBox are fixed by the SVG geometry; a scale below this
+  // stops being "a smaller disc" and becomes "no disc".
+  const DISC_R = 41
+  const VIEWBOX = 200
+  const discPx = (scale: number, size: number) => 2 * DISC_R * scale * (size / VIEWBOX)
+
+  it('every motion-dependent state has a named static pin', () => {
+    const block = reducedMotionBlock()
+    // Each of these four states is otherwise distinguishable ONLY by motion.
+    expect(block).toMatch(/\[data-state="speaking"\]\s*\.rayscale/)
+    expect(block).toMatch(/\[data-state="thinking"\]\s*\.twinkle/)
+    expect(block).toMatch(/\[data-state="listening"\]\s*\.ring/)
+    expect(block).toMatch(/\[data-state="connecting"\]\s*\.disc/)
+  })
+
+  it('the connecting disc stays a VISIBLE disc, not a speck', () => {
+    const block = reducedMotionBlock()
+    const m = block.match(
+      /\[data-state="connecting"\]\s*\.disc\s*\{[^}]*transform:\s*scale\((\.?\d*\.?\d+)\)/
+    )
+    expect(m).toBeTruthy()
+    const scale = parseFloat(m![1])
+    // Must be clearly smaller than idle's full-size disc...
+    expect(scale).toBeLessThan(1)
+    // ...but still legible at the SMALLEST shipped size (the 40px status row).
+    // 10% -- the animation's low point -- yields 1.6px here and fails this.
+    expect(discPx(scale, 40)).toBeGreaterThan(8)
+    expect(discPx(scale, 56)).toBeGreaterThan(8)
+  })
+
+  it('speaking rays stay pinned LONGER than idle rest length', () => {
+    const block = reducedMotionBlock()
+    const m = block.match(
+      /\[data-state="speaking"\]\s*\.rayscale\s*\{\s*transform:\s*scale\((\.?\d*\.?\d+)\)/
+    )
+    expect(m).toBeTruthy()
+    // Idle leaves .rayscale untransformed (scale 1), so the pin must exceed 1 to
+    // read as "extended" rather than "same as idle".
+    expect(parseFloat(m![1])).toBeGreaterThan(1)
+  })
+
+  it('listening keeps a visible halo ring (its only non-motion cue)', () => {
+    const block = reducedMotionBlock()
+    const m = block.match(/\[data-state="listening"\]\s*\.ring\s*\{\s*opacity:\s*(\.?\d*\.?\d+)/)
+    expect(m).toBeTruthy()
+    // Base .ring opacity is 0; the pin must actually make it visible.
+    expect(parseFloat(m![1])).toBeGreaterThan(0.3)
+  })
+})
