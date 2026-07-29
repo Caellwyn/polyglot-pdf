@@ -565,8 +565,10 @@ export const SOL_CSS = `
      static cue and make connecting indistinguishable from idle for a
      reduced-motion user (re-breaking bd polyglot-pdf-bxng on the collapsed FAB,
      where Sol is the ONLY status there is). .72 reads as clearly smaller than
-     idle's full-size disc while staying a visible disc at every shipped size
-     (11.8px / 16.6px / 35.4px at 40 / 56 / 120px). The keyframe low point and
+     idle's full-size disc while staying a visible disc at every SHIPPED size --
+     10.0px / 11.8px / 16.5px at 34 / 40 / 56px, the three sizes the overlays
+     actually mount (34 is the mobile expanded panel, and the smallest; 120px is
+     the dev preview only). The keyframe low point and
      the static pin answer different questions -- "where does the motion start"
      vs "what stays legible when there is no motion" -- so they must be chosen
      separately, not copied from each other. */

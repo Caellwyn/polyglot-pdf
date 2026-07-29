@@ -353,6 +353,18 @@ describe('reduced-motion legibility pins', () => {
   const VIEWBOX = 200
   const discPx = (scale: number, size: number) => 2 * DISC_R * scale * (size / VIEWBOX)
 
+  /**
+   * Every size Sol is actually MOUNTED at in shipped code -- grep `size={` at the
+   * three <Sol> call sites: 40 (desktop status row), 56 (mobile FAB), 34 (mobile
+   * expanded panel). 34 is the one that matters and the one an earlier version of
+   * this guard omitted: checking only 40 and 56 left a band (scale .488-.574)
+   * where the floor passed while the real 34px instance rendered under 8px --
+   * the exact failure the floor exists to catch. 120px is the dev preview only
+   * and is deliberately NOT here; a harness size must not widen the guard.
+   */
+  const SHIPPED_SIZES = [34, 40, 56]
+  const MIN_LEGIBLE_PX = 8
+
   it('every motion-dependent state has a named static pin', () => {
     const block = reducedMotionBlock()
     // Each of these four states is otherwise distinguishable ONLY by motion.
@@ -371,10 +383,11 @@ describe('reduced-motion legibility pins', () => {
     const scale = parseFloat(m![1])
     // Must be clearly smaller than idle's full-size disc...
     expect(scale).toBeLessThan(1)
-    // ...but still legible at the SMALLEST shipped size (the 40px status row).
-    // 10% -- the animation's low point -- yields 1.6px here and fails this.
-    expect(discPx(scale, 40)).toBeGreaterThan(8)
-    expect(discPx(scale, 56)).toBeGreaterThan(8)
+    // ...but still legible at EVERY shipped size, including the 34px mobile
+    // panel. 10% -- the animation's low point -- yields 1.4px at 34 and fails.
+    for (const size of SHIPPED_SIZES) {
+      expect(discPx(scale, size)).toBeGreaterThan(MIN_LEGIBLE_PX)
+    }
   })
 
   it('speaking rays stay pinned LONGER than idle rest length', () => {

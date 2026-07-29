@@ -65,6 +65,45 @@ function useFakeEnergy(): { energy: number; getEnergy: () => number } {
 	return { energy: e, getEnergy }
 }
 
+/**
+ * Re-scope the SHIPPED `@media (prefers-reduced-motion: reduce)` rules under a
+ * `.rm` class so the checkbox shows what a reduced-motion user actually sees.
+ *
+ * Why this exists: the toggle used to only do `animation: none`, which is NOT
+ * what the media query does. The query ALSO applies static pins (a shrunken
+ * connecting disc, extended speaking rays, visible listening ring, steady
+ * twinkles) -- and with animations merely stopped, `.disc` fell back to its
+ * normal declarations and rendered FULL SIZE. So the harness showed a full-size
+ * disc while a real user saw a 10%-scale speck: a 10x discrepancy, and precisely
+ * how an illegible pin shipped without anyone noticing by eye.
+ *
+ * Derived from SOL_CSS by text transform rather than hand-copied, so it cannot
+ * drift from the rules that actually ship.
+ */
+function reducedMotionPreviewCss(css: string): string {
+	const marker = '@media (prefers-reduced-motion: reduce)'
+	const start = css.indexOf(marker)
+	if (start < 0) return ''
+	const open = css.indexOf('{', start)
+	let depth = 0
+	let end = -1
+	for (let i = open; i < css.length; i++) {
+		if (css[i] === '{') depth++
+		else if (css[i] === '}') {
+			depth--
+			if (depth === 0) { end = i; break }
+		}
+	}
+	if (end < 0) return ''
+	// Strip the @media wrapper, keeping just its body...
+	const body = css.slice(open + 1, end)
+	// ...then prefix every `.sol` selector with `.rm ` so it applies only inside
+	// the toggled subtree. The rules all start at `.sol`, so this is a safe
+	// textual re-scope; anything that stops matching that shape shows up as a
+	// visibly unstyled state rather than silently doing nothing.
+	return body.replace(/(^|\s|,)(\.sol)/g, '$1.rm $2')
+}
+
 function App() {
 	const { energy, getEnergy } = useFakeEnergy()
 	const [rm, setRm] = useState(false)
@@ -98,14 +137,17 @@ function App() {
 				           background: linear-gradient(135deg,#7c3aed,#c084fc);
 				           display: flex; align-items: center; justify-content: center; }
 				.fab { position: relative; width: 56px; height: 56px; }
-				.rm .sol * { animation: none !important; }
 				table { border-collapse: collapse; font-size: 13px; background: #fff; }
 				td, th { border: 1px solid #e5e7eb; padding: 5px 10px; text-align: left; }
 			`}</style>
+			{/* The REAL reduced-motion rules, re-scoped under .rm -- static pins
+			    included, not just `animation: none`, so the checkbox shows what a
+			    reduced-motion user actually sees. */}
+			<style>{reducedMotionPreviewCss(SOL_CSS)}</style>
 			<div className={rm ? 'rm' : ''}>
 				<label style={{ display: 'block', marginBottom: 12 }}>
 					<input type="checkbox" checked={rm} onChange={e => setRm(e.target.checked)} />{' '}
-					simulate reduced motion (kills animations)
+					simulate reduced motion (kills animations AND applies the real static pins)
 				</label>
 
 				<h2>All {STATES.length} states -- panel size (40px), on white</h2>
