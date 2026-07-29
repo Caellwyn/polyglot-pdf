@@ -104,8 +104,8 @@ mechanics can be delegated to the cheap `closeout-runner` subagent
 - **DELEGABLE (mechanics):** running `closeout_prep.py`; writing the
   already-composed journal entry to disk; and running **`scripts/closeout_finish.py`**
   -- the one-shot glue that commits the staged work, rebases, pushes, opens the PR,
-  records the telemetry row, and closes the bead(s) -- ALL in one run, because both
-  reviews already cleared before it runs. It resolves the `$R`/`$WT`/`$PY` worktree
+  and closes the bead(s) -- ALL in one run, because both reviews already cleared
+  before it runs. It resolves the `$R`/`$WT`/`$PY` worktree
   traps **internally**, so neither you nor the subagent re-derives them.
 
 **The flow:** you make ALL the judgments FIRST -- prep is READY, the journal prose
@@ -114,8 +114,8 @@ fresh-eyes loop to `NO-GAPS`, then Step 5.6's Opus outer review to
 two-independent-`NO-GAPS`** (or the outer review was skipped per the Step 5.6
 gate), with all fixes committed. THEN you hand the `closeout-runner` a structured
 brief (bead id(s) + close reason; the **complete filled journal text**; PR title +
-body, including the Step-5.5 scorecard; the telemetry counters; branch + base). It
-runs the glue -- open PR, telemetry, close bead(s) -- and **stops back at every
+body, including the Step-5.5 scorecard; branch + base). It
+runs the glue -- open PR, close bead(s) -- and **stops back at every
 judgment point** (prep ATTENTION, a rebase conflict, any tooling error, a missing
 brief input). Fresh-eyes and the Opus outer review are NOT spawned by the runner --
 they already ran pre-PR (Steps 5.5 + 5.6).
@@ -276,7 +276,7 @@ on the updated diff -> ... until an **Opus** pass returns **`NO-GAPS`** (clause 
 a haiku/sonnet `NO-GAPS` is not terminal -- the final clearing round must be Opus),
 THEN proceed to Step 6 (open the PR).
 
-1. **Pick the fresh-eyes model from diff size (A/B arm B).** Zero-token router --
+1. **Pick the fresh-eyes model from diff size.** Zero-token router --
    size in, model name out, NO risk judgment (the risk call happens inside the
    fresh-eyes turn, by the cheap model):
    `R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; (cd "$WT" && "$PY" "$WT/scripts/pick_review_model.py" --base origin/dev)`
@@ -286,10 +286,8 @@ THEN proceed to Step 6 (open the PR).
    `git diff` in its own cwd -- without `cd "$WT"` it would measure the MAIN repo's
    `origin/dev...HEAD` (~0 lines) and route every review to `haiku`. On a
    measurement failure it prints `sonnet` and exits 1 (fail toward the capable
-   model). **A/B control (arm B OFF):** if `CLAUDE_CODE_SUBAGENT_MODEL` is set, that
-   session-wide override wins, so the picker is moot -- skip it and use Sonnet. Note
-   whether arm B was active (picker ran AND the env var was unset); count Haiku
-   self-escalations for Step 7's `--haiku-escalations`.
+   model). If `CLAUDE_CODE_SUBAGENT_MODEL` is set, that session-wide override
+   wins, so the picker is moot -- skip it and use Sonnet.
 2. **Spawn the reviewer, passing it the bead's EXIT CRITERIA.** Prefer the standing
    agent `.claude/agents/fresh-eyes-reviewer.md` (spawn by type) with a `model`
    override of the picked value; otherwise use its prompt via a one-off
@@ -320,7 +318,7 @@ THEN proceed to Step 6 (open the PR).
      nit" -- fix it inline, do not defer it. Commit the fixes, then **re-spawn
      fresh-eyes** on the updated diff. This is the recursion.
    - **`BLOCKED`** (Haiku self-escalation) -> re-spawn the SAME reviewer with
-     `model: sonnet`; count it for `--haiku-escalations`.
+     `model: sonnet`.
    - **A subagent TIMEOUT/ERROR** (no verdict returned) -> **surface to the
      maintainer; NEVER silently skip the assess.** Silence is not `NO-GAPS`.
      **Exception -- the effort-400:** if the spawn itself failed with an
@@ -349,7 +347,7 @@ THEN proceed to Step 6 (open the PR).
    strongest reviewer always gets the last look before the PR opens, because the
    cheaper tiers miss cross-file interaction bugs (a Sonnet `NO-GAPS` shipped the
    bd bo4m regression; only the stronger tier's trace caught it). This does NOT
-   change the merge decision or the A/B cost accounting for the earlier rounds --
+   change the merge decision for the earlier rounds --
    it is one guaranteed Opus pass at the end. (When the diff is already routed to
    Opus, or `CLAUDE_CODE_SUBAGENT_MODEL` forces Opus, the clearing round already
    satisfies this -- no extra pass.)
@@ -434,7 +432,7 @@ retired dead path.
 - **`GAPS-FOUND (n)`** -> fix blockers inline / defer true nits (the nit-vs-blocker rule below), commit, then **re-spawn the Opus review** on the updated local diff. This is the loop. Re-run the test suite (Step 4) after any code fix. (No push -- pre-PR.)
 - **`BLOCKED` / a subagent TIMEOUT or ERROR (no verdict)** -> surface to the maintainer. A failure of the last-resort reviewer is a genuine stop (no further fallback, EXCEPT the effort-400 Workflow retry above -- take that first when the failure is an effort-unsupported 400, and surface only if it too fails), so this is the one branch that escalates. **Never** interpret a missing verdict as CLEAN.
 
-### The nit-vs-blocker decision rule (A/B arm C -- bd polyglot-pdf-hrn.5)
+### The nit-vs-blocker decision rule (bd polyglot-pdf-hrn.5)
 
 The reviewer returns findings, but a subagent cannot reliably tell a nit from a blocker, so **the orchestrator makes that call.** For EACH finding, classify and act:
 
@@ -442,7 +440,7 @@ The reviewer returns findings, but a subagent cannot reliably tell a nit from a 
 - **True nit -- defer, don't fix inline.** A finding that is unambiguously cosmetic / stylistic / non-behavioral (naming preference, a comment-wording tweak, an optional micro-refactor with no functional effect). Do **not** fix these inline (that just spawns another review round for no behavior change). Instead **file them as ONE follow-up bead** (see the convention below) and proceed.
 - **When in doubt, it's a blocker.** Do not use "nit" as an excuse to skip a fix you're unsure about -- the whole point of "ambiguous = blocker" is that the cheap mistake (an extra fix) is the one we choose.
 
-**Deferred-nit bead convention.** File **one** bead per closeout collecting that change's true nits (not one bead per nit): title `chore(nits): deferred review nits from <bead-id>` (the review runs PRE-PR, so key the title on the bead being closed, not a PR number that does not exist yet), body listing each nit with its source (the review pass) + file:line, and tag it with the arm that deferred it via `bd create ... --metadata '{"arm":"C"}'` (the JSON-string form `bd` expects -- see hrn.4/hrn.5's own `arm` metadata) so the telemetry audit can later check whether any deferred "nit" turned out to be a real bug (the nit-turned-blocker rate, charged to the deferring arm -- see Step 7). Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md). Count them for Step 7's `--deferred-nits`.
+**Deferred-nit bead convention.** File **one** bead per closeout collecting that change's true nits (not one bead per nit): title `chore(nits): deferred review nits from <bead-id>` (the review runs PRE-PR, so key the title on the bead being closed, not a PR number that does not exist yet), body listing each nit with its source (the review pass) + file:line. Create it with a pull/push-bracketed `bd create` (the same way Step 1 files deferred findings -- `bd_safe.py` has no `create` subcommand, so bracket the `bd create` directly). These deferred-nit beads are **prime candidates for a later multi-bead cleanup PR** (several tiny nit beads bundled into one closeout, per the bead/PR contract in CLAUDE.md).
 
 **Loop-stop rule -- OUTCOME-based, no round cap (maintainer directive 2026-07-04).**
 There is **no hard round ceiling** on the adopt-and-loop cycle. This governs EACH
@@ -465,12 +463,9 @@ gate still requires BOTH independent reviews CLEAN on the identical final diff
 blocker -- keep looping. The escalation branch is a `BLOCKED`/TIMEOUT/ERROR from a
 reviewer, or a gap you can neither fix nor honestly classify -- never a round count.)
 
-**A/B control (arm C OFF).** The `CLOSEOUT_LOOP_MODE` env var forces the control arm:
-- unset / `blockers` (the default, **arm C ON**) -> the rule above: defer true nits, loop on blockers, ambiguous=blocker (under the outcome-based loop-stop -- no round cap).
-- `zero` (**arm C OFF / control**) -> the old behavior: do NOT defer nits to a bead; fix or explicitly reject every finding inline before looping (no deferral, so `--deferred-nits 0`). Same outcome-based loop-stop (the arm distinction is nit-deferral vs. no-deferral, not a round count).
-**Note whether arm C was active** (it was, if `CLOSEOUT_LOOP_MODE` is unset/`blockers`); Step 7 (telemetry) combines the active arms into the single `--arm` value and applies the Phase-A default.
+**Escape hatch.** Setting `CLOSEOUT_LOOP_MODE=zero` disables nit-deferral for a run: do NOT defer nits to a bead; fix or explicitly reject every finding inline before looping. Same outcome-based loop-stop. Unset (the default) applies the nit-deferral rule above.
 
-### Merge-conflict resolution (A/B arm-agnostic -- bd polyglot-pdf-hrn.6)
+### Merge-conflict resolution (bd polyglot-pdf-hrn.6)
 
 The Step-6 pre-push `git pull --rebase origin dev` can hit a **merge conflict**
 when the feature branch and the integration branch touched the same lines. When
@@ -522,7 +517,7 @@ Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 
 
 **There is NO trigger comment and NO watcher.** Do NOT put an `@codex review` line in the PR body, do NOT use the `requested_reviewers` reviewer API, and do NOT launch `pr_review_watcher.py` -- all retired dead path.
 
-1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, **write + commit + push the telemetry row** (from the counters you pass it -- see Step 7 for what they mean), and close the bead(s). Pass the telemetry counters ON THIS run (`--arm`, `--cost-category`, `--copilot-rounds`, `--maintainer-touchpoints`, `--deferred-nits`, `--haiku-escalations`, `--errors-shipped`); do NOT re-run `harness_ledger.py` in Step 7 (that duplicates the row). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; for a review-SKIPPED change, also note "review record: fresh-eyes NO-GAPS, round <n>"; for a reviewed change, note "review record: Opus outer review, two independent NO-GAPS"). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. If opening BY HAND (not via `closeout_finish.py`), you must also run the Step-7 `harness_ledger.py` command yourself (that is its fallback role):
+1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; for a review-SKIPPED change, also note "review record: fresh-eyes NO-GAPS, round <n>"; for a reviewed change, note "review record: Opus outer review, two independent NO-GAPS"). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. The equivalent raw commands, if opening BY HAND:
    ```bash
    git -C "<WT>" fetch origin && git -C "<WT>" pull --rebase origin dev
    git -C "<WT>" push -u origin <branch>
@@ -541,71 +536,3 @@ Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 
 **Do NOT go back and rewrite the PR body after opening it.** The fresh-eyes triage breakdown and the outer-review round count already live in the **journal entry** (Step 3, the canonical chronological record) and the **merge ping** (Step 6.3, what the maintainer actually reads). Re-editing the PR description with `gh pr edit` is a **wasted model turn** generating prose for a surface nobody reads -- the initial `gh pr create --body` is the only body write. The durable record is the journal.
 
 The PR is a normal, mergeable PR the moment it opens -- there is no flip step and no post-PR review wait. For a routine low-risk PR that reviewed CLEAN, **you merge it** (`gh pr merge`) and notify; for a consequence-bearing PR, pinging the maintainer is the autonomous endpoint. Force-push and `bd dolt push --force` are never yours regardless.
-
-## Step 7 -- The harness telemetry row (deterministic)
-
-The telemetry row is written by **`closeout_finish.py` itself in Step 6** -- you
-pass it the counters (`--arm`, `--cost-category`, `--copilot-rounds`,
-`--maintainer-touchpoints`, `--deferred-nits`, `--haiku-escalations`,
-`--errors-shipped`) and it runs `harness_ledger.py` and commits+pushes the row
-internally as part of the same run. **Do NOT run `harness_ledger.py` a second time
-here** -- that would write a DUPLICATE row and contaminate the A/B cost-arm
-counters (the exact double-count the hrn.15 discipline exists to prevent). This
-step is the REFERENCE for what those counters mean (below), plus the **hand-run
-fallback** for when you did NOT open the PR via `closeout_finish.py` (e.g. a manual
-`gh pr create`): only then do you run the ledger yourself.
-
-Write one JSON file to `docs/journal/telemetry/` capturing this closeout's
-cost (bd polyglot-pdf-hrn.1). Each closeout writes its own file (named by
-timestamp + session prefix), so parallel PRs never touch the same path and
-GitHub merges them without conflict -- no custom merge driver needed. The script
-is **zero-model-token**: it parses the session transcript JSONL for the token
-split (orchestrator-vs-subagent, by model) and wall-clock; you only pass the
-handful of numbers a script can't read off the transcript. **Fallback only**
-(when the PR was NOT opened via `closeout_finish.py`) -- run the **worktree's copy**
-so the file path resolves into THIS checkout (same `$WT` rule as Steps 3/4):
-
-`R="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"; WT="$(git rev-parse --show-toplevel)"; PY="$R/backend/.venv/Scripts/python.exe"; "$PY" "$WT/scripts/harness_ledger.py" --bead <bead-id> --arm <A|B|C|BC> --cost-category <production|audit> --recorded-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> --haiku-escalations <n> --errors-shipped <n>`
-
-(The explicit `%Y-%m-%dT%H:%M:%SZ` form is used instead of `%FT%TZ` because `%F`
-/`%T` are GNU `date` extensions -- BSD/macOS `date` would emit the literal format
-string and land junk in `--recorded-at`. The script also has a UTC fallback if
-`--recorded-at` is omitted entirely.)
-
-Pass **one `--bead` per bead this PR closed** (repeat the flag for a bundled
-PR). Fill the counters from what actually happened this session:
-- `--arm` -- the experiment arm you ran, as a SINGLE value derived from which
-  arms were active (Steps 5.5.b / 7 told you to note each -- arm B is the
-  fresh-eyes model-picker in Step 5.5.b, arm C is the outer-review nit-loop in Step 5.6):
-  - **Phase A (the default, until the counter says otherwise): pass `A`** --
-    regardless of what Steps 5.5.b/7 noted. In Phase A you are measuring the
-    baseline, so the arm is `A` even though the picker/loop ran their normal
-    path; the B/C notes only become the arm value once the phase directive has
-    advanced to B/C toggling. Mislabeling a baseline closeout `B`/`C` would
-    prematurely advance the phase counters and invalidate the baseline.
-  - **Once toggling (directive says "start B/C"):** pass `B` if only arm B was
-    active, `C` if only arm C, **`BC` if BOTH were active** this session, or `A`
-    if both were forced off by their control env vars. Combine -- never pass two
-    `--arm` flags; the counter takes one arm label per row.
-  The script prints the next-phase directive after it writes; check it any time
-  with `"$PY" "$WT/scripts/harness_ledger.py" --print-directive`.
-- `--cost-category` -- `production` for normal feature/bug work; **`audit`** for a
-  closeout whose work was measurement / cross-arm bug-reporting (audit work is
-  never charged to the arm doing it -- the plan's fairness rule).
-- `--copilot-rounds` -- how many outer-review rounds this PR took (final = CLEAN). The flag name is retained from the Copilot era to avoid churning the ledger schema + historical rows; it now counts Opus-5 outer-review rounds (the external reviewers -- Copilot, then Codex -- are retired).
-- `--maintainer-touchpoints` -- times you had to ping/ask the maintainer.
-- `--deferred-nits` -- nit beads you filed instead of fixing inline (the
-  denominator for the nit-turned-blocker rate).
-- `--haiku-escalations` -- times a Haiku fresh-eyes pass self-escalated to Sonnet
-  (0 until arm B ships; diagnostic, not a failure).
-- `--errors-shipped` -- known bugs shipped in this PR (usually 0; a later
-  nit-turned-blocker audit may revise this retroactively against the deferring arm).
-
-This is **warn-only**: a missing/failed telemetry file must never block the merge.
-If the script exits non-zero (e.g. it can't locate the transcript), note the
-telemetry gap in the journal entry and continue -- do NOT loop on it. The
-experiment counter is **derived by scanning `docs/journal/telemetry/`** (plus the
-legacy `harness_ledger.jsonl` for pre-migration rows), counted by `arm`; the
-script refreshes a gitignored local cache (`.beads/experiment_state.json`)
-that is never committed and can't collide on a parallel merge. `--no-counter`
-only skips that cache refresh (cosmetic; the counts are always re-derivable).

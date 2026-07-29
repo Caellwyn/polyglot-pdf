@@ -21,17 +21,16 @@ clause 5; this router governs the early rounds only.) The split is deliberate:
 
   - **This script makes NO risk judgment.** Size is the only signal. Adding a
     "is this risky?" check here would force an extra expensive orchestrator
-    turn on every small diff -- exactly the cost arm B exists to avoid. The risk
+    turn on every small diff -- exactly the cost this router exists to avoid. The risk
     call happens INSIDE the fresh-eyes turn that was going to run anyway, by the
     cheap model (see ``.claude/agents/fresh-eyes-reviewer.md``).
   - **Size is a coarse proxy, on purpose.** A 5-line change to Gemini wiring is
     riskier than an 800-line docs reflow; the script can't know that, so it
     routes on the cheap-to-measure axis and leaves severity to the reviewer.
 
-The A/B control arm (B-off) is the session-wide ``CLAUDE_CODE_SUBAGENT_MODEL``
-override, which forces every subagent to one model regardless of this script
-(see the sprint plan's A/B section). When that env var is set, closeout skips
-calling this picker.
+The session-wide ``CLAUDE_CODE_SUBAGENT_MODEL`` override forces every subagent to
+one model regardless of this script, so when that env var is set the picker is
+moot and closeout skips calling it.
 
 Base ref
 --------
@@ -75,9 +74,10 @@ import sys
 # Changed-line threshold (insertions + deletions). A diff AT OR BELOW this many
 # changed lines routes to the cheap model; anything larger gets Sonnet. 80 is
 # the plan's "<= ~80 changed lines" figure -- a deliberately round, conservative
-# cut chosen so the cheap model only sees genuinely small diffs. Tunable later
-# from the ledger's Haiku-escalation rate (the diagnostic that tells us how often
-# size under-predicted true severity); exposed as --threshold for experiments.
+# cut chosen so the cheap model only sees genuinely small diffs. Exposed as
+# --threshold for experiments. (It was once going to be tuned from the telemetry
+# ledger's Haiku-escalation rate; that ledger was removed in bd polyglot-pdf-40r4,
+# so retuning now means measuring escalations directly.)
 DEFAULT_THRESHOLD = 80
 
 # Fail toward the capable model: any measurement failure prints this, never the

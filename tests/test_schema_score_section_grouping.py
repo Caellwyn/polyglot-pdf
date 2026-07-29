@@ -10,7 +10,7 @@ Naming-independent. NOT the Rand index -- that was rejected because it credits
 cross-section true negatives, inflating a no-section draft (Codex PR #235). These
 tests pin that behavior -- naming-independence AND the no-inflation property.
 
-Load pattern mirrors tests/test_harness_ledger.py (load the script as a module
+Load pattern mirrors tests/test_doc_freshness.py (load the script as a module
 without running its CLI main()).
 """
 import importlib.util

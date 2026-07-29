@@ -19,7 +19,7 @@ import pytest
 
 
 # Load the script as a module without running its CLI main() -- same pattern as
-# tests/test_harness_ledger.py / tests/test_doc_freshness.py.
+# tests/test_doc_freshness.py.
 SCRIPT_PATH = (
     pathlib.Path(__file__).resolve().parent.parent / "scripts" / "pick_review_model.py"
 )

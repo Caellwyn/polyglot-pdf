@@ -1,7 +1,7 @@
-# Telemetry rows are now written as individual files under
-# docs/journal/telemetry/<timestamp>-<session>.json -- one file per closeout --
-# so parallel PRs never touch the same path and GitHub merges them without any
-# custom merge driver. The old single-file ledger is kept as a read-only source
-# for backwards-compatible counting of pre-migration rows; no new rows are
-# appended to it, so the union driver below is inert but kept for history.
+# Harness telemetry is RETIRED (bd polyglot-pdf-40r4): nothing writes rows any
+# more. Both sources are kept read-only as the evidence behind
+# docs/journal/telemetry/FINAL_REPORT.md -- this single-file ledger holds the
+# pre-2026-06-10 rows, and docs/journal/telemetry/*.json holds the per-closeout
+# rows that superseded it. The union driver below is inert (no new appends) and
+# is kept only so a historical merge of the archive still behaves.
 docs/journal/harness_ledger.jsonl merge=union

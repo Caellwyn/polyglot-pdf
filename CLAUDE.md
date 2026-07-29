@@ -455,7 +455,7 @@ Do NOT hand-roll the review cycle. In particular:
 - **`/closeout` OWNS PR creation.** Finish the work, commit until the tree is
   clean, *then* invoke `/closeout` -- it opens the **normal** (non-draft) PR
   itself. **Do not `gh pr create` first** (a manually-opened PR breaks the skill's
-  review + telemetry setup and tempts hand-polling).
+  review setup and tempts hand-polling).
 - **The Opus-5 outer review handles review-worthy changes PRE-PR -- there is NO
   external reviewer.** Review is entirely Claude-based (the maintainer's OpenAI Codex
   subscription ended 2026-07-08; Codex succeeded Copilot at the earlier

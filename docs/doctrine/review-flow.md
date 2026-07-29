@@ -115,8 +115,8 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   that produced it ran on Opus -- the strongest reviewer always gets the last look
   before the PR opens. The cheaper tiers miss cross-file interaction bugs (the bo4m
   regression cleared two Sonnet rounds; the stronger tier's trace caught it). This
-  is one guaranteed Opus pass at the end, not a change to the merge decision or the
-  A/B cost accounting for earlier rounds. (If the diff already routed to Opus, or
+  is one guaranteed Opus pass at the end, not a change to the merge decision for
+  earlier rounds. (If the diff already routed to Opus, or
   `CLAUDE_CODE_SUBAGENT_MODEL` forces it, no extra pass is needed.)
 - **The outer Opus review requires TWO independent clearing reviews, not one
   (bd dgoa).** The Opus outer review is the ONLY independent adversarial gate, so a
@@ -221,7 +221,7 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
 - **Resolve mechanical merge conflicts inline; escalate only structural ones.**
   When the loop's rebase hits a conflict, the orchestrator decides it -- it is not
   an automatic escalation. **Mechanical / ordering** conflicts (append-only journal
-  or ledger rows, changelog interleaving, independent additions to the same
+  entries, changelog interleaving, independent additions to the same
   list/table) are resolved inline by **keeping both sides** in a sensible order,
   then re-reading the merged region to confirm both intents survived. **Escalate
   (STOP and ask) only on genuine structural incompatibility** -- the two sides
