@@ -54,10 +54,14 @@ import type { FormField, FormConfig, FormSchema, FormSection } from './types/sch
 // Also carries the live version summary so an in-session metadata edit refreshes
 // the card's version line instead of showing the stale disk-scan value (Codex
 // PR #263). Exported for App.liveStats.test.ts, which pins the lintFindings
-// argument reaching the guidance-ack gate (Opus round 4).
+// argument reaching the guidance-ack gate (Opus round 4). `lintFindings` is
+// deliberately REQUIRED -- pass undefined explicitly when none exist: as an
+// optional parameter, a call site could silently revert to the gate-blind
+// `liveStats(schema)` with the whole suite green (Opus round 5, measured);
+// required, that revert is a compile error.
 export function liveStats(
   schema: FormSchema,
-  lintFindings?: LintFinding[],
+  lintFindings: LintFinding[] | undefined,
 ): { percent: number; complete: number; total: number; version: KitVersionInfo } {
   // The guidance-ack gate (bd anim) demotes a drifted reviewed_correct field
   // to amber in the FieldList; the catalogue bar's live % must agree.

@@ -51,12 +51,12 @@ script/JSON edits (e.g. a slug-repair pass re-minting values after a bake)
 -- rare, deliberate, and arguably worth a human glance anyway. When it does
 fire, the cost is ONE acknowledgment checkbox click, not an LLM re-author.
 The maintainer's 2026-07-29 reorder decision ("harmless reshuffling must not
-prompt") is preserved: a pure reorder moves whole options, each pair intact,
-and the sorted-pair hash does not move.
+prompt") is preserved: a pure reorder moves whole options, each binding
+intact, and the sorted-binding hash does not move.
 
 Note the editor-mediated swap variant is also caught: swapping labels by
-retyping them re-mints both values (with collision suffixes), so the pairs
-change either way.
+retyping them re-mints both values (with collision suffixes), so the
+bindings change either way.
 
 ## Safety
 
@@ -112,7 +112,14 @@ isinstance guard on the unmatched-ids counter (model junk under a
 hallucinated id crashed the whole apply AFTER the metered model run); round
 4 demanded rendered-component pins for the blocking wiring itself (mutation
 check: deleting the gate argument out of FieldList had left the suite
-green) and the doc sweeps in this entry; round 5 cleared.
+green) and doc sweeps in this entry; round 5 caught -- among five more --
+that this very entry had pre-declared "round 5 cleared" before round 5 ran
+(it had not cleared), that the liveStats call sites were STILL revertible
+to gate-blind with the suite green (fixed at the type level: the findings
+argument is now required, so the revert fails tsc), and that a field whose
+guidance a human emptied post-bake still gated with copy about text that no
+longer exists (the rule now skips guidance-less fields). The final verdict
+line below is written only after its round actually ran.
 
 Beads: polyglot-pdf-2onl (catalogue scan % stays gate-blind -- no lint
 findings at scan time), polyglot-pdf-ug5n (Repair-all value re-mint

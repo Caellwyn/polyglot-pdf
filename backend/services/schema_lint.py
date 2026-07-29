@@ -1168,7 +1168,9 @@ def _check_guidance_identity_drift(
 
     Silent (never fires) when there is nothing to compare against: no provenance
     record, or a record predating identity tracking. Gating a field on a hash
-    the bake never wrote would be unactionable noise.
+    the bake never wrote would be unactionable noise. Likewise silent when the
+    field no longer carries ANY authored guidance (a human emptied help after
+    the bake) -- there is nothing to confirm.
 
     The hash comes from guidance_contract.identity_sha1 -- the SAME function the
     bake writes with, so the written and compared values cannot drift.
@@ -1192,7 +1194,23 @@ def _check_guidance_identity_drift(
         baked = rec.get("identity_sha1")
         if not isinstance(baked, str) or not baked:
             continue  # pre-anim bake: nothing to be stale against
-        if baked == guidance_contract.identity_sha1(field):
+        help_obj = field.get("help")
+        if not isinstance(help_obj, dict) or not any(
+                isinstance(help_obj.get(k), str) and help_obj.get(k).strip()
+                for k in ("instructions", "details", "format_hint")):
+            # A human emptied the guidance after the bake: there is nothing
+            # left to confirm, and gating would render the ack box under an
+            # empty textarea with copy about text that no longer exists --
+            # the unactionable-noise case this rule exists to avoid (Opus
+            # round 5). help-instructions-missing already surfaces the
+            # emptiness itself.
+            continue
+        # ONE computation reused for both the comparison and the path token:
+        # two separate identity_sha1() calls invited a future edit to one
+        # without the other, letting the compared and reported hashes diverge
+        # (Opus round 5).
+        current = guidance_contract.identity_sha1(field)
+        if baked == current:
             continue
         # The CURRENT identity hash rides the PATH, not the message: the editor
         # pins a human's acknowledgment to the exact content they read, and the
@@ -1206,7 +1224,6 @@ def _check_guidance_identity_drift(
         # silently cover every later edit until the next re-bake (round 1
         # finding 1). field_id_of() ignores the trailing segment, so the
         # editor's click-to-focus still resolves this path.
-        current = guidance_contract.identity_sha1(field)
         out.append(LintFinding(
             SEVERITY_WARNING, "guidance-identity-stale",
             f"fields (id={fid}).help[identity:{current}]",

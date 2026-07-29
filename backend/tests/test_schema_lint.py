@@ -1095,6 +1095,24 @@ def test_pre_anim_bake_is_silent_not_noisy():
     assert _stale(lint_schema(_identity_schema(f, None))) == []
 
 
+def test_emptied_guidance_never_gates():
+    """A human who DELETED the guidance after the bake has nothing left to
+    confirm -- gating would render the ack box under an empty textarea with
+    copy about text that no longer exists (Opus round 5), the unactionable
+    noise the rule's own docstring forbids. help-instructions-missing already
+    surfaces the emptiness itself."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    for emptied_help in ({}, None, {"instructions": "   "}):
+        emptied = dict(f, spoken_name="v2", help=emptied_help)
+        assert _stale(lint_schema(_identity_schema(emptied, baked))) == []
+    # ...but ANY surviving guidance channel still gates
+    hint_only = dict(f, spoken_name="v2", help={"format_hint": "letters only"})
+    assert len(_stale(lint_schema(_identity_schema(hint_only, baked)))) == 1
+
+
 def test_identity_rule_never_throws_on_malformed_provenance():
     f = {"id": "a", "name": "N", "spoken_name": "n", "type": "text"}
     for junk in ("str", 123, [], {"a": "not-a-dict"}, {"a": {"identity_sha1": 5}}):

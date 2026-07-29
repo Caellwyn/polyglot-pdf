@@ -4,10 +4,11 @@
  * The catalogue bar's live % is computed by App's liveStats; its second
  * argument (the lint findings) is what lets getCompletionStats exclude a
  * reviewed_correct field whose guidance drifted un-acknowledged. This pins
- * the FUNCTION including that wiring; the two JSX call sites passing
- * `lintFindings` are asserted implicitly by the type (the argument exists
- * for exactly this) and by the ValidationPanel + FieldList component tests
- * covering the same gate on their surfaces.
+ * the FUNCTION including that wiring; the two JSX call sites are pinned by
+ * the TYPE -- `lintFindings` is a required parameter precisely so the
+ * gate-blind `liveStats(schema)` revert fails tsc (Opus round 5) -- and the
+ * ValidationPanel + FieldList component tests cover the same gate on their
+ * surfaces.
  */
 import { describe, it, expect } from 'vitest';
 import { liveStats } from './App';
@@ -35,7 +36,7 @@ const staleFinding: LintFinding = {
 describe('liveStats honours the guidance-ack gate (bd anim)', () => {
   it('a gated reviewed_correct field drops out of the live %', () => {
     const gated = schemaWith({ status: 'reviewed_correct' });
-    expect(liveStats(gated).percent).toBe(100);                  // gate-blind without findings
+    expect(liveStats(gated, undefined).percent).toBe(100);       // gate-blind without findings
     expect(liveStats(gated, [staleFinding]).percent).toBe(0);    // gated once they arrive
   });
 
