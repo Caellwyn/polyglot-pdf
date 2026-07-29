@@ -403,34 +403,55 @@ def identity_payload(field: dict) -> str:
     """The stable serialization of a field's voice-facing identity.
 
     Covers ONLY what the guidance actually describes: the field's name, its
-    spoken name, and its option LABELS. Deliberately excludes the field id
-    (renames are retargeted wholesale and an id is never spoken), option VALUES
-    (internal slugs), and plumbing (pdf_field_name, positions, conditions) --
-    changing those does not make authored guidance wrong, and hashing them
-    would manufacture false staleness that trains editors to click through the
-    gate.
+    spoken name, and its option labels -- each label BOUND to the option's
+    stored value as a [label, value] pair. Deliberately excludes the field id
+    (renames are retargeted wholesale and an id is never spoken) and plumbing
+    (pdf_field_name, positions, conditions) -- changing those does not make
+    authored guidance wrong, and hashing them would manufacture false
+    staleness that trains editors to click through the gate.
 
-    Option labels are SORTED, so a pure REORDER (same labels, different display
-    order) does not re-raise the gate -- the assistant still says the same
-    words (maintainer decision 2026-07-29). Adding, removing or editing a label
-    still changes the multiset and flags correctly. ACCEPTED TRADEOFF: guidance
-    that describes option ORDER ("choose the first option") would not be
-    re-flagged by a reorder alone; the option-order-dependent phrasing the
-    contract discourages anyway is the thin case this misses."""
+    The pairs are SORTED, so a pure REORDER (whole options moving, each
+    keeping its own value) does not re-raise the gate -- the assistant still
+    says the same words (maintainer decision 2026-07-29). Adding, removing or
+    editing a label still flags. ACCEPTED TRADEOFF: guidance that describes
+    option ORDER ("choose the first option") is not re-flagged by a reorder
+    alone; the contract discourages that phrasing anyway.
+
+    WHY the value rides in the pair (bd anim handoff decision): with bare
+    sorted labels, a label SWAP -- "Married" and "Single" trading places while
+    their values stay put -- hashed identically, so the one identity drift
+    that makes the assistant's unchanged words select a DIFFERENT stored
+    answer never flagged. That is not stale wording; it is a wrong answer on
+    the form. No order-insensitive hash can both ignore values and catch
+    swaps (a swap IS a reorder plus a value rename), so the binding is the
+    fix.
+
+    SECOND ACCEPTED TRADEOFF, the flip side: a value-only rename (label
+    untouched) now changes the hash and costs one acknowledgment click. The
+    editor cannot produce that edit -- option values are minted from labels
+    on blur, never free-typed (FieldEditor, bd h76m.10) -- so it lands only
+    on out-of-band script/JSON edits, where a human glance is due anyway."""
     if not isinstance(field, dict):
         return "[]"
     opts = field.get("options")
-    labels = []
+    pairs = []
     if isinstance(opts, list):
         for o in opts:
             lab = o.get("label") if isinstance(o, dict) else None
-            labels.append(lab if isinstance(lab, str) else "")
+            val = o.get("value") if isinstance(o, dict) else None
+            pairs.append([
+                lab if isinstance(lab, str) else "",
+                # str() keeps numeric-value bindings distinct; "" would erase
+                # them (labels coerce to "" -- a non-string label has no words
+                # to bind, but a non-string value is still a real join key)
+                val if isinstance(val, str) else
+                ("" if val is None else str(val))])
     name = field.get("name")
     spoken = field.get("spoken_name")
     return json.dumps(
         [name if isinstance(name, str) else "",
          spoken if isinstance(spoken, str) else "",
-         sorted(labels)],   # order-insensitive: see the docstring
+         sorted(pairs)],   # order-insensitive pairs: see the docstring
         ensure_ascii=False, separators=(",", ":"))
 
 

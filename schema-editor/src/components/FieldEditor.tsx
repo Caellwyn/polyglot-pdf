@@ -940,7 +940,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 {staleFinding && (
                   <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 p-2">
                     <p className="text-xs text-amber-900">
-                      This field's name, spoken name or option labels changed
+                      This field's name, spoken name or options changed
                       after this guidance was written, so it may no longer
                       match what the assistant says.
                     </p>

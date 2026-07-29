@@ -27,11 +27,16 @@
  * where they are produced removes that whole class of bug; the editor consumes a
  * finding, exactly like every other lint signal it already renders.
  *
- * The hash covers ONLY voice-facing identity -- name, spoken_name, option
- * labels -- never the field id (renames are retargeted wholesale by
- * fieldRename, and an id is not spoken), option VALUES (internal slugs), or
- * plumbing like pdf_field_name. Changing those does not make guidance wrong, so
- * hashing them would manufacture false staleness.
+ * The hash covers ONLY voice-facing identity -- name, spoken_name, and each
+ * option label BOUND to its stored value. The label->value binding is what
+ * makes a label SWAP flag (two labels trading places, values fixed): the label
+ * multiset is unchanged, but the assistant's unchanged words would select a
+ * different stored answer -- a wrong answer on the form, not just stale
+ * wording (bd anim handoff decision; tradeoffs in identity_payload's
+ * docstring, backend/services/guidance_contract.py). It never covers the field
+ * id (renames are retargeted wholesale by fieldRename, and an id is not
+ * spoken) or plumbing like pdf_field_name. Changing those does not make
+ * guidance wrong, so hashing them would manufacture false staleness.
  */
 import type { FormField } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';

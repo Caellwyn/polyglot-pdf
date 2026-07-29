@@ -1012,7 +1012,7 @@ def test_spoken_name_change_flags_the_field_as_a_warning():
     assert "id=a" in hits[0].path
 
 
-def test_option_label_change_flags_but_value_and_plumbing_do_not():
+def test_option_label_change_flags_but_plumbing_does_not():
     from backend.services import guidance_contract as gc
     f = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
          "options": [{"label": "Yes", "value": "y"}],
@@ -1020,10 +1020,46 @@ def test_option_label_change_flags_but_value_and_plumbing_do_not():
     baked = gc.identity_sha1(f)
     relabelled = dict(f, options=[{"label": "Yes please", "value": "y"}])
     assert len(_stale(lint_schema(_identity_schema(relabelled, baked)))) == 1
-    # an internal value / plumbing edit is NOT voice-facing -> no finding
-    revalued = dict(f, options=[{"label": "Yes", "value": "changed"}],
-                    pdf_field_name="W[0]")
-    assert _stale(lint_schema(_identity_schema(revalued, baked))) == []
+    # a plumbing edit is NOT voice-facing -> no finding
+    replumbed = dict(f, pdf_field_name="W[0]")
+    assert _stale(lint_schema(_identity_schema(replumbed, baked))) == []
+
+
+def test_option_label_swap_flags_even_with_identical_label_multiset():
+    """THE HANDOFF CASE (bd anim): two labels trading places while their
+    values stay put left the sorted-bare-label hash unchanged, yet the
+    assistant's unchanged words now select the OPPOSITE stored answer -- the
+    one identity drift that yields a wrong answer on the form rather than
+    stale wording. The label->value pair binding exists to catch this."""
+    from backend.services import guidance_contract as gc
+    base = {"id": "a", "name": "Marital status", "spoken_name": "marital status",
+            "type": "radio",
+            "options": [{"label": "Married", "value": "m"},
+                        {"label": "Single", "value": "s"}],
+            "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+    swapped = dict(base, options=[{"label": "Single", "value": "m"},
+                                  {"label": "Married", "value": "s"}])
+    assert len(_stale(lint_schema(_identity_schema(swapped, baked)))) == 1
+
+
+def test_value_only_rename_flags_as_the_accepted_swap_safety_cost():
+    """A value-only rename is indistinguishable, to any order-insensitive
+    hash, from half of a label swap (a swap IS a reorder plus a value
+    rename) -- so catching swaps means this flags too, the ACCEPTED TRADEOFF
+    pinned in identity_payload's docstring. The editor cannot produce this
+    edit (option values mint from labels on blur, never free-typed --
+    FieldEditor, bd h76m.10); it costs one acknowledgment click on
+    out-of-band script/JSON edits only. If this test starts failing because
+    someone re-excluded values, the swap test above must be failing too --
+    fix the swap case first."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+         "options": [{"label": "Yes", "value": "y"}],
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    revalued = dict(f, options=[{"label": "Yes", "value": "changed"}])
+    assert len(_stale(lint_schema(_identity_schema(revalued, baked)))) == 1
 
 
 def test_pre_anim_bake_is_silent_not_noisy():

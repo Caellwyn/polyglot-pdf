@@ -100,11 +100,13 @@ Rules (stable ids; one finding per violation site):
                                 fit
 - help-details-headings-missing WARNING a long details block has no heading
                                 lines (unnavigable for secretary/human review)
-- guidance-identity-stale WARNING a field's name / spoken_name / option labels
-                                changed since its guidance was authored (the
-                                bake's identity_sha1 no longer matches), so the
-                                guidance may describe something the assistant no
-                                longer says. Drives the editor's human
+- guidance-identity-stale WARNING a field's name / spoken_name / option
+                                label->value pairs changed since its guidance
+                                was authored (the bake's identity_sha1 no
+                                longer matches), so the guidance may describe
+                                something the assistant no longer says -- or a
+                                spoken label may now select a different stored
+                                answer (label swap). Drives the editor's human
                                 acknowledgment gate -- never an auto re-bake
                                 (bd polyglot-pdf-anim)
 
@@ -1151,12 +1153,17 @@ def _check_guidance_identity_drift(
     """Flag fields whose voice-facing identity changed since their guidance was
     authored (bd polyglot-pdf-anim).
 
-    The bake records identity_sha1 (name + spoken_name + option labels) in
-    _bakeoff.authoring.instructions_enrich.provenance. A human rename or option
-    relabel afterwards may leave the authored guidance describing something the
-    AI no longer says -- but a trivial rename does not warrant an LLM re-author,
-    so this is a WARNING that drives the editor's human-acknowledgment gate, not
-    an ERROR and not an automatic re-bake.
+    The bake records identity_sha1 (name + spoken_name + option label->value
+    pairs) in _bakeoff.authoring.instructions_enrich.provenance. A human rename
+    or option relabel afterwards may leave the authored guidance describing
+    something the AI no longer says -- but a trivial rename does not warrant an
+    LLM re-author, so this is a WARNING that drives the editor's
+    human-acknowledgment gate, not an ERROR and not an automatic re-bake.
+
+    A label SWAP (labels trading places across values, label multiset
+    unchanged) flags too: the assistant's unchanged words would select a
+    different stored answer, which is the drift that matters MOST (bd anim
+    handoff decision -- see identity_payload's docstring for the tradeoffs).
 
     Silent (never fires) when there is nothing to compare against: no provenance
     record, or a record predating identity tracking. Gating a field on a hash
@@ -1202,7 +1209,7 @@ def _check_guidance_identity_drift(
         out.append(LintFinding(
             SEVERITY_WARNING, "guidance-identity-stale",
             f"fields (id={fid}).help[identity:{current}]",
-            "this field's name / spoken name / option labels changed since its "
+            "this field's name / spoken name / options changed since its "
             "guidance was written, so the guidance may no longer match what "
             "the assistant says -- confirm it still reads correctly (or "
             "re-author it) before marking the field reviewed",
