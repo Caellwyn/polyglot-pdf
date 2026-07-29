@@ -803,8 +803,13 @@ def bootstrap_provenance(schema: dict, tu_map: Dict[str, str]) -> Dict[str, dict
              if isinstance(o, dict) and o.get("pdf_field_name")), None)
         tu = tu_map.get(pfn) if pfn else None
         if tu is not None and instr.strip() == tu.strip():
-            prov[f["id"]] = {"source": "tu",
-                             "instructions_sha1": _sha1(instr)}
+            prov[f["id"]] = {
+                "source": "tu",
+                "instructions_sha1": _sha1(instr),
+                # /TU text is written against the field's identity too, so the
+                # staleness gate covers bootstrapped fields as well (bd anim).
+                "identity_sha1": guidance_contract.identity_sha1(f),
+            }
     return prov
 
 
@@ -886,6 +891,10 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
                 "instructions_sha1": _sha1(help_obj.get("instructions", "")),
                 "details_sha1": _sha1(help_obj.get("details", "")),
                 "format_hint_sha1": _sha1(help_obj.get("format_hint", "")),
+                # The field's voice-facing identity AS AUTHORED (bd anim): if a
+                # human later renames it or relabels an option, lint compares
+                # this and flags the guidance for human re-confirmation.
+                "identity_sha1": guidance_contract.identity_sha1(f),
             }
             written += 1
     meta = schema.setdefault("form_metadata", {})

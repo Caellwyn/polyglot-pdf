@@ -100,6 +100,13 @@ Rules (stable ids; one finding per violation site):
                                 fit
 - help-details-headings-missing WARNING a long details block has no heading
                                 lines (unnavigable for secretary/human review)
+- guidance-identity-stale WARNING a field's name / spoken_name / option labels
+                                changed since its guidance was authored (the
+                                bake's identity_sha1 no longer matches), so the
+                                guidance may describe something the assistant no
+                                longer says. Drives the editor's human
+                                acknowledgment gate -- never an auto re-bake
+                                (bd polyglot-pdf-anim)
 
 ASCII only.
 """
@@ -906,6 +913,7 @@ def lint_schema(
 
     _emit_translation_flags(schema, out)
     _emit_guidance_flags(schema, out)
+    _check_guidance_identity_drift(schema, out)
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)
@@ -1135,3 +1143,54 @@ def _emit_translation_flags(schema: Dict[str, Any], out: List[LintFinding]) -> N
         if not isinstance(path, str) or not isinstance(message, str):
             continue
         out.append(LintFinding(SEVERITY_WARNING, rule, path, message))
+
+
+def _check_guidance_identity_drift(
+    schema: Dict[str, Any], out: List[LintFinding]
+) -> None:
+    """Flag fields whose voice-facing identity changed since their guidance was
+    authored (bd polyglot-pdf-anim).
+
+    The bake records identity_sha1 (name + spoken_name + option labels) in
+    _bakeoff.authoring.instructions_enrich.provenance. A human rename or option
+    relabel afterwards may leave the authored guidance describing something the
+    AI no longer says -- but a trivial rename does not warrant an LLM re-author,
+    so this is a WARNING that drives the editor's human-acknowledgment gate, not
+    an ERROR and not an automatic re-bake.
+
+    Silent (never fires) when there is nothing to compare against: no provenance
+    record, or a record predating identity tracking. Gating a field on a hash
+    the bake never wrote would be unactionable noise.
+
+    The hash comes from guidance_contract.identity_sha1 -- the SAME function the
+    bake writes with, so the written and compared values cannot drift.
+    """
+    authoring = schema.get("_bakeoff")
+    authoring = authoring.get("authoring") if isinstance(authoring, dict) else None
+    enrich = authoring.get("instructions_enrich") if isinstance(authoring, dict) else None
+    prov = enrich.get("provenance") if isinstance(enrich, dict) else None
+    if not isinstance(prov, dict) or not prov:
+        return
+    fields = schema.get("fields")
+    if not isinstance(fields, list):
+        return
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        fid = field.get("id")
+        rec = prov.get(fid) if isinstance(fid, str) else None
+        if not isinstance(rec, dict):
+            continue
+        baked = rec.get("identity_sha1")
+        if not isinstance(baked, str) or not baked:
+            continue  # pre-anim bake: nothing to be stale against
+        if baked == guidance_contract.identity_sha1(field):
+            continue
+        out.append(LintFinding(
+            SEVERITY_WARNING, "guidance-identity-stale",
+            f"fields (id={fid}).help",
+            "this field's name / spoken name / option labels changed since its "
+            "guidance was written, so the guidance may no longer match what "
+            "the assistant says -- confirm it still reads correctly (or "
+            "re-author it) before marking the field reviewed",
+        ))

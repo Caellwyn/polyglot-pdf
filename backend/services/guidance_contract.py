@@ -56,6 +56,8 @@ ASCII only (CLAUDE.md scar #6).
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from typing import List, Optional
@@ -379,3 +381,53 @@ Per field, return a verdict object:
 A field passes when: grounded, useful_beyond_label (or instructions empty),
 no advice, and no omission_concerns you judge material.
 """
+
+
+# --------------------------------------------------------------------------- #
+# Identity hashing for the staleness gate (bd polyglot-pdf-anim).
+#
+# Authored guidance is written against a field's VOICE-FACING identity. If a
+# human later renames the field or relabels its options, the guidance may no
+# longer match what the AI will say -- but a trivial rename does not warrant an
+# LLM re-author. The bake records identity_sha1; lint recomputes it and flags a
+# mismatch; the editor gates review-correct on a human acknowledgment.
+#
+# ONE definition, imported by BOTH the bake (enrich_instructions) and the lint
+# rule, so the written hash and the compared hash can never drift apart. The
+# option-translation re-run checker keys the same way in its own provenance
+# stage and should import this rather than fork a second, subtly-different hash.
+# --------------------------------------------------------------------------- #
+
+
+def identity_payload(field: dict) -> str:
+    """The stable serialization of a field's voice-facing identity.
+
+    Covers ONLY what the guidance actually describes: the field's name, its
+    spoken name, and its option LABELS. Deliberately excludes the field id
+    (renames are retargeted wholesale and an id is never spoken), option VALUES
+    (internal slugs), and plumbing (pdf_field_name, positions, conditions) --
+    changing those does not make authored guidance wrong, and hashing them
+    would manufacture false staleness that trains editors to click through the
+    gate."""
+    if not isinstance(field, dict):
+        return "[]"
+    opts = field.get("options")
+    labels = []
+    if isinstance(opts, list):
+        for o in opts:
+            lab = o.get("label") if isinstance(o, dict) else None
+            labels.append(lab if isinstance(lab, str) else "")
+    name = field.get("name")
+    spoken = field.get("spoken_name")
+    return json.dumps(
+        [name if isinstance(name, str) else "",
+         spoken if isinstance(spoken, str) else "",
+         labels],
+        ensure_ascii=False, separators=(",", ":"))
+
+
+def identity_sha1(field: dict) -> str:
+    """SHA-1 of identity_payload -- the value stored in provenance and compared
+    by the lint staleness rule."""
+    return hashlib.sha1(
+        identity_payload(field).encode("utf-8")).hexdigest()
