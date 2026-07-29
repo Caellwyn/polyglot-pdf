@@ -115,8 +115,8 @@ The SPEAR Assess gate runs in `/closeout` Step 5.5, BEFORE the PR opens:
   that produced it ran on Opus -- the strongest reviewer always gets the last look
   before the PR opens. The cheaper tiers miss cross-file interaction bugs (the bo4m
   regression cleared two Sonnet rounds; the stronger tier's trace caught it). This
-  is one guaranteed Opus pass at the end, not a change to the merge decision or the
-  A/B cost accounting for earlier rounds. (If the diff already routed to Opus, or
+  is one guaranteed Opus pass at the end, not a change to the merge decision for
+  earlier rounds. (If the diff already routed to Opus, or
   `CLAUDE_CODE_SUBAGENT_MODEL` forces it, no extra pass is needed.)
 - **The outer Opus review requires TWO independent clearing reviews, not one
   (bd dgoa).** The Opus outer review is the ONLY independent adversarial gate, so a

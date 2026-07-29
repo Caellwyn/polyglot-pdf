@@ -88,14 +88,20 @@ bead and does nothing else). Two unrelated test files referenced
 
 **Full stack (both testpaths, `pytest -q -m "not external"` from the worktree):
 2235 passed, 2 skipped, 3 deselected** -- that is 1323 from `backend/tests` plus
-912 from `tests/`. The root `tests/` half is the half that matters here: it is the
-only suite this change touches, and it holds every guard the bead added (912 is up
-from 904 pre-change, the +8 being the new retired-flag and fixture-drift guards).
+912 from `tests/`. The root `tests/` half is the one this change touches, and its
+count **goes DOWN, 979 -> 912**, which reconciles exactly:
+`979 - 65 (the whole test_harness_ledger.py file) - 31 + 29 (test_closeout_finish.py,
+which loses the two obsolete telemetry classes but gains the 8 new guards) = 912`.
+A shrinking suite is the expected shape when the thing under test is being removed;
+the guards are what keep the removal from silently regressing.
 
-**The review loop caught three real gaps across three rounds** -- all of them
-dangling *instructions or fixtures* rather than broken code, which is the
-characteristic failure mode of a removal like this (the code stops working loudly;
-the stale instruction just quietly misleads the next reader):
+**The review loop ran SEVEN rounds and caught 15 gaps** -- **not one of them a
+functional code defect.** Every single finding was a dangling *instruction*, a stale
+*comment*, a drifted *test fixture*, or a wrong *number in this entry*. That is the
+characteristic failure mode of a removal like this: deleted code fails loudly and
+immediately, but the prose that described it just quietly misleads the next reader,
+and no test can see it. The rounds also show a clean severity gradient -- code and
+config first, then comments, then documentation accuracy:
 
 1. **Round 1 (Sonnet):** the `_args()` test fixture still fabricated the seven
    removed counter fields, asserting a shape `build_parser()` could no longer
@@ -125,8 +131,8 @@ the stale instruction just quietly misleads the next reader):
    inaccuracies (this entry claimed the deleted test file had 49 tests -- it has
    **65**; the 49 was carried over from hrn.17's entry, not counted from this
    file). Round 4 also **measured the real blast radius of (b)**: not just the main
-   checkout but **17 worktrees** under `.claude/worktrees/` still hold their own
-   copy of the cache, so the retained ignore rule protects 17 future closeouts,
+   checkout but **18 worktrees** under `.claude/worktrees/` still hold their own
+   copy of the cache, so the retained ignore rule protects 18 future closeouts,
    not one.
 5. **Round 5 (Opus, the clearing round):** all three exit criteria PASS, one
    finding -- **the arm-distribution figures in this entry were wrong and did not
@@ -145,6 +151,19 @@ the stale instruction just quietly misleads the next reader):
    -- a script closeout runs on every PR -- still said its threshold was "tunable
    later from the ledger's Haiku-escalation rate," pointing a future tuner at a
    deleted data source. All three fixed.
+7. **Round 7 (Opus, the clearing round):** three findings, one of them the only
+   remaining *criterion-2 failure* --
+   (a) **`docs/doctrine/review-flow.md:119` still carried the A/B cost-accounting
+   clause** that the diff had already scrubbed from its mirror at `SKILL.md:350`.
+   That doctrine doc is the authority SKILL.md and CLAUDE.md both cite, so the two
+   contradicted each other on the identical rule. Same R6c class: prose naming the
+   retired subsystem with no removed identifier in it;
+   (b) the "912 is up from 904 pre-change" claim was wrong in **both** the baseline
+   and the direction -- measured on a clean `origin/dev` worktree, the pre-change
+   root suite is **979**, and this PR makes it **shrink** to 912. Replaced with the
+   exact reconciliation (`979 - 65 - 31 + 29 = 912`);
+   (c) the "17 worktrees" figure printed next to its own reproduction command
+   returns **18** when that command is run. Corrected in both places.
 
 ## Lessons
 
@@ -169,9 +188,9 @@ the stale instruction just quietly misleads the next reader):
   checkout that has one. Deleting it converts a harmless leftover file into an
   untracked entry, which `closeout_prep.py` reports as a DIRTY working tree --
   blocking the next closeout on a phantom, and inviting a `git add -A` reflex to
-  commit the dead cache. **Measured exposure here: 17 worktrees under
+  commit the dead cache. **Measured exposure here: 18 worktrees under
   `.claude/worktrees/` still hold a copy** (`find .claude/worktrees -maxdepth 3
-  -name experiment_state.json | wc -l`), so the rule guards 17 future closeouts --
+  -name experiment_state.json | wc -l`), so the rule guards 18 future closeouts --
   do not delete it just because the main checkout looks clean. Delete the file;
   keep the ignore line. Generalizes to any gitignored derived artifact whose
   producer is being retired.
@@ -184,6 +203,13 @@ the stale instruction just quietly misleads the next reader):
   subsystem without using any removed identifier -- invisible to an
   identifier-only grep). Sweep identifiers AND the plain-English name of what you
   deleted, include dotfiles, and state which paths the sweep actually ran over.
+- **When a rule is DUPLICATED in a skill and its doctrine doc, fixing one is half a
+  fix.** `SKILL.md` and `docs/doctrine/review-flow.md` deliberately mirror each
+  other, and CLAUDE.md cites the doctrine doc as the authority -- so scrubbing the
+  A/B clause from the skill while leaving it in the doctrine left the two
+  contradicting each other on the identical rule, with the *authoritative* copy
+  holding the stale text. After editing a rule in a skill, grep the doctrine docs
+  for the same sentence (and vice versa).
 - **Every figure in a journal entry must come from a command run against the
   artifact -- and the review loop should check the arithmetic.** THREE separate
   numeric/factual claims in this one entry were wrong on first writing: "49 tests"
@@ -225,6 +251,10 @@ historical planning document rather than per-session overhead.
   `_utcnow()` helper + its `datetime`/`timezone` imports; docstring rewritten
   (Steps 5-7 -> Steps 5-6).
 - `CLAUDE.md` -- struck "+ telemetry" from the `/closeout` OWNS PR creation bullet.
+- `docs/doctrine/review-flow.md` -- struck the "or the A/B cost accounting" clause
+  so the doctrine doc matches its mirror at `SKILL.md:350`.
+- `scripts/pick_review_model.py` -- COMMENT ONLY (arm B behavior untouched): the
+  threshold note no longer points a future tuner at the deleted ledger.
 - `.gitattributes` -- comment rewritten from the present tense ("rows are now
   written per closeout") to describe a retired system. The
   `docs/journal/harness_ledger.jsonl merge=union` driver line is KEPT: it still
