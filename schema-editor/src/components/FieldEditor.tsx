@@ -16,7 +16,10 @@ import {
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
 import { checkFieldComplete } from '../utils/validation';
-import { getReview, withReviewNote, withReviewStatus } from '../utils/reviewStatus';
+import { getReview, withGuidanceAck, withReviewNote, withReviewStatus }
+  from '../utils/reviewStatus';
+import { GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged }
+  from '../utils/guidanceStaleness';
 import type { FieldReviewStatus } from '../types/schema';
 import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
 
@@ -319,7 +322,9 @@ const FieldReviewEditor: React.FC<{
         </select>
         <p className="text-xs text-gray-500 mt-1">
           "Reviewed - correct" marks a field done even if the tool still flags it
-          amber. A real error (red) always stays red until fixed.
+          amber -- unless its guidance changed and awaits the "still correct"
+          confirmation under Instructions. A real error (red) always stays red
+          until fixed.
         </p>
         {onIgnoreField && ignoreBlocked && (
           <p className="text-xs text-gray-500 mt-1">{ignoreBlocked}</p>
@@ -900,20 +905,82 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-gray-900">Help & Guidance</h4>
 
-          <div>
-            <label className="label">Instructions</label>
-            <textarea
-              className="input"
-              rows={3}
-              value={field.help?.instructions || ''}
-              onChange={(e) =>
-                updateField({
-                  help: { ...field.help, instructions: e.target.value },
-                })
-              }
-              placeholder="Instructions for filling out this field..."
-            />
-          </div>
+          {(() => {
+            // Guidance staleness gate (bd polyglot-pdf-anim). The BACKEND owns
+            // the comparison (it wrote the hash, so it compares it -- no
+            // cross-language hash contract to drift); the editor consumes the
+            // finding and turns it into a human acknowledgment. A trivial
+            // rename must not cost an LLM call, so confirming is one free
+            // click; re-authoring stays a deliberate, separate action.
+            const staleFinding = (lintFindings ?? []).find(
+              // Scope by field id like currentIdentity below: the sole caller
+              // passes a pre-scoped array today, but this component's prop type
+              // invites a whole-schema list, and an unscoped match would amber
+              // EVERY field once ANY field drifts (fresh-eyes, closeout round 1).
+              f => f.rule === GUIDANCE_STALE_RULE && f.field_id === field.id);
+            // Pin the DISPLAY to the current identity, exactly as the write
+            // path and the row gate do. A naive "some ack exists" check
+            // rendered the box already-ticked after a SECOND drift -- showing
+            // content as reviewed that the human has never seen, which is the
+            // permanent-waiver hole surviving in the one surface a reviewer
+            // actually reads (bd anim fresh-eyes round 3).
+            const identity = currentIdentity(lintFindings, field.id);
+            const acked = isAcknowledged(field, identity);
+            // No parseable identity in the finding path -> fail OPEN like
+            // needsGuidanceAck: rendering the gate would offer a checkbox
+            // that can record nothing (withGuidanceAck without an identity
+            // is a no-op) -- a dead control on a permanently amber field
+            // (Opus round). Unreachable from today's contract-pinned backend.
+            const gated = !!staleFinding && identity !== undefined;
+            const stale = gated && !acked;
+            return (
+              <div>
+                <label className="label">Instructions</label>
+                <textarea
+                  className={stale
+                    ? 'input ring-2 ring-amber-400 border-amber-400'
+                    : 'input'}
+                  rows={3}
+                  value={field.help?.instructions || ''}
+                  onChange={(e) =>
+                    updateField({
+                      help: { ...field.help, instructions: e.target.value },
+                    })
+                  }
+                  placeholder="Instructions for filling out this field..."
+                />
+                {gated && (
+                  <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 p-2">
+                    <p className="text-xs text-amber-900">
+                      This field's name, spoken name or options changed
+                      after this guidance was written, so it may no longer
+                      match what the assistant says.
+                    </p>
+                    <label className="mt-1 flex items-start gap-2 text-xs text-amber-900 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        data-testid="guidance-ack-checkbox"
+                        checked={acked}
+                        onChange={(e) =>
+                          onUpdateField(withGuidanceAck(
+                            field, identity, e.target.checked))
+                        }
+                      />
+                      <span>
+                        I have read these instructions and they are still
+                        correct.
+                        {!acked && (
+                          <strong> Required before this field can be marked
+                          reviewed.</strong>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div>
             <label className="label">Details (official reference text)</label>

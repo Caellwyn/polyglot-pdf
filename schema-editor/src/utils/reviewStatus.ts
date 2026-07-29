@@ -54,32 +54,94 @@ export function getReview(field: FormField): FieldReview {
 
 /**
  * Set (or clear) a field's review status, returning a NEW field. Writing
- * 'unreviewed' with no note drops the _review key entirely so a field an editor
- * reset to neutral serializes clean (no dangling {status:'unreviewed'}).
+ * 'unreviewed' with no note (and no guidance ack) drops the _review key
+ * entirely so a field an editor reset to neutral serializes clean (no
+ * dangling {status:'unreviewed'}).
+ *
+ * The guidance ack (bd anim) is PRESERVED across a status write: it is a
+ * separate assertion ("I read the guidance and it still fits the current
+ * content") that a status change neither confirms nor withdraws. Rebuilding
+ * _review without it silently un-acked a field on the ORDINARY flow -- tick
+ * the ack box, then mark reviewed_correct -- re-raising the amber gate with
+ * no visible cause (fresh-eyes, closeout round 2).
  */
 export function withReviewStatus(field: FormField, status: FieldReviewStatus): FormField {
   const note = field._review?.note;
-  if (status === 'unreviewed' && !note) {
+  const ack = field._review?.guidance_ack_sha1;
+  if (status === 'unreviewed' && !note && !ack) {
     const { _review, ...rest } = field;
     return rest;
   }
-  return { ...field, _review: { status, ...(note ? { note } : {}) } };
+  return {
+    ...field,
+    _review: {
+      status,
+      ...(note ? { note } : {}),
+      ...(ack ? { guidance_ack_sha1: ack } : {}),
+    },
+  };
 }
 
 /**
  * Set (or clear) a field's review note, returning a NEW field. A whitespace-only
  * note counts as empty (so it never lands as a "   " tooltip); an empty note on
- * an otherwise-neutral field drops the _review key so it serializes clean. The
- * note is stored AS TYPED (internal spacing preserved) once it has real content.
+ * an otherwise-neutral field (no status, no guidance ack) drops the _review key
+ * so it serializes clean. The note is stored AS TYPED (internal spacing
+ * preserved) once it has real content. The guidance ack survives a note edit
+ * for the same reason it survives a status write (see withReviewStatus).
  */
 export function withReviewNote(field: FormField, note: string): FormField {
   const status = getReview(field).status;
+  const ack = field._review?.guidance_ack_sha1;
   const hasContent = note.trim().length > 0;
-  if (status === 'unreviewed' && !hasContent) {
+  if (status === 'unreviewed' && !hasContent && !ack) {
     const { _review, ...rest } = field;
     return rest;
   }
-  return { ...field, _review: { status, ...(hasContent ? { note } : {}) } };
+  return {
+    ...field,
+    _review: {
+      status,
+      ...(hasContent ? { note } : {}),
+      ...(ack ? { guidance_ack_sha1: ack } : {}),
+    },
+  };
+}
+
+/**
+ * Record (or clear) a human's acknowledgment that the authored guidance still
+ * reads correctly for this field's CURRENT identity, after the backend flagged
+ * it as drifted (bd polyglot-pdf-anim). `currentIdentity` is the hash the
+ * backend reports for the field's CONTENT RIGHT NOW -- storing that (never the
+ * frozen bake-time hash, which does not move when a human edits) is what makes
+ * a LATER edit re-raise the gate instead of one click becoming a permanent
+ * waiver. Returns a NEW field; clearing
+ * drops the key (and the whole _review record when nothing else remains) so it
+ * serializes clean.
+ */
+export function withGuidanceAck(
+  field: FormField,
+  currentIdentity: string | undefined,
+  acknowledged: boolean,
+): FormField {
+  const current = field._review;
+  if (!acknowledged || !currentIdentity) {
+    if (!current?.guidance_ack_sha1) return field;
+    const { guidance_ack_sha1, ...restReview } = current;
+    if (restReview.status === 'unreviewed' && !restReview.note) {
+      const { _review, ...rest } = field;
+      return rest as FormField;
+    }
+    return { ...field, _review: restReview };
+  }
+  return {
+    ...field,
+    _review: {
+      status: current?.status ?? 'unreviewed',
+      ...(current?.note ? { note: current.note } : {}),
+      guidance_ack_sha1: currentIdentity,
+    },
+  };
 }
 
 /**
@@ -87,11 +149,21 @@ export function withReviewNote(field: FormField, note: string): FormField {
  * derivation per the precedence above. `hasLintError` folds in a backend lint
  * ERROR anchored to this field (the FieldList already threads these in) -- a
  * lint ERROR is as red as a local completeness error, and red always wins.
+ *
+ * `needsGuidanceAck` (bd polyglot-pdf-anim) is the staleness gate: when the
+ * field's guidance drifted and no human has acknowledged it, the field CANNOT
+ * read green, even if an editor already marked it reviewed_correct -- that
+ * sign-off predates the drift and no longer covers what the assistant will
+ * say. It lands in the amber 'review' band (not red): the guidance may well
+ * still be fine, and confirming it is a human judgment, not a defect to fix.
+ * This is the same principle as the g63j amendment one layer on -- green means
+ * a human said so ABOUT THE CURRENT CONTENT.
  */
 export function effectiveStatus(
   field: FormField,
   hasLintError = false,
   pageCount?: number,
+  needsGuidanceAck = false,
 ): EffectiveStatus {
   const auto = checkFieldComplete(field, pageCount);
   // Red always wins -- a broken field cannot be signed off.
@@ -99,6 +171,9 @@ export function effectiveStatus(
 
   const review = getReview(field).status;
   if (review === 'needs_followup') return 'followup';
+  // An un-acknowledged drift demotes even an explicit reviewed_correct: the
+  // sign-off was given for different content.
+  if (needsGuidanceAck) return 'review';
   if (review === 'reviewed_correct') return 'complete';
 
   // unreviewed -> ALWAYS amber (bd g63j). Green is a human's word, not the
@@ -118,6 +193,13 @@ export function isReviewTarget(
   field: FormField,
   hasLintError = false,
   pageCount?: number,
+  needsGuidanceAck = false,
 ): boolean {
-  return effectiveStatus(field, hasLintError, pageCount) !== 'complete';
+  // Must pass the guidance gate through too (bd anim): a reviewed_correct
+  // field with un-acknowledged stale guidance renders amber via
+  // effectiveStatus, so the review-jump has to STOP on it -- otherwise "next
+  // to review: nothing left" would lie about a row the author can plainly see
+  // is flagged.
+  return effectiveStatus(field, hasLintError, pageCount, needsGuidanceAck)
+    !== 'complete';
 }

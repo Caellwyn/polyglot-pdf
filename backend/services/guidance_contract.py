@@ -56,6 +56,8 @@ ASCII only (CLAUDE.md scar #6).
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from typing import List, Optional
@@ -379,3 +381,90 @@ Per field, return a verdict object:
 A field passes when: grounded, useful_beyond_label (or instructions empty),
 no advice, and no omission_concerns you judge material.
 """
+
+
+# --------------------------------------------------------------------------- #
+# Identity hashing for the staleness gate (bd polyglot-pdf-anim).
+#
+# Authored guidance is written against a field's VOICE-FACING identity. If a
+# human later renames the field or relabels its options, the guidance may no
+# longer match what the AI will say -- but a trivial rename does not warrant an
+# LLM re-author. The bake records identity_sha1; lint recomputes it and flags a
+# mismatch; the editor gates review-correct on a human acknowledgment.
+#
+# ONE definition, imported by BOTH the bake (enrich_instructions) and the lint
+# rule, so the written hash and the compared hash can never drift apart. The
+# option-translation re-run checker keys the same way in its own provenance
+# stage and should import this rather than fork a second, subtly-different hash.
+# --------------------------------------------------------------------------- #
+
+
+def identity_payload(field: dict) -> str:
+    """The stable serialization of a field's voice-facing identity.
+
+    Covers ONLY what the guidance actually describes: the field's name, its
+    spoken name, and its options -- each option contributing a
+    [label, spoken_label, value] triple, so both voice-facing texts are BOUND
+    to the option's stored value. spoken_label rides along because it
+    OUTRANKS label as the voice join key (secretary_context resolves
+    spoken_label or label; manifest_service ships it to the live model), so a
+    spoken_label swap is the same wrong-answer hazard as a label swap
+    (closeout Opus round 3, bd polyglot-pdf-w028). Deliberately excludes the
+    field id (renames are retargeted wholesale and an id is never spoken) and
+    plumbing (pdf_field_name, positions, conditions) -- changing those does
+    not make authored guidance wrong, and hashing them would manufacture
+    false staleness that trains editors to click through the gate.
+
+    The triples are SORTED, so a pure REORDER (whole options moving, each
+    keeping its own texts and value) does not re-raise the gate -- the
+    assistant still says the same words (maintainer decision 2026-07-29).
+    Adding, removing or editing a label or spoken label still flags.
+    ACCEPTED TRADEOFF: guidance that describes option ORDER ("choose the
+    first option") is not re-flagged by a reorder alone; the contract
+    discourages that phrasing anyway.
+
+    WHY the value rides in each binding (bd anim handoff decision): with
+    bare sorted texts, a SWAP -- "Married" and "Single" trading places while
+    their values stay put -- hashed identically, so the one identity drift
+    that makes the assistant's unchanged words select a DIFFERENT stored
+    answer never flagged. That is not stale wording; it is a wrong answer on
+    the form. No order-insensitive hash can both ignore values and catch
+    swaps (a swap IS a reorder plus a value rename), so the binding is the
+    fix.
+
+    SECOND ACCEPTED TRADEOFF, the flip side: a value-only rename (label
+    untouched) now changes the hash and costs one acknowledgment click. The
+    editor cannot produce that edit -- option values are minted from labels
+    on blur, never free-typed (FieldEditor, bd h76m.10) -- so it lands only
+    on out-of-band script/JSON edits, where a human glance is due anyway."""
+    if not isinstance(field, dict):
+        return "[]"
+    opts = field.get("options")
+    triples = []
+    if isinstance(opts, list):
+        for o in opts:
+            lab = o.get("label") if isinstance(o, dict) else None
+            slab = o.get("spoken_label") if isinstance(o, dict) else None
+            val = o.get("value") if isinstance(o, dict) else None
+            triples.append([
+                lab if isinstance(lab, str) else "",
+                slab if isinstance(slab, str) else "",
+                # str() keeps numeric-value bindings distinct; "" would erase
+                # them (labels coerce to "" -- a non-string label has no words
+                # to bind, but a non-string value is still a real join key)
+                val if isinstance(val, str) else
+                ("" if val is None else str(val))])
+    name = field.get("name")
+    spoken = field.get("spoken_name")
+    return json.dumps(
+        [name if isinstance(name, str) else "",
+         spoken if isinstance(spoken, str) else "",
+         sorted(triples)],   # order-insensitive triples: see the docstring
+        ensure_ascii=False, separators=(",", ":"))
+
+
+def identity_sha1(field: dict) -> str:
+    """SHA-1 of identity_payload -- the value stored in provenance and compared
+    by the lint staleness rule."""
+    return hashlib.sha1(
+        identity_payload(field).encode("utf-8")).hexdigest()

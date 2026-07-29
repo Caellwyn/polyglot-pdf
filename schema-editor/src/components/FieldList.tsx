@@ -1,5 +1,7 @@
 import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
+import { currentIdentity, needsGuidanceAck, staleFieldIds }
+  from '../utils/guidanceStaleness';
 import { checkFieldComplete } from '../utils/validation';
 import { effectiveStatus, getReview, isReviewTarget } from '../utils/reviewStatus';
 import { getIgnoredFields } from '../utils/ignoreField';
@@ -191,8 +193,19 @@ export const FieldList: React.FC<FieldListProps> = ({
   // ERROR always wins; otherwise needs_followup -> 'followup',
   // reviewed_correct -> 'complete' (green), and un-reviewed -> amber ALWAYS
   // (green is a human's word, never the machine's).
+  // A field whose guidance drifted since it was authored cannot read green
+  // until a human confirms the guidance still matches (bd polyglot-pdf-anim).
+  // The BACKEND decides staleness (it wrote the hash); this reads its finding.
+  const guidanceAckPending = (field: FormField) =>
+    needsGuidanceAck(
+      field,
+      staleFieldIds(lintFindingsByField?.get(field.id)),
+      currentIdentity(lintFindingsByField?.get(field.id), field.id),
+    );
+
   const getFieldStatus = (field: FormField) =>
-    effectiveStatus(field, fieldHasLintError(field), pageCount);
+    effectiveStatus(field, fieldHasLintError(field), pageCount,
+                    guidanceAckPending(field));
 
   // Every reason a row is red, amber, or flagged, in plain language, for the
   // icon's tooltip: the human review state (sign-off / follow-up + its note)
@@ -213,8 +226,16 @@ export const FieldList: React.FC<FieldListProps> = ({
         review.note ? `Needs follow-up: ${noteForTooltip(review.note)}` : 'Marked needs follow-up',
       );
     } else if (review.status === 'reviewed_correct') {
-      // A signed-off field shows green; surface the sign-off (and any note) so
-      // the tooltip still explains WHY it is green rather than looking untouched.
+      // A signed-off field shows green -- unless un-acknowledged guidance
+      // drift demotes it to amber (bd anim). Lead the tooltip with whichever
+      // state the ICON shows, so its first line never contradicts an amber
+      // clock sitting right next to it (Opus round 4); the sign-off (and any
+      // note) still follows so the row never looks untouched.
+      if (guidanceAckPending(field)) {
+        reviewMessages.push(
+          'Guidance changed after this field was reviewed -- confirm it '
+          + 'still reads correctly (see Instructions)');
+      }
       reviewMessages.push(
         review.note ? `Reviewed - correct: ${noteForTooltip(review.note)}` : 'Reviewed - correct',
       );
@@ -363,7 +384,7 @@ export const FieldList: React.FC<FieldListProps> = ({
   // field IS one (bd polyglot-pdf-u8t6) -- both flow through isReviewTarget's
   // effective-status precedence.
   const hasReviewTarget = React.useMemo(
-    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f), pageCount)),
+    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f), pageCount, guidanceAckPending(f))),
     // isReviewTarget is a pure per-field check; the memo keys on the fields,
     // the lint findings (a backend ERROR also makes a row a review target),
     // and pageCount (which arrives asynchronously when the PDF finishes
@@ -380,7 +401,8 @@ export const FieldList: React.FC<FieldListProps> = ({
       : -1;
     for (let step = 1; step <= fields.length; step++) {
       const candidate = fields[(current + step) % fields.length];
-      if (isReviewTarget(candidate, fieldHasLintError(candidate), pageCount)) {
+      if (isReviewTarget(candidate, fieldHasLintError(candidate), pageCount,
+                        guidanceAckPending(candidate))) {
         onSelectField(candidate.id);
         return;
       }

@@ -100,6 +100,15 @@ Rules (stable ids; one finding per violation site):
                                 fit
 - help-details-headings-missing WARNING a long details block has no heading
                                 lines (unnavigable for secretary/human review)
+- guidance-identity-stale WARNING a field's name / spoken_name / option
+                                label/spoken-label/value bindings changed
+                                since its guidance was authored (the bake's
+                                identity_sha1 no longer matches), so the
+                                guidance may describe something the assistant
+                                no longer says -- or a spoken label may now
+                                select a different stored answer (label swap).
+                                Drives the editor's human acknowledgment gate
+                                -- never an auto re-bake (bd polyglot-pdf-anim)
 
 ASCII only.
 """
@@ -906,6 +915,7 @@ def lint_schema(
 
     _emit_translation_flags(schema, out)
     _emit_guidance_flags(schema, out)
+    _check_guidance_identity_drift(schema, out)
 
     if dump is not None:
         _check_dump_claims(fields, dump, out)
@@ -1135,3 +1145,90 @@ def _emit_translation_flags(schema: Dict[str, Any], out: List[LintFinding]) -> N
         if not isinstance(path, str) or not isinstance(message, str):
             continue
         out.append(LintFinding(SEVERITY_WARNING, rule, path, message))
+
+
+def _check_guidance_identity_drift(
+    schema: Dict[str, Any], out: List[LintFinding]
+) -> None:
+    """Flag fields whose voice-facing identity changed since their guidance was
+    authored (bd polyglot-pdf-anim).
+
+    The bake records identity_sha1 (name + spoken_name + option
+    label/spoken_label/value bindings) in
+    _bakeoff.authoring.instructions_enrich.provenance. A human rename
+    or option relabel afterwards may leave the authored guidance describing
+    something the AI no longer says -- but a trivial rename does not warrant an
+    LLM re-author, so this is a WARNING that drives the editor's
+    human-acknowledgment gate, not an ERROR and not an automatic re-bake.
+
+    A label SWAP (labels trading places across values, label multiset
+    unchanged) flags too: the assistant's unchanged words would select a
+    different stored answer, which is the drift that matters MOST (bd anim
+    handoff decision -- see identity_payload's docstring for the tradeoffs).
+
+    Silent (never fires) when there is nothing to compare against: no provenance
+    record, or a record predating identity tracking. Gating a field on a hash
+    the bake never wrote would be unactionable noise. Likewise silent when the
+    field no longer carries ANY authored guidance (a human emptied help after
+    the bake) -- there is nothing to confirm.
+
+    The hash comes from guidance_contract.identity_sha1 -- the SAME function the
+    bake writes with, so the written and compared values cannot drift.
+    """
+    authoring = schema.get("_bakeoff")
+    authoring = authoring.get("authoring") if isinstance(authoring, dict) else None
+    enrich = authoring.get("instructions_enrich") if isinstance(authoring, dict) else None
+    prov = enrich.get("provenance") if isinstance(enrich, dict) else None
+    if not isinstance(prov, dict) or not prov:
+        return
+    fields = schema.get("fields")
+    if not isinstance(fields, list):
+        return
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        fid = field.get("id")
+        rec = prov.get(fid) if isinstance(fid, str) else None
+        if not isinstance(rec, dict):
+            continue
+        baked = rec.get("identity_sha1")
+        if not isinstance(baked, str) or not baked:
+            continue  # pre-anim bake: nothing to be stale against
+        help_obj = field.get("help")
+        if not isinstance(help_obj, dict) or not any(
+                isinstance(help_obj.get(k), str) and help_obj.get(k).strip()
+                for k in ("instructions", "details", "format_hint")):
+            # A human emptied the guidance after the bake: there is nothing
+            # left to confirm, and gating would render the ack box under an
+            # empty textarea with copy about text that no longer exists --
+            # the unactionable-noise case this rule exists to avoid (Opus
+            # round 5). help-instructions-missing already surfaces the
+            # emptiness itself.
+            continue
+        # ONE computation reused for both the comparison and the path token:
+        # two separate identity_sha1() calls invited a future edit to one
+        # without the other, letting the compared and reported hashes diverge
+        # (Opus round 5).
+        current = guidance_contract.identity_sha1(field)
+        if baked == current:
+            continue
+        # The CURRENT identity hash rides the PATH, not the message: the editor
+        # pins a human's acknowledgment to the exact content they read, and the
+        # path is a machine anchor no UI renders as prose (the message IS shown
+        # -- in the lint strip, the flagged-reasons banner and the row tooltip
+        # -- so a raw hash there is unexplained noise for a non-technical
+        # reviewer; bd anim fresh-eyes round 2 finding 2).
+        #
+        # Pinning to the BAKED hash instead would be a permanent waiver: the
+        # baked value does not change when the user edits, so one ack would
+        # silently cover every later edit until the next re-bake (round 1
+        # finding 1). field_id_of() ignores the trailing segment, so the
+        # editor's click-to-focus still resolves this path.
+        out.append(LintFinding(
+            SEVERITY_WARNING, "guidance-identity-stale",
+            f"fields (id={fid}).help[identity:{current}]",
+            "this field's name / spoken name / options changed since its "
+            "guidance was written, so the guidance may no longer match what "
+            "the assistant says -- confirm it still reads correctly (or "
+            "re-author it) before marking the field reviewed",
+        ))

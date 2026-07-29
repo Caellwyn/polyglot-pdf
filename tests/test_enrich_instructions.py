@@ -180,7 +180,12 @@ def test_write_kit_no_clobber_and_provenance(tmp_path):
         "Hand-authored by the maintainer."
     prov = saved["_bakeoff"]["authoring"]["instructions_enrich"]["provenance"]
     assert prov["blank"]["source"] == "llm-verified"
-    assert saved["form_metadata"]["booklet_text"] == "BOOKLET"
+    # THE WRITER IS THE FEATURE (bd anim, closeout Opus round): the staleness
+    # lint rule is deliberately silent when identity_sha1 is absent, so if the
+    # bake ever stops writing it the whole gate turns off with no failing test
+    # and no runtime signal. This assertion is the only thing standing between
+    # a dropped write and a silently disabled feature.
+    assert prov["blank"]["identity_sha1"] == gc.identity_sha1(by_id["blank"])
     # machine-owned field UPDATES on re-run (hash matches recorded)
     proposals2 = {"fields": {"blank": {"instructions": "Authored A v2.",
                                        "details": "", "format_hint": ""}},
@@ -234,6 +239,11 @@ def test_bootstrap_provenance_marks_tu_identical_only():
         "C[0]": "Anything."})
     assert set(prov) == {"tu_match"}
     assert prov["tu_match"]["source"] == "tu"
+    # /TU-bootstrapped fields are covered by the staleness gate too -- the
+    # record must carry the field's identity hash (bd anim, closeout Opus
+    # round: the writer had zero coverage).
+    assert prov["tu_match"]["identity_sha1"] == \
+        gc.identity_sha1(schema["fields"][0])
 
 
 def test_lint_reemits_guidance_flags():
@@ -450,3 +460,33 @@ def test_existing_provenance_locks_out_unrecorded_fields():
                            tu_map={"A[0]": "Exact TU text."})
     assert s["written"] == 0 and s["skipped_human"] == 1
     assert schema["fields"][0]["help"]["instructions"] == "Exact TU text."
+
+
+def test_unmatched_proposal_ids_are_counted_not_applied(tmp_path):
+    """bd anim exit criterion 3: a model-echoed id matching NO schema field is
+    silently discarded by the apply loop (fail-safe) -- it must at least be
+    COUNTED, or a systematic id-echo failure looks like 'the booklet said
+    nothing'."""
+    schema = {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [{"id": "real", "name": "R", "type": "text"}],
+        "sections": [], "parts": [],
+    }
+    proposals = {"fields": {
+        "real": {"instructions": "Applied.", "details": "", "format_hint": ""},
+        "hallucinated_id": {"instructions": "Never applied.",
+                            "details": "", "format_hint": ""},
+        "blank_one": {"instructions": "", "details": "", "format_hint": ""},
+        # a model can return non-string junk under a hallucinated id; the
+        # counter must SKIP it, not crash the whole apply (a bare .strip()
+        # did, losing a metered run's output -- closeout Opus round 3)
+        "junk_typed": {"instructions": {"nested": "obj"}, "details": 5,
+                       "format_hint": None},
+    }, "form_details": ""}
+    summary = ei.apply_proposals(schema, proposals, "B", [], "m", "j")
+    assert summary["written"] == 1
+    # counted, and only the one carrying real STRING content
+    assert summary["unmatched_proposal_ids"] == ["hallucinated_id"]
+    # and genuinely NOT applied anywhere
+    assert schema["fields"][0]["help"]["instructions"] == "Applied."
+    assert len(schema["fields"]) == 1

@@ -1077,6 +1077,12 @@ def _enrich_guidance(schema: dict, pdf_path: str,
         report.update(
             written=summary.get("written", 0),
             skipped_human=summary.get("skipped_human", 0),
+            # Carry the hallucinated-id count into the PIPELINE report too --
+            # it exists to make a systematic model id-echo failure visible
+            # instead of looking like "the booklet had nothing to say", and
+            # the hosted path is the one that actually runs in production
+            # (bd anim outer review: the CLI printed it, this dropped it).
+            unmatched_proposal_ids=summary.get("unmatched_proposal_ids") or [],
             booklet=os.path.basename(booklet_path),
             tokens=result.get("tokens", []))
         # Judge-unavailable is caught INSIDE verify_and_rectify (the KEEP
@@ -1382,11 +1388,14 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
               file=sys.stderr)
     else:
         gflags = guidance_report.get("flags") or []
+        gunmatched = guidance_report.get("unmatched_proposal_ids") or []
         print(f"guidance: {guidance_report.get('written', 0)} field(s) "
               f"enriched, {guidance_report.get('skipped_human', 0)} "
               f"human-owned skipped, {len(gflags)} flag(s)"
               + (" -- recorded in _bakeoff.authoring.instructions_enrich"
-                 ".flags (WARNINGs, human-review worklist)" if gflags else ""))
+                 ".flags (WARNINGs, human-review worklist)" if gflags else "")
+              + (f"; {len(gunmatched)} proposal(s) matched NO schema field "
+                 f"and were discarded: {gunmatched[:5]}" if gunmatched else ""))
     if lint_report.get("skipped"):
         print(f"lint: skipped ({lint_report['skipped']})", file=sys.stderr)
     else:

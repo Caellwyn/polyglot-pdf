@@ -973,3 +973,230 @@ def test_option_claim_unresolvable_names_the_option():
     findings = _lint_structural(_schema(fields), dump)
     assert [f.rule for f in findings] == ["field-claim-unresolvable"]
     assert "option[1]" in findings[0].path
+
+
+# --- guidance-identity-stale (bd polyglot-pdf-anim) ------------------------ #
+
+def _identity_schema(field, baked=None):
+    prov = {"source": "llm-verified"}
+    if baked is not None:
+        prov["identity_sha1"] = baked
+    return {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [field], "sections": [], "parts": [],
+        "_bakeoff": {"authoring": {"instructions_enrich": {
+            "provenance": {field["id"]: prov}, "flags": []}}},
+    }
+
+
+def _stale(findings):
+    return [f for f in findings if f.rule == "guidance-identity-stale"]
+
+
+def test_identity_unchanged_emits_nothing():
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "Phone", "spoken_name": "phone", "type": "text",
+         "help": {"instructions": "x"}}
+    assert _stale(lint_schema(_identity_schema(f, gc.identity_sha1(f)))) == []
+
+
+def test_spoken_name_change_flags_the_field_as_a_warning():
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "Phone", "spoken_name": "phone", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    renamed = dict(f, spoken_name="telephone")
+    hits = _stale(lint_schema(_identity_schema(renamed, baked)))
+    assert len(hits) == 1
+    assert hits[0].severity == "WARNING"      # informs, never blocks
+    assert "id=a" in hits[0].path
+
+
+def test_option_label_change_flags_but_plumbing_does_not():
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+         "options": [{"label": "Yes", "value": "y"}],
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    relabelled = dict(f, options=[{"label": "Yes please", "value": "y"}])
+    assert len(_stale(lint_schema(_identity_schema(relabelled, baked)))) == 1
+    # a plumbing edit is NOT voice-facing -> no finding
+    replumbed = dict(f, pdf_field_name="W[0]")
+    assert _stale(lint_schema(_identity_schema(replumbed, baked))) == []
+
+
+def test_option_label_swap_flags_even_with_identical_label_multiset():
+    """THE HANDOFF CASE (bd anim): two labels trading places while their
+    values stay put left the sorted-bare-label hash unchanged, yet the
+    assistant's unchanged words now select the OPPOSITE stored answer -- the
+    one identity drift that yields a wrong answer on the form rather than
+    stale wording. The label->value pair binding exists to catch this."""
+    from backend.services import guidance_contract as gc
+    base = {"id": "a", "name": "Marital status", "spoken_name": "marital status",
+            "type": "radio",
+            "options": [{"label": "Married", "value": "m"},
+                        {"label": "Single", "value": "s"}],
+            "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+    swapped = dict(base, options=[{"label": "Single", "value": "m"},
+                                  {"label": "Married", "value": "s"}])
+    assert len(_stale(lint_schema(_identity_schema(swapped, baked)))) == 1
+
+
+def test_option_spoken_label_swap_flags_too():
+    """spoken_label OUTRANKS label as the voice join key (secretary_context
+    resolves spoken_label or label; manifest_service ships it to the live
+    model), so two spoken labels trading places while values stay put is the
+    same wrong-answer hazard as a label swap (closeout Opus round 3, bd
+    polyglot-pdf-w028)."""
+    from backend.services import guidance_contract as gc
+    base = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+            "options": [
+                {"label": "M", "spoken_label": "Married", "value": "m"},
+                {"label": "S", "spoken_label": "Single", "value": "s"}],
+            "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+    swapped = dict(base, options=[
+        {"label": "M", "spoken_label": "Single", "value": "m"},
+        {"label": "S", "spoken_label": "Married", "value": "s"}])
+    assert len(_stale(lint_schema(_identity_schema(swapped, baked)))) == 1
+    # editing one spoken_label flags; reordering whole options stays silent
+    edited = dict(base, options=[
+        {"label": "M", "spoken_label": "Currently married", "value": "m"},
+        base["options"][1]])
+    assert len(_stale(lint_schema(_identity_schema(edited, baked)))) == 1
+    reordered = dict(base, options=[base["options"][1], base["options"][0]])
+    assert _stale(lint_schema(_identity_schema(reordered, baked))) == []
+
+
+def test_value_only_rename_flags_as_the_accepted_swap_safety_cost():
+    """A value-only rename is indistinguishable, to any order-insensitive
+    hash, from half of a label swap (a swap IS a reorder plus a value
+    rename) -- so catching swaps means this flags too, the ACCEPTED TRADEOFF
+    pinned in identity_payload's docstring. The editor cannot produce this
+    edit (option values mint from labels on blur, never free-typed --
+    FieldEditor, bd h76m.10); it costs one acknowledgment click on
+    out-of-band script/JSON edits only. If this test starts failing because
+    someone re-excluded values, the swap test above must be failing too --
+    fix the swap case first."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+         "options": [{"label": "Yes", "value": "y"}],
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    revalued = dict(f, options=[{"label": "Yes", "value": "changed"}])
+    assert len(_stale(lint_schema(_identity_schema(revalued, baked)))) == 1
+
+
+def test_pre_anim_bake_is_silent_not_noisy():
+    # a provenance record with no identity_sha1 has nothing to be stale against
+    f = {"id": "a", "name": "Renamed", "spoken_name": "x", "type": "text",
+         "help": {"instructions": "x"}}
+    assert _stale(lint_schema(_identity_schema(f, None))) == []
+
+
+def test_emptied_guidance_never_gates():
+    """A human who DELETED the guidance after the bake has nothing left to
+    confirm -- gating would render the ack box under an empty textarea with
+    copy about text that no longer exists (Opus round 5), the unactionable
+    noise the rule's own docstring forbids. help-instructions-missing already
+    surfaces the emptiness itself."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    for emptied_help in ({}, None, {"instructions": "   "}):
+        emptied = dict(f, spoken_name="v2", help=emptied_help)
+        assert _stale(lint_schema(_identity_schema(emptied, baked))) == []
+    # ...but ANY surviving guidance channel still gates
+    hint_only = dict(f, spoken_name="v2", help={"format_hint": "letters only"})
+    assert len(_stale(lint_schema(_identity_schema(hint_only, baked)))) == 1
+
+
+def test_identity_rule_never_throws_on_malformed_provenance():
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "text"}
+    for junk in ("str", 123, [], {"a": "not-a-dict"}, {"a": {"identity_sha1": 5}}):
+        s = _identity_schema(f, "x")
+        s["_bakeoff"]["authoring"]["instructions_enrich"]["provenance"] = junk
+        lint_schema(s)   # must not raise
+
+
+def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
+    r"""CONTRACT PIN (bd anim): the editor parses the current identity out of
+    the finding PATH with /\[identity:([0-9a-f]+)\]/ and pins a human's
+    acknowledgment to it. If this format ever changes, that parse silently
+    returns undefined and 'any ack satisfies the gate' -- reopening the
+    permanent-waiver hole with no other test to catch it. The hash must stay
+    OUT of the message, which is rendered to humans in three UI surfaces."""
+    import re
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    drifted = dict(f, spoken_name="v2")
+    hit = _stale(lint_schema(_identity_schema(drifted, baked)))[0]
+
+    # the editor's EXACT regex must find the CURRENT identity in the path
+    m = re.search(r"\[identity:([0-9a-f]+)\]", hit.path)
+    assert m, f"editor's identity regex no longer matches path: {hit.path!r}"
+    assert m.group(1) == gc.identity_sha1(drifted)
+    # ...and the human-facing message must NOT carry it
+    assert "identity:" not in hit.message
+    # field_id must still resolve for click-to-focus despite the suffix
+    from backend.services.schema_lint import field_id_of
+    assert field_id_of(hit.path) == "a"
+
+
+def test_each_edit_reports_a_DIFFERENT_current_identity():
+    """The gate re-raises per edit only because this value moves (bd anim)."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    p1 = _stale(lint_schema(_identity_schema(dict(f, spoken_name="v2"), baked)))[0].path
+    p2 = _stale(lint_schema(_identity_schema(dict(f, spoken_name="v3"), baked)))[0].path
+    assert p1 != p2
+
+
+def test_pure_option_reorder_does_NOT_flag_but_real_changes_do():
+    """Maintainer decision 2026-07-29: reordering options with identical
+    labels must NOT re-raise the gate -- the assistant says the same words, and
+    a needless prompt trains editors to click through. Adding, removing or
+    editing a label still flags."""
+    from backend.services import guidance_contract as gc
+    base = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+            "options": [{"label": "Yes", "value": "y"},
+                        {"label": "No", "value": "n"}],
+            "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+
+    reordered = dict(base, options=[{"label": "No", "value": "n"},
+                                    {"label": "Yes", "value": "y"}])
+    assert _stale(lint_schema(_identity_schema(reordered, baked))) == []
+
+    for changed in (
+        dict(base, options=[{"label": "Yes please", "value": "y"},
+                            {"label": "No", "value": "n"}]),          # edited
+        dict(base, options=base["options"] + [{"label": "Maybe",
+                                               "value": "m"}]),       # added
+        dict(base, options=[{"label": "Yes", "value": "y"}]),         # removed
+    ):
+        assert len(_stale(lint_schema(_identity_schema(changed, baked)))) == 1
+
+
+def test_a_kit_baked_before_identity_tracking_never_reads_stale():
+    """REAL-KIT SAFETY (bd anim outer review round 2): the shipped w7 kit's 44
+    provenance records predate identity tracking and carry NO identity_sha1.
+    The rule must stay silent for them -- otherwise changing the hash formula
+    (as the reorder fix did) would light up every previously-baked field at
+    once, the mass false alarm that destroys the gate's credibility."""
+    import json, pathlib
+    kit = pathlib.Path(__file__).resolve().parents[2] / "form-kits" / "w7" / "schema.json"
+    if not kit.exists():          # kit not present in this checkout
+        return
+    schema = json.loads(kit.read_text(encoding="utf-8"))
+    hits = [f for f in lint_schema(schema)
+            if f.rule == "guidance-identity-stale"]
+    assert hits == [], (
+        "a kit baked before identity tracking must never read stale; "
+        f"got {len(hits)} findings")

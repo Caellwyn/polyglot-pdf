@@ -486,9 +486,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         summary = write_kit(args.kit, result["proposals"], booklet, flags,
                             args.model, JUDGE_MODEL)
         result["write_summary"] = summary
+        unmatched = summary.get("unmatched_proposal_ids") or []
         print(f"write: {summary['written']} field(s) written, "
               f"{summary['skipped_human']} human-owned skipped, "
-              f"{summary['flags']} flag(s) persisted")
+              f"{summary['flags']} flag(s) persisted"
+              + (f"; {len(unmatched)} proposal(s) matched NO schema field "
+                 f"and were discarded: {unmatched[:5]}" if unmatched else ""))
 
     out = args.out or os.path.join(
         _REPO, "scripts", "bakeoff", "outputs",
@@ -803,8 +806,13 @@ def bootstrap_provenance(schema: dict, tu_map: Dict[str, str]) -> Dict[str, dict
              if isinstance(o, dict) and o.get("pdf_field_name")), None)
         tu = tu_map.get(pfn) if pfn else None
         if tu is not None and instr.strip() == tu.strip():
-            prov[f["id"]] = {"source": "tu",
-                             "instructions_sha1": _sha1(instr)}
+            prov[f["id"]] = {
+                "source": "tu",
+                "instructions_sha1": _sha1(instr),
+                # /TU text is written against the field's identity too, so the
+                # staleness gate covers bootstrapped fields as well (bd anim).
+                "identity_sha1": guidance_contract.identity_sha1(f),
+            }
     return prov
 
 
@@ -847,6 +855,24 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
     if tu_map and not prov:
         prov.update(bootstrap_provenance(schema, tu_map))
 
+    # Proposals keyed to an id no field carries are silently DROPPED by the
+    # loop below (it walks schema fields, so a hallucinated id is simply never
+    # visited). That is fail-safe -- nothing wrong is written -- but it was
+    # also invisible: a systematic id-echo failure looked identical to "the
+    # booklet had nothing to say". Count them so the report can surface it
+    # (bd polyglot-pdf-anim).
+    schema_ids = {f.get("id") for f in schema.get("fields", [])
+                  if isinstance(f, dict)}
+    # isinstance guard: a model can return a non-string under a hallucinated
+    # id ({"instructions": 5}); bare .strip() crashed the whole apply -- and
+    # in the CLI --write path that loses a metered run's output (closeout
+    # Opus round 3). Non-string junk does not count as "carried content".
+    unmatched_proposal_ids = sorted(
+        fid for fid, e in (proposals.get("fields") or {}).items()
+        if fid not in schema_ids and isinstance(e, dict)
+        and any(isinstance(e.get(k), str) and e.get(k).strip()
+                for k in ("instructions", "details", "format_hint")))
+
     written = skipped_human = 0
     for f in schema.get("fields", []):
         if not isinstance(f, dict):
@@ -886,6 +912,10 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
                 "instructions_sha1": _sha1(help_obj.get("instructions", "")),
                 "details_sha1": _sha1(help_obj.get("details", "")),
                 "format_hint_sha1": _sha1(help_obj.get("format_hint", "")),
+                # The field's voice-facing identity AS AUTHORED (bd anim): if a
+                # human later renames it or relabels an option, lint compares
+                # this and flags the guidance for human re-confirmation.
+                "identity_sha1": guidance_contract.identity_sha1(f),
             }
             written += 1
     meta = schema.setdefault("form_metadata", {})
@@ -900,7 +930,8 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
         "provenance": prov, "flags": flags,
     }
     return {"written": written, "skipped_human": skipped_human,
-            "flags": len(flags)}
+            "flags": len(flags),
+            "unmatched_proposal_ids": unmatched_proposal_ids}
 
 if __name__ == "__main__":
     sys.exit(main())

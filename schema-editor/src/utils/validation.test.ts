@@ -393,3 +393,27 @@ describe('getCompletionStats reflects human review status (bd u8t6)', () => {
     expect(stats).toMatchObject({ complete: 1, needsReview: 1, total: 2, percentage: 50 });
   });
 });
+
+describe('getCompletionStats honours the guidance-ack gate (bd anim)', () => {
+  const complete = { spoken_name: 'spoken', help: { instructions: 'Done.' } };
+
+  it('a reviewed_correct field needing a guidance ack is NOT complete', () => {
+    // The FieldList renders this row amber (effectiveStatus demotes an
+    // un-acknowledged drift even over an explicit sign-off), so the kit-wide %
+    // must agree -- otherwise the progress dashboard reports a gated kit as
+    // done while its own field list shows amber (fresh-eyes, closeout round 1).
+    const stats = getCompletionStats(schemaWith([
+      field('drifted', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
+      field('fine', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
+    ]), new Set(['drifted']));
+    expect(stats).toMatchObject({ complete: 1, needsReview: 1, total: 2, percentage: 50 });
+  });
+
+  it('an empty or omitted gate set leaves the counts unchanged', () => {
+    const fields = [
+      field('signed', { ...complete, _review: { status: 'reviewed_correct' } } as Partial<FormField>),
+    ];
+    expect(getCompletionStats(schemaWith(fields)).complete).toBe(1);
+    expect(getCompletionStats(schemaWith(fields), new Set()).complete).toBe(1);
+  });
+});

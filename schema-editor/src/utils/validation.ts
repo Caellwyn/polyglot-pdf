@@ -241,8 +241,17 @@ export function validateSchema(schema: FormSchema): ValidationError[] {
  * validation.ts free of a reviewStatus <-> validation import cycle; the ordering
  * mirrors reviewStatus.effectiveStatus (error wins, then the review status
  * decides). Any change here MUST be mirrored there.
+ *
+ * `needsAck` (bd anim) is the guidance-staleness gate, pre-computed by the
+ * caller via guidanceStaleness.needsAckFieldIds(schema.fields, lintFindings)
+ * -- passed as a plain id set so this module stays free of lint-store imports.
+ * A field in the set cannot count complete even when reviewed_correct: the
+ * sign-off predates the drift, exactly as effectiveStatus demotes it to amber.
+ * Callers WITHOUT lint findings in hand (the kit catalogue's disk/remote scan)
+ * omit it and stay gate-blind -- tracked as a known limitation (bd
+ * polyglot-pdf-2onl) rather than silently plumbed here.
  */
-export function getCompletionStats(schema: FormSchema): {
+export function getCompletionStats(schema: FormSchema, needsAck?: Set<string>): {
   complete: number;
   needsReview: number;
   total: number;
@@ -256,7 +265,7 @@ export function getCompletionStats(schema: FormSchema): {
     // Red always wins: an ERROR field is neither complete nor needs-review.
     if (status.errors.length > 0) continue;
     const review = (field as { _review?: { status?: string } })._review?.status;
-    if (review === 'reviewed_correct') {
+    if (review === 'reviewed_correct' && !needsAck?.has(field.id)) {
       complete++;
     } else {
       // unreviewed / needs_followup / malformed -> needs review (bd g63j:
