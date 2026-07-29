@@ -280,10 +280,17 @@ def main(argv: list[str] | None = None) -> int:
     if result.get("error"):
         print(render(result), file=sys.stderr)
         return 2
-    print(render(result))
+    # Write the JSON BEFORE the success text: a failed write must not be
+    # preceded by an OK line, and must exit 2 rather than let Python's rc=1
+    # collide with "mismatches found".
     if args.json_out:
-        with open(args.json_out, "w", encoding="utf-8") as fh:
-            json.dump(result, fh, indent=2)
+        try:
+            with open(args.json_out, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, indent=2)
+        except OSError as exc:
+            print(f"ERROR: cannot write {args.json_out!r}: {exc}", file=sys.stderr)
+            return 2
+    print(render(result))
     if result["findings"]:
         return 1
     if result["checked"] == 0:

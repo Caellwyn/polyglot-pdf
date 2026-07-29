@@ -63,11 +63,18 @@ every claimant drawn). Note the DIRECTION -- `prior_extractor/pdf_annotator.py`
 draws WIDGET NAMES as grounding INPUT; this draws the model's OUTPUT, so the
 drawing is the thing under review.
 
-Multiclaim ownership is keyed on the owning FIELD, mirroring `schema_lint`'s
-`_check_dump_claims`, so the two shapes that lint declares benign stay unflagged:
-field-level plus a single option of the SAME field (the groups-of-one
-convention), and an option dict carrying its own `id` (which the walker would
-otherwise count as a second owner).
+Multiclaim detection mirrors `schema_lint`'s `_check_dump_claims` exactly, keying
+claims on `(owner field id, kind)`. That rule has **two** ERROR branches and
+**one** carve-out, and all three must be reproduced or the orange flag lies:
+- ERROR: more than one DIFFERENT field claims the widget;
+- ERROR: more than one OPTION of the same field claims it (selecting one would
+  tick both -- lint's own test calls this "the shipped-f1040 class of bug");
+- BENIGN: field-level plus a SINGLE option of the same field (the groups-of-one
+  convention, a standalone checkbox restating its widget in both places).
+
+An option dict carrying its own `id` is excluded by object IDENTITY, not by id
+string -- option ids are short generic slugs (`yes`, `other`), so a string match
+dropped genuine top-level fields with colliding ids.
 
 **Exit codes (`check_line_binding`):** `0` verified-clean, `1` mismatches, `2`
 usage/IO error, `3` ABSTAINED. Abstention is deliberately NOT `0` -- a caller
@@ -128,10 +135,11 @@ entirely. A gate running one without the other has a live blind spot.
   attempted and REVERTED -- fixing only `lha9`'s four fields collides with the
   shifted `1e`-`1h` fields and leaves the kit linting worse than baseline.
 
-## Two rounds of pre-PR review, and what they caught
+## Three rounds of pre-PR review, and what they caught
 
-The fresh-eyes loop found real bugs in this diff twice, both times in the
-detection machinery itself:
+The fresh-eyes loop found real bugs in this diff three times, every time in the
+detection machinery itself -- and twice the bug was introduced by the PREVIOUS
+round's fix:
 
 - **Round 1** -- the overlay's `_claims` used `setdefault`, so a widget claimed
   by two fields drew only the FIRST label and rendered identically to a clean
@@ -147,19 +155,49 @@ detection machinery itself:
   "2 = usage/IO error" while an unreadable `--pdf` raised a raw traceback, and
   the abstention text still LEADING with `OK:`.
 
+- **Round 3** -- the round-2 fix OVER-corrected. Keying on the owning field alone
+  collapsed *two options of the SAME field* into one entry, but `schema_lint`
+  raises `dump-widget-multiclaim` for that shape too -- its own test calls it
+  "the shipped-f1040 class of bug" (selecting one option would tick both
+  widgets). So the fix for a false positive created a false NEGATIVE on a
+  separately-tested defect class. The rule has TWO error branches (different
+  fields; two options of one field) and exactly ONE carve-out (field + a single
+  option); claims are now keyed on `(owner, kind)` to mirror all three. Round 3
+  also found the option-dict exclusion keyed on the id STRING rather than object
+  identity -- so a genuine field named `yes` or `other` was dropped entirely,
+  rendering its widget as a false coverage gap -- plus two more unguarded IO
+  paths (`--json`, `--png-dir`), one of which printed its OK line *before*
+  crashing.
+
 The lesson worth keeping: a detector's false-positive behavior needs the same
 adversarial scrutiny as its true positives, and "mirrors an existing rule" is a
-claim to verify against that rule's carve-outs, not an assertion to make in a
-comment.
+claim to verify against that rule's carve-outs -- **all of them** -- not an
+assertion to make in a comment. Rounds 2 and 3 both landed on that same sentence:
+round 2 because the rule's carve-outs were not read, round 3 because only one of
+its two error branches was. Reading the cited rule end-to-end, once, would have
+prevented both.
 
 ## Verification
 
-- 34 tests (20 oracle, 14 overlay).
-- Full suite: 2333 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
-  `closeout_prep.py` runs only the latter).
-- Real-kit regression after the fixes: f1040 `rc=1` (20 findings), w7 `rc=3`
-  (abstains, 10 markers found but no checkable pair), and **0 multiclaimed** on
-  both shipped kits -- confirming the round-2 false positive is gone.
+- 38 tests (21 oracle, 17 overlay).
+- Full suite: 2291 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
+  `closeout_prep.py` runs only the latter). The count is lower than this branch's
+  earlier 2339 because `origin/dev` deleted `tests/test_harness_ledger.py`
+  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 4 new = 2291.
+- Real-kit regression after all three rounds: f1040 `rc=1` (20 findings), w7
+  `rc=3` (abstains -- 10 markers found but no checkable pair), and **0
+  multiclaimed** on w7, f1040 AND i-90, confirming the stricter `(owner, kind)`
+  rule introduced no false positives on shipped data.
 - No shipped kit was modified (`git diff --name-only origin/dev...HEAD --
   form-kits/` is empty); bd `polyglot-pdf-3ave` stays open for the f1040 data
   fix.
+
+## Known limitation found while verifying
+
+On i-90 the CLI overlay reports 152 widgets "unclaimed" that are in fact claimed:
+that kit stores SHORT widget names (`P1_Line10_CityTownOfBirth[0]`) while the PDF's
+real widgets are fully qualified (`form1[0].#pageSet[0].Page1[0]...`), and the tool
+matches on the exact string, so 146 of 189 claims miss. Pre-existing name-resolution
+behaviour, not a regression from this work -- filed as its own bug. The editor-side
+overlay (bd `polyglot-pdf-w70y`) is immune, since it keys on `pdf_position` rects
+rather than names.

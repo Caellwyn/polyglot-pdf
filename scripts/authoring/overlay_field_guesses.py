@@ -92,38 +92,52 @@ def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
     this overlay exists to make visible. Collapsing it would render a
     multiclaimed widget identically to a correctly single-claimed one.
 
-    Ownership is keyed on the owning FIELD, mirroring schema_lint's
-    _check_dump_claims -- not on raw label count. Two shapes are BENIGN there and
-    must not be flagged here either, or the orange flag starts lying:
-      - field-level + a single option of the SAME field (the groups-of-one
-        convention: a standalone checkbox restating its widget in both places);
-      - an option dict that carries its own `id`, which _iter_fields yields as a
-        field in its own right and the options loop would then count twice.
-    """
-    # Option dicts that carry their own `id` are yielded by _iter_fields as
-    # fields in their own right. Collect them FIRST -- the walk order is not
-    # guaranteed to reach a parent before its option, so they cannot be
-    # unwound after the fact.
-    option_ids: set[str] = set()
-    for f in _iter_fields(schema):
-        for o in (f.get("options") or []) if isinstance(f.get("options"), list) else []:
-            if isinstance(o, dict) and isinstance(o.get("id"), str):
-                option_ids.add(o["id"])
+    Claimants are tracked as (owner field id, kind) pairs, mirroring BOTH ERROR
+    branches of schema_lint's _check_dump_claims -- not raw label count, and not
+    owner alone. That rule flags two distinct shapes and carves out exactly one:
+      - ERROR: more than one DIFFERENT field claims the widget;
+      - ERROR: more than one OPTION of the SAME field claims it (selecting one
+        would tick both -- the shipped-f1040 class of bug, pinned by
+        backend/tests/test_schema_lint.py::test_dump_multiclaim_by_two_options_of_one_field);
+      - BENIGN: field-level + a SINGLE option of the same field (the
+        groups-of-one convention -- a standalone checkbox restating its widget
+        in both places). This one alone must stay unflagged.
 
-    # widget -> {owner field id: label}. Same owner claiming twice collapses.
-    owners: dict[str, dict[str, str]] = {}
+    An option dict carrying its own `id` is yielded by _iter_fields as a field in
+    its own right; its claim belongs to its PARENT, so it is excluded by object
+    IDENTITY. Excluding by id STRING would drop a genuine top-level field whose
+    id merely collides with some option's id elsewhere in the schema (option ids
+    are short generic slugs -- `yes`, `no`, `other`), silently rendering that
+    field's widget as a false coverage gap.
+    """
+    # Collect the option dicts FIRST: the walk order is not guaranteed to reach a
+    # parent before its option, so this cannot be unwound after the fact.
+    option_dict_ids: set[int] = set()
     for f in _iter_fields(schema):
-        fid = f.get("id")
-        if not isinstance(fid, str) or fid in option_ids:
-            continue  # an option is claimed BY its parent field, not by itself
-        label = _label_for(f, mode)
-        claim = f.get("pdf_field_name")
-        if isinstance(claim, str) and claim:
-            owners.setdefault(claim, {}).setdefault(fid, label)
         options = f.get("options")
         if not isinstance(options, list):
             continue
         for o in options:
+            if isinstance(o, dict):
+                option_dict_ids.add(id(o))
+
+    # widget -> {(owner field id, kind): label}. `kind` is "field" for a
+    # field-level claim and the option's own value for an option-level one, so a
+    # field + one option collapses to two entries under one owner (benign, see
+    # below) while two options land as two distinct kinds (an ERROR shape).
+    claimants: dict[str, dict[tuple[str, str], str]] = {}
+    for f in _iter_fields(schema):
+        fid = f.get("id")
+        if not isinstance(fid, str) or id(f) in option_dict_ids:
+            continue  # an option is claimed BY its parent field, not by itself
+        label = _label_for(f, mode)
+        claim = f.get("pdf_field_name")
+        if isinstance(claim, str) and claim:
+            claimants.setdefault(claim, {}).setdefault((fid, "field"), label)
+        options = f.get("options")
+        if not isinstance(options, list):
+            continue
+        for idx, o in enumerate(options):
             if not isinstance(o, dict):
                 continue
             oc = o.get("pdf_field_name")
@@ -131,10 +145,23 @@ def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
                 continue
             val = o.get("value")
             suffix = f"={val}" if isinstance(val, (str, int)) else ""
-            # The option's claim belongs to its PARENT field. An option-level
-            # label is the more specific one, so it wins the slot.
-            owners.setdefault(oc, {})[fid] = f"{label}{suffix}"
-    return {name: list(by_owner.values()) for name, by_owner in owners.items()}
+            kind = str(val) if isinstance(val, (str, int)) else f"#{idx}"
+            claimants.setdefault(oc, {})[(fid, kind)] = f"{label}{suffix}"
+
+    out: dict[str, list[str]] = {}
+    for name, by_claimant in claimants.items():
+        owners = {fid for fid, _ in by_claimant}
+        option_kinds = [k for _, k in by_claimant if k != "field"]
+        if len(owners) > 1 or len(option_kinds) > 1:
+            # A real multiclaim: surface every claimant so the collision shows.
+            out[name] = list(by_claimant.values())
+        else:
+            # One owner, at most one option -> single claim OR the benign
+            # groups-of-one pair. Prefer the option-level label: it is the more
+            # specific of the two and names the value that ticks this widget.
+            option_labels = [v for (_, k), v in by_claimant.items() if k != "field"]
+            out[name] = [option_labels[0]] if option_labels else list(by_claimant.values())
+    return out
 
 
 def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
@@ -204,13 +231,20 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
 
     pngs: list[str] = []
     if png_dir:
-        os.makedirs(png_dir, exist_ok=True)
-        zoom = _PNG_DPI / 72.0
-        for pno, page in enumerate(doc):
-            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-            p = os.path.join(png_dir, f"page{pno + 1}.png")
-            pix.save(p)
-            pngs.append(p)
+        # Guarded like every other IO path: makedirs raises FileExistsError when
+        # png_dir names an existing FILE, and pix.save can fail per page. Either
+        # would otherwise traceback AFTER the review PDF was already written.
+        try:
+            os.makedirs(png_dir, exist_ok=True)
+            zoom = _PNG_DPI / 72.0
+            for pno, page in enumerate(doc):
+                pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+                p = os.path.join(png_dir, f"page{pno + 1}.png")
+                pix.save(p)
+                pngs.append(p)
+        except OSError as exc:
+            doc.close()
+            return {"error": f"cannot write PNGs to {png_dir!r}: {exc}"}
 
     doc.close()
     return {"drawn": drawn, "unclaimed": unclaimed,

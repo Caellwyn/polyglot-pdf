@@ -176,6 +176,21 @@ def test_an_unreadable_pdf_is_a_usage_error_not_a_traceback(tmp_path, capsys):
     assert rc == 2, "a missing PDF must exit 2, not raise or collide with rc 1"
 
 
+@needs_f1040
+def test_an_unwritable_json_path_exits_two_without_printing_ok(tmp_path, capsys):
+    """The --json write is the third IO path and was unguarded: it raised
+    FileNotFoundError AFTER render() had already printed its OK line, and
+    Python's rc=1 collided with 'mismatches found'."""
+    bad = tmp_path / "no-such-dir" / "deep" / "out.json"
+    rc = clb.main(["--schema", str(_F1040_SCHEMA), "--pdf", str(_F1040_PDF),
+                   "--json", str(bad)])
+    captured = capsys.readouterr()
+    assert rc == 2, "an unwritable --json must exit 2, not 1"
+    assert "OK:" not in captured.out
+    assert "MISMATCH" not in captured.out, \
+        "the report must not print before a failed write"
+
+
 def test_a_verified_clean_form_says_so():
     result = {"findings": [], "checked": 12, "markers": 30}
     text = clb.render(result)

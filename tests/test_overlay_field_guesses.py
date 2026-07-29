@@ -86,6 +86,37 @@ def test_groups_of_one_is_not_a_multiclaim():
     assert ov._claims(schema, "spoken") == {"w9": ["Checkbox=yes"]}
 
 
+def test_two_options_of_one_field_ARE_a_multiclaim():
+    """schema_lint._check_dump_claims raises dump-widget-multiclaim for this too
+    -- see backend/tests/test_schema_lint.py::test_dump_multiclaim_by_two_options
+    _of_one_field, which calls it 'the shipped-f1040 class of bug' (selecting one
+    option would tick both widgets). Keying on OWNER ALONE collapsed these into
+    one entry and blinded the overlay to a live, separately-tested defect."""
+    schema = {"fields": [{
+        "id": "g", "spoken_name": "G", "options": [
+            {"value": "x", "pdf_field_name": "W1"},
+            {"value": "y", "pdf_field_name": "W1"},
+        ],
+    }]}
+    assert ov._claims(schema, "spoken") == {"W1": ["G=x", "G=y"]}
+
+
+def test_a_field_id_colliding_with_some_options_id_is_not_dropped():
+    """The option-dict exclusion must key on object IDENTITY, not id string.
+    Option ids are short generic slugs (`yes`, `no`, `other`), so a string-based
+    exclusion silently dropped a genuine top-level field with a colliding id --
+    rendering its widget as a FALSE coverage gap (blue)."""
+    schema = {"fields": [
+        {"id": "yes", "spoken_name": "Consent", "pdf_field_name": "WREAL"},
+        {"id": "other", "spoken_name": "Other", "options": [
+            {"id": "yes", "value": "y", "pdf_field_name": "WOPT"},
+        ]},
+    ]}
+    claims = ov._claims(schema, "spoken")
+    assert claims["WREAL"] == ["Consent"], "a real field vanished on an id collision"
+    assert claims["WOPT"] == ["Other=y"]
+
+
 def test_an_option_carrying_its_own_id_is_not_a_second_owner():
     """_iter_fields yields ANY dict with a string id, so an option with an `id`
     is also yielded as a field. Its claim belongs to the parent field -- counting
@@ -197,8 +228,28 @@ def test_an_unreadable_pdf_is_a_usage_error_not_a_traceback(tmp_path, capsys):
 
 
 @needs_w7
-def test_an_unwritable_out_path_is_a_usage_error(tmp_path, capsys):
-    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+def test_an_unwritable_out_path_exits_two(tmp_path, capsys):
+    """Goes through main() so the rc==2 WIRING is pinned, not just annotate()'s
+    error dict -- the previous version asserted the dict only, so flipping
+    main()'s `return 2` to 0 would not have failed it."""
+    schema_path = tmp_path / "s.json"
+    schema_path.write_text(_W7_SCHEMA.read_text(encoding="utf-8"), encoding="utf-8")
     out = tmp_path / "no-such-dir" / "deep" / "o.pdf"  # parent does not exist
-    result = ov.annotate(schema, str(_W7_PDF), str(out), "spoken")
-    assert "error" in result
+    rc = ov.main(["--schema", str(schema_path), "--pdf", str(_W7_PDF),
+                  "--out", str(out)])
+    capsys.readouterr()
+    assert rc == 2
+
+
+@needs_w7
+def test_an_unwritable_png_dir_exits_two(tmp_path, capsys):
+    """--png-dir runs AFTER the review PDF is saved; a failure there must still
+    exit 2 rather than traceback on a half-completed run."""
+    schema_path = tmp_path / "s.json"
+    schema_path.write_text(_W7_SCHEMA.read_text(encoding="utf-8"), encoding="utf-8")
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("i am a file", encoding="utf-8")  # makedirs must fail
+    rc = ov.main(["--schema", str(schema_path), "--pdf", str(_W7_PDF),
+                  "--out", str(tmp_path / "o.pdf"), "--png-dir", str(blocker)])
+    capsys.readouterr()
+    assert rc == 2
