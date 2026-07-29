@@ -54,32 +54,58 @@ export function getReview(field: FormField): FieldReview {
 
 /**
  * Set (or clear) a field's review status, returning a NEW field. Writing
- * 'unreviewed' with no note drops the _review key entirely so a field an editor
- * reset to neutral serializes clean (no dangling {status:'unreviewed'}).
+ * 'unreviewed' with no note (and no guidance ack) drops the _review key
+ * entirely so a field an editor reset to neutral serializes clean (no
+ * dangling {status:'unreviewed'}).
+ *
+ * The guidance ack (bd anim) is PRESERVED across a status write: it is a
+ * separate assertion ("I read the guidance and it still fits the current
+ * content") that a status change neither confirms nor withdraws. Rebuilding
+ * _review without it silently un-acked a field on the ORDINARY flow -- tick
+ * the ack box, then mark reviewed_correct -- re-raising the amber gate with
+ * no visible cause (fresh-eyes, closeout round 2).
  */
 export function withReviewStatus(field: FormField, status: FieldReviewStatus): FormField {
   const note = field._review?.note;
-  if (status === 'unreviewed' && !note) {
+  const ack = field._review?.guidance_ack_sha1;
+  if (status === 'unreviewed' && !note && !ack) {
     const { _review, ...rest } = field;
     return rest;
   }
-  return { ...field, _review: { status, ...(note ? { note } : {}) } };
+  return {
+    ...field,
+    _review: {
+      status,
+      ...(note ? { note } : {}),
+      ...(ack ? { guidance_ack_sha1: ack } : {}),
+    },
+  };
 }
 
 /**
  * Set (or clear) a field's review note, returning a NEW field. A whitespace-only
  * note counts as empty (so it never lands as a "   " tooltip); an empty note on
- * an otherwise-neutral field drops the _review key so it serializes clean. The
- * note is stored AS TYPED (internal spacing preserved) once it has real content.
+ * an otherwise-neutral field (no status, no guidance ack) drops the _review key
+ * so it serializes clean. The note is stored AS TYPED (internal spacing
+ * preserved) once it has real content. The guidance ack survives a note edit
+ * for the same reason it survives a status write (see withReviewStatus).
  */
 export function withReviewNote(field: FormField, note: string): FormField {
   const status = getReview(field).status;
+  const ack = field._review?.guidance_ack_sha1;
   const hasContent = note.trim().length > 0;
-  if (status === 'unreviewed' && !hasContent) {
+  if (status === 'unreviewed' && !hasContent && !ack) {
     const { _review, ...rest } = field;
     return rest;
   }
-  return { ...field, _review: { status, ...(hasContent ? { note } : {}) } };
+  return {
+    ...field,
+    _review: {
+      status,
+      ...(hasContent ? { note } : {}),
+      ...(ack ? { guidance_ack_sha1: ack } : {}),
+    },
+  };
 }
 
 /**

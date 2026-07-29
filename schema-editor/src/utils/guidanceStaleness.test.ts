@@ -8,7 +8,9 @@ import {
   GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged,
   needsAckFieldIds, needsGuidanceAck, staleFieldIds,
 } from './guidanceStaleness';
-import { effectiveStatus, withGuidanceAck } from './reviewStatus';
+import {
+  effectiveStatus, withGuidanceAck, withReviewNote, withReviewStatus,
+} from './reviewStatus';
 import type { FormField } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
 
@@ -145,6 +147,36 @@ describe('staleFieldIds uses the centralized field_id (bd h76m.11)', () => {
   it('ignores a finding with a null field_id', () => {
     expect(staleFieldIds([{ severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
       path: 'p', message: 'm', field_id: null }]).size).toBe(0);
+  });
+});
+
+describe('the ack survives the other _review writers (fresh-eyes, closeout round 2)', () => {
+  // withReviewStatus / withReviewNote used to rebuild _review from scratch,
+  // silently DROPPING guidance_ack_sha1 on the ordinary flow: tick the ack
+  // box, then mark reviewed_correct (or type a note) -- the gate re-ambered
+  // with no visible cause. The fourth instance of the same conceptual bug
+  // (a layer not carrying the ack token when state moves through it).
+  it('a status change keeps the ack', () => {
+    const acked = withGuidanceAck(field(), BAKED, true);
+    const signed = withReviewStatus(acked, 'reviewed_correct');
+    expect(signed._review?.guidance_ack_sha1).toBe(BAKED);
+    expect(needsGuidanceAck(signed, staleFieldIds([staleFinding]), BAKED)).toBe(false);
+    // ...including a reset to unreviewed: withdrawing the sign-off does not
+    // withdraw the separate "the guidance still reads right" assertion.
+    expect(withReviewStatus(signed, 'unreviewed')._review?.guidance_ack_sha1)
+      .toBe(BAKED);
+  });
+
+  it('a note edit keeps the ack; clearing the note keeps it too', () => {
+    const acked = withGuidanceAck(field(), BAKED, true);
+    const noted = withReviewNote(acked, 'double-checked the booklet');
+    expect(noted._review?.guidance_ack_sha1).toBe(BAKED);
+    expect(withReviewNote(noted, '')._review?.guidance_ack_sha1).toBe(BAKED);
+  });
+
+  it('a neutral field with no ack still serializes clean (key dropped)', () => {
+    expect(withReviewStatus(field(), 'unreviewed')._review).toBeUndefined();
+    expect(withReviewNote(field(), '')._review).toBeUndefined();
   });
 });
 
