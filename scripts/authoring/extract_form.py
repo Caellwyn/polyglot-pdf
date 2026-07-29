@@ -63,14 +63,73 @@ def _has_usable_position(pos: object) -> bool:
     The LLM frequently emits a placeholder rect (all-zero, or missing
     width/height) that is truthy as a dict but useless for the editor's
     click-to-jump mapping. A genuine AcroForm widget always has positive width
-    and height, so we treat anything else as "no usable position" and let the
-    deterministic dump-rect back-fill replace it (bd 7a9.18)."""
+    and height, so we treat anything else as "no usable position" (bd 7a9.18).
+
+    NOTE this is NOT the test for "keep the model's rect": a deterministic
+    widget rect ALWAYS wins over a model-supplied one (bd polyglot-pdf-icyi),
+    so this only decides whether a MODEL rect is worth keeping when no widget
+    could be resolved at all. It deliberately does not validate `page` --
+    the fallback path normalizes an ordinal-base mismatch instead
+    (_normalize_model_page_base below).
+
+    ASCII only (CLAUDE.md scar #6)."""
     if not isinstance(pos, dict):
         return False
     try:
         return float(pos.get("width") or 0) > 0 and float(pos.get("height") or 0) > 0
     except (TypeError, ValueError):
         return False
+
+
+def _normalize_model_page_base(schema: dict, deterministic: object = None) -> int:
+    """Normalize MODEL-SUPPLIED pdf_position pages from 0-based to 1-based.
+
+    Schema pdf_position.page is ONE-BASED (the deterministic dump path converts
+    the 0-based widget page with an explicit +1, and the editor's PDFViewer
+    matches pages 1..numPages by exact equality -- a page of 0 paints nowhere).
+    A model handed a 0-based field digest may mirror that base back, which is an
+    ORDINAL COUNTING-SCHEME difference, not corrupt data (maintainer decision
+    2026-07-29, bd polyglot-pdf-icyi): the rect is right, the origin is off by
+    one. So if ANY surviving model-supplied page is 0, shift every one of them
+    up by 1 rather than discarding otherwise-good coordinates.
+
+    `deterministic` is the set of id()s of position dicts the dump back-fill
+    just wrote (_backfill_positions returns it as "deterministic_positions").
+    Those are already 1-based and must NOT be shifted -- a blanket shift would
+    push them off the document. Passing nothing treats every position as
+    model-supplied, which is the right default for a schema that never went
+    through the dump path. Identity, not a marker key, so nothing is written
+    into the position dicts themselves (an earlier marker-key version leaked
+    into every kit and test assertion). Returns the number of pages shifted.
+
+    This exists for the FUTURE non-AcroForm case (scanned/flat PDFs with no
+    widget rects to derive from). On AcroForms every field resolves a widget, so
+    nothing reaches here (bd polyglot-pdf-icyi verified 486/486 widgets across
+    all four real kits carry non-degenerate rects)."""
+    exempt = deterministic or frozenset()
+    model_positions: list[dict] = []
+    for field in schema.get("fields", []) or []:
+        if not isinstance(field, dict):
+            continue
+        for pos in (field.get("pdf_position"),
+                    *[o.get("pdf_position") for o in (field.get("options") or [])
+                      if isinstance(o, dict)]):
+            if not isinstance(pos, dict):
+                continue
+            if id(pos) in exempt:
+                continue  # deterministic rect: already 1-based, leave alone
+            model_positions.append(pos)
+
+    if not any(p.get("page") == 0 for p in model_positions):
+        return 0
+    shifted = 0
+    for pos in model_positions:
+        page = pos.get("page")
+        if isinstance(page, bool) or not isinstance(page, int):
+            continue  # non-integer page is a different defect; lint names it
+        pos["page"] = page + 1
+        shifted += 1
+    return shifted
 
 
 def _backfill_positions(schema: dict, dump_path: str) -> dict:
@@ -137,9 +196,18 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
             if r and name not in name_to_rect:
                 name_to_rect[name] = r
 
+    # id()s of every position dict written from a DUMP rect below. Returned so
+    # _normalize_model_page_base can skip them: they are already 1-based, and a
+    # blanket shift would push them off the document. Identity beats a marker
+    # key -- nothing is written into the position itself.
+    deterministic_positions: set = set()
+
     def rect_to_pos(r: dict) -> dict:
-        return {"page": int(r["page"]) + 1, "x": r["x"], "y": r["y"],
-                "width": r["width"], "height": r["height"]}
+        # The dump page is 0-based; schema pdf_position.page is 1-based.
+        pos = {"page": int(r["page"]) + 1, "x": r["x"], "y": r["y"],
+               "width": r["width"], "height": r["height"]}
+        deterministic_positions.add(id(pos))
+        return pos
 
     def resolve_widgets(claim: str) -> list[dict]:
         """The widget list for a schema-side pdf_field_name claim, suffix-aware."""
@@ -162,24 +230,37 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
         # positive width AND height, so a non-positive either means it needs the
         # deterministic dump rect.
         field_pfn = field.get("pdf_field_name")
-        if not _has_usable_position(field.get("pdf_position")):
-            # A field's position = the rect of its (first) pdf_field_name; for a
-            # consolidated options[] field, use the first option's widget.
-            pfn = field_pfn
-            if not pfn:
-                for o in (field.get("options") or []):
-                    if o.get("pdf_field_name"):
-                        pfn = o["pdf_field_name"]
-                        break
-            widgets = resolve_widgets(pfn) if pfn else []
-            rect = (widgets[0].get("rect") if widgets else None) or name_to_rect.get(pfn)
-            if rect:
-                field["pdf_position"] = rect_to_pos(rect)
-                fields_filled += 1
+        # A field's position = the rect of its (first) pdf_field_name; for a
+        # consolidated options[] field, use the first option's widget.
+        pfn = field_pfn
+        if not pfn:
+            for o in (field.get("options") or []):
+                if o.get("pdf_field_name"):
+                    pfn = o["pdf_field_name"]
+                    break
+        widgets = resolve_widgets(pfn) if pfn else []
+        rect = (widgets[0].get("rect") if widgets else None) or name_to_rect.get(pfn)
+        if rect:
+            # DETERMINISTIC RECT WINS, unconditionally (bd polyglot-pdf-icyi).
+            # This used to run only when the model's rect was missing or
+            # zero-size, which left a plausible-but-WRONG model rect in place:
+            # a fresh w7 extraction shipped 48 fields with page=0 (the model
+            # mirroring the 0-based digest), and every text overlay silently
+            # vanished from the editor preview -- only the 6 choice fields,
+            # whose rects came from here, drew. The model also rounds
+            # (469.2 -> 469), so even a "right" model rect is lossy. The PDF's
+            # own widget geometry is ground truth and free; asking a language
+            # model to transcribe five numbers per field bought nothing but
+            # non-determinism.
+            field["pdf_position"] = rect_to_pos(rect)
+            fields_filled += 1
+        elif not _has_usable_position(field.get("pdf_position")):
+            # No widget resolved AND no usable model rect: drop a degenerate
+            # placeholder outright rather than shipping {x:0,y:0,w:0,h:0},
+            # which reads as a real position to every downstream consumer.
+            field.pop("pdf_position", None)
 
         for opt in (field.get("options") or []):
-            if _has_usable_position(opt.get("pdf_position")):
-                continue  # idempotent -- a usable option position is never re-derived
             opt_pfn = opt.get("pdf_field_name")
             on_value = opt.get("pdf_on_value")
             rect = None
@@ -214,9 +295,14 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
                 rect = match.get("rect") if match else None
 
             if rect:
+                # Deterministic option rect WINS too (bd polyglot-pdf-icyi) --
+                # same inversion as the field-level branch above.
                 opt["pdf_position"] = rect_to_pos(rect)
                 options_filled += 1
-            elif opt_pfn or (field_pfn and on_value):
+            elif not _has_usable_position(opt.get("pdf_position")):
+                opt.pop("pdf_position", None)  # never ship a zero-size placeholder
+
+            if not rect and (opt_pfn or (field_pfn and on_value)):
                 # Only a genuine attempt (a name or a shared-group hint to resolve)
                 # counts as unmatched -- an option with neither is simply not a
                 # PDF-backed option (e.g. a web-only choice) and is silently skipped.
@@ -231,10 +317,17 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
                     "reason": reason,
                 })
 
+    # The three long-standing keys are what callers and tests compare whole, so
+    # the deterministic-position identity set is normalized away HERE rather
+    # than widening the return shape: page-base normalization only ever needs to
+    # run immediately after this pass, and doing it inline keeps the two from
+    # being called out of order (bd polyglot-pdf-icyi).
+    normalized = _normalize_model_page_base(schema, deterministic_positions)
     return {
         "fields_filled": fields_filled,
         "options_filled": options_filled,
         "unmatched": unmatched,
+        "model_pages_normalized": normalized,
     }
 
 
@@ -1183,9 +1276,20 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
                                     plain=plain,
                                     group_candidates=group_candidates)
 
-        # 3. Deterministically back-fill pdf_position from the dump (the LLM is
-        #    flaky at coordinates; the dump has them keyed by exact widget name).
+        # 3. Deterministically SET pdf_position from the dump. The dump's widget
+        #    geometry is ground truth (keyed by exact widget name) and OVERWRITES
+        #    whatever the model emitted -- the model rounds coordinates and its
+        #    page base is non-deterministic (bd polyglot-pdf-icyi). A model rect
+        #    survives only for a field no widget resolves (the future
+        #    non-AcroForm case).
+        #    It also normalizes any SURVIVING model-supplied page from 0-based to
+        #    1-based (an ordinal counting difference, not corrupt data) -- a
+        #    no-op on AcroForms, where every field resolves a widget.
         positions_filled = _backfill_positions(schema, dump_path)
+        if positions_filled.get("model_pages_normalized"):
+            print(f"  [positions] normalized "
+                  f"{positions_filled['model_pages_normalized']} model-supplied "
+                  f"page number(s) from 0-based to 1-based")
 
         # 3a. Deterministically populate help.instructions from each field's /TU
         #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs
