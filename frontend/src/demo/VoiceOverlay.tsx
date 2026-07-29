@@ -29,6 +29,9 @@ import { getOverlayStrings, formatFieldsCompleted } from './overlayTranslations'
 import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
+import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
+import { deriveSolState } from '../shared/solState'
+import { useGeminiSpeaking } from '../shared/useGeminiSpeaking'
 
 interface VoiceOverlayProps {
 	schema: FormSchema
@@ -1441,6 +1444,27 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const isReady = status.toLowerCase() === 'ready'
 	const fieldCount = schema.fields.length
 	const requiredCount = schema.fields.filter(f => f.validation?.required).length
+	// Sol, the avatar + status indicator (bd polyglot-pdf-2p4y). It replaces the
+	// status icon and subsumes the ear/meter chip: one wordless object that says
+	// whose turn it is, legible in every spoken language we ship. The mapping is a
+	// pure function in ../shared/solState so both overlays share one precedence
+	// rule (paused > offline > speaking > thinking > listening > idle).
+	// Resolved ONCE per render, not inside the hook's argument: this component
+	// re-renders ~60x/sec while the mic meter moves, and getAudioManager is a hot
+	// accessor (bd polyglot-pdf-2p4y).
+	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
+	const solSpeaking = useGeminiSpeaking(solAudioManager)
+	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
+	// Sol reads the AI's OUTPUT level for its speaking halo (the mic is silent
+	// while the assistant talks). Reads the ref rather than closing over the
+	// manager, since it is recreated across reconnects -- but caches the lookup
+	// so the per-frame path is a property read, not a manager fetch.
+	const solAudioManagerRef = useRef(solAudioManager)
+	solAudioManagerRef.current = solAudioManager
+	const getSolOutputEnergy = React.useCallback(
+		() => solAudioManagerRef.current?.getOutputEnergy?.() ?? 0,
+		[]
+	)
 
 	// Debug logging removed - was causing 100+ logs per second in development mode
 
@@ -1464,9 +1488,18 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				<div className="vff-panel-body">
 					{/* Status */}
 					<div className="vff-status">
-						<span className="vff-status-icon">
-							{isConnected ? '🟢' : status === 'idle_timeout' ? '⏱️' : '⚪'}
-						</span>
+						{/* Sol (bd polyglot-pdf-2p4y) replaces the emoji status icon. The
+						    traffic-light emoji reported connectedness -- a fact about our
+						    socket. Sol reports whose turn it is, which is the only thing
+						    the user is actually asking, and does it with no letters in it
+						    so it reads the same in all 17+ spoken languages. */}
+						<Sol
+							state={solState}
+							energy={micEnergy}
+							getOutputEnergy={getSolOutputEnergy}
+							size={40}
+							className="vff-sol"
+						/>
 						<span className="vff-status-text">
 							{status === 'idle_timeout' ? 'Disconnected due to inactivity' : status}
 						</span>
@@ -1822,9 +1855,11 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 					box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
 				}
 
-				.vff-status-icon {
-					font-size: 20px;
-				}
+				${SOL_CSS}
+				/* Sol in the desktop status row (bd polyglot-pdf-2p4y). Placement rules
+				   live in shared/Sol.tsx so the dev preview renders the real treatment
+				   rather than a drifting hand-copy. */
+				${SOL_PLACEMENT_CSS}
 
 				.vff-status-text {
 					font-size: 14px;

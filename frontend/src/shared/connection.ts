@@ -962,7 +962,15 @@ export function createConnectionManager(
 		},
 
 		getAudioManager() {
-			console.log('[ConnectionManager] getAudioManager called, audioManager:', audioManager, 'isNull:', audioManager === null)
+			// NO logging here (bd polyglot-pdf-2p4y). This is a per-render accessor:
+			// both overlays call it once per render, and they re-render ~60x/sec
+			// while the mic-energy meter moves. Logging a retained manager object at
+			// that rate costs real memory + main-thread time on the phones this
+			// overlay targets, and buries every diagnostic log around it -- the same
+			// failure the "Debug logging removed - was causing 100+ logs per second"
+			// note in VoiceOverlay.tsx records. Nullness is observable via callers.
+			// (Sol's per-frame loop does NOT reach here: the overlays cache the
+			// manager in a ref, so getOutputEnergy is a plain property read.)
 			return audioManager
 		},
 

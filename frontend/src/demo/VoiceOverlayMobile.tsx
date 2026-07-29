@@ -21,6 +21,9 @@ import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTim
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
+import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
+import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
+import { useGeminiSpeaking } from '../shared/useGeminiSpeaking'
 
 interface VoiceOverlayMobileProps {
 	schema: FormSchema
@@ -1106,11 +1109,33 @@ const isNotListeningTransient = status.toLowerCase() === 'connecting' ||
 	status.toLowerCase() === 'switching_section'
 const showEar = isListening || isNotListeningTransient
 const isPausedState = status.toLowerCase() === 'paused'
-const isWarming = status.toLowerCase().includes('warming')
-const isReady = status.toLowerCase() === 'ready'
 const fieldCount = schema.fields.length
-const requiredCount = schema.fields.filter(f => f.validation?.required).length	// Status color
-	const statusColor = isConnected ? '#10b981' : isPausedState ? '#f59e0b' : isWarming ? '#f59e0b' : isReady ? '#3b82f6' : '#6b7280'
+const requiredCount = schema.fields.filter(f => f.validation?.required).length
+	// `statusColor` (and the isWarming / isReady flags that only fed it) are gone
+	// with the coloured FAB ring + status dot Sol replaced (bd polyglot-pdf-2p4y):
+	// Sol reports those states as pictures, not as a colour legend.
+	// Sol, the avatar + status indicator (bd polyglot-pdf-2p4y). On mobile Sol IS
+	// the FAB: it replaces the pulsing blue ring, which pulsed at a constant 2s
+	// regardless of what the session was doing, so it conveyed "the widget is
+	// alive" and nothing else. Sol pulses only when there is something to say.
+	// Same pure mapping as desktop (../shared/solState).
+	// Resolved ONCE per render, not inside the hook's argument: this component
+	// re-renders ~60x/sec while the mic meter moves, and getAudioManager is a hot
+	// accessor. Mobile mounts TWO Sols (FAB + panel), so the per-frame path
+	// matters twice as much here (bd polyglot-pdf-2p4y).
+	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
+	const solSpeaking = useGeminiSpeaking(solAudioManager)
+	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
+	// Sol reads the AI's OUTPUT level for its speaking halo (the mic is silent
+	// while the assistant talks). Reads the ref rather than closing over the
+	// manager, since it is recreated across reconnects -- but caches the lookup
+	// so the per-frame path is a property read, not a manager fetch.
+	const solAudioManagerRef = useRef(solAudioManager)
+	solAudioManagerRef.current = solAudioManager
+	const getSolOutputEnergy = React.useCallback(
+		() => solAudioManagerRef.current?.getOutputEnergy?.() ?? 0,
+		[]
+	)
 
 	return (
 		<>
@@ -1138,23 +1163,74 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 				onCancel={() => setReconnectModalDismissed(true)}
 			/>
 			{/* Main FAB */}
-			<div className="vff-fab" onClick={() => setIsExpanded(!isExpanded)}>
-				<div className="vff-fab-pulse" style={{ borderColor: statusColor }}></div>
+			{/* The FAB is Sol (bd polyglot-pdf-2p4y). It replaces the pulsing blue
+			    ring + coloured mic-emoji puck: that ring pulsed on a fixed 2s loop
+			    whatever the session was doing, so it only ever said "this widget is
+			    alive", and the colour it pulsed in was a legend the user had to
+			    learn. Sol animates only when there is something to report, and its
+			    states are pictures rather than colour codes -- which matters on the
+			    one surface where the panel is collapsed by default and the avatar is
+			    the ONLY status the user can see. */}
+			<div
+				className="vff-fab"
+				onClick={() => setIsExpanded(!isExpanded)}
+				// role="button" + tabIndex make this reachable; a focusable control
+				// that ignores Enter/Space is a keyboard trap, so handle them too.
+				onKeyDown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault()
+						setIsExpanded(!isExpanded)
+					}
+				}}
+				role="button"
+				tabIndex={0}
+				aria-expanded={isExpanded}
+				// STATIC name. Sol's state must NOT live in the accessible name:
+				// screen readers re-announce the name of the FOCUSED element when it
+				// changes, so a keyboard user parked on the FAB would get the label
+				// re-read on every turn transition (idle -> listening -> thinking ->
+				// speaking), talking over the assistant. The changing state goes to
+				// the polite live region below instead, which announces without
+				// stealing the button's name.
+				aria-label={`${isExpanded ? 'Close' : 'Open'} voice controls`}
+			>
 				{/* Mic-activity badge (bd polyglot-pdf-8v53): green dot while audio is
 				    actually reaching the backend. Gated on `isListening && micSending`
 				    (the same live signals as the panel's listening indicator) so it
 				    works in native VAD mode -- the old `vad.userSpeaking && !nativeVad`
 				    gate needed client Silero VAD, which never runs in the deployed
-				    native-VAD default, leaving the dot permanently dark. */}
+				    native-VAD default, leaving the dot permanently dark. Kept on top of
+				    Sol: it reports the mic SEND GATE specifically, which Sol's
+				    listening state cannot distinguish from "mic alive but gated". */}
 				{isListening && micSending && (
 					<div className="vff-fab-vad-badge">
 						<div className="vff-fab-vad-dot"></div>
 					</div>
 				)}
-				<div className="vff-fab-icon" style={{ background: statusColor }}>
-					🎤
-				</div>
+				<Sol
+					state={solState}
+					energy={micEnergy}
+					getOutputEnergy={getSolOutputEnergy}
+					size={56}
+					className="vff-fab-sol"
+					decorative
+				/>
 			</div>
+
+			{/* Sol carries the status VISUALLY and is aria-hidden; this is its
+			    non-visual equivalent, and it MUST be a SIBLING of the FAB, never a
+			    child of it. `role="button"` is defined with Children Presentational:
+			    True, so user agents strip the semantics of every descendant -- a live
+			    region nested inside the button is silently dropped from the
+			    accessibility tree and announces nothing at all. Being outside also
+			    keeps it off the button's accessible name, which is the point: the
+			    name stays static so a focused FAB is not re-read on every turn, while
+			    `role="status"` (implicitly polite -- it never interrupts the
+			    assistant) announces the state changes. While the panel is collapsed
+			    this is the ONLY status a screen-reader user has. */}
+			<span className="vff-sr-only" role="status">
+				{SOL_STATE_LABEL[solState]}
+			</span>
 
 			{/* Expanded Panel */}
 			{isExpanded && (
@@ -1167,9 +1243,16 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					<div className="vff-panel-body">
 						{/* Status */}
 						<div className="vff-status-compact">
-							<div className="vff-status-dot" style={{
-								background: status === 'idle_timeout' ? '#6b7280' : statusColor
-							}}></div>
+							{/* Sol again in the expanded panel (bd polyglot-pdf-2p4y),
+							    replacing the coloured status dot. Small, so it runs at a
+							    bolder motion scale -- see the --k note in shared/Sol.tsx. */}
+							<Sol
+								state={solState}
+								energy={micEnergy}
+								getOutputEnergy={getSolOutputEnergy}
+								size={34}
+								className="vff-sol"
+							/>
 							<span className="vff-status-text">
 								{status === 'idle_timeout' ? 'Idle timeout' : status}
 							</span>
@@ -1333,41 +1416,12 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
 				}
 
-				.vff-fab-pulse {
-					position: absolute;
-					width: 100%;
-					height: 100%;
-					border-radius: 50%;
-					border: 3px solid;
-					animation: vff-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-				}
-
-				@keyframes vff-pulse {
-					0%, 100% {
-						opacity: 1;
-						transform: scale(1);
-					}
-					50% {
-						opacity: 0.3;
-						transform: scale(1.1);
-					}
-				}
-
-				.vff-fab-icon {
-					position: absolute;
-					width: 100%;
-					height: 100%;
-					border-radius: 50%;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					font-size: 24px;
-					transition: transform 0.2s;
-				}
-
-				.vff-fab:active .vff-fab-icon {
-					transform: scale(0.9);
-				}
+				${SOL_CSS}
+				/* Sol as the FAB (bd polyglot-pdf-2p4y). The old .vff-fab-pulse ring +
+				   .vff-fab-icon puck are gone; Sol is the whole control now. The
+				   placement rules live in shared/Sol.tsx so the dev preview renders
+				   the real treatment rather than a drifting hand-copy. */
+				${SOL_PLACEMENT_CSS}
 
 				/* VAD Speech Detection Badge - Small green dot in top-right */
 				.vff-fab-vad-badge {
@@ -1515,11 +1569,11 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length	/
 					overflow: hidden;
 				}
 
-				.vff-status-dot {
-					width: 8px;
-					height: 8px;
-					border-radius: 50%;
-					flex-shrink: 0;
+				/* Sol in the compact status row (bd polyglot-pdf-2p4y), replacing the
+				   8px .vff-status-dot. Tightens the shared .vff-sol margins a little
+				   further: this grid cell is narrower than the desktop panel's row. */
+				.vff-sol {
+					margin: -5px -3px -5px -1px;
 				}
 
 				.vff-status-text {

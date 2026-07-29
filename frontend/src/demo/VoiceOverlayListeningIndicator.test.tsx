@@ -351,11 +351,16 @@ describe('Mobile FAB mic-activity badge (bd polyglot-pdf-8v53)', () => {
 })
 
 describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxng)', () => {
-  // The mobile overlay's `isConnected` (status dot / FAB color / thinking
-  // indicator) must match the desktop definition: still "live" during
-  // `switching_section` and `reconnecting`. The LISTENING indicator deliberately
-  // stays connected-only in both overlays (Codex PR #278) -- covered by the
-  // 1dvp block above, NOT widened here.
+  // The mobile overlay must keep reading as a LIVE session during
+  // `switching_section` and `reconnecting`, and as NOT-live when disconnected.
+  //
+  // Sol replaced the coloured status dot (bd polyglot-pdf-2p4y), so the
+  // invariant is now asserted on Sol's `data-state` rather than on a green
+  // background: the transient states must NOT fall through to `offline`, which
+  // is the state reserved for a session that is genuinely gone. `disconnected`
+  // must. This is the same bxng guarantee, pinned on the element that now
+  // carries it -- the LISTENING indicator deliberately stays connected-only in
+  // both overlays (Codex PR #278), covered by the 1dvp block above.
   beforeEach(() => {
     vi.useFakeTimers()
     stubEnv()
@@ -367,8 +372,6 @@ describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxn
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
-
-  const GREEN = 'rgb(16, 185, 129)'  // #10b981, the connected statusColor
 
   function renderExpanded(status: string, thinking = false) {
     const utils = render(
@@ -385,25 +388,106 @@ describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxn
     return utils
   }
 
-  const statusDot = (c: HTMLElement) => c.querySelector('.vff-status-dot') as HTMLElement
+  // The panel's Sol (the FAB carries one too, so scope to the panel).
+  const panelSol = (c: HTMLElement) =>
+    c.querySelector('.vff-panel-mobile [data-testid="sol-avatar"]') as HTMLElement
 
-  it('status dot stays green during switching_section', () => {
+  it('Sol reads as a live-but-transient session during switching_section', () => {
     const { container } = renderExpanded('switching_section')
-    expect(statusDot(container).style.background).toBe(GREEN)
+    const s = panelSol(container).getAttribute('data-state')
+    expect(s).toBe('connecting')
+    // The invariant, stated both ways: not dead, and not cold either.
+    expect(s).not.toBe('offline')
+    expect(s).not.toBe('idle')
   })
 
-  it('status dot stays green while reconnecting', () => {
+  it('Sol reads as a live-but-transient session while reconnecting', () => {
     const { container } = renderExpanded('reconnecting')
-    expect(statusDot(container).style.background).toBe(GREEN)
+    const s = panelSol(container).getAttribute('data-state')
+    expect(s).toBe('connecting')
+    expect(s).not.toBe('offline')
+    expect(s).not.toBe('idle')
   })
 
-  it('status dot is NOT green when disconnected', () => {
+  it('Sol reads as offline when disconnected', () => {
     const { container } = renderExpanded('disconnected')
-    expect(statusDot(container).style.background).not.toBe(GREEN)
+    expect(panelSol(container).getAttribute('data-state')).toBe('offline')
+  })
+
+  it('the transient and disconnected renders are visually different states', () => {
+    // Guards the actual bxng regression: these two must never collapse.
+    const a = renderExpanded('reconnecting')
+    const transient = panelSol(a.container).getAttribute('data-state')
+    cleanup()
+    const b = renderExpanded('disconnected')
+    const dead = panelSol(b.container).getAttribute('data-state')
+    expect(transient).not.toBe(dead)
   })
 
   it('thinking indicator survives a section switch', () => {
     const { container } = renderExpanded('switching_section', true)
     expect(container.querySelector('.vff-thinking-indicator')).toBeTruthy()
+  })
+})
+
+describe('Mobile FAB status is announced without hijacking the button (bd polyglot-pdf-2p4y)', () => {
+  // Sol is a picture, so screen readers need a text equivalent. Two ways to get
+  // this wrong, and the first attempt hit the second one:
+  //   1. state in the button's aria-label -> the FOCUSED control is re-announced
+  //      on every turn transition, talking over the assistant;
+  //   2. live region nested INSIDE role="button" -> `Children Presentational:
+  //      True` strips descendant semantics, so it announces nothing at all.
+  // The live region must therefore be a SIBLING of the FAB, and the button's
+  // name must be static. While the panel is collapsed this is the only status a
+  // screen-reader user has.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    stubEnv()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  function renderFabOnly(status: string) {
+    return render(
+      <VoiceOverlayMobile
+        schema={MINIMAL_SCHEMA}
+        connectionManager={makeMockManager(status)}
+        status={status}
+        initialLanguage="English"
+      />
+    )
+  }
+
+  it('the FAB name is STATIC -- it does not carry the changing Sol state', () => {
+    const a = renderFabOnly('connected')
+    const nameConnected = a.container.querySelector('.vff-fab')!.getAttribute('aria-label')
+    cleanup()
+    const b = renderFabOnly('disconnected')
+    const nameOffline = b.container.querySelector('.vff-fab')!.getAttribute('aria-label')
+    // Same name in two very different session states -> nothing to re-announce.
+    expect(nameConnected).toBe(nameOffline)
+    expect(nameConnected).not.toMatch(/listening|speaking|connect(ing|ed)|paused/i)
+  })
+
+  it('the live region is a SIBLING of the FAB, not a descendant of the button', () => {
+    const { container } = renderFabOnly('connected')
+    const live = container.querySelector('[role="status"].vff-sr-only')
+    expect(live).toBeTruthy()
+    const fab = container.querySelector('.vff-fab')!
+    // The whole point: inside role="button" it would be stripped from the
+    // accessibility tree and announce nothing.
+    expect(fab.contains(live!)).toBe(false)
+    expect(live!.closest('[role="button"]')).toBeNull()
+  })
+
+  it('the live region carries the current state as text', () => {
+    const { container } = renderFabOnly('disconnected')
+    const live = container.querySelector('[role="status"].vff-sr-only')
+    expect(live!.textContent).toBe('Not connected')
   })
 })
