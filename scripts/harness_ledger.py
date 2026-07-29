@@ -109,10 +109,13 @@ VALID_COST_CATEGORIES = ("production", "audit")
 # the claude-api skill (shared/models.md), 2026-07-28. Update here if prices
 # drift; re-verify via /claude-api.
 #
-# Sonnet 5 carries an INTRODUCTORY rate of $2.00/$10.00 through 2026-08-31; the
-# standard $3.00/$15.00 is priced here deliberately, so the table stays correct
-# once the promo lapses rather than silently under-reporting from 2026-09-01.
-# This over-reports Sonnet-5 cost slightly until then.
+# Sonnet 5 is priced at the STANDARD $3.00/$15.00, and that is what billing
+# actually charges -- VERIFIED against live `claude -p` calls on 2026-07-28,
+# which reconcile to an implied input rate of $3.0000/MTok to four decimals.
+# The docs advertise an introductory $2.00/$10.00 through 2026-08-31, but it is
+# NOT being applied to this account, so do NOT "correct" this row down to the
+# intro rate: that would introduce a ~33% under-report, the same silent
+# under-costing this table exists to prevent. Re-probe before changing it.
 MODEL_PRICES_PER_MTOK = {
     "claude-opus-5": {"input": 5.00, "output": 25.00},
     "claude-sonnet-5": {"input": 3.00, "output": 15.00},

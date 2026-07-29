@@ -687,6 +687,18 @@ class TestCost:
         assert ledger._price_for_model("claude-sonnet-4-6")["input"] == 3.00
         assert ledger._price_for_model("claude-fable-5")["input"] == 10.00
 
+    def test_5_series_point_release_inherits_the_5_rate(self):
+        # DOCUMENTS a known limitation rather than asserting desired behavior.
+        # The 5-series keys are bare ("claude-opus-5"), so unlike the 4-series
+        # keys they ARE a prefix of a future point release: a hypothetical
+        # claude-opus-5-1 resolves to Opus 5's rate instead of landing in
+        # unpriced_models. If 5.1 ships at a DIFFERENT price, this silently
+        # reports a wrong number rather than a flagged zero -- add an explicit
+        # row for it at that point. This test exists so that change is a
+        # deliberate edit here, not a surprise in a telemetry row.
+        assert ledger._price_for_model("claude-opus-5-1")["input"] == 5.00
+        assert ledger._price_for_model("claude-sonnet-5-2")["input"] == 3.00
+
     def test_unknown_model_is_zero_and_flagged_not_crash(self):
         c = ledger.compute_cost(
             {"orchestrator": {"claude-mystery-9": {"output_tokens": 1_000_000}}}

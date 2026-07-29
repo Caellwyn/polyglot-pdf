@@ -37,13 +37,25 @@ Rates added (verified against the `/claude-api` skill's model table, 2026-07-28)
 | `claude-opus-5` | 5.00 | 25.00 |
 | `claude-sonnet-5` | 3.00 | 15.00 |
 
-**Sonnet 5 intro-rate decision.** Sonnet 5 carries an introductory
-$2.00/$10.00 through 2026-08-31. The table prices the **standard** $3.00/$15.00
-deliberately: a cost table outlives a promo, and the failure modes are
-asymmetric -- pricing the intro rate would silently under-report from
-2026-09-01 (the same class of bug this bead exists to fix), whereas pricing the
-standard rate over-reports slightly for about a month and then becomes correct
-on its own. The tradeoff is recorded in a comment above the table.
+**Sonnet 5 intro-rate decision, and the correction that followed.** The docs
+advertise an introductory $2.00/$10.00 for Sonnet 5 through 2026-08-31. The
+table prices the **standard** $3.00/$15.00.
+
+The first draft justified that as a deliberate conservative over-statement -- a
+cost table outlives a promo, so pricing the intro rate would silently
+under-report from 2026-09-01. **That reasoning was wrong, and the second
+independent Opus review caught it.** It probed live billing and reconciled a
+real `claude -p --model claude-sonnet-5` call to an implied input rate of
+**$3.0000/MTok exactly** -- the standard rate, charged today, inside the claimed
+promo window. Re-probed independently before acting on it: same result to four
+decimals. The intro rate is simply not being applied to this account.
+
+So the shipped number was right for the wrong reason -- and the wrong reason was
+the dangerous half. A comment claiming the row is deliberately over-stated until
+2026-08-31 invites the next maintainer to "correct" it down to $2/$10, which
+would create a ~33% under-report: exactly the silent under-costing this bead
+exists to kill. The comment now records the measured rate and tells the reader
+to re-probe rather than trust the published promo.
 
 ## What else moved
 
@@ -118,3 +130,13 @@ row is ambiguous about which judge produced it.
 - **A promo rate is the wrong default for a durable table.** Pick the rate that
   is correct after the promo lapses; a table that silently goes stale on a
   future date is the same failure mode as an unpriced model.
+- **Price from the bill, not from the price list.** The published rate and the
+  rate actually charged are different facts. Here the docs advertised an active
+  introductory rate that billing was not applying -- a live `claude -p` call
+  reports `total_cost_usd` alongside its token counts, so the real rate can be
+  solved for in one call. Do that before writing a rate into a cost table.
+- **A right answer with a wrong justification is still a defect.** The Sonnet-5
+  row was correct while the comment above it was false, and the comment was the
+  part a future maintainer would act on -- it argued for changing the row to a
+  value that would have under-reported by ~33%. Review the reasoning attached to
+  a constant, not just the constant.
