@@ -322,7 +322,9 @@ const FieldReviewEditor: React.FC<{
         </select>
         <p className="text-xs text-gray-500 mt-1">
           "Reviewed - correct" marks a field done even if the tool still flags it
-          amber. A real error (red) always stays red until fixed.
+          amber -- unless its guidance changed and awaits the "still correct"
+          confirmation under Instructions. A real error (red) always stays red
+          until fixed.
         </p>
         {onIgnoreField && ignoreBlocked && (
           <p className="text-xs text-gray-500 mt-1">{ignoreBlocked}</p>
@@ -924,7 +926,13 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             // actually reads (bd anim fresh-eyes round 3).
             const identity = currentIdentity(lintFindings, field.id);
             const acked = isAcknowledged(field, identity);
-            const stale = !!staleFinding && !acked;
+            // No parseable identity in the finding path -> fail OPEN like
+            // needsGuidanceAck: rendering the gate would offer a checkbox
+            // that can record nothing (withGuidanceAck without an identity
+            // is a no-op) -- a dead control on a permanently amber field
+            // (Opus round). Unreachable from today's contract-pinned backend.
+            const gated = !!staleFinding && identity !== undefined;
+            const stale = gated && !acked;
             return (
               <div>
                 <label className="label">Instructions</label>
@@ -941,7 +949,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                   }
                   placeholder="Instructions for filling out this field..."
                 />
-                {staleFinding && (
+                {gated && (
                   <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 p-2">
                     <p className="text-xs text-amber-900">
                       This field's name, spoken name or options changed

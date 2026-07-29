@@ -109,6 +109,13 @@ export function needsGuidanceAck(
   current?: string,
 ): boolean {
   if (!staleIds.has(field.id)) return false;
+  // A flagged field with NO parseable current identity fails OPEN: there is
+  // nothing to pin an ack to (withGuidanceAck without an identity is a
+  // no-op), so gating here would deadlock the field behind a checkbox that
+  // cannot record anything (Opus round). Unreachable from today's backend --
+  // the path format is contract-pinned -- and consistent with
+  // isAcknowledged's documented mercy for the same condition.
+  if (current === undefined) return false;
   return !isAcknowledged(field, current);
 }
 

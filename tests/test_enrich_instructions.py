@@ -180,7 +180,12 @@ def test_write_kit_no_clobber_and_provenance(tmp_path):
         "Hand-authored by the maintainer."
     prov = saved["_bakeoff"]["authoring"]["instructions_enrich"]["provenance"]
     assert prov["blank"]["source"] == "llm-verified"
-    assert saved["form_metadata"]["booklet_text"] == "BOOKLET"
+    # THE WRITER IS THE FEATURE (bd anim, closeout Opus round): the staleness
+    # lint rule is deliberately silent when identity_sha1 is absent, so if the
+    # bake ever stops writing it the whole gate turns off with no failing test
+    # and no runtime signal. This assertion is the only thing standing between
+    # a dropped write and a silently disabled feature.
+    assert prov["blank"]["identity_sha1"] == gc.identity_sha1(by_id["blank"])
     # machine-owned field UPDATES on re-run (hash matches recorded)
     proposals2 = {"fields": {"blank": {"instructions": "Authored A v2.",
                                        "details": "", "format_hint": ""}},
@@ -234,6 +239,11 @@ def test_bootstrap_provenance_marks_tu_identical_only():
         "C[0]": "Anything."})
     assert set(prov) == {"tu_match"}
     assert prov["tu_match"]["source"] == "tu"
+    # /TU-bootstrapped fields are covered by the staleness gate too -- the
+    # record must carry the field's identity hash (bd anim, closeout Opus
+    # round: the writer had zero coverage).
+    assert prov["tu_match"]["identity_sha1"] == \
+        gc.identity_sha1(schema["fields"][0])
 
 
 def test_lint_reemits_guidance_flags():

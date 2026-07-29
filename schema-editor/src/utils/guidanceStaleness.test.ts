@@ -55,6 +55,16 @@ describe('the acknowledgment gate', () => {
       ids, BAKED)).toBe(false);
   });
 
+  it('an UNPARSEABLE current identity fails open, never deadlocks (Opus round)', () => {
+    // A flagged field whose finding path yields no identity has nothing an
+    // ack could pin to -- withGuidanceAck without an identity is a no-op --
+    // so gating it would trap the field behind a checkbox that records
+    // nothing. Fail open: not gated. (Unreachable from today's backend; the
+    // path format is contract-pinned server-side.)
+    const ids = staleFieldIds([staleFinding]);
+    expect(needsGuidanceAck(field(), ids, undefined)).toBe(false);
+  });
+
   it('an ack for the CURRENT identity satisfies the gate', () => {
     const acked = withGuidanceAck(field(), BAKED, true);
     expect(isAcknowledged(acked, BAKED)).toBe(true);

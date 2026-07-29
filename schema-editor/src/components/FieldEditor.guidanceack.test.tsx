@@ -60,6 +60,23 @@ describe('FieldEditor guidance staleness gate (bd anim criterion 1)', () => {
     expect(ta.className).not.toMatch(/ring-2/);
   });
 
+  it('a finding with an UNPARSEABLE identity renders no dead checkbox (Opus round)', () => {
+    // Without a parseable identity the checkbox could record nothing
+    // (withGuidanceAck without an identity is a no-op), leaving a control
+    // that never ticks on a permanently amber field. Fail open instead,
+    // matching needsGuidanceAck.
+    const unparseable: LintFinding = {
+      ...staleFinding, path: 'fields (id=phone).help',
+    };
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[unparseable]} />,
+    );
+    expect(screen.queryByTestId('guidance-ack-checkbox')).toBeNull();
+    const ta = screen.getByPlaceholderText(/Instructions for filling out this field/);
+    expect(ta.className).not.toMatch(/ring-2/);
+  });
+
   it('ticking the box records an ack pinned to the CURRENT identity', () => {
     const onUpdateField = vi.fn();
     render(
