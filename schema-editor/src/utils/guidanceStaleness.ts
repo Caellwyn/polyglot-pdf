@@ -33,11 +33,19 @@
  * plumbing like pdf_field_name. Changing those does not make guidance wrong, so
  * hashing them would manufacture false staleness.
  */
-import type { FormField } from '../types/schema';
+import type { FormField, FormSchema } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
 
 /** The lint rule the backend emits for a drifted field identity. */
 export const GUIDANCE_STALE_RULE = 'guidance-identity-stale';
+
+/**
+ * The authoring stage whose provenance a consumer reads. The
+ * option-translation re-run checker (another session) records its own
+ * identity_sha1 under its own stage and can reuse these helpers by passing
+ * 'option_translation' rather than forking a parallel implementation.
+ */
+export type ProvenanceStage = 'instructions_enrich' | 'option_translation';
 
 /**
  * The stale field ids named by a lint report. The backend anchors the finding
@@ -55,20 +63,52 @@ export function staleFieldIds(findings: LintFinding[] | undefined): Set<string> 
 }
 
 /**
+ * The identity hash the BAKE recorded for this field, read straight out of the
+ * schema's provenance block. The editor never computes this (the backend owns
+ * hashing); it only needs the value to pin an acknowledgment to.
+ */
+export function bakedIdentity(
+  schema: FormSchema,
+  fieldId: string,
+  stage: ProvenanceStage = 'instructions_enrich',
+): string | undefined {
+  const bakeoff = (schema as unknown as Record<string, unknown>)._bakeoff;
+  const authoring =
+    bakeoff && typeof bakeoff === 'object' && !Array.isArray(bakeoff)
+      ? (bakeoff as Record<string, unknown>).authoring
+      : undefined;
+  const stageObj =
+    authoring && typeof authoring === 'object' && !Array.isArray(authoring)
+      ? (authoring as Record<string, unknown>)[stage]
+      : undefined;
+  const prov =
+    stageObj && typeof stageObj === 'object' && !Array.isArray(stageObj)
+      ? (stageObj as Record<string, unknown>).provenance
+      : undefined;
+  const rec =
+    prov && typeof prov === 'object' && !Array.isArray(prov)
+      ? (prov as Record<string, unknown>)[fieldId]
+      : undefined;
+  const h =
+    rec && typeof rec === 'object' && !Array.isArray(rec)
+      ? (rec as Record<string, unknown>).identity_sha1
+      : undefined;
+  return typeof h === 'string' && h ? h : undefined;
+}
+
+/**
  * Has a human acknowledged the guidance for this field's CURRENT state?
  *
- * The acknowledgment stores the backend's own recorded hash it was given for,
- * so a later edit (which changes the field and therefore the backend's freshly
- * emitted finding) leaves the stored ack pointing at a superseded identity --
- * an ack is not a permanent waiver. `bakedIdentity` is the hash the backend
- * currently reports for the field; pass undefined when it reports none.
+ * The acknowledgment stores the hash it was given for. On a LATER edit the
+ * backend re-bakes/re-flags against a new identity, so the stored ack no longer
+ * matches and the gate re-raises -- an ack is not a permanent waiver.
+ * `baked` is the hash currently recorded for the field; pass undefined when
+ * none is recorded (then any ack is honoured, since nothing is being gated).
  */
-export function isAcknowledged(field: FormField, bakedIdentity?: string): boolean {
+export function isAcknowledged(field: FormField, baked?: string): boolean {
   const ack = field._review?.guidance_ack_sha1;
   if (typeof ack !== 'string' || !ack) return false;
-  // With no current baked identity to pin to, any ack is honoured (the field is
-  // not being reported stale, so there is nothing to gate).
-  return bakedIdentity === undefined || ack === bakedIdentity;
+  return baked === undefined || ack === baked;
 }
 
 /**
@@ -78,8 +118,8 @@ export function isAcknowledged(field: FormField, bakedIdentity?: string): boolea
 export function needsGuidanceAck(
   field: FormField,
   staleIds: Set<string>,
-  bakedIdentity?: string,
+  baked?: string,
 ): boolean {
   if (!staleIds.has(field.id)) return false;
-  return !isAcknowledged(field, bakedIdentity);
+  return !isAcknowledged(field, baked);
 }

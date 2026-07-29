@@ -486,9 +486,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         summary = write_kit(args.kit, result["proposals"], booklet, flags,
                             args.model, JUDGE_MODEL)
         result["write_summary"] = summary
+        unmatched = summary.get("unmatched_proposal_ids") or []
         print(f"write: {summary['written']} field(s) written, "
               f"{summary['skipped_human']} human-owned skipped, "
-              f"{summary['flags']} flag(s) persisted")
+              f"{summary['flags']} flag(s) persisted"
+              + (f"; {len(unmatched)} proposal(s) matched NO schema field "
+                 f"and were discarded: {unmatched[:5]}" if unmatched else ""))
 
     out = args.out or os.path.join(
         _REPO, "scripts", "bakeoff", "outputs",
@@ -852,6 +855,20 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
     if tu_map and not prov:
         prov.update(bootstrap_provenance(schema, tu_map))
 
+    # Proposals keyed to an id no field carries are silently DROPPED by the
+    # loop below (it walks schema fields, so a hallucinated id is simply never
+    # visited). That is fail-safe -- nothing wrong is written -- but it was
+    # also invisible: a systematic id-echo failure looked identical to "the
+    # booklet had nothing to say". Count them so the report can surface it
+    # (bd polyglot-pdf-anim).
+    schema_ids = {f.get("id") for f in schema.get("fields", [])
+                  if isinstance(f, dict)}
+    unmatched_proposal_ids = sorted(
+        fid for fid, e in (proposals.get("fields") or {}).items()
+        if fid not in schema_ids and isinstance(e, dict)
+        and any((e.get(k) or "").strip()
+                for k in ("instructions", "details", "format_hint")))
+
     written = skipped_human = 0
     for f in schema.get("fields", []):
         if not isinstance(f, dict):
@@ -909,7 +926,8 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
         "provenance": prov, "flags": flags,
     }
     return {"written": written, "skipped_human": skipped_human,
-            "flags": len(flags)}
+            "flags": len(flags),
+            "unmatched_proposal_ids": unmatched_proposal_ids}
 
 if __name__ == "__main__":
     sys.exit(main())

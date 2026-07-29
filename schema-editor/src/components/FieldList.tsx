@@ -1,5 +1,7 @@
 import React from 'react';
 import type { FormSchema, FormField } from '../types/schema';
+import { bakedIdentity, needsGuidanceAck, staleFieldIds }
+  from '../utils/guidanceStaleness';
 import { checkFieldComplete } from '../utils/validation';
 import { effectiveStatus, getReview, isReviewTarget } from '../utils/reviewStatus';
 import { getIgnoredFields } from '../utils/ignoreField';
@@ -191,8 +193,19 @@ export const FieldList: React.FC<FieldListProps> = ({
   // ERROR always wins; otherwise needs_followup -> 'followup',
   // reviewed_correct -> 'complete' (green), and un-reviewed -> amber ALWAYS
   // (green is a human's word, never the machine's).
+  // A field whose guidance drifted since it was authored cannot read green
+  // until a human confirms the guidance still matches (bd polyglot-pdf-anim).
+  // The BACKEND decides staleness (it wrote the hash); this reads its finding.
+  const guidanceAckPending = (field: FormField) =>
+    needsGuidanceAck(
+      field,
+      staleFieldIds(lintFindingsByField?.get(field.id)),
+      bakedIdentity(schema, field.id),
+    );
+
   const getFieldStatus = (field: FormField) =>
-    effectiveStatus(field, fieldHasLintError(field), pageCount);
+    effectiveStatus(field, fieldHasLintError(field), pageCount,
+                    guidanceAckPending(field));
 
   // Every reason a row is red, amber, or flagged, in plain language, for the
   // icon's tooltip: the human review state (sign-off / follow-up + its note)

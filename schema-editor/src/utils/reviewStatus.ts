@@ -83,15 +83,59 @@ export function withReviewNote(field: FormField, note: string): FormField {
 }
 
 /**
+ * Record (or clear) a human's acknowledgment that the authored guidance still
+ * reads correctly for this field's CURRENT identity, after the backend flagged
+ * it as drifted (bd polyglot-pdf-anim). `bakedIdentity` is the hash the backend
+ * reports; storing it means a LATER edit re-raises the gate rather than the
+ * acknowledgment acting as a permanent waiver. Returns a NEW field; clearing
+ * drops the key (and the whole _review record when nothing else remains) so it
+ * serializes clean.
+ */
+export function withGuidanceAck(
+  field: FormField,
+  bakedIdentity: string | undefined,
+  acknowledged: boolean,
+): FormField {
+  const current = field._review;
+  if (!acknowledged || !bakedIdentity) {
+    if (!current?.guidance_ack_sha1) return field;
+    const { guidance_ack_sha1, ...restReview } = current;
+    if (restReview.status === 'unreviewed' && !restReview.note) {
+      const { _review, ...rest } = field;
+      return rest as FormField;
+    }
+    return { ...field, _review: restReview };
+  }
+  return {
+    ...field,
+    _review: {
+      status: current?.status ?? 'unreviewed',
+      ...(current?.note ? { note: current.note } : {}),
+      guidance_ack_sha1: bakedIdentity,
+    },
+  };
+}
+
+/**
  * The effective status for a field, layering human review over the automatic
  * derivation per the precedence above. `hasLintError` folds in a backend lint
  * ERROR anchored to this field (the FieldList already threads these in) -- a
  * lint ERROR is as red as a local completeness error, and red always wins.
+ *
+ * `needsGuidanceAck` (bd polyglot-pdf-anim) is the staleness gate: when the
+ * field's guidance drifted and no human has acknowledged it, the field CANNOT
+ * read green, even if an editor already marked it reviewed_correct -- that
+ * sign-off predates the drift and no longer covers what the assistant will
+ * say. It lands in the amber 'review' band (not red): the guidance may well
+ * still be fine, and confirming it is a human judgment, not a defect to fix.
+ * This is the same principle as the g63j amendment one layer on -- green means
+ * a human said so ABOUT THE CURRENT CONTENT.
  */
 export function effectiveStatus(
   field: FormField,
   hasLintError = false,
   pageCount?: number,
+  needsGuidanceAck = false,
 ): EffectiveStatus {
   const auto = checkFieldComplete(field, pageCount);
   // Red always wins -- a broken field cannot be signed off.
@@ -99,6 +143,9 @@ export function effectiveStatus(
 
   const review = getReview(field).status;
   if (review === 'needs_followup') return 'followup';
+  // An un-acknowledged drift demotes even an explicit reviewed_correct: the
+  // sign-off was given for different content.
+  if (needsGuidanceAck) return 'review';
   if (review === 'reviewed_correct') return 'complete';
 
   // unreviewed -> ALWAYS amber (bd g63j). Green is a human's word, not the

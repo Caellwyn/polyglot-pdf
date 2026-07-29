@@ -16,7 +16,9 @@ import {
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
 import { checkFieldComplete } from '../utils/validation';
-import { getReview, withReviewNote, withReviewStatus } from '../utils/reviewStatus';
+import { getReview, withGuidanceAck, withReviewNote, withReviewStatus }
+  from '../utils/reviewStatus';
+import { GUIDANCE_STALE_RULE, bakedIdentity } from '../utils/guidanceStaleness';
 import type { FieldReviewStatus } from '../types/schema';
 import type { LintFinding, UnclaimedWidget } from '../utils/remoteKitStore';
 
@@ -900,20 +902,65 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
         <div className="space-y-4">
           <h4 className="text-sm font-semibold text-gray-900">Help & Guidance</h4>
 
-          <div>
-            <label className="label">Instructions</label>
-            <textarea
-              className="input"
-              rows={3}
-              value={field.help?.instructions || ''}
-              onChange={(e) =>
-                updateField({
-                  help: { ...field.help, instructions: e.target.value },
-                })
-              }
-              placeholder="Instructions for filling out this field..."
-            />
-          </div>
+          {(() => {
+            // Guidance staleness gate (bd polyglot-pdf-anim). The BACKEND owns
+            // the comparison (it wrote the hash, so it compares it -- no
+            // cross-language hash contract to drift); the editor consumes the
+            // finding and turns it into a human acknowledgment. A trivial
+            // rename must not cost an LLM call, so confirming is one free
+            // click; re-authoring stays a deliberate, separate action.
+            const staleFinding = (lintFindings ?? []).find(
+              f => f.rule === GUIDANCE_STALE_RULE);
+            const acked = !!field._review?.guidance_ack_sha1;
+            const stale = !!staleFinding && !acked;
+            return (
+              <div>
+                <label className="label">Instructions</label>
+                <textarea
+                  className={stale
+                    ? 'input ring-2 ring-amber-400 border-amber-400'
+                    : 'input'}
+                  rows={3}
+                  value={field.help?.instructions || ''}
+                  onChange={(e) =>
+                    updateField({
+                      help: { ...field.help, instructions: e.target.value },
+                    })
+                  }
+                  placeholder="Instructions for filling out this field..."
+                />
+                {staleFinding && (
+                  <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 p-2">
+                    <p className="text-xs text-amber-900">
+                      This field's name, spoken name or option labels changed
+                      after this guidance was written, so it may no longer
+                      match what the assistant says.
+                    </p>
+                    <label className="mt-1 flex items-start gap-2 text-xs text-amber-900 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        data-testid="guidance-ack-checkbox"
+                        checked={acked}
+                        onChange={(e) =>
+                          onUpdateField(withGuidanceAck(
+                            field, bakedIdentity(schema, field.id), e.target.checked))
+                        }
+                      />
+                      <span>
+                        I have read these instructions and they are still
+                        correct.
+                        {!acked && (
+                          <strong> Required before this field can be marked
+                          reviewed.</strong>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div>
             <label className="label">Details (official reference text)</label>

@@ -450,3 +450,28 @@ def test_existing_provenance_locks_out_unrecorded_fields():
                            tu_map={"A[0]": "Exact TU text."})
     assert s["written"] == 0 and s["skipped_human"] == 1
     assert schema["fields"][0]["help"]["instructions"] == "Exact TU text."
+
+
+def test_unmatched_proposal_ids_are_counted_not_applied(tmp_path):
+    """bd anim exit criterion 3: a model-echoed id matching NO schema field is
+    silently discarded by the apply loop (fail-safe) -- it must at least be
+    COUNTED, or a systematic id-echo failure looks like 'the booklet said
+    nothing'."""
+    schema = {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [{"id": "real", "name": "R", "type": "text"}],
+        "sections": [], "parts": [],
+    }
+    proposals = {"fields": {
+        "real": {"instructions": "Applied.", "details": "", "format_hint": ""},
+        "hallucinated_id": {"instructions": "Never applied.",
+                            "details": "", "format_hint": ""},
+        "blank_one": {"instructions": "", "details": "", "format_hint": ""},
+    }, "form_details": ""}
+    summary = ei.apply_proposals(schema, proposals, "B", [], "m", "j")
+    assert summary["written"] == 1
+    # counted, and only the one carrying real content
+    assert summary["unmatched_proposal_ids"] == ["hallucinated_id"]
+    # and genuinely NOT applied anywhere
+    assert schema["fields"][0]["help"]["instructions"] == "Applied."
+    assert len(schema["fields"]) == 1

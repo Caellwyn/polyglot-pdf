@@ -973,3 +973,69 @@ def test_option_claim_unresolvable_names_the_option():
     findings = _lint_structural(_schema(fields), dump)
     assert [f.rule for f in findings] == ["field-claim-unresolvable"]
     assert "option[1]" in findings[0].path
+
+
+# --- guidance-identity-stale (bd polyglot-pdf-anim) ------------------------ #
+
+def _identity_schema(field, baked=None):
+    prov = {"source": "llm-verified"}
+    if baked is not None:
+        prov["identity_sha1"] = baked
+    return {
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [field], "sections": [], "parts": [],
+        "_bakeoff": {"authoring": {"instructions_enrich": {
+            "provenance": {field["id"]: prov}, "flags": []}}},
+    }
+
+
+def _stale(findings):
+    return [f for f in findings if f.rule == "guidance-identity-stale"]
+
+
+def test_identity_unchanged_emits_nothing():
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "Phone", "spoken_name": "phone", "type": "text",
+         "help": {"instructions": "x"}}
+    assert _stale(lint_schema(_identity_schema(f, gc.identity_sha1(f)))) == []
+
+
+def test_spoken_name_change_flags_the_field_as_a_warning():
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "Phone", "spoken_name": "phone", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    renamed = dict(f, spoken_name="telephone")
+    hits = _stale(lint_schema(_identity_schema(renamed, baked)))
+    assert len(hits) == 1
+    assert hits[0].severity == "WARNING"      # informs, never blocks
+    assert "id=a" in hits[0].path
+
+
+def test_option_label_change_flags_but_value_and_plumbing_do_not():
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+         "options": [{"label": "Yes", "value": "y"}],
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    relabelled = dict(f, options=[{"label": "Yes please", "value": "y"}])
+    assert len(_stale(lint_schema(_identity_schema(relabelled, baked)))) == 1
+    # an internal value / plumbing edit is NOT voice-facing -> no finding
+    revalued = dict(f, options=[{"label": "Yes", "value": "changed"}],
+                    pdf_field_name="W[0]")
+    assert _stale(lint_schema(_identity_schema(revalued, baked))) == []
+
+
+def test_pre_anim_bake_is_silent_not_noisy():
+    # a provenance record with no identity_sha1 has nothing to be stale against
+    f = {"id": "a", "name": "Renamed", "spoken_name": "x", "type": "text",
+         "help": {"instructions": "x"}}
+    assert _stale(lint_schema(_identity_schema(f, None))) == []
+
+
+def test_identity_rule_never_throws_on_malformed_provenance():
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "text"}
+    for junk in ("str", 123, [], {"a": "not-a-dict"}, {"a": {"identity_sha1": 5}}):
+        s = _identity_schema(f, "x")
+        s["_bakeoff"]["authoring"]["instructions_enrich"]["provenance"] = junk
+        lint_schema(s)   # must not raise
