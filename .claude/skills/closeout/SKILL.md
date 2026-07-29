@@ -318,7 +318,7 @@ THEN proceed to Step 6 (open the PR).
      nit" -- fix it inline, do not defer it. Commit the fixes, then **re-spawn
      fresh-eyes** on the updated diff. This is the recursion.
    - **`BLOCKED`** (Haiku self-escalation) -> re-spawn the SAME reviewer with
-     `model: sonnet`; count it for `--haiku-escalations`.
+     `model: sonnet`.
    - **A subagent TIMEOUT/ERROR** (no verdict returned) -> **surface to the
      maintainer; NEVER silently skip the assess.** Silence is not `NO-GAPS`.
      **Exception -- the effort-400:** if the spawn itself failed with an
