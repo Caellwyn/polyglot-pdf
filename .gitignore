@@ -68,6 +68,10 @@ tmp_*
 # transient R2 drain/handover runtime artifacts (drain markers + handover notes
 # written by scripts/drain_flag.py); session-scoped, never source of truth
 .beads/.runtime/
+# retired A/B experiment counter cache (bd polyglot-pdf-40r4 removed the ledger
+# that wrote it). Kept ignored so a leftover copy on any existing checkout stays
+# invisible to closeout's dirty-tree gate instead of surfacing as untracked.
+.beads/experiment_state.json
 .venv-backend/
 backend/.venv
 

@@ -52,7 +52,11 @@ had already concluded, and a ninth of them did not bother at all.
   invocation flags, the `telemetry: GAP` warn-only clause, and the frontmatter
   description (which loads into every session's agent roster).
 - `.claude/settings.json`: the three `harness_ledger.py` permission entries.
-- `.beads/experiment_state.json` (the derived cache) and its `.gitignore` entry.
+- `.beads/experiment_state.json` (the derived cache), deleted from the main
+  checkout as well as the worktree. Its `.gitignore` rule was **deliberately kept**
+  -- see the review-loop note below.
+- `scripts/closeout_finish.py`'s `_utcnow()` helper and its `datetime`/`timezone`
+  imports: its only call site was the deleted `--recorded-at` ledger argument.
 
 **Kept, as a read-only archive** (maintainer's explicit call): all **376** telemetry
 row files, `harness_ledger.jsonl` (the pre-2026-06-10 archive), `FINAL_REPORT.md`,
@@ -81,6 +85,32 @@ bead and does nothing else). Two unrelated test files referenced
 `tests/test_doc_freshness.py`, which still exists. Full stack: **1323 passed, 1
 skipped, 3 deselected**.
 
+**The review loop caught three real gaps across three rounds** -- all of them
+dangling *instructions or fixtures* rather than broken code, which is the
+characteristic failure mode of a removal like this (the code stops working loudly;
+the stale instruction just quietly misleads the next reader):
+
+1. **Round 1 (Sonnet):** the `_args()` test fixture still fabricated the seven
+   removed counter fields, asserting a shape `build_parser()` could no longer
+   produce. Fixed, plus two new guards -- `test_retired_telemetry_flags_rejected`
+   (all seven flags must now fail to parse) and
+   `test_args_fixture_matches_real_cli_shape` (the fixture may only invent
+   attributes the real CLI produces). The latter was **mutation-tested** by
+   reintroducing `arm="A"` and confirming it fails.
+2. **Round 2 (Sonnet):** a surviving "count it for `--haiku-escalations`" in
+   SKILL.md Step 5.5's `BLOCKED` branch. Four sibling mentions had been scrubbed;
+   this one survived because the sweep grepped `--arm`/`telemetry` but not each
+   removed flag *by name*. Re-swept all seven names across every live surface.
+3. **Round 3 (Opus, the clearing round):** three more --
+   (a) `CLAUDE.md` still named "telemetry setup" (above);
+   (b) **deleting the `.beads/experiment_state.json` ignore rule would have wedged
+   the next closeout.** The cache file still existed on disk in the main checkout,
+   so un-ignoring it would surface it as untracked, and `closeout_prep.py` turns
+   any `git status --short` output into `working tree is DIRTY`. Resolved by
+   deleting the stale file *and* **keeping the ignore rule** -- other checkouts may
+   still hold their own copy, and the rule costs nothing;
+   (c) the now-dead `_utcnow()` helper.
+
 ## Lessons
 
 - **Switching off an experiment's *output* is not the same as retiring the
@@ -99,6 +129,18 @@ skipped, 3 deselected**.
   experiment adopted.** "Remove the A/B/C trials" could have been read as removing
   arms B and C themselves; the report's verdict is what disambiguates it. Read the
   experiment's conclusion before deleting its apparatus.
+- **Do NOT remove a `.gitignore` rule for a derived cache just because the writer
+  is gone.** The rule is what keeps an already-existing copy invisible on every
+  checkout that has one. Deleting it converts a harmless leftover file into an
+  untracked entry, which `closeout_prep.py` reports as a DIRTY working tree --
+  blocking the next closeout on a phantom, and inviting a `git add -A` reflex to
+  commit the dead cache. Delete the file; keep the ignore line. Generalizes to any
+  gitignored derived artifact whose producer is being retired.
+- **A grep-based removal sweep must enumerate every removed NAME, not the concept.**
+  Two of the three gaps survived a sweep that searched `--arm` and `telemetry` but
+  not `--haiku-escalations`, and a claim about CLAUDE.md was written from a sweep
+  that never covered CLAUDE.md. Enumerate the identifiers, and state which paths the
+  sweep actually ran over.
 
 ## Doc freshness
 
@@ -109,10 +151,14 @@ change touches (this diff is harness scripts, the closeout skill/agent, settings
 `.gitignore`, and two journal READMEs). Reviewed and left as-is; reconciling them is
 not this bead's scope.
 
-The two docs this change *does* affect -- `docs/journal/README.md` and
-`docs/journal/telemetry/README.md` -- were updated in this PR to describe the
-telemetry as a closed archive. No tier-1/tier-2 component or standard doc changed,
-and no CLAUDE.md change was needed (CLAUDE.md never referenced the ledger).
+The docs this change *does* affect were updated in this PR: `docs/journal/README.md`
+and `docs/journal/telemetry/README.md` now describe the telemetry as a closed
+archive, and **`CLAUDE.md`** had one surviving mention -- the `/closeout` OWNS PR
+creation bullet warned that a hand-opened PR "breaks the skill's review + telemetry
+setup," which named a subsystem that no longer exists. Struck to "review setup."
+(An earlier draft of this entry claimed CLAUDE.md never referenced the ledger; that
+was wrong -- the sweep behind it had not covered CLAUDE.md, and the Opus clearing
+round caught it.) No tier-2 component or standard doc changed.
 `docs/sprint_1_harness-tuning_plan.md` was deliberately left untouched: it is the
 plan of record for roadmap epic `polyglot-pdf-h2r`, which is still open, and it is a
 historical planning document rather than per-session overhead.
@@ -122,14 +168,18 @@ historical planning document rather than per-session overhead.
 - `scripts/harness_ledger.py` -- DELETED (972 lines).
 - `tests/test_harness_ledger.py` -- DELETED (983 lines, 49 tests).
 - `scripts/closeout_finish.py` -- removed both telemetry steps, the seven counter
-  flags, the `telemetry` output key, and the dry-run ledger preview; docstring
-  rewritten (Steps 5-7 -> Steps 5-6).
+  flags, the `telemetry` output key, the dry-run ledger preview, and the dead
+  `_utcnow()` helper + its `datetime`/`timezone` imports; docstring rewritten
+  (Steps 5-7 -> Steps 5-6).
+- `CLAUDE.md` -- struck "+ telemetry" from the `/closeout` OWNS PR creation bullet.
 - `.claude/skills/closeout/SKILL.md` -- Step 7 removed in full; A/B arm scaffolding
   stripped from Steps 5.5.b / 5.6 and the merge-conflict + nit-rule headings.
 - `.claude/agents/closeout-runner.md` -- counter contract, invocation flags,
   `telemetry: GAP` clause, and frontmatter description updated.
 - `.claude/settings.json` -- three `harness_ledger.py` permission entries removed.
-- `.gitignore` -- `.beads/experiment_state.json` entry + its comment removed.
+- `.gitignore` -- `.beads/experiment_state.json` rule KEPT (comment rewritten to
+  explain why it outlives the ledger); the cache file itself deleted from both the
+  worktree and the main checkout.
 - `docs/journal/README.md`, `docs/journal/telemetry/README.md` -- rewritten as a
   closed archive.
 - `tests/test_closeout_finish.py` -- two obsolete classes removed; dry-run test

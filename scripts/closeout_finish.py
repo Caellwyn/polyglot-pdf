@@ -84,7 +84,6 @@ import argparse
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 # Make this script's dir importable so sibling-script imports work under both
@@ -155,11 +154,6 @@ def _run(cmd: list[str], *, cwd: str | None = None,
             )
         )
     return proc
-
-
-def _utcnow() -> str:
-    """UTC stamp in the explicit portable form (not %F/%T -- GNU-only)."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _base_branch_name(base: str) -> str:
