@@ -509,6 +509,22 @@ def parse_transcript(transcript: Path) -> dict:
             for key, val in cache_creation.items():
                 if key in ("ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens"):
                     continue
+                # Match by KEY MEANING, not just value type (bd
+                # polyglot-pdf-dxgj). Summing every numeric member would charge
+                # any future non-token sibling as cache-write tokens -- a
+                # `ttl_seconds: 3600` would overcharge 3.25x. That is not
+                # speculative schema-shape: `usage.server_tool_use` already
+                # carries non-token integer counts (web_search_requests /
+                # web_fetch_requests). Only `*_input_tokens` members are tokens.
+                # Note the failure directions differ: missing a real token kind
+                # under-reports, while charging a non-token key over-reports --
+                # so this guard is deliberately narrow. It matches the
+                # `ephemeral_<ttl>_input_tokens` shape the two known kinds use,
+                # NOT a bare `*_input_tokens` suffix: a summary member such as
+                # `total_input_tokens` would pass the looser test and be charged
+                # a second time on top of the buckets it summarizes.
+                if not (key.startswith("ephemeral_") and key.endswith("_input_tokens")):
+                    continue
                 if isinstance(val, (int, float)) and not isinstance(val, bool):
                     other_cc += max(0, int(val))
         rec_assumed = max(0, max(flat_cc, rec_1h + rec_5m + other_cc) - (rec_1h + rec_5m))

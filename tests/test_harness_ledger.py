@@ -184,6 +184,36 @@ class TestParseTranscript:
         assert c["cache_write_ttl_source"] == "assumed-5m"
         assert c["cache_write_tokens_5m_assumed"] == 5_000_000
 
+    def test_non_token_cache_creation_siblings_are_not_charged(self, tmp_path):
+        """bd polyglot-pdf-dxgj: match by KEY MEANING, not value type.
+
+        The 41c1 guard sums unmodelled members of `cache_creation` so a future
+        TTL kind cannot vanish. Summing every NUMERIC member would charge any
+        non-token sibling as cache-write tokens -- `ttl_seconds: 3600` would
+        overcharge 3.25x. That is established schema precedent, not invention:
+        `usage.server_tool_use` already carries non-token integer counts
+        (web_search_requests / web_fetch_requests).
+
+        A summary member is the subtler case: `total_input_tokens` ends in
+        `_input_tokens` but summarizes the buckets rather than adding a kind, so
+        the filter matches the `ephemeral_<ttl>_input_tokens` shape specifically.
+
+        True cost here is 1000 tokens at 1h (sonnet 3/MTok, 2.0x) = $0.006, and
+        every sibling below must leave it unchanged.
+        """
+        for sibling in (
+            {"ttl_seconds": 3600},
+            {"num_blocks": 4},
+            {"total_input_tokens": 1000},
+            {"cache_ttl": "1h"},
+        ):
+            usage = _usage(cc=1000)
+            usage["cache_creation"] = {"ephemeral_1h_input_tokens": 1000, **sibling}
+            t = _write_transcript(tmp_path, [_assistant(usage, model="claude-sonnet-4-6")])
+            c = ledger.compute_cost(ledger.parse_transcript(t)["models"])
+            assert c["total"] == 0.006, f"sibling {sibling} changed the charge"
+            assert c["cache_write_tokens_5m_assumed"] == 0
+
     def test_wall_clock_span(self, tmp_path):
         records = [
             {"type": "user", "sessionId": "sess-fixture", "timestamp": "2026-06-01T00:00:00Z"},

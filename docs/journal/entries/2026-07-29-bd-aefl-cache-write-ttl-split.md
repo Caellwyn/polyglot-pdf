@@ -102,6 +102,48 @@ The fix makes the label structurally incapable of disagreeing with the charge:
 the buckets are accumulated inside the same loop that prices them, from the same
 call. Tracked and closed as `polyglot-pdf-uksl`.
 
+## Two more, each one layer down
+
+The review layers then found two further defects in the fix itself. Both are
+the *same* failure mode as the original bug, which is the interesting part: each
+round closed one path by which tokens could be silently mis-priced, and exposed
+the next.
+
+**Bucketing by subtracting aggregates (`polyglot-pdf-9qf2`, a real dollar
+error).** `parse_transcript` accumulated the flat count and the TTL breakdown
+independently across records, and the remainder was then derived as
+`assumed = flat - (1h + 5m)` from those **aggregates**. That is only sound if
+every record contributes proportionally to both sides -- and records are not
+uniform. A record carrying a breakdown with a zero flat field, aggregated
+alongside a genuinely legacy record on the same model, cancels the legacy tokens
+to zero: they price at **$0** while the block reports `"measured"`. Reproduced
+through the real parser at **$6.62 charged where $10.75 is correct**.
+
+Fixed by computing each record's remainder **at parse time**, while that
+record's own flat count and breakdown are still paired. Aggregate-level
+subtraction is now impossible rather than merely unobserved.
+
+**An unmodelled TTL kind vanishing entirely (`polyglot-pdf-41c1`).** The
+per-record remainder was still anchored on the flat field alone, so a future
+`ephemeral_12h_input_tokens` beside a zero flat field computed all three buckets
+to zero: **5,000,000 tokens priced at $0.00, labelled `"none"`** -- "no cache
+writes at all" -- on a real charge. Only the unmodelled-kind half is
+speculative; the zero-flat-with-breakdown half is common (**167 such records**
+across 1,238 local transcripts). It also falsified `_split_cache_writes`' own
+docstring, which promised exactly that an unmodelled kind lands in the assumed
+bucket.
+
+Fixed by anchoring the remainder on the **larger** of the flat count and the
+breakdown's own total, so neither side can be silently dropped. Verified inert
+on all **117,796** real `cache_creation` records -- zero differing tokens --
+because every real record carries exactly the two modelled keys.
+
+Both were filed as out-of-scope by the reviewers who found them, and both were
+fixed inline anyway. The reasoning was the same each time: a money bug that is
+dormant only because of the current wire format is still a money bug; it sat in
+code this change introduces; and in both cases the code contradicted a promise
+its own docstring made.
+
 ## Scar tissue
 
 - **A comment asserting "the data doesn't record X" is a claim to verify, not a
@@ -116,3 +158,18 @@ call. Tracked and closed as `polyglot-pdf-uksl`.
   the same computation that produced the number.** Re-deriving it "equivalently"
   from the same inputs is where the two silently drift apart -- here, into
   labelling a $6.62 charge as no charge at all.
+- **Never derive a per-item quantity by subtracting aggregates.** `assumed =
+  total_flat - (total_1h + total_5m)` looks algebraically obvious and is wrong
+  the moment the items are not uniform: one record's surplus cancels another's
+  deficit, and the cancellation is invisible. Compute the remainder where the
+  paired values still belong to the same record.
+- **Anchor a "leftover" bucket on the MAXIMUM of every source that could
+  contain it, not on one of them.** Anchoring on the flat field alone meant a
+  token kind absent from that field had nowhere to land and silently ceased to
+  exist. If two sources can each describe the same quantity, the leftover has to
+  be measured against whichever is larger.
+- **Each of these three bugs was the previous one, one layer down.** Fixing "the
+  label disagrees with the charge" exposed "the buckets disagree with the
+  records"; fixing that exposed "the records disagree with the wire". When a fix
+  addresses a class of failure rather than an instance, re-ask the same question
+  at the next layer in before shipping.
