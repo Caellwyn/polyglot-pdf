@@ -53,10 +53,11 @@ seen. All three now use `isAcknowledged(field, currentIdentity(...))`.
 ## THE OPEN QUESTION (this is the handoff)
 
 > **RESOLVED (2026-07-29), in this same PR** -- `identity_payload` now hashes
-> sorted `[label, value]` PAIRS: swaps flag, pure reorders stay silent, and a
-> value-only rename flags as the ACCEPTED tradeoff (the "all six" wishlist
-> below is provably unattainable -- a swap IS a reorder plus a value rename).
-> See [`2026-07-29-bd-anim-swap-binding.md`](2026-07-29-bd-anim-swap-binding.md).
+> sorted `[label, spoken_label, value]` bindings: swaps flag (label or spoken
+> label), pure reorders stay silent, and a value-only rename flags as the
+> ACCEPTED tradeoff (the "all six" wishlist below is provably unattainable --
+> a swap IS a reorder plus a value rename). See
+> [`2026-07-29-bd-anim-swap-binding.md`](2026-07-29-bd-anim-swap-binding.md).
 > Everything below is the historical record of the question as it stood.
 
 `identity_payload` (backend/services/guidance_contract.py) currently hashes

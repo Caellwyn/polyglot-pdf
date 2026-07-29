@@ -11,8 +11,11 @@ Resolves the ONE open question from the handoff
 ("Married" and "Single" trading places, values staying put) hashed
 identically under the sorted-bare-labels formula, so the one identity drift
 that records a WRONG ANSWER on the form -- not merely stale wording -- never
-raised the gate. Fixed by hashing option labels as sorted `[label, value]`
-pairs in `identity_payload` (backend/services/guidance_contract.py).
+raised the gate. Fixed by hashing each option as a sorted
+`[label, spoken_label, value]` binding in `identity_payload`
+(backend/services/guidance_contract.py). (spoken_label joined the binding in
+the closeout Opus rounds: it OUTRANKS label as the voice join key, so a
+spoken-label swap is the same hazard -- bd polyglot-pdf-w028.)
 
 ## Why "all six cases" was impossible, and which one was sacrificed
 

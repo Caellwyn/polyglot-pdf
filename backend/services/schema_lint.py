@@ -101,14 +101,14 @@ Rules (stable ids; one finding per violation site):
 - help-details-headings-missing WARNING a long details block has no heading
                                 lines (unnavigable for secretary/human review)
 - guidance-identity-stale WARNING a field's name / spoken_name / option
-                                label->value pairs changed since its guidance
-                                was authored (the bake's identity_sha1 no
-                                longer matches), so the guidance may describe
-                                something the assistant no longer says -- or a
-                                spoken label may now select a different stored
-                                answer (label swap). Drives the editor's human
-                                acknowledgment gate -- never an auto re-bake
-                                (bd polyglot-pdf-anim)
+                                label/spoken-label/value bindings changed
+                                since its guidance was authored (the bake's
+                                identity_sha1 no longer matches), so the
+                                guidance may describe something the assistant
+                                no longer says -- or a spoken label may now
+                                select a different stored answer (label swap).
+                                Drives the editor's human acknowledgment gate
+                                -- never an auto re-bake (bd polyglot-pdf-anim)
 
 ASCII only.
 """
@@ -1153,8 +1153,9 @@ def _check_guidance_identity_drift(
     """Flag fields whose voice-facing identity changed since their guidance was
     authored (bd polyglot-pdf-anim).
 
-    The bake records identity_sha1 (name + spoken_name + option label->value
-    pairs) in _bakeoff.authoring.instructions_enrich.provenance. A human rename
+    The bake records identity_sha1 (name + spoken_name + option
+    label/spoken_label/value bindings) in
+    _bakeoff.authoring.instructions_enrich.provenance. A human rename
     or option relabel afterwards may leave the authored guidance describing
     something the AI no longer says -- but a trivial rename does not warrant an
     LLM re-author, so this is a WARNING that drives the editor's

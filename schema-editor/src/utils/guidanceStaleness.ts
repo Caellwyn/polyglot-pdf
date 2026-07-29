@@ -28,8 +28,9 @@
  * finding, exactly like every other lint signal it already renders.
  *
  * The hash covers ONLY voice-facing identity -- name, spoken_name, and each
- * option label BOUND to its stored value. The label->value binding is what
- * makes a label SWAP flag (two labels trading places, values fixed): the label
+ * option's label and spoken label BOUND to its stored value. The binding is
+ * what makes a SWAP flag (two labels -- or two spoken labels, which outrank
+ * labels as the voice join key -- trading places, values fixed): the text
  * multiset is unchanged, but the assistant's unchanged words would select a
  * different stored answer -- a wrong answer on the form, not just stale
  * wording (bd anim handoff decision; tradeoffs in identity_payload's

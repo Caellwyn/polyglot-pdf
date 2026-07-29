@@ -1043,6 +1043,32 @@ def test_option_label_swap_flags_even_with_identical_label_multiset():
     assert len(_stale(lint_schema(_identity_schema(swapped, baked)))) == 1
 
 
+def test_option_spoken_label_swap_flags_too():
+    """spoken_label OUTRANKS label as the voice join key (secretary_context
+    resolves spoken_label or label; manifest_service ships it to the live
+    model), so two spoken labels trading places while values stay put is the
+    same wrong-answer hazard as a label swap (closeout Opus round 3, bd
+    polyglot-pdf-w028)."""
+    from backend.services import guidance_contract as gc
+    base = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+            "options": [
+                {"label": "M", "spoken_label": "Married", "value": "m"},
+                {"label": "S", "spoken_label": "Single", "value": "s"}],
+            "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+    swapped = dict(base, options=[
+        {"label": "M", "spoken_label": "Single", "value": "m"},
+        {"label": "S", "spoken_label": "Married", "value": "s"}])
+    assert len(_stale(lint_schema(_identity_schema(swapped, baked)))) == 1
+    # editing one spoken_label flags; reordering whole options stays silent
+    edited = dict(base, options=[
+        {"label": "M", "spoken_label": "Currently married", "value": "m"},
+        base["options"][1]])
+    assert len(_stale(lint_schema(_identity_schema(edited, baked)))) == 1
+    reordered = dict(base, options=[base["options"][1], base["options"][0]])
+    assert _stale(lint_schema(_identity_schema(reordered, baked))) == []
+
+
 def test_value_only_rename_flags_as_the_accepted_swap_safety_cost():
     """A value-only rename is indistinguishable, to any order-insensitive
     hash, from half of a label swap (a swap IS a reorder plus a value

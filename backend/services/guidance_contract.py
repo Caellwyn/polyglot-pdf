@@ -403,19 +403,25 @@ def identity_payload(field: dict) -> str:
     """The stable serialization of a field's voice-facing identity.
 
     Covers ONLY what the guidance actually describes: the field's name, its
-    spoken name, and its option labels -- each label BOUND to the option's
-    stored value as a [label, value] pair. Deliberately excludes the field id
-    (renames are retargeted wholesale and an id is never spoken) and plumbing
-    (pdf_field_name, positions, conditions) -- changing those does not make
-    authored guidance wrong, and hashing them would manufacture false
-    staleness that trains editors to click through the gate.
+    spoken name, and its options -- each option contributing a
+    [label, spoken_label, value] triple, so both voice-facing texts are BOUND
+    to the option's stored value. spoken_label rides along because it
+    OUTRANKS label as the voice join key (secretary_context resolves
+    spoken_label or label; manifest_service ships it to the live model), so a
+    spoken_label swap is the same wrong-answer hazard as a label swap
+    (closeout Opus round 3, bd polyglot-pdf-w028). Deliberately excludes the
+    field id (renames are retargeted wholesale and an id is never spoken) and
+    plumbing (pdf_field_name, positions, conditions) -- changing those does
+    not make authored guidance wrong, and hashing them would manufacture
+    false staleness that trains editors to click through the gate.
 
-    The pairs are SORTED, so a pure REORDER (whole options moving, each
-    keeping its own value) does not re-raise the gate -- the assistant still
-    says the same words (maintainer decision 2026-07-29). Adding, removing or
-    editing a label still flags. ACCEPTED TRADEOFF: guidance that describes
-    option ORDER ("choose the first option") is not re-flagged by a reorder
-    alone; the contract discourages that phrasing anyway.
+    The triples are SORTED, so a pure REORDER (whole options moving, each
+    keeping its own texts and value) does not re-raise the gate -- the
+    assistant still says the same words (maintainer decision 2026-07-29).
+    Adding, removing or editing a label or spoken label still flags.
+    ACCEPTED TRADEOFF: guidance that describes option ORDER ("choose the
+    first option") is not re-flagged by a reorder alone; the contract
+    discourages that phrasing anyway.
 
     WHY the value rides in the pair (bd anim handoff decision): with bare
     sorted labels, a label SWAP -- "Married" and "Single" trading places while
@@ -434,13 +440,15 @@ def identity_payload(field: dict) -> str:
     if not isinstance(field, dict):
         return "[]"
     opts = field.get("options")
-    pairs = []
+    triples = []
     if isinstance(opts, list):
         for o in opts:
             lab = o.get("label") if isinstance(o, dict) else None
+            slab = o.get("spoken_label") if isinstance(o, dict) else None
             val = o.get("value") if isinstance(o, dict) else None
-            pairs.append([
+            triples.append([
                 lab if isinstance(lab, str) else "",
+                slab if isinstance(slab, str) else "",
                 # str() keeps numeric-value bindings distinct; "" would erase
                 # them (labels coerce to "" -- a non-string label has no words
                 # to bind, but a non-string value is still a real join key)
@@ -451,7 +459,7 @@ def identity_payload(field: dict) -> str:
     return json.dumps(
         [name if isinstance(name, str) else "",
          spoken if isinstance(spoken, str) else "",
-         sorted(pairs)],   # order-insensitive pairs: see the docstring
+         sorted(triples)],   # order-insensitive triples: see the docstring
         ensure_ascii=False, separators=(",", ":"))
 
 

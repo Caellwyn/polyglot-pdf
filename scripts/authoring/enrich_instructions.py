@@ -863,10 +863,14 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
     # (bd polyglot-pdf-anim).
     schema_ids = {f.get("id") for f in schema.get("fields", [])
                   if isinstance(f, dict)}
+    # isinstance guard: a model can return a non-string under a hallucinated
+    # id ({"instructions": 5}); bare .strip() crashed the whole apply -- and
+    # in the CLI --write path that loses a metered run's output (closeout
+    # Opus round 3). Non-string junk does not count as "carried content".
     unmatched_proposal_ids = sorted(
         fid for fid, e in (proposals.get("fields") or {}).items()
         if fid not in schema_ids and isinstance(e, dict)
-        and any((e.get(k) or "").strip()
+        and any(isinstance(e.get(k), str) and e.get(k).strip()
                 for k in ("instructions", "details", "format_hint")))
 
     written = skipped_human = 0

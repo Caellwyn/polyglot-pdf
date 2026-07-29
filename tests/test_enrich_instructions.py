@@ -477,10 +477,15 @@ def test_unmatched_proposal_ids_are_counted_not_applied(tmp_path):
         "hallucinated_id": {"instructions": "Never applied.",
                             "details": "", "format_hint": ""},
         "blank_one": {"instructions": "", "details": "", "format_hint": ""},
+        # a model can return non-string junk under a hallucinated id; the
+        # counter must SKIP it, not crash the whole apply (a bare .strip()
+        # did, losing a metered run's output -- closeout Opus round 3)
+        "junk_typed": {"instructions": {"nested": "obj"}, "details": 5,
+                       "format_hint": None},
     }, "form_details": ""}
     summary = ei.apply_proposals(schema, proposals, "B", [], "m", "j")
     assert summary["written"] == 1
-    # counted, and only the one carrying real content
+    # counted, and only the one carrying real STRING content
     assert summary["unmatched_proposal_ids"] == ["hallucinated_id"]
     # and genuinely NOT applied anywhere
     assert schema["fields"][0]["help"]["instructions"] == "Applied."
