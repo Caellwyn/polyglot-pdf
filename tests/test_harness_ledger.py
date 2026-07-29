@@ -100,6 +100,120 @@ class TestParseTranscript:
         assert parsed["models"]["subagent"]["claude-haiku-4-5"]["input_tokens"] == 10
         assert parsed["models"]["orchestrator"]["claude-opus-4-8"]["input_tokens"] == 30
 
+    def test_cache_creation_ttl_breakdown_is_parsed_off_the_record(self, tmp_path):
+        """bd polyglot-pdf-aefl: the per-TTL split must be READ from the record.
+
+        Real transcripts carry usage.cache_creation alongside the flat count;
+        parse_transcript has to pick it up, or compute_cost silently falls back
+        to the 5m rate and under-reports every 1h write by 37.5%.
+        """
+        usage = _usage(inp=5, cc=1000)
+        usage["cache_creation"] = {
+            "ephemeral_1h_input_tokens": 900,
+            "ephemeral_5m_input_tokens": 100,
+        }
+        legacy = _usage(inp=5, cc=500)  # no breakdown -> stays unattributed
+        t = _write_transcript(tmp_path, [
+            _assistant(usage, model="claude-opus-5"),
+            _assistant(legacy, model="claude-opus-5"),
+        ])
+        parsed = ledger.parse_transcript(t)
+        m = parsed["models"]["orchestrator"]["claude-opus-5"]
+
+        # The breakdown is a SPLIT of the flat field, never additive to it.
+        assert m["cache_creation_input_tokens"] == 1500
+        assert m["cache_creation_1h_input_tokens"] == 900
+        assert m["cache_creation_5m_input_tokens"] == 100
+
+        # 600 tokens are unattributed (the legacy record) -> "mixed", 5m-priced.
+        c = ledger.compute_cost(parsed["models"])
+        assert c["cache_write_ttl_source"] == "mixed"
+        assert c["cache_write_tokens_1h"] == 900
+        assert c["cache_write_tokens_5m"] == 600
+
+    def test_legacy_record_not_cancelled_by_zero_flat_breakdown_record(self, tmp_path):
+        """bd polyglot-pdf-9qf2: bucket PER RECORD, never by subtracting aggregates.
+
+        Records are not uniform -- some carry a TTL breakdown while their flat
+        cache_creation_input_tokens is 0 (93 such records / 1.1M tokens in one
+        live session). Aggregating first and then deriving
+        assumed = flat - (1h + 5m) lets the zero-flat record's breakdown cancel
+        a DIFFERENT record's genuinely-legacy tokens: they price at $0 while the
+        block reports "measured".
+
+        Here: 1M tokens of 1h (flat 0) + 1M legacy tokens (no breakdown), same
+        model. Correct = 1M @ 2.0x + 1M @ 1.25x on sonnet = 6.00 + 3.75 = $9.75.
+        The aggregate-subtraction bug charged $6.00 and claimed "measured".
+        """
+        with_bd = _usage(cc=0)
+        with_bd["cache_creation"] = {
+            "ephemeral_1h_input_tokens": 1_000_000,
+            "ephemeral_5m_input_tokens": 0,
+        }
+        legacy = _usage(cc=1_000_000)  # no breakdown at all
+        t = _write_transcript(tmp_path, [
+            _assistant(with_bd, model="claude-sonnet-4-6"),
+            _assistant(legacy, model="claude-sonnet-4-6"),
+        ])
+        c = ledger.compute_cost(ledger.parse_transcript(t)["models"])
+
+        assert c["total"] == 9.75
+        assert c["cache_write_ttl_source"] == "mixed"
+        assert c["cache_write_tokens_1h"] == 1_000_000
+        assert c["cache_write_tokens_5m_assumed"] == 1_000_000
+
+    def test_unmodelled_ttl_kind_is_priced_not_dropped(self, tmp_path):
+        """bd polyglot-pdf-41c1: a future TTL kind must not vanish.
+
+        Anchoring the remainder on the flat field ALONE drops an unmodelled kind
+        to $0 whenever the flat field is also 0 -- and a non-zero breakdown
+        beside a zero flat field is a real shape (167 such records in the local
+        corpus), so the two conditions co-occur. The block then reported "none"
+        ("no cache writes at all") on a real charge.
+
+        An unknown kind is charged at the conservative 5m rate and surfaces as
+        assumed, rather than being silently priced at zero.
+        """
+        usage = _usage(cc=0)
+        usage["cache_creation"] = {"ephemeral_12h_input_tokens": 5_000_000}
+        t = _write_transcript(tmp_path, [_assistant(usage, model="claude-sonnet-4-6")])
+        c = ledger.compute_cost(ledger.parse_transcript(t)["models"])
+
+        # 5M at sonnet's 3/MTok input, 1.25x = $18.75.
+        assert c["total"] == 18.75
+        assert c["cache_write_ttl_source"] == "assumed-5m"
+        assert c["cache_write_tokens_5m_assumed"] == 5_000_000
+
+    def test_non_token_cache_creation_siblings_are_not_charged(self, tmp_path):
+        """bd polyglot-pdf-dxgj: match by KEY MEANING, not value type.
+
+        The 41c1 guard sums unmodelled members of `cache_creation` so a future
+        TTL kind cannot vanish. Summing every NUMERIC member would charge any
+        non-token sibling as cache-write tokens -- `ttl_seconds: 3600` would
+        overcharge 3.25x. That is established schema precedent, not invention:
+        `usage.server_tool_use` already carries non-token integer counts
+        (web_search_requests / web_fetch_requests).
+
+        A summary member is the subtler case: `total_input_tokens` ends in
+        `_input_tokens` but summarizes the buckets rather than adding a kind, so
+        the filter matches the `ephemeral_<ttl>_input_tokens` shape specifically.
+
+        True cost here is 1000 tokens at 1h (sonnet 3/MTok, 2.0x) = $0.006, and
+        every sibling below must leave it unchanged.
+        """
+        for sibling in (
+            {"ttl_seconds": 3600},
+            {"num_blocks": 4},
+            {"total_input_tokens": 1000},
+            {"cache_ttl": "1h"},
+        ):
+            usage = _usage(cc=1000)
+            usage["cache_creation"] = {"ephemeral_1h_input_tokens": 1000, **sibling}
+            t = _write_transcript(tmp_path, [_assistant(usage, model="claude-sonnet-4-6")])
+            c = ledger.compute_cost(ledger.parse_transcript(t)["models"])
+            assert c["total"] == 0.006, f"sibling {sibling} changed the charge"
+            assert c["cache_write_tokens_5m_assumed"] == 0
+
     def test_wall_clock_span(self, tmp_path):
         records = [
             {"type": "user", "sessionId": "sess-fixture", "timestamp": "2026-06-01T00:00:00Z"},
@@ -628,13 +742,133 @@ class TestCost:
         )
         assert c["total"] == 0.1
 
-    def test_cache_write_priced_at_1_25x_input_5m_ttl(self):
-        # 1M cache-creation on sonnet (input 3/MTok) = 3.0 * 1.25 = $3.75.
+    def test_legacy_cache_write_without_ttl_breakdown_falls_back_to_5m(self):
+        # A LEGACY record (flat cache_creation_input_tokens, no usage.cache_creation
+        # breakdown) keeps its historical 1.25x pricing rather than being silently
+        # re-priced upward: 1M on sonnet (input 3/MTok) = 3.0 * 1.25 = $3.75.
         c = ledger.compute_cost(
             {"orchestrator": {"claude-sonnet-4-6": {"cache_creation_input_tokens": 1_000_000}}}
         )
         assert c["total"] == 3.75
-        assert c["cache_write_ttl_assumed"] == "5m"
+        assert c["cache_write_ttl_source"] == "assumed-5m"
+        assert c["cache_write_tokens_5m"] == 1_000_000
+        assert c["cache_write_tokens_1h"] == 0
+
+    def test_1h_cache_write_priced_at_2x_input(self):
+        # bd polyglot-pdf-aefl: 1-hour cache writes cost 2.0x the base input rate,
+        # not 1.25x. MEASURED reality -- every cache write in recent transcripts is
+        # ephemeral_1h. 1M on sonnet (input 3/MTok) = 3.0 * 2.0 = $6.00.
+        c = ledger.compute_cost({"orchestrator": {"claude-sonnet-4-6": {
+            "cache_creation_input_tokens": 1_000_000,
+            "cache_creation_1h_input_tokens": 1_000_000,
+        }}})
+        assert c["total"] == 6.00
+        assert c["cache_write_ttl_source"] == "measured"
+        assert c["cache_write_tokens_1h"] == 1_000_000
+        assert c["cache_write_tokens_5m"] == 0
+
+    def test_5m_cache_write_priced_at_1_25x_input(self):
+        # The other measured bucket: an explicit 5m write stays at 1.25x.
+        c = ledger.compute_cost({"orchestrator": {"claude-sonnet-4-6": {
+            "cache_creation_input_tokens": 1_000_000,
+            "cache_creation_5m_input_tokens": 1_000_000,
+        }}})
+        assert c["total"] == 3.75
+        assert c["cache_write_ttl_source"] == "measured"
+
+    def test_mixed_ttl_buckets_price_independently(self):
+        # A transcript with both kinds prices each at its own multiplier:
+        # 1M @ 2.0x + 1M @ 1.25x on sonnet = 6.00 + 3.75 = $9.75.
+        c = ledger.compute_cost({"orchestrator": {"claude-sonnet-4-6": {
+            "cache_creation_input_tokens": 2_000_000,
+            "cache_creation_1h_input_tokens": 1_000_000,
+            "cache_creation_5m_input_tokens": 1_000_000,
+        }}})
+        assert c["total"] == 9.75
+        assert c["cache_write_ttl_source"] == "measured"
+
+    def test_negative_token_counts_are_clamped_not_blended(self):
+        """A negative bucket must be contained, not propagated.
+
+        The wire never sends negative token counts, but a hand-built or
+        future-schema row could. Unclamped, {flat: 1000, 1h: -500} would blend
+        the effective rate (pricing 1000 net tokens as if -500 were charged at
+        2.0x) AND surface -500 as a reported token count.
+        """
+        c = ledger.compute_cost({"orchestrator": {"claude-sonnet-4-6": {
+            "cache_creation_input_tokens": 1000,
+            "cache_creation_1h_input_tokens": -500,
+        }}})
+        # 1000 tokens, all unattributed -> 5m rate: 1000 * 3/1e6 * 1.25
+        assert c["total"] == round(1000 * (3.0 / 1_000_000) * 1.25, 6)
+        assert c["cache_write_tokens_1h"] == 0      # never negative
+        assert c["cache_write_tokens_5m"] == 1000
+        assert c["cache_write_ttl_source"] == "assumed-5m"
+
+    def test_ttl_source_not_derived_from_cross_model_global_sums(self):
+        """bd polyglot-pdf-uksl: the label must reflect what was actually priced.
+
+        Deriving the diagnostic from global sums lets one model's measured
+        tokens cancel another's assumed ones. Here sonnet's 1M is measured and
+        haiku's 1M went through the legacy fallback -- the honest label is
+        "mixed", and the assumed portion must be visible, not laundered into
+        the 5m bucket as though the transcript had stated it.
+        """
+        c = ledger.compute_cost({
+            "orchestrator": {"claude-sonnet-4-6": {
+                "cache_creation_input_tokens": 0,
+                "cache_creation_1h_input_tokens": 1_000_000,
+            }},
+            "subagent": {"claude-haiku-4-5": {"cache_creation_input_tokens": 1_000_000}},
+        })
+        assert c["cache_write_ttl_source"] == "mixed"
+        assert c["cache_write_tokens_1h"] == 1_000_000
+        assert c["cache_write_tokens_5m_assumed"] == 1_000_000
+
+    def test_breakdown_with_zero_flat_field_is_measured_not_none(self):
+        """bd polyglot-pdf-uksl: a real shape -- 93 records / 1.1M tokens in one
+        live session -- carries the TTL breakdown while the flat field is 0.
+        Keying "none" off the flat field alone reported 'no cache writes at all'
+        on a genuinely non-zero cost.
+        """
+        c = ledger.compute_cost({"orchestrator": {"claude-sonnet-4-6": {
+            "cache_creation_input_tokens": 0,
+            "cache_creation_1h_input_tokens": 1_102_515,
+        }}})
+        assert c["total"] > 0
+        assert c["cache_write_ttl_source"] == "measured"
+        assert c["cache_write_tokens_1h"] == 1_102_515
+
+    def test_no_cache_writes_at_all_is_none(self):
+        c = ledger.compute_cost(
+            {"orchestrator": {"claude-sonnet-4-6": {"input_tokens": 100}}}
+        )
+        assert c["cache_write_ttl_source"] == "none"
+
+    def test_unpriced_model_still_counted_in_cache_write_diagnostic(self):
+        """The diagnostic describes the TRANSCRIPT, not just its billable part:
+        an unknown model contributes $0 but its cache writes still happened."""
+        c = ledger.compute_cost({"orchestrator": {"claude-mystery-9": {
+            "cache_creation_input_tokens": 500,
+            "cache_creation_1h_input_tokens": 500,
+        }}})
+        assert c["total"] == 0.0
+        assert c["unpriced_models"] == ["claude-mystery-9"]
+        assert c["cache_write_ttl_source"] == "measured"
+        assert c["cache_write_tokens_1h"] == 500
+
+    def test_partial_ttl_breakdown_routes_remainder_to_5m(self):
+        # Defensive: if the breakdown accounts for only part of the flat total
+        # (a TTL kind we do not model yet), the remainder must still be priced --
+        # at the conservative 5m rate -- and the source flagged "mixed", never
+        # silently dropped. 1M @ 2.0x + 1M unattributed @ 1.25x = $9.75.
+        c = ledger.compute_cost({"orchestrator": {"claude-sonnet-4-6": {
+            "cache_creation_input_tokens": 2_000_000,
+            "cache_creation_1h_input_tokens": 1_000_000,
+        }}})
+        assert c["total"] == 9.75
+        assert c["cache_write_ttl_source"] == "mixed"
+        assert c["cache_write_tokens_5m"] == 1_000_000
 
     def test_dated_haiku_id_resolves_by_prefix(self):
         # The real transcript carries the dated id; it must resolve to the family.
