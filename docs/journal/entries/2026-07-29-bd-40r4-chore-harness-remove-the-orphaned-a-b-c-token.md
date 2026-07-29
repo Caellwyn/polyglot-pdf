@@ -84,8 +84,13 @@ deleted; the two surviving `--close-only` tests renamed and re-commented off the
 now-gone double-count rationale onto what they actually pin (close-only closes the
 bead and does nothing else). Two unrelated test files referenced
 `tests/test_harness_ledger.py` as the module-loading idiom example -- repointed at
-`tests/test_doc_freshness.py`, which still exists. Full stack: **1323 passed, 1
-skipped, 3 deselected**.
+`tests/test_doc_freshness.py`, which still exists.
+
+**Full stack (both testpaths, `pytest -q -m "not external"` from the worktree):
+2235 passed, 2 skipped, 3 deselected** -- that is 1323 from `backend/tests` plus
+912 from `tests/`. The root `tests/` half is the half that matters here: it is the
+only suite this change touches, and it holds every guard the bead added (912 is up
+from 904 pre-change, the +8 being the new retired-flag and fixture-drift guards).
 
 **The review loop caught three real gaps across three rounds** -- all of them
 dangling *instructions or fixtures* rather than broken code, which is the
@@ -130,6 +135,16 @@ the stale instruction just quietly misleads the next reader):
    actually yields N=180, the distribution is **115 A / 24 C / 20 BC / 1 B / 20
    unset**. The qualitative dead-signal finding is unchanged; only the counts were
    wrong. Corrected above.
+6. **Round 6 (Opus, the clearing round):** all three criteria PASS again, three
+   findings -- (a) R5's figure correction had been applied to two places but
+   **missed the Lessons bullet**, leaving the entry stating two different
+   distributions for the same dataset; (b) the "Full stack: 1323 passed" claim was
+   **the backend suite alone**, excluding `tests/` -- the only suite this change
+   touches and where every new guard lives. Real full-stack figure: **2235 passed,
+   2 skipped, 3 deselected** (1323 backend + 912 root); (c) `pick_review_model.py`
+   -- a script closeout runs on every PR -- still said its threshold was "tunable
+   later from the ledger's Haiku-escalation rate," pointing a future tuner at a
+   deleted data source. All three fixed.
 
 ## Lessons
 
@@ -142,7 +157,7 @@ the stale instruction just quietly misleads the next reader):
   keeps paying for a signal with no consumer.
 - **An orphaned field announces itself in the data.** The tell was not the code, it
   was the label distribution: once a counter has no consumer, nothing corrects
-  mislabeling, so the values drift incoherent (100/20/15/1/20-unset). A quick
+  mislabeling, so the values drift incoherent (115/24/20/1/20-unset). A quick
   distribution check over recent rows is a cheap way to test whether a telemetry
   field is still real.
 - **When deleting experiment scaffolding, separate the scaffolding from what the
@@ -160,12 +175,15 @@ the stale instruction just quietly misleads the next reader):
   do not delete it just because the main checkout looks clean. Delete the file;
   keep the ignore line. Generalizes to any gitignored derived artifact whose
   producer is being retired.
-- **A grep-based removal sweep must enumerate every removed NAME, and every file
-  TYPE.** Gaps survived a sweep that searched `--arm`/`telemetry` but not
-  `--haiku-escalations`; a claim about CLAUDE.md was written from a sweep that never
-  covered CLAUDE.md; and `.gitattributes` (a dotfile matched by no `--include=*.ext`
-  filter) kept describing the deleted system in the present tense. Enumerate the
-  identifiers, include dotfiles, and state which paths the sweep actually ran over.
+- **A grep-based removal sweep must cover every removed NAME, every file TYPE, and
+  the PROSE that names the thing without using its identifier.** Four separate gaps
+  came from one sweep being too narrow: `--haiku-escalations` (searched `--arm` and
+  `telemetry`, not each flag by name); CLAUDE.md (never in the swept paths);
+  `.gitattributes` (a dotfile matched by no `--include=*.ext` filter); and
+  `pick_review_model.py`'s "the ledger's Haiku-escalation rate" (prose naming the
+  subsystem without using any removed identifier -- invisible to an
+  identifier-only grep). Sweep identifiers AND the plain-English name of what you
+  deleted, include dotfiles, and state which paths the sweep actually ran over.
 - **Every figure in a journal entry must come from a command run against the
   artifact -- and the review loop should check the arithmetic.** THREE separate
   numeric/factual claims in this one entry were wrong on first writing: "49 tests"

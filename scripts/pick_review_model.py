@@ -75,9 +75,10 @@ import sys
 # Changed-line threshold (insertions + deletions). A diff AT OR BELOW this many
 # changed lines routes to the cheap model; anything larger gets Sonnet. 80 is
 # the plan's "<= ~80 changed lines" figure -- a deliberately round, conservative
-# cut chosen so the cheap model only sees genuinely small diffs. Tunable later
-# from the ledger's Haiku-escalation rate (the diagnostic that tells us how often
-# size under-predicted true severity); exposed as --threshold for experiments.
+# cut chosen so the cheap model only sees genuinely small diffs. Exposed as
+# --threshold for experiments. (It was once going to be tuned from the telemetry
+# ledger's Haiku-escalation rate; that ledger was removed in bd polyglot-pdf-40r4,
+# so retuning now means measuring escalations directly.)
 DEFAULT_THRESHOLD = 80
 
 # Fail toward the capable model: any measurement failure prints this, never the
