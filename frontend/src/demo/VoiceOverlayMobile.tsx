@@ -1215,15 +1215,22 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 					className="vff-fab-sol"
 					decorative
 				/>
-				{/* Sol carries the status VISUALLY and is aria-hidden; this is its
-				    non-visual equivalent. Polite (never interrupts the assistant) and
-				    separate from the button's name, so state changes are announced
-				    without re-reading the control on every turn. It is the only
-				    status a screen-reader user has while the panel is collapsed. */}
-				<span className="vff-sr-only" role="status" aria-live="polite">
-					{SOL_STATE_LABEL[solState]}
-				</span>
 			</div>
+
+			{/* Sol carries the status VISUALLY and is aria-hidden; this is its
+			    non-visual equivalent, and it MUST be a SIBLING of the FAB, never a
+			    child of it. `role="button"` is defined with Children Presentational:
+			    True, so user agents strip the semantics of every descendant -- a live
+			    region nested inside the button is silently dropped from the
+			    accessibility tree and announces nothing at all. Being outside also
+			    keeps it off the button's accessible name, which is the point: the
+			    name stays static so a focused FAB is not re-read on every turn, while
+			    `role="status"` (implicitly polite -- it never interrupts the
+			    assistant) announces the state changes. While the panel is collapsed
+			    this is the ONLY status a screen-reader user has. */}
+			<span className="vff-sr-only" role="status">
+				{SOL_STATE_LABEL[solState]}
+			</span>
 
 			{/* Expanded Panel */}
 			{isExpanded && (

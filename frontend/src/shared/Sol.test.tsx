@@ -13,10 +13,30 @@
 //   - the accessible name is present (or correctly suppressed when decorative).
 import { render, cleanup } from '@testing-library/react'
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { Sol } from './Sol'
+import { Sol, SOL_CSS } from './Sol'
 import type { SolState } from './solState'
 
 afterEach(cleanup)
+
+/**
+ * Force the prefers-reduced-motion answer for one test. jsdom supplies a
+ * matchMedia that always reports `matches: false`, so the normal path is live by
+ * default and only the reduced case needs stubbing.
+ */
+function stubReducedMotion(matches: boolean) {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('prefers-reduced-motion') ? matches : false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }))
+}
+
+const frame = () => new Promise(r => requestAnimationFrame(() => r(null)))
 
 const STATES: SolState[] = [
   'idle', 'connecting', 'listening', 'thinking', 'speaking', 'paused', 'offline',
@@ -130,9 +150,75 @@ describe('Sol rendering', () => {
 
   it('survives a missing output getter (pre-connect / mocked managers)', async () => {
     const { container } = render(<Sol state="speaking" energy={0} />)
-    await new Promise(r => requestAnimationFrame(() => r(null)))
+    await frame()
     const svg = container.querySelector('[data-testid="sol-avatar"]') as HTMLElement
     // No getter -> treated as silence, not NaN (which would break every calc()).
     expect(Number.isNaN(parseFloat(svg.style.getPropertyValue('--e')))).toBe(false)
+  })
+})
+
+describe('Sol reduced-motion handling', () => {
+  // These pin the two behavioural changes that shipped in the corona-fix commit.
+  // Both are invisible to every other test in the suite: an inverted guard would
+  // kill the amplitude animation on EVERY normal device, and a reverted keyframe
+  // would restore the corona inversion, with 1100+ tests still green either way.
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('skips the amplitude loop entirely under prefers-reduced-motion', async () => {
+    stubReducedMotion(true)
+    const getOutputEnergy = vi.fn(() => 80)
+    const { container } = render(
+      <Sol state="speaking" energy={90} getOutputEnergy={getOutputEnergy} />
+    )
+    await frame()
+    await frame()
+    const svg = container.querySelector('[data-testid="sol-avatar"]') as HTMLElement
+    // Every rule --e/--eb feed is overridden under reduced motion, so running the
+    // loop would be a per-frame FFT copy for no visual effect.
+    expect(svg.style.getPropertyValue('--e')).toBe('0')
+    expect(svg.style.getPropertyValue('--eb')).toBe('0')
+    expect(getOutputEnergy).not.toHaveBeenCalled()
+  })
+
+  it('DOES run the amplitude loop when reduced motion is off (guard not inverted)', async () => {
+    stubReducedMotion(false)
+    const getOutputEnergy = vi.fn(() => 80)
+    render(<Sol state="speaking" energy={0} getOutputEnergy={getOutputEnergy} />)
+    await frame()
+    // The mirror of the test above: without this, inverting the guard would pass.
+    expect(getOutputEnergy).toHaveBeenCalled()
+  })
+})
+
+describe('Sol stylesheet invariants', () => {
+  // Asserted against the exported CSS text because these are cascade facts no
+  // jsdom render can observe (jsdom does not run animations or resolve
+  // animated-vs-normal declaration precedence).
+
+  it('the connecting corona pulses in SIZE ONLY, never via sol-pulse', () => {
+    // sol-pulse animates opacity as well as transform, and an animated
+    // declaration outranks a normal one -- so borrowing it here silently voids
+    // the corona's `opacity: .5` and swings it 0.78-1.0, BRIGHTER than idle's
+    // steady .85. That is the exact bug this pins: the state whose whole brief
+    // is "quietly waiting" became the loudest one Sol has.
+    const coronaRule = SOL_CSS.match(
+      /\.sol\[data-state="connecting"\]\s*\.corona\s*\{[^}]*\}/
+    )
+    expect(coronaRule).toBeTruthy()
+    expect(coronaRule![0]).toContain('sol-pulse-size')
+    expect(coronaRule![0]).not.toMatch(/animation:\s*sol-pulse\s/)
+    expect(coronaRule![0]).toContain('opacity: .5')
+  })
+
+  it('sol-pulse-size animates transform only (no opacity to override with)', () => {
+    const kf = SOL_CSS.match(/@keyframes sol-pulse-size\s*\{[\s\S]*?\}\s*\}/)
+    expect(kf).toBeTruthy()
+    expect(kf![0]).not.toContain('opacity')
+  })
+
+  it('connecting stays dimmer than idle -- the whole point of the state', () => {
+    const idle = SOL_CSS.match(/\.sol \.corona\s*\{[^}]*\}/)![0]
+    expect(idle).toContain('opacity: .85')
+    // .5 (connecting) < .85 (idle): quieter, not louder.
   })
 })

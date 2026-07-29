@@ -429,3 +429,65 @@ describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxn
     expect(container.querySelector('.vff-thinking-indicator')).toBeTruthy()
   })
 })
+
+describe('Mobile FAB status is announced without hijacking the button (bd polyglot-pdf-2p4y)', () => {
+  // Sol is a picture, so screen readers need a text equivalent. Two ways to get
+  // this wrong, and the first attempt hit the second one:
+  //   1. state in the button's aria-label -> the FOCUSED control is re-announced
+  //      on every turn transition, talking over the assistant;
+  //   2. live region nested INSIDE role="button" -> `Children Presentational:
+  //      True` strips descendant semantics, so it announces nothing at all.
+  // The live region must therefore be a SIBLING of the FAB, and the button's
+  // name must be static. While the panel is collapsed this is the only status a
+  // screen-reader user has.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    stubEnv()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  function renderFabOnly(status: string) {
+    return render(
+      <VoiceOverlayMobile
+        schema={MINIMAL_SCHEMA}
+        connectionManager={makeMockManager(status)}
+        status={status}
+        initialLanguage="English"
+      />
+    )
+  }
+
+  it('the FAB name is STATIC -- it does not carry the changing Sol state', () => {
+    const a = renderFabOnly('connected')
+    const nameConnected = a.container.querySelector('.vff-fab')!.getAttribute('aria-label')
+    cleanup()
+    const b = renderFabOnly('disconnected')
+    const nameOffline = b.container.querySelector('.vff-fab')!.getAttribute('aria-label')
+    // Same name in two very different session states -> nothing to re-announce.
+    expect(nameConnected).toBe(nameOffline)
+    expect(nameConnected).not.toMatch(/listening|speaking|connect(ing|ed)|paused/i)
+  })
+
+  it('the live region is a SIBLING of the FAB, not a descendant of the button', () => {
+    const { container } = renderFabOnly('connected')
+    const live = container.querySelector('[role="status"].vff-sr-only')
+    expect(live).toBeTruthy()
+    const fab = container.querySelector('.vff-fab')!
+    // The whole point: inside role="button" it would be stripped from the
+    // accessibility tree and announce nothing.
+    expect(fab.contains(live!)).toBe(false)
+    expect(live!.closest('[role="button"]')).toBeNull()
+  })
+
+  it('the live region carries the current state as text', () => {
+    const { container } = renderFabOnly('disconnected')
+    const live = container.querySelector('[role="status"].vff-sr-only')
+    expect(live!.textContent).toBe('Not connected')
+  })
+})

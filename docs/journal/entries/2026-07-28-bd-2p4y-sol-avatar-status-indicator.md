@@ -154,6 +154,27 @@ direction. A uniqueness check answers "are these distinguishable?", never "is
 this one what it claims to be." Both questions need asking, and only the first
 one is cheap to automate.
 
+## Every guard here was mutation-tested, and it kept paying
+
+Writing an assertion is not the same as knowing it fires. After the round-1
+episode above -- where a rewritten test passed while the invariant underneath it
+had quietly collapsed -- every new guard in this branch was checked by breaking
+the code on purpose and confirming a red test:
+
+| mutation | caught by |
+|---|---|
+| clamp removed from `useGeminiSpeaking` | 2 tests |
+| clamp fires for live managers too | 5 tests |
+| reduced-motion guard inverted | 3 tests |
+| corona reverted to `sol-pulse` | 1 test |
+| live region nested back inside the button | 1 test |
+
+The last row earned its place immediately. Restoring the source after that
+mutation, a `git checkout` pulled from the **index** -- which still held the
+pre-fix nested version -- silently reverting the accessibility fix I had just
+made. The test caught it on the next run. A guard that has never been seen to
+fail is a guess; these have each been seen to fail exactly once, on purpose.
+
 ## The precedence rule
 
 `paused > offline > speaking > thinking > listening > idle`, with the three
@@ -235,8 +256,13 @@ demo hang invisibly on 2026-06-10. The mobile FAB's green mic-activity badge (bd
 
 ## Verification
 
-Frontend **1113 passing** (up 32 from the 1081 baseline, all new), backend
-**1323 passed / 1 skipped**, `tsc --noEmit` clean.
+Frontend **1121 passing**, backend **1323 passed / 1 skipped**, `tsc --noEmit`
+clean.
+
+The frontend delta is **+81 over a 1040 baseline**, measured rather than
+inferred: running the suite with this branch's four changed test files excluded
+gives 1021, and `origin/dev`'s version of the one pre-existing file among them
+(`VoiceOverlayListeningIndicator.test.tsx`) has 19 tests -- so 1021 + 19 = 1040.
 
 Beyond the suite, the real component was driven in a browser via a dev-only
 harness (`frontend/sol-preview.html` + `src/dev/solPreview.tsx`; the deployed
@@ -250,12 +276,19 @@ Three bugs were found and fixed *by* that browser pass, none of which any unit
 test would have caught: the disc over-scaling (13% -> 5.5%), the reduced-motion
 state collapse, and the `connecting` corona inversion (below).
 
-**These numbers are the ones that shipped.** An earlier draft of this section
-carried counts measured three commits before the branch was done -- 1099 tests,
-24 instances, 72 gradients -- and each was already stale when written. That is a
-worse failure than it looks: the browser pass is the ONLY evidence offered for
-the visual claims, so a demonstrably wrong count there invites a reader to
-discount the whole section. Re-measured against the final tree.
+**This section got its numbers wrong twice, and that is worth recording.** The
+first draft carried counts taken three commits before the branch was done (1099
+tests, 24 instances, 72 gradients), each already stale when written. The
+correction then asserted "up 32 from the 1081 baseline" -- a *fabricated*
+baseline, arrived at by subtraction from a remembered total rather than by
+measuring `origin/dev`. Both slipped past because a plausible-looking number
+attracts no scrutiny, least of all from the person who wrote it.
+
+The counts above are now derived from commands whose output is reproducible, and
+the derivation is shown so a reader can re-run it instead of trusting it. That
+matters more here than elsewhere: the browser pass is the ONLY evidence offered
+for the visual claims, so a wrong count anywhere in this section invites a reader
+to discount all of it -- including the parts that are load-bearing.
 
 A caveat worth stating plainly: the Browser pane would not composite frames in
 this session, so **no human has visually eyeballed Sol yet** -- every claim above
@@ -319,10 +352,20 @@ keyboard user parked on the FAB would have the control read over them, on every
 transition, while the assistant was speaking.
 
 Split in two instead: the button keeps a **static** name (`"Open voice
-controls"`), and the changing state lives in a visually-hidden
-`role="status" aria-live="polite"` span beside it. Polite never interrupts, and a
-live region announces without stealing the control's name. The desktop instance
+controls"`), and the changing state lives in a visually-hidden `role="status"`
+span. A live region announces without stealing the control's name, and `status`
+is implicitly polite, so it never interrupts the assistant. The desktop instance
 needs none of this -- it is not focusable and sits next to visible status text.
+
+**The span must be a SIBLING of the button, never a child of it** -- and the
+first attempt at this fix got that wrong, which is the more instructive half of
+the story. `role="button"` is defined with *Children Presentational: True*: user
+agents strip the semantics of every descendant, so a live region nested inside
+the button is dropped from the accessibility tree entirely and announces
+nothing. That turned "too chatty" into "completely silent" -- strictly the worse
+failure, on the one screen where the avatar is the sole status. A second review
+caught it by reading the ARIA spec against the JSX; nothing in a passing test
+suite or a rendered screenshot would have shown it.
 
 ## Follow-ups not taken
 
