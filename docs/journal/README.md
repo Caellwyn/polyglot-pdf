@@ -13,10 +13,14 @@ Files touched.
 `scripts/journal_scaffold.py <bead-id>` emits the skeleton; you fill the prose.
 The tag set is the per-feature index: `grep -l '<tag>' entries/*.md`.
 
-**Harness telemetry** lives in two places: [`harness_ledger.jsonl`](harness_ledger.jsonl)
-is the pre-2026-06-10 archive, and [`telemetry/*.json`](telemetry/) is the current
-per-closeout system. Analyze BOTH (dedup by `session_id` + `recorded_at`) for the
-full cost dataset -- see [`telemetry/README.md`](telemetry/README.md) (bd
-polyglot-pdf-icjr).
+**Harness telemetry is a CLOSED ARCHIVE** (bd polyglot-pdf-40r4). The sprint-1
+harness-tuning A/B experiment (epic `polyglot-pdf-hrn`) concluded on 2026-07-05;
+its conclusions are in
+[`telemetry/FINAL_REPORT.md`](telemetry/FINAL_REPORT.md). Closeout no longer
+writes telemetry rows and `scripts/harness_ledger.py` is gone. The dataset is
+retained read-only in two places: [`harness_ledger.jsonl`](harness_ledger.jsonl)
+(the pre-2026-06-10 archive) and [`telemetry/*.json`](telemetry/) (the
+per-closeout rows). Analyze BOTH (dedup by `session_id` + `recorded_at`) for the
+full historical cost dataset -- see [`telemetry/README.md`](telemetry/README.md).
 
 See [`../doc-architecture.md`](../doc-architecture.md) for the full system.

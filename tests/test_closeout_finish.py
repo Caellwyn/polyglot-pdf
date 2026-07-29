@@ -11,10 +11,9 @@ no external-reviewer trigger to pin here.
   - a normal run opens the PR and closes the bead(s); it emits NO watch command and
     makes NO gh-api / reviewer-API / bot-trigger call;
   - a rebase conflict aborts the rebase and exits REBASE-CONFLICT (4);
-  - telemetry is warn-only (a ledger failure does not change the exit code);
   - --close-only closes the bead(s) ONLY (recovery tool).
 
-All git/gh/bd/ledger calls go through closeout_finish._run, so the tests stub
+All git/gh/bd calls go through closeout_finish._run, so the tests stub
 that single seam rather than spawning real processes (the bd_safe._run idiom).
 The live end-to-end run is the closeout's own --dry-run demo + first dogfood.
 
@@ -146,15 +145,10 @@ class TestDryRun:
         rec = RunRecorder()
         job = _job(rec, dry_run=True, commit_message="c")
         assert job.run() == cf.EXIT_OK
-        # The ledger preview MUST have run (else the test passes vacuously with
-        # zero calls -- the Finding-7 gap).
-        assert len(rec.calls) >= 1, "dry-run made no subprocess call at all"
-        # The ONLY allowed subprocess in dry-run is the ledger's own --dry-run.
-        assert all("--dry-run" in j for j in rec.joined()), rec.joined()
-        for joined in rec.joined():
-            assert "commit" not in joined and "push" not in joined
-            assert "pr create" not in joined and "gh api" not in joined
-            assert "bd_safe" not in joined
+        # --dry-run now makes ZERO subprocess calls: the only one it ever made
+        # was the telemetry ledger's own --dry-run preview, and the ledger is
+        # gone (bd polyglot-pdf-40r4). The plan is printed from in-memory labels.
+        assert rec.calls == [], rec.joined()
         out = capsys.readouterr().out
         assert "DRY RUN" in out and "RESULT: DRY-RUN" in out
 
@@ -254,167 +248,6 @@ class TestRebaseConflict:
 
 
 # --------------------------------------------------------------------------- #
-# Telemetry warn-only
-# --------------------------------------------------------------------------- #
-class TestTelemetryWarnOnly:
-    def test_ledger_failure_does_not_fail_run(self):
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger.py": (1, "", "could not find transcript"),
-        })
-        job = _job(rec)
-        assert job.run() == cf.EXIT_OK
-        assert job.out["telemetry"].startswith("GAP")
-
-
-# --------------------------------------------------------------------------- #
-# Telemetry commit+push (bd polyglot-pdf-3yf): the ledger row is written AFTER
-# the closeout commit+push, so a dedicated step must commit+push the two
-# tool-owned files or the row is orphaned in the working tree.
-# --------------------------------------------------------------------------- #
-class TestTelemetryCommitPush:
-    # harness_ledger.py now writes one file per row under docs/journal/telemetry/
-    # and prints its repo-relative path on a TELEMETRY_FILE: line so
-    # commit_push_telemetry can stage it by exact path (no glob, no git add -A).
-    _TELEMETRY_ROW_PATH = "docs/journal/telemetry/2026-06-10T00-00-00Z-sess0001.json"
-    _LEDGER_STDOUT = "TELEMETRY_FILE: {}\n".format(_TELEMETRY_ROW_PATH)
-    _DIRTY_STATUS = (0, " M {}".format(_TELEMETRY_ROW_PATH), "")
-
-    def test_commits_and_pushes_dirty_telemetry_files(self):
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (0, self._LEDGER_STDOUT, ""),
-            "status --porcelain": self._DIRTY_STATUS,
-        })
-        job = _job(rec)
-        assert job.run() == cf.EXIT_OK
-        # A commit naming the per-row telemetry file (by exact path) happened.
-        commits = [j for j in rec.joined()
-                   if "commit" in j and self._TELEMETRY_ROW_PATH in j]
-        assert len(commits) == 1, rec.joined()
-        # The old ledger and the counter cache must NOT be staged/committed.
-        assert "harness_ledger.jsonl" not in commits[0]
-        assert ".beads/experiment_state.json" not in commits[0]
-        # The PR number is in the commit message.
-        assert "PR #7" in commits[0]
-        # TWO pushes happened: the initial branch push (-u) AND the telemetry
-        # push (plain). Asserting >=2 (not just "a push exists") is what actually
-        # proves the TELEMETRY push ran (fresh-eyes PR #70 F2).
-        pushes = [j for j in rec.joined() if " push " in (" " + j + " ") and "feat/x" in j]
-        assert len(pushes) == 2, pushes
-        assert "committed+pushed" in job.out["telemetry"]
-
-    def test_noop_when_telemetry_gap(self):
-        # If harness_ledger.py fails (GAP) -- no TELEMETRY_FILE line -> no commit.
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (1, "", "transcript not found"),
-        })
-        job = _job(rec)
-        job.run()
-        assert not any("status --porcelain" in j for j in rec.joined())
-        assert not any("commit" in j and "telemetry" in j for j in rec.joined())
-
-    def test_noop_when_telemetry_clean(self):
-        # File written but already committed (status returns empty) -> no commit.
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (0, self._LEDGER_STDOUT, ""),
-            # status returns empty (recorder default) -> clean -> nothing to do
-        })
-        job = _job(rec)
-        job.run()
-        assert not any("commit" in j and "telemetry" in j for j in rec.joined())
-
-    def test_uses_git_C_worktree_and_no_broad_add(self):
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (0, self._LEDGER_STDOUT, ""),
-            "status --porcelain": self._DIRTY_STATUS,
-        })
-        job = _job(rec)
-        job.run()
-        # Every git call uses git -C <WT>.
-        for cmd in rec.calls:
-            if cmd and cmd[0] == "git":
-                assert cmd[1] == "-C" and cmd[2] == str(FAKE_WT), cmd
-        # The only `git add` allowed is the exact-path telemetry stage (no -A, no ".").
-        add_calls = [c for c in rec.calls if c and c[0] == "git" and "add" in c]
-        for cmd in add_calls:
-            # Must be `git -C <WT> add -- <exact-telemetry-path>`
-            assert "--" in cmd, cmd
-            assert self._TELEMETRY_ROW_PATH in " ".join(cmd), cmd
-            assert "-A" not in cmd and "." not in cmd, cmd
-
-    def test_push_failure_is_warn_only(self):
-        # A failed telemetry push must NOT fail the run (the PR is already open).
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (0, self._LEDGER_STDOUT, ""),
-            "status --porcelain": self._DIRTY_STATUS,
-            "push origin feat/x": (1, "", "remote rejected"),
-        })
-        job = _job(rec)
-        assert job.run() == cf.EXIT_OK
-        assert "PUSH-FAILED" in job.out["telemetry"]
-        assert "remote rejected" in job.out["telemetry"]
-
-    def test_status_check_failure_is_surfaced_not_silent(self):
-        # If `git status` itself fails, annotate STATUS-CHECK-FAILED, warn-only.
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (0, self._LEDGER_STDOUT, ""),
-            "status --porcelain": (128, "", "fatal: not a git repository"),
-        })
-        job = _job(rec)
-        assert job.run() == cf.EXIT_OK
-        assert "STATUS-CHECK-FAILED" in job.out["telemetry"]
-        # Did NOT attempt a telemetry commit after the failed guard.
-        assert not any("commit" in j and "telemetry" in j for j in rec.joined())
-
-    def test_unstages_on_commit_failure(self):
-        # If git add succeeds but git commit fails, the staged file is reset so it
-        # doesn't bleed into the next closeout commit.
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (0, self._LEDGER_STDOUT, ""),
-            "status --porcelain": self._DIRTY_STATUS,
-            "commit -m": (1, "", "pre-commit hook rejected"),
-        })
-        job = _job(rec)
-        assert job.run() == cf.EXIT_OK
-        assert "COMMIT-FAILED" in job.out["telemetry"]
-        # A `git reset HEAD -- <telemetry_file>` must follow the failed commit.
-        resets = [j for j in rec.joined() if "reset" in j and self._TELEMETRY_ROW_PATH in j]
-        assert len(resets) == 1, rec.joined()
-
-    def test_commits_even_when_ledger_exits_nonzero_but_wrote_file(self):
-        # If harness_ledger.py writes the file but fails the cache refresh
-        # (non-zero exit), the TELEMETRY_FILE path is still preserved and committed.
-        nonzero_stdout = self._LEDGER_STDOUT + "Experiment state: ..."
-        rec = RunRecorder(responses={
-            "pr create": (0, "https://github.com/o/r/pull/7", ""),
-            "harness_ledger": (1, nonzero_stdout, "cache write failed"),
-            "status --porcelain": self._DIRTY_STATUS,
-        })
-        job = _job(rec)
-        job.run()
-        commits = [j for j in rec.joined()
-                   if "commit" in j and self._TELEMETRY_ROW_PATH in j]
-        assert len(commits) == 1, rec.joined()
-
-    def test_close_only_never_commits_telemetry(self):
-        # --close-only returns before the telemetry steps -> no status/commit/push.
-        rec = RunRecorder()
-        job = _job(rec, close_only=True, close_beads=True, bead=["proj-aa11"])
-        job.run()
-        assert not any("status --porcelain" in j or "telemetry" in j
-                       for j in rec.joined())
-
-
-# --------------------------------------------------------------------------- #
-# Bead-close
-# --------------------------------------------------------------------------- #
 class TestCloseBeadsGated:
     def test_main_forces_close_on_normal_run(self, monkeypatch):
         # A normal CLI run always closes the bead(s): main() sets close_beads=True
@@ -446,28 +279,25 @@ class TestCloseBeadsGated:
 
 
 # --------------------------------------------------------------------------- #
-# --close-only (recovery tool) -- must NOT write a telemetry row
+# --close-only (recovery tool) -- closes the bead and nothing else
 # --------------------------------------------------------------------------- #
 class TestCloseOnly:
-    def test_closes_bead_and_writes_no_telemetry_row(self):
-        # The whole point of hrn.15: --close-only closes the bead but does NOT
-        # append a ledger row (the first call already did), so no double-count.
+    def test_closes_bead_and_does_nothing_else(self):
+        # --close-only is a pure recovery tool: it closes the bead and performs
+        # NO other side effect (no PR / commit / push / rebase).
         rec = RunRecorder()
         job = _job(rec, close_only=True, close_beads=True, bead=["proj-aa11"])
         assert job.run() == cf.EXIT_OK
         joined = rec.joined()
         # bead WAS closed
         assert any("bd_safe" in j and "close" in j for j in joined)
-        # but the ledger was NOT invoked (no duplicate telemetry row)
-        assert not any("harness_ledger.py" in j for j in joined)
         # and no PR/commit/push/rebase happened
         assert not any("pr create" in j or "commit" in j or "push" in j
                        or "pull --rebase" in j for j in joined)
         assert job.out["RESULT"] == "CLOSED-ONLY"
 
     def test_close_only_dry_run_makes_no_calls(self, capsys):
-        # --close-only --dry-run skips the ledger preview entirely (close-only
-        # writes no row), so it must make ZERO subprocess calls (fresh-eyes
+        # --close-only --dry-run must make ZERO subprocess calls (fresh-eyes
         # Finding 4 -- guards against a future regression adding one).
         rec = RunRecorder()
         job = _job(rec, close_only=True, close_beads=True, dry_run=True)

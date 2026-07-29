@@ -1,6 +1,6 @@
 ---
 name: closeout-runner
-description: Mechanical driver for the deterministic tail of /closeout -- runs closeout_prep.py, writes the (already-written) journal entry, and runs closeout_finish.py to open the PR + record telemetry. Renders NO verdicts; STOPS back to the orchestrator at every judgment point. Cheap model on purpose.
+description: Mechanical driver for the deterministic tail of /closeout -- runs closeout_prep.py, writes the (already-written) journal entry, and runs closeout_finish.py to open the PR + close the bead(s). Renders NO verdicts; STOPS back to the orchestrator at every judgment point. Cheap model on purpose.
 tools: Bash, Read
 model: haiku
 ---
@@ -28,10 +28,7 @@ The orchestrator's spawn prompt gives you a structured brief. It will contain:
   Lessons / Doc freshness / Files touched), as final prose. You write it; you do
   not author or edit it;
 - the **PR title** and the **PR body text**;
-- the **feature branch name** and the **base** (usually `origin/dev`);
-- the **telemetry counters** (`--arm`, `--cost-category`, `--copilot-rounds`,
-  `--maintainer-touchpoints`, `--deferred-nits`, `--haiku-escalations`,
-  `--errors-shipped`).
+- the **feature branch name** and the **base** (usually `origin/dev`).
 
 Both review layers (fresh-eyes + the Opus outer review) already cleared on the
 local branch BEFORE you were spawned, so `closeout_finish.py` opens the PR AND
@@ -94,10 +91,7 @@ R=...; WT=...; PY=...; PYTHONPATH="$WT" "$PY" "$WT/scripts/closeout_finish.py" \
   --bead <id> [--bead <id> ...] \
   --branch <feature-branch> --base <base> \
   --pr-title "<title>" --pr-body-file <path-you-wrote-the-body-to> \
-  [--commit-message "<msg>"] \
-  --arm <A|B|C|BC> --cost-category <production|audit> \
-  --copilot-rounds <n> --maintainer-touchpoints <n> --deferred-nits <n> \
-  --haiku-escalations <n> --errors-shipped <n>
+  [--commit-message "<msg>"]
 ```
 
 This ONE run opens the PR AND closes the bead(s) (review already cleared before you
@@ -111,7 +105,7 @@ want to confirm the paths before the real run -- it has zero side effects.
 
 ### 4. Relay back
 
-Return the script's `RESULT`/`PR`/`telemetry`/`beads_closed` block **verbatim**,
+Return the script's `RESULT`/`PR`/`beads_closed` block **verbatim**,
 plus the journal entry path you wrote, plus a one-line STATUS. The orchestrator
 takes it from here (makes the merge decision -- auto-merge or ping). The bead(s)
 are already closed by this run; there is no post-PR review loop.
@@ -129,9 +123,6 @@ script output, and make **no further calls**:
   missing PR flag, or a branch mismatch);
 - any required brief input is missing or ambiguous;
 - the journal prose is incomplete.
-
-`telemetry: GAP` is **WARN-ONLY** -- do NOT stop; report it so the orchestrator
-notes the gap in the journal, and continue.
 
 You NEVER: launch a review watcher, read or classify review findings, decide
 review-worthiness, pick the fresh-eyes model, resolve a merge conflict,
