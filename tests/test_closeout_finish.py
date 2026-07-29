@@ -85,9 +85,7 @@ def _args(**over):
         bead=["proj-aa11"], branch="feat/x", base="origin/dev",
         pr_title="docs(x): y (bd proj-aa11)", pr_body_file="/tmp/body.md",
         commit_message=None,
-        arm="A", cost_category="production", copilot_rounds=0,
-        maintainer_touchpoints=0, deferred_nits=0, haiku_escalations=0,
-        errors_shipped=0, close_beads=True, close_only=False, dry_run=False,
+        close_beads=True, close_only=False, dry_run=False,
     )
     base.update(over)
     return argparse.Namespace(**base)
@@ -135,6 +133,32 @@ class TestCLIContract:
             ["--bead", "x", "--bead", "y", "--branch", "b", "--pr-title", "t",
              "--pr-body-file", "f"])
         assert ns.bead == ["x", "y"]
+
+    @pytest.mark.parametrize("flag", [
+        "--arm", "--cost-category", "--copilot-rounds",
+        "--maintainer-touchpoints", "--deferred-nits", "--haiku-escalations",
+        "--errors-shipped",
+    ])
+    def test_retired_telemetry_flags_rejected(self, flag):
+        # The A/B telemetry ledger is gone (bd polyglot-pdf-40r4), so its seven
+        # counter flags must no longer parse -- a caller still passing one should
+        # fail loudly rather than have it silently ignored.
+        with pytest.raises(SystemExit):
+            cf.build_parser().parse_args(
+                ["--bead", "x", "--branch", "b", "--pr-title", "t",
+                 "--pr-body-file", "f", flag, "0"])
+
+    def test_args_fixture_matches_real_cli_shape(self):
+        # Guard against the test fixture drifting from the real parser: every
+        # attribute _args() fabricates must be one build_parser() can actually
+        # produce. This is what would have caught the seven dead counter fields
+        # the fixture kept after the ledger was removed.
+        real = vars(cf.build_parser().parse_args(
+            ["--bead", "x", "--branch", "b", "--pr-title", "t",
+             "--pr-body-file", "f"]))
+        assert set(vars(_args())) <= set(real), (
+            "fixture has fields the CLI cannot produce: {}".format(
+                sorted(set(vars(_args())) - set(real))))
 
 
 # --------------------------------------------------------------------------- #
