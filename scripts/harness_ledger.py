@@ -174,11 +174,23 @@ def _split_cache_writes(counts: dict) -> tuple[int, int, int]:
     but a hand-built or future-schema row could be -- and an unclamped negative
     would both blend the effective rate and surface as a negative token count in
     the reported diagnostic, rather than being contained here.
+
+    The assumed bucket is taken from `cache_creation_assumed_input_tokens` when
+    present, because parse_transcript computes it PER RECORD (bd
+    polyglot-pdf-9qf2). Deriving it here by subtracting aggregates is wrong:
+    records are not uniform -- some carry a breakdown with a zero flat field --
+    so on a model mixing those with a genuinely legacy record, the subtraction
+    cancels the legacy tokens to zero and prices them at $0 while reporting
+    "measured". The subtraction survives only as a fallback for hand-built
+    counts dicts (tests, callers) that never saw parse_transcript.
     """
     flat = max(0, counts.get("cache_creation_input_tokens", 0) or 0)
     m_1h = max(0, counts.get("cache_creation_1h_input_tokens", 0) or 0)
     m_5m = max(0, counts.get("cache_creation_5m_input_tokens", 0) or 0)
-    assumed = max(0, flat - (m_1h + m_5m))
+    if "cache_creation_assumed_input_tokens" in counts:
+        assumed = max(0, counts.get("cache_creation_assumed_input_tokens") or 0)
+    else:
+        assumed = max(0, flat - (m_1h + m_5m))
     return m_1h, m_5m, assumed
 
 
@@ -412,6 +424,10 @@ def parse_transcript(transcript: Path) -> dict:
             # sends the flat count down the assumed-5m fallback.
             "cache_creation_1h_input_tokens": 0,
             "cache_creation_5m_input_tokens": 0,
+            # Per-record unattributed remainder (legacy records with no
+            # breakdown). Computed at parse time, NOT by subtracting aggregates
+            # -- see the note at the accumulation site (bd polyglot-pdf-9qf2).
+            "cache_creation_assumed_input_tokens": 0,
         }
 
     tokens_by_actor: dict[str, dict] = {"orchestrator": _zero(), "subagent": _zero()}
@@ -465,17 +481,30 @@ def parse_transcript(transcript: Path) -> dict:
 
         # Per-TTL cache-write split (bd polyglot-pdf-aefl). Newer records carry
         # usage.cache_creation = {ephemeral_1h_input_tokens, ephemeral_5m_...};
-        # older ones omit it, and those tokens stay attributed only to the flat
-        # field above so _split_cache_writes routes them to the 5m fallback.
+        # older ones omit it entirely.
+        #
+        # The unattributed remainder is computed HERE, per record, while this
+        # record's own flat count and breakdown are still paired -- NOT later by
+        # subtracting aggregates (bd polyglot-pdf-9qf2). Records are not uniform:
+        # some carry a breakdown with a ZERO flat field (93 such records / 1.1M
+        # tokens in one live session), and when those aggregate alongside a
+        # genuinely legacy record on the same model, an aggregate-level
+        # subtraction cancels the legacy tokens to zero -- pricing them at $0 and
+        # reporting "measured". Bucketing per record makes that impossible.
         cache_creation = usage.get("cache_creation")
+        flat_cc = max(0, usage.get("cache_creation_input_tokens") or 0)
+        rec_1h = rec_5m = 0
         if isinstance(cache_creation, dict):
-            for src, dst in (
-                ("ephemeral_1h_input_tokens", "cache_creation_1h_input_tokens"),
-                ("ephemeral_5m_input_tokens", "cache_creation_5m_input_tokens"),
-            ):
-                val = cache_creation.get(src) or 0
-                tokens_by_actor[actor][dst] += val
-                models_by_actor[actor][model][dst] += val
+            rec_1h = max(0, cache_creation.get("ephemeral_1h_input_tokens") or 0)
+            rec_5m = max(0, cache_creation.get("ephemeral_5m_input_tokens") or 0)
+        rec_assumed = max(0, flat_cc - (rec_1h + rec_5m))
+        for dst, val in (
+            ("cache_creation_1h_input_tokens", rec_1h),
+            ("cache_creation_5m_input_tokens", rec_5m),
+            ("cache_creation_assumed_input_tokens", rec_assumed),
+        ):
+            tokens_by_actor[actor][dst] += val
+            models_by_actor[actor][model][dst] += val
 
     for rec in _iter_records(transcript):
         _accumulate(rec, anchor_meta=True)

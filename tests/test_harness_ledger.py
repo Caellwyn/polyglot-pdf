@@ -131,6 +131,37 @@ class TestParseTranscript:
         assert c["cache_write_tokens_1h"] == 900
         assert c["cache_write_tokens_5m"] == 600
 
+    def test_legacy_record_not_cancelled_by_zero_flat_breakdown_record(self, tmp_path):
+        """bd polyglot-pdf-9qf2: bucket PER RECORD, never by subtracting aggregates.
+
+        Records are not uniform -- some carry a TTL breakdown while their flat
+        cache_creation_input_tokens is 0 (93 such records / 1.1M tokens in one
+        live session). Aggregating first and then deriving
+        assumed = flat - (1h + 5m) lets the zero-flat record's breakdown cancel
+        a DIFFERENT record's genuinely-legacy tokens: they price at $0 while the
+        block reports "measured".
+
+        Here: 1M tokens of 1h (flat 0) + 1M legacy tokens (no breakdown), same
+        model. Correct = 1M @ 2.0x + 1M @ 1.25x on sonnet = 6.00 + 3.75 = $9.75.
+        The aggregate-subtraction bug charged $6.00 and claimed "measured".
+        """
+        with_bd = _usage(cc=0)
+        with_bd["cache_creation"] = {
+            "ephemeral_1h_input_tokens": 1_000_000,
+            "ephemeral_5m_input_tokens": 0,
+        }
+        legacy = _usage(cc=1_000_000)  # no breakdown at all
+        t = _write_transcript(tmp_path, [
+            _assistant(with_bd, model="claude-sonnet-4-6"),
+            _assistant(legacy, model="claude-sonnet-4-6"),
+        ])
+        c = ledger.compute_cost(ledger.parse_transcript(t)["models"])
+
+        assert c["total"] == 9.75
+        assert c["cache_write_ttl_source"] == "mixed"
+        assert c["cache_write_tokens_1h"] == 1_000_000
+        assert c["cache_write_tokens_5m_assumed"] == 1_000_000
+
     def test_wall_clock_span(self, tmp_path):
         records = [
             {"type": "user", "sessionId": "sess-fixture", "timestamp": "2026-06-01T00:00:00Z"},
