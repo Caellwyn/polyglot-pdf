@@ -85,19 +85,21 @@ export function withReviewNote(field: FormField, note: string): FormField {
 /**
  * Record (or clear) a human's acknowledgment that the authored guidance still
  * reads correctly for this field's CURRENT identity, after the backend flagged
- * it as drifted (bd polyglot-pdf-anim). `bakedIdentity` is the hash the backend
- * reports; storing it means a LATER edit re-raises the gate rather than the
- * acknowledgment acting as a permanent waiver. Returns a NEW field; clearing
+ * it as drifted (bd polyglot-pdf-anim). `currentIdentity` is the hash the
+ * backend reports for the field's CONTENT RIGHT NOW -- storing that (never the
+ * frozen bake-time hash, which does not move when a human edits) is what makes
+ * a LATER edit re-raise the gate instead of one click becoming a permanent
+ * waiver. Returns a NEW field; clearing
  * drops the key (and the whole _review record when nothing else remains) so it
  * serializes clean.
  */
 export function withGuidanceAck(
   field: FormField,
-  bakedIdentity: string | undefined,
+  currentIdentity: string | undefined,
   acknowledged: boolean,
 ): FormField {
   const current = field._review;
-  if (!acknowledged || !bakedIdentity) {
+  if (!acknowledged || !currentIdentity) {
     if (!current?.guidance_ack_sha1) return field;
     const { guidance_ack_sha1, ...restReview } = current;
     if (restReview.status === 'unreviewed' && !restReview.note) {
@@ -111,7 +113,7 @@ export function withGuidanceAck(
     _review: {
       status: current?.status ?? 'unreviewed',
       ...(current?.note ? { note: current.note } : {}),
-      guidance_ack_sha1: bakedIdentity,
+      guidance_ack_sha1: currentIdentity,
     },
   };
 }

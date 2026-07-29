@@ -33,19 +33,11 @@
  * plumbing like pdf_field_name. Changing those does not make guidance wrong, so
  * hashing them would manufacture false staleness.
  */
-import type { FormField, FormSchema } from '../types/schema';
+import type { FormField } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
 
 /** The lint rule the backend emits for a drifted field identity. */
 export const GUIDANCE_STALE_RULE = 'guidance-identity-stale';
-
-/**
- * The authoring stage whose provenance a consumer reads. The
- * option-translation re-run checker (another session) records its own
- * identity_sha1 under its own stage and can reuse these helpers by passing
- * 'option_translation' rather than forking a parallel implementation.
- */
-export type ProvenanceStage = 'instructions_enrich' | 'option_translation';
 
 /**
  * The stale field ids named by a lint report. The backend anchors the finding
@@ -65,42 +57,8 @@ export function staleFieldIds(findings: LintFinding[] | undefined): Set<string> 
 }
 
 /**
- * The identity hash the BAKE recorded for this field, read straight out of the
- * schema's provenance block. The editor never computes this (the backend owns
- * hashing); it only needs the value to pin an acknowledgment to.
- */
-export function bakedIdentity(
-  schema: FormSchema,
-  fieldId: string,
-  stage: ProvenanceStage = 'instructions_enrich',
-): string | undefined {
-  const bakeoff = (schema as unknown as Record<string, unknown>)._bakeoff;
-  const authoring =
-    bakeoff && typeof bakeoff === 'object' && !Array.isArray(bakeoff)
-      ? (bakeoff as Record<string, unknown>).authoring
-      : undefined;
-  const stageObj =
-    authoring && typeof authoring === 'object' && !Array.isArray(authoring)
-      ? (authoring as Record<string, unknown>)[stage]
-      : undefined;
-  const prov =
-    stageObj && typeof stageObj === 'object' && !Array.isArray(stageObj)
-      ? (stageObj as Record<string, unknown>).provenance
-      : undefined;
-  const rec =
-    prov && typeof prov === 'object' && !Array.isArray(prov)
-      ? (prov as Record<string, unknown>)[fieldId]
-      : undefined;
-  const h =
-    rec && typeof rec === 'object' && !Array.isArray(rec)
-      ? (rec as Record<string, unknown>).identity_sha1
-      : undefined;
-  return typeof h === 'string' && h ? h : undefined;
-}
-
-/**
  * The field's CURRENT identity hash, as reported by the backend in the
- * staleness finding's message (`[identity:<hash>]`).
+ * staleness finding's PATH (`...help[identity:<hash>]`).
  *
  * This -- NOT the baked hash -- is what an acknowledgment pins to. The baked
  * value is frozen at bake time and does not change when a human edits, so
@@ -114,7 +72,9 @@ export function currentIdentity(findings: LintFinding[] | undefined,
   for (const f of findings ?? []) {
     if (!f || f.rule !== GUIDANCE_STALE_RULE) continue;
     if (f.field_id !== fieldId) continue;   // centralized id (bd h76m.11)
-    const hm = /\[identity:([0-9a-f]+)\]/.exec(f.message ?? '');
+    // The hash rides the PATH, never the message: `message` is rendered to
+    // humans in three places, so a raw hash there is unexplained noise.
+    const hm = /\[identity:([0-9a-f]+)\]/.exec(f.path ?? '');
     if (hm) return hm[1];
   }
   return undefined;

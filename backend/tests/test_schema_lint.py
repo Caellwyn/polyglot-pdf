@@ -1039,3 +1039,40 @@ def test_identity_rule_never_throws_on_malformed_provenance():
         s = _identity_schema(f, "x")
         s["_bakeoff"]["authoring"]["instructions_enrich"]["provenance"] = junk
         lint_schema(s)   # must not raise
+
+
+def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
+    """CONTRACT PIN (bd anim): the editor parses the current identity out of
+    the finding PATH with /\[identity:([0-9a-f]+)\]/ and pins a human's
+    acknowledgment to it. If this format ever changes, that parse silently
+    returns undefined and 'any ack satisfies the gate' -- reopening the
+    permanent-waiver hole with no other test to catch it. The hash must stay
+    OUT of the message, which is rendered to humans in three UI surfaces."""
+    import re
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    drifted = dict(f, spoken_name="v2")
+    hit = _stale(lint_schema(_identity_schema(drifted, baked)))[0]
+
+    # the editor's EXACT regex must find the CURRENT identity in the path
+    m = re.search(r"\[identity:([0-9a-f]+)\]", hit.path)
+    assert m, f"editor's identity regex no longer matches path: {hit.path!r}"
+    assert m.group(1) == gc.identity_sha1(drifted)
+    # ...and the human-facing message must NOT carry it
+    assert "identity:" not in hit.message
+    # field_id must still resolve for click-to-focus despite the suffix
+    from backend.services.schema_lint import field_id_of
+    assert field_id_of(hit.path) == "a"
+
+
+def test_each_edit_reports_a_DIFFERENT_current_identity():
+    """The gate re-raises per edit only because this value moves (bd anim)."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
+         "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(f)
+    p1 = _stale(lint_schema(_identity_schema(dict(f, spoken_name="v2"), baked)))[0].path
+    p2 = _stale(lint_schema(_identity_schema(dict(f, spoken_name="v3"), baked)))[0].path
+    assert p1 != p2

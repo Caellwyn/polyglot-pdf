@@ -1186,18 +1186,24 @@ def _check_guidance_identity_drift(
             continue  # pre-anim bake: nothing to be stale against
         if baked == guidance_contract.identity_sha1(field):
             continue
-        # The message carries the CURRENT identity hash so the editor can pin a
-        # human's acknowledgment to the exact content they read. Pinning to the
-        # BAKED hash instead would be a permanent waiver: the baked value does
-        # not change when the user edits, so one ack would silently cover every
-        # later edit until the next re-bake (bd anim fresh-eyes finding 1).
+        # The CURRENT identity hash rides the PATH, not the message: the editor
+        # pins a human's acknowledgment to the exact content they read, and the
+        # path is a machine anchor no UI renders as prose (the message IS shown
+        # -- in the lint strip, the flagged-reasons banner and the row tooltip
+        # -- so a raw hash there is unexplained noise for a non-technical
+        # reviewer; bd anim fresh-eyes round 2 finding 2).
+        #
+        # Pinning to the BAKED hash instead would be a permanent waiver: the
+        # baked value does not change when the user edits, so one ack would
+        # silently cover every later edit until the next re-bake (round 1
+        # finding 1). field_id_of() ignores the trailing segment, so the
+        # editor's click-to-focus still resolves this path.
         current = guidance_contract.identity_sha1(field)
         out.append(LintFinding(
             SEVERITY_WARNING, "guidance-identity-stale",
-            f"fields (id={fid}).help",
+            f"fields (id={fid}).help[identity:{current}]",
             "this field's name / spoken name / option labels changed since its "
             "guidance was written, so the guidance may no longer match what "
             "the assistant says -- confirm it still reads correctly (or "
-            f"re-author it) before marking the field reviewed [identity:"
-            f"{current}]",
+            "re-author it) before marking the field reviewed",
         ))

@@ -5,11 +5,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  GUIDANCE_STALE_RULE, bakedIdentity, currentIdentity, isAcknowledged,
+  GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged,
   needsGuidanceAck, staleFieldIds,
 } from './guidanceStaleness';
 import { effectiveStatus, withGuidanceAck } from './reviewStatus';
-import type { FormField, FormSchema } from '../types/schema';
+import type { FormField } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
 
 const BAKED = 'abc123identity';
@@ -23,22 +23,9 @@ function field(over: Partial<FormField> = {}): FormField {
   } as unknown as FormField;
 }
 
-function schemaWith(f: FormField, identity?: string): FormSchema {
-  return {
-    source: 'pdf',
-    form_metadata: { title: 'T', form_number: 'T', version: '1', language: 'en' },
-    parts: [], sections: [{ id: 's1', label: 'S', order: 1, fields: [f.id] }],
-    fields: [f],
-    _bakeoff: { authoring: { instructions_enrich: {
-      provenance: { [f.id]: { source: 'llm-verified',
-        ...(identity ? { identity_sha1: identity } : {}) } },
-      flags: [] } } },
-  } as unknown as FormSchema;
-}
-
 const staleFinding: LintFinding = {
   severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
-  path: 'fields (id=phone).help', message: `identity changed [identity:${BAKED}]`,
+  path: `fields (id=phone).help[identity:${BAKED}]`, message: 'identity changed',
   field_id: 'phone',
 };
 
@@ -55,18 +42,6 @@ describe('staleFieldIds', () => {
   it('is empty for no findings / undefined', () => {
     expect(staleFieldIds(undefined).size).toBe(0);
     expect(staleFieldIds([]).size).toBe(0);
-  });
-});
-
-describe('bakedIdentity', () => {
-  it('reads the recorded hash out of provenance', () => {
-    expect(bakedIdentity(schemaWith(field(), BAKED), 'phone')).toBe(BAKED);
-  });
-  it('is undefined when unrecorded or the schema shape is junk', () => {
-    expect(bakedIdentity(schemaWith(field()), 'phone')).toBeUndefined();
-    expect(bakedIdentity({} as FormSchema, 'phone')).toBeUndefined();
-    expect(bakedIdentity(
-      { _bakeoff: 'nope' } as unknown as FormSchema, 'phone')).toBeUndefined();
   });
 });
 
@@ -131,8 +106,8 @@ describe('withGuidanceAck serialization', () => {
 describe('the ack pins to CURRENT content, never the frozen bake (fresh-eyes finding 1)', () => {
   const finding = (identity: string): LintFinding => ({
     severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
-    path: 'fields (id=phone).help',
-    message: `changed [identity:${identity}]`, field_id: 'phone',
+    path: `fields (id=phone).help[identity:${identity}]`,
+    message: 'changed', field_id: 'phone',
   });
 
   it('reads the current identity out of the finding message', () => {
@@ -163,7 +138,7 @@ describe('staleFieldIds uses the centralized field_id (bd h76m.11)', () => {
   it('reads field_id, not a re-parse of path', () => {
     const odd: LintFinding = {
       severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
-      path: 'some/other/shape', message: 'x [identity:zz]', field_id: 'weird)id',
+      path: 'some/other/shape', message: 'x', field_id: 'weird)id',
     };
     expect([...staleFieldIds([odd])]).toEqual(['weird)id']);
   });
