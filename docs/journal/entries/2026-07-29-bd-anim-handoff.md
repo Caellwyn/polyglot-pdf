@@ -1,7 +1,7 @@
 ---
 date: 2026-07-29
 beads: [polyglot-pdf-anim]
-tags: [handoff, editor, guidance, review-gate]
+tags: [schema-editor, review]
 ---
 
 # HANDOFF: bd anim (guidance staleness gate) -- one open decision

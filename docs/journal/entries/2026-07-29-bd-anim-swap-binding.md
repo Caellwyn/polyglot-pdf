@@ -1,7 +1,7 @@
 ---
 date: 2026-07-29
 beads: [polyglot-pdf-anim]
-tags: [editor, guidance, review-gate, design-decision]
+tags: [schema-editor, review]
 ---
 
 # bd anim: label swaps now flag -- the identity hash binds labels to values
