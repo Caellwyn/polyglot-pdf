@@ -106,9 +106,19 @@ VALID_COST_CATEGORIES = ("production", "audit")
 # --------------------------------------------------------------------------- #
 # Per-million-token base rates (USD), keyed by model-id PREFIX so a dated id like
 # "claude-haiku-4-5-20251001" resolves to the "claude-haiku-4-5" entry. Source:
-# the claude-api skill (shared/models.md), 2026-06-28. Update here if prices
+# the claude-api skill (shared/models.md), 2026-07-28. Update here if prices
 # drift; re-verify via /claude-api.
+#
+# Sonnet 5 is priced at the STANDARD $3.00/$15.00, and that is what billing
+# actually charges -- VERIFIED against live `claude -p` calls on 2026-07-28,
+# which reconcile to an implied input rate of $3.0000/MTok to four decimals.
+# The docs advertise an introductory $2.00/$10.00 through 2026-08-31, but it is
+# NOT being applied to this account, so do NOT "correct" this row down to the
+# intro rate: that would introduce a ~33% under-report, the same silent
+# under-costing this table exists to prevent. Re-probe before changing it.
 MODEL_PRICES_PER_MTOK = {
+    "claude-opus-5": {"input": 5.00, "output": 25.00},
+    "claude-sonnet-5": {"input": 3.00, "output": 15.00},
     "claude-opus-4-8": {"input": 5.00, "output": 25.00},
     "claude-opus-4-7": {"input": 5.00, "output": 25.00},
     "claude-opus-4-6": {"input": 5.00, "output": 25.00},

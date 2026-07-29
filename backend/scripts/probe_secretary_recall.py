@@ -79,7 +79,14 @@ from backend.scripts.secretary_recall_corpus import (  # noqa: E402
 # (hold the model CONSTANT within a battery -- production's 2.5->3.1 fallback
 # mixing lives in TextAIGemini, jnjj.42, and is correct THERE, not here).
 MODEL_SECRETARY = "gemini-2.5-flash-lite"
-JUDGE_MODEL = "claude-sonnet-4-6"
+# Judge model. Bumped 4-6 -> 5 with the rest of the harness (bd polyglot-pdf-sw8h,
+# maintainer directive 2026-07-28: all locally run models move to the 5 series).
+# CAVEAT for anyone reading old numbers: judge scores recorded BEFORE this bump
+# (scripts/spikes/secretary_recall_findings.md, secretary_context_format_findings.md,
+# and the *.meta.json rows stamping "judge_model": "claude-sonnet-4-6") came from
+# the 4-6 judge and are NOT directly comparable to post-bump runs. Re-baseline
+# rather than diffing across the boundary; each run stamps its own judge_model.
+JUDGE_MODEL = "claude-sonnet-5"
 
 OUT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),

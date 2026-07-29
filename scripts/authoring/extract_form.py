@@ -1130,7 +1130,7 @@ def _enrich_guidance(schema: dict, pdf_path: str,
 
 
 def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
-            model: str = "claude-opus-4-8", keep_dump: bool = False,
+            model: str = "claude-opus-5", keep_dump: bool = False,
             instructions_pdf: str | None = None,
             group_candidates: bool = True,
             division_cap: int = derive_sections.DEFAULT_CAP,
@@ -1449,7 +1449,7 @@ def main(argv: list[str] | None = None) -> int:
         description="One-command PDF -> draft FormSchema (bd 7a9.12 / B1).")
     ap.add_argument("--pdf", required=True, help="the fillable form PDF")
     ap.add_argument("--out", required=True, help="output draft schema.json path")
-    ap.add_argument("--model", default="claude-opus-4-8",
+    ap.add_argument("--model", default="claude-opus-5",
                     help="extractor model (claude-* local CLI free in-env; DEFAULT)")
     grp = ap.add_mutually_exclusive_group()
     grp.add_argument("--plain", dest="plain", action="store_true", default=None,

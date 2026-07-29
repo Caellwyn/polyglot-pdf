@@ -150,7 +150,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--fewshot-truth", default=None)
     ap.add_argument("--pages", default=None,
                     help="comma-separated pages (default: all non-empty)")
-    ap.add_argument("--model", default="claude-opus-4-8")
+    ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
 

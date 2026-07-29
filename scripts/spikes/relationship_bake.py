@@ -9,7 +9,7 @@ of one run and restore it; the winning change is grafted into
 scripts/bakeoff/schema_contract.py by R3, not here (maintainer decision
 2026-07-25: isolate research from the shipped prompt).
 
-Backend: the local `claude` CLI (claude-opus-4-8), free in-env -- no metered
+Backend: the local `claude` CLI (claude-opus-5), free in-env -- no metered
 Vertex spend (Gate-2 estimate in relationship_bake_findings.md). Option-
 translation is disabled (irrelevant to relationship scoring, and it needs
 Vertex creds the eval env lacks).
@@ -280,7 +280,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--arms", default="A0,A1,A2,A3")
     ap.add_argument("--forms", default="i-90,w7")
-    ap.add_argument("--model", default="claude-opus-4-8")
+    ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--round", type=int, default=1,
                     help="round tag written into each JSONL row -- distinguishes "

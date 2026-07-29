@@ -171,11 +171,13 @@ The PDF -> schema model call is selected behind a provider seam
 (`scripts/bakeoff/llm_providers.py`):
 
 - **Default:** the local `claude` CLI (free in the maintainer's environment).
-- **`EXTRACTOR_PROVIDER=gemini`** routes to the paid google-genai SDK (needs
-  `GEMINI_API_KEY`). **You MUST also set `EXTRACTOR_MODEL` to a `gemini-*` model**
-  (e.g. `EXTRACTOR_MODEL=gemini-2.5-flash`) -- otherwise the default
-  `claude-opus-4-8` would be sent to Gemini and rejected. The button forwards
-  `EXTRACTOR_MODEL` to the extractor's `--model`.
+- **`EXTRACTOR_PROVIDER=gemini`** routes to the paid google-genai SDK on
+  **Vertex** (ADC + `GOOGLE_CLOUD_PROJECT`, so the spend lands on the tracked
+  billing project). There is no AI Studio / `GEMINI_API_KEY` path -- that gate
+  is closed (bd `polyglot-pdf-f3lm`). **You MUST also set `EXTRACTOR_MODEL` to a
+  `gemini-*` model** (e.g. `EXTRACTOR_MODEL=gemini-2.5-flash`) -- otherwise the
+  default `claude-opus-5` would be sent to Gemini and rejected. The button
+  forwards `EXTRACTOR_MODEL` to the extractor's `--model`.
 - Otherwise the model name dispatches (`gemini*` -> Gemini; everything else ->
   the CLI).
 

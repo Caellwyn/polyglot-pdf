@@ -1995,7 +1995,7 @@ def test_extract_unconfigured_is_503(client, monkeypatch):
     monkeypatch.setattr(
         ekr, "get_settings",
         lambda: _settings(editor="edit-tok", author="auth-tok",
-                          EXTRACTOR_MODEL="claude-opus-4-8"),
+                          EXTRACTOR_MODEL="claude-opus-5"),
     )
     assert c.post(
         "/api/editor/kits/fresh/extract", headers={"X-Editor-Token": "auth-tok"}

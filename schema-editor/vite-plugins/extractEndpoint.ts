@@ -269,7 +269,7 @@ export function extractEndpoint(options: ExtractEndpointOptions = {}): Plugin {
           // Forward EXTRACTOR_MODEL to the script's --model so a configured
           // provider swap (e.g. EXTRACTOR_PROVIDER=gemini + a gemini-* model)
           // actually takes effect from the button (Codex). Unset -> the script's
-          // own default (claude-opus-4-8) stands.
+          // own default (claude-opus-5) stands.
           model: process.env.EXTRACTOR_MODEL,
         }).catch((err) => {
           if (!res.headersSent) {

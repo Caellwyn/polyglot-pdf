@@ -25,7 +25,7 @@ reconstruction / IRS-HTML sourcing for table regions is a known follow-up.
 Usage (from the repo root; local Claude CLI is the free default):
     python scripts/authoring/enrich_instructions.py --kit form-kits/w7 \
         [--instructions-pdf form-kits/w7/w7-instructions.pdf] \
-        [--model claude-opus-4-8] [--chunk-size 40] \
+        [--model claude-opus-5] [--chunk-size 40] \
         [--out scripts/bakeoff/outputs/w7_guidance_proposals.json]
 
 ASCII only (CLAUDE.md scar #6).
@@ -52,7 +52,7 @@ from backend.services.schema_lint import lint_schema  # noqa: E402
 import llm_providers  # noqa: E402
 
 DEFAULT_MODEL = os.getenv("INSTRUCTIONS_MODEL",
-                          os.getenv("EXTRACTOR_MODEL", "claude-opus-4-8"))
+                          os.getenv("EXTRACTOR_MODEL", "claude-opus-5"))
 DEFAULT_CHUNK = 40
 
 

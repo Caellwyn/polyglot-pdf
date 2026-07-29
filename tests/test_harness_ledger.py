@@ -666,6 +666,49 @@ class TestCost:
         assert c["subagent_total"] == 15.0      # sonnet output 15/MTok
         assert c["unpriced_models"] == []
 
+    def test_5_series_models_are_priced_not_unpriced(self):
+        # Opus 5 / Sonnet 5 are the current default tiers for code production and
+        # subagents (bd polyglot-pdf-sw8h). They MUST be priced -- an unpriced id
+        # is silently costed at $0, which would under-report exactly the sessions
+        # we now run most. Dated ids resolve via longest-prefix match.
+        c = ledger.compute_cost({
+            "orchestrator": {"claude-opus-5": {"output_tokens": 1_000_000}},
+            "subagent": {"claude-sonnet-5-20260701": {"output_tokens": 1_000_000}},
+        })
+        assert c["orchestrator_total"] == 25.0  # opus 5 output 25/MTok
+        assert c["subagent_total"] == 15.0      # sonnet 5 output 15/MTok (standard, not intro)
+        assert c["unpriced_models"] == []
+
+    def test_opus_5_not_shadowed_by_4_series_prefixes(self):
+        # Guards the longest-prefix resolver: "claude-opus-5" must not collide
+        # with any "claude-opus-4-*" key, and vice versa.
+        assert ledger._price_for_model("claude-opus-5")["input"] == 5.00
+        assert ledger._price_for_model("claude-sonnet-5")["input"] == 3.00
+        assert ledger._price_for_model("claude-sonnet-4-6")["input"] == 3.00
+        assert ledger._price_for_model("claude-fable-5")["input"] == 10.00
+
+    def test_5_series_point_release_inherits_the_5_rate(self):
+        # DOCUMENTS a known limitation rather than asserting desired behavior.
+        #
+        # Prefix inheritance is NOT unique to the 5-series keys -- it is how the
+        # resolver works for every key (claude-opus-4-80 would inherit
+        # claude-opus-4-8's rate the same way). The asymmetry is about the NEXT
+        # MINOR of each series: an Opus 5 point release (claude-opus-5-1) is a
+        # prefix-extension of the bare "claude-opus-5" key and silently inherits
+        # its rate, whereas the next 4-series minor (claude-opus-4-9) matches no
+        # key at all and correctly lands in unpriced_models.
+        #
+        # So if a 5.x point release ships at a DIFFERENT price, this reports a
+        # silently wrong number rather than a flagged zero. Add an explicit row
+        # for it at that point. This test exists so that is a deliberate edit
+        # here, not a surprise in a telemetry row.
+        assert ledger._price_for_model("claude-opus-5-1")["input"] == 5.00
+        assert ledger._price_for_model("claude-sonnet-5-2")["input"] == 3.00
+        # The contrast that motivates the warning, pinned so it cannot rot:
+        assert ledger._price_for_model("claude-opus-4-9") is None
+        # ...and the mechanism is general, not 5-series-specific:
+        assert ledger._price_for_model("claude-opus-4-80")["input"] == 5.00
+
     def test_unknown_model_is_zero_and_flagged_not_crash(self):
         c = ledger.compute_cost(
             {"orchestrator": {"claude-mystery-9": {"output_tokens": 1_000_000}}}

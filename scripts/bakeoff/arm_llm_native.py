@@ -20,7 +20,7 @@ Pluggable model via --model. Two backends, dispatched by model name:
   claude* / opus* / sonnet* / haiku*  -> the local `claude` CLI in headless
       print mode (-p). This uses the maintainer's existing Claude Code
       subscription auth, so it is effectively FREE in-environment (no metered
-      API token cost). This is the DEFAULT (claude-opus-4-8) because schema
+      API token cost). This is the DEFAULT (claude-opus-5) because schema
       extraction runs in the maintainer's environment.
   gemini*                             -> the google-genai SDK with GEMINI_API_KEY
       (metered/paid). Kept as a fallback in case external help is hired and the
@@ -31,7 +31,7 @@ ASCII only (cp1252 safe).
 Usage:
     python scripts/bakeoff/arm_llm_native.py --pdf FORM.pdf \
         --acroform DUMP.json --fewshot-truth OTHER_FORM_TRUTH.json \
-        --model claude-opus-4-8 --out OUT.json
+        --model claude-opus-5 --out OUT.json
 """
 from __future__ import annotations
 
@@ -303,7 +303,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="claude-hybrid mode (bd 7a9.12/B1): plain AcroForm field "
                          "list, no enrichment -- the prompt B1 bakes against the "
                          "enriched arm on I-90 (same backend + scorer)")
-    ap.add_argument("--model", default="claude-opus-4-8",
+    ap.add_argument("--model", default="claude-opus-5",
                     help="claude-* (local CLI, free in-env; DEFAULT) or "
                          "gemini-* (paid SDK, fallback)")
     ap.add_argument("--out", required=True)

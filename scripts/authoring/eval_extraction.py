@@ -477,7 +477,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--extract", action="store_true",
                     help="run the full LLM extraction per form (slow; f1040 is "
                          ">6 min + paid tokens). Default: evaluate existing schemas.")
-    ap.add_argument("--model", default="claude-opus-4-8",
+    ap.add_argument("--model", default="claude-opus-5",
                     help="extractor model for --extract")
     ap.add_argument("--group-candidates", action="store_true",
                     help="(with --extract) include the deterministic "
