@@ -95,7 +95,8 @@ which loses the two obsolete telemetry classes but gains the 8 new guards) = 912
 A shrinking suite is the expected shape when the thing under test is being removed;
 the guards are what keep the removal from silently regressing.
 
-**The review loop ran TEN rounds and caught 20 gaps** (1+1+3+4+1+3+3+1+2+1) --
+**The review loop ran ELEVEN rounds and caught 20 gaps** (1+1+3+4+1+3+3+1+2+1+0,
+round 11 clearing `NO-GAPS`) --
 **not one of them a functional code defect.** Every single finding was a dangling *instruction*, a stale
 *comment*, a drifted *test fixture*, or a wrong *number in this entry*. That is the
 characteristic failure mode of a removal like this: deleted code fails loudly and
@@ -196,6 +197,17 @@ config first, then comments, then documentation accuracy:
     stated-total-vs-enumerated-parts check has to run at **every** level of a
     nested list, not just the top: R9 fixed the outer tally, and the same defect
     was still sitting inside one of its addends.
+11. **Round 11 (Opus): `NO-GAPS`.** By this point the shipped change had been
+    stable for two rounds and the only findings were the round history's own
+    bookkeeping -- a self-perpetuating loop, since each fix adds a round that must
+    itself be recorded. So round 11 was scoped to the **deliverable**: the shipped
+    change plus the entry's substantive claims, explicitly excluding the
+    round-history section. It scored all three criteria PASS, independently
+    re-derived all six figures (arm distribution, the 979->912 reconciliation, the
+    2235 full stack, 18 worktrees, the 972/983/65 deleted counts, SKILL 611->538),
+    read `SKILL.md` end-to-end as an executing orchestrator to confirm the
+    procedure still works with Step 7 gone, and confirmed
+    `pick_review_model.py`'s diff contains no non-comment line. No gaps.
 
 ## Lessons
 
@@ -251,6 +263,16 @@ config first, then comments, then documentation accuracy:
   thing gets named. **Fixing the grep hit is not the same as fixing the file** --
   after the first hit lands, re-grep that file for the full vocabulary (`arm`,
   `A/B`, `experiment`, `counter`, `ledger`, the plan it cites) before moving on.
+- **A review loop can start reviewing its own paperwork -- notice, and re-scope.**
+  Rounds 9 and 10 found only defects in this entry's *round-history* section, which
+  is self-perpetuating: fixing a round adds a round, which must be recorded, which
+  becomes the next round's finding. Meanwhile the shipped change had been untouched
+  for two rounds. The fix is not to stop reviewing but to **re-scope the review to
+  the deliverable** and say so explicitly -- round 11 was told to ignore the round
+  history and hunt the shipped change instead, and it cleared `NO-GAPS` after
+  independently re-deriving every substantive figure. The signal to watch for:
+  consecutive rounds whose findings all live in the write-up rather than in the
+  artifact.
 - **Every figure in a journal entry must come from a command run against the
   artifact -- and the review loop should check the arithmetic.** THREE separate
   numeric/factual claims in this one entry were wrong on first writing: "49 tests"
