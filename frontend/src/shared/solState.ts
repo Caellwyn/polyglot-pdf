@@ -19,9 +19,10 @@
  * two hand-duplicated overlay components.
  */
 
-/** The six states Sol can render. Drives the `data-state` attribute. */
+/** The states Sol can render. Drives the `data-state` attribute. */
 export type SolState =
 	| 'idle'
+	| 'connecting'
 	| 'listening'
 	| 'thinking'
 	| 'speaking'
@@ -69,6 +70,27 @@ function isOffline(s: string): boolean {
 }
 
 /**
+ * Coming up, or recovering: a session exists (or is being (re)established) but is
+ * not yet carrying audio.
+ *
+ * This is deliberately NOT folded into `idle`. The invariant from bd
+ * polyglot-pdf-bxng is that a live-but-transient session must stay visually
+ * distinguishable from one that is not running -- and on the collapsed mobile
+ * FAB, Sol is the ONLY status the user can see (there is no accompanying status
+ * text there). Mapping `reconnecting` to the same picture as a cold, never-
+ * started session would reintroduce exactly the bug bxng fixed, in a new guise.
+ */
+function isConnecting(s: string): boolean {
+	return (
+		s === 'connecting' ||
+		s === 'switching_section' ||
+		s.startsWith('reconnecting') ||
+		s.includes('warming') ||
+		s.startsWith('setting up')
+	)
+}
+
+/**
  * Map the app's session signals onto one of Sol's six states.
  *
  * Precedence, highest first:
@@ -81,9 +103,12 @@ function isOffline(s: string): boolean {
  *                  audio frames) and beats `listening`.
  *   4. thinking -- turn taken, working, no audio yet.
  *   5. listening-- live session actually forwarding mic audio.
- *   6. idle     -- everything else: pre-connect ('Ready'), 'connecting',
- *                  'Setting up audio...', 'warming', 'switching_section',
- *                  'reconnecting'. Warm and awake, committing to nothing.
+ *   6. connecting-- coming up or recovering: 'connecting', 'reconnecting',
+ *                  'switching_section', 'warming', 'Setting up audio...'.
+ *                  Distinct from idle so a live-but-transient session never
+ *                  looks like a cold one (bd polyglot-pdf-bxng).
+ *   7. idle     -- everything else, i.e. genuinely pre-session ('Ready').
+ *                  Warm and awake, committing to nothing.
  *
  * Note 3-5 are gated on a live session: a stale `speaking`/`thinking` flag left
  * over from a dropped socket must not animate Sol while the session is down.
@@ -99,6 +124,11 @@ export function deriveSolState(inputs: SolStateInputs): SolState {
 	if (live && inputs.thinking) return 'thinking'
 	if (live && inputs.micSending) return 'listening'
 
+	// Checked AFTER the live-session activity states: `switching_section` is
+	// "connecting" only in the sense that audio is briefly not flowing, and a
+	// steady `connected` session never reaches here anyway.
+	if (isConnecting(s)) return 'connecting'
+
 	return 'idle'
 }
 
@@ -110,6 +140,7 @@ export function deriveSolState(inputs: SolStateInputs): SolState {
  */
 export const SOL_STATE_LABEL: Record<SolState, string> = {
 	idle: 'Ready',
+	connecting: 'Connecting',
 	listening: 'Listening',
 	thinking: 'Working',
 	speaking: 'Speaking',

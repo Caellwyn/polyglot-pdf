@@ -392,19 +392,36 @@ describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxn
   const panelSol = (c: HTMLElement) =>
     c.querySelector('.vff-panel-mobile [data-testid="sol-avatar"]') as HTMLElement
 
-  it('Sol does not read as offline during switching_section', () => {
+  it('Sol reads as a live-but-transient session during switching_section', () => {
     const { container } = renderExpanded('switching_section')
-    expect(panelSol(container).getAttribute('data-state')).not.toBe('offline')
+    const s = panelSol(container).getAttribute('data-state')
+    expect(s).toBe('connecting')
+    // The invariant, stated both ways: not dead, and not cold either.
+    expect(s).not.toBe('offline')
+    expect(s).not.toBe('idle')
   })
 
-  it('Sol does not read as offline while reconnecting', () => {
+  it('Sol reads as a live-but-transient session while reconnecting', () => {
     const { container } = renderExpanded('reconnecting')
-    expect(panelSol(container).getAttribute('data-state')).not.toBe('offline')
+    const s = panelSol(container).getAttribute('data-state')
+    expect(s).toBe('connecting')
+    expect(s).not.toBe('offline')
+    expect(s).not.toBe('idle')
   })
 
   it('Sol reads as offline when disconnected', () => {
     const { container } = renderExpanded('disconnected')
     expect(panelSol(container).getAttribute('data-state')).toBe('offline')
+  })
+
+  it('the transient and disconnected renders are visually different states', () => {
+    // Guards the actual bxng regression: these two must never collapse.
+    const a = renderExpanded('reconnecting')
+    const transient = panelSol(a.container).getAttribute('data-state')
+    cleanup()
+    const b = renderExpanded('disconnected')
+    const dead = panelSol(b.container).getAttribute('data-state')
+    expect(transient).not.toBe(dead)
   })
 
   it('thinking indicator survives a section switch', () => {

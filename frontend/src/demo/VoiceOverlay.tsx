@@ -30,7 +30,7 @@ import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTim
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
 import { Sol, SOL_CSS } from '../shared/Sol'
-import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
+import { deriveSolState } from '../shared/solState'
 import { useGeminiSpeaking } from '../shared/useGeminiSpeaking'
 
 interface VoiceOverlayProps {

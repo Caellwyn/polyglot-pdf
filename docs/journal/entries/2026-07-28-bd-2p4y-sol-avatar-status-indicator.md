@@ -35,11 +35,12 @@ from words or from a colour legend fails a user who reads neither.
 
 ## What shipped
 
-Six states, none of which contain a letter:
+Seven states, none of which contain a letter:
 
 | state | reads as | cue |
 |---|---|---|
 | idle | ready, nothing pending | rays turn very slowly |
+| connecting | coming up / recovering | disc pulses gently; rays faint and still |
 | listening | your turn | rays **stop dead** and breathe in length with mic energy |
 | thinking | working on it | rays turn (16s/rev) + sparkles |
 | speaking | its turn | halo rings swell out of the disc and fade |
@@ -82,6 +83,48 @@ so:
   re-derived in each overlay.
 - **`frontend/src/shared/useGeminiSpeaking.ts`** -- the missing speaking signal
   (below).
+
+## The bxng invariant nearly died in a test rewrite
+
+The riskiest thing in this change was not code -- it was **editing an existing
+test to match new behaviour**, which is how invariants quietly disappear.
+
+`VoiceOverlayListeningIndicator.test.tsx` had three tests asserting the mobile
+status dot was **green** during `switching_section` / `reconnecting` and
+not-green when disconnected, pinning bd `polyglot-pdf-bxng`: *a session that is
+still live through a transient must not look like one that is dead.* Sol removed
+the dot, so those assertions could not survive as written. My first rewrite
+asserted `data-state !== 'offline'`.
+
+A fresh-eyes review caught that this was **strictly weaker than what it
+replaced**, and it was right. My mapping sent `switching_section` /
+`reconnecting` to **`idle`** -- the same state as `Ready`, i.e. a cold,
+never-started session. `idle !== 'offline'`, so the test passed while the
+user-facing defect bxng existed to prevent had been reintroduced in a new guise:
+**a reconnecting session rendered identically to one that had never started.**
+
+This is worse on mobile than the original bug. On the collapsed FAB, Sol is the
+**only** status the user can see -- there is no accompanying status text -- so
+the two situations were genuinely indistinguishable there.
+
+The fix is a seventh state, `connecting`, covering `connecting` /
+`reconnecting` / `switching_section` / `warming` / `Setting up audio...`: the
+disc pulses gently while the rays stay faint and still, reading as
+alive-but-waiting rather than either cold or dead. Checked *after* the
+live-session activity states, so a steady `connected` session never reaches it.
+
+Three lessons worth keeping:
+
+1. **"Not the bad value" is not equivalent to "the right value."** An assertion
+   rewritten during a refactor should be re-derived from the invariant's
+   *intent*, not from the old assertion's negation.
+2. The invariant now has a test that names it and states it **both ways** --
+   distinguishable from dead AND from cold -- rather than relying on a
+   colour-equality check that only held for the old widget.
+3. A browser sweep now asserts **no two states share a computed-style
+   fingerprint**, with motion on and off. That is a structural guard: it would
+   have caught this collapse automatically, where a hand-written per-state
+   assertion did not.
 
 ## The precedence rule
 
@@ -135,7 +178,13 @@ a browser: identical computed style on every distinguishing property.
 Each motion-dependent state therefore gets a static substitute: listening pins
 the rays **fully extended** (visibly longer than idle's rest length), thinking
 pins the **sparkles visible** (the state's own motif), speaking pins a **steady
-halo ring**. All six now read apart with the clock stopped.
+halo ring**, and connecting pins the disc **small and dimmed** (its cue is a
+pulse, which motion-off would otherwise erase entirely).
+
+Verified structurally rather than by inspection: a browser sweep fingerprints
+every state on ten computed properties and asserts **no two states collide**,
+with motion on and with the shipped `prefers-reduced-motion` rules applied.
+Both sets came back with **zero collisions** across all seven states.
 
 ## What was deliberately KEPT
 

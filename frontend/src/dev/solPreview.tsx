@@ -12,7 +12,9 @@ import { Sol, SOL_CSS } from '../shared/Sol'
 import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
 import type { SolState } from '../shared/solState'
 
-const STATES: SolState[] = ['idle', 'listening', 'thinking', 'speaking', 'paused', 'offline']
+const STATES: SolState[] = [
+  'idle', 'connecting', 'listening', 'thinking', 'speaking', 'paused', 'offline',
+]
 
 // A syllable-shaped envelope so the amplitude-driven states can be judged
 // without a live model: attack, decay, word gaps, a breath in the middle.

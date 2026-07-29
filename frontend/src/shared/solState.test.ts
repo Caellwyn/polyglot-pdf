@@ -19,15 +19,16 @@ describe('deriveSolState -- status coverage', () => {
   const cases: Array<[string, SolState]> = [
     ['Ready', 'idle'],
     ['ready', 'idle'],
-    ['connecting', 'idle'],
-    ['Setting up audio...', 'idle'],
-    ['warming', 'idle'],
-    ['warming up', 'idle'],
+    ['connecting', 'connecting'],
+    ['Setting up audio...', 'connecting'],
+    ['warming', 'connecting'],
+    ['warming up', 'connecting'],
+    // A steady connected session with no activity flags: nothing to report yet.
     ['connected', 'idle'],
     ['connected section_2', 'idle'],
-    ['switching_section', 'idle'],
-    ['reconnecting', 'idle'],
-    ['reconnecting (2/5)', 'idle'],
+    ['switching_section', 'connecting'],
+    ['reconnecting', 'connecting'],
+    ['reconnecting (2/5)', 'connecting'],
     ['paused', 'paused'],
     ['disconnected', 'offline'],
     ['error', 'offline'],
@@ -87,19 +88,27 @@ describe('deriveSolState -- precedence', () => {
 
 describe('deriveSolState -- activity requires a live session', () => {
   // A stale speaking/thinking flag left over from a dropped socket must not
-  // animate Sol while the session is not actually carrying audio.
-  const notLive = ['connecting', 'switching_section', 'reconnecting', 'Ready', 'warming']
+  // animate Sol while the session is not actually carrying audio. These states
+  // resolve to `connecting` (coming up / recovering) rather than to an activity
+  // state -- `Ready` is the one that is genuinely pre-session, hence `idle`.
+  const transient = ['connecting', 'switching_section', 'reconnecting', 'warming']
 
-  it.each(notLive)('%j ignores a stale speaking flag', (status) => {
-    expect(deriveSolState({ status, speaking: true })).toBe('idle')
+  it.each(transient)('%j ignores a stale speaking flag', (status) => {
+    expect(deriveSolState({ status, speaking: true })).toBe('connecting')
   })
 
-  it.each(notLive)('%j ignores a stale thinking flag', (status) => {
-    expect(deriveSolState({ status, thinking: true })).toBe('idle')
+  it.each(transient)('%j ignores a stale thinking flag', (status) => {
+    expect(deriveSolState({ status, thinking: true })).toBe('connecting')
   })
 
-  it.each(notLive)('%j ignores a stale micSending flag', (status) => {
-    expect(deriveSolState({ status, micSending: true })).toBe('idle')
+  it.each(transient)('%j ignores a stale micSending flag', (status) => {
+    expect(deriveSolState({ status, micSending: true })).toBe('connecting')
+  })
+
+  it('Ready ignores every stale flag and stays idle', () => {
+    expect(deriveSolState({ status: 'Ready', speaking: true })).toBe('idle')
+    expect(deriveSolState({ status: 'Ready', thinking: true })).toBe('idle')
+    expect(deriveSolState({ status: 'Ready', micSending: true })).toBe('idle')
   })
 
   it('listening requires micSending, not merely being connected', () => {
@@ -115,11 +124,48 @@ describe('deriveSolState -- activity requires a live session', () => {
   })
 })
 
+describe('bd polyglot-pdf-bxng -- a live-but-transient session is never mistakable for a dead one', () => {
+  // The bug bxng fixed: a session that is still live through `switching_section`
+  // / `reconnecting` must not LOOK like one that is not running. Asserting
+  // merely "not offline" is too weak -- it would pass if the transient states
+  // collapsed into `idle`, i.e. the same picture as a cold, never-started
+  // session. On the collapsed mobile FAB, Sol is the ONLY status visible (no
+  // status text accompanies it), so that collapse would be the same user-facing
+  // defect in a new guise.
+  const transient = ['switching_section', 'reconnecting', 'reconnecting (3/5)', 'connecting']
+  const dead = ['disconnected', 'error', 'idle_timeout', 'reconnect_failed']
+
+  it.each(transient)('%j is distinguishable from a DEAD session', (status) => {
+    const s = deriveSolState({ status })
+    expect(s).not.toBe('offline')
+    for (const d of dead) {
+      expect(s).not.toBe(deriveSolState({ status: d }))
+    }
+  })
+
+  it.each(transient)('%j is distinguishable from a COLD (never-started) session', (status) => {
+    // This is the assertion the weaker "not offline" check was missing.
+    expect(deriveSolState({ status })).not.toBe(deriveSolState({ status: 'Ready' }))
+  })
+
+  it('a transient state is also distinct from paused (a user choice, not a hiccup)', () => {
+    for (const status of transient) {
+      expect(deriveSolState({ status })).not.toBe('paused')
+    }
+  })
+})
+
 describe('SOL_STATE_LABEL', () => {
   it('names every state (accessible name must never be undefined)', () => {
-    const states: SolState[] = ['idle', 'listening', 'thinking', 'speaking', 'paused', 'offline']
+    const states: SolState[] = [
+      'idle', 'connecting', 'listening', 'thinking', 'speaking', 'paused', 'offline',
+    ]
     for (const s of states) {
       expect(SOL_STATE_LABEL[s]).toBeTruthy()
     }
+    // Labels must be distinct, or the screen-reader announcement collapses the
+    // same states the visuals were just made to distinguish.
+    const labels = states.map(s => SOL_STATE_LABEL[s])
+    expect(new Set(labels).size).toBe(labels.length)
   })
 })

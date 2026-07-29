@@ -355,6 +355,20 @@ export const SOL_CSS = `
 .sol[data-state="idle"] .rayA { animation-duration: 70s; }
 .sol[data-state="idle"] .rayB { animation-duration: 95s; }
 
+/* CONNECTING -- coming up, or recovering. A live-but-not-ready session must not
+   look like a cold one (bd polyglot-pdf-bxng), and on the collapsed mobile FAB
+   Sol is the only status there is. So: the disc pulses gently -- a heartbeat,
+   clearly "something is happening" -- while the rays stay faint and still,
+   because nothing is being listened to or said yet. Reads as alive-but-waiting,
+   which is exactly what it is. */
+.sol[data-state="connecting"] .rays { opacity: .3; }
+.sol[data-state="connecting"] .rayA,
+.sol[data-state="connecting"] .rayB { animation-play-state: paused; }
+.sol[data-state="connecting"] .corona { opacity: .5; animation: sol-pulse 1.9s ease-in-out infinite; }
+.sol[data-state="connecting"] .disc { animation: sol-pulse 1.9s ease-in-out infinite; }
+@keyframes sol-pulse { 0%, 100% { transform: scale(.94); opacity: .78; }
+  50% { transform: scale(1.04); opacity: 1; } }
+
 /* LISTENING -- the rays stop dead, then breathe in length with your voice.
    It listens with its rays. The disc holds perfectly still. */
 .sol[data-state="listening"] .rays { opacity: calc(.72 + var(--eb) * .28); }
@@ -420,10 +434,12 @@ export const SOL_CSS = `
      thinking   rays rotating + twinkles -> twinkles pinned VISIBLE (static
                                             sparkles, the state's own motif)
      speaking   halo swelling            -> halo pinned to a steady ring
+     connecting disc pulsing             -> disc pinned SMALL + faint rays
 
-   With those three pinned, all six read apart with the clock stopped:
-   idle = short rays; listening = long rays, no sparkles; thinking = sparkles;
-   speaking = halo ring; paused = moon; offline = cloud. */
+   With those pinned, all seven read apart with the clock stopped:
+   idle = short rays, full-size disc; connecting = shrunken dimmed disc, faintest
+   rays; listening = long rays, no sparkles; thinking = sparkles; speaking =
+   halo ring; paused = moon; offline = cloud. */
 @media (prefers-reduced-motion: reduce) {
   .sol * { animation: none !important; }
   .sol .disc { transform: none !important; filter: none !important; }
@@ -439,5 +455,8 @@ export const SOL_CSS = `
      amplitude-driven one -- otherwise the cue vanishes completely. */
   .sol[data-state="speaking"] .ring { opacity: .55; }
   .sol[data-state="speaking"] .ring2 { opacity: .35; }
+  /* Connecting: the pulse is the cue, so pin the disc small and dim -- still
+     obviously "not the resting state", without motion. */
+  .sol[data-state="connecting"] .disc { transform: scale(.94) !important; opacity: .8; }
 }
 `

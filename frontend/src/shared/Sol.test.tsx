@@ -18,7 +18,9 @@ import type { SolState } from './solState'
 
 afterEach(cleanup)
 
-const STATES: SolState[] = ['idle', 'listening', 'thinking', 'speaking', 'paused', 'offline']
+const STATES: SolState[] = [
+  'idle', 'connecting', 'listening', 'thinking', 'speaking', 'paused', 'offline',
+]
 
 describe('Sol rendering', () => {
   it.each(STATES)('exposes state %s as data-state', (state) => {
