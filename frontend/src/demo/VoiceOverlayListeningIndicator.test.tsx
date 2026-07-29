@@ -351,11 +351,16 @@ describe('Mobile FAB mic-activity badge (bd polyglot-pdf-8v53)', () => {
 })
 
 describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxng)', () => {
-  // The mobile overlay's `isConnected` (status dot / FAB color / thinking
-  // indicator) must match the desktop definition: still "live" during
-  // `switching_section` and `reconnecting`. The LISTENING indicator deliberately
-  // stays connected-only in both overlays (Codex PR #278) -- covered by the
-  // 1dvp block above, NOT widened here.
+  // The mobile overlay must keep reading as a LIVE session during
+  // `switching_section` and `reconnecting`, and as NOT-live when disconnected.
+  //
+  // Sol replaced the coloured status dot (bd polyglot-pdf-2p4y), so the
+  // invariant is now asserted on Sol's `data-state` rather than on a green
+  // background: the transient states must NOT fall through to `offline`, which
+  // is the state reserved for a session that is genuinely gone. `disconnected`
+  // must. This is the same bxng guarantee, pinned on the element that now
+  // carries it -- the LISTENING indicator deliberately stays connected-only in
+  // both overlays (Codex PR #278), covered by the 1dvp block above.
   beforeEach(() => {
     vi.useFakeTimers()
     stubEnv()
@@ -367,8 +372,6 @@ describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxn
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
-
-  const GREEN = 'rgb(16, 185, 129)'  // #10b981, the connected statusColor
 
   function renderExpanded(status: string, thinking = false) {
     const utils = render(
@@ -385,21 +388,23 @@ describe('Mobile isConnected includes transient live states (bd polyglot-pdf-bxn
     return utils
   }
 
-  const statusDot = (c: HTMLElement) => c.querySelector('.vff-status-dot') as HTMLElement
+  // The panel's Sol (the FAB carries one too, so scope to the panel).
+  const panelSol = (c: HTMLElement) =>
+    c.querySelector('.vff-panel-mobile [data-testid="sol-avatar"]') as HTMLElement
 
-  it('status dot stays green during switching_section', () => {
+  it('Sol does not read as offline during switching_section', () => {
     const { container } = renderExpanded('switching_section')
-    expect(statusDot(container).style.background).toBe(GREEN)
+    expect(panelSol(container).getAttribute('data-state')).not.toBe('offline')
   })
 
-  it('status dot stays green while reconnecting', () => {
+  it('Sol does not read as offline while reconnecting', () => {
     const { container } = renderExpanded('reconnecting')
-    expect(statusDot(container).style.background).toBe(GREEN)
+    expect(panelSol(container).getAttribute('data-state')).not.toBe('offline')
   })
 
-  it('status dot is NOT green when disconnected', () => {
+  it('Sol reads as offline when disconnected', () => {
     const { container } = renderExpanded('disconnected')
-    expect(statusDot(container).style.background).not.toBe(GREEN)
+    expect(panelSol(container).getAttribute('data-state')).toBe('offline')
   })
 
   it('thinking indicator survives a section switch', () => {
