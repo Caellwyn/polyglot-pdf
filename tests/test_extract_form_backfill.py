@@ -214,6 +214,111 @@ def test_deterministic_pages_are_never_shifted_by_normalization(tmp_path):
     assert schema["fields"][1]["pdf_position"]["page"] == 1   # model: 0 -> 1
 
 
+def test_every_shipped_kit_has_in_range_pages_and_real_rects():
+    """REAL-KIT REGRESSION (bd polyglot-pdf-icyi): the shipped kits' field
+    positions must land on a page the document actually has, and match the PDF's
+    own widget geometry.
+
+    This is the test that would have caught the bug from the outside: a fresh w7
+    extraction shipped 48 of 54 fields on page 0, which the editor's PDF preview
+    matches against 1..numPages by exact equality -- so every text-field overlay
+    silently vanished and only the 6 dump-derived choice fields drew. Nothing in
+    the suite noticed, because the schema was internally well-formed.
+
+    Skips a kit whose PDF or schema is absent from the checkout rather than
+    failing (the same degrade-quietly convention the other real-kit guards use);
+    fields whose widget name does not resolve are also skipped -- an unclaimed
+    widget is a different concern (the coverage ledger's)."""
+    fitz = pytest.importorskip("fitz")
+    kits_root = _REPO / "form-kits"
+    if not kits_root.is_dir():
+        pytest.skip("form-kits/ not present in this checkout")
+
+    checked_kits = 0
+    for kit in sorted(p for p in kits_root.iterdir() if p.is_dir()):
+        schema_path = kit / "schema.json"
+        pdfs = [p for p in kit.glob("*.pdf")
+                if "instruction" not in p.name.lower()]
+        if not schema_path.exists() or not pdfs:
+            continue
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        doc = fitz.open(pdfs[0])
+        page_count = doc.page_count
+        real: dict = {}
+        for pno in range(page_count):
+            for w in doc.load_page(pno).widgets() or []:
+                real.setdefault(w.field_name, (
+                    pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
+                    round(w.rect.width, 2), round(w.rect.height, 2)))
+
+        bad_pages, wrong_rects = [], []
+        for field in schema.get("fields") or []:
+            pos = field.get("pdf_position")
+            if not isinstance(pos, dict):
+                continue  # no position recorded: not this test's concern
+            page = pos.get("page")
+            if (not isinstance(page, int) or isinstance(page, bool)
+                    or page < 1 or page > page_count):
+                bad_pages.append((field.get("id"), page))
+                continue
+            expected = real.get(field.get("pdf_field_name"))
+            if not expected:
+                continue  # unresolved widget name: the ledger's concern
+            got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
+            # TOLERANCE, not equality: the dump serializes rects rounded to one
+            # decimal, so a deterministic value legitimately differs from
+            # PyMuPDF's raw float by up to 0.05pt (~1/1400 inch). The bug this
+            # guards against is nothing like that -- a model rect is rounded to
+            # whole points (469.2 -> 469) or lands on the wrong page entirely.
+            if got[0] != expected[0] or any(
+                    abs(g - e) > 0.06 for g, e in zip(got[1:], expected[1:])):
+                wrong_rects.append((field.get("id"), got, expected))
+
+        assert not bad_pages, (
+            f"{kit.name}: pdf_position.page out of range 1..{page_count} "
+            f"(the editor preview draws NOTHING for these): {bad_pages[:10]}")
+        assert not wrong_rects, (
+            f"{kit.name}: pdf_position does not match the PDF's own widget "
+            f"rect -- positions must be deterministic, not model-authored: "
+            f"{wrong_rects[:5]}")
+        checked_kits += 1
+
+    if not checked_kits:
+        pytest.skip("no kit with both a schema and a form PDF in this checkout")
+
+
+def test_the_page_zero_bug_cannot_survive_the_backfill(tmp_path):
+    """MUTATION PIN, through the REAL code path (bd polyglot-pdf-icyi).
+
+    The real-kit guard above only inspects kits PRESENT in the checkout, and the
+    kit that actually shipped this bug was untracked scratch -- so that guard
+    alone proves nothing. This one reproduces the exact production shape (a
+    1-page form where the model claimed page 0 with plausible rounded rects) and
+    drives it through _backfill_positions, asserting the page-0 fields cannot
+    come out the other side. If the trust inversion is ever reverted, this fails.
+    """
+    dump = _write_dump(tmp_path, {
+        "f_text": {"page": 0, "x": 469.2, "y": 180.0,
+                   "width": 106.8, "height": 11.0},
+        "f_check": {"page": 0, "x": 453.6, "y": 97.75,
+                    "width": 8.0, "height": 8.0},
+    })
+    schema = {"fields": [
+        # the 48-field majority shape: model rect, rounded, page 0
+        {"id": "text_like_v3", "pdf_field_name": "f_text",
+         "pdf_position": {"page": 0, "x": 469, "y": 180,
+                          "width": 107, "height": 11}},
+        # the 6-field minority that kept working: no model rect at all
+        {"id": "checkbox_like_v3", "pdf_field_name": "f_check"},
+    ]}
+    ef._backfill_positions(schema, dump)
+
+    pages = [f["pdf_position"]["page"] for f in schema["fields"]]
+    assert pages == [1, 1], f"a page-0 position survived the back-fill: {pages}"
+    # and the previously-rounded field now carries the PDF's real precision
+    assert schema["fields"][0]["pdf_position"]["width"] == 106.8
+
+
 # --- _normalize_model_page_base (the no-widget fallback's page base) --------- #
 
 def test_model_page_zero_base_is_shifted_not_discarded():
