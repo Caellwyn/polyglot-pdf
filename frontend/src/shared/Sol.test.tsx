@@ -203,44 +203,72 @@ describe('Sol stylesheet invariants', () => {
   // jsdom render can observe (jsdom does not run animations or resolve
   // animated-vs-normal declaration precedence).
 
-  it('the connecting corona pulses in SIZE ONLY, never via sol-pulse', () => {
-    // sol-pulse animates opacity as well as transform, and an animated
-    // declaration outranks a normal one -- so borrowing it here silently voids
-    // the corona's `opacity: .5` and swings it 0.78-1.0, BRIGHTER than idle's
-    // steady .85. That is the exact bug this pins: the state whose whole brief
-    // is "quietly waiting" became the loudest one Sol has.
-    const coronaRule = SOL_CSS.match(
-      /\.sol\[data-state="connecting"\]\s*\.corona\s*\{[^}]*\}/
-    )
-    expect(coronaRule).toBeTruthy()
-    expect(coronaRule![0]).toContain('sol-pulse-size')
-    expect(coronaRule![0]).not.toMatch(/animation:\s*sol-pulse\s/)
-    expect(coronaRule![0]).toContain('opacity: .5')
+  // sol-grow-disc / sol-grow-corona are written as `@keyframes name { 0% {
+  // ...} 50% {...} 100% {...} }` -- a run of nested `{...}` blocks closed by a
+  // final `} }`. Extracted with a small brace-depth walk rather than a single
+  // regex, since a naive `[^}]*` or non-greedy `.*?\}` either stops at the
+  // FIRST inner `}` or (worse) spills into unrelated rules later in the
+  // stylesheet -- which is exactly what happened the first time this was
+  // written and made these tests read a value from a different rule entirely.
+  function extractKeyframes(css: string, name: string): string {
+    const start = css.indexOf(`@keyframes ${name}`)
+    expect(start).toBeGreaterThanOrEqual(0)
+    const openBrace = css.indexOf('{', start)
+    let depth = 0
+    for (let i = openBrace; i < css.length; i++) {
+      if (css[i] === '{') depth++
+      else if (css[i] === '}') {
+        depth--
+        if (depth === 0) return css.slice(start, i + 1)
+      }
+    }
+    throw new Error(`unterminated @keyframes ${name}`)
+  }
+
+  it('connecting grows the disc from tiny (10%) to full size (100%)', () => {
+    // Parse the actual scale values out of the keyframe rather than eyeballing
+    // the source text -- a transcription slip (e.g. .1 vs 1.1) would read as
+    // plausible CSS and pass a substring check.
+    const kf = extractKeyframes(SOL_CSS, 'sol-grow-disc')
+    const scales = [...kf.matchAll(/scale\((\.?\d*\.?\d+)\)/g)].map(m => parseFloat(m[1]))
+    expect(scales.length).toBeGreaterThan(0)
+    expect(Math.min(...scales)).toBeCloseTo(0.1, 5)
+    expect(Math.max(...scales)).toBeCloseTo(1, 5)
   })
 
-  it('sol-pulse-size animates transform only (no opacity to override with)', () => {
-    const kf = SOL_CSS.match(/@keyframes sol-pulse-size\s*\{[\s\S]*?\}\s*\}/)
-    expect(kf).toBeTruthy()
-    expect(kf![0]).not.toContain('opacity')
+  it('connecting SNAPS back to tiny rather than easing symmetrically', () => {
+    // The snap is the whole point (maintainer feedback 2026-07-29): a smooth
+    // in-and-out reads as calm breathing, which is too settled for "trying to
+    // start". A snap needs the full-size scale held almost to the end of the
+    // cycle, then dropped in a step too small to perceive as motion.
+    const kf = extractKeyframes(SOL_CSS, 'sol-grow-disc')
+    const steps = [...kf.matchAll(/(\d+(?:\.\d+)?)%\s*\{\s*transform:\s*scale\((\.?\d*\.?\d+)\)/g)]
+      .map(m => ({ pct: parseFloat(m[1]), scale: parseFloat(m[2]) }))
+    expect(steps.length).toBeGreaterThanOrEqual(3)
+    // Find the last step still at full size and the first step back at the
+    // small size; the gap between their percentages must be small (a snap),
+    // not spread across most of the cycle (which would be a smooth ease).
+    const lastFull = Math.max(...steps.filter(s => s.scale > 0.9).map(s => s.pct))
+    const firstSmall = Math.min(...steps.filter(s => s.pct > lastFull && s.scale < 0.5).map(s => s.pct))
+    expect(firstSmall - lastFull).toBeLessThan(1)
   })
 
-  it('connecting stays dimmer than idle -- the whole point of the state', () => {
-    // Parse BOTH values and compare them numerically. Asserting only idle's .85
-    // (and leaving the relation in a comment) would let connecting be set to
-    // .95 and still pass -- reintroducing the exact "connecting is brighter than
-    // idle" inversion this round exists to prevent.
+  it('connecting stays dimmer than idle at its brightest point', () => {
+    // Parse BOTH values numerically rather than asserting one side and leaving
+    // the comparison in a comment -- the round-2 lesson from the corona-
+    // inversion bug: a test that only checks idle's value would let connecting
+    // be set brighter and still pass.
     const opacityOf = (rule: string) => {
       const m = rule.match(/opacity:\s*(\.?\d*\.?\d+)/)
       expect(m).toBeTruthy()
       return parseFloat(m![1])
     }
     const idleRule = SOL_CSS.match(/\.sol \.corona\s*\{[^}]*\}/)![0]
-    const connectingRule = SOL_CSS.match(
-      /\.sol\[data-state="connecting"\]\s*\.corona\s*\{[^}]*\}/
-    )![0]
-
     const idle = opacityOf(idleRule)
-    const connecting = opacityOf(connectingRule)
-    expect(connecting).toBeLessThan(idle)
+
+    const kf = extractKeyframes(SOL_CSS, 'sol-grow-corona')
+    const opacities = [...kf.matchAll(/opacity:\s*(\.?\d*\.?\d+)/g)].map(m => parseFloat(m[1]))
+    expect(opacities.length).toBeGreaterThan(0)
+    expect(Math.max(...opacities)).toBeLessThan(idle)
   })
 })
