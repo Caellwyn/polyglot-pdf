@@ -73,9 +73,11 @@ const FAST_ALPHA = 0.14
 const SLOW_ALPHA = 0.075
 
 /**
- * The amplitude swing is capped deliberately: the disc moves ~6% and brightens
- * ~7%, nowhere near a flash hazard, which matters a great deal on a large bright
- * shape. The visible work is done by the rings, which cost no luminance.
+ * The amplitude swing on LISTENING's disc is capped deliberately: it moves ~6%
+ * and brightens ~7%, nowhere near a flash hazard, which matters a great deal on
+ * a large bright shape. The visible work there is done by the rings, which cost
+ * no luminance. (Speaking has no disc rule at all -- see the listening/speaking
+ * blocks below for what each state's amplitude actually drives.)
  */
 
 export interface SolProps {
@@ -83,12 +85,13 @@ export interface SolProps {
 	state: SolState
 	/**
 	 * Live MIC amplitude, 0-100 (the capture worklet's smoothed RMS scale).
-	 * Drives the listening ray-breathing. Ignored in states that do not use it.
+	 * Drives the listening halo (corona + rings). Ignored in states that do not
+	 * use it.
 	 */
 	energy?: number
 	/**
 	 * Live AI-OUTPUT amplitude, 0-100 (same scale), pulled per frame. Drives the
-	 * speaking halo.
+	 * speaking ray-breathing.
 	 *
 	 * This is a separate input on purpose: during the assistant's turn the mic is
 	 * near-silent, so feeding `energy` into the speaking state would leave it
@@ -211,8 +214,8 @@ export function Sol({
 			return
 		}
 		// Which voice are we visualising? Speaking reads the AI's output level;
-		// listening reads the mic. Using the mic for both would leave the speaking
-		// halo flat, since the user is silent while the assistant talks.
+		// listening reads the mic. Using the mic for both would leave speaking's
+		// ray-breathing flat, since the user is silent while the assistant talks.
 		const speaking = state === 'speaking'
 		let fast = 0
 		let slow = 0
@@ -435,7 +438,7 @@ export const SOL_CSS = `
    look like a cold one (bd polyglot-pdf-bxng), and on the collapsed mobile FAB
    Sol is the only status there is.
    Redesigned on maintainer feedback 2026-07-29: the disc grows from tiny (10%)
-   up to full size (100%), then snaps stright back to tiny and repeats, ~1s a
+   up to full size (100%), then snaps straight back to tiny and repeats, ~1s a
    cycle -- reading as "trying to start" rather than a calm heartbeat. The snap
    (not a symmetric ease back down) is the point: a smooth in-and-out reads as
    breathing, which is too settled for a state that has not connected yet. Rays
@@ -469,10 +472,16 @@ export const SOL_CSS = `
    nod, which is backwards -- speaking should be the louder-looking turn). It
    still listens with its rays: they freeze the instant this state is entered,
    which is the stillness cue that matters; they just no longer carry the
-   energy. Deliberately does NOT take the --k boost -- see the note on the
-   speaking disc below, which used to live here. */
+   energy. */
 .sol[data-state="listening"] .rays { opacity: .95; }
 .sol[data-state="listening"] .rayA, .sol[data-state="listening"] .rayB { animation-play-state: paused; }
+/* The disc scale/brightness here deliberately do NOT take the --k motion boost:
+   --k exists so RAYS and RINGS stay visible when the avatar shrinks (the FAB is
+   56px), but disc scale and brightness are the two capped quantities (~6% /
+   ~7%), and the cap is a safety property on a large bright shape -- multiplying
+   it by up to 2.4x on the FAB would put a bright orb at a ~13-17% throb. The
+   ring/corona below carry the amplitude at full --k boost instead; they cost no
+   luminance. */
 .sol[data-state="listening"] .disc { animation: none;
   transform: scale(calc(1 + var(--e) * .055));
   filter: brightness(calc(1 + var(--eb) * .07)); }

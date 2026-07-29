@@ -198,6 +198,54 @@ describe('Sol reduced-motion handling', () => {
   })
 })
 
+describe('listening/speaking swap (maintainer feedback 2026-07-29)', () => {
+  // Pins WHICH shape each state uses, not just that amplitude reaches the SVG
+  // (the "reads OUTPUT/MIC energy" tests above cover that). Without this, an
+  // accidental re-swap, partial revert, or copy-paste slip between the two
+  // adjacent CSS blocks would pass the full suite silently -- there was
+  // previously nothing here pinning listening to the halo shape and speaking to
+  // the ray-breathing shape, unlike the connecting redesign below.
+  function ruleFor(state: string, selector: string): string {
+    const m = SOL_CSS.match(
+      new RegExp(`\\.sol\\[data-state="${state}"\\]\\s*\\.${selector}\\s*\\{[^}]*\\}`)
+    )
+    expect(m).toBeTruthy()
+    return m![0]
+  }
+
+  it('listening drives the HALO (corona/ring/ring2), not ray length', () => {
+    expect(ruleFor('listening', 'corona')).toMatch(/var\(--eb\)/)
+    expect(ruleFor('listening', 'ring')).toMatch(/var\(--eb\)/)
+    expect(ruleFor('listening', 'ring2')).toMatch(/var\(--eb\)/)
+    // rayscale must NOT be amplitude-driven for listening -- that is speaking's.
+    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="listening"\]\s*\.rayscale/)
+  })
+
+  it('listening nods the disc via --e/--eb, same shape speaking used to own', () => {
+    const disc = ruleFor('listening', 'disc')
+    expect(disc).toMatch(/var\(--e\)/)
+    expect(disc).toMatch(/var\(--eb\)/)
+  })
+
+  it('speaking drives RAY LENGTH (rayscale) via --e, not the halo', () => {
+    expect(ruleFor('speaking', 'rayscale')).toMatch(/var\(--e\)/)
+    // .disc and .ring must NOT exist for speaking -- those are listening's now.
+    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="speaking"\]\s*\.disc\s*\{/)
+    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="speaking"\]\s*\.ring\b/)
+  })
+
+  it('speaking corona scales with --e but is not amplitude-opacity-driven (that is listening\'s halo swell)', () => {
+    const corona = ruleFor('speaking', 'corona')
+    expect(corona).toMatch(/var\(--e\)/)
+    expect(corona).not.toMatch(/var\(--eb\)/)
+  })
+
+  it('both states freeze ray rotation -- neither should spin like thinking', () => {
+    expect(SOL_CSS).toMatch(/\.sol\[data-state="listening"\]\s*\.rayA,\s*\.sol\[data-state="listening"\]\s*\.rayB\s*\{\s*animation-play-state:\s*paused/)
+    expect(SOL_CSS).toMatch(/\.sol\[data-state="speaking"\]\s*\.rayA,\s*\.sol\[data-state="speaking"\]\s*\.rayB\s*\{\s*animation-play-state:\s*paused/)
+  })
+})
+
 describe('Sol stylesheet invariants', () => {
   // Asserted against the exported CSS text because these are cascade facts no
   // jsdom render can observe (jsdom does not run animations or resolve
