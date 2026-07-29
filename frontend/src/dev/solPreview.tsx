@@ -6,7 +6,7 @@
  * states can be eyeballed without a live Gemini session. Not part of any build
  * entry point that ships -- it is reachable only via /sol-preview.html in dev.
  */
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
@@ -28,8 +28,20 @@ const SYLL: Array<[number, number, number]> = [
 ]
 const DUR = 5.1
 
-function useFakeEnergy(): number {
+/**
+ * Returns BOTH a re-rendering state value (for the `energy` prop, which
+ * listening/idle/etc. consume) and a stable getter reading the same value from
+ * a ref (for `getOutputEnergy`, which speaking consumes). Sol intentionally
+ * takes the two amplitude sources through different shapes -- one is threaded
+ * through React state, the other is a per-frame pull specifically so the
+ * component does not re-render 50x/sec -- so the harness has to supply both
+ * shapes or whichever state reads the getter goes static. That is exactly the
+ * bug this fixes: after the listening/speaking swap, speaking started reading
+ * getOutputEnergy, which this preview never supplied.
+ */
+function useFakeEnergy(): { energy: number; getEnergy: () => number } {
 	const [e, setE] = useState(0)
+	const ref = useRef(0)
 	useEffect(() => {
 		let raf = 0
 		const t0 = performance.now()
@@ -42,17 +54,19 @@ function useFakeEnergy(): number {
 					v = Math.max(v, amp * Math.sin(Math.PI * Math.pow(u, 0.7)))
 				}
 			}
+			ref.current = v
 			setE(v)
 			raf = requestAnimationFrame(tick)
 		}
 		raf = requestAnimationFrame(tick)
 		return () => cancelAnimationFrame(raf)
 	}, [])
-	return e
+	const getEnergy = useCallback(() => ref.current, [])
+	return { energy: e, getEnergy }
 }
 
 function App() {
-	const energy = useFakeEnergy()
+	const { energy, getEnergy } = useFakeEnergy()
 	const [rm, setRm] = useState(false)
 
 	// Real status strings the overlays can emit -> the state each maps to.
@@ -98,7 +112,7 @@ function App() {
 				<div className="row">
 					{STATES.map(s => (
 						<div className="cell" key={s} data-probe={s}>
-							<Sol state={s} energy={energy} size={40} />
+							<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={40} />
 							<div className="nm">{s}</div>
 						</div>
 					))}
@@ -108,7 +122,7 @@ function App() {
 				<div className="row">
 					{STATES.map(s => (
 						<div className="cell" key={s} style={{ width: 170 }}>
-							<Sol state={s} energy={energy} size={120} />
+							<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={120} />
 							<div className="nm">{s}</div>
 						</div>
 					))}
@@ -120,7 +134,7 @@ function App() {
 						<div key={s} style={{ textAlign: 'center' }}>
 							<div className="fabwrap">
 								<div className="fab">
-									<Sol state={s} energy={energy} size={56} className="vff-fab-sol" decorative />
+									<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={56} className="vff-fab-sol" decorative />
 								</div>
 							</div>
 							<div className="nm">{s}</div>
@@ -132,7 +146,7 @@ function App() {
 				<div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360 }}>
 					{STATES.map(s => (
 						<div className="statusrow" key={s}>
-							<Sol state={s} energy={energy} size={40} className="vff-sol" />
+							<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={40} className="vff-sol" />
 							<span style={{ fontWeight: 500 }}>{SOL_STATE_LABEL[s]}</span>
 						</div>
 					))}
