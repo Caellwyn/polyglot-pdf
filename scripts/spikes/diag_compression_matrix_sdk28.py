@@ -62,7 +62,48 @@ if str(_REPO_ROOT) not in sys.path:
 
 from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
 from backend import config as _config  # noqa: E402
-from backend.config import MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD  # noqa: E402
+from backend.config import (  # noqa: E402
+    MODEL_NATIVE_PREMIUM, MODEL_NATIVE_STANDARD, MODEL_NATIVE_STANDARD_VERTEX,
+)
+
+
+def _live_adapter_kwargs() -> dict:
+    """Vertex by DEFAULT (maintainer directive 2026-07-12, reaffirmed
+    2026-07-28: AI Studio is not currently available to this project, so a
+    key-defaulting path errors outright). VERTEXAI=true (default) -> ADC +
+    GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY only for a
+    deliberate AI Studio run (kept reachable for future 3.1-Live
+    experimentation -- bd polyglot-pdf-kbi1). Mirrors the sibling spikes'
+    _client() convention and the production adapter's construction."""
+    if os.environ.get("VERTEXAI", "true").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not project:
+            print(
+                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+                "default project (gcloud config get-value project).",
+                flush=True,
+            )
+        return {
+            "vertexai": True,
+            "project": project,
+            "location": os.environ.get("VERTEX_LOCATION", "us-central1"),
+        }
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
+        sys.exit(2)
+    return {"api_key": key}
+
+
+def _live_auth_preflight() -> int:
+    """0 when auth is usable. Only the deliberate AI-Studio opt-out needs a
+    key; the DEFAULT Vertex path must never abort for a missing key."""
+    if (os.environ.get("VERTEXAI", "true").lower() != "true"
+            and not os.getenv("GEMINI_API_KEY")):
+        print("VERTEXAI=false but GEMINI_API_KEY not set.")
+        return 1
+    return 0
+
 
 # Reuse the single-config probe's synth/prompts/settings helpers (same dir, not a
 # package -- load by path so the two scripts cannot drift apart).
@@ -158,7 +199,7 @@ async def _drive_run(model_name: str, label: str, settings, n_turns: int,
         "api_version": None,
     }
     try:
-        adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=model_name)
+        adapter = LiveAIGemini(model=model_name, **_live_adapter_kwargs())
         adapter.set_session_context(form_session_id=f"matrix-{label}", form_id="DIAG")
         adapter._log = _LogTap(adapter._log, log_sink)
         adapter._on_raw_usage = lambda u: usage_dumps.append(_diag._dump_usage(u))
@@ -294,8 +335,7 @@ def _summarize(records: list[dict]) -> None:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set; cannot run.")
+    if _live_auth_preflight():
         return 1
     try:
         for p in _diag.PROMPTS[: min(args.turns, len(_diag.PROMPTS))]:
@@ -327,13 +367,57 @@ async def main_async(args: argparse.Namespace) -> int:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    total = len(model_tiers) * len(configs) * args.repeats
-    print(f"genai={genai_version}; matrix = {model_tiers} x {[c[0] for c in configs]} "
-          f"x {args.repeats} repeats = {total} sessions, {args.turns} turns each\n")
+    on_vertex = os.environ.get("VERTEXAI", "true").lower() == "true"
+    # Count only the tiers that will actually RUN: on the Vertex path the
+    # no-Vertex-id tiers are skipped below, and counting them made the
+    # progress ratio stall short of its total (e.g. [15/30] then done),
+    # reading as a crashed run (bd kbi1 outer review).
+    def _will_run(tier: str) -> bool:
+        return (not on_vertex) or tier == "2.5" or getattr(
+            args, "force_doomed_tiers", False)
+
+    running_tiers = [t for t in model_tiers if _will_run(t)]
+    skipped_tiers = [t for t in model_tiers if t not in running_tiers]
+    total = len(running_tiers) * len(configs) * args.repeats
+    print(f"genai={genai_version}; matrix = {running_tiers} x "
+          f"{[c[0] for c in configs]} x {args.repeats} repeats = {total} "
+          f"sessions, {args.turns} turns each"
+          + (f"  (skipping {skipped_tiers}: no Vertex id)"
+             if skipped_tiers else "") + "\n")
 
     n = 0
     for tier in model_tiers:
         model_name = MODELS[tier]
+        # The 2.5 native-audio model has a DIFFERENT id on Vertex than on AI
+        # Studio, and the AI Studio id 1008s on Vertex (backend/config.py
+        # MODEL_NATIVE_STANDARD_VERTEX). Swap it on the Vertex path, mirroring
+        # measure_form_session_costs.py. There is NO Vertex 3.1 id, so a 3.1
+        # tier on Vertex is a known-1008 -- warn rather than pretend
+        # (bd polyglot-pdf-kbi1 + a079).
+        if on_vertex:
+            if tier == "2.5":
+                model_name = MODEL_NATIVE_STANDARD_VERTEX
+            else:
+                # EVERY other tier is an AI-Studio-shaped id: 3.1 has no Vertex
+                # equivalent, and the 2.5-latest / 2.5-0925 aliases are
+                # unverified AI Studio strings. Passing any of them to a Vertex
+                # client 1008s on connect. SKIP the cell rather than burn
+                # --repeats live sessions that are known in advance to fail --
+                # the experimentation doctrine bars knowingly-doomed live
+                # spend (bd polyglot-pdf-kbi1 round 3). --force-doomed-tiers
+                # runs them anyway (e.g. to re-verify an alias hypothesis).
+                why = ("has no Vertex id" if tier == "3.1"
+                       else "is an unverified AI-Studio-only alias")
+                if not getattr(args, "force_doomed_tiers", False):
+                    print(f"  [skip] tier {tier} {why} -- skipping "
+                          f"{len(configs) * args.repeats} session(s) that "
+                          f"would 1008 on the Vertex path (set VERTEXAI=false "
+                          f"with GEMINI_API_KEY to run it on AI Studio, or "
+                          f"--force-doomed-tiers to attempt anyway).",
+                          flush=True)
+                    continue
+                print(f"  [warn] tier {tier} {why} -- attempting anyway "
+                      f"(--force-doomed-tiers); expect 1008.", flush=True)
         for (label, enabled, trigger, window) in configs:
             for rep in range(args.repeats):
                 n += 1
@@ -376,9 +460,18 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Per-model compression support matrix on google-genai 2.8.x (bd h04c).")
     ap.add_argument("--models", default="2.5,3.1",
-                    help="comma list of tiers: 2.5,3.1,2.5-latest,2.5-0925")
+                    help="comma list of tiers: 2.5,3.1,2.5-latest,2.5-0925. "
+                         "Only 2.5 has a Vertex id (the DEFAULT backend); "
+                         "3.1 and the 2.5-latest/2.5-0925 aliases are "
+                         "AI-Studio-only and 1008 on Vertex -- run those with "
+                         "VERTEXAI=false plus GEMINI_API_KEY.")
     ap.add_argument("--configs", default="off,on-inert,on-live",
                     help="comma list of: off,on-inert,on-live")
+    ap.add_argument("--force-doomed-tiers", action="store_true",
+                    help="on the Vertex path, still attempt tiers with no "
+                         "Vertex id (3.1, the 2.5-* aliases) instead of "
+                         "skipping them -- they are expected to 1008 "
+                         "(bd polyglot-pdf-kbi1).")
     ap.add_argument("--repeats", type=int, default=5)
     ap.add_argument("--turns", type=int, default=20,
                     help="20 minimum for eviction verdicts: compression is async "

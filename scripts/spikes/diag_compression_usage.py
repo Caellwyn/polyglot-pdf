@@ -53,6 +53,51 @@ if str(_REPO_ROOT) not in sys.path:
 from backend.adapters.live_ai_gemini import LiveAIGemini  # noqa: E402
 from backend import config as _config  # noqa: E402
 
+
+# MODEL-AVAILABILITY EXCEPTION (bd polyglot-pdf-kbi1 + a079): this script drives
+# a 3.1 Live model, and there is NO Vertex 3.1 id (backend/config.py:38 -- the
+# AI Studio id 1008s on Vertex). So unlike the rest of the fleet, this script
+# CANNOT default to Vertex: doing so would guarantee a connect failure. It
+# defaults to the AI Studio path it actually needs and states the reason. Set
+# VERTEXAI=true to force Vertex anyway (it will 1008 until Vertex ships 3.1).
+def _live_adapter_kwargs() -> dict:
+    if os.environ.get("VERTEXAI", "").lower() == "true":
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        print(
+            "VERTEXAI=true forced, but this script's 3.1 Live model has no "
+            "Vertex id -- expect a 1008 on connect (bd a079).",
+            flush=True,
+        )
+        return {
+            "vertexai": True,
+            "project": project,
+            "location": os.environ.get("VERTEX_LOCATION", "us-central1"),
+        }
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        print(
+            "This script needs a 3.1 Live model, which is AI-Studio-ONLY (no "
+            "Vertex 3.1 id yet), so it requires GEMINI_API_KEY. AI Studio is "
+            "not currently provisioned for this project -- see bd "
+            "polyglot-pdf-kbi1.",
+            flush=True,
+        )
+        sys.exit(2)
+    return {"api_key": key}
+
+
+def _live_auth_preflight() -> int:
+    """0 when auth is usable. 3.1 is AI-Studio-only, so the DEFAULT path needs
+    a key; a forced VERTEXAI=true run is allowed through (and will 1008)."""
+    if os.environ.get("VERTEXAI", "").lower() == "true":
+        return 0
+    if not os.getenv("GEMINI_API_KEY"):
+        print("GEMINI_API_KEY not set; this script's 3.1 Live model is "
+              "AI-Studio-only (no Vertex 3.1 id).")
+        return 1
+    return 0
+
+
 MODEL = "gemini-3.1-flash-live-preview"  # 2.5 is unstable on audio (bd daa)
 
 PROMPTS = [
@@ -144,7 +189,7 @@ async def _drive(label: str, settings, n_turns: int) -> list[dict]:
     _config.get_settings = lambda s=settings: s
     captured: list[dict] = []
     try:
-        adapter = LiveAIGemini(api_key=os.getenv("GEMINI_API_KEY"), model=MODEL)
+        adapter = LiveAIGemini(model=MODEL, **_live_adapter_kwargs())
         adapter.set_session_context(form_session_id=f"diag-{label}", form_id="DIAG")
         adapter._on_raw_usage = lambda u: captured.append(_dump_usage(u))
 
@@ -223,8 +268,7 @@ def _all_field_union(dumps_on: list[dict], dumps_off: list[dict]) -> list[str]:
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    if not os.getenv("GEMINI_API_KEY"):
-        print("GEMINI_API_KEY not set; cannot run the diagnostic.")
+    if _live_auth_preflight():
         return 1
     try:
         for p in PROMPTS[: min(args.turns, len(PROMPTS))]:
