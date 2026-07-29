@@ -144,6 +144,44 @@ dormant only because of the current wire format is still a money bug; it sat in
 code this change introduces; and in both cases the code contradicted a promise
 its own docstring made.
 
+**A fourth defect, and the point where the loop converged.** The
+`41c1` guard summed unmodelled members of `cache_creation` by *value type*, so
+a future numeric non-token sibling would be charged as cache-write tokens -- a
+`ttl_seconds: 3600` would overcharge **3.25x**. That is not an invented schema:
+`usage.server_tool_use` already carries non-token integer counts
+(`web_search_requests` / `web_fetch_requests`). Fixed by matching the
+`ephemeral_<ttl>_input_tokens` **shape** rather than a bare `*_input_tokens`
+suffix -- the looser suffix still double-charges a summary member like
+`total_input_tokens` on top of the buckets it summarizes (verified; the
+reviewer who suggested the suffix withdrew it).
+
+That fourth finding is where the triage changed. The first two defects were
+**reachable on real data**; the last two require a schema Anthropic has not
+shipped, and *each existed only because the previous fix created its surface*.
+That is a loop generating its own findings rather than converging on latent
+ones -- every round adds guard surface, and guard surface is itself reviewable
+surface. The two speculative fixes also have **opposite** failure directions
+(41c1 under-reports, dxgj over-reports), so they bracket each other: a stable
+resting point. Further hardening would mean guarding a guard with no wire
+evidence to discipline the design.
+
+## The wire validates the anchor
+
+Hunting for a reachable defect, a reviewer examined `usage.iterations` -- a real
+key on **83,151 records** carrying its own nested `cache_creation`, which no
+round had looked at. Two findings, both reassuring:
+
+- The ledger never reads `iterations`, and that is **correct**: it duplicates
+  the top-level usage on every real record, so reading it would double-count.
+- On **all 167** zero-flat records, the iterations' token sum equals the
+  top-level breakdown **exactly**.
+
+The second is independent corroboration from the wire itself that the breakdown
+-- not the zero flat field -- is the truthful figure on those records. The
+`max(flat, breakdown)` anchor was therefore right on **real data**, not merely
+as defensive hardening; anchoring on the flat field alone would have been wrong
+today.
+
 ## Scar tissue
 
 - **A comment asserting "the data doesn't record X" is a claim to verify, not a
@@ -168,8 +206,19 @@ its own docstring made.
   token kind absent from that field had nowhere to land and silently ceased to
   exist. If two sources can each describe the same quantity, the leftover has to
   be measured against whichever is larger.
-- **Each of these three bugs was the previous one, one layer down.** Fixing "the
+- **Each of these bugs was the previous one, one layer down.** Fixing "the
   label disagrees with the charge" exposed "the buckets disagree with the
-  records"; fixing that exposed "the records disagree with the wire". When a fix
-  addresses a class of failure rather than an instance, re-ask the same question
-  at the next layer in before shipping.
+  records"; fixing that exposed "the records disagree with the wire"; fixing
+  *that* exposed "the guard mis-reads the wire's shape". When a fix addresses a
+  class of failure rather than an instance, re-ask the same question at the next
+  layer in before shipping.
+- **Know when a review loop has stopped finding bugs and started making them.**
+  The first two defects here were reachable on real data and worth every round.
+  The last two required an unshipped schema, and each existed *only because the
+  previous fix created its surface* -- guard code is itself reviewable code, so
+  a loop that keeps hardening will keep finding things forever. The triage that
+  ended it: **is this reachable on the current wire format or on stored data?**
+  Reachable is a blocker; hypothetical gets filed. Both reviewers independently
+  agreed once that test was stated, and one noted the useful stopping signal --
+  the two speculative fixes have opposite failure directions (one under-reports,
+  one over-reports), so they bracket each other rather than leaving an open edge.
