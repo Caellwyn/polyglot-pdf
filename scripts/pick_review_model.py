@@ -21,17 +21,16 @@ clause 5; this router governs the early rounds only.) The split is deliberate:
 
   - **This script makes NO risk judgment.** Size is the only signal. Adding a
     "is this risky?" check here would force an extra expensive orchestrator
-    turn on every small diff -- exactly the cost arm B exists to avoid. The risk
+    turn on every small diff -- exactly the cost this router exists to avoid. The risk
     call happens INSIDE the fresh-eyes turn that was going to run anyway, by the
     cheap model (see ``.claude/agents/fresh-eyes-reviewer.md``).
   - **Size is a coarse proxy, on purpose.** A 5-line change to Gemini wiring is
     riskier than an 800-line docs reflow; the script can't know that, so it
     routes on the cheap-to-measure axis and leaves severity to the reviewer.
 
-The A/B control arm (B-off) is the session-wide ``CLAUDE_CODE_SUBAGENT_MODEL``
-override, which forces every subagent to one model regardless of this script
-(see the sprint plan's A/B section). When that env var is set, closeout skips
-calling this picker.
+The session-wide ``CLAUDE_CODE_SUBAGENT_MODEL`` override forces every subagent to
+one model regardless of this script, so when that env var is set the picker is
+moot and closeout skips calling it.
 
 Base ref
 --------

@@ -95,7 +95,7 @@ which loses the two obsolete telemetry classes but gains the 8 new guards) = 912
 A shrinking suite is the expected shape when the thing under test is being removed;
 the guards are what keep the removal from silently regressing.
 
-**The review loop ran SEVEN rounds and caught 15 gaps** -- **not one of them a
+**The review loop ran EIGHT rounds and caught 16 gaps** -- **not one of them a
 functional code defect.** Every single finding was a dangling *instruction*, a stale
 *comment*, a drifted *test fixture*, or a wrong *number in this entry*. That is the
 characteristic failure mode of a removal like this: deleted code fails loudly and
@@ -164,6 +164,16 @@ config first, then comments, then documentation accuracy:
    exact reconciliation (`979 - 65 - 31 + 29 = 912`);
    (c) the "17 worktrees" figure printed next to its own reproduction command
    returns **18** when that command is run. Corrected in both places.
+8. **Round 8 (Opus, the clearing round):** one finding, and the sharpest lesson of
+   the loop -- **`pick_review_model.py`'s module docstring still called
+   `CLAUDE_CODE_SUBAGENT_MODEL` "the A/B control arm (B-off)"** and pointed readers
+   at the sprint plan's A/B toggling section, describing a counter this PR deletes.
+   R6 had *already edited this very file* (line 79) but stopped at the one
+   occurrence containing the word "ledger" -- so a second stale passage sat four
+   lines from a line I had just rewritten. Fixed, along with a present-tense "the
+   cost arm B exists to avoid" on line 24, after re-grepping the whole file for
+   *every* experiment word (`arm`, `A/B`, `experiment`, `sprint plan`, `counter`)
+   rather than the one term that first matched.
 
 ## Lessons
 
@@ -210,6 +220,14 @@ config first, then comments, then documentation accuracy:
   contradicting each other on the identical rule, with the *authoritative* copy
   holding the stale text. After editing a rule in a skill, grep the doctrine docs
   for the same sentence (and vice versa).
+- **Once a file is open for a stale-reference fix, re-sweep the WHOLE file.** The
+  loop's last finding was a second stale passage in `pick_review_model.py` sitting
+  four lines from one already rewritten -- missed because the fix targeted the
+  single line that matched the search term ("ledger") instead of re-reading the file
+  for every way the retired thing gets named. Fixing the grep hit is not the same as
+  fixing the file: after the first hit lands, re-grep that file for the full
+  vocabulary (`arm`, `A/B`, `experiment`, `counter`, the plan it cites) before
+  moving on.
 - **Every figure in a journal entry must come from a command run against the
   artifact -- and the review loop should check the arithmetic.** THREE separate
   numeric/factual claims in this one entry were wrong on first writing: "49 tests"
@@ -253,8 +271,15 @@ historical planning document rather than per-session overhead.
 - `CLAUDE.md` -- struck "+ telemetry" from the `/closeout` OWNS PR creation bullet.
 - `docs/doctrine/review-flow.md` -- struck the "or the A/B cost accounting" clause
   so the doctrine doc matches its mirror at `SKILL.md:350`.
-- `scripts/pick_review_model.py` -- COMMENT ONLY (arm B behavior untouched): the
-  threshold note no longer points a future tuner at the deleted ledger.
+- `scripts/pick_review_model.py` -- COMMENT ONLY (arm B behavior untouched, verified
+  by `git diff | grep -v '^[+-]#'` returning nothing): the threshold note no longer
+  points a future tuner at the deleted ledger; the module docstring no longer frames
+  `CLAUDE_CODE_SUBAGENT_MODEL` as "the A/B control arm (B-off)" of a running trial
+  (now stated as the plain operational rule) and no longer cites the sprint plan's
+  A/B toggling section, which describes a counter this PR deleted. The past-tense
+  provenance lines ("bd polyglot-pdf-hrn.4 -- A/B arm B") are deliberately KEPT:
+  they record which bead produced the script, and erasing lineage would be
+  over-removal.
 - `.gitattributes` -- comment rewritten from the present tense ("rows are now
   written per closeout") to describe a retired system. The
   `docs/journal/harness_ledger.jsonl merge=union` driver line is KEPT: it still
