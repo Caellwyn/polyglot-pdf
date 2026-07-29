@@ -34,10 +34,13 @@ rename.
 Early single-turn probes suggested a ~36% under-report, and that figure got
 repeated. It is real but unrepresentative: those probes were 100% 1h writes.
 
-A **real mixed session** measured on the final code (4,379,684 tokens at 1h and
-3,048,565 at 5m) moves **10.1%** -- $155.32 to $172.82. The split genuinely cuts
-both ways. This is per-bucket accuracy, not a blanket multiplier bump, and the
-5m bucket is not vestigial.
+On a **real mixed session** measured with the final code (4,379,684 tokens at 1h
+and 3,048,565 at 5m), the previously-reported total was **10.1% below** the true
+one -- $155.32 where the correct figure is $172.82. (Stated against the true
+value, matching the "under-reported by 37.5%" framing above; the same $17.50
+delta is 11.3% *of the old figure*.) The split genuinely cuts both ways: this is
+per-bucket accuracy, not a blanket multiplier bump, and the 5m bucket is not
+vestigial.
 
 ## Verified against the bill, not against itself
 
