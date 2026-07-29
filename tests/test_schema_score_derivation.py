@@ -283,3 +283,34 @@ def test_overlay_leaves_unknown_draft_dicts_untouched():
     assert out[0][1]["section_id"] == "s1"
     # A draft dict not in orig_fields (no positional counterpart) keeps its own.
     assert out[1][1]["section_id"] == "keep_me"
+
+
+# --- pdf_position: not-asked is not-applicable (bd polyglot-pdf-icyi) -------- #
+
+def test_absent_draft_position_is_NA_not_a_miss():
+    """The SAME scorer-artifact class this file already fixes for sections.
+
+    The extraction contract no longer asks the model for pdf_position -- widget
+    geometry is read from the PDF's own AcroForm widgets after extraction,
+    because a model transcribing coordinates rounds them and its page base is
+    non-deterministic (that shipped a real bug: 48 of 54 w7 fields on page 0,
+    every text overlay invisible in the editor). Raw arms are scored on DRAFT
+    output, which never goes through that back-fill, so a draft legitimately
+    carries no positions now. Grading that absence as a MISS would peg
+    pdf_position at 0% for every future arm and drag down the headline attribute
+    average -- a metric change nobody chose."""
+    gold = {"pdf_position": {"page": 1, "x": 10, "y": 10}}
+    assert schema_score._pos_match(gold, {}) is None            # not asked
+    assert schema_score._pos_match({}, gold) is None            # gold silent
+
+
+def test_a_present_but_WRONG_draft_position_is_still_a_miss():
+    """The metric keeps its teeth for an arm that does emit coordinates -- only
+    ABSENCE is excused, never a wrong value (page or coords out of tolerance)."""
+    gold = {"pdf_position": {"page": 1, "x": 10, "y": 10}}
+    assert schema_score._pos_match(
+        gold, {"pdf_position": {"page": 1, "x": 10, "y": 10}}) is True
+    assert schema_score._pos_match(
+        gold, {"pdf_position": {"page": 2, "x": 10, "y": 10}}) is False
+    assert schema_score._pos_match(
+        gold, {"pdf_position": {"page": 1, "x": 999, "y": 10}}) is False

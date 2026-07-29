@@ -284,11 +284,27 @@ def _opts_match(t: dict, d: dict) -> bool:
 
 
 def _pos_match(t: dict, d: dict, tol: float = 5.0) -> Optional[bool]:
+    """Position agreement, or None when the metric does not apply.
+
+    NOT-ASKED IS NOT-APPLICABLE (bd polyglot-pdf-icyi): the extraction contract
+    no longer asks the model for pdf_position at all -- widget geometry is read
+    straight from the PDF's AcroForm widgets after extraction, because a model
+    transcribing coordinates rounds them and its page base is non-deterministic
+    (that shipped a real bug: 48 of 54 w7 fields on page 0, every text overlay
+    invisible). Raw bake-off arms are scored on their DRAFT output, which never
+    goes through that back-fill, so a draft now legitimately carries no
+    positions. Scoring that absence as a MISS would peg pdf_position at 0% for
+    every future arm and silently drag down the headline attribute average,
+    breaking comparability with every historical bake-off number -- a metric
+    change nobody chose. An absent draft position is therefore not-applicable
+    (None), exactly like an absent gold position; a PRESENT-but-wrong one is
+    still a miss, so the metric keeps its teeth for any arm that does emit
+    coordinates."""
     tp, dp = t.get("pdf_position"), d.get("pdf_position")
     if not tp:
         return None  # not applicable for this form/field
     if not dp:
-        return False
+        return None  # not asked for -- see the docstring; never a miss
     return (tp.get("page") == dp.get("page")
             and abs((tp.get("x") or 0) - (dp.get("x") or 0)) <= tol
             and abs((tp.get("y") or 0) - (dp.get("y") or 0)) <= tol)

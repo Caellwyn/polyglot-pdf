@@ -319,6 +319,37 @@ def test_the_page_zero_bug_cannot_survive_the_backfill(tmp_path):
     assert schema["fields"][0]["pdf_position"]["width"] == 106.8
 
 
+def test_a_bogus_option_widget_name_is_reported_even_with_a_model_position(tmp_path):
+    """BEHAVIOR CHANGE, deliberately pinned (bd polyglot-pdf-icyi, fresh-eyes).
+
+    Inverting the trust removed an early `continue` that skipped any option
+    already carrying a "usable" position. A side effect: an option whose
+    pdf_field_name resolves to NOTHING, but which the model gave a plausible
+    rect, used to be skipped silently -- never resolved, never reported. It is
+    now attempted, fails, and lands in `unmatched`, surfacing a coverage gap
+    that previously hid. That is the better behavior (a bogus widget name is
+    exactly what the unmatched list exists to reveal), but it is a real delta
+    from the old contract, so it gets a test rather than living undocumented.
+
+    The stale model rect is deliberately LEFT in place: it is still "usable",
+    and dropping a position we cannot replace would only trade a possibly-wrong
+    overlay for no overlay at all."""
+    dump = _write_dump(tmp_path, {
+        "real_widget": {"page": 0, "x": 1, "y": 2, "width": 3, "height": 4}})
+    model_rect = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
+    schema = {"fields": [{
+        "id": "f", "type": "radio",
+        "options": [{"value": "a", "pdf_field_name": "bogus",
+                     "pdf_position": dict(model_rect)}],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["unmatched"] == [{
+        "field_id": "f", "option_value": "a",
+        "reason": "pdf_field_name 'bogus' not found in dump"}]
+    # the unreplaceable model rect survives -- a wrong overlay beats none
+    assert schema["fields"][0]["options"][0]["pdf_position"] == model_rect
+
+
 # --- _normalize_model_page_base (the no-widget fallback's page base) --------- #
 
 def test_model_page_zero_base_is_shifted_not_discarded():
