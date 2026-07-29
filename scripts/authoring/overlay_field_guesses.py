@@ -122,9 +122,10 @@ def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
                 option_dict_ids.add(id(o))
 
     # widget -> {(owner field id, kind): label}. `kind` is "field" for a
-    # field-level claim and the option's own value for an option-level one, so a
-    # field + one option collapses to two entries under one owner (benign, see
-    # below) while two options land as two distinct kinds (an ERROR shape).
+    # field-level claim and "option[<idx>]" for an option-level one -- the same
+    # key space lint uses. So a field + one option gives two entries under one
+    # owner (benign, see below) while two options give two distinct option kinds
+    # (an ERROR shape). Indices, not values: see the note at the assignment.
     claimants: dict[str, dict[tuple[str, str], str]] = {}
     for f in _iter_fields(schema):
         fid = f.get("id")
@@ -145,8 +146,15 @@ def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
                 continue
             val = o.get("value")
             suffix = f"={val}" if isinstance(val, (str, int)) else ""
-            kind = str(val) if isinstance(val, (str, int)) else f"#{idx}"
-            claimants.setdefault(oc, {})[(fid, kind)] = f"{label}{suffix}"
+            # Key on the option's INDEX, exactly as lint's option_kinds does.
+            # Deriving `kind` from the option's VALUE would let a value of
+            # "field" collide with the field-level key above and overwrite it,
+            # silently turning an option+option ERROR into a benign-looking
+            # single claim -- and no other lint rule catches that shape, since
+            # "field" is a perfectly legal option slug. The index is
+            # collision-free by construction; `val` is display only.
+            claimants.setdefault(oc, {})[(fid, f"option[{idx}]")] = (
+                f"{label}{suffix}")
 
     out: dict[str, list[str]] = {}
     for name, by_claimant in claimants.items():

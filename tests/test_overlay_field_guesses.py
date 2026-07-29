@@ -101,6 +101,36 @@ def test_two_options_of_one_field_ARE_a_multiclaim():
     assert ov._claims(schema, "spoken") == {"W1": ["G=x", "G=y"]}
 
 
+def test_an_option_valued_field_does_not_collide_with_the_field_level_key():
+    """`kind` must come from the option's INDEX, not its value. With a
+    value-derived key, an option whose value is literally "field" produces the
+    same key as the field-level claim and OVERWRITES it -- collapsing an
+    option+option ERROR into a benign-looking single claim. Nothing else catches
+    it: "field" is a legal option slug, so no lint rule fires on the value
+    itself, while lint DOES raise dump-widget-multiclaim for the shape."""
+    schema = {"fields": [{
+        "id": "g", "spoken_name": "G", "pdf_field_name": "W1", "options": [
+            {"value": "field", "pdf_field_name": "W1"},
+            {"value": "other", "pdf_field_name": "W1"},
+        ],
+    }]}
+    labels = ov._claims(schema, "spoken")["W1"]
+    assert len(labels) > 1, "an option valued 'field' erased the multiclaim"
+    assert "G=field" in labels and "G=other" in labels
+
+
+def test_options_with_no_value_still_register_as_distinct_claimants():
+    """Two valueless options on one widget are still an ERROR shape; the
+    index-based key keeps them distinct even with nothing to display."""
+    schema = {"fields": [{
+        "id": "g", "spoken_name": "G", "options": [
+            {"pdf_field_name": "W1"},
+            {"pdf_field_name": "W1"},
+        ],
+    }]}
+    assert len(ov._claims(schema, "spoken")["W1"]) == 2
+
+
 def test_a_field_id_colliding_with_some_options_id_is_not_dropped():
     """The option-dict exclusion must key on object IDENTITY, not id string.
     Option ids are short generic slugs (`yes`, `no`, `other`), so a string-based

@@ -169,21 +169,38 @@ round's fix:
   paths (`--json`, `--png-dir`), one of which printed its OK line *before*
   crashing.
 
+- **Round 4** -- a reserved-word collision in the round-3 key space. `kind` was
+  `"field"` for a field-level claim but `str(value)` for an option, so an option
+  whose value is literally `"field"` produced the same key and OVERWROTE the
+  field-level entry, collapsing an option+option ERROR into a benign-looking
+  single claim. Nothing else catches that shape: `"field"` is a legal option slug,
+  so no lint rule fires on the value, while lint *does* raise
+  `dump-widget-multiclaim` for the binding. Now keyed on the option's INDEX
+  (`option[<idx>]`) -- the same key space lint uses, collision-free by
+  construction; `value` is display only.
+
 The lesson worth keeping: a detector's false-positive behavior needs the same
 adversarial scrutiny as its true positives, and "mirrors an existing rule" is a
-claim to verify against that rule's carve-outs -- **all of them** -- not an
-assertion to make in a comment. Rounds 2 and 3 both landed on that same sentence:
-round 2 because the rule's carve-outs were not read, round 3 because only one of
-its two error branches was. Reading the cited rule end-to-end, once, would have
-prevented both.
+claim to verify against that rule -- **all of its branches, and its key space** --
+not an assertion to make in a comment. All three later rounds landed on that one
+sentence: round 2 because the carve-outs were not read, round 3 because only one
+of the two ERROR branches was, round 4 because the key space was re-derived
+instead of copied. Each fix was locally reasonable and still wrong. The cheap
+prevention is an equivalence sweep: run both implementations over a set of shapes
+and assert they agree, rather than reasoning about whether they should. That sweep
+is now `test_an_option_valued_field_does_not_collide_with_the_field_level_key`
+plus its siblings; it agrees with live `lint_schema` on all five probed shapes.
 
 ## Verification
 
-- 38 tests (21 oracle, 17 overlay).
-- Full suite: 2291 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
+- 40 tests (21 oracle, 19 overlay).
+- Full suite: 2293 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
   `closeout_prep.py` runs only the latter). The count is lower than this branch's
   earlier 2339 because `origin/dev` deleted `tests/test_harness_ledger.py`
-  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 4 new = 2291.
+  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 6 new = 2293.
+- The overlay's multiclaim verdict was checked against **live `lint_schema`** on
+  five shapes (two different fields; two options of one field; an option valued
+  `"field"`; groups-of-one; a normal two-widget choice) -- agreement on all five.
 - Real-kit regression after all three rounds: f1040 `rc=1` (20 findings), w7
   `rc=3` (abstains -- 10 markers found but no checkable pair), and **0
   multiclaimed** on w7, f1040 AND i-90, confirming the stricter `(owner, kind)`
