@@ -95,7 +95,7 @@ which loses the two obsolete telemetry classes but gains the 8 new guards) = 912
 A shrinking suite is the expected shape when the thing under test is being removed;
 the guards are what keep the removal from silently regressing.
 
-**The review loop ran NINE rounds and caught 19 gaps** (1+1+3+4+1+3+3+1+2) --
+**The review loop ran TEN rounds and caught 20 gaps** (1+1+3+4+1+3+3+1+2+1) --
 **not one of them a functional code defect.** Every single finding was a dangling *instruction*, a stale
 *comment*, a drifted *test fixture*, or a wrong *number in this entry*. That is the
 characteristic failure mode of a removal like this: deleted code fails loudly and
@@ -124,16 +124,17 @@ config first, then comments, then documentation accuracy:
    reflex to commit the dead cache. Resolved by deleting the stale file *and*
    **keeping the ignore rule**;
    (c) the now-dead `_utcnow()` helper.
-4. **Round 4 (Opus, re-clear):** four more -- a present-tense `.gitattributes`
-   comment still claiming rows "are now written" per closeout; the
-   subprocess-seam banner in `closeout_finish.py` still reading "git/gh/bd/ledger"
-   while its test-file counterpart had already been corrected; and two journal
-   inaccuracies (this entry claimed the deleted test file had 49 tests -- it has
-   **65**; the 49 was carried over from hrn.17's entry, not counted from this
-   file). Round 4 also **measured the real blast radius of (b)**: not just the main
-   checkout but **18 worktrees** under `.claude/worktrees/` still hold their own
-   copy of the cache, so the retained ignore rule protects 18 future closeouts,
-   not one.
+4. **Round 4 (Opus, re-clear):** four more --
+   (a) a present-tense `.gitattributes` comment still claiming rows "are now
+   written" per closeout;
+   (b) the subprocess-seam banner in `closeout_finish.py` still reading
+   "git/gh/bd/ledger" while its test-file counterpart had already been corrected;
+   (c) this entry claimed the deleted test file had 49 tests -- it has **65**; the
+   49 was carried over from hrn.17's entry, not counted from this file;
+   (d) the R3(b) retention rationale said "any existing checkout" where the real,
+   **measured** exposure is **18 worktrees** under `.claude/worktrees/` that still
+   hold their own copy of the cache -- so the retained ignore rule protects 18
+   future closeouts, not one.
 5. **Round 5 (Opus, the clearing round):** all three exit criteria PASS, one
    finding -- **the arm-distribution figures in this entry were wrong and did not
    even sum to their own stated total** (100+20+15+1+20 = 156, against a claimed
@@ -186,6 +187,15 @@ config first, then comments, then documentation accuracy:
    summed to 17 -- failing the "make any multi-part count sum to its stated total"
    rule this entry prescribes two sections later. Now stated with the addends shown
    so the arithmetic is checkable at a glance.
+10. **Round 10 (Opus, the clearing round):** all three exit criteria PASS. One
+    finding, and it is the same bookkeeping defect one level deeper: **Round 4's
+    bullet said "four more" but its prose enumerated only three**, because the
+    fourth (the measured 18-worktree exposure) had been written as a trailing
+    sentence reading like supplementary confirmation of R3(b) rather than as a
+    counted finding. Re-labelled R4 as explicit (a)-(d). The lesson is that a
+    stated-total-vs-enumerated-parts check has to run at **every** level of a
+    nested list, not just the top: R9 fixed the outer tally, and the same defect
+    was still sitting inside one of its addends.
 
 ## Lessons
 
@@ -250,7 +260,10 @@ config first, then comments, then documentation accuracy:
   claimed 180). The prose was written from memory of the investigation rather than
   re-derived, and *supporting evidence for the change's core justification* is
   exactly where that is least acceptable. Cheapest guard: make any multi-part count
-  sum to its stated total before writing it down.
+  sum to its stated total before writing it down -- **and run that check at every
+  level of a nested list.** Round 9 fixed the outer tally (16 vs 17); round 10 then
+  found the identical defect *inside* one of its addends (R4 said "four" and
+  enumerated three). Fixing the total does not validate the parts.
 
 ## Doc freshness
 
