@@ -35,9 +35,10 @@ committed `REPORT_DONE` sentinel (running `--print-directive` returns "experimen
 CLOSED").
 
 The labels had also decayed into noise. Across the **180 rows written after the
-experiment closed**, the arm values are incoherent: 100 `A`, 20 `BC`, 15 `C`, 1 `B`,
-and 20 unset. Sessions were labeling themselves with a baseline arm for a trial that
-had already concluded, and a ninth of them did not bother at all.
+experiment closed** (`recorded_at > 2026-07-05`), the arm values are incoherent:
+**115 `A`, 24 `C`, 20 `BC`, 1 `B`, and 20 unset**. Sessions were labeling themselves
+with a baseline arm for a trial that had already concluded, and a ninth of them did
+not bother at all.
 
 **Removed:**
 - `scripts/harness_ledger.py` (972 lines) and `tests/test_harness_ledger.py`
@@ -122,6 +123,13 @@ the stale instruction just quietly misleads the next reader):
    checkout but **17 worktrees** under `.claude/worktrees/` still hold their own
    copy of the cache, so the retained ignore rule protects 17 future closeouts,
    not one.
+5. **Round 5 (Opus, the clearing round):** all three exit criteria PASS, one
+   finding -- **the arm-distribution figures in this entry were wrong and did not
+   even sum to their own stated total** (100+20+15+1+20 = 156, against a claimed
+   N=180). Recomputed from the rows: at the `recorded_at > 2026-07-05` cutoff that
+   actually yields N=180, the distribution is **115 A / 24 C / 20 BC / 1 B / 20
+   unset**. The qualitative dead-signal finding is unchanged; only the counts were
+   wrong. Corrected above.
 
 ## Lessons
 
@@ -158,10 +166,16 @@ the stale instruction just quietly misleads the next reader):
   covered CLAUDE.md; and `.gitattributes` (a dotfile matched by no `--include=*.ext`
   filter) kept describing the deleted system in the present tense. Enumerate the
   identifiers, include dotfiles, and state which paths the sweep actually ran over.
-- **Numbers copied from a neighbouring doc are not verified numbers.** This entry's
-  "49 tests" was carried over from the prior epic's journal entry rather than
-  counted from the file being deleted (the real count is 65). If a figure appears in
-  a journal entry, it should come from a command run against the artifact.
+- **Every figure in a journal entry must come from a command run against the
+  artifact -- and the review loop should check the arithmetic.** THREE separate
+  numeric/factual claims in this one entry were wrong on first writing: "49 tests"
+  (carried over from the prior epic's entry; really 65), "CLAUDE.md never referenced
+  the ledger" (written from a sweep that never covered CLAUDE.md), and the
+  arm-distribution counts (which did not sum to their own stated total -- 156 vs a
+  claimed 180). The prose was written from memory of the investigation rather than
+  re-derived, and *supporting evidence for the change's core justification* is
+  exactly where that is least acceptable. Cheapest guard: make any multi-part count
+  sum to its stated total before writing it down.
 
 ## Doc freshness
 
