@@ -74,6 +74,29 @@ def test_claims_walk_nested_parts_and_sections():
     assert ov._claims(schema, "spoken") == {"w1": ["alpha"]}
 
 
+def test_groups_of_one_is_not_a_multiclaim():
+    """A standalone checkbox restating its widget at BOTH field level and on its
+    single option is the benign groups-of-one convention -- schema_lint
+    explicitly carves it out (backend/services/schema_lint.py, _check_dump_claims).
+    Flagging it orange would make the multiclaim signal lie."""
+    schema = {"fields": [{
+        "id": "cb", "spoken_name": "Checkbox", "pdf_field_name": "w9",
+        "options": [{"value": "yes", "pdf_field_name": "w9"}],
+    }]}
+    assert ov._claims(schema, "spoken") == {"w9": ["Checkbox=yes"]}
+
+
+def test_an_option_carrying_its_own_id_is_not_a_second_owner():
+    """_iter_fields yields ANY dict with a string id, so an option with an `id`
+    is also yielded as a field. Its claim belongs to the parent field -- counting
+    it twice would invent a multiclaim that does not exist."""
+    schema = {"fields": [{
+        "id": "f1", "spoken_name": "F",
+        "options": [{"id": "opt1", "value": "yes", "pdf_field_name": "w1"}],
+    }]}
+    assert ov._claims(schema, "spoken") == {"w1": ["F=yes"]}
+
+
 def test_a_multiclaimed_widget_keeps_every_claimant():
     """Two fields claiming ONE widget is a real defect (dump-widget-multiclaim)
     and precisely the shape this overlay exists to surface. A first-wins collapse
@@ -159,3 +182,23 @@ def test_missing_schema_is_a_usage_error_not_a_crash(tmp_path, capsys):
                   "--pdf", str(_W7_PDF), "--out", str(tmp_path / "o.pdf")])
     capsys.readouterr()
     assert rc == 2
+
+
+def test_an_unreadable_pdf_is_a_usage_error_not_a_traceback(tmp_path, capsys):
+    """The docstring promises '2 = usage/IO error'; only the schema read was
+    guarded, so a bad --pdf raised a raw traceback instead."""
+    schema = tmp_path / "s.json"
+    schema.write_text(json.dumps({"fields": []}), encoding="utf-8")
+    rc = ov.main(["--schema", str(schema),
+                  "--pdf", str(tmp_path / "does-not-exist.pdf"),
+                  "--out", str(tmp_path / "o.pdf")])
+    capsys.readouterr()
+    assert rc == 2
+
+
+@needs_w7
+def test_an_unwritable_out_path_is_a_usage_error(tmp_path, capsys):
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    out = tmp_path / "no-such-dir" / "deep" / "o.pdf"  # parent does not exist
+    result = ov.annotate(schema, str(_W7_PDF), str(out), "spoken")
+    assert "error" in result

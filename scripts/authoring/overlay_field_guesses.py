@@ -84,31 +84,57 @@ def _label_for(field: dict, mode: str) -> str:
 
 
 def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
-    """widget name -> EVERY label claiming it. Includes option-level claims,
+    """widget name -> the label(s) claiming it. Includes option-level claims,
     which is where choice fields carry their real widget identity.
 
-    Deliberately a LIST, not a first-wins scalar: two fields claiming one widget
-    is a real defect class (schema_lint's dump-widget-multiclaim), and it is
-    exactly the shape this overlay exists to make visible. Collapsing it would
-    render a multiclaimed widget identically to a correctly single-claimed one --
-    hiding the bug the reviewer is looking for."""
-    out: dict[str, list[str]] = {}
+    A LIST, not a first-wins scalar: two DIFFERENT fields claiming one widget is
+    a real defect (schema_lint's dump-widget-multiclaim) and exactly the shape
+    this overlay exists to make visible. Collapsing it would render a
+    multiclaimed widget identically to a correctly single-claimed one.
+
+    Ownership is keyed on the owning FIELD, mirroring schema_lint's
+    _check_dump_claims -- not on raw label count. Two shapes are BENIGN there and
+    must not be flagged here either, or the orange flag starts lying:
+      - field-level + a single option of the SAME field (the groups-of-one
+        convention: a standalone checkbox restating its widget in both places);
+      - an option dict that carries its own `id`, which _iter_fields yields as a
+        field in its own right and the options loop would then count twice.
+    """
+    # Option dicts that carry their own `id` are yielded by _iter_fields as
+    # fields in their own right. Collect them FIRST -- the walk order is not
+    # guaranteed to reach a parent before its option, so they cannot be
+    # unwound after the fact.
+    option_ids: set[str] = set()
     for f in _iter_fields(schema):
+        for o in (f.get("options") or []) if isinstance(f.get("options"), list) else []:
+            if isinstance(o, dict) and isinstance(o.get("id"), str):
+                option_ids.add(o["id"])
+
+    # widget -> {owner field id: label}. Same owner claiming twice collapses.
+    owners: dict[str, dict[str, str]] = {}
+    for f in _iter_fields(schema):
+        fid = f.get("id")
+        if not isinstance(fid, str) or fid in option_ids:
+            continue  # an option is claimed BY its parent field, not by itself
         label = _label_for(f, mode)
         claim = f.get("pdf_field_name")
         if isinstance(claim, str) and claim:
-            out.setdefault(claim, []).append(label)
+            owners.setdefault(claim, {}).setdefault(fid, label)
         options = f.get("options")
-        if isinstance(options, list):
-            for o in options:
-                if not isinstance(o, dict):
-                    continue
-                oc = o.get("pdf_field_name")
-                if isinstance(oc, str) and oc:
-                    val = o.get("value")
-                    suffix = f"={val}" if isinstance(val, (str, int)) else ""
-                    out.setdefault(oc, []).append(f"{label}{suffix}")
-    return out
+        if not isinstance(options, list):
+            continue
+        for o in options:
+            if not isinstance(o, dict):
+                continue
+            oc = o.get("pdf_field_name")
+            if not isinstance(oc, str) or not oc:
+                continue
+            val = o.get("value")
+            suffix = f"={val}" if isinstance(val, (str, int)) else ""
+            # The option's claim belongs to its PARENT field. An option-level
+            # label is the more specific one, so it wins the slot.
+            owners.setdefault(oc, {})[fid] = f"{label}{suffix}"
+    return {name: list(by_owner.values()) for name, by_owner in owners.items()}
 
 
 def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
@@ -119,7 +145,10 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
         return {"error": "PyMuPDF (fitz) is required"}
 
     claims = _claims(schema, mode)
-    doc = fitz.open(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as exc:  # unreadable/missing PDF is a USAGE error (rc 2)
+        return {"error": f"cannot open PDF {pdf_path!r}: {exc}"}
     drawn = unclaimed = multiclaimed = 0
 
     for page in doc:
@@ -167,7 +196,11 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
                              color=(box_color if len(labels) > 1 else _TEXT_COLOR))
             drawn += 1
 
-    doc.save(out_path)
+    try:
+        doc.save(out_path)
+    except Exception as exc:  # unwritable --out is a USAGE error (rc 2)
+        doc.close()
+        return {"error": f"cannot write {out_path!r}: {exc}"}
 
     pngs: list[str] = []
     if png_dir:

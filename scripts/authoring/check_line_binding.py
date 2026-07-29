@@ -29,6 +29,18 @@ markers yields no findings rather than false ones, and a field whose intent is
 unstated is skipped, not guessed at. Silence means "found nothing it can prove",
 never "verified correct" -- the summary says so explicitly.
 
+KNOWN BLIND SPOTS (stated so they are not mistaken for coverage):
+  - OPTION-LEVEL claims are not checked. Choice fields carry their widget
+    identity on options[], and this reads only a field's own pdf_field_name.
+    That is load-bearing: instance #1 of this error class (bd 13vo, i-90
+    ethnicity options on the OPPOSITE boxes) is an option-level defect this
+    oracle structurally cannot see. Extending it naively WOULD misfire -- an
+    f1040 field stating line "3c" has checkboxes printed "1"/"2", so the
+    field's line number is not the option's marker. Use the overlay
+    (overlay_field_guesses.py) for those.
+  - A gutter needs >= _GUTTER_MIN_COL markers to be recognized, so a page with
+    one or two numbered rows is not judged at all.
+
 Usage:
     python scripts/authoring/check_line_binding.py --schema DRAFT.json --pdf FORM.pdf
     ... [--json OUT.json]   machine-readable findings
@@ -167,7 +179,11 @@ def check(schema: dict, pdf_path: str) -> dict:
         return {"error": "PyMuPDF (fitz) is required", "findings": [],
                 "checked": 0, "markers": 0}
 
-    doc = fitz.open(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as exc:  # unreadable/missing PDF is a USAGE error (rc 2)
+        return {"error": f"cannot open PDF {pdf_path!r}: {exc}",
+                "findings": [], "checked": 0, "markers": 0}
     widgets: dict[str, tuple[int, Any]] = {}
     markers_by_page: dict[int, list] = {}
     for pno, page in enumerate(doc):
@@ -214,15 +230,23 @@ def render(result: dict) -> str:
     fs = result["findings"]
     lines = []
     if not fs:
+        if result["checked"] == 0:
+            # Must NOT lead with "OK:" -- a caller grepping for it, or reading
+            # only the first line of a truncated log, would read abstention as
+            # a pass. That is the text twin of the exit-code bug (rc 3).
+            lines.append(
+                "ABSTAINED: verified NOTHING -- no field/widget pair was "
+                "checkable.")
+            lines.append(
+                f"  ({result['markers']} printed marker(s) found; a field is "
+                f"only checkable when it states a line number AND its claimed "
+                f"widget sits on a marked row.)")
+            lines.append("  This is NOT a clean bill of health.")
+            return "\n".join(lines)
         lines.append(
             f"OK: no line-binding mismatch found "
             f"({result['checked']} field(s) verifiable against a printed line "
             f"marker).")
-        if result["checked"] == 0:
-            lines.append(
-                "  NOTE: nothing was verifiable -- this form may not print "
-                "gutter line markers, or no field states its line number. "
-                "This is NOT a clean bill of health.")
         return "\n".join(lines)
     lines.append(f"MISMATCH: {len(fs)} field(s) claim a widget printed on a "
                  f"different line ({result['checked']} checked):")

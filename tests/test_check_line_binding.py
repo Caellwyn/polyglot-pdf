@@ -155,6 +155,27 @@ def test_a_form_with_no_markers_abstains_loudly():
     assert "NOT a clean bill of health" in text
 
 
+def test_abstention_does_not_lead_with_the_ok_token():
+    """A caller grepping for 'OK:' -- or reading only the first line of a
+    truncated log -- must not read abstention as a pass. Text twin of the
+    exit-code contract (rc 3)."""
+    text = clb.render({"findings": [], "checked": 0, "markers": 10})
+    assert text.splitlines()[0].startswith("ABSTAINED:")
+    assert "OK:" not in text
+    # w7 abstains WITH markers present, so the message must not claim the form
+    # prints none -- it reports the marker count and the real precondition.
+    assert "10 printed marker(s)" in text
+
+
+def test_an_unreadable_pdf_is_a_usage_error_not_a_traceback(tmp_path, capsys):
+    schema = tmp_path / "s.json"
+    schema.write_text(json.dumps({"fields": []}), encoding="utf-8")
+    rc = clb.main(["--schema", str(schema),
+                   "--pdf", str(tmp_path / "does-not-exist.pdf")])
+    capsys.readouterr()
+    assert rc == 2, "a missing PDF must exit 2, not raise or collide with rc 1"
+
+
 def test_a_verified_clean_form_says_so():
     result = {"findings": [], "checked": 12, "markers": 30}
     text = clb.render(result)
