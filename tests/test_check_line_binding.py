@@ -161,6 +161,38 @@ def test_a_verified_clean_form_says_so():
     assert "OK:" in text and "NOT a clean bill of health" not in text
 
 
+def test_total_abstention_does_not_exit_zero(tmp_path, capsys, monkeypatch):
+    """rc==0 must mean VERIFIED-clean, never 'I checked nothing'. A lint-style
+    caller gating on `rc == 0` would otherwise read total abstention as a pass --
+    the exact failure mode this tool exists to prevent."""
+    monkeypatch.setattr(clb, "check",
+                        lambda *a, **k: {"findings": [], "checked": 0,
+                                         "markers": 0})
+    schema = tmp_path / "s.json"
+    schema.write_text(json.dumps({"fields": []}), encoding="utf-8")
+
+    rc = clb.main(["--schema", str(schema), "--pdf", "unused.pdf"])
+    capsys.readouterr()
+    assert rc == 3, "abstention must be distinguishable from a verified pass"
+
+    rc_ci = clb.main(["--schema", str(schema), "--pdf", "unused.pdf",
+                      "--require-verified"])
+    capsys.readouterr()
+    assert rc_ci == 1, "--require-verified must make abstention a hard failure"
+
+
+def test_a_verified_clean_run_exits_zero(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(clb, "check",
+                        lambda *a, **k: {"findings": [], "checked": 7,
+                                         "markers": 20})
+    schema = tmp_path / "s.json"
+    schema.write_text(json.dumps({"fields": []}), encoding="utf-8")
+    rc = clb.main(["--schema", str(schema), "--pdf", "unused.pdf",
+                   "--require-verified"])
+    capsys.readouterr()
+    assert rc == 0
+
+
 @needs_f1040
 def test_exit_code_signals_findings(tmp_path, capsys):
     rc = clb.main(["--schema", str(_F1040_SCHEMA), "--pdf", str(_F1040_PDF),

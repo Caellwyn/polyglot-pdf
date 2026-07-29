@@ -46,6 +46,7 @@ _FONT_SIZE = 6.5
 _TEXT_COLOR = (0.75, 0.0, 0.0)     # dark red -- distinct from black form print
 _BOX_COLOR = (0.85, 0.1, 0.1)      # widget outline
 _UNCLAIMED_COLOR = (0.0, 0.35, 0.9)  # blue -- a widget NO field claims
+_MULTICLAIM_COLOR = (0.9, 0.45, 0.0)  # orange -- a widget MORE THAN ONE field claims
 _PNG_DPI = 140
 
 
@@ -82,15 +83,21 @@ def _label_for(field: dict, mode: str) -> str:
     return "?"
 
 
-def _claims(schema: dict, mode: str) -> dict[str, str]:
-    """widget name -> label to draw on it. Includes option-level claims, which
-    is where choice fields carry their real widget identity."""
-    out: dict[str, str] = {}
+def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
+    """widget name -> EVERY label claiming it. Includes option-level claims,
+    which is where choice fields carry their real widget identity.
+
+    Deliberately a LIST, not a first-wins scalar: two fields claiming one widget
+    is a real defect class (schema_lint's dump-widget-multiclaim), and it is
+    exactly the shape this overlay exists to make visible. Collapsing it would
+    render a multiclaimed widget identically to a correctly single-claimed one --
+    hiding the bug the reviewer is looking for."""
+    out: dict[str, list[str]] = {}
     for f in _iter_fields(schema):
         label = _label_for(f, mode)
         claim = f.get("pdf_field_name")
         if isinstance(claim, str) and claim:
-            out.setdefault(claim, label)
+            out.setdefault(claim, []).append(label)
         options = f.get("options")
         if isinstance(options, list):
             for o in options:
@@ -100,7 +107,7 @@ def _claims(schema: dict, mode: str) -> dict[str, str]:
                 if isinstance(oc, str) and oc:
                     val = o.get("value")
                     suffix = f"={val}" if isinstance(val, (str, int)) else ""
-                    out.setdefault(oc, f"{label}{suffix}")
+                    out.setdefault(oc, []).append(f"{label}{suffix}")
     return out
 
 
@@ -113,7 +120,7 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
 
     claims = _claims(schema, mode)
     doc = fitz.open(pdf_path)
-    drawn = unclaimed = 0
+    drawn = unclaimed = multiclaimed = 0
 
     for page in doc:
         for w in page.widgets():
@@ -121,8 +128,8 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
             if not isinstance(name, str):
                 continue
             rect = w.rect
-            label = claims.get(name)
-            if label is None:
+            labels = claims.get(name)
+            if not labels:
                 # A widget the draft claims for NO field. Marked distinctly:
                 # it is a coverage gap, not a mislabel, and the two failure
                 # modes must not look alike on the review sheet.
@@ -130,7 +137,19 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
                 unclaimed += 1
                 continue
 
-            page.draw_rect(rect, color=_BOX_COLOR, width=0.6)
+            if len(labels) > 1:
+                # Two or more fields claim this ONE widget -- a real defect
+                # (schema_lint's dump-widget-multiclaim). Draw every claimant,
+                # flagged, so the reviewer sees the collision instead of a
+                # plausible-looking single label.
+                label = "!! " + " | ".join(labels)
+                box_color = _MULTICLAIM_COLOR
+                multiclaimed += 1
+            else:
+                label = labels[0]
+                box_color = _BOX_COLOR
+
+            page.draw_rect(rect, color=box_color, width=0.6)
             # Short boxes get their label ABOVE (drawing inside would cover the
             # form's own printed text); tall boxes take it inside at the top.
             if (rect.y1 - rect.y0) > _FONT_SIZE + 5:
@@ -145,7 +164,7 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
                 color=None, fill=(1, 1, 1),
             )
             page.insert_text(origin, label, fontsize=_FONT_SIZE,
-                             color=_TEXT_COLOR)
+                             color=(box_color if len(labels) > 1 else _TEXT_COLOR))
             drawn += 1
 
     doc.save(out_path)
@@ -161,8 +180,8 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
             pngs.append(p)
 
     doc.close()
-    return {"drawn": drawn, "unclaimed": unclaimed, "out": out_path,
-            "pngs": pngs}
+    return {"drawn": drawn, "unclaimed": unclaimed,
+            "multiclaimed": multiclaimed, "out": out_path, "pngs": pngs}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,7 +208,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     print(f"[OK] {result['out']} -- {result['drawn']} labelled widget(s), "
-          f"{result['unclaimed']} unclaimed (blue)")
+          f"{result['unclaimed']} unclaimed (blue), "
+          f"{result['multiclaimed']} multiclaimed (orange)")
     for p in result["pngs"]:
         print(f"  {p}")
     print("Review question: does the label drawn on each box MEAN what that "

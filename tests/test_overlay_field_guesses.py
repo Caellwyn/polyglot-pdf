@@ -63,15 +63,46 @@ def test_option_level_claims_are_drawn_with_their_value():
         ],
     }]}
     claims = ov._claims(schema, "spoken")
-    assert claims["top.c1_2[0]"] == "reason=a_treaty"
-    assert claims["top.c1_3[0]"] == "reason=b_filing"
+    assert claims["top.c1_2[0]"] == ["reason=a_treaty"]
+    assert claims["top.c1_3[0]"] == ["reason=b_filing"]
 
 
 def test_claims_walk_nested_parts_and_sections():
     schema = {"parts": [{"sections": [{"fields": [
         {"id": "a", "spoken_name": "alpha", "pdf_field_name": "w1"},
     ]}]}]}
-    assert ov._claims(schema, "spoken") == {"w1": "alpha"}
+    assert ov._claims(schema, "spoken") == {"w1": ["alpha"]}
+
+
+def test_a_multiclaimed_widget_keeps_every_claimant():
+    """Two fields claiming ONE widget is a real defect (dump-widget-multiclaim)
+    and precisely the shape this overlay exists to surface. A first-wins collapse
+    would draw a plausible single label and HIDE the collision."""
+    schema = {"fields": [
+        {"id": "a", "spoken_name": "A", "pdf_field_name": "w1"},
+        {"id": "b", "spoken_name": "B", "pdf_field_name": "w1"},
+    ]}
+    assert ov._claims(schema, "spoken") == {"w1": ["A", "B"]}
+
+
+@needs_w7
+def test_a_multiclaim_is_counted_and_drawn_distinctly(tmp_path):
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    base = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "a.pdf"), "spoken")
+    assert base["multiclaimed"] == 0  # the shipped gold is a clean bijection
+
+    # Point a second field at a widget another field already claims.
+    victim = next(f for f in ov._iter_fields(schema)
+                  if isinstance(f.get("pdf_field_name"), str)
+                  and f.get("pdf_field_name"))
+    schema["fields"].append({
+        "id": "intruder", "spoken_name": "intruder",
+        "pdf_field_name": victim["pdf_field_name"],
+    })
+    after = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "b.pdf"), "spoken")
+    assert after["multiclaimed"] == 1
+    # It stays a labelled (drawn) widget -- a collision is not a coverage gap.
+    assert after["unclaimed"] == base["unclaimed"]
 
 
 # --------------------------------------------------------------------------- #

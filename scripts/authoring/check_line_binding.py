@@ -32,7 +32,11 @@ never "verified correct" -- the summary says so explicitly.
 Usage:
     python scripts/authoring/check_line_binding.py --schema DRAFT.json --pdf FORM.pdf
     ... [--json OUT.json]   machine-readable findings
-Exit: 0 = no mismatch found, 1 = mismatch(es) found, 2 = usage/IO error.
+    ... [--require-verified] treat total abstention as failure (for CI)
+Exit: 0 = verified, nothing mismatched. 1 = mismatch(es) found. 2 = usage/IO
+error. 3 = ABSTAINED (nothing was verifiable) -- distinct from 0 on purpose, so
+a caller gating on `rc == 0` can never read "I checked nothing" as "it is
+clean"; --require-verified folds 3 into a hard failure.
 
 ASCII only (cp1252 safe).
 """
@@ -236,6 +240,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--pdf", required=True, help="the form PDF")
     ap.add_argument("--json", dest="json_out", default=None,
                     help="write findings as JSON here")
+    ap.add_argument("--require-verified", action="store_true",
+                    help="exit non-zero when NOTHING was verifiable (CI use): "
+                         "an abstained run must not pass as clean")
     args = ap.parse_args(argv)
 
     try:
@@ -253,7 +260,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as fh:
             json.dump(result, fh, indent=2)
-    return 1 if result["findings"] else 0
+    if result["findings"]:
+        return 1
+    if result["checked"] == 0:
+        # Nothing was verifiable. The rendered text already says so, but the
+        # EXIT CODE must say it too -- a lint-style caller gating on `rc == 0`
+        # would otherwise read total abstention as a clean pass, which is the
+        # exact failure mode this tool exists to prevent.
+        return 1 if args.require_verified else 3
+    return 0
 
 
 if __name__ == "__main__":
