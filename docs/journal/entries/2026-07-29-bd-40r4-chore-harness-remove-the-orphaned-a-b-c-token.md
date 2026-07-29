@@ -209,6 +209,37 @@ config first, then comments, then documentation accuracy:
     procedure still works with Step 7 gone, and confirmed
     `pick_review_model.py`'s diff contains no non-comment line. No gaps.
 
+**Outer review (Opus-5, two independent passes, both `NO-GAPS`).** This is a
+harness change (it modifies machinery every future closeout runs), so both passes
+were told to weigh that: could a future closeout break, could arm B/C have been
+weakened, is the removal's own premise (nothing reads `arm`) actually true. Both
+independently re-derived the same figures the inner loop had and traced the CLI
+contract into every caller, including untouched files (`pr_review_watcher.py`,
+its test, `check_doc_freshness.py`). Neither found a blocking issue. Each filed one
+genuinely out-of-scope bead instead of reporting inline:
+
+- **`polyglot-pdf-64i9`** (pass 1): the telemetry README's coverage table has always
+  had a wrong left bound (66 of the 376 rows predate the stated 2026-06-10 start).
+  Pre-existing on `origin/dev`; this PR only changed the *right* bound. Left open.
+- **`polyglot-pdf-58o7`** (pass 2): `harness_ledger.py` was ALSO the only home for
+  the verified Anthropic price table and per-TTL cache-write multipliers -- work
+  from PRs #505 (bd sw8h) and #506 (bd aefl) that had merged *hours* before this
+  bead, adding the `claude-opus-5`/`claude-sonnet-5` rows and measuring the real
+  1h-vs-5m cache-write split against 26.5M tokens (the old flat 1.25x assumption
+  had under-reported cost by 37.5%). That asset rode out with the retired
+  experiment, unmentioned anywhere in this bead. **Raised to the maintainer**
+  (a defensible decide-it-yourself call was available -- extract it to a standalone
+  script -- but the maintainer had directly asked for USD tracking five weeks
+  earlier and re-invested in it the same week, so treating "let it go" as an
+  autonomous call risked erasing an explicit standing preference). **Decision:**
+  retire USD tracking rather than rebuild it standalone. Recorded in
+  `docs/journal/telemetry/README.md`'s new "USD cost tracking is also retired"
+  section (names the deleting commit + both pricing PRs so the rates stay
+  findable via git history), and the stale local memory
+  `anthropic-token-pricing-for-telemetry.md` (which predated the 5-series rows and
+  still recommended the refuted 1.25x default) was corrected to point there instead
+  of being left as live-looking-but-wrong guidance. Bead closed.
+
 ## Lessons
 
 - **Switching off an experiment's *output* is not the same as retiring the
@@ -342,8 +373,10 @@ historical planning document rather than per-session overhead.
 - `.gitignore` -- `.beads/experiment_state.json` rule KEPT (comment rewritten to
   explain why it outlives the ledger); the cache file itself deleted from both the
   worktree and the main checkout.
-- `docs/journal/README.md`, `docs/journal/telemetry/README.md` -- rewritten as a
-  closed archive.
+- `docs/journal/README.md` -- rewritten as a closed archive.
+- `docs/journal/telemetry/README.md` -- rewritten as a closed archive, plus a new
+  "USD cost tracking is also retired" section recording the outer-review-triggered
+  maintainer decision on bd polyglot-pdf-58o7 (see the outer-review note above).
 - `tests/test_closeout_finish.py` -- two obsolete classes removed; dry-run test
   strengthened to zero-subprocess-calls; `--close-only` tests renamed.
 - `tests/test_pick_review_model.py`, `tests/test_schema_score_section_grouping.py` --

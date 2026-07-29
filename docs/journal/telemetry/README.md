@@ -34,3 +34,24 @@ join if the cutover window ever double-counts.
 Nothing writes new rows here (the ledger script is removed); see
 [`../../doc-architecture.md`](../../doc-architecture.md) for where this sits in the
 doc system.
+
+## USD cost tracking is also retired (maintainer decision, 2026-07-29)
+
+`harness_ledger.py` was the only home for the Anthropic per-MTok price table and
+the per-TTL cache-write multipliers that turned a session transcript into a USD
+figure (the `cost_usd` block on rows recorded after bd polyglot-pdf-cb6i). Deleting
+the ledger (bd polyglot-pdf-40r4) removed that machinery too, and the maintainer
+decided not to rebuild it standalone (bd polyglot-pdf-58o7, closed as won't-do):
+**per-session USD cost is no longer tracked going forward.** Token counts (which
+the ledger measured separately from pricing) are also no longer collected, since
+nothing else in the repo reads a transcript's token split.
+
+If USD tracking is ever wanted again, the verified rates are recoverable from git
+history at the commit that deleted `scripts/harness_ledger.py` (bd
+polyglot-pdf-40r4) -- notably the `claude-opus-5` / `claude-sonnet-5` price rows
+added in PR #505 (bd sw8h) with a load-bearing comment warning not to "correct"
+the Sonnet-5 rate down to the advertised intro price, and the 5m-vs-1h cache-write
+split added in PR #506 (bd aefl), measured against 26.5M real cache-creation
+tokens showing the old flat 1.25x assumption under-reported by 37.5%. Do not
+recreate these rates from memory or from web pricing pages -- both PRs reconciled
+them against live billing.
