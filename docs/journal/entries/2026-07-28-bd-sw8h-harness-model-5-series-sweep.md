@@ -104,14 +104,48 @@ diff across the boundary. Each run already stamps its own `judge_model` into
 its meta.json, so the boundary is machine-detectable in the data itself -- no
 row is ambiguous about which judge produced it.
 
+## Review record
+
+Five review passes: two inner fresh-eyes rounds, then two independent Opus
+outer reviewers, each looped until both cleared the identical final diff
+(`NO-GAPS` from both). Between them they found **three real defects in this
+change**, all fixed here:
+
+1. A stale `claude-opus-4-8` comment in `extractEndpoint.ts`, and its
+   near-verbatim twin in `EDITOR_GUIDE.md` -- the second only surfaced because
+   fixing the first created a doc/code contradiction.
+2. **The Sonnet-5 rate justification was factually false** (see above). Caught
+   by the second confirming reviewer via a live billing probe, not by reading.
+3. A false 4-vs-5 contrast in the new point-release test comment: it claimed
+   bare 5-series keys are prefix-prone "unlike the 4-series keys", but prefix
+   inheritance is universal to the resolver (`claude-opus-4-80` inherits
+   `claude-opus-4-8`'s rate identically). The real asymmetry is the next MINOR
+   -- `claude-opus-4-9` matches no key and is safely flagged, while
+   `claude-opus-5-1` extends the bare key and is silently priced.
+
+**Two of the three were correct code with incorrect prose attached** -- the
+number was right and the comment explaining it was wrong. In both cases the
+comment was the part a future maintainer would act on.
+
+The reviewers' own verification was stronger than this change's: three
+independent live billing probes converging on $3.0000/MTok; a two-equation
+simultaneous solve for input AND output rates assuming no ratio
+($3.000000/$15.000000); mutation testing of the new assertions (including
+confirming the *rejected* fix fails loudly, 2 failed / 50 passed); and an
+occurrence count proving every live 5-series id is bare (1,953 `claude-opus-5`,
+28,701 `claude-sonnet-5`, zero dated variants) -- which is why lengthening the
+table keys would have been a strictly worse bug.
+
 ## Verification
 
 - `_price_for_model()` exercised directly against the new IDs, including a
   dated variant (`claude-opus-5-20260701`) and the `claude-fable-5` /
   `claude-opus-4-*` neighbours, to confirm the longest-prefix resolver does not
-  shadow the new short keys. Two new tests pin this:
+  shadow the new short keys. Three tests pin this:
   `test_5_series_models_are_priced_not_unpriced` (mirrors the existing 4.5
-  guard) and `test_opus_5_not_shadowed_by_4_series_prefixes`.
+  guard), `test_opus_5_not_shadowed_by_4_series_prefixes`, and
+  `test_5_series_point_release_inherits_the_5_rate` (documents the known
+  next-minor limitation).
 - All seven authoring/bakeoff scripts parse `--help` cleanly (exit 0) **under
   `backend/.venv`** -- on a bare interpreter `eval_extraction.py` and
   `enrich_instructions.py` exit 1 with `ModuleNotFoundError: pydantic`, the
