@@ -9,14 +9,17 @@
  * What DOES exist is a pair of global hooks the audio manager already fires --
  * `window.vffOnAudioPlaybackStart` on the first audio chunk of a turn and
  * `window.vffOnAudioPlaybackEnd` when the queue drains naturally (deliberately
- * NOT during a barge-in flush). They were declared for an activity watchdog that
- * never subscribed, so as of this change nothing else reads them.
+ * NOT during a barge-in flush).
  *
  * This hook claims them, but CHAINS any handler that was already installed
- * rather than overwriting it, and restores the previous value on unmount. That
- * matters because the overlay remounts on a desktop<->mobile breakpoint cross,
- * and because a future watchdog must be able to attach without silently losing
- * one of the two events.
+ * rather than overwriting it, and restores the previous value on unmount.
+ *
+ * The chaining is LOAD-BEARING, not defensive: the E2E voice harness
+ * (`tests/e2e/voice-harness/harness.js`) installs its own
+ * `vffOnAudioPlaybackEnd` subscriber to detect turn end, and itself
+ * chains-and-restores. Overwriting instead of chaining here would silently break
+ * the harness's turn detection; dropping the restore would break it after the
+ * first desktop<->mobile breakpoint remount.
  *
  * A polled fallback covers the gap the events cannot: `flushAudioQueue()` on a
  * barge-in stops playback WITHOUT firing the end event (by design -- firing it
@@ -58,7 +61,15 @@ export function useGeminiSpeaking(audioManager: AudioManager | null | undefined)
 	// Barge-in safety net: a flush stops audio without an end event.
 	useEffect(() => {
 		if (!speaking) return
-		if (!audioManager?.isSpeaking) return
+		// The manager went away (disconnect nulls it) while we believed audio was
+		// playing. There is nothing left to reconcile against and no end event is
+		// ever coming, so clear the flag rather than letting it stick true across a
+		// reconnect -- which would leave Sol permanently "speaking" with a flat,
+		// zero-amplitude halo.
+		if (!audioManager?.isSpeaking) {
+			setSpeaking(false)
+			return
+		}
 		const id = setInterval(() => {
 			if (!audioManager.isSpeaking()) setSpeaking(false)
 		}, RECONCILE_MS)

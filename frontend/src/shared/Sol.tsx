@@ -306,6 +306,37 @@ export function Sol({
 }
 
 /**
+ * Placement rules for the two shipped Sol mount points, kept here rather than in
+ * each overlay so the dev preview harness (src/dev/solPreview.tsx) can render the
+ * REAL treatment instead of a hand-copy that silently drifts from it.
+ *
+ * `.vff-sol`      -- the status-row instance (desktop panel + mobile panel).
+ * `.vff-fab-sol`  -- the mobile FAB instance.
+ */
+export const SOL_PLACEMENT_CSS = `
+/* Negative margins: the corona extends well past the disc, and without them it
+   steals width from the status text in a deliberately tight row. */
+.vff-sol { flex-shrink: 0; margin: -6px -4px -6px -2px; }
+
+/* The FAB floats over arbitrary page content, and Sol's warm palette was tuned
+   for a near-white card -- the rays would vanish over a pale photo. So the FAB
+   instance carries a light backing disc of its own. */
+.vff-fab-sol {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #ffffff 58%, #fdf6e6 100%);
+  box-shadow: 0 2px 10px rgba(120, 72, 12, 0.22);
+  transition: transform 0.2s;
+  /* The corona and rays overflow the 56px box by design; let them. */
+  overflow: visible;
+}
+.vff-fab:active .vff-fab-sol { transform: scale(0.9); }
+`
+
+/**
  * The Sol stylesheet, exported as a string so each overlay can drop it into its
  * existing inline <style> block (the established pattern in both overlay files --
  * neither imports a .css file).

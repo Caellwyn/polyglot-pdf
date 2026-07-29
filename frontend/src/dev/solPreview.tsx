@@ -8,7 +8,7 @@
  */
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Sol, SOL_CSS } from '../shared/Sol'
+import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
 import type { SolState } from '../shared/solState'
 
@@ -63,7 +63,11 @@ function App() {
 
 	return (
 		<div style={{ padding: 24, font: '14px system-ui, sans-serif', color: '#1c2233' }}>
+			{/* The SHIPPED stylesheet + the SHIPPED placement rules, imported rather
+			    than hand-copied -- a harness that silently diverges from production
+			    is worse than no harness, since its whole job is to be signed off on. */}
 			<style>{SOL_CSS}</style>
+			<style>{SOL_PLACEMENT_CSS}</style>
 			<style>{`
 				body { background: #f3f4f6; margin: 0; }
 				h2 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
@@ -75,15 +79,11 @@ function App() {
 				      letter-spacing: .06em; text-transform: uppercase; }
 				.statusrow { display: flex; align-items: center; gap: 10px; background: #f9fafb;
 				             border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; }
-				.vff-sol { margin: -6px -4px -6px -2px; flex-shrink: 0; }
+				/* Harness-only scaffolding (a stand-in for the page the FAB floats over). */
 				.fabwrap { width: 110px; height: 110px; border-radius: 16px;
 				           background: linear-gradient(135deg,#7c3aed,#c084fc);
 				           display: flex; align-items: center; justify-content: center; }
 				.fab { position: relative; width: 56px; height: 56px; }
-				.vff-fab-sol { position: absolute; inset: 0; width: 100%; height: 100%;
-				  border-radius: 50%;
-				  background: radial-gradient(circle at 50% 50%, #ffffff 58%, #fdf6e6 100%);
-				  box-shadow: 0 2px 10px rgba(120,72,12,.22); overflow: visible; }
 				.rm .sol * { animation: none !important; }
 				table { border-collapse: collapse; font-size: 13px; background: #fff; }
 				td, th { border: 1px solid #e5e7eb; padding: 5px 10px; text-align: left; }
@@ -94,7 +94,7 @@ function App() {
 					simulate reduced motion (kills animations)
 				</label>
 
-				<h2>All six states -- panel size (40px), on white</h2>
+				<h2>All {STATES.length} states -- panel size (40px), on white</h2>
 				<div className="row">
 					{STATES.map(s => (
 						<div className="cell" key={s} data-probe={s}>

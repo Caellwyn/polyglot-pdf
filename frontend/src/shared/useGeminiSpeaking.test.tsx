@@ -113,12 +113,24 @@ describe('useGeminiSpeaking', () => {
     expect(am.isSpeaking).not.toHaveBeenCalled()
   })
 
-  it('tolerates a null audio manager (pre-connect renders)', () => {
+  it('tolerates a null audio manager (pre-connect renders) without crashing', () => {
     const { container } = render(<Probe am={null} />)
+    expect(val(container)).toBe('false')
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(val(container)).toBe('false')
+  })
+
+  it('clears a stuck speaking flag when the audio manager goes away', () => {
+    // disconnect() nulls the manager. If we kept believing audio was playing,
+    // no end event would ever arrive and there would be nothing to reconcile
+    // against -- leaving Sol permanently "speaking" with a flat halo across the
+    // reconnect. Clearing is the only honest option.
+    const am = makeAudioManager(true)
+    const { container, rerender } = render(<Probe am={am} />)
     act(() => { window.vffOnAudioPlaybackStart!() })
     expect(val(container)).toBe('true')
-    act(() => { vi.advanceTimersByTime(500) })
-    // No manager to reconcile against: the event remains the only source.
-    expect(val(container)).toBe('true')
+
+    act(() => { rerender(<Probe am={null} />) })
+    expect(val(container)).toBe('false')
   })
 })

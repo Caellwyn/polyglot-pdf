@@ -21,7 +21,7 @@ import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTim
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { SPOKEN_LANGUAGES } from '../shared/languages'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
-import { Sol, SOL_CSS } from '../shared/Sol'
+import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
 import { useGeminiSpeaking } from '../shared/useGeminiSpeaking'
 
@@ -1119,13 +1119,21 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 	// regardless of what the session was doing, so it conveyed "the widget is
 	// alive" and nothing else. Sol pulses only when there is something to say.
 	// Same pure mapping as desktop (../shared/solState).
-	const solSpeaking = useGeminiSpeaking(connectionManager?.getAudioManager?.())
+	// Resolved ONCE per render, not inside the hook's argument: this component
+	// re-renders ~60x/sec while the mic meter moves, and getAudioManager is a hot
+	// accessor. Mobile mounts TWO Sols (FAB + panel), so the per-frame path
+	// matters twice as much here (bd polyglot-pdf-2p4y).
+	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
+	const solSpeaking = useGeminiSpeaking(solAudioManager)
 	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
 	// Sol reads the AI's OUTPUT level for its speaking halo (the mic is silent
-	// while the assistant talks). Resolved per call rather than captured, since
-	// the audio manager is recreated across reconnects.
+	// while the assistant talks). Reads the ref rather than closing over the
+	// manager, since it is recreated across reconnects -- but caches the lookup
+	// so the per-frame path is a property read, not a manager fetch.
+	const solAudioManagerRef = useRef(solAudioManager)
+	solAudioManagerRef.current = solAudioManager
 	const getSolOutputEnergy = React.useCallback(
-		() => connectionManagerRef.current?.getAudioManager?.()?.getOutputEnergy?.() ?? 0,
+		() => solAudioManagerRef.current?.getOutputEnergy?.() ?? 0,
 		[]
 	)
 
@@ -1387,28 +1395,11 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				}
 
 				${SOL_CSS}
-
 				/* Sol as the FAB (bd polyglot-pdf-2p4y). The old .vff-fab-pulse ring +
-				   .vff-fab-icon puck are gone; Sol is the whole control now. It needs a
-				   light disc behind it because the FAB floats over arbitrary page
-				   content -- Sol's warm palette was tuned for a near-white card, and
-				   the rays would disappear over a pale photo without one. */
-				.vff-fab-sol {
-					position: absolute;
-					inset: 0;
-					width: 100%;
-					height: 100%;
-					border-radius: 50%;
-					background: radial-gradient(circle at 50% 50%, #ffffff 58%, #fdf6e6 100%);
-					box-shadow: 0 2px 10px rgba(120, 72, 12, 0.22);
-					transition: transform 0.2s;
-					/* The corona and rays overflow the 56px box by design; let them. */
-					overflow: visible;
-				}
-
-				.vff-fab:active .vff-fab-sol {
-					transform: scale(0.9);
-				}
+				   .vff-fab-icon puck are gone; Sol is the whole control now. The
+				   placement rules live in shared/Sol.tsx so the dev preview renders
+				   the real treatment rather than a drifting hand-copy. */
+				${SOL_PLACEMENT_CSS}
 
 				/* VAD Speech Detection Badge - Small green dot in top-right */
 				.vff-fab-vad-badge {
@@ -1557,11 +1548,9 @@ const requiredCount = schema.fields.filter(f => f.validation?.required).length
 				}
 
 				/* Sol in the compact status row (bd polyglot-pdf-2p4y), replacing the
-				   8px .vff-status-dot. Negative margins keep the corona, which extends
-				   past the disc, from stealing width from the status text in this
-				   deliberately tight grid cell. */
+				   8px .vff-status-dot. Tightens the shared .vff-sol margins a little
+				   further: this grid cell is narrower than the desktop panel's row. */
 				.vff-sol {
-					flex-shrink: 0;
 					margin: -5px -3px -5px -1px;
 				}
 

@@ -29,7 +29,7 @@ import { getOverlayStrings, formatFieldsCompleted } from './overlayTranslations'
 import { ConnectionTimeoutModal } from '../schema-forms/components/ConnectionTimeoutModal'
 import { LanguageSelectionModal } from '../schema-forms/components/LanguageSelectionModal'
 import { getBackendHttpUrl } from '../schema-forms/utils/pdfFiller'
-import { Sol, SOL_CSS } from '../shared/Sol'
+import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState } from '../shared/solState'
 import { useGeminiSpeaking } from '../shared/useGeminiSpeaking'
 
@@ -1449,13 +1449,20 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	// whose turn it is, legible in every spoken language we ship. The mapping is a
 	// pure function in ../shared/solState so both overlays share one precedence
 	// rule (paused > offline > speaking > thinking > listening > idle).
-	const solSpeaking = useGeminiSpeaking(connectionManager?.getAudioManager?.())
+	// Resolved ONCE per render, not inside the hook's argument: this component
+	// re-renders ~60x/sec while the mic meter moves, and getAudioManager is a hot
+	// accessor (bd polyglot-pdf-2p4y).
+	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
+	const solSpeaking = useGeminiSpeaking(solAudioManager)
 	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
 	// Sol reads the AI's OUTPUT level for its speaking halo (the mic is silent
-	// while the assistant talks). Resolved per call rather than captured, since
-	// the audio manager is recreated across reconnects.
+	// while the assistant talks). Reads the ref rather than closing over the
+	// manager, since it is recreated across reconnects -- but caches the lookup
+	// so the per-frame path is a property read, not a manager fetch.
+	const solAudioManagerRef = useRef(solAudioManager)
+	solAudioManagerRef.current = solAudioManager
 	const getSolOutputEnergy = React.useCallback(
-		() => connectionManagerRef.current?.getAudioManager?.()?.getOutputEnergy?.() ?? 0,
+		() => solAudioManagerRef.current?.getOutputEnergy?.() ?? 0,
 		[]
 	)
 
@@ -1849,13 +1856,10 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				}
 
 				${SOL_CSS}
-
-				/* Sol in the desktop status row (bd polyglot-pdf-2p4y). Slight negative
-				   margin so the corona -- which extends well past the disc -- does not
-				   push the status text off-centre. */
-				.vff-sol {
-					margin: -6px -4px -6px -2px;
-				}
+				/* Sol in the desktop status row (bd polyglot-pdf-2p4y). Placement rules
+				   live in shared/Sol.tsx so the dev preview renders the real treatment
+				   rather than a drifting hand-copy. */
+				${SOL_PLACEMENT_CSS}
 
 				.vff-status-text {
 					font-size: 14px;
