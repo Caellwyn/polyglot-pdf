@@ -201,10 +201,20 @@ plus its siblings; it agrees with live `lint_schema` on all five probed shapes.
 - The overlay's multiclaim verdict was checked against **live `lint_schema`** on
   five shapes (two different fields; two options of one field; an option valued
   `"field"`; groups-of-one; a normal two-widget choice) -- agreement on all five.
-- Real-kit regression after all three rounds: f1040 `rc=1` (20 findings), w7
+- Real-kit regression after all four rounds: f1040 `rc=1` (20 findings), w7
   `rc=3` (abstains -- 10 markers found but no checkable pair), and **0
-  multiclaimed** on w7, f1040 AND i-90, confirming the stricter `(owner, kind)`
-  rule introduced no false positives on shipped data.
+  multiclaimed** on w7, f1040 and i-90. The no-false-positive evidence rests on
+  **w7 and f1040**, whose claims resolve fully; the i-90 row exercises only ~22%
+  of that form (43 of 189 claims resolve -- see the limitation below), so it
+  corroborates rather than confirms.
+- The strongest equivalence evidence is not the real kits but an **exhaustive
+  sweep**: 1560 synthetic shapes (1-2 fields x field-level claim in
+  {none, W1, W2} x 0-2 options x every option-claim combination) compared against
+  live `lint_schema`, **zero divergences** in the multiclaimed widget set. Where
+  the overlay differs at all it OVER-detects relative to lint -- it walks
+  `parts`/`sections`/nested `fields` that lint's flat loop never sees (the
+  already-filed lint gap bd `polyglot-pdf-hj6w`), so it errs toward showing a
+  reviewer more, never less.
 - No shipped kit was modified (`git diff --name-only origin/dev...HEAD --
   form-kits/` is empty); bd `polyglot-pdf-3ave` stays open for the f1040 data
   fix.
@@ -213,8 +223,19 @@ plus its siblings; it agrees with live `lint_schema` on all five probed shapes.
 
 On i-90 the CLI overlay reports 152 widgets "unclaimed" that are in fact claimed:
 that kit stores SHORT widget names (`P1_Line10_CityTownOfBirth[0]`) while the PDF's
-real widgets are fully qualified (`form1[0].#pageSet[0].Page1[0]...`), and the tool
-matches on the exact string, so 146 of 189 claims miss. Pre-existing name-resolution
-behaviour, not a regression from this work -- filed as its own bug. The editor-side
-overlay (bd `polyglot-pdf-w70y`) is immune, since it keys on `pdf_position` rects
-rather than names.
+real widgets are fully qualified (`form1[0].#pageSet[0].Page1[0]...`). This tool
+matches on the exact string, whereas every other consumer in the repo resolves
+exact-or-dot-suffix (`schema_lint._match_dump_names`,
+`pdf_fill_routes.find_widget`, `schema_repair._check_widgets_exist`), so 146 of
+189 claims miss.
+
+Pre-existing name-resolution behaviour, not a regression from this work. Filed as
+bd **`polyglot-pdf-wjxs`**, which also records the sharper consequence found in
+round 5: two claimants written in DIFFERENT name styles land in different buckets,
+so a genuine multiclaim would report `multiclaimed: 0`. No live defect is hidden on
+shipped data today -- after correct resolution i-90 has exactly one repeatedly
+claimed widget, `P7_checkbox7Extend[0]`, and it is the benign groups-of-one pair
+lint also passes -- but the blind spot is real for future kits.
+
+The editor-side overlay (bd `polyglot-pdf-w70y`) is immune to this whole class,
+since it keys on `pdf_position` rects rather than widget names.
