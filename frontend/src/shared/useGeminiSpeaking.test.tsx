@@ -113,10 +113,33 @@ describe('useGeminiSpeaking', () => {
     expect(am.isSpeaking).not.toHaveBeenCalled()
   })
 
-  it('tolerates a null audio manager (pre-connect renders) without crashing', () => {
+  it('with a null audio manager, a start event clamps straight back to silence', () => {
+    // Pins the branch the stuck-flag fix introduced. With no manager there is
+    // nothing to reconcile against and no end event is coming, so believing the
+    // start event would strand `speaking` true forever. The clamp runs in the
+    // same commit as the event, so this never even flickers true.
     const { container } = render(<Probe am={null} />)
     expect(val(container)).toBe('false')
+
+    act(() => { window.vffOnAudioPlaybackStart!() })
+    expect(val(container)).toBe('false')
+
     act(() => { vi.advanceTimersByTime(500) })
+    expect(val(container)).toBe('false')
+  })
+
+  it('a LIVE manager still engages on the start event (the clamp is null-only)', () => {
+    // Guards the obvious over-correction: if the clamp ever fired for a live
+    // manager, speaking would never engage at all and Sol's speaking state would
+    // be dead. `isSpeaking()` returning false must NOT suppress the event -- the
+    // reconcile poll is what lowers the flag later, 200ms in.
+    const am = makeAudioManager(false)
+    const { container } = render(<Probe am={am} />)
+
+    act(() => { window.vffOnAudioPlaybackStart!() })
+    expect(val(container)).toBe('true')
+
+    act(() => { vi.advanceTimersByTime(250) })
     expect(val(container)).toBe('false')
   })
 

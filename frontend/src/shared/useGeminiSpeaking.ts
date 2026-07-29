@@ -15,11 +15,19 @@
  * rather than overwriting it, and restores the previous value on unmount.
  *
  * The chaining is LOAD-BEARING, not defensive: the E2E voice harness
- * (`tests/e2e/voice-harness/harness.js`) installs its own
- * `vffOnAudioPlaybackEnd` subscriber to detect turn end, and itself
- * chains-and-restores. Overwriting instead of chaining here would silently break
- * the harness's turn detection; dropping the restore would break it after the
- * first desktop<->mobile breakpoint remount.
+ * (`tests/e2e/voice-harness/harness.js`, `waitForGeminiQuestion`) installs its
+ * own `vffOnAudioPlaybackEnd` subscriber to detect turn end. Overwriting instead
+ * of chaining here would silently break that turn detection.
+ *
+ * Note the restore is the SUBTLER half, and it cuts the other way: the harness
+ * installs its handler while this hook is already mounted, so it captures OUR
+ * handler as its `prev` and restores it in `finish()`. Our own cleanup, by
+ * contrast, writes back whatever was installed at OUR mount time -- so an
+ * unmount landing mid-`waitForGeminiQuestion` (a desktop<->mobile breakpoint
+ * flip during a turn) would discard the harness's handler. Narrow, and the
+ * harness self-restores on its own timeout, but it is the reason to leave the
+ * chain-and-restore symmetry exactly as it is rather than "simplifying" either
+ * half.
  *
  * A polled fallback covers the gap the events cannot: `flushAudioQueue()` on a
  * barge-in stops playback WITHOUT firing the end event (by design -- firing it
