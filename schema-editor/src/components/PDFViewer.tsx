@@ -30,6 +30,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   const pageRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
   const pageDimensions = React.useRef<Map<number, { width: number; height: number }>>(new Map());
   const [scale, setScale] = React.useState(1.0);
+  // Session-only, per tab: replaces the coloured boxes with each field's ID so a
+  // reviewer can spot a mis-wired widget at a glance. Deliberately NOT persisted
+  // -- it is a transient inspection mode, so a reload returning to boxes is the
+  // intended behaviour (bd polyglot-pdf-w70y).
+  const [showFieldIds, setShowFieldIds] = React.useState(false);
   const [currentPage, setCurrentPage] = React.useState(1);
   // Bumped whenever a page's dimensions are first stored. pageDimensions is a
   // ref (so the auto-scroll effect can read it synchronously), but the field
@@ -283,7 +288,25 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           )}
         </div>
 
-        {/* Right: Zoom controls */}
+        {/* Right: ID-label toggle + zoom controls. Both live in ONE wrapper so
+            the toolbar row keeps exactly two children and justify-between still
+            pins this group right. */}
+        <div className="flex items-center gap-4">
+        <label
+          className="flex items-center gap-2 cursor-pointer select-none"
+          title="Replace the coloured field boxes with each field's ID. Small boxes show no name until you zoom in, and long names are shortened -- hover any box for the full name."
+        >
+          <input
+            type="checkbox"
+            className="rounded"
+            checked={showFieldIds}
+            onChange={(e) => setShowFieldIds(e.target.checked)}
+            aria-label="Show field IDs"
+            data-testid="toggle-show-field-ids"
+          />
+          <span className="text-sm text-gray-700">Show field IDs</span>
+        </label>
+
         <div className="flex items-center gap-2">
           <button
             className="btn-sm btn-secondary"
@@ -318,6 +341,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           >
             Fit Page
           </button>
+        </div>
         </div>
       </div>
 
@@ -397,6 +421,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                           pageHeight={pageDimensions.current.get(pageNum)!.height}
                           scale={scale}
                           isSelected={field.id === selectedFieldId}
+                          showFieldId={showFieldIds}
                           onClick={() => onSelectField(field.id)}
                         />
                       ))}
