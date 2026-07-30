@@ -246,12 +246,28 @@ describe('FieldOverlay -- ID mode', () => {
 
     it('is red for a broken field even when marked reviewed-correct', () => {
       // Red always wins: a sign-off never greens a field with a real error.
-      // An empty id is the error shape the existing suite already uses.
+      // Missing help/spoken_name is an error shape that still HAS an id, so a
+      // label renders and its colour can be read.
       const broken = createMockField({
-        id: '',
+        spoken_name: '',
+        help: undefined,
+        pdf_field_name: '',
         _review: { status: 'reviewed_correct' },
       } as Partial<FormField>);
       expect(labelColor(broken)).toBe('rgb(185, 28, 28)');
+    });
+
+    it('draws no label for a blank id, and keeps the FULL error box', () => {
+      // A blank id is the error band -- the field a reviewer most needs to see --
+      // so it must not get an empty label plus the faint hairline, which would
+      // be the weakest marker on screen for the worst field.
+      const { container } = renderOverlay({
+        field: createMockField({ id: '' }), showFieldId: true,
+      });
+      expect(container.querySelector('.field-id-label')).toBeNull();
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.border).toContain('2px');
+      expect(overlay.style.border).toContain('rgb(248, 113, 113)');  // red-400, solid
     });
 
     it('keeps the box border and the label in the SAME status band', () => {

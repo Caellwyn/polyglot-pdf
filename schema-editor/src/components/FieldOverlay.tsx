@@ -150,7 +150,13 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // label cut at 100% is cut identically at 300%. Measured on the real kits:
   // 16% of labelled f1040 fields truncate, 11% on w7, and 64% on i-90 (whose
   // ids average 21 chars). Hover is the recovery path for those, not zoom.
-  const showLabel = showFieldId && rawLabelFontSize >= MIN_LABEL_FONT_PX;
+  // A blank id has nothing to draw, and it is an ERROR-band field -- the one a
+  // reviewer most needs to see. Without this it would get an empty label AND the
+  // faint hairline box, i.e. the weakest marker on screen for the worst field.
+  // Fold it into the same full-box fallback suppression uses.
+  const hasDrawableId = typeof field.id === 'string' && field.id.trim() !== '';
+  const showLabel =
+    showFieldId && hasDrawableId && rawLabelFontSize >= MIN_LABEL_FONT_PX;
 
   // A suppressed label falls back to the FULL box: that box is then the only
   // thing marking the field, so thinning it would make small checkboxes vanish.
