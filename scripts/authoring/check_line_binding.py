@@ -30,14 +30,18 @@ unstated is skipped, not guessed at. Silence means "found nothing it can prove",
 never "verified correct" -- the summary says so explicitly.
 
 KNOWN BLIND SPOTS (stated so they are not mistaken for coverage):
-  - OPTION-LEVEL claims are not checked. Choice fields carry their widget
-    identity on options[], and this reads only a field's own pdf_field_name.
-    That is load-bearing: instance #1 of this error class (bd 13vo, i-90
-    ethnicity options on the OPPOSITE boxes) is an option-level defect this
-    oracle structurally cannot see. Extending it naively WOULD misfire -- an
-    f1040 field stating line "3c" has checkboxes printed "1"/"2", so the
-    field's line number is not the option's marker. Use the overlay
-    (overlay_field_guesses.py) for those.
+  - OPTION-LEVEL claims are DELIBERATELY not checked, and _iter_fields enforces
+    that by excluding option dicts by object identity. Choice fields carry their
+    widget identity on options[]; this reads only a field's own pdf_field_name.
+    Consequence: instance #1 of this error class (bd 13vo, i-90 ethnicity options
+    on the OPPOSITE boxes) is an option-level defect this oracle cannot see. Use
+    the overlay (overlay_field_guesses.py) for those.
+    Extending this to options would need more than lifting the exclusion. Option
+    label text routinely BEGINS with a numeral that is list-item text, not a line
+    number -- f1040 ships "1 Rollover", "2 QCD", "1 Line 3a" -- so _stated_line
+    would read those as claims and report false findings on correctly bound
+    widgets. A field stating line "3c" also has checkboxes printed "1"/"2", so
+    the parent's line number is not the option's marker either.
   - A gutter needs >= _GUTTER_MIN_COL markers to be recognized, so a page with
     one or two numbered rows is not judged at all.
 
@@ -110,7 +114,33 @@ def _stated_line(field: dict) -> Optional[str]:
 
 
 def _iter_fields(schema: dict):
-    """Every dict carrying an id, at any nesting depth (parts/sections/fields)."""
+    """Every FIELD dict carrying an id, at any nesting depth (parts/sections/
+    fields).
+
+    Option dicts are excluded even when they carry their own `id`, by object
+    IDENTITY. Without that, an option is yielded as a field in its own right and
+    the oracle reads its label as a stated line -- an option labelled "1 Yes" on a
+    correctly bound widget printed on row 6a produces a confident FALSE finding,
+    because the "1" is list-item text, not a line number. This is the exclusion
+    overlay_field_guesses._claims makes for the same reason.
+    """
+    option_dict_ids: set[int] = set()
+
+    def find_options(o: Any) -> None:
+        if isinstance(o, dict):
+            opts = o.get("options")
+            if isinstance(opts, list):
+                for opt in opts:
+                    if isinstance(opt, dict):
+                        option_dict_ids.add(id(opt))
+            for v in o.values():
+                find_options(v)
+        elif isinstance(o, list):
+            for v in o:
+                find_options(v)
+
+    find_options(schema)
+
     seen: set[int] = set()
 
     def walk(o: Any):
@@ -118,7 +148,7 @@ def _iter_fields(schema: dict):
             if id(o) in seen:
                 return
             seen.add(id(o))
-            if isinstance(o.get("id"), str):
+            if isinstance(o.get("id"), str) and id(o) not in option_dict_ids:
                 yield o
             for v in o.values():
                 yield from walk(v)

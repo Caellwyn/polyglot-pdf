@@ -135,6 +135,38 @@ def test_body_text_numerals_are_not_read_as_line_markers():
 
 
 @needs_f1040
+def test_an_option_carrying_its_own_id_is_not_judged_as_a_field():
+    """_iter_fields yields any dict with a string `id`, so an option with an `id`
+    was yielded as a FIELD and its LABEL read as a stated line. An option labelled
+    "1 Yes" on a correctly bound widget printed on row 6a produced a confident
+    false finding -- the "1" is list-item text, not a line number.
+
+    Dormant on current data (no shipped or fresh schema gives options ids) but
+    f1040 already ships option labels that parse as markers ("1 Rollover",
+    "2 QCD", "1 Line 3a"); only the `id` was missing, and the sibling overlay's
+    tests treat an option `id` as a normal shape.
+    """
+    schema = json.loads(_F1040_SCHEMA.read_text(encoding="utf-8"))
+    base = clb.check(json.loads(json.dumps(schema)), str(_F1040_PDF))
+
+    schema["fields"].append({
+        "id": "choice_x", "type": "radio", "options": [
+            # Correctly bound: f1_68[0] IS the line-6a widget. Only the label's
+            # leading numeral could make this look like a line-1 claim.
+            {"id": "opt_yes", "label": "1 Yes",
+             "pdf_field_name": "topmostSubform[0].Page1[0].f1_68[0]"},
+        ],
+    })
+    after = clb.check(schema, str(_F1040_PDF))
+
+    assert len(after["findings"]) == len(base["findings"]), \
+        "an option was judged as a field and produced a false finding"
+    assert after["checked"] == base["checked"], \
+        "an option was counted as a verifiable field"
+    assert "opt_yes" not in {f["field_id"] for f in after["findings"]}
+
+
+@needs_f1040
 def test_the_f1040_checkbox_legend_is_not_read_as_a_gutter():
     """The REAL property, not the accidental survivor.
 
@@ -143,10 +175,12 @@ def test_the_f1040_checkbox_legend_is_not_read_as_a_gutter():
     -- clearing the recurrence threshold outright. Recurrence alone therefore does
     not identify a gutter; the column must also carry DISTINCT marker texts.
 
-    The earlier test only asserted that no finding claimed line '3', which held by
-    two accidents (the legend's '3' recurs twice, one short of the threshold, and
-    those widgets are claimed at option level, which the oracle does not read).
-    This asserts the marker set directly, so the rule cannot silently rot.
+    The earlier test only asserted that no finding claimed line '3'. That held by
+    coincidence, not by the rule: under the old collector the legend markers WERE
+    paired with the legend checkboxes, and no finding fired only because those
+    options are labelled "1 Rollover" / "2 QCD", so the parsed line happened to
+    EQUAL the legend numeral. This asserts the marker set directly instead, so the
+    rule cannot silently rot behind a coincidence.
     """
     import fitz
     markers = clb.collect_markers(fitz.open(str(_F1040_PDF))[0])

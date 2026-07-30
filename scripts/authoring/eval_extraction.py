@@ -238,9 +238,14 @@ def _try_repair(draft_path: str) -> tuple[str, str, dict]:
     try:
         repaired, repairs = mod.repair(schema)  # the P5.2 contract
     except mod.RepairError as exc:
-        # Degrade like every other repair() caller (extract_form._repair_schema,
-        # the editor Repair-all route, the schema_repair CLI): keep the
-        # UNREPAIRED draft so lint/roundtrip/score still run on it.
+        # Every repair() caller DEGRADES rather than crashing, but they differ in
+        # how: the schema_repair CLI returns 1 writing nothing, and the editor
+        # Repair-all route raises 422 leaving the stored schema untouched. Only
+        # extract_form._repair_schema does what a sweep needs -- hand back the
+        # UNREPAIRED schema so downstream steps still run. A sweep must go
+        # further still and keep going, because a hard failure here would discard
+        # every OTHER form's row (potentially after paid --extract calls). So the
+        # defect is recorded per-form and scored, not raised.
         return draft_path, f"FAILED: {exc}", {}
     fd, out = tempfile.mkstemp(
         suffix=".repaired.json",

@@ -125,9 +125,12 @@ entirely. A gate running one without the other has a live blind spot.
     review proved the rule did not do what its own docstring claimed: the
     legend's `'1'` (x_right 278.0) and `'2'` (x_right 357.2) each recur on three
     rows, clear the threshold, and **were** still returned as markers. No false
-    finding fired only by luck -- those widgets are claimed at option level
-    (which the oracle does not read) and the legend's `'3'` recurs twice, one
-    short of the threshold.
+    finding fired only by coincidence: under v2 those legend markers WERE paired
+    with the legend checkboxes, and the options are labelled "1 Rollover" /
+    "2 QCD", so the parsed line happened to EQUAL the legend numeral. (My first
+    write-up of this said the widgets were "claimed at option level, which the
+    oracle does not read" -- that reason was itself wrong, and outer-review pass 2
+    disproved it; see the option-level finding below.)
   - v3 adds `_GUTTER_MIN_DISTINCT`: a gutter numbers successive rows, so its
     tokens vary (`2a`, `3a`, `4a`); a legend column repeats one token.
 
@@ -228,13 +231,32 @@ did not match its own docstring (above) -- a mismatch five rounds of inner revie
 had read past, because every one of them checked the code against my description
 of the rule instead of against the PDF.
 
+**Pass 2 found the same class of error a third time, in a docstring I had just
+written.** The "KNOWN BLIND SPOTS" note claimed option-level claims "are not
+checked ... this reads only a field's own `pdf_field_name`". But `_iter_fields`
+yields ANY dict with a string `id` at any depth, so an option carrying an `id` was
+yielded as a field in its own right and its LABEL read as a stated line. An option
+labelled `"1 Yes"` on a correctly bound widget printed on row 6a produced a
+confident FALSE finding -- the "1" is list-item text, not a line number. Dormant
+only because no shipped or fresh schema currently gives options ids, while f1040
+already ships labels that parse as markers (`"1 Rollover"`, `"2 QCD"`,
+`"1 Line 3a"`). The exclusion the sibling overlay already had (by object identity)
+is now enforced in `_iter_fields` itself, so the documented contract is true by
+construction rather than by accident of the current data.
+
+Three separate reviews, three instances of one failure: **a comment asserting a
+property nobody had executed.** The tests that "covered" each one passed
+throughout, because they tested the same belief the comment stated. The cheap
+prevention is to make the claim executable -- assert the marker set, inject the
+option, diff the two implementations -- rather than to write it more carefully.
+
 ## Verification
 
-- 47 tests (26 oracle, 19 overlay, plus the eval-sweep pins).
-- Full suite: 2297 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
+- 48 tests across the two tools plus the eval-sweep pins.
+- Full suite: 2298 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
   `closeout_prep.py` runs only the latter). The count is lower than this branch's
   earlier 2339 because `origin/dev` deleted `tests/test_harness_ledger.py`
-  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 10 new = 2297.
+  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 11 new = 2298.
 - The oracle's f1040 findings and the fresh-extraction count (5) are unchanged by
   the v3 gutter rule -- 20 findings / 52 checked on the shipped kit, exactly the
   pre-fix baseline, with the legend numerals now rejected.
