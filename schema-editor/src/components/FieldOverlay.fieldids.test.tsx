@@ -150,6 +150,23 @@ describe('FieldOverlay -- ID mode', () => {
       expect(overlay.style.border).toContain('rgb(250, 204, 21)');  // yellow-400, not rgba(...0.35)
     });
 
+    it('never tints the background UNDER a label, even selected or hovered', () => {
+      // The product rule the whole feature rests on: the reviewer is comparing
+      // the label against the PRINTED form text beneath it, and a translucent
+      // status tint greys exactly that evidence. This is the mirror of the
+      // suppressed-field test below -- without it the rule was deletable with
+      // the entire suite still green.
+      const field = createMockField();
+      const { container } = renderOverlay({
+        field, showFieldId: true, isSelected: true,
+      });
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.backgroundColor).toBe('transparent');
+
+      fireEvent.mouseEnter(overlay);
+      expect(overlay.style.backgroundColor).toBe('transparent');
+    });
+
     it('keeps the normal selected background on a suppressed field', () => {
       const field = createMockField({
         pdf_position: { page: 1, x: 100, y: 700, width: 10, height: 8 },
@@ -257,17 +274,32 @@ describe('FieldOverlay -- ID mode', () => {
       expect(labelColor(broken)).toBe('rgb(185, 28, 28)');
     });
 
-    it('draws no label for a blank id, and keeps the FULL error box', () => {
-      // A blank id is the error band -- the field a reviewer most needs to see --
-      // so it must not get an empty label plus the faint hairline, which would
-      // be the weakest marker on screen for the worst field.
+    // Whitespace-only is included deliberately: it renders an INVISIBLE label,
+    // the same defect as a blank one, and is why the guard trims. Note the two
+    // cases differ in COLOUR band -- validation treats '   ' as a present id, so
+    // it is amber, not the red a truly blank id gets. Only the suppression
+    // behaviour is common, so that is all this asserts.
+    it.each([['blank', ''], ['whitespace-only', '   ']])(
+      'draws no label for a %s id, and keeps the FULL box',
+      (_name, id) => {
+        // A missing id must not get an unreadable label plus the faint hairline,
+        // which would be the weakest marker on screen.
+        const { container } = renderOverlay({
+          field: createMockField({ id }), showFieldId: true,
+        });
+        expect(container.querySelector('.field-id-label')).toBeNull();
+        const overlay = container.querySelector('.field-overlay') as HTMLElement;
+        expect(overlay.style.border).toContain('2px');       // full, not hairline
+        expect(overlay.style.border).not.toContain('0.35');  // not the alpha hairline
+      },
+    );
+
+    it('a blank id is the ERROR band, so its full box is red', () => {
       const { container } = renderOverlay({
         field: createMockField({ id: '' }), showFieldId: true,
       });
-      expect(container.querySelector('.field-id-label')).toBeNull();
       const overlay = container.querySelector('.field-overlay') as HTMLElement;
-      expect(overlay.style.border).toContain('2px');
-      expect(overlay.style.border).toContain('rgb(248, 113, 113)');  // red-400, solid
+      expect(overlay.style.border).toContain('rgb(248, 113, 113)');  // red-400
     });
 
     it('keeps the box border and the label in the SAME status band', () => {
