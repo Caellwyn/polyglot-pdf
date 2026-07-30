@@ -131,6 +131,21 @@ def test_options_with_no_value_still_register_as_distinct_claimants():
     assert len(ov._claims(schema, "spoken")["W1"]) == 2
 
 
+def test_an_option_under_an_id_less_container_is_still_excluded():
+    """The option-dict scan must recurse the RAW schema, not iterate the fields
+    the walker yields: an options list can hang off a container with no `id`,
+    which the walker skips. Those options were then missed by the exclusion and
+    later yielded as fields, inventing a FALSE multiclaim against whatever else
+    claims the widget."""
+    schema = {"fields": [
+        {"id": "Real", "spoken_name": "Real", "pdf_field_name": "W1"},
+        {"group": {"options": [
+            {"id": "o1", "value": "x", "pdf_field_name": "W1"},
+        ]}},
+    ]}
+    assert ov._claims(schema, "spoken") == {"W1": ["Real"]}
+
+
 def test_a_field_id_colliding_with_some_options_id_is_not_dropped():
     """The option-dict exclusion must key on object IDENTITY, not id string.
     Option ids are short generic slugs (`yes`, `no`, `other`), so a string-based

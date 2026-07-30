@@ -44,6 +44,13 @@ KNOWN BLIND SPOTS (stated so they are not mistaken for coverage):
     the parent's line number is not the option's marker either.
   - A gutter needs >= _GUTTER_MIN_COL markers to be recognized, so a page with
     one or two numbered rows is not judged at all.
+  - The column rules reject a REPEATED-token legend, but they do NOT reject
+    VARIED body text. f1040 page 2 prints cross-references ("Add lines 16 and
+    17", "Subtract line 21 from line 18"), whose numerals form an accepted column
+    at x_right ~159-172. It produces no finding today only because no widget sits
+    within _GUTTER_MAX_DX to its right -- geometric luck, not a rule. A form
+    whose entry column sat nearer such prose could get false findings; the
+    abstention contract (silence is never a pass) is what bounds the damage.
 
 Usage:
     python scripts/authoring/check_line_binding.py --schema DRAFT.json --pdf FORM.pdf
@@ -84,9 +91,6 @@ _GUTTER_MAX_DX = 60.0
 # falls in a column shared by at least this many markers, within this tolerance.
 _GUTTER_COL_TOL = 2.5
 _GUTTER_MIN_COL = 3
-# A gutter column must carry at least this many DISTINCT marker texts. A legend
-# column repeats one token on every row and is rejected; see collect_markers.
-_GUTTER_MIN_DISTINCT = 2
 # A marker belongs to a widget row when their vertical spans overlap. Rows are
 # ~12pt; require the marker's midpoint to fall inside the widget's span, grown
 # slightly so a 1-2pt typographic offset does not break the pairing.
@@ -166,7 +170,7 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
     needed -- recurrence alone is not enough:
 
       1. the right edges cluster into a column of >= _GUTTER_MIN_COL tokens; and
-      2. that column carries >= _GUTTER_MIN_DISTINCT DISTINCT marker texts.
+      2. no marker text REPEATS within that column.
 
     Condition 2 exists because recurring body text also forms columns, so
     recurrence by itself does not identify a gutter. f1040's line-4c/5a/5b rows
@@ -186,25 +190,35 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
         if m:
             cands.append((_norm_line(m.group(1)), x1, y0, y1))
 
-    # Cluster right edges; keep only columns that recur.
-    edges = sorted(c[1] for c in cands)
-    columns: list[list[float]] = []
-    for e in edges:
-        if columns and e - columns[-1][-1] <= _GUTTER_COL_TOL:
-            columns[-1].append(e)
+    # Cluster the CANDIDATES (not bare edges) so each column keeps its own
+    # members. Both conditions below must be judged on those members: deriving
+    # them from the column's padded band instead lets a single unrelated token
+    # sitting just outside the column -- but inside the tolerance -- supply the
+    # variety that rescues a pure legend column.
+    columns: list[list[tuple[str, float, float, float]]] = []
+    for c in sorted(cands, key=lambda c: c[1]):
+        if columns and c[1] - columns[-1][-1][1] <= _GUTTER_COL_TOL:
+            columns[-1].append(c)
         else:
-            columns.append([e])
+            columns.append([c])
+
     kept: list[tuple[float, float]] = []
     for col in columns:
         if len(col) < _GUTTER_MIN_COL:
             continue
-        lo, hi = min(col), max(col)
-        texts = {c[0] for c in cands
-                 if lo - _GUTTER_COL_TOL <= c[1] <= hi + _GUTTER_COL_TOL}
-        # Condition 2: a gutter numbers successive rows, so its tokens vary. A
-        # legend column repeats one token and is rejected here.
-        if len(texts) >= _GUTTER_MIN_DISTINCT:
-            kept.append((lo, hi))
+        # Condition 2: a gutter numbers rows, and a row number appears ONCE per
+        # page -- so its tokens are all distinct. A legend prints the same token
+        # on every row it labels. Requiring uniqueness rather than a minimum
+        # count is what makes this robust: a nearby unrelated token can join the
+        # cluster and supply "variety", but it cannot remove a repeat.
+        # Measured on every page of the three real kits: every genuine gutter has
+        # distinct == n (f1040 p1 x=100.8 4/4, x=105.3 7/7, x=495.4 19/19; p2
+        # x=100.8 23/23, x=497.6 22/22; w7 x=123.1 7/7), while both f1040 legend
+        # columns are 1 distinct out of 3.
+        texts = [c[0] for c in col]
+        if len(set(texts)) != len(texts):
+            continue
+        kept.append((col[0][1], col[-1][1]))
     if not kept:
         return []
     return [c for c in cands

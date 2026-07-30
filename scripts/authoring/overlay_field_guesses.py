@@ -112,14 +112,28 @@ def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
     """
     # Collect the option dicts FIRST: the walk order is not guaranteed to reach a
     # parent before its option, so this cannot be unwound after the fact.
+    #
+    # Recurse the RAW schema rather than iterating _iter_fields: an options list
+    # can hang off a container that _iter_fields does not yield (one with no
+    # `id`), and its options would then be missed here and later yielded as
+    # fields in their own right -- inventing a FALSE multiclaim against whatever
+    # else claims that widget. This mirrors check_line_binding._iter_fields.
     option_dict_ids: set[int] = set()
-    for f in _iter_fields(schema):
-        options = f.get("options")
-        if not isinstance(options, list):
-            continue
-        for o in options:
-            if isinstance(o, dict):
-                option_dict_ids.add(id(o))
+
+    def _find_options(o: Any) -> None:
+        if isinstance(o, dict):
+            opts = o.get("options")
+            if isinstance(opts, list):
+                for opt in opts:
+                    if isinstance(opt, dict):
+                        option_dict_ids.add(id(opt))
+            for v in o.values():
+                _find_options(v)
+        elif isinstance(o, list):
+            for v in o:
+                _find_options(v)
+
+    _find_options(schema)
 
     # widget -> {(owner field id, kind): label}. `kind` is "field" for a
     # field-level claim and "option[<idx>]" for an option-level one -- the same

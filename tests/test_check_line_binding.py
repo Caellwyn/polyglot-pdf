@@ -196,9 +196,17 @@ def test_the_f1040_checkbox_legend_is_not_read_as_a_gutter():
     assert any(490 <= e <= 505 for e in edges), "amount-column gutter lost"
 
 
-def test_collect_markers_rejects_a_column_that_repeats_one_token():
-    """A column of >= _GUTTER_MIN_COL tokens that are all the SAME text is a
-    legend, not a gutter -- a gutter numbers successive rows, so its tokens vary."""
+def test_collect_markers_rejects_a_column_that_repeats_a_token():
+    """A gutter numbers rows and a row number appears ONCE per page, so a gutter
+    column's tokens are all distinct. A legend prints the same token on every row
+    it labels.
+
+    The stray-token case is the load-bearing one: an earlier version asked for
+    ">= 2 distinct texts" and computed that over the column's padded BAND, so a
+    single unrelated token near the column supplied the variety and rescued the
+    whole legend. Requiring UNIQUENESS closes that -- a neighbour can join a
+    cluster, but it cannot remove a repeat.
+    """
     class _Page:
         def __init__(self, words):
             self._w = words
@@ -210,9 +218,36 @@ def test_collect_markers_rejects_a_column_that_repeats_one_token():
                   for i in range(4)])
     assert clb.collect_markers(same) == []
 
+    # The same legend plus ONE unrelated token just outside the column but
+    # inside the tolerance. Must still be rejected.
+    rescued = _Page([(0, 100 + 12 * i, 300, 110 + 12 * i, "1", 0, 0, 0)
+                     for i in range(4)]
+                    + [(0, 200, 302.4, 210, "7", 0, 0, 0)])
+    assert clb.collect_markers(rescued) == [], \
+        "a neighbouring token rescued a repeated-token legend column"
+
     varied = _Page([(0, 100 + 12 * i, 300, 110 + 12 * i, f"{i + 1}a", 0, 0, 0)
                     for i in range(4)])
     assert len(clb.collect_markers(varied)) == 4
+
+
+@needs_f1040
+def test_every_real_gutter_has_all_distinct_markers():
+    """The uniqueness rule is safe because it matches how real gutters are built:
+    measured across every page of the shipped kits, a genuine gutter column has
+    distinct == n, while f1040's two legend columns are 1 distinct of 3. Pinned so
+    a future form that violates it fails loudly here rather than silently losing
+    its gutter."""
+    import fitz
+    doc = fitz.open(str(_F1040_PDF))
+    for page in doc:
+        markers = clb.collect_markers(page)
+        by_col: dict[int, list[str]] = {}
+        for text, x1, _y0, _y1 in markers:
+            by_col.setdefault(round(x1 / 3), []).append(text)
+        for col, texts in by_col.items():
+            assert len(set(texts)) == len(texts), \
+                f"accepted a gutter column with a repeated marker: {texts}"
 
 
 def test_collect_markers_requires_a_recurring_column():
