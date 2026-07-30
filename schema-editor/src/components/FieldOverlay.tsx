@@ -55,6 +55,18 @@ const STATUS_COLORS: Record<StatusBand, {
 const LABEL_HEIGHT_RATIO = 0.72;
 /** Below this the glyphs are noise: draw the coloured box instead. */
 const MIN_LABEL_FONT_PX = 6;
+/**
+ * ...and above this, a tall widget makes the label WORSE. Height alone drives
+ * the font, but the ID has to fit the box's WIDTH, so a tall-and-narrow widget
+ * renders enormous type showing almost nothing: i-90's comment blocks
+ * (180pt tall, 234pt wide) hit 130px and fit ~3 of 24 characters -- strictly
+ * less legible than the plain box they replace. Capping at 18px takes those
+ * same fields to ~21 characters. 18 is the largest size at which every affected
+ * i-90 field becomes substantially readable; lower buys almost nothing (the cap
+ * touches only 8 fields across all three kits, so it barely moves the aggregate
+ * truncation rate -- its whole value is at the extreme).
+ */
+const MAX_LABEL_FONT_PX = 18;
 
 export interface FieldOverlayProps {
   field: FormField;
@@ -121,7 +133,11 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
 
   // VERTICAL fit: a fixed fraction of the widget height. screenPos is ALREADY
   // multiplied by scale, so the label tracks zoom with no scale term here.
-  const labelFontSize = screenPos.height * LABEL_HEIGHT_RATIO;
+  // Capped at the top end (see MAX_LABEL_FONT_PX) -- but the SUPPRESSION test
+  // below reads the UNCAPPED value, because the cap only ever lowers the size
+  // and must never pull a label back above the legibility floor.
+  const rawLabelFontSize = screenPos.height * LABEL_HEIGHT_RATIO;
+  const labelFontSize = Math.min(rawLabelFontSize, MAX_LABEL_FONT_PX);
   // Below this the glyphs are noise, so draw no label and leave the coloured box
   // as the fallback -- it still carries review status, and hover/click still
   // identify the field. Keyed on SIZE, not field type: a 36pt select is exactly
@@ -134,7 +150,7 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   // label cut at 100% is cut identically at 300%. Measured on the real kits:
   // 16% of labelled f1040 fields truncate, 11% on w7, and 64% on i-90 (whose
   // ids average 21 chars). Hover is the recovery path for those, not zoom.
-  const showLabel = showFieldId && labelFontSize >= MIN_LABEL_FONT_PX;
+  const showLabel = showFieldId && rawLabelFontSize >= MIN_LABEL_FONT_PX;
 
   // A suppressed label falls back to the FULL box: that box is then the only
   // thing marking the field, so thinning it would make small checkboxes vanish.

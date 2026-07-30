@@ -85,13 +85,47 @@ describe('FieldOverlay -- ID mode', () => {
     };
 
     it('derives the font size from the box height', () => {
-      expect(fontPx(createMockField())).toBeCloseTo(21.6, 5);  // 30 * 0.72
+      // 12 * 0.72 = 8.64, comfortably inside the 6..18px window so neither
+      // bound is doing the work here.
+      const short = createMockField({
+        pdf_position: { page: 1, x: 100, y: 700, width: 150, height: 12 },
+      });
+      expect(fontPx(short)).toBeCloseTo(8.64, 5);
     });
 
     it('scales with zoom WITHOUT a scale term in the formula', () => {
       // screenPos is already multiplied by scale, so the label tracks zoom for
-      // free. This fails if anyone reintroduces a `* scale` or clamps the size.
-      expect(fontPx(createMockField(), 2.0)).toBeCloseTo(43.2, 5);
+      // free. This fails if anyone reintroduces a `* scale`.
+      // 30 * 2 * 0.72 = 43.2, above the cap, so read a SHORT box that stays
+      // under it: 12 * 2 * 0.72 = 17.28.
+      const short = createMockField({
+        pdf_position: { page: 1, x: 100, y: 700, width: 150, height: 12 },
+      });
+      expect(fontPx(short)).toBeCloseTo(8.64, 5);
+      expect(fontPx(short, 2.0)).toBeCloseTo(17.28, 5);
+    });
+
+    it('caps the font on a TALL widget, where height alone makes it useless', () => {
+      // i-90's comment blocks are 180pt tall but only 234pt wide, so an
+      // uncapped height-driven font hits ~130px and shows ~3 of 24 characters --
+      // strictly less readable than the box it replaced. Capped, the same field
+      // shows ~21.
+      const tall = createMockField({
+        id: 'p8_line3d_additionalinfo',
+        pdf_position: { page: 1, x: 40, y: 300, width: 234, height: 180 },
+      });
+      expect(fontPx(tall)).toBe(18);
+    });
+
+    it('does not let the cap resurrect a label below the legibility floor', () => {
+      // The cap only ever LOWERS the size, so suppression must be judged on the
+      // uncapped value. (Both are below the cap here; this pins the ordering so
+      // a future refactor cannot compute showLabel from the capped size.)
+      const tiny = createMockField({
+        pdf_position: { page: 1, x: 100, y: 700, width: 10, height: 8 },
+      });
+      const { container } = renderOverlay({ field: tiny, showFieldId: true });
+      expect(container.querySelector('.field-id-label')).toBeNull();
     });
   });
 
@@ -103,10 +137,27 @@ describe('FieldOverlay -- ID mode', () => {
       });
       const { container } = renderOverlay({ field, showFieldId: true });
       expect(container.querySelector('.field-id-label')).toBeNull();
-      // The box is the fallback marker, so it must stay FULL width, not the
-      // 1px hairline a labelled widget gets -- otherwise it nearly vanishes.
+      // The box is the fallback marker, so ALL THREE of its properties must fall
+      // back, not just the width: full 2px, the SOLID status colour (not the
+      // 0.35-alpha hairline), and the normal background. Asserting width alone
+      // left the colour and background expressions unpinned, so thinning either
+      // one would ship a nearly invisible checkbox silently.
       const overlay = container.querySelector('.field-overlay') as HTMLElement;
       expect(overlay.style.border).toContain('2px');
+      expect(overlay.style.border).toContain('rgb(250, 204, 21)');  // yellow-400, not rgba(...0.35)
+    });
+
+    it('keeps the normal selected background on a suppressed field', () => {
+      const field = createMockField({
+        pdf_position: { page: 1, x: 100, y: 700, width: 10, height: 8 },
+      });
+      const { container } = renderOverlay({
+        field, showFieldId: true, isSelected: true,
+      });
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      // Not 'transparent': that is the labelled-mode behaviour, and a suppressed
+      // field has no label to keep the paper visible for.
+      expect(overlay.style.backgroundColor).toBe('rgba(234, 179, 8, 0.15)');
     });
 
     it('restores the label once zoom makes it legible', () => {
@@ -130,9 +181,14 @@ describe('FieldOverlay -- ID mode', () => {
       // SUPPRESSION only; hover is the recovery path for truncation. Pinned
       // because the opposite was asserted in a comment and believed until it was
       // measured in a browser (16% of f1040 labels truncate, 64% on i-90).
+      // Height 10 keeps BOTH samples strictly inside the 6..18px window --
+      // 7.2px at 1x and 14.4px at 2x -- so neither the floor nor the cap binds
+      // and the ratio genuinely reflects the sizing formula. (At 3x the cap
+      // WOULD bind, which is itself correct behaviour but would make this pass
+      // for the wrong reason.)
       const field = createMockField({
         id: 'p6_line4_interpreters_daytime_phone_number',
-        pdf_position: { page: 1, x: 100, y: 700, width: 40, height: 30 },
+        pdf_position: { page: 1, x: 100, y: 700, width: 40, height: 10 },
       });
       const ratioAt = (scale: number) => {
         const { container } = renderOverlay({ field, showFieldId: true, scale });
@@ -144,7 +200,7 @@ describe('FieldOverlay -- ID mode', () => {
         const boxPx = parseFloat((container.querySelector('.field-overlay') as HTMLElement).style.width);
         return boxPx / (0.6 * fontPx);
       };
-      expect(ratioAt(3.0)).toBeCloseTo(ratioAt(1.0), 5);
+      expect(ratioAt(2.0)).toBeCloseTo(ratioAt(1.0), 5);
     });
 
     it('pins the truncation CSS contract (jsdom cannot observe clipping)', () => {

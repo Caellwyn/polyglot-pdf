@@ -64,6 +64,18 @@ miss 29 of 49 illegible fields there while the size rule catches all of them.
 A suppressed field keeps its full-width box rather than the 1px hairline a
 labelled field gets -- that box is then the only thing marking it.
 
+**Vertical (too TALL) -> cap the font at 18px.** The half I originally missed:
+I reasoned carefully about the small end and never considered the large. Height
+alone drives the font, but the ID must fit the box's WIDTH, so a tall-and-narrow
+widget renders enormous type showing almost nothing. i-90's comment blocks
+(180pt tall, 234pt wide) hit **129.7px and fit ~3 of 24 characters** -- strictly
+less readable than the plain box they replaced, on the kit with the highest
+assignment risk. Capped, the same field shows **23 of 24** (browser-verified).
+The cap touches only 8 fields across all three kits, so it barely moves the
+aggregate truncation rate; its entire value is at the extreme. Suppression is
+still judged on the UNCAPPED size -- the cap only lowers, and must never pull a
+label back above the legibility floor.
+
 **Horizontal (too long) -> truncate with an ellipsis.** Never spill into a
 neighbour.
 
@@ -114,8 +126,10 @@ distinction, and the zoom-invariance above.
 
 ## Verification
 
-- 22 new tests (15 overlay, 7 viewer integration).
-- Full schema-editor suite: 963 passed across 68 files.
+- 26 new tests (19 overlay, 7 viewer integration).
+- Full schema-editor suite: 966 passed across 68 files. (A trailing "Timeout
+  starting forks runner" error is Windows fork-startup noise, not a test failure --
+  read the counts.)
 - `tsc --noEmit` clean -- `paintOrder` and `WebkitTextStrokeWidth` are typed in
   the installed `csstype`, so no cast is needed.
 - Live browser check against real widget geometry (above).
