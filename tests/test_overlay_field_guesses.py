@@ -1,0 +1,300 @@
+"""Tests for scripts/authoring/overlay_field_guesses.py (bd polyglot-pdf-3ave).
+
+The overlay is the SECOND review surface for field<->widget assignment. Its
+companion, check_line_binding.py, is exact but narrow -- it can only judge a
+field that states a line number and claims a widget on a printed marker row, so
+it abstains entirely on a form like W-7 that prints no gutter markers. The
+overlay covers precisely that gap: it draws the extractor's own guess onto each
+widget so a human or vision model can ask the semantic question ("is this
+'signature' actually on a phone box?") no numbering scheme can answer.
+
+These pin the mechanics -- what gets drawn, from which fields, and that a
+coverage gap is visually distinct from a mislabel. The judgement itself is the
+reviewer's; there is no assertion here about a form being 'correct'.
+
+ASCII only.
+"""
+
+import importlib.util
+import json
+import pathlib
+import sys
+
+import pytest
+
+_REPO = pathlib.Path(__file__).resolve().parent.parent
+_SCRIPT = _REPO / "scripts" / "authoring" / "overlay_field_guesses.py"
+spec = importlib.util.spec_from_file_location("overlay_field_guesses", _SCRIPT)
+ov = importlib.util.module_from_spec(spec)
+sys.modules["overlay_field_guesses"] = ov
+spec.loader.exec_module(ov)
+
+_W7_PDF = _REPO / "form-kits" / "w7" / "form.pdf"
+_W7_SCHEMA = _REPO / "form-kits" / "w7" / "schema.json"
+
+needs_w7 = pytest.mark.skipif(not _W7_PDF.exists(), reason="w7 kit not present")
+pytest.importorskip("fitz", reason="PyMuPDF required to render the overlay")
+
+
+# --------------------------------------------------------------------------- #
+# Which text gets drawn
+# --------------------------------------------------------------------------- #
+
+def test_label_mode_prefers_the_requested_key():
+    f = {"id": "fld_x", "name": "Display Label", "spoken_name": "spoken label"}
+    assert ov._label_for(f, "spoken") == "spoken label"
+    assert ov._label_for(f, "name") == "Display Label"
+    assert ov._label_for(f, "id") == "fld_x"
+
+
+def test_label_falls_back_when_the_preferred_key_is_missing_or_blank():
+    # spoken_name is the default mode; a blank one must not draw an empty plate.
+    assert ov._label_for({"id": "fld_x", "spoken_name": "   "}, "spoken") == "fld_x"
+    assert ov._label_for({"id": "fld_x"}, "spoken") == "fld_x"
+
+
+def test_option_level_claims_are_drawn_with_their_value():
+    """Choice fields carry their real widget identity on OPTIONS, not on the
+    field -- if the overlay skipped those, every checkbox would look unclaimed."""
+    schema = {"fields": [{
+        "id": "reason", "spoken_name": "reason", "options": [
+            {"value": "a_treaty", "pdf_field_name": "top.c1_2[0]"},
+            {"value": "b_filing", "pdf_field_name": "top.c1_3[0]"},
+        ],
+    }]}
+    claims = ov._claims(schema, "spoken")
+    assert claims["top.c1_2[0]"] == ["reason=a_treaty"]
+    assert claims["top.c1_3[0]"] == ["reason=b_filing"]
+
+
+def test_claims_walk_nested_parts_and_sections():
+    schema = {"parts": [{"sections": [{"fields": [
+        {"id": "a", "spoken_name": "alpha", "pdf_field_name": "w1"},
+    ]}]}]}
+    assert ov._claims(schema, "spoken") == {"w1": ["alpha"]}
+
+
+def test_groups_of_one_is_not_a_multiclaim():
+    """A standalone checkbox restating its widget at BOTH field level and on its
+    single option is the benign groups-of-one convention -- schema_lint
+    explicitly carves it out (backend/services/schema_lint.py, _check_dump_claims).
+    Flagging it orange would make the multiclaim signal lie."""
+    schema = {"fields": [{
+        "id": "cb", "spoken_name": "Checkbox", "pdf_field_name": "w9",
+        "options": [{"value": "yes", "pdf_field_name": "w9"}],
+    }]}
+    assert ov._claims(schema, "spoken") == {"w9": ["Checkbox=yes"]}
+
+
+def test_two_options_of_one_field_ARE_a_multiclaim():
+    """schema_lint._check_dump_claims raises dump-widget-multiclaim for this too
+    -- see backend/tests/test_schema_lint.py::test_dump_multiclaim_by_two_options
+    _of_one_field, which calls it 'the shipped-f1040 class of bug' (selecting one
+    option would tick both widgets). Keying on OWNER ALONE collapsed these into
+    one entry and blinded the overlay to a live, separately-tested defect."""
+    schema = {"fields": [{
+        "id": "g", "spoken_name": "G", "options": [
+            {"value": "x", "pdf_field_name": "W1"},
+            {"value": "y", "pdf_field_name": "W1"},
+        ],
+    }]}
+    assert ov._claims(schema, "spoken") == {"W1": ["G=x", "G=y"]}
+
+
+def test_an_option_valued_field_does_not_collide_with_the_field_level_key():
+    """`kind` must come from the option's INDEX, not its value. With a
+    value-derived key, an option whose value is literally "field" produces the
+    same key as the field-level claim and OVERWRITES it -- collapsing an
+    option+option ERROR into a benign-looking single claim. Nothing else catches
+    it: "field" is a legal option slug, so no lint rule fires on the value
+    itself, while lint DOES raise dump-widget-multiclaim for the shape."""
+    schema = {"fields": [{
+        "id": "g", "spoken_name": "G", "pdf_field_name": "W1", "options": [
+            {"value": "field", "pdf_field_name": "W1"},
+            {"value": "other", "pdf_field_name": "W1"},
+        ],
+    }]}
+    labels = ov._claims(schema, "spoken")["W1"]
+    assert len(labels) > 1, "an option valued 'field' erased the multiclaim"
+    assert "G=field" in labels and "G=other" in labels
+
+
+def test_options_with_no_value_still_register_as_distinct_claimants():
+    """Two valueless options on one widget are still an ERROR shape; the
+    index-based key keeps them distinct even with nothing to display."""
+    schema = {"fields": [{
+        "id": "g", "spoken_name": "G", "options": [
+            {"pdf_field_name": "W1"},
+            {"pdf_field_name": "W1"},
+        ],
+    }]}
+    assert len(ov._claims(schema, "spoken")["W1"]) == 2
+
+
+def test_an_option_under_an_id_less_container_is_still_excluded():
+    """The option-dict scan must recurse the RAW schema, not iterate the fields
+    the walker yields: an options list can hang off a container with no `id`,
+    which the walker skips. Those options were then missed by the exclusion and
+    later yielded as fields, inventing a FALSE multiclaim against whatever else
+    claims the widget."""
+    schema = {"fields": [
+        {"id": "Real", "spoken_name": "Real", "pdf_field_name": "W1"},
+        {"group": {"options": [
+            {"id": "o1", "value": "x", "pdf_field_name": "W1"},
+        ]}},
+    ]}
+    assert ov._claims(schema, "spoken") == {"W1": ["Real"]}
+
+
+def test_a_field_id_colliding_with_some_options_id_is_not_dropped():
+    """The option-dict exclusion must key on object IDENTITY, not id string.
+    Option ids are short generic slugs (`yes`, `no`, `other`), so a string-based
+    exclusion silently dropped a genuine top-level field with a colliding id --
+    rendering its widget as a FALSE coverage gap (blue)."""
+    schema = {"fields": [
+        {"id": "yes", "spoken_name": "Consent", "pdf_field_name": "WREAL"},
+        {"id": "other", "spoken_name": "Other", "options": [
+            {"id": "yes", "value": "y", "pdf_field_name": "WOPT"},
+        ]},
+    ]}
+    claims = ov._claims(schema, "spoken")
+    assert claims["WREAL"] == ["Consent"], "a real field vanished on an id collision"
+    assert claims["WOPT"] == ["Other=y"]
+
+
+def test_an_option_carrying_its_own_id_is_not_a_second_owner():
+    """_iter_fields yields ANY dict with a string id, so an option with an `id`
+    is also yielded as a field. Its claim belongs to the parent field -- counting
+    it twice would invent a multiclaim that does not exist."""
+    schema = {"fields": [{
+        "id": "f1", "spoken_name": "F",
+        "options": [{"id": "opt1", "value": "yes", "pdf_field_name": "w1"}],
+    }]}
+    assert ov._claims(schema, "spoken") == {"w1": ["F=yes"]}
+
+
+def test_a_multiclaimed_widget_keeps_every_claimant():
+    """Two fields claiming ONE widget is a real defect (dump-widget-multiclaim)
+    and precisely the shape this overlay exists to surface. A first-wins collapse
+    would draw a plausible single label and HIDE the collision."""
+    schema = {"fields": [
+        {"id": "a", "spoken_name": "A", "pdf_field_name": "w1"},
+        {"id": "b", "spoken_name": "B", "pdf_field_name": "w1"},
+    ]}
+    assert ov._claims(schema, "spoken") == {"w1": ["A", "B"]}
+
+
+@needs_w7
+def test_a_multiclaim_is_counted_and_drawn_distinctly(tmp_path):
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    base = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "a.pdf"), "spoken")
+    assert base["multiclaimed"] == 0  # the shipped gold is a clean bijection
+
+    # Point a second field at a widget another field already claims.
+    victim = next(f for f in ov._iter_fields(schema)
+                  if isinstance(f.get("pdf_field_name"), str)
+                  and f.get("pdf_field_name"))
+    schema["fields"].append({
+        "id": "intruder", "spoken_name": "intruder",
+        "pdf_field_name": victim["pdf_field_name"],
+    })
+    after = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "b.pdf"), "spoken")
+    assert after["multiclaimed"] == 1
+    # It stays a labelled (drawn) widget -- a collision is not a coverage gap.
+    assert after["unclaimed"] == base["unclaimed"]
+
+
+# --------------------------------------------------------------------------- #
+# Rendering
+# --------------------------------------------------------------------------- #
+
+@needs_w7
+def test_renders_every_widget_and_reports_counts(tmp_path):
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    out = tmp_path / "review.pdf"
+    result = ov.annotate(schema, str(_W7_PDF), str(out), "spoken")
+    assert out.exists() and out.stat().st_size > 0
+    # The hand-corrected w7 gold deliberately leaves the two "Other" write-in
+    # widgets (f1_04, f1_23) unmodeled -- bd ivh9 pins that. They must show as
+    # a COVERAGE gap, visually distinct from a mislabelled box.
+    assert result["unclaimed"] == 2
+    assert result["drawn"] > 0
+
+
+@needs_w7
+def test_an_unclaimed_widget_is_counted_separately_from_a_labelled_one(tmp_path):
+    """Dropping a field must move exactly one widget from drawn -> unclaimed:
+    a coverage gap and a mislabel are different bugs and must not look alike."""
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    base = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "a.pdf"), "spoken")
+
+    dropped = None
+    for f in list(ov._iter_fields(schema)):
+        if isinstance(f.get("pdf_field_name"), str) and f.get("pdf_field_name"):
+            dropped = f.pop("pdf_field_name")
+            break
+    assert dropped is not None
+    after = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "b.pdf"), "spoken")
+    assert after["unclaimed"] == base["unclaimed"] + 1
+    assert after["drawn"] == base["drawn"] - 1
+
+
+@needs_w7
+def test_png_rasterization_is_opt_in(tmp_path):
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    no_png = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "a.pdf"), "spoken")
+    assert no_png["pngs"] == []
+
+    png_dir = tmp_path / "pages"
+    with_png = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "b.pdf"),
+                           "spoken", str(png_dir))
+    assert with_png["pngs"]
+    for p in with_png["pngs"]:
+        assert pathlib.Path(p).exists()
+
+
+def test_missing_schema_is_a_usage_error_not_a_crash(tmp_path, capsys):
+    rc = ov.main(["--schema", str(tmp_path / "nope.json"),
+                  "--pdf", str(_W7_PDF), "--out", str(tmp_path / "o.pdf")])
+    capsys.readouterr()
+    assert rc == 2
+
+
+def test_an_unreadable_pdf_is_a_usage_error_not_a_traceback(tmp_path, capsys):
+    """The docstring promises '2 = usage/IO error'; only the schema read was
+    guarded, so a bad --pdf raised a raw traceback instead."""
+    schema = tmp_path / "s.json"
+    schema.write_text(json.dumps({"fields": []}), encoding="utf-8")
+    rc = ov.main(["--schema", str(schema),
+                  "--pdf", str(tmp_path / "does-not-exist.pdf"),
+                  "--out", str(tmp_path / "o.pdf")])
+    capsys.readouterr()
+    assert rc == 2
+
+
+@needs_w7
+def test_an_unwritable_out_path_exits_two(tmp_path, capsys):
+    """Goes through main() so the rc==2 WIRING is pinned, not just annotate()'s
+    error dict -- the previous version asserted the dict only, so flipping
+    main()'s `return 2` to 0 would not have failed it."""
+    schema_path = tmp_path / "s.json"
+    schema_path.write_text(_W7_SCHEMA.read_text(encoding="utf-8"), encoding="utf-8")
+    out = tmp_path / "no-such-dir" / "deep" / "o.pdf"  # parent does not exist
+    rc = ov.main(["--schema", str(schema_path), "--pdf", str(_W7_PDF),
+                  "--out", str(out)])
+    capsys.readouterr()
+    assert rc == 2
+
+
+@needs_w7
+def test_an_unwritable_png_dir_exits_two(tmp_path, capsys):
+    """--png-dir runs AFTER the review PDF is saved; a failure there must still
+    exit 2 rather than traceback on a half-completed run."""
+    schema_path = tmp_path / "s.json"
+    schema_path.write_text(_W7_SCHEMA.read_text(encoding="utf-8"), encoding="utf-8")
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("i am a file", encoding="utf-8")  # makedirs must fail
+    rc = ov.main(["--schema", str(schema_path), "--pdf", str(_W7_PDF),
+                  "--out", str(tmp_path / "o.pdf"), "--png-dir", str(blocker)])
+    capsys.readouterr()
+    assert rc == 2

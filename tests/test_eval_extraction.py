@@ -191,6 +191,73 @@ def test_broken_w7_draft_repairs_clean_in_the_default_pipeline():
     assert row["repair"] != "-"  # the repair step actually ran
 
 
+# --------------------------------------------------------------------------- #
+# A RepairError scores the draft RED -- it never crashes the sweep (bd ah76)
+# --------------------------------------------------------------------------- #
+
+def _no_name_pdf_draft() -> dict:
+    """The defect _check_no_name_non_choice (bd l1a9) raises on, DUMP-LESS: a
+    source=pdf text field carrying no pdf_field_name at all. `text` is outside
+    FIELD_LEVEL_NAME_EXEMPT_TYPES, so its widget identity must live on the
+    field itself."""
+    return {
+        "source": "pdf", "schema_version": "2",
+        "fields": [{"id": "fld_phantom", "type": "text", "label": "Phantom"}],
+    }
+
+
+def test_try_repair_records_a_repair_error_instead_of_raising(tmp_path):
+    draft = tmp_path / "phantom.json"
+    draft.write_text(json.dumps(_no_name_pdf_draft()), encoding="utf-8")
+    out, note, harvest = ev._try_repair(str(draft))
+    assert note.startswith("FAILED: ")
+    # The UNREPAIRED draft is handed back so lint/roundtrip/score still run.
+    assert out == str(draft)
+    assert harvest == {}
+
+
+def test_the_repair_ran_guard_still_excludes_a_failed_repair_SOURCE_PIN():
+    """SOURCE-TEXT pin, not a behavioural one -- named so no reader mistakes it.
+
+    `repair_ran` gates a post-repair RED exemption; a FAILED repair leaves the
+    draft UNREPAIRED, so the exemption must not apply. That guard is not
+    behaviourally isolatable on any reachable input: `_try_repair` calls
+    `repair()` with NO dump, so only `_check_no_name_non_choice` can raise, and
+    that shape always produces a `field-unbacked` lint ERROR which forces RED via
+    `lint_errors > 0` regardless of this term. The guard is correct-but-defensive,
+    so this asserts the source spelling rather than an observable outcome.
+
+    Consequence to know: an equivalent refactor (`"FAILED:" not in repair_note`)
+    will fail this test even though behaviour is unchanged. Update the literal.
+    """
+    src = pathlib.Path(_SCRIPT).read_text(encoding="utf-8")
+    assert 'not repair_note.startswith("FAILED:")' in src
+
+
+@needs_w7
+def test_one_bad_draft_does_not_discard_the_whole_sweep(tmp_path, capsys):
+    """The bead's exit criterion: a multi-form sweep containing a draft that
+    repair() rejects runs to completion and still reports EVERY row -- rather
+    than losing all rows (potentially after paid --extract calls) to one
+    uncaught RepairError."""
+    draft_dir = tmp_path / "drafts"
+    draft_dir.mkdir()
+    # Poison exactly one form's draft; the others fall back to their gold.
+    (draft_dir / "w7.json").write_text(
+        json.dumps(_no_name_pdf_draft()), encoding="utf-8")
+
+    out_json = tmp_path / "rows.json"
+    ev.main(["--draft-dir", str(draft_dir), "--json", str(out_json)])
+    capsys.readouterr()
+
+    rows = json.loads(out_json.read_text(encoding="utf-8"))
+    assert len(rows) == 4  # every benchmark form still reported
+    w7 = next(r for r in rows if r["form"] == "w7")
+    assert w7["repair"].startswith("FAILED: ")
+    # Scored RED like any other defective draft -- not skipped, not crashed.
+    assert w7["verdict"] == "RED"
+
+
 @needs_w7
 def test_gold_w7_scores_ok_with_structural_pass():
     form = next(f for f in ev._FORMS if f["name"] == "w7")

@@ -219,7 +219,14 @@ def _harvest_counts(repairs: list[dict]) -> dict:
 def _try_repair(draft_path: str) -> tuple[str, str, dict]:
     """Run schema_repair when it exists (P5.2); returns (draft_path, note,
     trigger_harvest). The repaired draft goes to a TEMP file (never beside the
-    input -- a fixture input must not grow siblings in the repo)."""
+    input -- a fixture input must not grow siblings in the repo).
+
+    A RepairError is a property of the DRAFT, not of the harness: repair()
+    rejects defective drafts (a source=pdf field with no pdf_field_name, a
+    hallucinated widget) and those are exactly the defects this harness exists
+    to MEASURE. Scoring the unrepaired draft RED keeps a multi-form sweep --
+    potentially already paid for via --extract -- reporting every row instead
+    of discarding all of them on one bad draft."""
     repair_py = os.path.join(_HERE, "schema_repair.py")
     if not os.path.exists(repair_py):
         return draft_path, "-", {}
@@ -228,7 +235,18 @@ def _try_repair(draft_path: str) -> tuple[str, str, dict]:
     spec.loader.exec_module(mod)
     with open(draft_path, encoding="utf-8") as fh:
         schema = json.load(fh)
-    repaired, repairs = mod.repair(schema)  # the P5.2 contract
+    try:
+        repaired, repairs = mod.repair(schema)  # the P5.2 contract
+    except mod.RepairError as exc:
+        # Every repair() caller DEGRADES rather than crashing, but they differ in
+        # how: the schema_repair CLI returns 1 writing nothing, and the editor
+        # Repair-all route raises 422 leaving the stored schema untouched. Only
+        # extract_form._repair_schema does what a sweep needs -- hand back the
+        # UNREPAIRED schema so downstream steps still run. A sweep must go
+        # further still and keep going, because a hard failure here would discard
+        # every OTHER form's row (potentially after paid --extract calls). So the
+        # defect is recorded per-form and scored, not raised.
+        return draft_path, f"FAILED: {exc}", {}
     fd, out = tempfile.mkstemp(
         suffix=".repaired.json",
         prefix=os.path.splitext(os.path.basename(draft_path))[0] + "_")
@@ -278,7 +296,9 @@ def evaluate_form(form: dict, draft_path: Optional[str],
         row["repair"] = repair_note
         if harvest.get("mirrored") or harvest.get("unconverted"):
             row["trigger_harvest"] = harvest
-        repair_ran = repair_note != "-"
+        # A FAILED note means repair RAISED and the draft is UNREPAIRED, so the
+        # post-repair exemption below must not apply to it.
+        repair_ran = repair_note != "-" and not repair_note.startswith("FAILED:")
     else:
         row["repair"] = "-"
 
