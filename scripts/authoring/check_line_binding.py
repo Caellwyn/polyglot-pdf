@@ -47,10 +47,15 @@ KNOWN BLIND SPOTS (stated so they are not mistaken for coverage):
   - The column rules reject a REPEATED-token legend, but they do NOT reject
     VARIED body text. f1040 page 2 prints cross-references ("Add lines 16 and
     17", "Subtract line 21 from line 18"), whose numerals form an accepted column
-    at x_right ~159-172. It produces no finding today only because no widget sits
-    within _GUTTER_MAX_DX to its right -- geometric luck, not a rule. A form
-    whose entry column sat nearer such prose could get false findings; the
-    abstention contract (silence is never a pass) is what bounds the damage.
+    at x_right ~159-172. It produces no finding today, but NOT because those
+    markers are far from any widget: 18 marker/widget pairs there pass the
+    _GUTTER_MAX_DX proximity guard. Every one is then rejected by the ROW guard
+    in marker_for_widget -- the prose sits at mid-y 150-548 while the nearby
+    widgets span y 50-58 and 504-527, so no pair overlaps vertically.
+    So the risk to watch is NOT "an entry column nearer the prose" (already true
+    here) but prose numerals sharing a ROW BAND with an entry widget -- a common
+    layout, and one _GUTTER_MAX_DX does not guard at all. The abstention contract
+    (silence is never a pass) is what bounds the damage.
 
 Usage:
     python scripts/authoring/check_line_binding.py --schema DRAFT.json --pdf FORM.pdf

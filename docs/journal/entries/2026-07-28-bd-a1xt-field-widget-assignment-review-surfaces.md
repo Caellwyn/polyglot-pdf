@@ -140,6 +140,17 @@ entirely. A gate running one without the other has a live blind spot.
     minimum count is what closes the rescue: a neighbour can join a cluster and
     add variety, but it cannot remove a repeat.
 
+  A fifth round then caught the same shape in the KNOWN BLIND SPOTS entry written
+  to stop the docstring overclaiming: it said f1040 page 2's accepted prose column
+  fires nothing "because no widget sits within `_GUTTER_MAX_DX` to its right".
+  Measured: **18 marker/widget pairs there pass that proximity guard**; every one
+  is rejected by the ROW guard instead. The note was not just imprecise, it was
+  prescriptive in the wrong direction -- it told the next maintainer to watch for
+  "an entry column nearer the prose", which is already the case, when the real
+  trigger is prose sharing a ROW BAND with an entry widget. Corrected, and pinned
+  by `test_the_page2_prose_column_is_suppressed_by_the_ROW_guard`, which asserts
+  both halves (proximity passes, row rejects) and fails if either changes.
+
   The rule is **per column, never per page**. f1040 prints each line number in
   BOTH the left gutter and the amount column, so texts do repeat across a page
   (`2a`, `8`, `9` twice on page 1; up to three times on page 2). Hoisting the
@@ -265,11 +276,11 @@ option, diff the two implementations -- rather than to write it more carefully.
 
 ## Verification
 
-- 47 tests across the two tools (27 oracle, 20 overlay) plus the eval-sweep pins.
-- Full suite: 2300 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
+- 48 tests across the two tools (28 oracle, 20 overlay) plus the eval-sweep pins.
+- Full suite: 2301 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
   `closeout_prep.py` runs only the latter). The count is lower than this branch's
   earlier 2339 because `origin/dev` deleted `tests/test_harness_ledger.py`
-  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 13 new = 2300.
+  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 14 new = 2301.
 - The oracle's f1040 findings and the fresh-extraction count (5) are unchanged by
   the v4 gutter rule -- 20 findings / 52 checked on the shipped kit, exactly the
   pre-fix baseline, with the legend numerals now rejected.

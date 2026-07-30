@@ -232,6 +232,46 @@ def test_collect_markers_rejects_a_column_that_repeats_a_token():
 
 
 @needs_f1040
+def test_the_page2_prose_column_is_suppressed_by_the_ROW_guard():
+    """Pins WHICH guard suppresses f1040 page 2's accepted prose column, because
+    the KNOWN BLIND SPOTS note is prescriptive -- it tells the next maintainer
+    which geometry makes this tool go false-positive.
+
+    The proximity guard (_GUTTER_MAX_DX) does NOT do it: 18 marker/widget pairs
+    there pass it. The ROW guard does -- the prose and those widgets never share
+    a vertical band. So the risk is prose sharing a ROW with an entry widget, not
+    prose merely being near one.
+    """
+    import fitz
+
+    page = fitz.open(str(_F1040_PDF))[1]
+    prose = [m for m in clb.collect_markers(page) if 155 <= m[1] <= 175]
+    assert prose, "expected f1040 p2's cross-reference numerals to form a column"
+
+    widgets = [w.rect for w in page.widgets()]
+    x_ok = row_ok = 0
+    for _text, mx1, y0, y1 in prose:
+        mid = (y0 + y1) / 2
+        for rect in widgets:
+            if 0 <= rect.x0 - mx1 <= clb._GUTTER_MAX_DX:
+                x_ok += 1
+                if rect.y0 - clb._ROW_PAD <= mid <= rect.y1 + clb._ROW_PAD:
+                    row_ok += 1
+
+    assert x_ok > 0, "the proximity guard is NOT what suppresses these"
+    assert row_ok == 0, "the row guard is what suppresses these"
+
+    # And end to end: no page-2 finding cites one of these prose numerals.
+    schema = json.loads(_F1040_SCHEMA.read_text(encoding="utf-8"))
+    result = clb.check(schema, str(_F1040_PDF))
+    prose_texts = {m[0] for m in prose}
+    for f in result["findings"]:
+        if f["page"] == 2:
+            assert f["widget_is_on_line"] not in prose_texts, \
+                f"a page-2 prose numeral produced a finding: {f}"
+
+
+@needs_f1040
 def test_uniqueness_is_a_PER_COLUMN_rule_not_a_per_page_one():
     """Pins the SCOPE of the uniqueness rule, because the two readings differ on
     real data and only one of them works.
