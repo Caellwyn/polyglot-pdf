@@ -118,9 +118,12 @@ describe('FieldOverlay -- ID mode', () => {
     });
 
     it('does not let the cap resurrect a label below the legibility floor', () => {
-      // The cap only ever LOWERS the size, so suppression must be judged on the
-      // uncapped value. (Both are below the cap here; this pins the ordering so
-      // a future refactor cannot compute showLabel from the capped size.)
+      // DOCUMENTATION of intent, not a behavioural guard -- worth being honest
+      // about. Because MAX (18) > MIN (6), `min(raw, 18) >= 6` is equivalent to
+      // `raw >= 6`, so swapping which value showLabel reads is unobservable and
+      // this test would survive that refactor. It is kept because the ordering
+      // becomes load-bearing the moment either constant moves (e.g. a cap below
+      // the floor), and the next reader should not have to re-derive that.
       const tiny = createMockField({
         pdf_position: { page: 1, x: 100, y: 700, width: 10, height: 8 },
       });
@@ -216,6 +219,10 @@ describe('FieldOverlay -- ID mode', () => {
       // NOT a flex container: textOverflow silently no-ops on one, which would
       // leave this assertion passing while real truncation was broken.
       expect(label.style.display).not.toBe('flex');
+      // lineHeight IS the vertical centring, precisely because this is not a
+      // flex container -- the two decisions are a pair. Pinned so a future edit
+      // cannot top-align every label without a signal.
+      expect(label.style.lineHeight).toBe('30px');  // the box height
     });
   });
 
