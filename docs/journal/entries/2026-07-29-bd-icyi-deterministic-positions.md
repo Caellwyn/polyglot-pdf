@@ -145,8 +145,9 @@ The Opus clearing round then found five more, **four adopted**:
 
 Running the corrected CLI over the COMMITTED i-90 kit reports a real
 difference, which is the detector working. 115 of the 123 changed positions are
-harmless float churn (committed kits store raw PyMuPDF floats like
-`293.99798583984375`; the dump rounds to one decimal). But **8 are real moves
+harmless float churn: i-90's committed rects are raw PyMuPDF floats
+(`293.99798583984375`) while the dump rounds to TWO decimals
+(`acroform_dump.py`: `round(r.x0, 2)`) -> `294.0`, a max delta of 0.005pt. But **8 are real moves
 of 42-108pt**, all on choice fields with no field-level `pdf_field_name`, whose
 field-level rect is defined as "the first option's widget". Example
 `p3_checkbox4[1]`: options are `select_no` (real widget x=259.75) then
@@ -251,6 +252,36 @@ touched** and all were stale before it; left alone deliberately.
 
 Beads housekeeping: no orphans. Two stale in-progress beads (ah76, btbi) belong
 to other sessions' work, not this branch -- not transitioned.
+
+## Filed, not fixed here
+
+The review rounds filed six follow-ups. Kept out deliberately: each either
+touches committed kit data (which this bead never rewrites) or removes
+regression power rather than masking a live defect.
+
+- **polyglot-pdf-ks1y** (P2) -- 8 i-90 choice-field rects would move 42-108pt on
+  a re-derive; the committed value points at a non-first option while the
+  documented rule says first-option. Needs eyes on the rendered overlay.
+- **polyglot-pdf-r5q1** -- the real-kit guard still resolves only from
+  `pdf_field_name`, so it skips the 32 committed consolidated-choice fields
+  (whose rect the extractor derives from the first option's widget) and never
+  inspects `options[]` at all (112 option positions unverified). The SAME
+  guard-weaker-than-the-code shape as the i-90 miss above, and the non-vacuity
+  floor cannot catch it because the text fields keep `compared` non-zero.
+  Genuinely lost coverage, but no current mismatch hides behind it.
+- **polyglot-pdf-2hxu** -- `positions_filled` in the bake provenance silently
+  changed meaning from "positions repaired" to "positions derived", so it is now
+  ~= the field count on any AcroForm. It used to be a live diagnostic (bd 5f41
+  records a kit shipping `positions_filled: 0` with 61 degenerate rects as a
+  missed signal). This bead's own lesson about sweeping every reader of a flipped
+  flag caught the CLI and the coupling test -- and missed this one.
+- **polyglot-pdf-8i9u** -- null-vs-absent in the change detector. Closed:
+  fixed in-PR (one line in code this bead already rewrote).
+- **polyglot-pdf-89ge** -- the bake-off scorer half. Closed: fixed in-PR (the
+  diff caused it).
+- **polyglot-pdf-tz7a / u4r0** -- `_complete_grouped_families` appends options
+  with no `pdf_position`; pre-existing on `origin/dev`, now cheap to fix given
+  the unconditional derive.
 
 ## Files touched
 
