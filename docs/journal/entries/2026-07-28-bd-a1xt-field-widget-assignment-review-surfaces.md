@@ -131,8 +131,21 @@ entirely. A gate running one without the other has a live blind spot.
     write-up of this said the widgets were "claimed at option level, which the
     oracle does not read" -- that reason was itself wrong, and outer-review pass 2
     disproved it; see the option-level finding below.)
-  - v3 adds `_GUTTER_MIN_DISTINCT`: a gutter numbers successive rows, so its
-    tokens vary (`2a`, `3a`, `4a`); a legend column repeats one token.
+  - v3 asked for ">= 2 distinct texts" in a column -- but computed that over the
+    column's padded BAND, not its members, so one unrelated token near a legend
+    supplied the variety and rescued it (four identical `'1'`s plus a stray `'7'`
+    -> all five accepted). Outer-review pass 1 caught it.
+  - **v4 (shipped)**: clustering carries each token's text, and the rule is
+    UNIQUENESS -- no text repeats within a column. Uniqueness rather than a
+    minimum count is what closes the rescue: a neighbour can join a cluster and
+    add variety, but it cannot remove a repeat.
+
+  The rule is **per column, never per page**. f1040 prints each line number in
+  BOTH the left gutter and the amount column, so texts do repeat across a page
+  (`2a`, `8`, `9` twice on page 1; up to three times on page 2). Hoisting the
+  check to page scope would reject both gutters and take the tool from 20 findings
+  to 0 -- pinned by `test_uniqueness_is_a_PER_COLUMN_rule_not_a_per_page_one`,
+  which asserts both halves so the distinction cannot rot.
 
   Worth recording what did NOT work, because it looks obvious: **leftmost-column
   wins is wrong.** f1040 has TWO legitimate gutters -- the left row numbers at
@@ -252,13 +265,13 @@ option, diff the two implementations -- rather than to write it more carefully.
 
 ## Verification
 
-- 48 tests across the two tools plus the eval-sweep pins.
-- Full suite: 2298 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
+- 47 tests across the two tools (27 oracle, 20 overlay) plus the eval-sweep pins.
+- Full suite: 2300 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
   `closeout_prep.py` runs only the latter). The count is lower than this branch's
   earlier 2339 because `origin/dev` deleted `tests/test_harness_ledger.py`
-  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 11 new = 2298.
+  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 13 new = 2300.
 - The oracle's f1040 findings and the fresh-extraction count (5) are unchanged by
-  the v3 gutter rule -- 20 findings / 52 checked on the shipped kit, exactly the
+  the v4 gutter rule -- 20 findings / 52 checked on the shipped kit, exactly the
   pre-fix baseline, with the legend numerals now rejected.
 - The overlay's multiclaim verdict was checked against **live `lint_schema`** on
   five shapes (two different fields; two options of one field; an option valued

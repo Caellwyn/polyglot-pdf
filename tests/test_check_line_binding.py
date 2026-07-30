@@ -232,22 +232,40 @@ def test_collect_markers_rejects_a_column_that_repeats_a_token():
 
 
 @needs_f1040
-def test_every_real_gutter_has_all_distinct_markers():
-    """The uniqueness rule is safe because it matches how real gutters are built:
-    measured across every page of the shipped kits, a genuine gutter column has
-    distinct == n, while f1040's two legend columns are 1 distinct of 3. Pinned so
-    a future form that violates it fails loudly here rather than silently losing
-    its gutter."""
+def test_uniqueness_is_a_PER_COLUMN_rule_not_a_per_page_one():
+    """Pins the SCOPE of the uniqueness rule, because the two readings differ on
+    real data and only one of them works.
+
+    Per column: a gutter numbers successive rows, so no text repeats -- true, and
+    what the code enforces. Per page: FALSE on f1040, which prints each line
+    number in BOTH the left gutter and the amount column ('2a', '8', '9' twice on
+    page 1; up to three times on page 2). Hoisting the check to page scope would
+    reject both real gutters and take the tool from 20 findings to 0.
+    """
     import fitz
+    from collections import Counter
+
     doc = fitz.open(str(_F1040_PDF))
+    saw_page_level_repeat = False
     for page in doc:
         markers = clb.collect_markers(page)
+        if not markers:
+            continue
+        # Per-column: must hold everywhere.
         by_col: dict[int, list[str]] = {}
         for text, x1, _y0, _y1 in markers:
             by_col.setdefault(round(x1 / 3), []).append(text)
-        for col, texts in by_col.items():
+        for texts in by_col.values():
             assert len(set(texts)) == len(texts), \
                 f"accepted a gutter column with a repeated marker: {texts}"
+        # Per-page: must NOT be assumed -- record that it genuinely fails.
+        if any(n > 1 for n in Counter(t for t, *_ in markers).values()):
+            saw_page_level_repeat = True
+
+    assert saw_page_level_repeat, (
+        "f1040 is expected to repeat marker texts across columns on a page; if "
+        "this ever stops being true, the per-column vs per-page distinction in "
+        "collect_markers is no longer load-bearing and the comment should change")
 
 
 def test_collect_markers_requires_a_recurring_column():

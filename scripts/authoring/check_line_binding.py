@@ -206,11 +206,15 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
     for col in columns:
         if len(col) < _GUTTER_MIN_COL:
             continue
-        # Condition 2: a gutter numbers rows, and a row number appears ONCE per
-        # page -- so its tokens are all distinct. A legend prints the same token
-        # on every row it labels. Requiring uniqueness rather than a minimum
-        # count is what makes this robust: a nearby unrelated token can join the
-        # cluster and supply "variety", but it cannot remove a repeat.
+        # Condition 2: a gutter numbers successive rows, so no text repeats
+        # WITHIN ONE COLUMN. Scope matters -- a text may well repeat across the
+        # PAGE, because f1040 prints each line number in both the left gutter and
+        # the amount column ('2a', '8', '9' all appear twice on page 1, and up to
+        # three times on page 2). Hoisting this check to page scope would reject
+        # both real gutters and take f1040 from 20 findings to 0.
+        # Requiring uniqueness rather than a minimum distinct count is what makes
+        # the rule robust: a nearby unrelated token can join the cluster and
+        # supply "variety", but it cannot remove a repeat.
         # Measured on every page of the three real kits: every genuine gutter has
         # distinct == n (f1040 p1 x=100.8 4/4, x=105.3 7/7, x=495.4 19/19; p2
         # x=100.8 23/23, x=497.6 22/22; w7 x=123.1 7/7), while both f1040 legend
