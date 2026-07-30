@@ -98,12 +98,83 @@ def test_recovery_level_1_forbids_filling_before_answer():
     assert "Do not fill or change any field until the user answers" in prompt
 
 
+# --- ARTICULATION / diction rules (bd polyglot-pdf-e1x9) ----------------------
+# The voice model slurred and mispronounced words. The DTI SI's SPEECH STYLE
+# block already covered PACE (slow) and per-character read-back; these rules add
+# ARTICULATION, which it did not cover. Pinned on BOTH SIs -- USE_DTI=true is the
+# production default, but the legacy path must not silently regress.
+
+def _both_sis():
+    s = _settings()
+    return (
+        ("DTI_SYSTEM_INSTRUCTION", s.DTI_SYSTEM_INSTRUCTION),
+        ("SYSTEM_INSTRUCTION", s.SYSTEM_INSTRUCTION),
+    )
+
+
+def test_both_sis_carry_articulation_rule():
+    for name, si in _both_sis():
+        assert "ARTICULATION" in si, f"{name} lost the articulation block"
+        # Word endings are the specific casualty of slurred speech.
+        assert "word ENDINGS their full sound" in si, name
+
+
+def test_both_sis_forbid_slurring_and_rushing():
+    for name, si in _both_sis():
+        for phrase in ("slur", "swallow syllables", "rush through a sentence"):
+            assert phrase in si, f"{name} missing: {phrase}"
+
+
+def test_both_sis_require_clause_pauses():
+    for name, si in _both_sis():
+        assert "pause between clauses" in si, name
+
+
+def test_both_sis_forbid_fillers_and_casual_contractions():
+    # Simulating casual/disfluent speech is a known audio-degradation trigger.
+    for name, si in _both_sis():
+        assert "no filler or hesitation sounds" in si, name
+        assert "gonna" in si, name
+
+
+def test_articulation_applies_in_every_language():
+    # 17+ session languages: a rule pinned to English only would not travel.
+    for name, si in _both_sis():
+        assert "This applies in EVERY session language." in si, name
+
+
+def test_both_sis_carry_the_slower_pace_target():
+    # Tester feedback 2026-07-30: still rushing. A concrete relative target
+    # beats piling on intensifiers, which saturate.
+    for name, si in _both_sis():
+        assert "ten percent slower" in si, name
+        assert "err on the side of too slow" in si, name
+
+
+def test_both_sis_forbid_accelerating_mid_sentence():
+    # "Rushing" is typically starting well and speeding up, so the sustain
+    # rule is pinned separately from the target pace itself.
+    for name, si in _both_sis():
+        assert "from the FIRST word to the LAST" in si, name
+        assert "do not start slowly and then speed up" in si, name
+
+
+def test_articulation_does_not_contradict_the_slow_pace_rule():
+    # The articulation rules EXTEND the existing SPEECH STYLE block; they must
+    # not have displaced the pace rule that shares it.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "SPEECH STYLE" in si
+    assert "Speak SLOWLY and calmly in every language" in si
+    assert si.index("SPEECH STYLE") < si.index("ARTICULATION")
+
+
 # --- ASCII-only guard for every constant this change touched (scar #6) --------
 
 def test_touched_constants_are_ascii_only():
     s = _settings()
     for name in (
         "DTI_SYSTEM_INSTRUCTION",
+        "SYSTEM_INSTRUCTION",
         "INITIATING_MESSAGE",
         "RESUME_INITIATING_MESSAGE",
         "RECOVERY_PROMPT_LEVEL_1",
