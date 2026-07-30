@@ -197,10 +197,10 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
     except the name lookup is now suffix-aware too (a strict superset: it can
     fill fields whose leaf-name claim the old exact match missed).
 
-    Option-level: for EVERY option, resolve its widget and take that rect --
-    the deterministic rect wins unconditionally (bd polyglot-pdf-icyi). This
-    used to skip any option already carrying a "usable" position, which is
-    exactly how a plausible-but-wrong model rect survived --
+    Option-level: for EVERY option, resolve its widget and take that rect -- the
+    deterministic rect wins unconditionally (bd polyglot-pdf-icyi; this used to
+    skip any option already carrying a "usable" position, which is exactly how a
+    plausible-but-wrong model rect survived). Resolution order:
       a. option.pdf_field_name present: look up its widget group. A single
          widget wins outright; several widgets are disambiguated by
          option.pdf_on_value (matched against each widget's on_value), else the

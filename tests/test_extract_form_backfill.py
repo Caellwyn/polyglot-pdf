@@ -13,8 +13,10 @@ option's own widget rect is resolved the same way (name lookup is suffix-aware,
 matching schema_lint._match_dump_names' exact-then-dot-boundary-suffix
 convention), disambiguated by pdf_on_value when a name covers several widgets,
 or resolved purely by pdf_on_value for the shared-field-name radio/combo-group
-shape. `_backfill_positions` now returns
-{"fields_filled", "options_filled", "unmatched"} instead of a bare field count.
+shape. `_backfill_positions` returns a mapping rather than a bare field count --
+{"fields_filled", "options_filled", "unmatched"} at that point, and a fourth key
+"model_pages_normalized" since bd polyglot-pdf-icyi (below), on EVERY return
+path including the dump-unreadable one.
 
 bd polyglot-pdf-icyi INVERTS the priority (maintainer decision 2026-07-29): the
 deterministic dump rect now wins UNCONDITIONALLY wherever a widget resolves, at

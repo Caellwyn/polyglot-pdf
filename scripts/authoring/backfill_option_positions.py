@@ -57,9 +57,11 @@ sys.modules.setdefault("extract_form", _ef)
 _spec.loader.exec_module(_ef)
 
 
-# Module-level singleton so two _position_map() calls compare equal on it. A
-# per-call object() never would, and a marker STRING could collide with real
-# data; this cannot (bd polyglot-pdf-8i9u).
+# Module-level singleton so two _position_map() calls compare equal on it (a
+# per-call object() never would). A NUL-prefixed marker rather than a plain
+# string so it cannot realistically appear in a schema; a pdf_position is a dict
+# or absent, so any string there is already invalid against Optional[PDFPosition]
+# (bd polyglot-pdf-8i9u).
 _ABSENT = "\x00<pdf_position absent>"
 
 
