@@ -13,7 +13,7 @@
 //   - the accessible name is present (or correctly suppressed when decorative).
 import { render, cleanup } from '@testing-library/react'
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { Sol, SOL_CSS } from './Sol'
+import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from './Sol'
 import type { SolState } from './solState'
 
 afterEach(cleanup)
@@ -198,49 +198,255 @@ describe('Sol reduced-motion handling', () => {
   })
 })
 
+describe('listening/speaking swap (maintainer feedback 2026-07-29)', () => {
+  // Pins WHICH shape each state uses, not just that amplitude reaches the SVG
+  // (the "reads OUTPUT/MIC energy" tests above cover that). Without this, an
+  // accidental re-swap, partial revert, or copy-paste slip between the two
+  // adjacent CSS blocks would pass the full suite silently -- there was
+  // previously nothing here pinning listening to the halo shape and speaking to
+  // the ray-breathing shape, unlike the connecting redesign below.
+  function ruleFor(state: string, selector: string): string {
+    const m = SOL_CSS.match(
+      new RegExp(`\\.sol\\[data-state="${state}"\\]\\s*\\.${selector}\\s*\\{[^}]*\\}`)
+    )
+    expect(m).toBeTruthy()
+    return m![0]
+  }
+
+  it('listening drives the HALO (corona/ring/ring2), not ray length', () => {
+    expect(ruleFor('listening', 'corona')).toMatch(/var\(--eb\)/)
+    expect(ruleFor('listening', 'ring')).toMatch(/var\(--eb\)/)
+    expect(ruleFor('listening', 'ring2')).toMatch(/var\(--eb\)/)
+    // rayscale must NOT be amplitude-driven for listening -- that is speaking's.
+    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="listening"\]\s*\.rayscale/)
+  })
+
+  it('listening nods the disc via --e/--eb, same shape speaking used to own', () => {
+    const disc = ruleFor('listening', 'disc')
+    expect(disc).toMatch(/var\(--e\)/)
+    expect(disc).toMatch(/var\(--eb\)/)
+  })
+
+  it('speaking drives RAY LENGTH (rayscale) via --e, not the halo', () => {
+    expect(ruleFor('speaking', 'rayscale')).toMatch(/var\(--e\)/)
+    // .disc and BOTH halo rings must NOT exist for speaking -- those are
+    // listening's now.
+    //
+    // `ring2?` not `ring\b`: \b does NOT match between `g` and `2` (both word
+    // characters), so the earlier `\.ring\b` was blind to `.ring2` entirely --
+    // re-inserting the pre-swap `.sol[data-state="speaking"] .ring2` rule (i.e.
+    // speaking driving listening's second halo ring, the exact "wrong organ"
+    // this block exists to catch) left the whole suite green. Mutation-verified
+    // both before and after the fix.
+    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="speaking"\]\s*\.disc\s*\{/)
+    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="speaking"\]\s*\.ring2?\s*\{/)
+  })
+
+  it('listening rays are FLAT -- amplitude belongs to its halo, not its rays', () => {
+    // The mirror of the hole above. Nothing pinned listening's ray opacity, so
+    // reverting it to the pre-swap `calc(.72 + var(--eb) * .28)` -- putting the
+    // ray-breathing back on listening, half of the maintainer's requested swap
+    // undone -- also passed the full suite.
+    expect(ruleFor('listening', 'rays')).not.toMatch(/var\(--e/)
+    // And speaking's rays SHOULD be amplitude-driven, the other half of the swap.
+    expect(ruleFor('speaking', 'rays')).toMatch(/var\(--eb\)/)
+  })
+
+  it('speaking corona scales with --e but is not amplitude-opacity-driven (that is listening\'s halo swell)', () => {
+    const corona = ruleFor('speaking', 'corona')
+    expect(corona).toMatch(/var\(--e\)/)
+    expect(corona).not.toMatch(/var\(--eb\)/)
+  })
+
+  it('both states freeze ray rotation -- neither should spin like thinking', () => {
+    expect(SOL_CSS).toMatch(/\.sol\[data-state="listening"\]\s*\.rayA,\s*\.sol\[data-state="listening"\]\s*\.rayB\s*\{\s*animation-play-state:\s*paused/)
+    expect(SOL_CSS).toMatch(/\.sol\[data-state="speaking"\]\s*\.rayA,\s*\.sol\[data-state="speaking"\]\s*\.rayB\s*\{\s*animation-play-state:\s*paused/)
+  })
+})
+
 describe('Sol stylesheet invariants', () => {
   // Asserted against the exported CSS text because these are cascade facts no
   // jsdom render can observe (jsdom does not run animations or resolve
   // animated-vs-normal declaration precedence).
 
-  it('the connecting corona pulses in SIZE ONLY, never via sol-pulse', () => {
-    // sol-pulse animates opacity as well as transform, and an animated
-    // declaration outranks a normal one -- so borrowing it here silently voids
-    // the corona's `opacity: .5` and swings it 0.78-1.0, BRIGHTER than idle's
-    // steady .85. That is the exact bug this pins: the state whose whole brief
-    // is "quietly waiting" became the loudest one Sol has.
-    const coronaRule = SOL_CSS.match(
-      /\.sol\[data-state="connecting"\]\s*\.corona\s*\{[^}]*\}/
-    )
-    expect(coronaRule).toBeTruthy()
-    expect(coronaRule![0]).toContain('sol-pulse-size')
-    expect(coronaRule![0]).not.toMatch(/animation:\s*sol-pulse\s/)
-    expect(coronaRule![0]).toContain('opacity: .5')
+  // sol-grow-disc / sol-grow-corona are written as `@keyframes name { 0% {
+  // ...} 50% {...} 100% {...} }` -- a run of nested `{...}` blocks closed by a
+  // final `} }`. Extracted with a small brace-depth walk rather than a single
+  // regex, since a naive `[^}]*` or non-greedy `.*?\}` either stops at the
+  // FIRST inner `}` or (worse) spills into unrelated rules later in the
+  // stylesheet -- which is exactly what happened the first time this was
+  // written and made these tests read a value from a different rule entirely.
+  function extractKeyframes(css: string, name: string): string {
+    const start = css.indexOf(`@keyframes ${name}`)
+    expect(start).toBeGreaterThanOrEqual(0)
+    const openBrace = css.indexOf('{', start)
+    let depth = 0
+    for (let i = openBrace; i < css.length; i++) {
+      if (css[i] === '{') depth++
+      else if (css[i] === '}') {
+        depth--
+        if (depth === 0) return css.slice(start, i + 1)
+      }
+    }
+    throw new Error(`unterminated @keyframes ${name}`)
+  }
+
+  it('connecting grows the disc from tiny (10%) to full size (100%)', () => {
+    // Parse the actual scale values out of the keyframe rather than eyeballing
+    // the source text -- a transcription slip (e.g. .1 vs 1.1) would read as
+    // plausible CSS and pass a substring check.
+    const kf = extractKeyframes(SOL_CSS, 'sol-grow-disc')
+    const scales = [...kf.matchAll(/scale\((\.?\d*\.?\d+)\)/g)].map(m => parseFloat(m[1]))
+    expect(scales.length).toBeGreaterThan(0)
+    expect(Math.min(...scales)).toBeCloseTo(0.1, 5)
+    expect(Math.max(...scales)).toBeCloseTo(1, 5)
   })
 
-  it('sol-pulse-size animates transform only (no opacity to override with)', () => {
-    const kf = SOL_CSS.match(/@keyframes sol-pulse-size\s*\{[\s\S]*?\}\s*\}/)
-    expect(kf).toBeTruthy()
-    expect(kf![0]).not.toContain('opacity')
+  it('connecting SNAPS back to tiny rather than easing symmetrically', () => {
+    // The snap is the whole point (maintainer feedback 2026-07-29): a smooth
+    // in-and-out reads as calm breathing, which is too settled for "trying to
+    // start". A snap needs the full-size scale held almost to the end of the
+    // cycle, then dropped in a step too small to perceive as motion.
+    const kf = extractKeyframes(SOL_CSS, 'sol-grow-disc')
+    const steps = [...kf.matchAll(/(\d+(?:\.\d+)?)%\s*\{\s*transform:\s*scale\((\.?\d*\.?\d+)\)/g)]
+      .map(m => ({ pct: parseFloat(m[1]), scale: parseFloat(m[2]) }))
+    expect(steps.length).toBeGreaterThanOrEqual(3)
+    // Find the last step still at full size and the first step back at the
+    // small size; the gap between their percentages must be small (a snap),
+    // not spread across most of the cycle (which would be a smooth ease).
+    const lastFull = Math.max(...steps.filter(s => s.scale > 0.9).map(s => s.pct))
+    const firstSmall = Math.min(...steps.filter(s => s.pct > lastFull && s.scale < 0.5).map(s => s.pct))
+    expect(firstSmall - lastFull).toBeLessThan(1)
   })
 
-  it('connecting stays dimmer than idle -- the whole point of the state', () => {
-    // Parse BOTH values and compare them numerically. Asserting only idle's .85
-    // (and leaving the relation in a comment) would let connecting be set to
-    // .95 and still pass -- reintroducing the exact "connecting is brighter than
-    // idle" inversion this round exists to prevent.
+  it('connecting stays dimmer than idle at its brightest point', () => {
+    // Parse BOTH values numerically rather than asserting one side and leaving
+    // the comparison in a comment -- the round-2 lesson from the corona-
+    // inversion bug: a test that only checks idle's value would let connecting
+    // be set brighter and still pass.
     const opacityOf = (rule: string) => {
       const m = rule.match(/opacity:\s*(\.?\d*\.?\d+)/)
       expect(m).toBeTruthy()
       return parseFloat(m![1])
     }
     const idleRule = SOL_CSS.match(/\.sol \.corona\s*\{[^}]*\}/)![0]
-    const connectingRule = SOL_CSS.match(
-      /\.sol\[data-state="connecting"\]\s*\.corona\s*\{[^}]*\}/
-    )![0]
-
     const idle = opacityOf(idleRule)
-    const connecting = opacityOf(connectingRule)
-    expect(connecting).toBeLessThan(idle)
+
+    const kf = extractKeyframes(SOL_CSS, 'sol-grow-corona')
+    const opacities = [...kf.matchAll(/opacity:\s*(\.?\d*\.?\d+)/g)].map(m => parseFloat(m[1]))
+    expect(opacities.length).toBeGreaterThan(0)
+    expect(Math.max(...opacities)).toBeLessThan(idle)
+  })
+})
+
+describe('CSS template-literal hygiene', () => {
+  // SOL_CSS and SOL_PLACEMENT_CSS are template literals, so a backtick anywhere
+  // inside them -- including inside a /* */ comment -- terminates the string and
+  // breaks the esbuild transform with a misleading error pointing at whatever
+  // word follows. This has happened TWICE while editing those comments (both
+  // times from writing a CSS property name in backticks out of markdown habit),
+  // each time turning the whole frontend red. Cheaper to assert than to
+  // rediscover.
+  it('neither CSS export contains a backtick or a template interpolation', () => {
+    for (const [name, css] of [['SOL_CSS', SOL_CSS], ['SOL_PLACEMENT_CSS', SOL_PLACEMENT_CSS]] as const) {
+      expect(css.includes('`'), `${name} contains a backtick`).toBe(false)
+      expect(css.includes('${'), `${name} contains a template interpolation`).toBe(false)
+    }
+  })
+
+  it('both exports are non-empty (a terminated literal would truncate them)', () => {
+    // The failure mode is silent truncation as much as it is a parse error, so
+    // pin a floor well below current size but far above "a few broken rules".
+    expect(SOL_CSS.length).toBeGreaterThan(5000)
+    expect(SOL_PLACEMENT_CSS.length).toBeGreaterThan(500)
+  })
+})
+
+describe('reduced-motion legibility pins', () => {
+  // The @media (prefers-reduced-motion: reduce) block is the SOLE legibility
+  // guarantee for the four motion-dependent states, and it had zero coverage --
+  // which is exactly why a regression shipped in it: the `connecting` disc pin
+  // was mechanically updated to match the animation's new 10% low point, making
+  // it a ~1.6px speck at the 40px status row and erasing the only cue that
+  // distinguishes `connecting` from `idle` when the clock is stopped.
+  //
+  // The keyframe low point and the static pin answer different questions --
+  // "where does the motion start" vs "what stays legible without motion" -- so
+  // copying one from the other is the bug this block guards.
+  function reducedMotionBlock(): string {
+    const start = SOL_CSS.indexOf('@media (prefers-reduced-motion: reduce)')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const open = SOL_CSS.indexOf('{', start)
+    let depth = 0
+    for (let i = open; i < SOL_CSS.length; i++) {
+      if (SOL_CSS[i] === '{') depth++
+      else if (SOL_CSS[i] === '}') {
+        depth--
+        if (depth === 0) return SOL_CSS.slice(start, i + 1)
+      }
+    }
+    throw new Error('unterminated reduced-motion media block')
+  }
+
+  // Disc radius and viewBox are fixed by the SVG geometry; a scale below this
+  // stops being "a smaller disc" and becomes "no disc".
+  const DISC_R = 41
+  const VIEWBOX = 200
+  const discPx = (scale: number, size: number) => 2 * DISC_R * scale * (size / VIEWBOX)
+
+  /**
+   * Every size Sol is actually MOUNTED at in shipped code -- grep `size={` at the
+   * three <Sol> call sites: 40 (desktop status row), 56 (mobile FAB), 34 (mobile
+   * expanded panel). 34 is the one that matters and the one an earlier version of
+   * this guard omitted: checking only 40 and 56 left a band (scale .488-.574)
+   * where the floor passed while the real 34px instance rendered under 8px --
+   * the exact failure the floor exists to catch. 120px is the dev preview only
+   * and is deliberately NOT here; a harness size must not widen the guard.
+   */
+  const SHIPPED_SIZES = [34, 40, 56]
+  const MIN_LEGIBLE_PX = 8
+
+  it('every motion-dependent state has a named static pin', () => {
+    const block = reducedMotionBlock()
+    // Each of these four states is otherwise distinguishable ONLY by motion.
+    expect(block).toMatch(/\[data-state="speaking"\]\s*\.rayscale/)
+    expect(block).toMatch(/\[data-state="thinking"\]\s*\.twinkle/)
+    expect(block).toMatch(/\[data-state="listening"\]\s*\.ring/)
+    expect(block).toMatch(/\[data-state="connecting"\]\s*\.disc/)
+  })
+
+  it('the connecting disc stays a VISIBLE disc, not a speck', () => {
+    const block = reducedMotionBlock()
+    const m = block.match(
+      /\[data-state="connecting"\]\s*\.disc\s*\{[^}]*transform:\s*scale\((\.?\d*\.?\d+)\)/
+    )
+    expect(m).toBeTruthy()
+    const scale = parseFloat(m![1])
+    // Must be clearly smaller than idle's full-size disc...
+    expect(scale).toBeLessThan(1)
+    // ...but still legible at EVERY shipped size, including the 34px mobile
+    // panel. 10% -- the animation's low point -- yields 1.4px at 34 and fails.
+    for (const size of SHIPPED_SIZES) {
+      expect(discPx(scale, size)).toBeGreaterThan(MIN_LEGIBLE_PX)
+    }
+  })
+
+  it('speaking rays stay pinned LONGER than idle rest length', () => {
+    const block = reducedMotionBlock()
+    const m = block.match(
+      /\[data-state="speaking"\]\s*\.rayscale\s*\{\s*transform:\s*scale\((\.?\d*\.?\d+)\)/
+    )
+    expect(m).toBeTruthy()
+    // Idle leaves .rayscale untransformed (scale 1), so the pin must exceed 1 to
+    // read as "extended" rather than "same as idle".
+    expect(parseFloat(m![1])).toBeGreaterThan(1)
+  })
+
+  it('listening keeps a visible halo ring (its only non-motion cue)', () => {
+    const block = reducedMotionBlock()
+    const m = block.match(/\[data-state="listening"\]\s*\.ring\s*\{\s*opacity:\s*(\.?\d*\.?\d+)/)
+    expect(m).toBeTruthy()
+    // Base .ring opacity is 0; the pin must actually make it visible.
+    expect(parseFloat(m![1])).toBeGreaterThan(0.3)
   })
 })

@@ -15,23 +15,34 @@
  * The state grammar, and why each state looks the way it does:
  *
  *   idle       Warm, awake, barely breathing. Rays turn very slowly.
- *   connecting Coming up, or recovering. The disc pulses gently while the rays
- *              stay faint and still: alive-but-waiting. Deliberately distinct
- *              from idle -- a reconnecting session must never look like one
- *              that never started (bd polyglot-pdf-bxng), and on the collapsed
- *              mobile FAB this avatar is the ONLY status the user can see.
- *   listening  The rays STOP DEAD and breathe in length with mic energy.
- *              Stillness is the correct grammar for attention -- a thing that
- *              keeps moving while you talk looks busy with something else.
+ *   connecting Coming up, or recovering. The disc grows from tiny to full size
+ *              and then SNAPS back to tiny, repeating at ~1s -- reading as
+ *              "trying to start" rather than a calm heartbeat. Rays stay faint
+ *              and still throughout: growth is the only cue. Deliberately
+ *              distinct from idle -- a reconnecting session must never look
+ *              like one that never started (bd polyglot-pdf-bxng), and on the
+ *              collapsed mobile FAB this avatar is the ONLY status the user can
+ *              see. In practice most connects resolve in under a second, so
+ *              this usually reads as "snapping into being" rather than as a
+ *              visible cycle -- the cycle itself only becomes visible on a slow
+ *              or failing connection, which is exactly when it is needed most.
+ *   listening  The rays STOP DEAD; the disc only nods along and the halo
+ *              carries the visible amplitude instead. Stillness is the correct
+ *              grammar for attention -- a thing that keeps moving while you
+ *              talk looks busy with something else.
  *   thinking   Rays turn (16s/rev, NOT 1s -- a fast spinner reads as "waiting",
  *              and the user has done enough waiting) and light catches on them.
- *   speaking   The halo does the talking: two rings swell out of the sphere and
- *              fade. A shape crossing empty space stays visible at 28px, where a
- *              few percent of scale on the disc does not.
+ *   speaking   The rays breathe in length with the AI's voice while rotation
+ *              stays frozen -- the more visually active of the two turns, since
+ *              this is the one where the assistant is doing the talking.
  *   paused     Crescent moon + drifting stars. The user chose this; all is well.
  *   offline    Sol LEAVES. What is left is the cloud he lives in, crossed out.
  *              The only state allowed to be unreassuring, because it is the only
  *              one where something is actually wrong.
+ *
+ * (Listening/speaking swapped 2026-07-29, maintainer feedback: the ray-breathing
+ * shape read as more visually active than the halo-nod shape, which was backwards
+ * -- speaking, the louder turn, should carry the louder-looking animation.)
  *
  * This file is the single source of the SVG + CSS. The two overlays
  * (VoiceOverlay / VoiceOverlayMobile) are hand-duplicated of each other, so
@@ -61,23 +72,21 @@ import { SOL_STATE_LABEL } from './solState'
 const FAST_ALPHA = 0.14
 const SLOW_ALPHA = 0.075
 
-/**
- * The amplitude swing is capped deliberately: the disc moves ~6% and brightens
- * ~7%, nowhere near a flash hazard, which matters a great deal on a large bright
- * shape. The visible work is done by the rings, which cost no luminance.
- */
+/* The flash-hazard cap on listening's disc scale/brightness is documented where
+   it applies, next to the .disc rule in the LISTENING block below. */
 
 export interface SolProps {
 	/** Which of the seven states to render. */
 	state: SolState
 	/**
 	 * Live MIC amplitude, 0-100 (the capture worklet's smoothed RMS scale).
-	 * Drives the listening ray-breathing. Ignored in states that do not use it.
+	 * Drives the listening halo (corona + rings). Ignored in states that do not
+	 * use it.
 	 */
 	energy?: number
 	/**
 	 * Live AI-OUTPUT amplitude, 0-100 (same scale), pulled per frame. Drives the
-	 * speaking halo.
+	 * speaking ray-breathing.
 	 *
 	 * This is a separate input on purpose: during the assistant's turn the mic is
 	 * near-silent, so feeding `energy` into the speaking state would leave it
@@ -200,8 +209,8 @@ export function Sol({
 			return
 		}
 		// Which voice are we visualising? Speaking reads the AI's output level;
-		// listening reads the mic. Using the mic for both would leave the speaking
-		// halo flat, since the user is silent while the assistant talks.
+		// listening reads the mic. Using the mic for both would leave speaking's
+		// ray-breathing flat, since the user is silent while the assistant talks.
 		const speaking = state === 'speaking'
 		let fast = 0
 		let slow = 0
@@ -422,33 +431,69 @@ export const SOL_CSS = `
 
 /* CONNECTING -- coming up, or recovering. A live-but-not-ready session must not
    look like a cold one (bd polyglot-pdf-bxng), and on the collapsed mobile FAB
-   Sol is the only status there is. So: the disc pulses gently -- a heartbeat,
-   clearly "something is happening" -- while the rays stay faint and still,
-   because nothing is being listened to or said yet. Reads as alive-but-waiting,
-   which is exactly what it is. */
+   Sol is the only status there is.
+   Redesigned on maintainer feedback 2026-07-29: the disc grows from tiny (10%)
+   up to full size (100%), then snaps straight back to tiny and repeats, ~1s a
+   cycle -- reading as "trying to start" rather than a calm heartbeat. The snap
+   (not a symmetric ease back down) is the point: a smooth in-and-out reads as
+   breathing, which is too settled for a state that has not connected yet. Rays
+   stay faint and still throughout, because nothing is being listened to or said
+   yet -- growth is the only cue.
+   In production this will often resolve in well under a second, so most users
+   will see at most one partial grow before the state flips to something else --
+   which is fine; it reads as "snapping into being" rather than as a stall, and
+   the animation only becomes visible AS a cycle on a slow or failing
+   connection, which is exactly when the user most needs the "still working"
+   signal. */
 .sol[data-state="connecting"] .rays { opacity: .3; }
 .sol[data-state="connecting"] .rayA,
 .sol[data-state="connecting"] .rayB { animation-play-state: paused; }
-/* The corona pulses in SIZE ONLY. It must not borrow sol-pulse, which also
-   animates opacity: an animated declaration outranks a normal one, so the .5
-   below would never apply and the corona would swing 0.78-1.0 -- BRIGHTER than
-   idle's steady .85, turning the quietest state into the most eye-catching one.
-   It would also have jumped to .5 under reduced motion (where the animation is
-   killed and the declaration finally lands), so the same state rendered at two
-   very different brightnesses depending on a user preference. */
-.sol[data-state="connecting"] .corona { opacity: .5; animation: sol-pulse-size 1.9s ease-in-out infinite; }
-.sol[data-state="connecting"] .disc { animation: sol-pulse 1.9s ease-in-out infinite; }
-@keyframes sol-pulse { 0%, 100% { transform: scale(.94); opacity: .78; }
-  50% { transform: scale(1.04); opacity: 1; } }
-@keyframes sol-pulse-size { 0%, 100% { transform: scale(.94); }
-  50% { transform: scale(1.04); } }
+/* No normal opacity declaration here, on purpose. sol-grow-corona animates
+   opacity (.2-.6), and an animation-origin value outranks an author-normal one,
+   so a static opacity would be dead while animating -- and under reduced motion
+   the pin further down (.35) wins instead. A never-applied declaration sitting
+   next to an opacity-animating keyframe is exactly the shape that hid the
+   original brighter-than-idle inversion, so it is not recreated. The keyframe's
+   own ceiling (.6) stays below idle's .85, pinned numerically in Sol.test.tsx. */
+.sol[data-state="connecting"] .corona { animation: sol-grow-corona 1s linear infinite; }
+.sol[data-state="connecting"] .disc { animation: sol-grow-disc 1s linear infinite; }
+/* The 99.9% hold is deliberate: without a near-instant final step the browser
+   interpolates smoothly from 100% back to 10% across the keyframe boundary,
+   turning the snap into the same slow symmetric breathing this was designed to
+   avoid. Holding at full size until the very end of the cycle, then dropping in
+   under a frame, is what makes it read as a snap rather than a shrink. */
+@keyframes sol-grow-disc { 0% { transform: scale(.1); } 85% { transform: scale(1); }
+  99.9% { transform: scale(1); } 100% { transform: scale(.1); } }
+@keyframes sol-grow-corona { 0% { transform: scale(.1); opacity: .2; }
+  85% { transform: scale(1); opacity: .6; }
+  99.9% { transform: scale(1); opacity: .6; } 100% { transform: scale(.1); opacity: .2; } }
 
-/* LISTENING -- the rays stop dead, then breathe in length with your voice.
-   It listens with its rays. The disc holds perfectly still. */
-.sol[data-state="listening"] .rays { opacity: calc(.72 + var(--eb) * .28); }
+/* LISTENING -- the rays stop dead; the disc only nods along (~6%), and the halo
+   carries the visible amplitude instead (swapped with speaking on maintainer
+   feedback 2026-07-29: the ray-breathing read as MORE animated than the halo
+   nod, which is backwards -- speaking should be the louder-looking turn). It
+   still listens with its rays: they freeze the instant this state is entered,
+   which is the stillness cue that matters; they just no longer carry the
+   energy. */
+.sol[data-state="listening"] .rays { opacity: .95; }
 .sol[data-state="listening"] .rayA, .sol[data-state="listening"] .rayB { animation-play-state: paused; }
-.sol[data-state="listening"] .rayscale { transform: scale(calc(1 + var(--e) * .22 * var(--k))); }
-.sol[data-state="listening"] .corona { opacity: 1; transform: scale(calc(1 + var(--e) * .07)); }
+/* The disc scale/brightness here deliberately do NOT take the --k motion boost:
+   --k exists so RAYS and RINGS stay visible when the avatar shrinks (the FAB is
+   56px), but disc scale and brightness are the two capped quantities (~6% /
+   ~7%), and the cap is a safety property on a large bright shape -- multiplying
+   it by up to 2.4x on the FAB would put a bright orb at a ~13-17% throb. The
+   ring/corona below carry the amplitude at full --k boost instead; they cost no
+   luminance. */
+.sol[data-state="listening"] .disc { animation: none;
+  transform: scale(calc(1 + var(--e) * .055));
+  filter: brightness(calc(1 + var(--eb) * .07)); }
+.sol[data-state="listening"] .corona { opacity: calc(.45 + var(--eb) * .35);
+  transform: scale(calc(1 + var(--e) * .16 * var(--k))); }
+.sol[data-state="listening"] .ring { opacity: calc(.30 + var(--eb) * 1.7);
+  filter: drop-shadow(0 0 1.4px rgba(140,72,12,.62));
+  transform: scale(calc(1 + var(--e) * .23 * var(--k))); }
+.sol[data-state="listening"] .ring2 { opacity: calc(.12 + var(--eb) * .95);
+  transform: scale(calc(1 + var(--e) * .26 * var(--k))); }
 
 /* THINKING -- slow rotation plus sparkles. Sixteen seconds a revolution, not one. */
 .sol[data-state="thinking"] .rays { opacity: 1; }
@@ -460,26 +505,16 @@ export const SOL_CSS = `
 .sol[data-state="thinking"] .t4 { animation-delay: 1.5s; }
 .sol[data-state="thinking"] .t5 { animation-delay: .8s; }
 
-/* SPEAKING -- the halo carries the voice; the orb only nods along (~6%). */
-.sol[data-state="speaking"] .rays { opacity: .95; }
-.sol[data-state="speaking"] .rayA { animation-duration: 26s; }
-.sol[data-state="speaking"] .rayB { animation-duration: 38s; }
-/* The orb only nods along, and deliberately does NOT take the --k boost: --k
-   exists so the RAYS and RINGS stay visible when the avatar shrinks, but disc
-   scale and brightness are the two capped quantities (~6% / ~7%), and the cap
-   is a safety property on a large bright shape -- multiplying it by 2.4 on the
-   FAB would put a bright orb at a 13% throb. The halo carries the amplitude
-   instead; it costs no luminance. */
-.sol[data-state="speaking"] .disc { animation: none;
-  transform: scale(calc(1 + var(--e) * .055));
-  filter: brightness(calc(1 + var(--eb) * .07)); }
-.sol[data-state="speaking"] .corona { opacity: calc(.45 + var(--eb) * .35);
-  transform: scale(calc(1 + var(--e) * .16 * var(--k))); }
-.sol[data-state="speaking"] .ring { opacity: calc(.30 + var(--eb) * 1.7);
-  filter: drop-shadow(0 0 1.4px rgba(140,72,12,.62));
-  transform: scale(calc(1 + var(--e) * .23 * var(--k))); }
-.sol[data-state="speaking"] .ring2 { opacity: calc(.12 + var(--eb) * .95);
-  transform: scale(calc(1 + var(--e) * .26 * var(--k))); }
+/* SPEAKING -- rays hold near-full brightness and breathe in length with the
+   AI's voice (swapped with listening on maintainer feedback 2026-07-29: this is
+   the more visually active of the two organs, and speaking is the turn that
+   should read as louder/busier -- the assistant doing the talking). Rotation
+   still stays frozen; only ray length and corona respond to amplitude, so
+   speaking never looks like thinking's spin. */
+.sol[data-state="speaking"] .rays { opacity: calc(.72 + var(--eb) * .28); }
+.sol[data-state="speaking"] .rayA, .sol[data-state="speaking"] .rayB { animation-play-state: paused; }
+.sol[data-state="speaking"] .rayscale { transform: scale(calc(1 + var(--e) * .22 * var(--k))); }
+.sol[data-state="speaking"] .corona { opacity: 1; transform: scale(calc(1 + var(--e) * .07)); }
 
 /* PAUSED -- crescent moon and drifting stars. Sleep with no letters in it. */
 .sol[data-state="paused"] .rays { opacity: 0; }
@@ -500,37 +535,51 @@ export const SOL_CSS = `
 
 /* Accessibility: kill all motion, keep every state legible.
 
-   Shape and colour carry the meaning; motion only garnishes it. But three
+   Shape and colour carry the meaning; motion only garnishes it. But four
    states lean on motion ALONE to tell themselves apart, so each needs a static
-   substitute or the avatar collapses to "a sun" for half the state machine:
+   substitute or the avatar collapses to "a sun" for half the state machine.
+   (Listening/speaking swapped 2026-07-29 along with their normal-motion rules,
+   above.)
 
-     listening  rays still + long        -> pinned FULLY EXTENDED (scale 1.18)
+     speaking   rays still + long        -> pinned FULLY EXTENDED (scale 1.18)
      thinking   rays rotating + twinkles -> twinkles pinned VISIBLE (static
                                             sparkles, the state's own motif)
-     speaking   halo swelling            -> halo pinned to a steady ring
-     connecting disc pulsing             -> disc pinned SMALL + faint rays
+     listening  halo swelling            -> halo pinned to a steady ring
+     connecting disc growing-and-snapping -> disc pinned SMALL + faint rays
 
    With those pinned, all seven read apart with the clock stopped:
    idle = short rays, full-size disc; connecting = shrunken dimmed disc, faintest
-   rays; listening = long rays, no sparkles; thinking = sparkles; speaking =
+   rays; speaking = long rays, no sparkles; thinking = sparkles; listening =
    halo ring; paused = moon; offline = cloud. */
 @media (prefers-reduced-motion: reduce) {
   .sol * { animation: none !important; }
   .sol .disc { transform: none !important; filter: none !important; }
   .sol .ring, .sol .ring2 { transform: none !important; }
-  /* Listening: the rays cannot breathe, so hold them at full extension --
+  /* Speaking: the rays cannot breathe, so hold them at full extension --
      visibly longer than idle's resting length. */
   .sol .rayscale { transform: none !important; }
-  .sol[data-state="listening"] .rayscale { transform: scale(1.18) !important; }
-  .sol[data-state="listening"] .rays { opacity: 1; }
+  .sol[data-state="speaking"] .rayscale { transform: scale(1.18) !important; }
+  .sol[data-state="speaking"] .rays { opacity: 1; }
   /* Thinking: the sparkles ARE the state's motif; show them steadily. */
   .sol[data-state="thinking"] .twinkle { opacity: .9; transform: none !important; }
-  /* Speaking: pin the halo to a steady visible ring rather than an
+  /* Listening: pin the halo to a steady visible ring rather than an
      amplitude-driven one -- otherwise the cue vanishes completely. */
-  .sol[data-state="speaking"] .ring { opacity: .55; }
-  .sol[data-state="speaking"] .ring2 { opacity: .35; }
-  /* Connecting: the pulse is the cue, so pin the disc small and dim -- still
-     obviously "not the resting state", without motion. */
-  .sol[data-state="connecting"] .disc { transform: scale(.94) !important; opacity: .8; }
+  .sol[data-state="listening"] .ring { opacity: .55; }
+  .sol[data-state="listening"] .ring2 { opacity: .35; }
+  /* Connecting: the grow-and-snap IS the cue, so pin the disc SHRUNKEN -- but
+     NOT at the animation's 10% low point, which is a 1.6px speck at the 40px
+     status row and 2.3px on the 56px FAB. That would erase the state's only
+     static cue and make connecting indistinguishable from idle for a
+     reduced-motion user (re-breaking bd polyglot-pdf-bxng on the collapsed FAB,
+     where Sol is the ONLY status there is). .72 reads as clearly smaller than
+     idle's full-size disc while staying a visible disc at every SHIPPED size --
+     10.0px / 11.8px / 16.5px at 34 / 40 / 56px, the three sizes the overlays
+     actually mount (34 is the mobile expanded panel, and the smallest; 120px is
+     the dev preview only). The keyframe low point and
+     the static pin answer different questions -- "where does the motion start"
+     vs "what stays legible when there is no motion" -- so they must be chosen
+     separately, not copied from each other. */
+  .sol[data-state="connecting"] .disc { transform: scale(.72) !important; opacity: .8; }
+  .sol[data-state="connecting"] .corona { transform: scale(.72) !important; opacity: .35; }
 }
 `

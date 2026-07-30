@@ -6,7 +6,7 @@
  * states can be eyeballed without a live Gemini session. Not part of any build
  * entry point that ships -- it is reachable only via /sol-preview.html in dev.
  */
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from '../shared/Sol'
 import { deriveSolState, SOL_STATE_LABEL } from '../shared/solState'
@@ -28,8 +28,20 @@ const SYLL: Array<[number, number, number]> = [
 ]
 const DUR = 5.1
 
-function useFakeEnergy(): number {
+/**
+ * Returns BOTH a re-rendering state value (for the `energy` prop, which
+ * listening/idle/etc. consume) and a stable getter reading the same value from
+ * a ref (for `getOutputEnergy`, which speaking consumes). Sol intentionally
+ * takes the two amplitude sources through different shapes -- one is threaded
+ * through React state, the other is a per-frame pull specifically so the
+ * component does not re-render 50x/sec -- so the harness has to supply both
+ * shapes or whichever state reads the getter goes static. That is exactly the
+ * bug this fixes: after the listening/speaking swap, speaking started reading
+ * getOutputEnergy, which this preview never supplied.
+ */
+function useFakeEnergy(): { energy: number; getEnergy: () => number } {
 	const [e, setE] = useState(0)
+	const ref = useRef(0)
 	useEffect(() => {
 		let raf = 0
 		const t0 = performance.now()
@@ -42,18 +54,77 @@ function useFakeEnergy(): number {
 					v = Math.max(v, amp * Math.sin(Math.PI * Math.pow(u, 0.7)))
 				}
 			}
+			ref.current = v
 			setE(v)
 			raf = requestAnimationFrame(tick)
 		}
 		raf = requestAnimationFrame(tick)
 		return () => cancelAnimationFrame(raf)
 	}, [])
-	return e
+	const getEnergy = useCallback(() => ref.current, [])
+	return { energy: e, getEnergy }
+}
+
+/**
+ * Re-scope the SHIPPED `@media (prefers-reduced-motion: reduce)` rules under a
+ * `.rm` class so the checkbox shows what a reduced-motion user actually sees.
+ *
+ * Why this exists: the toggle used to only do `animation: none`, which is NOT
+ * what the media query does. The query ALSO applies static pins (a shrunken
+ * connecting disc, extended speaking rays, visible listening ring, steady
+ * twinkles) -- and with animations merely stopped, `.disc` fell back to its
+ * normal declarations and rendered FULL SIZE. So the harness showed a full-size
+ * disc while a real user saw a 10%-scale speck: a 10x discrepancy, and precisely
+ * how an illegible pin shipped without anyone noticing by eye.
+ *
+ * Derived from SOL_CSS by text transform rather than hand-copied, so it cannot
+ * drift from the rules that actually ship.
+ */
+/** Stable zero getter -- a fresh arrow each render would restart Sol's loop. */
+const ZERO_ENERGY = () => 0
+
+function reducedMotionPreviewCss(css: string): string {
+	const marker = '@media (prefers-reduced-motion: reduce)'
+	const start = css.indexOf(marker)
+	if (start < 0) return ''
+	const open = css.indexOf('{', start)
+	let depth = 0
+	let end = -1
+	for (let i = open; i < css.length; i++) {
+		if (css[i] === '{') depth++
+		else if (css[i] === '}') {
+			depth--
+			if (depth === 0) { end = i; break }
+		}
+	}
+	if (end < 0) return ''
+	// Strip the @media wrapper, keeping just its body...
+	const body = css.slice(open + 1, end)
+	// ...then prefix every `.sol` selector with `.rm ` so it applies only inside
+	// the toggled subtree. The rules all start at `.sol`, so this is a safe
+	// textual re-scope; anything that stops matching that shape shows up as a
+	// visibly unstyled state rather than silently doing nothing.
+	return body.replace(/(^|\s|,)(\.sol)/g, '$1.rm $2')
 }
 
 function App() {
-	const energy = useFakeEnergy()
+	const { energy: liveEnergy, getEnergy: getLiveEnergy } = useFakeEnergy()
 	const [rm, setRm] = useState(false)
+
+	/*
+	 * Reproduce the SHIPPED reduced-motion JS guard, not just its CSS.
+	 *
+	 * Sol zeroes --e/--eb itself when `matchMedia('(prefers-reduced-motion:
+	 * reduce)')` matches (see the guard in shared/Sol.tsx). That check is blind to
+	 * this harness's class toggle -- it reads the OS preference -- so without
+	 * this the rAF loop keeps feeding amplitude and the CSS pins only cover what
+	 * the @media block names. Result: listening's corona kept swelling ~38% and
+	 * brightening .45 -> .80 with the box ticked, while a real reduced-motion
+	 * user sees it dead static. Same class of lie as the full-size disc this
+	 * toggle was just fixed for, only subtler -- so feed silence instead.
+	 */
+	const energy = rm ? 0 : liveEnergy
+	const getEnergy = rm ? ZERO_ENERGY : getLiveEnergy
 
 	// Real status strings the overlays can emit -> the state each maps to.
 	const statusProbe = [
@@ -84,21 +155,24 @@ function App() {
 				           background: linear-gradient(135deg,#7c3aed,#c084fc);
 				           display: flex; align-items: center; justify-content: center; }
 				.fab { position: relative; width: 56px; height: 56px; }
-				.rm .sol * { animation: none !important; }
 				table { border-collapse: collapse; font-size: 13px; background: #fff; }
 				td, th { border: 1px solid #e5e7eb; padding: 5px 10px; text-align: left; }
 			`}</style>
+			{/* The REAL reduced-motion rules, re-scoped under .rm -- static pins
+			    included, not just `animation: none`, so the checkbox shows what a
+			    reduced-motion user actually sees. */}
+			<style>{reducedMotionPreviewCss(SOL_CSS)}</style>
 			<div className={rm ? 'rm' : ''}>
 				<label style={{ display: 'block', marginBottom: 12 }}>
 					<input type="checkbox" checked={rm} onChange={e => setRm(e.target.checked)} />{' '}
-					simulate reduced motion (kills animations)
+					simulate reduced motion (kills animations AND applies the real static pins)
 				</label>
 
 				<h2>All {STATES.length} states -- panel size (40px), on white</h2>
 				<div className="row">
 					{STATES.map(s => (
 						<div className="cell" key={s} data-probe={s}>
-							<Sol state={s} energy={energy} size={40} />
+							<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={40} />
 							<div className="nm">{s}</div>
 						</div>
 					))}
@@ -108,7 +182,7 @@ function App() {
 				<div className="row">
 					{STATES.map(s => (
 						<div className="cell" key={s} style={{ width: 170 }}>
-							<Sol state={s} energy={energy} size={120} />
+							<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={120} />
 							<div className="nm">{s}</div>
 						</div>
 					))}
@@ -120,7 +194,7 @@ function App() {
 						<div key={s} style={{ textAlign: 'center' }}>
 							<div className="fabwrap">
 								<div className="fab">
-									<Sol state={s} energy={energy} size={56} className="vff-fab-sol" decorative />
+									<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={56} className="vff-fab-sol" decorative />
 								</div>
 							</div>
 							<div className="nm">{s}</div>
@@ -132,7 +206,7 @@ function App() {
 				<div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360 }}>
 					{STATES.map(s => (
 						<div className="statusrow" key={s}>
-							<Sol state={s} energy={energy} size={40} className="vff-sol" />
+							<Sol state={s} energy={energy} getOutputEnergy={getEnergy} size={40} className="vff-sol" />
 							<span style={{ fontWeight: 500 }}>{SOL_STATE_LABEL[s]}</span>
 						</div>
 					))}

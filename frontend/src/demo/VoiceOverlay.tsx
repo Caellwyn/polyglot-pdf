@@ -1455,9 +1455,9 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 	const solAudioManager = connectionManager?.getAudioManager?.() ?? null
 	const solSpeaking = useGeminiSpeaking(solAudioManager)
 	const solState = deriveSolState({ status, thinking, speaking: solSpeaking, micSending })
-	// Sol reads the AI's OUTPUT level for its speaking halo (the mic is silent
-	// while the assistant talks). Reads the ref rather than closing over the
-	// manager, since it is recreated across reconnects -- but caches the lookup
+	// Sol reads the AI's OUTPUT level for its speaking ray-breathing (the mic is
+	// silent while the assistant talks). Reads the ref rather than closing over
+	// the manager, since it is recreated across reconnects -- but caches the lookup
 	// so the per-frame path is a property read, not a manager fetch.
 	const solAudioManagerRef = useRef(solAudioManager)
 	solAudioManagerRef.current = solAudioManager
