@@ -80,6 +80,9 @@ _GUTTER_MAX_DX = 60.0
 # falls in a column shared by at least this many markers, within this tolerance.
 _GUTTER_COL_TOL = 2.5
 _GUTTER_MIN_COL = 3
+# A gutter column must carry at least this many DISTINCT marker texts. A legend
+# column repeats one token on every row and is rejected; see collect_markers.
+_GUTTER_MIN_DISTINCT = 2
 # A marker belongs to a widget row when their vertical spans overlap. Rows are
 # ~12pt; require the marker's midpoint to fall inside the widget's span, grown
 # slightly so a 1-2pt typographic offset does not break the pairing.
@@ -129,9 +132,23 @@ def _iter_fields(schema: dict):
 def collect_markers(page) -> list[tuple[str, float, float, float]]:
     """Printed line markers on one page: (text, x_right, y_top, y_bottom).
 
-    Only markers that live in a real GUTTER COLUMN are returned -- a right edge
-    shared by >= _GUTTER_MIN_COL marker-shaped tokens. This is what separates a
-    printed row number from a numeral inside body text (see _GUTTER_COL_TOL).
+    Only markers in a real GUTTER are returned. Two conditions, and BOTH are
+    needed -- recurrence alone is not enough:
+
+      1. the right edges cluster into a column of >= _GUTTER_MIN_COL tokens; and
+      2. that column carries >= _GUTTER_MIN_DISTINCT DISTINCT marker texts.
+
+    Condition 2 exists because recurring body text also forms columns, so
+    recurrence by itself does not identify a gutter. f1040's line-4c/5a/5b rows
+    each print the checkbox legend "1 Rollover 2 QCD 3", so the legend's '1'
+    (x_right 278.0) and '2' (x_right 357.2) each recur on three rows and clear
+    condition 1 outright. What separates them from a gutter is not position --
+    they sit BETWEEN f1040's two real gutters (the left one at x~101-105 and the
+    amount column at x~495-500) -- but repetition: a gutter numbers successive
+    rows, so its tokens VARY ('2a', '3a', '4a', ...), whereas a legend column
+    prints the same token on every row. Counting distinct texts is therefore the
+    structural discriminator; a position rule would reject the amount column,
+    which is where most f1040 findings come from.
     """
     cands = []
     for x0, y0, x1, y1, word, *_ in page.get_text("words"):
@@ -147,12 +164,22 @@ def collect_markers(page) -> list[tuple[str, float, float, float]]:
             columns[-1].append(e)
         else:
             columns.append([e])
-    keep = [(min(c), max(c)) for c in columns if len(c) >= _GUTTER_MIN_COL]
-    if not keep:
+    kept: list[tuple[float, float]] = []
+    for col in columns:
+        if len(col) < _GUTTER_MIN_COL:
+            continue
+        lo, hi = min(col), max(col)
+        texts = {c[0] for c in cands
+                 if lo - _GUTTER_COL_TOL <= c[1] <= hi + _GUTTER_COL_TOL}
+        # Condition 2: a gutter numbers successive rows, so its tokens vary. A
+        # legend column repeats one token and is rejected here.
+        if len(texts) >= _GUTTER_MIN_DISTINCT:
+            kept.append((lo, hi))
+    if not kept:
         return []
     return [c for c in cands
             if any(lo - _GUTTER_COL_TOL <= c[1] <= hi + _GUTTER_COL_TOL
-                   for lo, hi in keep)]
+                   for lo, hi in kept)]
 
 
 def marker_for_widget(markers, rect) -> Optional[str]:
@@ -284,9 +311,16 @@ def main(argv: list[str] | None = None) -> int:
     # preceded by an OK line, and must exit 2 rather than let Python's rc=1
     # collide with "mismatches found".
     if args.json_out:
+        # `abstained` is explicit in the payload for the same reason rc 3 exists
+        # and the text leads with ABSTAINED: a consumer written to the obvious
+        # contract ("no findings means pass") must not read "verified nothing" as
+        # clean. Without it the JSON is the ONE channel where abstention is
+        # implicit, since {"findings": [], "checked": 0} is shape-identical to a
+        # genuinely clean run.
+        payload = dict(result, abstained=result["checked"] == 0)
         try:
             with open(args.json_out, "w", encoding="utf-8") as fh:
-                json.dump(result, fh, indent=2)
+                json.dump(payload, fh, indent=2)
         except OSError as exc:
             print(f"ERROR: cannot write {args.json_out!r}: {exc}", file=sys.stderr)
             return 2

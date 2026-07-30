@@ -116,11 +116,30 @@ entirely. A gate running one without the other has a live blind spot.
 - **Abstention is loud.** A form the oracle cannot verify prints "NOT a clean
   bill of health", never OK. Silence that reads as success is how this class
   stayed hidden for three incidents.
-- **A gutter marker must sit in a RECURRING COLUMN, not merely near the widget.**
-  The first version used proximity alone and read f1040's "1 Rollover 2 QCD 3"
-  checkbox legend as "line 3" -- three false positives. Real markers share a
-  right edge and repeat down the page. Pinned by a regression test, since
-  proximity-only is the obvious way to reimplement this wrong.
+- **A gutter marker must sit in a recurring column AND that column must carry
+  VARIED marker texts.** Both conditions are load-bearing, and it took two tries
+  to get right:
+  - v1 used proximity alone and read f1040's "1 Rollover 2 QCD 3" checkbox legend
+    as "line 3" -- three false positives.
+  - v2 added the recurring-column rule, which killed those. But the Opus outer
+    review proved the rule did not do what its own docstring claimed: the
+    legend's `'1'` (x_right 278.0) and `'2'` (x_right 357.2) each recur on three
+    rows, clear the threshold, and **were** still returned as markers. No false
+    finding fired only by luck -- those widgets are claimed at option level
+    (which the oracle does not read) and the legend's `'3'` recurs twice, one
+    short of the threshold.
+  - v3 adds `_GUTTER_MIN_DISTINCT`: a gutter numbers successive rows, so its
+    tokens vary (`2a`, `3a`, `4a`); a legend column repeats one token.
+
+  Worth recording what did NOT work, because it looks obvious: **leftmost-column
+  wins is wrong.** f1040 has TWO legitimate gutters -- the left row numbers at
+  x~101-105 and the amount column at x~495-500 -- and the legend sits *between*
+  them, so a position rule drops the amount column and takes f1040 from 20
+  findings to 0. Position cannot discriminate here; repetition can.
+
+  Pinned by a test that asserts the marker set directly (not just "no finding
+  claims line 3", which was the accidental survivor) and that BOTH gutters
+  survive, so the position rule cannot be reintroduced.
 - **Dropped the `*_extra` heuristic** originally proposed. Checking the drafts
   showed `widgets_backfilled: 0` on both forms -- the deterministic backfill never
   fired, so those fields were LLM inventions, not backfill artifacts. An id-shape
@@ -191,13 +210,34 @@ and assert they agree, rather than reasoning about whether they should. That swe
 is now `test_an_option_valued_field_does_not_collide_with_the_field_level_key`
 plus its siblings; it agrees with live `lint_schema` on all five probed shapes.
 
+## The Opus outer review, and the one thing it caught that five inner rounds did not
+
+The outer review did what the inner loop structurally could not: it **verified the
+tool's core claim against physical reality** rather than against the tool. It
+opened `form-kits/f1040/form.pdf`, located widget `f1_68[0]` at
+`Rect(252, 654, 323.25, 666)`, found the printed token `"6a"` immediately to its
+left on the same row with the row text "6a Social security benefits", and
+confirmed that the oracle's report -- *`fld_9` says line 9 but its widget is
+printed on line 6a* -- is factually true. It also verified the negative control
+(`f1_73[0]` really is the line-9 widget the correction test rebinds to).
+
+That is the check that matters most for a tool like this, and no amount of
+self-consistent unit testing substitutes for it: a detector that reports
+confidently and wrongly is worse than no detector. It then found the gutter rule
+did not match its own docstring (above) -- a mismatch five rounds of inner review
+had read past, because every one of them checked the code against my description
+of the rule instead of against the PDF.
+
 ## Verification
 
-- 40 tests (21 oracle, 19 overlay).
-- Full suite: 2293 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
+- 47 tests (26 oracle, 19 overlay, plus the eval-sweep pins).
+- Full suite: 2297 passed, 2 skipped (both `tests/` and `backend/tests/` roots;
   `closeout_prep.py` runs only the latter). The count is lower than this branch's
   earlier 2339 because `origin/dev` deleted `tests/test_harness_ledger.py`
-  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 6 new = 2293.
+  (52 tests, bd `polyglot-pdf-40r4`); 2339 - 52 + 10 new = 2297.
+- The oracle's f1040 findings and the fresh-extraction count (5) are unchanged by
+  the v3 gutter rule -- 20 findings / 52 checked on the shipped kit, exactly the
+  pre-fix baseline, with the legend numerals now rejected.
 - The overlay's multiclaim verdict was checked against **live `lint_schema`** on
   five shapes (two different fields; two options of one field; an option valued
   `"field"`; groups-of-one; a normal two-widget choice) -- agreement on all five.

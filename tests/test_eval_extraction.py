@@ -216,10 +216,20 @@ def test_try_repair_records_a_repair_error_instead_of_raising(tmp_path):
     assert harvest == {}
 
 
-def test_a_repair_error_does_not_exempt_the_draft_from_the_convention_check():
-    """repair_ran gates a post-repair RED exemption. A FAILED repair means the
-    draft is UNREPAIRED, so the exemption must NOT apply -- otherwise the one
-    draft that failed repair would be scored more leniently than its peers."""
+def test_the_repair_ran_guard_still_excludes_a_failed_repair_SOURCE_PIN():
+    """SOURCE-TEXT pin, not a behavioural one -- named so no reader mistakes it.
+
+    `repair_ran` gates a post-repair RED exemption; a FAILED repair leaves the
+    draft UNREPAIRED, so the exemption must not apply. That guard is not
+    behaviourally isolatable on any reachable input: `_try_repair` calls
+    `repair()` with NO dump, so only `_check_no_name_non_choice` can raise, and
+    that shape always produces a `field-unbacked` lint ERROR which forces RED via
+    `lint_errors > 0` regardless of this term. The guard is correct-but-defensive,
+    so this asserts the source spelling rather than an observable outcome.
+
+    Consequence to know: an equivalent refactor (`"FAILED:" not in repair_note`)
+    will fail this test even though behaviour is unchanged. Update the literal.
+    """
     src = pathlib.Path(_SCRIPT).read_text(encoding="utf-8")
     assert 'not repair_note.startswith("FAILED:")' in src
 

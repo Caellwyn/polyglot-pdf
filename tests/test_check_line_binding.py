@@ -31,8 +31,16 @@ spec.loader.exec_module(clb)
 _F1040_PDF = _REPO / "form-kits" / "f1040" / "form.pdf"
 _F1040_SCHEMA = _REPO / "form-kits" / "f1040" / "schema.json"
 
+# w7 is the ABSTENTION fixture: it prints markers but has no field that both
+# states a line number and claims a widget on a marked row, so the oracle
+# verifies nothing on it -- which is what the abstention contract must cover.
+_W7_PDF = _REPO / "form-kits" / "w7" / "form.pdf"
+_W7_SCHEMA = _REPO / "form-kits" / "w7" / "schema.json"
+
 needs_f1040 = pytest.mark.skipif(
     not _F1040_PDF.exists(), reason="f1040 kit not present")
+needs_w7 = pytest.mark.skipif(
+    not _W7_PDF.exists(), reason="w7 kit not present")
 
 pytest.importorskip("fitz", reason="PyMuPDF required for the geometry oracle")
 
@@ -78,8 +86,8 @@ def test_catches_the_shipped_f1040_line_shift():
     found = {f["field_id"] for f in result["findings"]}
     # Spot-pin the hand-verified worst cases (see bd 3ave):
     #   fld_9 (total income) sits on the printed line 6a box.
-    assert "fld_9" in found
-    assert "fld_11a" in found
+    for expected in ("fld_9", "fld_10", "fld_11a"):
+        assert expected in found, f"{expected} no longer detected"
     by_id = {f["field_id"]: f for f in result["findings"]}
     assert by_id["fld_9"]["widget_is_on_line"] == "6a"
     assert by_id["fld_10"]["widget_is_on_line"] == "6b"
@@ -124,6 +132,53 @@ def test_body_text_numerals_are_not_read_as_line_markers():
     result = clb.check(schema, str(_F1040_PDF))
     assert all(f["widget_is_on_line"] != "3" for f in result["findings"]), \
         "a body-text numeral was mistaken for a printed gutter marker"
+
+
+@needs_f1040
+def test_the_f1040_checkbox_legend_is_not_read_as_a_gutter():
+    """The REAL property, not the accidental survivor.
+
+    f1040's line-4c/5a/5b rows each print the legend "1 Rollover 2 QCD 3", so the
+    legend's '1' (x_right 278.0) and '2' (x_right 357.2) each recur on THREE rows
+    -- clearing the recurrence threshold outright. Recurrence alone therefore does
+    not identify a gutter; the column must also carry DISTINCT marker texts.
+
+    The earlier test only asserted that no finding claimed line '3', which held by
+    two accidents (the legend's '3' recurs twice, one short of the threshold, and
+    those widgets are claimed at option level, which the oracle does not read).
+    This asserts the marker set directly, so the rule cannot silently rot.
+    """
+    import fitz
+    markers = clb.collect_markers(fitz.open(str(_F1040_PDF))[0])
+    assert markers, "the real gutters must still be found"
+    legend = [m for m in markers if abs(m[1] - 278.0) < 3 or abs(m[1] - 357.2) < 3]
+    assert not legend, f"legend numerals accepted as gutter markers: {legend}"
+    # Both REAL gutters survive: the left row numbers and the amount column
+    # (x~495-500), which is where most f1040 findings come from. A position-based
+    # rule (e.g. leftmost-column-wins) would drop the amount column and take the
+    # finding count from 20 to 0.
+    edges = {round(m[1]) for m in markers}
+    assert any(e <= 110 for e in edges), "left gutter lost"
+    assert any(490 <= e <= 505 for e in edges), "amount-column gutter lost"
+
+
+def test_collect_markers_rejects_a_column_that_repeats_one_token():
+    """A column of >= _GUTTER_MIN_COL tokens that are all the SAME text is a
+    legend, not a gutter -- a gutter numbers successive rows, so its tokens vary."""
+    class _Page:
+        def __init__(self, words):
+            self._w = words
+
+        def get_text(self, _kind):
+            return self._w
+
+    same = _Page([(0, 100 + 12 * i, 300, 110 + 12 * i, "1", 0, 0, 0)
+                  for i in range(4)])
+    assert clb.collect_markers(same) == []
+
+    varied = _Page([(0, 100 + 12 * i, 300, 110 + 12 * i, f"{i + 1}a", 0, 0, 0)
+                    for i in range(4)])
+    assert len(clb.collect_markers(varied)) == 4
 
 
 def test_collect_markers_requires_a_recurring_column():
@@ -227,6 +282,32 @@ def test_a_verified_clean_run_exits_zero(tmp_path, capsys, monkeypatch):
                    "--require-verified"])
     capsys.readouterr()
     assert rc == 0
+
+
+@needs_w7
+def test_the_json_payload_marks_abstention_explicitly(tmp_path, capsys):
+    """The JSON is the one machine-readable channel, so abstention must be
+    EXPLICIT there too -- {"findings": [], "checked": 0} is otherwise
+    shape-identical to a verified-clean run, and a consumer written to "no
+    findings means pass" would reproduce the exact failure rc 3 prevents."""
+    out = tmp_path / "w7.json"
+    rc = clb.main(["--schema", str(_W7_SCHEMA), "--pdf", str(_W7_PDF),
+                   "--json", str(out)])
+    capsys.readouterr()
+    assert rc == 3
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["abstained"] is True
+
+
+@needs_f1040
+def test_the_json_payload_marks_a_verified_run_not_abstained(tmp_path, capsys):
+    out = tmp_path / "f1040.json"
+    clb.main(["--schema", str(_F1040_SCHEMA), "--pdf", str(_F1040_PDF),
+              "--json", str(out)])
+    capsys.readouterr()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["abstained"] is False
+    assert payload["findings"]
 
 
 @needs_f1040
