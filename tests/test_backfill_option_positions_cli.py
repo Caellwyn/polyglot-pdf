@@ -166,6 +166,36 @@ def test_duplicate_field_ids_cannot_mask_a_change():
     assert bop._positions_differ(base, moved) is True
 
 
+def test_a_null_position_routes_through_backfill_kit_END_TO_END(tmp_path):
+    """The null case through the REAL CLI entry point, not just the comparison
+    helper (bd polyglot-pdf-8i9u criterion 2; fresh-eyes Opus round 5 caught that
+    the shipped pin only called _positions_differ directly).
+
+    A field whose widget does not resolve AND whose pdf_position is an explicit
+    null: the key gets popped, which IS a file change, so --check must report 1
+    and a write run must actually rewrite the file with the key gone."""
+    pdf = _one_widget_pdf(tmp_path)
+    schema_path = tmp_path / "schema.json"
+    schema_path.write_text(json.dumps({
+        "form_metadata": {"title": "T", "version": "1"},
+        "fields": [{"id": "a", "name": "A", "type": "text",
+                    "pdf_field_name": "no_such_widget",
+                    "pdf_position": None}],
+        "sections": [], "parts": [],
+    }), encoding="utf-8")
+
+    assert bop.backfill_kit(str(schema_path), pdf, check=True) == 1
+    # --check wrote nothing
+    assert json.loads(schema_path.read_text(encoding="utf-8"))["fields"][0][
+        "pdf_position"] is None
+
+    assert bop.backfill_kit(str(schema_path), pdf, check=False) == 0
+    written = json.loads(schema_path.read_text(encoding="utf-8"))
+    assert "pdf_position" not in written["fields"][0]
+    # ...and it has settled: a second run is a no-op
+    assert bop.backfill_kit(str(schema_path), pdf, check=True) == 0
+
+
 def test_an_explicit_null_position_is_not_the_same_as_an_absent_key():
     """NULL-vs-ABSENT (bd polyglot-pdf-8i9u, fresh-eyes Opus round 3).
 

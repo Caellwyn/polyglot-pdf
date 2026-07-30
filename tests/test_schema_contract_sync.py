@@ -143,26 +143,39 @@ def test_contract_advertises_every_scorer_graded_key():
     assert not missing, f"contract dropped scorer-graded keys: {missing}"
 
 
-def test_contract_FORBIDS_pdf_position_and_says_so_in_the_rules():
+def test_contract_FORBIDS_pdf_position_on_BOTH_surfaces_independently():
     """bd polyglot-pdf-icyi: pdf_position must be declared derived-and-discarded,
-    the same way parts/sections/section_id already are -- and on the surface the
-    model actually follows. A bare absence from the FIELD SHAPE block is weaker
-    than the RULES-level prohibition its siblings get: a model that emits it
-    anyway still costs a paid extraction run (fresh-eyes)."""
+    the same way parts/sections/section_id already are -- and on BOTH surfaces
+    the model reads: the FIELD SHAPE listing and the RULES block.
+
+    ASSERTED SEPARATELY, PER SECTION, on purpose. The first version of this test
+    collected every line containing "pdf_position" and ran ONE `any("do not
+    emit")` over the lot -- so the FIELD SHAPE comment satisfied it alone, and
+    deleting the entire RULES bullet (round-1 finding 7's whole deliverable, and
+    the "mirroring parts/sections" half of exit criterion 2) still passed. That
+    is verbatim the vacuity shape this test was written to REPLACE: the test it
+    superseded also passed on a surviving substring (fresh-eyes Opus round 5).
+    Mutating away either surface must now fail."""
     contract = sc.render_contract()
-    # not offered as an emittable key...
-    assert '"pdf_position": {{' not in contract
+
+    # 1. Not offered as an emittable key anywhere.
     assert '"pdf_position": {' not in contract
-    # ...and explicitly forbidden, in the same breath as its siblings
-    assert "Do NOT emit" in contract
-    lowered = contract.lower()
-    assert "pdf_position" in lowered
-    forbidding = [ln for ln in contract.splitlines()
-                  if "pdf_position" in ln.lower()]
-    assert forbidding, "pdf_position vanished entirely -- say WHY, or an arm re-adds it"
-    assert any("do not emit" in ln.lower() for ln in forbidding), (
-        "pdf_position is mentioned but not forbidden: "
-        f"{forbidding}")
+
+    # 2. Forbidden in the FIELD SHAPE listing (where the key used to sit).
+    head, sep, rules = contract.partition("RULES:")
+    assert sep, "contract has no RULES: section -- the split below is meaningless"
+    shape_lines = [ln for ln in head.splitlines() if "pdf_position" in ln.lower()]
+    assert any("do not emit" in ln.lower() for ln in shape_lines), (
+        "the FIELD SHAPE block no longer forbids pdf_position: "
+        f"{shape_lines}")
+
+    # 3. AND forbidden at RULES level, like parts/sections/section_id -- the
+    #    surface a model actually follows.
+    rules_lines = [ln for ln in rules.splitlines() if "pdf_position" in ln.lower()]
+    assert any("do not emit" in ln.lower() for ln in rules_lines), (
+        "the RULES block no longer forbids pdf_position, so it is not declared "
+        "derived-and-discarded the way parts/sections are: "
+        f"{rules_lines}")
 
 
 def test_contract_allows_multi_bucket_composite_conditions():

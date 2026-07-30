@@ -197,8 +197,10 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
     except the name lookup is now suffix-aware too (a strict superset: it can
     fill fields whose leaf-name claim the old exact match missed).
 
-    Option-level (new): for each option not already carrying a usable
-    pdf_position, resolve its widget --
+    Option-level: for EVERY option, resolve its widget and take that rect --
+    the deterministic rect wins unconditionally (bd polyglot-pdf-icyi). This
+    used to skip any option already carrying a "usable" position, which is
+    exactly how a plausible-but-wrong model rect survived --
       a. option.pdf_field_name present: look up its widget group. A single
          widget wins outright; several widgets are disambiguated by
          option.pdf_on_value (matched against each widget's on_value), else the
@@ -276,13 +278,13 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
     unmatched: list[dict] = []
 
     for field in schema.get("fields", []):
-        # Back-fill when the position is MISSING *or* DEGENERATE. The LLM often
-        # emits a placeholder {page, x:0, y:0, width:0, height:0} -- a truthy dict
-        # that a bare `if field.get("pdf_position")` would treat as already set,
-        # leaving the zeros in place (the editor then can't map the field to the
-        # PDF, so click-to-jump dies -- bd 7a9.18). A real widget always has a
-        # positive width AND height, so a non-positive either means it needs the
-        # deterministic dump rect.
+        # NOTE the comment that used to head this loop ("back-fill when the
+        # position is MISSING *or* DEGENERATE ... bd 7a9.18") described the
+        # conditional this bead DELETED, and survived the deletion verbatim --
+        # contradicting the correct comment 13 lines below. Removed rather than
+        # patched (fresh-eyes Opus round 5): the deterministic rect now wins
+        # unconditionally, so there is no "when to back-fill" rule left to
+        # state. See the `if rect:` block below for what replaced it.
         field_pfn = field.get("pdf_field_name")
         # A field's position = the rect of its (first) pdf_field_name; for a
         # consolidated options[] field, use the first option's widget.

@@ -198,6 +198,22 @@ Fixed to use the same exact-then-dot-suffix rule (114 real comparisons now), and
 a NON-VACUITY FLOOR added: if a kit has positioned fields and none resolve, the
 test fails loudly instead of passing quietly.
 
+**A replacement for a vacuous test can be vacuous the same way.** Round 1 found
+a coupling test passing on a forbidden substring that survived inside a comment.
+The test I wrote to replace it collected every matching line and ran ONE
+`any(...)` over the lot -- so the two prohibition surfaces each satisfied the
+assertion alone, and deleting either one still passed. Round 5 caught it by
+mutating each surface separately. The fix is asserting per-surface, and the
+habit is: when replacing a test that failed by being too loose, mutate the
+replacement before trusting it -- the same reflex that produced the loose test
+tends to produce a loose replacement.
+
+**Fixing the code is not closing the bead.** The journal claimed
+polyglot-pdf-8i9u was "Closed: fixed in-PR" while the bead was still OPEN -- a
+false claim in the closeout audit trail, and its second exit criterion (an
+end-to-end pin, not just a unit call) genuinely was unmet. Write the closure
+after running `bd show`, not from memory of having fixed it.
+
 **Assert that a guard is doing work, not just that it passes.** The vacuous-i-90
 guard is the sharpest instance: it compared zero fields and reported success for
 two review rounds. A test whose subject can silently become empty needs a floor
@@ -275,8 +291,12 @@ regression power rather than masking a live defect.
   records a kit shipping `positions_filled: 0` with 61 degenerate rects as a
   missed signal). This bead's own lesson about sweeping every reader of a flipped
   flag caught the CLI and the coupling test -- and missed this one.
-- **polyglot-pdf-8i9u** -- null-vs-absent in the change detector. Closed:
-  fixed in-PR (one line in code this bead already rewrote).
+- **polyglot-pdf-8i9u** -- null-vs-absent in the change detector. Fix landed
+  in-PR (one line in code this bead already rewrote), and its criterion-2
+  end-to-end pin (the null case routed through `backfill_kit`, not just the
+  comparison helper) landed in the round-5 commit; bead closed then. An earlier
+  draft of this entry claimed it was already closed while it was still OPEN --
+  a false closure claim in the audit trail, caught by fresh-eyes Opus round 5.
 - **polyglot-pdf-89ge** -- the bake-off scorer half. Closed: fixed in-PR (the
   diff caused it).
 - **polyglot-pdf-tz7a / u4r0** -- `_complete_grouped_families` appends options

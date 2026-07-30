@@ -304,7 +304,7 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
             #                                 one-decimal dump)
             # So 0.06 is the right ceiling for a guard over COMMITTED data, and
             # one-decimal rounding is real but HISTORICAL. Getting this number
-            # honest took three passes: v1 asserted the wrong basis (blamed the
+            # honest took FOUR passes: v1 asserted the wrong basis (blamed the
             # current dump), tightening to 0.01 then false-failed on w7's legacy
             # values, and the figures quoted after THAT were still wrong because
             # i-90 was contributing 0 comparisons (see _widget_for). Every
