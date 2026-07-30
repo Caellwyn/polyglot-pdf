@@ -172,10 +172,15 @@ contract -- `pdf_position` was the straggler.
 The broken schema was well-formed: valid page key, valid numbers, positive
 sizes. Nothing in 2257 tests noticed, because nothing compared the schema
 against the PDF it describes. The new real-kit guard does exactly that, with a
-0.06pt tolerance (the dump serializes rects to one decimal, so a deterministic
-value legitimately differs from PyMuPDF's raw float by up to 0.05pt -- exact
-equality false-fires while a model rect, rounded to whole points, is caught
-easily).
+0.06pt tolerance -- and getting that number honest took three tries, which is
+the more useful lesson. v1 used 0.06 and credited it to "the dump rounds to one
+decimal". The Opus round showed the dump rounds to TWO decimals (max 0.005pt),
+so the tolerance was ~12x looser than its own stated basis. Tightening to 0.01
+then FAILED on w7 -- because 7 of its committed rects were written by an OLDER
+one-decimal dump and sit 0.05pt off the real widget. Measured per kit: i-90
+0.0000pt (raw floats), f1040 0.0050pt (current dump), w7 0.0500pt (legacy). So
+0.06 was the right ceiling all along for a guard that reads COMMITTED data --
+but for a reason I had not established, and the comment asserted the wrong one.
 
 **Mutation-check a regression guard before trusting it.** The first
 mutation run passed, which looked like the new guard was useless -- but the

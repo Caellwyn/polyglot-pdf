@@ -133,6 +133,39 @@ def test_positions_differ_helper_ignores_untouched_schemas():
     assert bop._positions_differ(base, dropped) is True
 
 
+def test_a_VALUELESS_option_cannot_mask_a_changed_field_position():
+    """KEY-COLLISION REGRESSION (bd polyglot-pdf-icyi, fresh-eyes Opus round 2).
+
+    The first version keyed the map by (field_id, option_value), so an option
+    with no `value` produced (field_id, None) -- the SAME key as the field's own
+    entry -- and silently overwrote it. A genuinely wrong field rect then
+    compared EQUAL, so --check reported exit 0 AND a patch run skipped the write
+    entirely, discarding the corrected positions it had just computed. Keys are
+    positional indices now, collision-free by construction."""
+    base = {"fields": [{
+        "id": "a",
+        "pdf_position": {"page": 1, "x": 1, "y": 2, "width": 3, "height": 4},
+        "options": [{"label": "no value key here"}],
+    }]}
+    moved = json.loads(json.dumps(base))
+    moved["fields"][0]["pdf_position"]["x"] = 999
+    assert bop._positions_differ(base, moved) is True
+
+
+def test_duplicate_field_ids_cannot_mask_a_change():
+    """Same collision class via a different route: two fields sharing an id used
+    to overwrite each other's entry."""
+    base = {"fields": [
+        {"id": "dup", "pdf_position": {"page": 1, "x": 1, "y": 1,
+                                       "width": 1, "height": 1}},
+        {"id": "dup", "pdf_position": {"page": 1, "x": 2, "y": 2,
+                                       "width": 2, "height": 2}},
+    ]}
+    moved = json.loads(json.dumps(base))
+    moved["fields"][0]["pdf_position"]["x"] = 50
+    assert bop._positions_differ(base, moved) is True
+
+
 def test_option_positions_are_compared_too():
     """A per-option rect change counts: the CLI exists primarily for options."""
     base = {"fields": [{"id": "a", "options": [

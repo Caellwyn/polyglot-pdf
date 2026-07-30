@@ -58,20 +58,30 @@ _spec.loader.exec_module(_ef)
 
 
 def _position_map(schema: dict) -> dict:
-    """Every pdf_position in the schema, keyed by where it lives.
+    """Every pdf_position in the schema, keyed by POSITIONAL INDEX.
 
-    The change-detector's input (bd polyglot-pdf-icyi). Keyed by field id plus
-    option value so a moved/renamed entry counts as a difference rather than
-    silently cancelling out against a sibling."""
+    The change-detector's input (bd polyglot-pdf-icyi). Keyed by
+    (field_index, option_index-or-None), which is collision-free by
+    construction. Keying by (field_id, option_value) -- the first version --
+    collided whenever an option carried no `value`: its key became
+    (field_id, None), the SAME key as the field's own entry, so the field's
+    position was silently discarded from the comparison and a genuinely wrong
+    field rect compared EQUAL. That made `--check` report exit 0 and, worse,
+    made a PATCH run skip the write (`if changed and not check`) and throw away
+    the corrected positions it had just computed. Duplicate field ids collided
+    the same way (fresh-eyes Opus round 2).
+
+    Index keys mean a REORDER also reads as a change, which is correct here: the
+    field-level rect of an options-bearing field is defined as its FIRST
+    option's widget, so moving options can legitimately move that rect."""
     out: dict = {}
-    for field in schema.get("fields") or []:
+    for i, field in enumerate(schema.get("fields") or []):
         if not isinstance(field, dict):
             continue
-        fid = field.get("id")
-        out[(fid, None)] = field.get("pdf_position")
-        for opt in field.get("options") or []:
+        out[(i, None)] = field.get("pdf_position")
+        for j, opt in enumerate(field.get("options") or []):
             if isinstance(opt, dict):
-                out[(fid, opt.get("value"))] = opt.get("pdf_position")
+                out[(i, j)] = opt.get("pdf_position")
     return out
 
 

@@ -105,10 +105,20 @@ def _as_page_int(value: object) -> int | None:
     if isinstance(value, float):
         return int(value) if value.is_integer() else None
     if isinstance(value, str):
+        text = value.strip()
         try:
-            return int(value.strip())
+            return int(text)
+        except (TypeError, ValueError):
+            pass
+        # "0.0" / "1.0": int() rejects a decimal string outright, so an
+        # integral page written that way used to escape entirely -- neither
+        # arming the shift nor being shifted, then coerced to a bare 0 by
+        # PDFPosition (fresh-eyes Opus round 2). Route it through float.
+        try:
+            as_float = float(text)
         except (TypeError, ValueError):
             return None
+        return int(as_float) if as_float.is_integer() else None
     return None
 
 

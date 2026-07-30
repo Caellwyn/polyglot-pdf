@@ -237,12 +237,18 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
     checked_kits = 0
     for kit in sorted(p for p in kits_root.iterdir() if p.is_dir()):
         schema_path = kit / "schema.json"
-        pdfs = [p for p in kit.glob("*.pdf")
-                if "instruction" not in p.name.lower()]
-        if not schema_path.exists() or not pdfs:
+        # form.pdf BY CONVENTION, never glob order: a kit can ship extra PDFs
+        # (i-90 has i-90-annotated.pdf), and comparing geometry against the
+        # wrong document would make this guard -- the only automated evidence
+        # behind "positions match the real PDF" -- silently meaningless. Every
+        # other tool hard-codes form.pdf (backfill_option_positions.py does);
+        # match it, and SKIP rather than guess when it is absent (fresh-eyes
+        # Opus round 2).
+        form_pdf = kit / "form.pdf"
+        if not schema_path.exists() or not form_pdf.exists():
             continue
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        doc = fitz.open(pdfs[0])
+        doc = fitz.open(form_pdf)
         page_count = doc.page_count
         real: dict = {}
         for pno in range(page_count):
@@ -265,11 +271,21 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
             if not expected:
                 continue  # unresolved widget name: the ledger's concern
             got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
-            # TOLERANCE, not equality: the dump serializes rects rounded to one
-            # decimal, so a deterministic value legitimately differs from
-            # PyMuPDF's raw float by up to 0.05pt (~1/1400 inch). The bug this
-            # guards against is nothing like that -- a model rect is rounded to
-            # whole points (469.2 -> 469) or lands on the wrong page entirely.
+            # TOLERANCE, not equality -- sized to the MEASURED worst case over
+            # the committed kits, which is what this guard actually reads:
+            #   i-90  0.0000pt (raw PyMuPDF floats, exact)
+            #   f1040 0.0050pt (today's dump rounds to TWO decimals --
+            #                   acroform_dump.py `round(r.x0, 2)`)
+            #   w7    0.0500pt (7 fields written by an OLDER one-decimal dump)
+            # So one-decimal rounding is real but HISTORICAL, not current. An
+            # earlier comment here credited it to the current dump (wrong, and
+            # ~12x looser than its own stated basis); tightening to 0.01 then
+            # false-failed on w7's legacy values (fresh-eyes Opus round 2 found
+            # the first error, the retest found the second). 0.06 is the right
+            # ceiling for a REGRESSION guard over committed data; the bug it
+            # exists to catch is nothing like any of these figures -- a model
+            # rect rounds to WHOLE points (469.2 -> 469) or lands on the wrong
+            # page outright, both orders of magnitude beyond this.
             if got[0] != expected[0] or any(
                     abs(g - e) > 0.06 for g, e in zip(got[1:], expected[1:])):
                 wrong_rects.append((field.get("id"), got, expected))
@@ -370,7 +386,7 @@ def test_model_page_zero_base_is_shifted_not_discarded():
     assert schema["fields"][2]["options"][0]["pdf_position"]["page"] == 1
 
 
-@pytest.mark.parametrize("raw", [0, 0.0, "0", " 0 "])
+@pytest.mark.parametrize("raw", [0, 0.0, "0", " 0 ", "0.0", " 0.0 "])
 def test_a_zero_page_normalizes_whatever_JSON_TYPE_it_arrives_as(raw):
     """THE BUG THIS BEAD EXISTS TO KILL, reachable through the fallback until now
     (bd polyglot-pdf-icyi, fresh-eyes Opus round).
@@ -389,6 +405,23 @@ def test_a_zero_page_normalizes_whatever_JSON_TYPE_it_arrives_as(raw):
     assert ef._normalize_model_page_base(schema) == 1
     # a REAL int, so downstream page matching (exact equality) works
     assert schema["fields"][0]["pdf_position"]["page"] == 1
+
+
+@pytest.mark.parametrize("raw,want", [
+    (0, 0), (0.0, 0), ("0", 0), (" 0 ", 0), ("0.0", 0), (" 0.0 ", 0),
+    (1, 1), (1.0, 1), ("1", 1), ("1.0", 1), (3, 3), ("2.0", 2),
+    # non-integral: no sane +1 exists
+    ("abc", None), ("", None), (None, None), (1.5, None), ("1.5", None),
+    (True, None), (False, None), ([], None), ({}, None),
+])
+def test_as_page_int_accepts_every_integral_json_form(raw, want):
+    """The page-coercion contract, pinned directly (bd polyglot-pdf-icyi).
+
+    Two rounds of review each found another integral shape escaping: first 0.0
+    and "0" (the gate/shift type mismatch), then "0.0" (int() rejects a decimal
+    string). Every escape shipped an unnormalized page 0, which paints NOWHERE.
+    Enumerated here so the next shape has to be added deliberately."""
+    assert ef._as_page_int(raw) == want
 
 
 @pytest.mark.parametrize("raw", ["abc", None, 1.5, True, [], {}])
