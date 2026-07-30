@@ -115,8 +115,25 @@ def _both_sis():
 def test_both_sis_carry_articulation_rule():
     for name, si in _both_sis():
         assert "ARTICULATION" in si, f"{name} lost the articulation block"
-        # Word endings are the specific casualty of slurred speech.
-        assert "word ENDINGS their full sound" in si, name
+        # The end of a word is the specific casualty of slurred speech.
+        assert "full value through to the END of the word" in si, name
+
+
+def test_articulation_generalizes_beyond_inflected_languages():
+    # 17+ session languages, not all Indo-European: "word endings" is
+    # meaningless in tonal/syllable-timed languages (Chinese, Vietnamese,
+    # Thai, Japanese), so the rule names their equivalent failure mode too.
+    for name, si in _both_sis():
+        assert "tones or on evenly-timed syllables" in si, name
+        assert "keep every tone and syllable distinct" in si, name
+
+
+def test_articulation_is_scoped_to_delivery_not_word_choice():
+    # Guards against the model reading "no casual contractions" as a licence
+    # to drop the warm, conversational REGISTER.
+    for name, si in _both_sis():
+        assert "govern DELIVERY only, not" in si, name
+        assert "never the same as being formal or stiff" in si, name
 
 
 def test_both_sis_forbid_slurring_and_rushing():
@@ -166,6 +183,19 @@ def test_articulation_does_not_contradict_the_slow_pace_rule():
     assert "SPEECH STYLE" in si
     assert "Speak SLOWLY and calmly in every language" in si
     assert si.index("SPEECH STYLE") < si.index("ARTICULATION")
+
+
+def test_legacy_si_block_order_is_register_then_pace_then_articulation():
+    # The legacy SI's rules live in REGISTER, not SPEECH STYLE. Pinned because
+    # an earlier revision of this change put BOTH articulation blocks into
+    # DTI_SYSTEM_INSTRUCTION by mistake -- nothing would have caught it.
+    si = _settings().SYSTEM_INSTRUCTION
+    assert si.index("REGISTER") < si.index("PACE:") < si.index("ARTICULATION")
+
+
+def test_each_si_has_exactly_one_articulation_block():
+    for name, si in _both_sis():
+        assert si.count("ARTICULATION (say every word clearly)") == 1, name
 
 
 # --- ASCII-only guard for every constant this change touched (scar #6) --------
