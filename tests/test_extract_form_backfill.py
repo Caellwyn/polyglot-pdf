@@ -13,12 +13,25 @@ option's own widget rect is resolved the same way (name lookup is suffix-aware,
 matching schema_lint._match_dump_names' exact-then-dot-boundary-suffix
 convention), disambiguated by pdf_on_value when a name covers several widgets,
 or resolved purely by pdf_on_value for the shared-field-name radio/combo-group
-shape. `_backfill_positions` now returns
-{"fields_filled", "options_filled", "unmatched"} instead of a bare field count.
+shape. `_backfill_positions` returns a mapping rather than a bare field count --
+{"fields_filled", "options_filled", "unmatched"} at that point, and a fourth key
+"model_pages_normalized" since bd polyglot-pdf-icyi (below), on EVERY return
+path including the dump-unreadable one.
+
+bd polyglot-pdf-icyi INVERTS the priority (maintainer decision 2026-07-29): the
+deterministic dump rect now wins UNCONDITIONALLY wherever a widget resolves, at
+both the field and option level. Trusting a model rect that merely LOOKED usable
+(positive width/height) is what shipped the page-0 bug -- a fresh w7 extraction
+emitted 48 rects with page=0 (the model mirroring the 0-based digest it was
+shown), and since the editor matches pages 1..numPages by exact equality, every
+text-field overlay silently vanished from the preview. Model coordinates survive
+ONLY where no widget resolves (the future scanned/flat-PDF route), and a
+0-based model page there is shifted up rather than discarded.
 
 These tests pin that behavior with synthetic data (no PDF / LLM needed): a
 degenerate-zero field and a missing-position field both get the dump rect; a
-field that already has a usable position is left untouched.
+plausible-but-wrong model rect is OVERWRITTEN by the dump; a degenerate rect
+with no dump match is dropped entirely.
 
 Imports extract_form by file path (repo precedent: test_bd_safe.py); it adds
 scripts/bakeoff to sys.path at import for acroform_dump/arm_llm_native, which is
@@ -83,7 +96,8 @@ def test_backfill_replaces_degenerate_zero_position(tmp_path):
         "pdf_position": {"page": 1, "x": 0, "y": 0, "width": 0, "height": 0},
     }]}
     result = ef._backfill_positions(schema, dump)
-    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": []}
+    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": [],
+         "model_pages_normalized": 0}
     assert schema["fields"][0]["pdf_position"] == {
         "page": 1, "x": 100.0, "y": 200.0, "width": 8.0, "height": 8.0}
 
@@ -93,20 +107,421 @@ def test_backfill_fills_missing_position(tmp_path):
         "fld": {"page": 2, "x": 5, "y": 6, "width": 7, "height": 9}})
     schema = {"fields": [{"id": "a", "pdf_field_name": "fld"}]}  # no pdf_position
     result = ef._backfill_positions(schema, dump)
-    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": []}
+    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": [],
+         "model_pages_normalized": 0}
     assert schema["fields"][0]["pdf_position"]["page"] == 3  # 2 + 1
 
 
-def test_backfill_preserves_a_usable_position(tmp_path):
-    """A field that ALREADY has a real (positive w/h) position is left as-is, even
-    if the dump has a different rect for it -- the LLM/human value wins when valid."""
+def test_the_DUMP_RECT_WINS_over_a_plausible_model_position(tmp_path):
+    """PRIORITY INVERSION (bd polyglot-pdf-icyi, maintainer decision 2026-07-29).
+
+    This test previously asserted the OPPOSITE ("the LLM/human value wins when
+    valid") and that is precisely what shipped the bug: a fresh w7 extraction
+    emitted 48 model rects with page=0 (the model mirroring the 0-based digest
+    it was shown). They had positive width/height, so they looked "usable" and
+    the deterministic back-fill never replaced them -- and since the editor
+    matches pages 1..numPages by exact equality, EVERY text-field overlay
+    silently vanished from the PDF preview. Only the 6 choice fields drew,
+    because their rects came from this dump path.
+
+    The PDF's own widget geometry is ground truth and free to read, so it now
+    overwrites the model unconditionally. The model also rounds (469.2 -> 469),
+    so even a page-correct model rect is lossy."""
     dump = _write_dump(tmp_path, {
-        "fld": {"page": 0, "x": 999, "y": 999, "width": 1, "height": 1}})
-    good = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
-    schema = {"fields": [{"id": "a", "pdf_field_name": "fld", "pdf_position": dict(good)}]}
+        "fld": {"page": 0, "x": 469.2, "y": 180.0, "width": 106.8, "height": 11.0}})
+    # A model rect that looks entirely reasonable: positive w/h, rounded coords,
+    # and the 0-based page that broke the real extraction.
+    model = {"page": 0, "x": 469, "y": 180, "width": 107, "height": 11}
+    schema = {"fields": [{"id": "a", "pdf_field_name": "fld",
+                          "pdf_position": dict(model)}]}
     result = ef._backfill_positions(schema, dump)
-    assert result == {"fields_filled": 0, "options_filled": 0, "unmatched": []}
-    assert schema["fields"][0]["pdf_position"] == good
+    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": [],
+         "model_pages_normalized": 0}
+    # Unrounded coordinates AND the correct 1-based page, from the dump.
+    assert schema["fields"][0]["pdf_position"] == {
+        "page": 1, "x": 469.2, "y": 180.0, "width": 106.8, "height": 11.0}
+
+
+def test_a_model_position_survives_only_when_NO_widget_resolves(tmp_path):
+    """The documented fallback route (bd polyglot-pdf-icyi): keep model-supplied
+    coordinates when the PDF has no widget to derive them from. Rare on
+    AcroForms (all 4 real kits resolve 486/486 widgets), but it is the path a
+    future scanned/flat-PDF extraction would depend on, so it must not be
+    deleted along with the trust inversion."""
+    dump = _write_dump(tmp_path, {"other_widget": {
+        "page": 0, "x": 1, "y": 2, "width": 3, "height": 4}})
+    model = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
+    schema = {"fields": [{"id": "a", "pdf_field_name": "no_such_widget",
+                          "pdf_position": dict(model)}]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["fields_filled"] == 0
+    assert schema["fields"][0]["pdf_position"] == model   # kept verbatim
+
+
+def test_a_degenerate_position_is_DROPPED_when_no_widget_resolves(tmp_path):
+    """No widget AND no usable model rect: ship NO pdf_position rather than a
+    zero-size placeholder, which reads as a real position to every downstream
+    consumer (the editor's overlay-block reason then says 'no position
+    recorded', which is the truth)."""
+    dump = _write_dump(tmp_path, {"other": {
+        "page": 0, "x": 1, "y": 2, "width": 3, "height": 4}})
+    schema = {"fields": [{"id": "a", "pdf_field_name": "no_such_widget",
+                          "pdf_position": {"page": 1, "x": 0, "y": 0,
+                                           "width": 0, "height": 0}}]}
+    ef._backfill_positions(schema, dump)
+    assert "pdf_position" not in schema["fields"][0]
+
+
+def test_positions_carry_only_the_five_real_keys(tmp_path):
+    """A written pdf_position holds page/x/y/width/height and NOTHING else.
+
+    Guards a regression from this bead's own first draft: an earlier version
+    tagged deterministic rects with a marker KEY so page normalization could
+    tell them from model rects -- and that marker leaked into every kit and
+    every dict-equality assertion. The set of deterministic positions is now
+    tracked by identity instead, writing nothing into the data."""
+    dump = _write_dump(tmp_path, {
+        "fld": {"page": 0, "x": 5, "y": 6, "width": 7, "height": 9},
+        "opt1": {"page": 0, "x": 1, "y": 2, "width": 8, "height": 8}})
+    schema = {"fields": [
+        {"id": "a", "pdf_field_name": "fld"},
+        {"id": "b", "options": [{"value": "v", "pdf_field_name": "opt1"}]},
+    ]}
+    ef._backfill_positions(schema, dump)
+    expected_keys = {"page", "x", "y", "width", "height"}
+    assert set(schema["fields"][0]["pdf_position"]) == expected_keys
+    assert set(schema["fields"][1]["options"][0]["pdf_position"]) == expected_keys
+    # ...and the deterministic pages stayed 1-based (never double-shifted)
+    assert schema["fields"][0]["pdf_position"]["page"] == 1
+    assert schema["fields"][1]["options"][0]["pdf_position"]["page"] == 1
+
+
+def test_deterministic_pages_are_never_shifted_by_normalization(tmp_path):
+    """THE ORDERING TRAP this bead's design has to avoid: dump rects are already
+    1-based, so if the page-base normalization treated them as model-supplied,
+    a schema containing any genuine 0-based model page would shift the
+    deterministic ones too and push them off the document. _backfill_positions
+    runs normalization itself with the identity set, so this cannot happen."""
+    dump = _write_dump(tmp_path, {
+        "fld": {"page": 0, "x": 5, "y": 6, "width": 7, "height": 9}})
+    schema = {"fields": [
+        {"id": "deterministic", "pdf_field_name": "fld"},
+        # no widget resolves -> keeps its model rect, which IS 0-based
+        {"id": "model_only", "pdf_field_name": "absent",
+         "pdf_position": {"page": 0, "x": 1, "y": 2, "width": 3, "height": 4}},
+    ]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["model_pages_normalized"] == 1        # only the model one
+    assert schema["fields"][0]["pdf_position"]["page"] == 1   # dump: unchanged
+    assert schema["fields"][1]["pdf_position"]["page"] == 1   # model: 0 -> 1
+
+
+def test_every_shipped_kit_has_in_range_pages_and_real_rects():
+    """REAL-KIT REGRESSION (bd polyglot-pdf-icyi): the shipped kits' field
+    positions must land on a page the document actually has, and match the PDF's
+    own widget geometry.
+
+    This is the test that would have caught the bug from the outside: a fresh w7
+    extraction shipped 48 of 54 fields on page 0, which the editor's PDF preview
+    matches against 1..numPages by exact equality -- so every text-field overlay
+    silently vanished and only the 6 dump-derived choice fields drew. Nothing in
+    the suite noticed, because the schema was internally well-formed.
+
+    Skips a kit whose PDF or schema is absent from the checkout rather than
+    failing (the same degrade-quietly convention the other real-kit guards use);
+    fields whose widget name does not resolve are also skipped -- an unclaimed
+    widget is a different concern (the coverage ledger's)."""
+    fitz = pytest.importorskip("fitz")
+    kits_root = _REPO / "form-kits"
+    if not kits_root.is_dir():
+        pytest.skip("form-kits/ not present in this checkout")
+
+    checked_kits = 0
+    for kit in sorted(p for p in kits_root.iterdir() if p.is_dir()):
+        schema_path = kit / "schema.json"
+        # form.pdf BY CONVENTION, never glob order: a kit can ship extra PDFs
+        # (i-90 has i-90-annotated.pdf), and comparing geometry against the
+        # wrong document would make this guard -- the only automated evidence
+        # behind "positions match the real PDF" -- silently meaningless. Every
+        # other tool hard-codes form.pdf (backfill_option_positions.py does);
+        # match it, and SKIP rather than guess when it is absent (fresh-eyes
+        # Opus round 2).
+        form_pdf = kit / "form.pdf"
+        if not schema_path.exists() or not form_pdf.exists():
+            continue
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        doc = fitz.open(form_pdf)
+        page_count = doc.page_count
+        real: dict = {}
+        for pno in range(page_count):
+            for w in doc.load_page(pno).widgets() or []:
+                real.setdefault(w.field_name, (
+                    pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
+                    round(w.rect.width, 2), round(w.rect.height, 2)))
+
+        def _widget_for(claim):
+            """The widget rect for a schema-side pdf_field_name claim.
+
+            SUFFIX-AWARE, matching what the extractor itself does
+            (schema_lint._match_dump_names' exact-then-dot-boundary-suffix
+            rule). Exact-match-only skipped 100% of i-90's 132 fields -- the
+            schema stores the XFA LEAF (P1_Line1_AlienNumber[0]) while the PDF
+            widget carries the fully-qualified path
+            (form1[0].#subform[0].P1_Line1_AlienNumber[0]) -- so this guard
+            verified NOTHING on the largest, most XFA-complex kit while
+            appearing to pass (fresh-eyes Opus round 3). A guard weaker than
+            the code it guards is decoration."""
+            if not claim:
+                return None
+            hit = real.get(claim)
+            if hit:
+                return hit
+            for name, rect in real.items():
+                if name.endswith("." + claim):
+                    return rect
+            return None
+
+        bad_pages, wrong_rects, compared = [], [], 0
+        for field in schema.get("fields") or []:
+            pos = field.get("pdf_position")
+            if not isinstance(pos, dict):
+                continue  # no position recorded: not this test's concern
+            page = pos.get("page")
+            if (not isinstance(page, int) or isinstance(page, bool)
+                    or page < 1 or page > page_count):
+                bad_pages.append((field.get("id"), page))
+                continue
+            expected = _widget_for(field.get("pdf_field_name"))
+            if not expected:
+                continue  # unresolved widget name: the ledger's concern
+            compared += 1
+            got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
+            # TOLERANCE, not equality. Sized to the worst case MEASURED with
+            # this exact arithmetic (expected rounded to 2dp, `got` as stored)
+            # over the committed kits this guard reads:
+            #   f1040 0.0000pt / 163 fields  (already dump-derived, exact)
+            #   i-90  0.0050pt / 114 fields  (today's dump rounds to TWO
+            #                                 decimals: round(r.x0, 2))
+            #   w7    0.0500pt /  54 fields  (rects written by an OLDER
+            #                                 one-decimal dump)
+            # So 0.06 is the right ceiling for a guard over COMMITTED data, and
+            # one-decimal rounding is real but HISTORICAL. Getting this number
+            # honest took FOUR passes: v1 asserted the wrong basis (blamed the
+            # current dump), tightening to 0.01 then false-failed on w7's legacy
+            # values, and the figures quoted after THAT were still wrong because
+            # i-90 was contributing 0 comparisons (see _widget_for). Every
+            # number above is now measured, not reasoned. The bug this exists to
+            # catch is orders of magnitude beyond any of them: a model rect
+            # rounds to WHOLE points (469.2 -> 469) or lands on the wrong page.
+            if got[0] != expected[0] or any(
+                    abs(g - e) > 0.06 for g, e in zip(got[1:], expected[1:])):
+                wrong_rects.append((field.get("id"), got, expected))
+
+        assert not bad_pages, (
+            f"{kit.name}: pdf_position.page out of range 1..{page_count} "
+            f"(the editor preview draws NOTHING for these): {bad_pages[:10]}")
+        assert not wrong_rects, (
+            f"{kit.name}: pdf_position does not match the PDF's own widget "
+            f"rect -- positions must be deterministic, not model-authored: "
+            f"{wrong_rects[:5]}")
+        # NON-VACUITY FLOOR: a kit with a schema, a form.pdf and positioned
+        # fields MUST yield real comparisons. Without this the guard passed
+        # while comparing 0 of i-90's 132 fields (fresh-eyes Opus round 3) --
+        # silent success is the failure mode a regression guard must not have.
+        positioned = sum(1 for f in schema.get("fields") or []
+                         if isinstance(f.get("pdf_position"), dict))
+        if positioned:
+            assert compared, (
+                f"{kit.name}: {positioned} field(s) carry a pdf_position but "
+                f"NONE resolved to a PDF widget -- this guard is verifying "
+                f"nothing on this kit (widget-name matching is broken)")
+        checked_kits += 1
+
+    if not checked_kits:
+        pytest.skip("no kit with both a schema and a form PDF in this checkout")
+
+
+def test_the_page_zero_bug_cannot_survive_the_backfill(tmp_path):
+    """MUTATION PIN, through the REAL code path (bd polyglot-pdf-icyi).
+
+    The real-kit guard above only inspects kits PRESENT in the checkout, and the
+    kit that actually shipped this bug was untracked scratch -- so that guard
+    alone proves nothing. This one reproduces the exact production shape (a
+    1-page form where the model claimed page 0 with plausible rounded rects) and
+    drives it through _backfill_positions, asserting the page-0 fields cannot
+    come out the other side. If the trust inversion is ever reverted, this fails.
+    """
+    dump = _write_dump(tmp_path, {
+        "f_text": {"page": 0, "x": 469.2, "y": 180.0,
+                   "width": 106.8, "height": 11.0},
+        "f_check": {"page": 0, "x": 453.6, "y": 97.75,
+                    "width": 8.0, "height": 8.0},
+    })
+    schema = {"fields": [
+        # the 48-field majority shape: model rect, rounded, page 0
+        {"id": "text_like_v3", "pdf_field_name": "f_text",
+         "pdf_position": {"page": 0, "x": 469, "y": 180,
+                          "width": 107, "height": 11}},
+        # the 6-field minority that kept working: no model rect at all
+        {"id": "checkbox_like_v3", "pdf_field_name": "f_check"},
+    ]}
+    ef._backfill_positions(schema, dump)
+
+    pages = [f["pdf_position"]["page"] for f in schema["fields"]]
+    assert pages == [1, 1], f"a page-0 position survived the back-fill: {pages}"
+    # and the previously-rounded field now carries the PDF's real precision
+    assert schema["fields"][0]["pdf_position"]["width"] == 106.8
+
+
+def test_every_return_path_carries_all_four_keys(tmp_path):
+    """The return shape must not be only sometimes-four-keyed: the OSError early
+    return omitted model_pages_normalized, so a caller indexing it directly
+    would KeyError on the error path alone (fresh-eyes Opus round 3)."""
+    expected_keys = {"fields_filled", "options_filled", "unmatched",
+                     "model_pages_normalized"}
+    # error path: no such dump file
+    assert set(ef._backfill_positions({}, str(tmp_path / "nope.json"))) \
+        == expected_keys
+    # success path
+    dump = _write_dump(tmp_path, {
+        "fld": {"page": 0, "x": 1, "y": 2, "width": 3, "height": 4}})
+    assert set(ef._backfill_positions(
+        {"fields": [{"id": "a", "pdf_field_name": "fld"}]}, dump)) \
+        == expected_keys
+
+
+def test_a_bogus_option_widget_name_is_reported_even_with_a_model_position(tmp_path):
+    """BEHAVIOR CHANGE, deliberately pinned (bd polyglot-pdf-icyi, fresh-eyes).
+
+    Inverting the trust removed an early `continue` that skipped any option
+    already carrying a "usable" position. A side effect: an option whose
+    pdf_field_name resolves to NOTHING, but which the model gave a plausible
+    rect, used to be skipped silently -- never resolved, never reported. It is
+    now attempted, fails, and lands in `unmatched`, surfacing a coverage gap
+    that previously hid. That is the better behavior (a bogus widget name is
+    exactly what the unmatched list exists to reveal), but it is a real delta
+    from the old contract, so it gets a test rather than living undocumented.
+
+    The stale model rect is deliberately LEFT in place: it is still "usable",
+    and dropping a position we cannot replace would only trade a possibly-wrong
+    overlay for no overlay at all."""
+    dump = _write_dump(tmp_path, {
+        "real_widget": {"page": 0, "x": 1, "y": 2, "width": 3, "height": 4}})
+    model_rect = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
+    schema = {"fields": [{
+        "id": "f", "type": "radio",
+        "options": [{"value": "a", "pdf_field_name": "bogus",
+                     "pdf_position": dict(model_rect)}],
+    }]}
+    result = ef._backfill_positions(schema, dump)
+    assert result["unmatched"] == [{
+        "field_id": "f", "option_value": "a",
+        "reason": "pdf_field_name 'bogus' not found in dump"}]
+    # the unreplaceable model rect survives -- a wrong overlay beats none
+    assert schema["fields"][0]["options"][0]["pdf_position"] == model_rect
+
+
+# --- _normalize_model_page_base (the no-widget fallback's page base) --------- #
+
+def test_model_page_zero_base_is_shifted_not_discarded():
+    """A model that mirrors the 0-based digest base is off by an ordinal
+    convention, not wrong about geometry (maintainer decision 2026-07-29): if
+    any model page is 0, shift every model page up by one."""
+    schema = {"fields": [
+        {"id": "a", "pdf_position": {"page": 0, "x": 1, "y": 2,
+                                     "width": 3, "height": 4}},
+        {"id": "b", "pdf_position": {"page": 1, "x": 5, "y": 6,
+                                     "width": 7, "height": 8}},
+        {"id": "c", "options": [{"value": "v", "pdf_position": {
+            "page": 0, "x": 9, "y": 9, "width": 9, "height": 9}}]},
+    ]}
+    assert ef._normalize_model_page_base(schema) == 3
+    assert schema["fields"][0]["pdf_position"]["page"] == 1
+    assert schema["fields"][1]["pdf_position"]["page"] == 2
+    assert schema["fields"][2]["options"][0]["pdf_position"]["page"] == 1
+
+
+@pytest.mark.parametrize("raw", [0, 0.0, "0", " 0 ", "0.0", " 0.0 "])
+def test_a_zero_page_normalizes_whatever_JSON_TYPE_it_arrives_as(raw):
+    """THE BUG THIS BEAD EXISTS TO KILL, reachable through the fallback until now
+    (bd polyglot-pdf-icyi, fresh-eyes Opus round).
+
+    A model returns raw JSON, so a 0-based page can arrive as 0, 0.0 or "0" --
+    all three mean page one under the model's base, and all three paint NOWHERE
+    if they survive (the editor matches 1..numPages by exact equality, and
+    PDFPosition coerces 0.0/"0" to a bare 0). The first version gated on
+    `page == 0` (True for 0.0, False for "0") then shifted only `int`, so 0.0
+    tripped the gate WITHOUT shifting and "0" did neither -- shipping an
+    unnormalized page 0 silently, on the very code path added to prevent it. The
+    skip was excused as "lint names it", which is false: no lint rule reads
+    pdf_position at all."""
+    schema = {"fields": [{"id": "a", "pdf_position": {
+        "page": raw, "x": 1, "y": 2, "width": 3, "height": 4}}]}
+    assert ef._normalize_model_page_base(schema) == 1
+    # a REAL int, so downstream page matching (exact equality) works
+    assert schema["fields"][0]["pdf_position"]["page"] == 1
+
+
+@pytest.mark.parametrize("raw,want", [
+    (0, 0), (0.0, 0), ("0", 0), (" 0 ", 0), ("0.0", 0), (" 0.0 ", 0),
+    (1, 1), (1.0, 1), ("1", 1), ("1.0", 1), (3, 3), ("2.0", 2),
+    # non-integral: no sane +1 exists
+    ("abc", None), ("", None), (None, None), (1.5, None), ("1.5", None),
+    (True, None), (False, None), ([], None), ({}, None),
+])
+def test_as_page_int_accepts_every_integral_json_form(raw, want):
+    """The page-coercion contract, pinned directly (bd polyglot-pdf-icyi).
+
+    Two rounds of review each found another integral shape escaping: first 0.0
+    and "0" (the gate/shift type mismatch), then "0.0" (int() rejects a decimal
+    string). Every escape shipped an unnormalized page 0, which paints NOWHERE.
+    Enumerated here so the next shape has to be added deliberately."""
+    assert ef._as_page_int(raw) == want
+
+
+@pytest.mark.parametrize("raw", ["abc", None, 1.5, True, [], {}])
+def test_a_non_integral_page_is_left_alone_and_never_crashes(raw):
+    """Only INTEGRAL pages shift; anything else has no sane +1 and is left as-is
+    (a second field carries the page 0 that arms the pass)."""
+    schema = {"fields": [
+        {"id": "junk", "pdf_position": {"page": raw, "x": 1, "y": 2,
+                                        "width": 3, "height": 4}},
+        {"id": "armer", "pdf_position": {"page": 0, "x": 1, "y": 2,
+                                         "width": 3, "height": 4}},
+    ]}
+    ef._normalize_model_page_base(schema)          # must not raise
+    assert schema["fields"][0]["pdf_position"]["page"] == raw
+    assert schema["fields"][1]["pdf_position"]["page"] == 1
+
+
+def test_an_ALIASED_position_dict_is_shifted_only_once():
+    """One dict referenced from two fields must not shift twice -- two pages off
+    is exactly the off-the-document failure the exempt set exists to prevent
+    (fresh-eyes Opus round). Collection dedupes by identity."""
+    shared = {"page": 0, "x": 1, "y": 2, "width": 3, "height": 4}
+    schema = {"fields": [{"id": "a", "pdf_position": shared},
+                         {"id": "b", "pdf_position": shared}]}
+    assert ef._normalize_model_page_base(schema) == 1
+    assert shared["page"] == 1
+
+
+def test_model_pages_are_untouched_when_none_is_zero():
+    """Already 1-based: shifting would push the last page off the document."""
+    schema = {"fields": [{"id": "a", "pdf_position": {
+        "page": 1, "x": 1, "y": 2, "width": 3, "height": 4}}]}
+    assert ef._normalize_model_page_base(schema) == 0
+    assert schema["fields"][0]["pdf_position"]["page"] == 1
+
+
+def test_normalize_never_throws_on_junk():
+    for junk in ({"fields": "nope"}, {"fields": [None, 5, "x"]}, {},
+                 {"fields": [{"id": "a", "pdf_position": "not a dict"}]},
+                 {"fields": [{"id": "a", "pdf_position": {"page": None}},
+                             {"id": "b", "pdf_position": {"page": 0,
+                                                          "x": 1, "y": 1,
+                                                          "width": 1,
+                                                          "height": 1}}]}):
+        ef._normalize_model_page_base(junk)   # must not raise
 
 
 def test_backfill_uses_first_option_widget_for_consolidated_field(tmp_path):
@@ -122,7 +537,8 @@ def test_backfill_uses_first_option_widget_for_consolidated_field(tmp_path):
     result = ef._backfill_positions(schema, dump)
     # The field's own position AND its single option's position both resolve to
     # the same "opt1" widget rect (one join, both levels backfilled).
-    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": [],
+         "model_pages_normalized": 0}
     # Full rect, incl. the page +1 (dump page 0 -> schema page 1).
     assert schema["fields"][0]["pdf_position"] == {
         "page": 1, "x": 1, "y": 2, "width": 8, "height": 8}
@@ -143,7 +559,8 @@ def test_backfill_prefers_top_level_pdf_field_name_over_options(tmp_path):
     result = ef._backfill_positions(schema, dump)
     # The field resolves via its own "top" name; the option independently
     # resolves via its own "opt1" name -- the two levels don't share a value.
-    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": [],
+         "model_pages_normalized": 0}
     assert schema["fields"][0]["pdf_position"]["x"] == 10  # top, not opt1
     assert schema["fields"][0]["options"][0]["pdf_position"]["x"] == 99  # opt1
 
@@ -157,8 +574,13 @@ def test_backfill_leaves_degenerate_when_no_dump_match(tmp_path):
         "pdf_position": {"page": 1, "x": 0, "y": 0, "width": 0, "height": 0},
     }]}
     result = ef._backfill_positions(schema, dump)
-    assert result == {"fields_filled": 0, "options_filled": 0, "unmatched": []}
-    assert not ef._has_usable_position(schema["fields"][0]["pdf_position"])
+    assert result == {"fields_filled": 0, "options_filled": 0, "unmatched": [],
+         "model_pages_normalized": 0}
+    # bd polyglot-pdf-icyi: the degenerate placeholder is now REMOVED rather
+    # than left in place. A zero-size rect is indistinguishable from a real
+    # position to downstream consumers, so absence is the honest encoding --
+    # the editor then reports "no position recorded for this field".
+    assert "pdf_position" not in schema["fields"][0]
 
 
 # --- option-level pdf_position back-fill (bd polyglot-pdf-5f41) -------------- #
@@ -185,7 +607,8 @@ def test_backfill_option_single_widget_via_own_pdf_field_name(tmp_path):
     result = ef._backfill_positions(schema, dump)
     # fields_filled=1: the positionless field ALSO resolves via its first
     # option's widget (the pre-5f41 consolidated-field convention).
-    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": [],
+         "model_pages_normalized": 0}
     assert schema["fields"][0]["options"][0]["pdf_position"] == {
         "page": 1, "x": 1, "y": 2, "width": 8, "height": 8}
 
@@ -206,7 +629,8 @@ def test_backfill_option_multi_widget_disambiguated_by_on_value(tmp_path):
     result = ef._backfill_positions(schema, dump)
     # fields_filled=1: the positionless field takes the group's FIRST widget
     # (first-wins field convention); the option picks its on_value match.
-    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": []}
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": [],
+         "model_pages_normalized": 0}
     assert schema["fields"][0]["options"][0]["pdf_position"]["x"] == 2
 
 
@@ -237,25 +661,30 @@ def test_backfill_shared_field_name_radio_group_by_on_value(tmp_path):
     assert opts[1]["pdf_position"]["x"] == 6
 
 
-def test_backfill_option_position_idempotent(tmp_path):
-    """An option that already carries a USABLE pdf_position is left untouched,
-    even though the dump has a different rect for its name (LLM/human value
-    wins when valid -- same idempotence contract as the field level)."""
+def test_option_dump_rect_also_wins_over_an_existing_position(tmp_path):
+    """The OPTION level inverts with the field level (bd polyglot-pdf-icyi).
+
+    This previously pinned the opposite ("LLM/human value wins when valid").
+    Option rects are how the choice fields kept working through the page-0 bug,
+    and they must stay deterministic for the same reason: the PDF's widget
+    geometry is ground truth, and a model rect is at best a rounded copy."""
     dump = _write_widget_dump(tmp_path, [
         {"name": "opt1", "widgets": [
             {"rect": {"page": 0, "x": 999, "y": 999, "width": 1, "height": 1}}]},
     ])
-    good = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
+    stale = {"page": 1, "x": 10, "y": 20, "width": 8, "height": 8}
     schema = {"fields": [{
         "id": "f", "type": "radio",
-        "options": [{"value": "a", "pdf_field_name": "opt1", "pdf_position": dict(good)}],
+        "options": [{"value": "a", "pdf_field_name": "opt1", "pdf_position": dict(stale)}],
     }]}
     result = ef._backfill_positions(schema, dump)
-    # The OPTION is untouched (options_filled=0); the positionless FIELD still
-    # back-fills from the option's widget name (pre-5f41 convention), so
-    # fields_filled=1 -- option idempotence is what this test pins.
-    assert result == {"fields_filled": 1, "options_filled": 0, "unmatched": []}
-    assert schema["fields"][0]["options"][0]["pdf_position"] == good
+    # BOTH levels now re-derive from the dump: the field takes the option's
+    # widget rect (pre-5f41 convention) and the option takes its own.
+    assert result == {"fields_filled": 1, "options_filled": 1, "unmatched": [],
+         "model_pages_normalized": 0}
+    assert schema["fields"][0]["options"][0]["pdf_position"] == {
+        "page": 1, "x": 999, "y": 999, "width": 1, "height": 1}
+    assert schema["fields"][0]["options"][0]["pdf_position"] != stale
 
 
 def test_backfill_option_unmatched_bogus_name_is_reported_not_guessed(tmp_path):

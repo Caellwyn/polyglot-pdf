@@ -246,7 +246,11 @@ FIELD SHAPE (the unit the scorer grades hardest):
                   "checkbox","checkbox_group","select","signature",
                   "address_group","table",
   "pdf_field_name": str,     // EXACT AcroForm widget name -- copy it verbatim
-  "pdf_position": {{"page": int, "x": num, "y": num, "width": num, "height": num}},
+  // Do NOT emit "pdf_position". Widget geometry is read straight from the PDF's
+  // own AcroForm widgets after extraction and OVERWRITES anything you send --
+  // same as "sections"/"parts" above. Transcribing coordinates wastes your
+  // effort and loses precision. Get "pdf_field_name" exactly right instead:
+  // that name is the key the position is looked up by.
   "validation": {{"required": bool, "pattern": str(optional regex)}},
   "max_length": int, "read_only": bool, "multiline": bool,
   "options": [ {{"value": str(SLUG), "label": str,
@@ -289,6 +293,10 @@ RULES:
 - Do NOT emit parts, sections, or field section_id -- form divisions are
   derived deterministically from the PDF after extraction (bd 6cfu.2), so any
   boundaries you produce are overwritten.
+- Do NOT emit pdf_position -- widget geometry is read straight from the PDF's
+  own AcroForm widgets after extraction and overwrites anything you send, so
+  transcribing coordinates only loses precision. Spend that effort on getting
+  pdf_field_name exactly right: it is the key the position is looked up by.
 - Recover conditional logic from the PRINTED instructions on the page, not
   guesses. Express a "show / require this field when X" dependency as show_if /
   require_if ON THE DEPENDENT FIELD. For a read-only field a choice unlocks, put

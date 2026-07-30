@@ -663,7 +663,7 @@ For expandable fields in repeating groups (e.g., spouse "other names"), when the
 }
 ```
 
-**pdf_position**: Coordinates in PDF (for non-fillable PDFs)
+**pdf_position**: Coordinates in PDF
 ```json
 {
   "pdf_position": {
@@ -676,7 +676,29 @@ For expandable fields in repeating groups (e.g., spouse "other names"), when the
 }
 ```
 
-**Purpose**: Maps schema fields back to original PDF for export.
+**Purpose**: Maps schema fields back to original PDF for export, and drives the
+schema editor's field overlay on the PDF preview.
+
+**`page` is ONE-BASED.** The editor's PDF viewer matches pages `1..numPages` by
+exact equality, so a field claiming page `0` draws nothing at all -- silently. The
+AcroForm dump is 0-based, and the extraction pipeline converts it with an explicit
+`+1`.
+
+**Who owns this value.** On a fillable (AcroForm) PDF it is read DIRECTLY from the
+PDF's own widget geometry and OVERWRITES anything an extraction model emitted --
+the extraction contract tells the model not to emit `pdf_position` at all, the same
+treatment `parts`/`sections`/`section_id` already get. A model transcribing
+coordinates rounds them (469.2 -> 469) and its page base is non-deterministic:
+that combination shipped a real bug where 48 of 54 W-7 fields landed on page 0 and
+every text-field overlay vanished from the preview while only the choice fields
+(whose rects came from the deterministic path) drew (bd polyglot-pdf-icyi).
+
+Model-supplied coordinates survive ONLY for a field whose widget name resolves to
+nothing -- the route a future non-AcroForm/scanned PDF would need. On that path a
+0-based page is treated as an ordinal counting-scheme difference and shifted up by
+one rather than discarded. A field with neither a resolvable widget nor a usable
+model rect carries NO `pdf_position` key at all, rather than a zero-size
+placeholder that would read as a real position downstream.
 
 ---
 

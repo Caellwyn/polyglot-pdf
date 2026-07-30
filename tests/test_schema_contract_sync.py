@@ -120,15 +120,62 @@ def test_contract_advertises_every_scorer_graded_key():
     # scorer no longer grades either as a relationship-recall key (bd
     # polyglot-pdf-d9lz reconciled schema_score.rel_keys to v2), so this coupling
     # list must not require the contract to advertise them.
+    # ALSO EXCLUDES pdf_position (bd polyglot-pdf-icyi): the contract now
+    # deliberately FORBIDS it, because widget geometry is read straight from the
+    # PDF's AcroForm widgets after extraction and overwrites anything the model
+    # emits -- a model transcribing coordinates rounds them and its page base is
+    # non-deterministic (that shipped a real bug: 48 of 54 w7 fields on page 0,
+    # every text overlay invisible). This coupling list is "keys an arm must be
+    # ASKED for", and pdf_position is no longer one; the scorer half was
+    # reconciled to match (schema_score._pos_match treats an absent DRAFT
+    # position as not-applicable rather than a miss, pinned in
+    # test_schema_score_derivation.py). Leaving it in this list would have
+    # passed vacuously -- the substring survives inside the forbidding comment
+    # -- which is exactly the false green a coupling test must not give.
     contract = sc.render_contract()
     scored_keys = [
-        "pdf_position", "max_length", "read_only", "multiline",  # attributes
+        "max_length", "read_only", "multiline",                  # attributes
         "show_if", "require_if", "copy_to",                      # relationships
         "conditional_behavior", "conditional_logic",
         "overflow_to_supplement", "multi_entry",                 # structure/overflow
     ]
     missing = [k for k in scored_keys if k not in contract]
     assert not missing, f"contract dropped scorer-graded keys: {missing}"
+
+
+def test_contract_FORBIDS_pdf_position_on_BOTH_surfaces_independently():
+    """bd polyglot-pdf-icyi: pdf_position must be declared derived-and-discarded,
+    the same way parts/sections/section_id already are -- and on BOTH surfaces
+    the model reads: the FIELD SHAPE listing and the RULES block.
+
+    ASSERTED SEPARATELY, PER SECTION, on purpose. The first version of this test
+    collected every line containing "pdf_position" and ran ONE `any("do not
+    emit")` over the lot -- so the FIELD SHAPE comment satisfied it alone, and
+    deleting the entire RULES bullet (round-1 finding 7's whole deliverable, and
+    the "mirroring parts/sections" half of exit criterion 2) still passed. That
+    is verbatim the vacuity shape this test was written to REPLACE: the test it
+    superseded also passed on a surviving substring (fresh-eyes Opus round 5).
+    Mutating away either surface must now fail."""
+    contract = sc.render_contract()
+
+    # 1. Not offered as an emittable key anywhere.
+    assert '"pdf_position": {' not in contract
+
+    # 2. Forbidden in the FIELD SHAPE listing (where the key used to sit).
+    head, sep, rules = contract.partition("RULES:")
+    assert sep, "contract has no RULES: section -- the split below is meaningless"
+    shape_lines = [ln for ln in head.splitlines() if "pdf_position" in ln.lower()]
+    assert any("do not emit" in ln.lower() for ln in shape_lines), (
+        "the FIELD SHAPE block no longer forbids pdf_position: "
+        f"{shape_lines}")
+
+    # 3. AND forbidden at RULES level, like parts/sections/section_id -- the
+    #    surface a model actually follows.
+    rules_lines = [ln for ln in rules.splitlines() if "pdf_position" in ln.lower()]
+    assert any("do not emit" in ln.lower() for ln in rules_lines), (
+        "the RULES block no longer forbids pdf_position, so it is not declared "
+        "derived-and-discarded the way parts/sections are: "
+        f"{rules_lines}")
 
 
 def test_contract_allows_multi_bucket_composite_conditions():
