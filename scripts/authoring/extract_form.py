@@ -219,12 +219,18 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
     (e.g. "form1[0].#subform[0].P1_checkbox6c_Unit[1]") -- i-90 alone has 32
     option pdf_field_names that only resolve this way.
 
-    Returns {"fields_filled": int, "options_filled": int, "unmatched": [...]}."""
+    Returns {"fields_filled": int, "options_filled": int, "unmatched": [...],
+    "model_pages_normalized": int} -- the fourth key counts model-supplied pages
+    shifted from 0-based to 1-based (bd polyglot-pdf-icyi). EVERY return path
+    carries all four: an early return that omitted one made the shape only
+    sometimes-four-keyed, so a caller indexing it directly would KeyError on the
+    error path alone (fresh-eyes Opus round 3)."""
     try:
         with open(dump_path, encoding="utf-8") as fh:
             dump = json.load(fh)
     except OSError:
-        return {"fields_filled": 0, "options_filled": 0, "unmatched": []}
+        return {"fields_filled": 0, "options_filled": 0, "unmatched": [],
+                "model_pages_normalized": 0}
 
     sys.path.insert(0, _REPO)  # self-sufficient, like the other backend imports
     from backend.services.schema_lint import _match_dump_names  # noqa: E402

@@ -57,6 +57,12 @@ sys.modules.setdefault("extract_form", _ef)
 _spec.loader.exec_module(_ef)
 
 
+# Module-level singleton so two _position_map() calls compare equal on it. A
+# per-call object() never would, and a marker STRING could collide with real
+# data; this cannot (bd polyglot-pdf-8i9u).
+_ABSENT = "\x00<pdf_position absent>"
+
+
 def _position_map(schema: dict) -> dict:
     """Every pdf_position in the schema, keyed by POSITIONAL INDEX.
 
@@ -73,15 +79,22 @@ def _position_map(schema: dict) -> dict:
 
     Index keys mean a REORDER also reads as a change, which is correct here: the
     field-level rect of an options-bearing field is defined as its FIRST
-    option's widget, so moving options can legitimately move that rect."""
+    option's widget, so moving options can legitimately move that rect.
+
+    A SENTINEL distinguishes "key absent" from an explicit null pdf_position:
+    `.get()` returns None for both, so popping a null placeholder -- a real edit
+    to the file -- read as unchanged, and a patch run would skip the write and
+    discard the positions it had just computed (the same symptom the key
+    collision above caused, via a different route; bd polyglot-pdf-8i9u, fixed
+    here since it is one line in code this bead already rewrites)."""
     out: dict = {}
     for i, field in enumerate(schema.get("fields") or []):
         if not isinstance(field, dict):
             continue
-        out[(i, None)] = field.get("pdf_position")
+        out[(i, None)] = field.get("pdf_position", _ABSENT)
         for j, opt in enumerate(field.get("options") or []):
             if isinstance(opt, dict):
-                out[(i, j)] = opt.get("pdf_position")
+                out[(i, j)] = opt.get("pdf_position", _ABSENT)
     return out
 
 

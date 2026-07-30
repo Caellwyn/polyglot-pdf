@@ -166,6 +166,22 @@ def test_duplicate_field_ids_cannot_mask_a_change():
     assert bop._positions_differ(base, moved) is True
 
 
+def test_an_explicit_null_position_is_not_the_same_as_an_absent_key():
+    """NULL-vs-ABSENT (bd polyglot-pdf-8i9u, fresh-eyes Opus round 3).
+
+    `.get()` returns None for both, so popping a null placeholder -- a real edit
+    to the written file -- used to read as unchanged: --check said exit 0 and a
+    patch run skipped the write, discarding the positions it had just computed.
+    Same symptom as the key collision, different route."""
+    with_null = {"fields": [{"id": "a", "pdf_position": None}]}
+    without_key = {"fields": [{"id": "a"}]}
+    assert bop._positions_differ(with_null, without_key) is True
+    # ...and the sentinel is stable across separate calls (a per-call object()
+    # would make every schema differ from itself)
+    assert bop._positions_differ(without_key,
+                                 json.loads(json.dumps(without_key))) is False
+
+
 def test_option_positions_are_compared_too():
     """A per-option rect change counts: the CLI exists primarily for options."""
     base = {"fields": [{"id": "a", "options": [

@@ -172,15 +172,38 @@ contract -- `pdf_position` was the straggler.
 The broken schema was well-formed: valid page key, valid numbers, positive
 sizes. Nothing in 2257 tests noticed, because nothing compared the schema
 against the PDF it describes. The new real-kit guard does exactly that, with a
-0.06pt tolerance -- and getting that number honest took three tries, which is
+0.06pt tolerance -- and getting that number honest took FOUR passes, which is
 the more useful lesson. v1 used 0.06 and credited it to "the dump rounds to one
-decimal". The Opus round showed the dump rounds to TWO decimals (max 0.005pt),
-so the tolerance was ~12x looser than its own stated basis. Tightening to 0.01
-then FAILED on w7 -- because 7 of its committed rects were written by an OLDER
-one-decimal dump and sit 0.05pt off the real widget. Measured per kit: i-90
-0.0000pt (raw floats), f1040 0.0050pt (current dump), w7 0.0500pt (legacy). So
-0.06 was the right ceiling all along for a guard that reads COMMITTED data --
-but for a reason I had not established, and the comment asserted the wrong one.
+decimal". Round 2 showed the dump rounds to TWO decimals (max 0.005pt), so the
+tolerance was ~12x looser than its own stated basis. Tightening to 0.01 then
+FAILED on w7, whose committed rects were written by an OLDER one-decimal dump
+and sit 0.05pt off. The figures I quoted after THAT were still wrong -- because
+i-90 was contributing zero comparisons (below), so its "0.0000pt, raw floats"
+was an artifact of measuring nothing. Final MEASURED values, with the guard's own
+arithmetic: f1040 0.0000pt/163 fields, i-90 0.0050pt/114, w7 0.0500pt/54. 0.06
+was the right ceiling all along -- for a reason I never established until the
+fourth try, while the comment asserted three wrong ones.
+
+**The worst find of the whole bead: my regression guard verified NOTHING on the
+biggest kit.** It looked up widget rects by exact `pdf_field_name` match, but
+i-90's schema stores the XFA LEAF (`P1_Line1_AlienNumber[0]`) while the PDF
+widget carries the fully-qualified path
+(`form1[0].#subform[0].P1_Line1_AlienNumber[0]`). So **0 of 132 i-90 fields were
+compared** -- every one hit the "unresolved widget name" skip -- and the test
+passed, green, proving nothing on the largest and most XFA-complex kit in the
+repo. The extractor itself resolves these correctly via the suffix-aware
+`_match_dump_names`, so my guard was strictly weaker than the code it guards.
+Fixed to use the same exact-then-dot-suffix rule (114 real comparisons now), and
+a NON-VACUITY FLOOR added: if a kit has positioned fields and none resolve, the
+test fails loudly instead of passing quietly.
+
+**Assert that a guard is doing work, not just that it passes.** The vacuous-i-90
+guard is the sharpest instance: it compared zero fields and reported success for
+two review rounds. A test whose subject can silently become empty needs a floor
+("we compared at least one thing") as much as it needs its assertion -- otherwise
+green means "nothing was checked" and "everything is correct" indistinguishably.
+This is the same failure shape as the vacuous coupling test in round 1, which
+passed because a forbidden substring survived inside a comment.
 
 **Mutation-check a regression guard before trusting it.** The first
 mutation run passed, which looked like the new guard was useless -- but the

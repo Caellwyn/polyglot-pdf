@@ -257,7 +257,29 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
                     round(w.rect.width, 2), round(w.rect.height, 2)))
 
-        bad_pages, wrong_rects = [], []
+        def _widget_for(claim):
+            """The widget rect for a schema-side pdf_field_name claim.
+
+            SUFFIX-AWARE, matching what the extractor itself does
+            (schema_lint._match_dump_names' exact-then-dot-boundary-suffix
+            rule). Exact-match-only skipped 100% of i-90's 132 fields -- the
+            schema stores the XFA LEAF (P1_Line1_AlienNumber[0]) while the PDF
+            widget carries the fully-qualified path
+            (form1[0].#subform[0].P1_Line1_AlienNumber[0]) -- so this guard
+            verified NOTHING on the largest, most XFA-complex kit while
+            appearing to pass (fresh-eyes Opus round 3). A guard weaker than
+            the code it guards is decoration."""
+            if not claim:
+                return None
+            hit = real.get(claim)
+            if hit:
+                return hit
+            for name, rect in real.items():
+                if name.endswith("." + claim):
+                    return rect
+            return None
+
+        bad_pages, wrong_rects, compared = [], [], 0
         for field in schema.get("fields") or []:
             pos = field.get("pdf_position")
             if not isinstance(pos, dict):
@@ -267,25 +289,28 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     or page < 1 or page > page_count):
                 bad_pages.append((field.get("id"), page))
                 continue
-            expected = real.get(field.get("pdf_field_name"))
+            expected = _widget_for(field.get("pdf_field_name"))
             if not expected:
                 continue  # unresolved widget name: the ledger's concern
+            compared += 1
             got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
-            # TOLERANCE, not equality -- sized to the MEASURED worst case over
-            # the committed kits, which is what this guard actually reads:
-            #   i-90  0.0000pt (raw PyMuPDF floats, exact)
-            #   f1040 0.0050pt (today's dump rounds to TWO decimals --
-            #                   acroform_dump.py `round(r.x0, 2)`)
-            #   w7    0.0500pt (7 fields written by an OLDER one-decimal dump)
-            # So one-decimal rounding is real but HISTORICAL, not current. An
-            # earlier comment here credited it to the current dump (wrong, and
-            # ~12x looser than its own stated basis); tightening to 0.01 then
-            # false-failed on w7's legacy values (fresh-eyes Opus round 2 found
-            # the first error, the retest found the second). 0.06 is the right
-            # ceiling for a REGRESSION guard over committed data; the bug it
-            # exists to catch is nothing like any of these figures -- a model
-            # rect rounds to WHOLE points (469.2 -> 469) or lands on the wrong
-            # page outright, both orders of magnitude beyond this.
+            # TOLERANCE, not equality. Sized to the worst case MEASURED with
+            # this exact arithmetic (expected rounded to 2dp, `got` as stored)
+            # over the committed kits this guard reads:
+            #   f1040 0.0000pt / 163 fields  (already dump-derived, exact)
+            #   i-90  0.0050pt / 114 fields  (today's dump rounds to TWO
+            #                                 decimals: round(r.x0, 2))
+            #   w7    0.0500pt /  54 fields  (rects written by an OLDER
+            #                                 one-decimal dump)
+            # So 0.06 is the right ceiling for a guard over COMMITTED data, and
+            # one-decimal rounding is real but HISTORICAL. Getting this number
+            # honest took three passes: v1 asserted the wrong basis (blamed the
+            # current dump), tightening to 0.01 then false-failed on w7's legacy
+            # values, and the figures quoted after THAT were still wrong because
+            # i-90 was contributing 0 comparisons (see _widget_for). Every
+            # number above is now measured, not reasoned. The bug this exists to
+            # catch is orders of magnitude beyond any of them: a model rect
+            # rounds to WHOLE points (469.2 -> 469) or lands on the wrong page.
             if got[0] != expected[0] or any(
                     abs(g - e) > 0.06 for g, e in zip(got[1:], expected[1:])):
                 wrong_rects.append((field.get("id"), got, expected))
@@ -297,6 +322,17 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
             f"{kit.name}: pdf_position does not match the PDF's own widget "
             f"rect -- positions must be deterministic, not model-authored: "
             f"{wrong_rects[:5]}")
+        # NON-VACUITY FLOOR: a kit with a schema, a form.pdf and positioned
+        # fields MUST yield real comparisons. Without this the guard passed
+        # while comparing 0 of i-90's 132 fields (fresh-eyes Opus round 3) --
+        # silent success is the failure mode a regression guard must not have.
+        positioned = sum(1 for f in schema.get("fields") or []
+                         if isinstance(f.get("pdf_position"), dict))
+        if positioned:
+            assert compared, (
+                f"{kit.name}: {positioned} field(s) carry a pdf_position but "
+                f"NONE resolved to a PDF widget -- this guard is verifying "
+                f"nothing on this kit (widget-name matching is broken)")
         checked_kits += 1
 
     if not checked_kits:
@@ -333,6 +369,23 @@ def test_the_page_zero_bug_cannot_survive_the_backfill(tmp_path):
     assert pages == [1, 1], f"a page-0 position survived the back-fill: {pages}"
     # and the previously-rounded field now carries the PDF's real precision
     assert schema["fields"][0]["pdf_position"]["width"] == 106.8
+
+
+def test_every_return_path_carries_all_four_keys(tmp_path):
+    """The return shape must not be only sometimes-four-keyed: the OSError early
+    return omitted model_pages_normalized, so a caller indexing it directly
+    would KeyError on the error path alone (fresh-eyes Opus round 3)."""
+    expected_keys = {"fields_filled", "options_filled", "unmatched",
+                     "model_pages_normalized"}
+    # error path: no such dump file
+    assert set(ef._backfill_positions({}, str(tmp_path / "nope.json"))) \
+        == expected_keys
+    # success path
+    dump = _write_dump(tmp_path, {
+        "fld": {"page": 0, "x": 1, "y": 2, "width": 3, "height": 4}})
+    assert set(ef._backfill_positions(
+        {"fields": [{"id": "a", "pdf_field_name": "fld"}]}, dump)) \
+        == expected_keys
 
 
 def test_a_bogus_option_widget_name_is_reported_even_with_a_model_position(tmp_path):
