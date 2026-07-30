@@ -178,11 +178,22 @@ def test_both_sis_forbid_accelerating_mid_sentence():
 
 def test_articulation_does_not_contradict_the_slow_pace_rule():
     # The articulation rules EXTEND the existing SPEECH STYLE block; they must
-    # not have displaced the pace rule that shares it.
+    # not have displaced the pace rule that shares it. Ordering alone is a weak
+    # assertion (SPEECH STYLE sits at the top, so it passes trivially), so pin
+    # that the pace prose actually lives BETWEEN the two anchors -- otherwise
+    # deleting the pace sentences would leave this test green.
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "SPEECH STYLE" in si
-    assert "Speak SLOWLY and calmly in every language" in si
-    assert si.index("SPEECH STYLE") < si.index("ARTICULATION")
+    start, end = si.index("SPEECH STYLE"), si.index("ARTICULATION")
+    assert start < end
+    between = si[start:end]
+    for phrase in (
+        "Speak SLOWLY and calmly in every language",
+        "ten percent slower",
+        "from the FIRST word to the LAST",
+        # the per-character read-back rule shares this block and must survive
+        "N ... G ... U ... Y ... E ... N",
+    ):
+        assert phrase in between, f"SPEECH STYLE lost: {phrase}"
 
 
 def test_legacy_si_block_order_is_register_then_pace_then_articulation():

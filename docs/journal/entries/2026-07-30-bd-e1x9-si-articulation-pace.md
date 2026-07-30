@@ -104,10 +104,26 @@ Confirmed good by ear in a second live session.
 
 ## Cost
 
-~200 tokens/turn of added SI text. Non-trivial against the measured invariant
-that per-turn SI text is 95-98% of session cost (and against the active
-SI-reduction epic `polyglot-pdf-jnjj`), but small in absolute terms and bought a
-maintainer-verified quality win.
+**+393 tokens/turn on the production DTI path** (SI floor 3128 -> 3521, a 12.6%
+increase; chars 12515 -> 14086). The legacy SI grows +410 (1521 -> 1931).
+Measured with the repo's own `estimate_si_floor_tokens`
+(`backend/adapters/live_ai_gemini.py`) against `origin/dev`, not estimated by eye.
+
+This is a real cost against the measured invariant that per-turn SI text is
+95-98% of session cost, and it cuts against the active SI-reduction epic
+`polyglot-pdf-jnjj`. It was accepted as a deliberate quality-for-cost trade on
+maintainer ear-verification.
+
+Compression derivation is unaffected in the dangerous direction: the derived
+window rises to ~4120 and the trigger to ~5620, still ABOVE the 5000 API
+minimum, so the clamp path (which would otherwise kill the connect with 1007)
+does not newly fire.
+
+**An earlier draft of this entry said "~200 tokens/turn." That was wrong** -- it
+counted only the first articulation block and missed the pace rules and the
+review-driven additions. Corrected here after the Opus outer review recomputed
+it. Cost figures in a journal entry get trusted by later audits; measure them
+with the repo's estimator rather than estimating by eye.
 
 ## What pre-PR review caught
 

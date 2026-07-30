@@ -122,10 +122,20 @@ instant the local VAD fires, for sub-perceptual latency (see
 
 ## Spoken delivery (pace + articulation)
 
-Both SIs govern HOW the model speaks, not just what it says. The DTI SI carries
-this in its `SPEECH STYLE` block; the legacy `SYSTEM_INSTRUCTION` carries the
-equivalent as `PACE` + `ARTICULATION` inside `REGISTER`. Three concerns, kept
-deliberately separate (bd polyglot-pdf-e1x9):
+Both SIs govern HOW the model speaks, not just what it says -- but they LABEL it
+differently, which matters when you go to tune it:
+
+- **DTI** (`DTI_SYSTEM_INSTRUCTION`, the production path): one `SPEECH STYLE`
+  block holds the pace prose (UNLABELLED -- there is no `PACE:` token in this
+  constant, so grepping `PACE:` will miss it), followed by `ARTICULATION`.
+- **Legacy** (`SYSTEM_INSTRUCTION`): labelled `PACE:` + `ARTICULATION` inside
+  `REGISTER`.
+
+Grepping for `PACE:` alone therefore finds ONLY the legacy, non-production
+constant. Tune the DTI copy via `SPEECH STYLE` or `ARTICULATION`; the two SIs'
+ARTICULATION text is byte-identical and must be edited together.
+
+Three concerns, kept deliberately separate (bd polyglot-pdf-e1x9):
 
 - **Pace** -- distinctly slower than natural conversational speed, targeted as
   "about ten percent slower again than the measured pace you would otherwise
