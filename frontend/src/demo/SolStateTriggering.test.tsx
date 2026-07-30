@@ -146,12 +146,19 @@ async function advanceOneFrame() {
 }
 
 /**
- * Let amplitude propagate all the way to a CSS variable. Two hops are involved,
- * each on its own rAF loop: the overlay publishes `micEnergy` state from the
- * worklet frame, THEN Sol's own loop exponentially smooths that into --e
- * (`fast += (target - fast) * 0.14`). One frame moves --e barely off zero, so a
- * single tick is not enough to assert "amplitude is flowing" -- give it enough
- * frames for the smoothing to climb clear of zero.
+ * Let amplitude propagate all the way to a CSS variable.
+ *
+ * The MIC path genuinely needs several frames: it has TWO hops, each on its own
+ * rAF loop -- the overlay publishes `micEnergy` state from the worklet frame,
+ * then Sol's loop exponentially smooths that into --e (`fast += (target - fast)
+ * * 0.14`). Measured: --e is unset on frame 1 and 0.063 on frame 2.
+ *
+ * The OUTPUT path (speaking) has only ONE hop, since Sol pulls the getter
+ * directly, and measurably clears zero on a single frame (0.084 from the mock's
+ * 60). Those tests therefore do not need this helper -- they use it only for
+ * uniformity, and are stricter than required. Stated plainly because an earlier
+ * version of this comment claimed one frame was insufficient for BOTH, which is
+ * false for the output path and would mislead anyone tuning the frame count.
  */
 async function advanceFrames(n = 20) {
   for (let i = 0; i < n; i++) {

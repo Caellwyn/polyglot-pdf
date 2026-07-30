@@ -448,7 +448,14 @@ export const SOL_CSS = `
 .sol[data-state="connecting"] .rays { opacity: .3; }
 .sol[data-state="connecting"] .rayA,
 .sol[data-state="connecting"] .rayB { animation-play-state: paused; }
-.sol[data-state="connecting"] .corona { opacity: .5; animation: sol-grow-corona 1s linear infinite; }
+/* No normal opacity declaration here, on purpose. sol-grow-corona animates
+   opacity (.2-.6), and an animation-origin value outranks an author-normal one,
+   so a static opacity would be dead while animating -- and under reduced motion
+   the pin further down (.35) wins instead. A never-applied declaration sitting
+   next to an opacity-animating keyframe is exactly the shape that hid the
+   original brighter-than-idle inversion, so it is not recreated. The keyframe's
+   own ceiling (.6) stays below idle's .85, pinned numerically in Sol.test.tsx. */
+.sol[data-state="connecting"] .corona { animation: sol-grow-corona 1s linear infinite; }
 .sol[data-state="connecting"] .disc { animation: sol-grow-disc 1s linear infinite; }
 /* The 99.9% hold is deliberate: without a near-instant final step the browser
    interpolates smoothly from 100% back to 10% across the keyframe boundary,

@@ -13,7 +13,7 @@
 //   - the accessible name is present (or correctly suppressed when decorative).
 import { render, cleanup } from '@testing-library/react'
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { Sol, SOL_CSS } from './Sol'
+import { Sol, SOL_CSS, SOL_PLACEMENT_CSS } from './Sol'
 import type { SolState } from './solState'
 
 afterEach(cleanup)
@@ -229,9 +229,27 @@ describe('listening/speaking swap (maintainer feedback 2026-07-29)', () => {
 
   it('speaking drives RAY LENGTH (rayscale) via --e, not the halo', () => {
     expect(ruleFor('speaking', 'rayscale')).toMatch(/var\(--e\)/)
-    // .disc and .ring must NOT exist for speaking -- those are listening's now.
+    // .disc and BOTH halo rings must NOT exist for speaking -- those are
+    // listening's now.
+    //
+    // `ring2?` not `ring\b`: \b does NOT match between `g` and `2` (both word
+    // characters), so the earlier `\.ring\b` was blind to `.ring2` entirely --
+    // re-inserting the pre-swap `.sol[data-state="speaking"] .ring2` rule (i.e.
+    // speaking driving listening's second halo ring, the exact "wrong organ"
+    // this block exists to catch) left the whole suite green. Mutation-verified
+    // both before and after the fix.
     expect(SOL_CSS).not.toMatch(/\.sol\[data-state="speaking"\]\s*\.disc\s*\{/)
-    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="speaking"\]\s*\.ring\b/)
+    expect(SOL_CSS).not.toMatch(/\.sol\[data-state="speaking"\]\s*\.ring2?\s*\{/)
+  })
+
+  it('listening rays are FLAT -- amplitude belongs to its halo, not its rays', () => {
+    // The mirror of the hole above. Nothing pinned listening's ray opacity, so
+    // reverting it to the pre-swap `calc(.72 + var(--eb) * .28)` -- putting the
+    // ray-breathing back on listening, half of the maintainer's requested swap
+    // undone -- also passed the full suite.
+    expect(ruleFor('listening', 'rays')).not.toMatch(/var\(--e/)
+    // And speaking's rays SHOULD be amplitude-driven, the other half of the swap.
+    expect(ruleFor('speaking', 'rays')).toMatch(/var\(--eb\)/)
   })
 
   it('speaking corona scales with --e but is not amplitude-opacity-driven (that is listening\'s halo swell)', () => {
@@ -318,6 +336,29 @@ describe('Sol stylesheet invariants', () => {
     const opacities = [...kf.matchAll(/opacity:\s*(\.?\d*\.?\d+)/g)].map(m => parseFloat(m[1]))
     expect(opacities.length).toBeGreaterThan(0)
     expect(Math.max(...opacities)).toBeLessThan(idle)
+  })
+})
+
+describe('CSS template-literal hygiene', () => {
+  // SOL_CSS and SOL_PLACEMENT_CSS are template literals, so a backtick anywhere
+  // inside them -- including inside a /* */ comment -- terminates the string and
+  // breaks the esbuild transform with a misleading error pointing at whatever
+  // word follows. This has happened TWICE while editing those comments (both
+  // times from writing a CSS property name in backticks out of markdown habit),
+  // each time turning the whole frontend red. Cheaper to assert than to
+  // rediscover.
+  it('neither CSS export contains a backtick or a template interpolation', () => {
+    for (const [name, css] of [['SOL_CSS', SOL_CSS], ['SOL_PLACEMENT_CSS', SOL_PLACEMENT_CSS]] as const) {
+      expect(css.includes('`'), `${name} contains a backtick`).toBe(false)
+      expect(css.includes('${'), `${name} contains a template interpolation`).toBe(false)
+    }
+  })
+
+  it('both exports are non-empty (a terminated literal would truncate them)', () => {
+    // The failure mode is silent truncation as much as it is a parse error, so
+    // pin a floor well below current size but far above "a few broken rules".
+    expect(SOL_CSS.length).toBeGreaterThan(5000)
+    expect(SOL_PLACEMENT_CSS.length).toBeGreaterThan(500)
   })
 })
 

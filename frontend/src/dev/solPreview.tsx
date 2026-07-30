@@ -80,6 +80,9 @@ function useFakeEnergy(): { energy: number; getEnergy: () => number } {
  * Derived from SOL_CSS by text transform rather than hand-copied, so it cannot
  * drift from the rules that actually ship.
  */
+/** Stable zero getter -- a fresh arrow each render would restart Sol's loop. */
+const ZERO_ENERGY = () => 0
+
 function reducedMotionPreviewCss(css: string): string {
 	const marker = '@media (prefers-reduced-motion: reduce)'
 	const start = css.indexOf(marker)
@@ -105,8 +108,23 @@ function reducedMotionPreviewCss(css: string): string {
 }
 
 function App() {
-	const { energy, getEnergy } = useFakeEnergy()
+	const { energy: liveEnergy, getEnergy: getLiveEnergy } = useFakeEnergy()
 	const [rm, setRm] = useState(false)
+
+	/*
+	 * Reproduce the SHIPPED reduced-motion JS guard, not just its CSS.
+	 *
+	 * Sol zeroes --e/--eb itself when `matchMedia('(prefers-reduced-motion:
+	 * reduce)')` matches (see the guard in shared/Sol.tsx). That check is blind to
+	 * this harness's class toggle -- it reads the OS preference -- so without
+	 * this the rAF loop keeps feeding amplitude and the CSS pins only cover what
+	 * the @media block names. Result: listening's corona kept swelling ~38% and
+	 * brightening .45 -> .80 with the box ticked, while a real reduced-motion
+	 * user sees it dead static. Same class of lie as the full-size disc this
+	 * toggle was just fixed for, only subtler -- so feed silence instead.
+	 */
+	const energy = rm ? 0 : liveEnergy
+	const getEnergy = rm ? ZERO_ENERGY : getLiveEnergy
 
 	// Real status strings the overlays can emit -> the state each maps to.
 	const statusProbe = [
