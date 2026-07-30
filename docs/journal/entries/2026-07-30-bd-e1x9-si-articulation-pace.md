@@ -98,7 +98,11 @@ Two changes, deliberately separable so either can be tuned alone:
    observed "rushing" was mid-sentence DRIFT, a distinct failure from baseline
    speed.
 
-The legacy SI got a matching `PACE` rule so both paths behave the same.
+The legacy SI got a matching `PACE` rule. The two paths are NOT fully
+equivalent even so: the ARTICULATION text is byte-identical across both, but
+the legacy SI has never had DTI's per-character read-back rule
+(`'N ... G ... U ... Y ... E ... N'`) and still does not. That gap is
+pre-existing and out of scope here -- `USE_DTI=true` is production.
 
 Confirmed good by ear in a second live session.
 

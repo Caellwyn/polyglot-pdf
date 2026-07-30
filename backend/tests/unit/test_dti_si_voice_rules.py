@@ -209,6 +209,18 @@ def test_each_si_has_exactly_one_articulation_block():
         assert si.count("ARTICULATION (say every word clearly)") == 1, name
 
 
+def test_articulation_text_is_identical_across_both_sis():
+    # The two constants wrap differently in source but must concatenate to the
+    # SAME rule. Without this, the copies could drift in any prose no other
+    # assertion happens to name, with the whole suite still green.
+    def _block(si):
+        start = si.index("ARTICULATION (say every word clearly)")
+        return si[start:si.index("\n\n", start)]
+
+    s = _settings()
+    assert _block(s.DTI_SYSTEM_INSTRUCTION) == _block(s.SYSTEM_INSTRUCTION)
+
+
 # --- ASCII-only guard for every constant this change touched (scar #6) --------
 
 def test_touched_constants_are_ascii_only():
