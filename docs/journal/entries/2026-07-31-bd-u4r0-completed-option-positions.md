@@ -36,18 +36,23 @@ widget-family members as options carrying only
 them. Confirmed by reading every step between 3c2 and the end of `extract()`:
 none touches option positions.
 
-**Why it is a bug, not cosmetic:** the runtime option-rect painter is
-ALL-OR-NOTHING (`frontend/src/pdf-view/valuePainting.ts`), so ONE positionless
-option silently disables per-option mark painting for the WHOLE choice field --
-it falls back to a label at the field rect. It also violated the invariant bd
-polyglot-pdf-icyi had just established: *where a widget resolves, the
-deterministic dump rect OWNS pdf_position*.
+**Why it is a bug, not cosmetic:** `valuePainting.selectedOptionRects` iterates
+the SELECTED values and returns `[]` mid-loop the moment one lacks a rect, so
+selecting a completed option loses the per-option marks for every other
+selection on that field too -- it falls back to a label at the field rect. (An
+earlier draft of this entry, the code comment and the test message all said
+"ONE positionless option disables painting for the WHOLE field", full stop.
+That overstates it: the painter loops `selectedValues`, not `field.options`, so
+an UNSELECTED positionless option is harmless. Corrected in all three places --
+fresh-eyes caught the same wrong severity model propagated to three readers.)
+It also violated the invariant bd polyglot-pdf-icyi had just established:
+*where a widget resolves, the deterministic dump rect OWNS pdf_position*.
 
 **The fix is a late re-derive (3d2) after 3c2/3d, not a reordering.** Moving
 step 3 down was the other candidate and was rejected on evidence:
 
-- the pass is IDEMPOTENT -- verified byte-identical on a second run over the
-  real i-90 kit (132 fields / 75 options, same counts, same bytes);
+- RECT DERIVATION is IDEMPOTENT -- verified byte-identical on a second run over
+  the real i-90 kit (132 fields / 75 options, same counts, same bytes);
 - since icyi it derives UNCONDITIONALLY, so there is no trusted model rect left
   for a second pass to clobber -- the property that makes a re-run safe now and
   would NOT have been true before that bead;
@@ -55,6 +60,17 @@ step 3 down was the other candidate and was rejected on evidence:
   never positions, so a re-derive is a pure addition rather than a reordering
   that could perturb them;
 - 3d's own minted fields already carry a converted rect, so they are a no-op.
+
+**But "the pass is idempotent" was too broad, and the review caught it.** Rect
+derivation is; the PAGE-BASE SHIFT inside the same function is not. It one-shot
+corrects the MODEL's ordinal base, so a second run moves positions the first run
+already shifted -- model pages `[-1, 0]` become `[0, 1]` and then `[1, 2]`, and
+that `2` is off a one-page document. That is precisely the off-the-document
+failure the deterministic-exempt set was built to prevent, reintroduced from the
+other direction by my own fix. The late pass now takes `normalize_pages=False`,
+pinned by a regression test. Worth stating plainly: I justified the whole design
+with an idempotence claim that was true of the part I was thinking about and
+false of the part I was not.
 
 Also corrected the 3c2 comment, which claimed it *"Runs BEFORE the backfill"* --
 that reads as step 3, which actually runs ABOVE it. The ordering that matters is
@@ -85,6 +101,12 @@ ORCHESTRATION -- the order in which it calls things -- a test that calls those
 things itself has replaced the subject with a re-implementation.** Drive the
 real entry point, and mutate the production step to confirm the test can fail.
 
+**An idempotence claim needs to name WHICH part is idempotent.** The whole
+design rested on "the pass is idempotent, so re-running it is safe". That was
+true of rect derivation and false of the page-base shift living in the same
+function -- and re-running it double-shifted model pages off the document. A
+function is not idempotent; its individual effects are. Enumerate them.
+
 **Fixture vacuity needs its own assertion.** Two earlier fixture attempts
 returned `{fields_completed: 0, options_added: 0}` -- family mining requires
 BUTTON widgets (`logical_type` checkbox/radio) sharing a leaf base on one page
@@ -105,6 +127,11 @@ documented rule is applied, not what the rule is.
 
 - `scripts/authoring/extract_form.py` -- the 3d2 late re-derive with the
   rejected-alternative rationale; corrected the stale 3c2 ordering comment.
-- `tests/test_extract_form_backfill.py` -- `_family_dump` / `_family_pdf`
-  fixtures and the pipeline-level `test_extract_gives_family_completed_options_a_position`,
-  with an anti-vacuity assertion.
+- `tests/test_extract_form_backfill.py` -- the `_family_pdf` fixture, the
+  pipeline-level `test_extract_gives_family_completed_options_a_position` with
+  an anti-vacuity assertion, and
+  `test_the_late_pass_does_NOT_re_shift_model_pages`. (A `_family_dump` helper
+  also shipped in the first draft and was never called by anything -- dead
+  scaffolding carrying an authoritative-sounding docstring, duplicating the
+  live `_write_family_dump` in `tests/test_extract_form_group_completion.py`.
+  Removed.)

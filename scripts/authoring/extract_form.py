@@ -180,7 +180,8 @@ def _normalize_model_page_base(schema: dict, deterministic: object = None) -> in
     return shifted
 
 
-def _backfill_positions(schema: dict, dump_path: str) -> dict:
+def _backfill_positions(schema: dict, dump_path: str, *,
+                        normalize_pages: bool = True) -> dict:
     """Deterministically set `pdf_position` on each field AND each option from the
     AcroForm dump (bd polyglot-pdf-5f41 extends the field-only pass, bd 7a9.18).
 
@@ -378,7 +379,17 @@ def _backfill_positions(schema: dict, dump_path: str) -> dict:
     # than widening the return shape: page-base normalization only ever needs to
     # run immediately after this pass, and doing it inline keeps the two from
     # being called out of order (bd polyglot-pdf-icyi).
-    normalized = _normalize_model_page_base(schema, deterministic_positions)
+    #
+    # normalize_pages=False for a SECOND pass over the same schema (the 3d2 late
+    # re-derive, bd polyglot-pdf-u4r0). Rect derivation is idempotent, but the
+    # page-base shift is NOT: it is a one-shot correction of the MODEL's ordinal
+    # base, and re-running it over positions pass 1 already shifted moves them a
+    # second page -- e.g. model pages [-1, 0] go to [0, 1] then to [1, 2], and
+    # that 2 is off a 1-page document. That is the exact off-the-document
+    # failure the deterministic-exempt set exists to prevent, reintroduced from
+    # the other direction (fresh-eyes, bd u4r0 round 1).
+    normalized = (_normalize_model_page_base(schema, deterministic_positions)
+                  if normalize_pages else 0)
     return {
         "fields_filled": fields_filled,
         "options_filled": options_filled,
@@ -1380,33 +1391,46 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #      {value, label, pdf_field_name} -- no rect -- so a completed
         #      option shipped POSITIONLESS even though its widget resolves in
         #      the dump, and nothing downstream filled it. Not cosmetic: the
-        #      runtime option-rect painter is ALL-OR-NOTHING
-        #      (frontend/src/pdf-view/valuePainting.ts), so ONE positionless
-        #      option silently disables per-option mark painting for the WHOLE
-        #      choice field. It also violated the invariant bd
-        #      polyglot-pdf-icyi established -- "where a widget resolves, the
-        #      deterministic dump rect OWNS pdf_position".
+        #      runtime option-rect painter bails out for the WHOLE field when
+        #      any SELECTED value lacks a rect (valuePainting.selectedOptionRects
+        #      returns [] mid-loop), falling back to a label at the field rect --
+        #      so a user who ticks the completed option loses the per-option
+        #      marks for every other selection on that field too. It also
+        #      violated the invariant bd polyglot-pdf-icyi established --
+        #      "where a widget resolves, the deterministic dump rect OWNS
+        #      pdf_position".
         #
-        #      A RE-RUN rather than moving step 3 down: the pass is idempotent
-        #      (verified byte-identical on a second run over the real i-90
-        #      kit), it derives unconditionally since icyi so there is no
-        #      trusted model rect left to clobber, and the steps in between
-        #      (3a /TU, 3c2, 3d) read and write pdf_field_name, never
+        #      A RE-RUN rather than moving step 3 down: RECT derivation is
+        #      idempotent (verified byte-identical on a second run over the
+        #      real i-90 kit), it derives unconditionally since icyi so there
+        #      is no trusted model rect left to clobber, and the steps in
+        #      between (3a /TU, 3c2, 3d) read and write pdf_field_name, never
         #      positions -- so this is a pure addition, not a reordering that
         #      could perturb them. 3d's own minted fields already carry a
         #      converted rect, so they are a no-op here.
-        late_positions = _backfill_positions(schema, dump_path)
+        #
+        #      normalize_pages=False because the page-base shift is the ONE
+        #      part of the pass that is NOT idempotent: it one-shot corrects
+        #      the model's ordinal base, so re-running it would move positions
+        #      pass 1 already shifted a second page, off the document. See the
+        #      note at the end of _backfill_positions.
+        late_positions = _backfill_positions(schema, dump_path,
+                                             normalize_pages=False)
         positions_filled = {
-            # Report the TOTAL derived across both passes: the counter means
-            # "positions this run derived", and the late pass is part of the
-            # same run (bd polyglot-pdf-2hxu tracks that this counter's meaning
-            # shifted from "repaired" to "derived" at icyi).
+            # The late pass re-derives EVERYTHING pass 1 did, plus whatever
+            # 3c2/3d added, so its counts are a superset -- take them, never a
+            # sum (summing would double-count every field). The counter means
+            # "positions this run derived" (bd polyglot-pdf-2hxu tracks that
+            # meaning shifting from "repaired" to "derived" at icyi).
             "fields_filled": late_positions["fields_filled"],
             "options_filled": late_positions["options_filled"],
             "unmatched": late_positions["unmatched"],
+            # Pass 1's value verbatim: the late pass runs with
+            # normalize_pages=False and always reports 0, so this stays equal
+            # to the number the console line above printed -- the log and the
+            # provenance stanza can never disagree (fresh-eyes, bd u4r0).
             "model_pages_normalized":
-                positions_filled.get("model_pages_normalized", 0)
-                + late_positions.get("model_pages_normalized", 0),
+                positions_filled.get("model_pages_normalized", 0),
         }
 
         # Keep the dump IN MEMORY for the lint pass at step 4 (the temp file is

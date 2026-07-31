@@ -970,31 +970,8 @@ def test_backfill_claim_is_suffix_aware(tmp_path):
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
 
 
+
 # --- 3c2 completion + the late position pass (bd polyglot-pdf-u4r0) ---------- #
-
-def _family_dump(tmp_path, leaf="P2_checkbox3", n=3, page=0):
-    """A dump holding ONE minable checkbox family: same leaf, distinct [n].
-
-    group_candidates.find_group_candidates only mines BUTTON widgets
-    (logical_type checkbox/radio) sharing a leaf base on one page with distinct
-    indexes, so the fixture has to carry logical_type -- a bare rect dump never
-    triggers completion and would make this test vacuous.
-    """
-    fields = []
-    for i in range(n):
-        fields.append({
-            "name": f"form1[0].#subform[0].{leaf}[{i}]",
-            "logical_type": "checkbox",
-            "widgets": [{
-                "rect": {"page": page, "x": 100.0 + 20 * i, "y": 200.0,
-                         "width": 10.0, "height": 10.0},
-                "type": "checkbox",
-                "on_value": f"on{i}",
-            }],
-        })
-    p = tmp_path / "dump.json"
-    p.write_text(json.dumps({"fields": fields}), encoding="utf-8")
-    return str(p)
 
 
 def _family_pdf(tmp_path, leaf="P2_checkbox3", n=3):
@@ -1057,12 +1034,43 @@ def test_extract_gives_family_completed_options_a_position(tmp_path, monkeypatch
     for opt in opts:
         pos = opt.get("pdf_position")
         assert pos, (
-            f"option {opt.get('value')} shipped with NO pdf_position -- a "
-            "positionless option disables per-option painting for the WHOLE "
-            "field (valuePainting.ts is all-or-nothing)")
+            f"option {opt.get('value')} shipped with NO pdf_position -- if a "
+            "user SELECTS it, valuePainting.selectedOptionRects bails for the "
+            "WHOLE field, losing the per-option marks for every other "
+            "selection on it too")
         assert pos["page"] == 1, f"page {pos['page']} is not 1-based"
         assert pos["width"] > 0 and pos["height"] > 0
 
     # each option took ITS OWN widget rect, not a sibling's
     xs = sorted(o["pdf_position"]["x"] for o in opts)
     assert xs == [100.0, 120.0, 140.0], f"options took the wrong rects: {xs}"
+
+
+def test_the_late_pass_does_NOT_re_shift_model_pages(tmp_path):
+    """REGRESSION PIN for the 3d2 re-run (bd polyglot-pdf-u4r0, fresh-eyes).
+
+    Rect derivation is idempotent, but the page-base shift is NOT: it one-shot
+    corrects the MODEL's ordinal base. My first draft of 3d2 called
+    _backfill_positions plainly, which re-ran that shift over positions pass 1
+    had already moved -- model pages [-1, 0] went to [0, 1] and then to [1, 2],
+    and that 2 is off a 1-page document. Exactly the off-the-document failure
+    the deterministic-exempt set exists to prevent, arriving from the other
+    direction. The late pass now passes normalize_pages=False.
+    """
+    dump = tmp_path / "dump.json"
+    dump.write_text(json.dumps({"fields": []}), encoding="utf-8")  # nothing resolves
+    schema = {"fields": [
+        {"id": "a", "pdf_field_name": "nope1",
+         "pdf_position": {"page": -1, "x": 1, "y": 1, "width": 5, "height": 5}},
+        {"id": "b", "pdf_field_name": "nope2",
+         "pdf_position": {"page": 0, "x": 1, "y": 1, "width": 5, "height": 5}},
+    ]}
+    first = ef._backfill_positions(schema, str(dump))
+    assert first["model_pages_normalized"] == 2
+    assert [f["pdf_position"]["page"] for f in schema["fields"]] == [0, 1]
+
+    late = ef._backfill_positions(schema, str(dump), normalize_pages=False)
+    assert late["model_pages_normalized"] == 0
+    assert [f["pdf_position"]["page"] for f in schema["fields"]] == [0, 1], (
+        "the late pass re-shifted model pages -- a second shift moves them off "
+        "the document")
