@@ -115,6 +115,23 @@ have "passed" while exercising nothing. The shipped test asserts
 `len(opts) == 3` with an explicit *"this test would be vacuous"* message before
 it asserts anything about positions.
 
+## Real-kit safety, stated precisely
+
+`w7`, `i-90` and `f1040` all return `{fields_completed: 0, options_added: 0}`
+from 3c2, so the late pass is a strict no-op on every committed kit today --
+consistent with this defect only biting a FRESH extraction whose 3c2 step
+actually completes a family.
+
+One correction to how I first phrased that safety check. I wrote "0 positionless
+options"; the review measured **219 of i-90's 294 options carry no
+`pdf_position`** -- and re-measuring confirms it exactly: all 219 belong to
+`type: select` fields (the state / height dropdowns).
+`_backfill_positions` skips those deliberately and correctly, because a
+combobox's choice-values have no printed box to place. Zero checkbox/radio
+family options are positionless. So the safety conclusion holds, but the
+sentence I used to support it was false, and repeating it would have taught the
+next reader that any positionless option is a defect.
+
 ## Doc freshness
 
 No tier-1/tier-2 doc tracks `extract_form.py`'s stage order (the freshness
