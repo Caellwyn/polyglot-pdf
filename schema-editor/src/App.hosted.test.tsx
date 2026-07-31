@@ -464,33 +464,6 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
     fireEvent.click(screen.getByTestId('edit-field'));
   }
 
-  // REGRESSION PIN for the order-dependent flake (bd 79tz) -- a PAIR of tests,
-  // because the thing being pinned is what the suite's afterEach does, and no
-  // single test can observe that from the inside.
-  //
-  // The first queues a one-time rejection and never spends it (the shape any
-  // test can accidentally produce when an assertion fails early or the UI
-  // coalesces a save). The second asserts the mock is clean. Under
-  // afterEach's resetAllMocks the queue is drained and the pair passes; revert
-  // it to clearAllMocks and the queue survives into the second test, which
-  // fails BY NAME rather than corrupting some unrelated test downstream.
-  //
-  // Two earlier versions of this pin were both hollow: one asserted only
-  // vi.isMockFunction(...) (true under either hook) and relied on an
-  // unrelated later test failing; the rewrite proved vitest's own
-  // clear-vs-reset semantics using LOCAL calls, which never touch the hook
-  // under test at all -- reverting afterEach left it green (Opus outer review,
-  // both passes). The hook is observable only across a test boundary.
-  it('79tz pin (1/2): queues an unconsumed once-rejection', () => {
-    vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new Error('leaked'));
-    expect(vi.isMockFunction(saveRemoteSchema)).toBe(true);
-  });
-
-  it('79tz pin (2/2): the next test does NOT inherit it', async () => {
-    // Fails with "leaked" if afterEach stops draining queued once-mocks.
-    await expect(saveRemoteSchema('kit', {} as never)).resolves.toBeUndefined();
-  });
-
   it('a failed remote save shows a dismissible banner and keeps the editor alive', async () => {
     vi.mocked(saveRemoteSchema).mockRejectedValue(
       new Error('Kit is complete -- revert to draft before saving'),
@@ -584,5 +557,45 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
       expect(screen.getByText(/Welcome to PDF Schema Editor/)).toBeInTheDocument());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('Help')).toBeInTheDocument();
+  });
+});
+
+/**
+ * REGRESSION PIN for the order-dependent flake (bd polyglot-pdf-79tz).
+ *
+ * What is being pinned is what this file's `afterEach` does -- and a hook is
+ * observable only ACROSS a test boundary, so the pin has to be a PAIR: one
+ * test queues a one-time rejection and never spends it (the shape any test
+ * accidentally produces when an assertion fails early or the UI coalesces a
+ * save), the next asserts the mock comes back clean. Under `resetAllMocks`
+ * the queue is drained and both pass; revert the hook to `clearAllMocks` and
+ * the second fails BY NAME instead of corrupting an unrelated test.
+ *
+ * ISOLATED IN ITS OWN describe, with a mock NO App render touches. Three
+ * earlier versions were each hollow or fragile:
+ *   1. asserted only vi.isMockFunction(...) -- true under either hook -- and
+ *      leaned on some unrelated later test failing;
+ *   2. proved vitest's clear-vs-reset semantics with LOCAL calls that never
+ *      touched the hook under test, so reverting afterEach left it green;
+ *   3. sat inside the UX describe, where a neighbouring test leaves a mounted
+ *      App with an in-flight setTimeout whose continuation can still call
+ *      saveRemoteSchema -- the very mock the pin arms. That made the pin
+ *      ITSELF an intermittent flake (observed once in six full runs, Opus
+ *      clearing review), which is worse than no pin: a red that names the fix
+ *      invites someone to revert the fix.
+ *
+ * `probeSession` is the mock used here precisely because no test in this file
+ * renders anything that calls it after the gate has passed, so no ambient
+ * async tail can reach it.
+ */
+describe('bd 79tz: afterEach drains queued one-time mocks', () => {
+  it('pin (1/2): queues an unconsumed once-rejection', () => {
+    vi.mocked(probeSession).mockRejectedValueOnce(new Error('leaked'));
+    expect(vi.isMockFunction(probeSession)).toBe(true);
+  });
+
+  it('pin (2/2): the next test does NOT inherit it', async () => {
+    // Fails with "leaked" if afterEach stops draining queued once-mocks.
+    await expect(probeSession()).resolves.toEqual({ role: 'editor' });
   });
 });

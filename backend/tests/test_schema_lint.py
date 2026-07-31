@@ -1166,11 +1166,17 @@ def test_identity_rule_never_throws_on_malformed_provenance():
 
 def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
     r"""CONTRACT PIN (bd anim): the editor parses the current identity out of
-    the finding PATH with /\[identity:([0-9a-f]+)\]/ and pins a human's
-    acknowledgment to it. If this format ever changes, that parse silently
-    returns undefined and 'any ack satisfies the gate' -- reopening the
-    permanent-waiver hole with no other test to catch it. The hash must stay
-    OUT of the message, which is rendered to humans in three UI surfaces."""
+    the finding PATH with /\[identity:([0-9a-f]+)\]$/ -- ANCHORED since bd
+    polyglot-pdf-g5vj -- and pins a human's acknowledgment to it. If this
+    format ever changes, that parse silently returns undefined and 'any ack
+    satisfies the gate' -- reopening the permanent-waiver hole with no other
+    test to catch it. The hash must stay OUT of the message, which is rendered
+    to humans in three UI surfaces.
+
+    The pattern quoted here MUST match the assertion below and the editor's
+    actual regex: this docstring previously quoted the pre-g5vj unanchored
+    form, which invited a future reader to 'restore' it and re-open the hole
+    (Opus clearing review)."""
     import re
     from backend.services import guidance_contract as gc
     f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
