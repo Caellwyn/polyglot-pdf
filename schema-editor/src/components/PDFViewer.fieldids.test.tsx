@@ -153,13 +153,22 @@ describe('PDFViewer -- Show field IDs toggle', () => {
   });
 
   it('re-labels when a field ID changes (rename)', async () => {
-    // Documents the update mechanism: the overlay map is keyed on field.id, so a
-    // rename unmounts and remounts that overlay and the new label appears with
-    // no subscription of any kind. Renames commit only on Enter / the Rename
+    // The update mechanism is React's key: the overlay map uses key={field.id},
+    // so a rename UNMOUNTS the old overlay and mounts a new one -- no
+    // subscription of any kind. Renames commit only on Enter / the Rename
     // button, so this rerender is exactly what the editor does on save.
+    //
+    // Asserting the text alone would NOT pin that: a plain prop update renders
+    // identical text, so this test passed with the key replaced by a constant.
+    // Tagging the DOM node and proving the tag is gone is what actually
+    // executes the remount claim.
     const { rerender } = await renderLoadedViewer(makeSchema(['old_name', 'field2']));
     fireEvent.click(screen.getByLabelText('Show field IDs'));
     expect(screen.getByTestId('field-id-label-old_name').textContent).toBe('old_name');
+
+    // Mark the live overlay node; a remount must discard this node entirely.
+    const before = screen.getByTestId('field-overlay-old_name');
+    (before as HTMLElement & { __remountProbe?: string }).__remountProbe = 'original';
 
     rerender(
       <PDFViewer
@@ -172,5 +181,13 @@ describe('PDFViewer -- Show field IDs toggle', () => {
 
     expect(screen.getByTestId('field-id-label-new_name').textContent).toBe('new_name');
     expect(screen.queryByTestId('field-id-label-old_name')).toBeNull();
+
+    // The remount itself: a constant key would REUSE this node and carry the
+    // probe across, so its absence is what proves the key is doing the work.
+    const after = screen.getByTestId('field-overlay-new_name') as HTMLElement & {
+      __remountProbe?: string;
+    };
+    expect(after.__remountProbe).toBeUndefined();
+    expect(after).not.toBe(before);
   });
 });
