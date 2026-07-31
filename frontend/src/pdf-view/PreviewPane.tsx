@@ -10,7 +10,7 @@
  * polyglot-pdf-7esr); the snap-to camera is bd polyglot-pdf-35t0.
  *
  * Lazy-loaded from SchemaForm (React.lazy), so pdfjs stays out of the default
- * bundle while the preview flag is off.
+ * bundle until the user switches into Preview.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';

@@ -6,9 +6,8 @@
  * bytes with pdf.js. What this modal shows IS the backend's own output -- not a
  * client-side approximation -- so it matches a downloaded fill exactly.
  *
- * Flag-gated (see featureFlag.ts) and reached only via React.lazy(), so
- * pdfjs-dist lives in this chunk and the default bundle is unchanged while the
- * preview flag is off.
+ * Reached only via React.lazy(), so pdfjs-dist lives in this chunk and is
+ * fetched only once the user actually opens a preview surface.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';

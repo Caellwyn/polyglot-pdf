@@ -526,7 +526,7 @@ select.field-highlight {
 }
 
 
-/* View-mode toggle (flag-gated preview epic js7q, bd vxwj) */
+/* View-mode toggle (preview epic js7q, bd vxwj; always-on since bd v437) */
 .schema-form__view-toggle {
   display: flex;
   justify-content: center;

@@ -22,13 +22,6 @@ import type { FormSchema } from '../types/schema';
 
 // --- Mocks for SchemaForm's heavy dependencies -----------------------------
 
-// The preview-UI flag: default ON for these tests (the toggle + Preview branch
-// only exist flag-on). Overridable per-test via the mocked fn.
-const isPreviewUiEnabled = vi.fn(() => true);
-vi.mock('../../pdf-view/featureFlag', () => ({
-  isPreviewUiEnabled: () => isPreviewUiEnabled(),
-}));
-
 // Report the test-harness path ON so SchemaForm SKIPS its mount-time
 // getUserMedia (jsdom has no navigator.mediaDevices) and marks the stream ready
 // immediately -- the connection manager then gets created and the overlay
@@ -154,7 +147,6 @@ function setWidth(width: number) {
 describe('SchemaForm view-mode structure (bd polyglot-pdf-fdz8)', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    isPreviewUiEnabled.mockReturnValue(true);
     setWidth(1280);
   });
 
@@ -163,23 +155,55 @@ describe('SchemaForm view-mode structure (bd polyglot-pdf-fdz8)', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the Simplified/Preview toggle only when the preview flag is ON', async () => {
-    // Flag OFF: no toggle.
-    isPreviewUiEnabled.mockReturnValue(false);
-    const { unmount } = render(<SchemaForm schema={makeSchema()} kitId="test" />);
-    // Let the stream-ready + connection-manager effects settle.
-    await act(async () => {});
-    expect(screen.queryByRole('tablist', { name: 'Form view' })).toBeNull();
-    unmount();
-    cleanup();
-
-    // Flag ON: the toggle renders with both tabs.
-    isPreviewUiEnabled.mockReturnValue(true);
+  // Post-cutover (bd polyglot-pdf-v437): the toggle is unconditional -- no
+  // query param or sessionStorage opt-in gates it any more.
+  it('renders the Simplified/Preview toggle unconditionally', async () => {
     render(<SchemaForm schema={makeSchema()} kitId="test" />);
+    // Let the stream-ready + connection-manager effects settle.
     await act(async () => {});
     expect(screen.getByRole('tablist', { name: 'Form view' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Simplified' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Preview' })).toBeTruthy();
+  });
+
+  it('still starts in Simplified when nothing is stored (cutover did NOT change the landing view)', async () => {
+    render(<SchemaForm schema={makeSchema()} kitId="test" />);
+    await act(async () => {});
+    expect(screen.getByRole('tab', { name: 'Simplified' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Preview' }).getAttribute('aria-selected')).toBe('false');
+  });
+
+  // The OTHER direction of the stored-preference contract: at desktop width a
+  // stored 'preview' must actually be HONORED at mount. Without this, the
+  // getStoredViewMode() read in SchemaForm's viewMode initialiser could be
+  // deleted outright (passing null) and every other test would still pass --
+  // viewMode.test.ts only covers the pure helper, and every other SchemaForm
+  // test either clears storage or expects the mobile demotion.
+  it('honors a stored preview choice at desktop width', async () => {
+    sessionStorage.setItem('preview_view_mode', 'preview');
+    setWidth(1280);
+    render(<SchemaForm schema={makeSchema()} kitId="test" />);
+    await act(async () => {});
+
+    expect(screen.getByRole('tab', { name: 'Preview' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Simplified' }).getAttribute('aria-selected')).toBe('false');
+  });
+
+  // A mobile-width mount demotes a stored 'preview' choice to Simplified (epic
+  // rubric #5). It must PERSIST that demotion, like the resize path does --
+  // otherwise state and storage disagree and the stale 'preview' silently
+  // resurrects the next time this session is opened at desktop width. Reachable
+  // only since the cutover (bd polyglot-pdf-v437) made the toggle tappable on
+  // mobile at all.
+  it('persists the mobile-width demotion instead of leaving a stale stored preview', async () => {
+    sessionStorage.setItem('preview_view_mode', 'preview');
+    setWidth(390);
+    render(<SchemaForm schema={makeSchema()} kitId="test" />);
+    await act(async () => {});
+
+    expect(screen.getByRole('tab', { name: 'Simplified' }).getAttribute('aria-selected')).toBe('true');
+    // The stored value must agree with what is actually shown.
+    expect(sessionStorage.getItem('preview_view_mode')).toBe('simplified');
   });
 
   it('keeps the voice overlay mounted (same DOM node) across a Simplified->Preview toggle', async () => {
@@ -304,8 +328,8 @@ describe('SchemaForm continuous-mode section paging (bd polyglot-pdf-gz20)', () 
   beforeEach(() => {
     sessionStorage.clear();
     capturedOnNextField = null;
-    // Preview UI off here -- this is about the simplified <form> view.
-    isPreviewUiEnabled.mockReturnValue(false);
+    // This is about the simplified <form> view: the cleared sessionStorage
+    // above means no stored view-mode choice, so the mount starts Simplified.
     setWidth(1280);
     // jsdom does not implement scrollIntoView; handleNextField's focus step
     // calls it on the located element. Stub it so the focus path is exercised
