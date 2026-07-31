@@ -220,6 +220,81 @@ def test_deterministic_pages_are_never_shifted_by_normalization(tmp_path):
     assert schema["fields"][1]["pdf_position"]["page"] == 1   # model: 0 -> 1
 
 
+def _widget_entries_for(real_all, claim):
+    """Every widget of a claim's name, suffix-aware, keeping the WHOLE group.
+
+    MODULE LEVEL on purpose (fresh-eyes round 5): this and _widget_for_option
+    below used to be closures inside the real-kit guard, with a standalone test
+    re-deriving their logic in a parallel copy. That copy could not fail when
+    the closure broke -- and the closure broke four times in four review rounds
+    while the suite stayed green, because no committed kit reaches these
+    branches. One implementation, called by both the guard and its unit test,
+    is the only arrangement where the test can actually protect the code.
+    """
+    if not claim:
+        return None
+    hit = real_all.get(claim)
+    if hit:
+        return hit
+    for name, entries in real_all.items():
+        if name.endswith("." + claim):
+            return entries
+    return None
+
+
+def _widget_for_option(real_all, opt, field_pfn=None):
+    """The widget rect an OPTION's pdf_position should equal.
+
+    Mirrors BOTH of _backfill_positions' option branches (bd polyglot-pdf-r5q1
+    EC2), because a guard that mirrors only one silently verifies nothing for
+    the other:
+
+    (a) the option has its OWN pdf_field_name -- one widget resolves outright;
+        several are disambiguated by pdf_on_value against each widget's
+        on-state, falling back to FIRST-WINS when the option carries no hint or
+        nothing matches;
+
+    (b) the option has NO name of its own but the FIELD does and the option
+        carries pdf_on_value (the shared-name radio-group shape that
+        form_models documents as a first-class fillable radio layout).
+        Resolution is by on_value within the FIELD's widget group, and --
+        unlike (a) -- a miss yields None rather than first-wins, matching the
+        extractor exactly. A group where NO widget carries an on_value is a
+        DROPDOWN (i-90's height selects), which the extractor skips outright;
+        the guard skips it too, so a combobox's choice values are never
+        mistaken for printed boxes.
+
+    `real_all` maps widget name -> [(rect_tuple, on_state), ...].
+    """
+    opt_pfn = opt.get("pdf_field_name")
+    on_value = opt.get("pdf_on_value")
+
+    if opt_pfn:                                   # branch (a)
+        entries = _widget_entries_for(real_all, opt_pfn)
+        if not entries:
+            return None
+        if len(entries) == 1:
+            return entries[0][0]
+        if on_value:
+            for rect, on_state in entries:
+                if on_state == on_value:
+                    return rect
+        return entries[0][0]          # first-wins, same as the extractor
+
+    if field_pfn and on_value:                    # branch (b)
+        entries = _widget_entries_for(real_all, field_pfn)
+        if not entries:
+            return None
+        if not any(st for _rect, st in entries):
+            return None               # dropdown: the extractor `continue`s
+        for rect, on_state in entries:
+            if on_state == on_value:
+                return rect
+        return None                   # no match -> unmatched, NOT first-wins
+
+    return None
+
+
 # The 8 committed i-90 choice fields whose stored field-level rect disagrees
 # with the FIRST OPTION's widget (bd polyglot-pdf-ks1y). Both rects are real
 # widget rects from this PDF; the stored one anchors to a DIFFERENT option of
@@ -352,70 +427,6 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     return rect
             return None
 
-        def _widget_entries_for(claim):
-            """Every widget of a claim's name, suffix-aware (same lookup as
-            _widget_for, but keeping the whole group)."""
-            if not claim:
-                return None
-            hit = real_all.get(claim)
-            if hit:
-                return hit
-            for name, entries in real_all.items():
-                if name.endswith("." + claim):
-                    return entries
-            return None
-
-        def _widget_for_option(opt, field_pfn=None):
-            """The widget rect an OPTION's pdf_position should equal.
-
-            Mirrors BOTH of _backfill_positions' option branches
-            (bd polyglot-pdf-r5q1 EC2), because a guard that mirrors only one
-            silently verifies nothing for the other:
-
-            (a) the option has its OWN pdf_field_name -- one widget resolves
-                outright; several are disambiguated by pdf_on_value against
-                each widget's on-state, falling back to FIRST-WINS when the
-                option carries no hint or nothing matches;
-
-            (b) the option has NO name of its own but the FIELD does and the
-                option carries pdf_on_value (the shared-name radio-group shape
-                that form_models documents as a first-class fillable radio
-                layout). Resolution is by on_value within the FIELD's widget
-                group, and -- unlike (a) -- a miss yields None rather than
-                first-wins, matching the extractor exactly. A group where NO
-                widget carries an on_value is a DROPDOWN (i-90's height
-                selects), which the extractor skips outright; the guard skips
-                it too, so a combobox's choice values are never mistaken for
-                printed boxes.
-            """
-            opt_pfn = opt.get("pdf_field_name")
-            on_value = opt.get("pdf_on_value")
-
-            if opt_pfn:                                   # branch (a)
-                entries = _widget_entries_for(opt_pfn)
-                if not entries:
-                    return None
-                if len(entries) == 1:
-                    return entries[0][0]
-                if on_value:
-                    for rect, on_state in entries:
-                        if on_state == on_value:
-                            return rect
-                return entries[0][0]      # first-wins, same as the extractor
-
-            if field_pfn and on_value:                    # branch (b)
-                entries = _widget_entries_for(field_pfn)
-                if not entries:
-                    return None
-                if not any(st for _rect, st in entries):
-                    return None           # dropdown: extractor `continue`s
-                for rect, on_state in entries:
-                    if on_state == on_value:
-                        return rect
-                return None               # no match -> unmatched, NOT first-wins
-
-            return None
-
         def _expected_for_field(field):
             """The widget rect a FIELD's pdf_position should equal.
 
@@ -509,7 +520,8 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                 # Resolved by the option's OWN name AND its pdf_on_value,
                 # matching _backfill_positions' option branch including its
                 # multi-widget disambiguation (bd r5q1 EC2).
-                oexp = _widget_for_option(opt, field.get("pdf_field_name"))
+                oexp = _widget_for_option(
+                    real_all, opt, field.get("pdf_field_name"))
                 if not oexp:
                     continue
                 opt_compared += 1
@@ -1310,58 +1322,45 @@ def test_the_guards_option_resolver_mirrors_both_extractor_branches():
     reproduces _widget_for_option's contract standalone so a regression fails
     loudly instead of silently degrading to first-wins.
 
-    Kept deliberately in lockstep with _backfill_positions' option branches; if
-    that precedence changes, change both.
+    Calls the REAL _widget_for_option -- the same module-level function the
+    real-kit guard calls. An earlier version re-derived the logic in a local
+    copy, which could not fail when the guard broke; that is the same
+    can't-catch-it shape as the bugs it was written to prevent.
     """
-    def resolve(opt, entries_by_name, field_pfn=None):
-        opt_pfn = opt.get("pdf_field_name")
-        on_value = opt.get("pdf_on_value")
-        if opt_pfn:
-            entries = entries_by_name.get(opt_pfn)
-            if not entries:
-                return None
-            if len(entries) == 1:
-                return entries[0][0]
-            if on_value:
-                for rect, st in entries:
-                    if st == on_value:
-                        return rect
-            return entries[0][0]
-        if field_pfn and on_value:
-            entries = entries_by_name.get(field_pfn)
-            if not entries:
-                return None
-            if not any(st for _r, st in entries):
-                return None
-            for rect, st in entries:
-                if st == on_value:
-                    return rect
-            return None
-        return None
-
     A, B = (1, 10.0, 20.0, 8.0, 8.0), (1, 90.0, 20.0, 8.0, 8.0)
+    grp = {"grp": [(A, "Y"), (B, "N")]}
 
     # (a) own name, single widget -> that widget
-    assert resolve({"pdf_field_name": "solo"}, {"solo": [(A, "Y")]}) == A
+    assert _widget_for_option({"solo": [(A, "Y")]},
+                              {"pdf_field_name": "solo"}) == A
     # (a) own name, several widgets, on_value matches the SECOND
-    grp = {"grp": [(A, "Y"), (B, "N")]}
-    assert resolve({"pdf_field_name": "grp", "pdf_on_value": "N"}, grp) == B
+    assert _widget_for_option(
+        grp, {"pdf_field_name": "grp", "pdf_on_value": "N"}) == B
     # (a) several widgets, NO hint -> first-wins
-    assert resolve({"pdf_field_name": "grp"}, grp) == A
+    assert _widget_for_option(grp, {"pdf_field_name": "grp"}) == A
     # (a) several widgets, hint matches NOTHING -> first-wins
-    assert resolve({"pdf_field_name": "grp", "pdf_on_value": "ZZ"}, grp) == A
+    assert _widget_for_option(
+        grp, {"pdf_field_name": "grp", "pdf_on_value": "ZZ"}) == A
+    # (a) suffix-aware: a bare leaf resolves a fully-qualified dump name
+    qualified = {"form1[0].#s[0].grp": [(A, "Y"), (B, "N")]}
+    assert _widget_for_option(
+        qualified, {"pdf_field_name": "grp", "pdf_on_value": "N"}) == B
 
     # (b) SHARED-NAME radio: no own name, resolved via the FIELD's group
-    assert resolve({"pdf_on_value": "N"}, grp, field_pfn="grp") == B
+    assert _widget_for_option(grp, {"pdf_on_value": "N"}, field_pfn="grp") == B
     # (b) a miss yields None -- NOT first-wins (the extractor records it
     #     unmatched rather than guessing)
-    assert resolve({"pdf_on_value": "ZZ"}, grp, field_pfn="grp") is None
+    assert _widget_for_option(
+        grp, {"pdf_on_value": "ZZ"}, field_pfn="grp") is None
     # (b) DROPDOWN: no widget in the group carries an on_value -> skipped, so a
     #     combobox's choice values are never treated as printed boxes
     combo = {"sel": [((1, 5.0, 5.0, 40.0, 12.0), None)]}
-    assert resolve({"pdf_on_value": "3"}, combo, field_pfn="sel") is None
+    assert _widget_for_option(
+        combo, {"pdf_on_value": "3"}, field_pfn="sel") is None
+    # (b) an EMPTY group resolves to nothing rather than raising
+    assert _widget_for_option({}, {"pdf_on_value": "N"}, field_pfn="gone") is None
     # neither a name nor a usable hint -> not a PDF-backed option
-    assert resolve({"value": "web_only"}, grp, field_pfn="grp") is None
+    assert _widget_for_option(grp, {"value": "web_only"}, field_pfn="grp") is None
 
 
 def test_option_rects_are_on_value_disambiguated_in_the_extractor(tmp_path):
