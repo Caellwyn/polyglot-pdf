@@ -15,8 +15,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FieldOverlay } from './FieldOverlay';
 import { FieldList } from './FieldList';
-import { isReviewTargetFromFindings, statusFromFindings }
-  from '../utils/reviewStatus';
 import type { FormField, FormSchema } from '../types/schema';
 import type { LintFinding } from '../utils/remoteKitStore';
 
@@ -186,31 +184,51 @@ describe('FieldOverlay agrees with FieldList (bd polyglot-pdf-l7u0)', () => {
     expect(overlayBandWithPages(unreviewed, 1)).toBe('yellow');
   });
 
-  it('the review-JUMP agrees with the row icon on every field state', () => {
-    // Third surface (bd polyglot-pdf-l7u0, fresh-eyes round 8). FieldList
-    // routed its icon through statusFromFindings but re-assembled the gate's
-    // two booleans by hand for "next to review" -- identical results at the
-    // time, but a change to the gate's inputs would land on one path and not
-    // the other, and a jump that skips a visibly-amber row reports "nothing
-    // left to review" while flagged rows sit on screen. Both now derive from
-    // the same findings; this pins that they cannot disagree.
-    const cases: Array<[string, FormField, LintFinding[]]> = [
-      ['clean reviewed', field(), []],
-      ['lint ERROR', field(), [errorFinding]],
-      ['stale unacked', field(), [staleFinding]],
+  it('the RENDERED review-jump agrees with the RENDERED row icon', () => {
+    // Third surface (bd polyglot-pdf-l7u0). FieldList routed its icon through
+    // statusFromFindings but re-assembled the gate's booleans by hand for
+    // "next to review" -- identical then, but a change to the gate's inputs
+    // would land on one path and not the other, and a jump that skips a
+    // visibly-amber row reports "nothing left to review" while flagged rows
+    // sit on screen.
+    //
+    // Drives the REAL rendered surfaces: the row icon's colour and the "Next
+    // to review" button's disabled state. An earlier version of this test
+    // compared isReviewTargetFromFindings against statusFromFindings(...) !==
+    // 'complete', which is that function's literal definition -- it could
+    // never fail no matter what FieldList did (Opus outer review).
+    const cases: Array<[string, FormField, LintFinding[], string]> = [
+      ['clean reviewed', field(), [], 'green'],
+      ['lint ERROR', field(), [errorFinding], 'red'],
+      ['stale unacked', field(), [staleFinding], 'yellow'],
       ['stale acked', field({
         _review: { status: 'reviewed_correct', guidance_ack_sha1: IDENTITY },
-      } as Partial<FormField>), [staleFinding]],
+      } as Partial<FormField>), [staleFinding], 'green'],
       ['superseded ack', field({
         _review: { status: 'reviewed_correct', guidance_ack_sha1: 'OLD' },
-      } as Partial<FormField>), [staleFinding]],
-      ['unreviewed', field({ _review: undefined } as Partial<FormField>), []],
+      } as Partial<FormField>), [staleFinding], 'yellow'],
+      ['unreviewed', field({ _review: undefined } as Partial<FormField>), [],
+       'yellow'],
     ];
-    for (const [label, f, findings] of cases) {
-      const status = statusFromFindings(f, findings);
-      const isTarget = isReviewTargetFromFindings(f, findings);
-      // A field is a jump target exactly when it is NOT settled green.
-      expect(isTarget, `${label}: jump/icon disagree`).toBe(status !== 'complete');
+    for (const [label, f, findings, expectedBand] of cases) {
+      const byField = new Map<string, LintFinding[]>();
+      if (findings.length) byField.set(f.id, findings);
+      const { unmount } = render(
+        <FieldList schema={schemaOf(f)} selectedFieldId={null}
+          onSelectField={vi.fn()} lintFindingsByField={byField} />,
+      );
+      const icon = screen.getByTestId(`field-status-${f.id}`);
+      const cls = icon.querySelector('svg')?.getAttribute('class') ?? '';
+      const band = cls.includes('text-green') ? 'green'
+        : cls.includes('text-red') ? 'red' : 'yellow';
+      const jump = screen.getByRole('button', { name: 'Next to review' });
+      unmount();
+
+      expect(band, `${label}: row icon band`).toBe(expectedBand);
+      // The jump is ENABLED exactly when the row is not settled green.
+      expect((jump as HTMLButtonElement).disabled,
+             `${label}: jump enabled-ness must match the row`)
+        .toBe(band === 'green');
     }
   });
 

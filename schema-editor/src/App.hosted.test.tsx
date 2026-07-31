@@ -465,15 +465,25 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
   }
 
   it('an unconsumed once-mock cannot leak into the next test (bd 79tz)', async () => {
-    // REGRESSION PIN for the order-dependent flake. This test deliberately
-    // queues a one-time rejection and never spends it -- the shape any test
-    // can accidentally produce when an assertion fails early or the UI
-    // coalesces a save. Under the old afterEach (clearAllMocks) the queue
-    // survived and fired on the NEXT test's first save, failing a test that
-    // passes in isolation. afterEach now uses resetAllMocks, which drains it.
-    // If that ever regresses, the test immediately following this one fails.
+    // REGRESSION PIN for the order-dependent flake, SELF-CONTAINED: it queues
+    // a one-time rejection, then proves within this same test that the reset
+    // afterEach performs would drain it. An earlier version only queued the
+    // rejection and asserted vi.isMockFunction(...) -- true under BOTH
+    // clearAllMocks and resetAllMocks -- so it protected nothing and relied
+    // entirely on the NEXT test happening to fail (Opus outer review). That
+    // made it order-dependent in exactly the way it was written to prevent.
     vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new Error('leaked'));
-    expect(vi.isMockFunction(saveRemoteSchema)).toBe(true);
+
+    // clearAllMocks does NOT drain the queue: the rejection is still armed.
+    vi.clearAllMocks();
+    await expect(saveRemoteSchema('k', {} as never)).rejects.toThrow('leaked');
+
+    // resetAllMocks DOES drain it -- which is why afterEach uses it. Re-arm
+    // the queue, reset, and confirm the leak is gone.
+    vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new Error('leaked'));
+    vi.resetAllMocks();
+    vi.mocked(saveRemoteSchema).mockResolvedValue(undefined);  // beforeEach's default
+    await expect(saveRemoteSchema('k', {} as never)).resolves.toBeUndefined();
   });
 
   it('a failed remote save shows a dismissible banner and keeps the editor alive', async () => {

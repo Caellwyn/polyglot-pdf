@@ -468,19 +468,6 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                 continue  # unresolved widget name: the ledger's concern
             compared += 1
             exempt_key = (kit.name, field.get("id"))
-            if exempt_key in _KS1Y_FIRST_OPTION_DIVERGENCE:
-                # KNOWN, OWNED divergence -- not a hole in this guard. See the
-                # constant's comment: these 8 committed i-90 rects predate the
-                # first-option rule and are owned by bd polyglot-pdf-ks1y,
-                # which is scoped to a PARALLEL i-90_v2 extraction because the
-                # live demo serves form-kits/i-90 byte-identical. Still
-                # COMPARED (above) so the non-vacuity floor sees it, and still
-                # checked below so a resolved entry must leave the ledger.
-                got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
-                if got[0] == expected[0] and all(
-                        abs(g - e) <= 0.06 for g, e in zip(got[1:], expected[1:])):
-                    stale_exemptions.append(exempt_key)
-                continue
             got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
             # TOLERANCE, not equality. Sized to the worst case MEASURED with
             # this exact arithmetic (expected rounded to 2dp, `got` as stored)
@@ -495,12 +482,32 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
             # honest took FOUR passes: v1 asserted the wrong basis (blamed the
             # current dump), tightening to 0.01 then false-failed on w7's legacy
             # values, and the figures quoted after THAT were still wrong because
-            # i-90 was contributing 0 comparisons (see _widget_for). Every
-            # number above is now measured, not reasoned. The bug this exists to
-            # catch is orders of magnitude beyond any of them: a model rect
-            # rounds to WHOLE points (469.2 -> 469) or lands on the wrong page.
-            if got[0] != expected[0] or any(
-                    abs(g - e) > 0.06 for g, e in zip(got[1:], expected[1:])):
+            # i-90 was contributing 0 comparisons. Every number above is
+            # measured, not reasoned. The bug this exists to catch is orders of
+            # magnitude beyond any of them: a model rect rounds to WHOLE points
+            # (469.2 -> 469) or lands on the wrong page.
+            field_matches = got[0] == expected[0] and all(
+                abs(g - e) <= 0.06 for g, e in zip(got[1:], expected[1:]))
+            if exempt_key in _KS1Y_FIRST_OPTION_DIVERGENCE:
+                # KNOWN, OWNED divergence -- not a hole in this guard. See the
+                # constant's comment: these 8 committed i-90 rects predate the
+                # first-option rule and are owned by bd polyglot-pdf-ks1y,
+                # which is scoped to a PARALLEL i-90_v2 extraction because the
+                # live demo serves form-kits/i-90 byte-identical. Still
+                # COMPARED (above) so the non-vacuity floor sees it, and a
+                # resolved entry must leave the ledger.
+                #
+                # The exemption covers the FIELD-LEVEL rect ONLY. It must not
+                # `continue` past the option loop below: that would silently
+                # widen an 8-field field-level exemption into skipping 32 of
+                # the 112 committed OPTION rects (28.6%), which is r5q1's own
+                # headline criterion, and the per-class floor could not notice
+                # because the other 80 keep opt_compared non-zero (Opus outer
+                # review). Those 32 option rects all pass -- measured -- so
+                # exempting them was pure lost coverage for no benefit.
+                if field_matches:
+                    stale_exemptions.append(exempt_key)
+            elif not field_matches:
                 wrong_rects.append((field.get("id"), got, expected))
 
             # OPTION rects (bd polyglot-pdf-r5q1). The guard used to iterate

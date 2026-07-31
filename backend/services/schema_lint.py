@@ -1233,8 +1233,14 @@ def _check_guidance_identity_drift(
         out.append(LintFinding(
             SEVERITY_WARNING, "guidance-identity-stale",
             f"fields (id={fid}).help[identity:{current}]",
-            "this field's name / spoken name / options changed since its "
-            "guidance was written, so the guidance may no longer match what "
-            "the assistant says -- confirm it still reads correctly (or "
-            "re-author it) before marking the field reviewed",
+            # Names EVERY hashed input (bd polyglot-pdf-stkz added type). A
+            # message that lists only name/spoken name/options tells a
+            # reviewer something false after a text -> date edit: they check
+            # those three, find them identical, and conclude the gate is
+            # broken -- which is how a gate loses credibility and starts
+            # getting clicked through.
+            "this field's name / spoken name / options / answer type changed "
+            "since its guidance was written, so the guidance may no longer "
+            "match what the assistant says -- confirm it still reads "
+            "correctly (or re-author it) before marking the field reviewed",
         ))

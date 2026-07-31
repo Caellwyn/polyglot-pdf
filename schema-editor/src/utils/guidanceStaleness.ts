@@ -27,17 +27,22 @@
  * where they are produced removes that whole class of bug; the editor consumes a
  * finding, exactly like every other lint signal it already renders.
  *
- * The hash covers ONLY voice-facing identity -- name, spoken_name, and each
- * option's label and spoken label BOUND to its stored value. The binding is
- * what makes a SWAP flag (two labels -- or two spoken labels, which outrank
- * labels as the voice join key -- trading places, values fixed): the text
- * multiset is unchanged, but the assistant's unchanged words would select a
- * different stored answer -- a wrong answer on the form, not just stale
- * wording (bd anim handoff decision; tradeoffs in identity_payload's
- * docstring, backend/services/guidance_contract.py). It never covers the field
- * id (renames are retargeted wholesale by fieldRename, and an id is not
- * spoken) or plumbing like pdf_field_name. Changing those does not make
- * guidance wrong, so hashing them would manufacture false staleness.
+ * The hash covers what SHAPES THE AUTHORED GUIDANCE -- name, spoken_name, each
+ * option's label and spoken label BOUND to its stored value, and the field's
+ * TYPE. The binding is what makes a SWAP flag (two labels -- or two spoken
+ * labels, which outrank labels as the voice join key -- trading places, values
+ * fixed): the text multiset is unchanged, but the assistant's unchanged words
+ * would select a different stored answer -- a wrong answer on the form, not
+ * just stale wording (bd anim handoff decision; tradeoffs in identity_payload's
+ * docstring, backend/services/guidance_contract.py).
+ *
+ * TYPE is hashed even though it is never SPOKEN (bd polyglot-pdf-stkz): the
+ * test is "does changing it make the authored guidance WRONG?", not "is it read
+ * aloud?" -- a text -> date change rewrites the expected answer SHAPE while
+ * every spoken text stays identical. It never covers the field id (renames are
+ * retargeted wholesale by fieldRename, and an id is not spoken) or plumbing
+ * like pdf_field_name. Changing those does not make guidance wrong, so hashing
+ * them would manufacture false staleness.
  */
 import type { FormField } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';

@@ -1361,11 +1361,18 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #    It also normalizes any SURVIVING model-supplied page from 0-based to
         #    1-based (an ordinal counting difference, not corrupt data) -- a
         #    no-op on AcroForms, where every field resolves a widget.
-        positions_filled = _backfill_positions(schema, dump_path)
-        if positions_filled.get("model_pages_normalized"):
+        # Named for WHICH PASS it is, not what it counts: 2hxu retired
+        # "positions_filled" as a misleading repair-tally name, and a local
+        # still carrying it invites a future edit to stamp provenance from the
+        # FIRST pass -- reintroducing the exact wiring bug
+        # test_provenance_counts_reflect_BOTH_position_passes exists to catch.
+        # Only model_pages_normalized is read from it; the provenance block
+        # stamps completion_positions (the post-completion pass).
+        first_pass_positions = _backfill_positions(schema, dump_path)
+        if first_pass_positions.get("model_pages_normalized"):
             print(f"  [positions] normalized "
-                  f"{positions_filled['model_pages_normalized']} model-supplied "
-                  f"page number(s) from 0-based to 1-based")
+                  f"{first_pass_positions['model_pages_normalized']} "
+                  f"model-supplied page number(s) from 0-based to 1-based")
 
         # 3a. Deterministically populate help.instructions from each field's /TU
         #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs

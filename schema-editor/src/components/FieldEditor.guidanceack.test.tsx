@@ -212,9 +212,10 @@ describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', (
     expect(text).toContain('no backing widget');
   });
 
-  it('another field\'s acked staleness does not suppress THIS field\'s', () => {
+  it('THIS field\'s ack does not suppress ANOTHER field\'s staleness', () => {
     // The suppression is scoped by field_id, so a whole-schema findings list
-    // cannot let one field's ack silence another field's warning.
+    // cannot let one field's ack silence another field's warning. (The title
+    // used to state the inverse direction of what is asserted below.)
     const otherFieldFinding: LintFinding = {
       severity: 'WARNING', rule: 'guidance-identity-stale',
       path: `fields (id=zip).help[identity:${IDENTITY}]`,
