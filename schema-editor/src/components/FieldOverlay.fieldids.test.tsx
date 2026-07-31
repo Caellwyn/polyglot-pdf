@@ -141,14 +141,45 @@ describe('FieldOverlay -- ID mode', () => {
       });
       const { container } = renderOverlay({ field, showFieldId: true });
       expect(container.querySelector('.field-id-label')).toBeNull();
-      // The box is the fallback marker, so ALL THREE of its properties must fall
+      // The box is the fallback marker, so all three of its properties must fall
       // back, not just the width: full 2px, the SOLID status colour (not the
-      // 0.35-alpha hairline), and the normal background. Asserting width alone
-      // left the colour and background expressions unpinned, so thinning either
-      // one would ship a nearly invisible checkbox silently.
+      // 0.35-alpha hairline), and the normal background.
+      // NOTE these are the FALLBACK (negative) halves only -- "not the
+      // hairline". The positive halves, i.e. that a LABELLED field actually gets
+      // the hairline, are pinned separately above; asserting only the negatives
+      // let the entire hairline branch be deleted with the suite green.
       const overlay = container.querySelector('.field-overlay') as HTMLElement;
       expect(overlay.style.border).toContain('2px');
       expect(overlay.style.border).toContain('rgb(250, 204, 21)');  // yellow-400, not rgba(...0.35)
+    });
+
+    it('gives a LABELLED field the thin hairline border', () => {
+      // The positive half of the hairline rule. Every other border assertion in
+      // this file is a NEGATIVE on the fallback path ("not the hairline"), so
+      // the labelled branch itself was executed by nothing -- deleting the whole
+      // hairline concept left all 52 tests green.
+      //
+      // It is load-bearing: the journal defends the hairline as preserving the
+      // widget's EXTENT, which is what tells a reviewer whether a truncated
+      // label belongs to the narrow box or the wide one beside it -- and 64% of
+      // i-90's labels truncate. A full 2px solid border would also reintroduce
+      // the "border fights the text" problem the hairline exists to solve.
+      const { container } = renderOverlay({
+        field: createMockField(), showFieldId: true,
+      });
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.border).toContain('1px');
+      expect(overlay.style.border).toContain('0.35');
+    });
+
+    it('thickens the hairline for a SELECTED labelled field', () => {
+      const { container } = renderOverlay({
+        field: createMockField(), showFieldId: true, isSelected: true,
+      });
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.style.border).toContain('2px');
+      // Selected uses the solid -500 tone, not the translucent hairline.
+      expect(overlay.style.border).not.toContain('0.35');
     });
 
     it('never tints the background UNDER a label, even selected or hovered', () => {
