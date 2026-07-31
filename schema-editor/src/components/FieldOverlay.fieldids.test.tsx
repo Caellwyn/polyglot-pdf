@@ -373,9 +373,10 @@ describe('FieldOverlay -- ID mode', () => {
 
   describe('existing behaviour survives ID mode', () => {
     it('hover recovers the FULL id in ID mode, not just the spoken name', () => {
-      // The mitigation the whole truncation tradeoff rests on. Every field in
-      // every shipped kit (471 of 471) has a spoken_name, so the `|| field.id`
-      // fallback never fires -- hover used to show ONLY the plain-English name,
+      // The mitigation the whole truncation tradeoff rests on. Measured across
+      // every kit in the repo, ZERO fields lack a spoken_name, so the
+      // `|| field.id` fallback is unreachable on real data -- hover used to show
+      // ONLY the plain-English name,
       // which cannot tell p3_line9_heightinches1 from its two identically-named
       // siblings. That was the exact defect this feature exists to catch.
       const field = createMockField({
@@ -395,6 +396,21 @@ describe('FieldOverlay -- ID mode', () => {
       // Parenthesised: the margin separates them visually but not in text, so a
       // screen reader or a copy-paste would otherwise run the two together.
       expect(tip.textContent).toContain('(p3_line9_heightinches1)');
+    });
+
+    it('does not advertise an id that is only whitespace', () => {
+      // The tooltip guards must TRIM like hasDrawableId does. With raw
+      // truthiness, id '   ' suppressed the label (correctly) but still produced
+      // "Test Field (   )" -- promising a recoverable id that does not exist,
+      // which is the opposite of what this tooltip change exists to do.
+      const field = createMockField({ id: '   ', spoken_name: 'Test Field' });
+      const { container } = renderOverlay({ field, showFieldId: true });
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.title).toBe('Test Field');
+
+      fireEvent.mouseEnter(overlay);
+      const tip = container.querySelector('.field-label-tooltip') as HTMLElement;
+      expect(tip.textContent).not.toContain('(');
     });
 
     it('leaves the BOX-mode tooltip untouched', () => {

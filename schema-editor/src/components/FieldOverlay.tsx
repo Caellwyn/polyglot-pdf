@@ -209,7 +209,7 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
         // Same reason as the custom tooltip below: in ID mode the on-screen
         // label is the id and it may be truncated, so the native tooltip must
         // carry the whole id too.
-        showFieldId && field.spoken_name && field.id
+        showFieldId && field.spoken_name && hasDrawableId
           ? `${field.spoken_name} (${field.id})`
           : field.spoken_name || field.id
       }
@@ -278,8 +278,10 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
               above never fires and hover would otherwise show only the
               plain-English name: no help at all to a reviewer trying to tell
               p3_line9_heightinches1 from its two identically-named siblings.
+              (Measured: EVERY field in every kit checked out has a spoken_name,
+              so the fallback is unreachable on real data.)
               Only added in ID mode; box mode's tooltip is unchanged. */}
-          {showFieldId && field.spoken_name && field.id ? (
+          {showFieldId && field.spoken_name && hasDrawableId ? (
             <span
               className="field-id-tooltip-id"
               style={{ marginLeft: '8px', opacity: 0.85, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
