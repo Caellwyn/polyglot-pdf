@@ -968,3 +968,101 @@ def test_backfill_claim_is_suffix_aware(tmp_path):
     schema = {"fields": [{"id": "a", "type": "text", "pdf_field_name": "x[0]"}],
               "sections": [{"id": "s", "page_numbers": [1], "fields": ["a"]}]}
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
+
+
+# --- 3c2 completion + the late position pass (bd polyglot-pdf-u4r0) ---------- #
+
+def _family_dump(tmp_path, leaf="P2_checkbox3", n=3, page=0):
+    """A dump holding ONE minable checkbox family: same leaf, distinct [n].
+
+    group_candidates.find_group_candidates only mines BUTTON widgets
+    (logical_type checkbox/radio) sharing a leaf base on one page with distinct
+    indexes, so the fixture has to carry logical_type -- a bare rect dump never
+    triggers completion and would make this test vacuous.
+    """
+    fields = []
+    for i in range(n):
+        fields.append({
+            "name": f"form1[0].#subform[0].{leaf}[{i}]",
+            "logical_type": "checkbox",
+            "widgets": [{
+                "rect": {"page": page, "x": 100.0 + 20 * i, "y": 200.0,
+                         "width": 10.0, "height": 10.0},
+                "type": "checkbox",
+                "on_value": f"on{i}",
+            }],
+        })
+    p = tmp_path / "dump.json"
+    p.write_text(json.dumps({"fields": fields}), encoding="utf-8")
+    return str(p)
+
+
+def _family_pdf(tmp_path, leaf="P2_checkbox3", n=3):
+    """A real 1-page PDF carrying ONE minable checkbox family."""
+    fitz = pytest.importorskip("fitz")
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    for i in range(n):
+        w = fitz.Widget()
+        w.field_name = f"{leaf}[{i}]"
+        w.field_type = fitz.PDF_WIDGET_TYPE_CHECKBOX
+        w.rect = fitz.Rect(100 + 20 * i, 200, 110 + 20 * i, 210)
+        page.add_widget(w)
+    out = tmp_path / "form.pdf"
+    doc.save(str(out))
+    doc.close()
+    return str(out)
+
+
+def test_extract_gives_family_completed_options_a_position(tmp_path, monkeypatch):
+    """THE u4r0 DEFECT, driven through the REAL extract() stage order.
+
+    Asserted at the pipeline level on purpose. A first draft of this test called
+    _backfill_positions / _complete_grouped_families directly and asserted the
+    result -- and DISABLING the real 3d2 step left it green, because the test
+    was performing the fix itself rather than checking the pipeline performs it.
+    That is the same vacuity trap bd polyglot-pdf-icyi hit twice, so this drives
+    extract() with the model arm stubbed: the only thing that can make the
+    appended options positioned is the pipeline's own late pass.
+
+    Setup: the stub models only member [0] of a 3-widget family -- the
+    partial-grouping shape 3c2 exists to complete (bd qmxb / 0nxh). Steps 3a/3d
+    and the guidance/translation stages are off or naturally inert here.
+    """
+    pdf = _family_pdf(tmp_path)
+    out = str(tmp_path / "schema.json")
+
+    def _stub_run(pdf_path, dump_path, model, **kw):
+        return {
+            "form_metadata": {"title": "T", "form_number": "T-1",
+                              "version": "1", "language": "en"},
+            "fields": [{
+                "id": "grp", "name": "Group", "spoken_name": "group",
+                "type": "checkbox_group",
+                "options": [{"value": "a", "label": "A",
+                             "pdf_field_name": "P2_checkbox3[0]"}],
+            }],
+        }
+
+    monkeypatch.setattr(ef.arm_llm_native, "run", _stub_run)
+    ef.extract(pdf, out, translate_options=False, enrich_guidance=False)
+
+    schema = json.loads(pathlib.Path(out).read_text(encoding="utf-8"))
+    grp = next(f for f in schema["fields"] if f["id"] == "grp")
+    opts = grp.get("options") or []
+    assert len(opts) == 3, (
+        f"family completion did not append the 2 missing members -- this test "
+        f"would be vacuous: {[o.get('value') for o in opts]}")
+
+    for opt in opts:
+        pos = opt.get("pdf_position")
+        assert pos, (
+            f"option {opt.get('value')} shipped with NO pdf_position -- a "
+            "positionless option disables per-option painting for the WHOLE "
+            "field (valuePainting.ts is all-or-nothing)")
+        assert pos["page"] == 1, f"page {pos['page']} is not 1-based"
+        assert pos["width"] > 0 and pos["height"] > 0
+
+    # each option took ITS OWN widget rect, not a sibling's
+    xs = sorted(o["pdf_position"]["x"] for o in opts)
+    assert xs == [100.0, 120.0, 140.0], f"options took the wrong rects: {xs}"

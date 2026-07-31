@@ -1360,8 +1360,11 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         # 3c2. Complete any partially-grouped widget family: when the LLM
         #      consolidated SOME-but-not-all of a mined family into one field's
         #      options[], append the missing members as options of that SAME field
-        #      (bd polyglot-pdf-qmxb) -- never retyping it. Runs BEFORE the backfill
-        #      so a completed member is not also minted as a loose duplicate.
+        #      (bd polyglot-pdf-qmxb) -- never retyping it. Runs BEFORE the
+        #      UNCLAIMED-widget backfill (3d) so a completed member is not also
+        #      minted as a loose duplicate field. (The old wording here said
+        #      "before the backfill", which read as step 3 -- that pass runs
+        #      ABOVE this one; the ordering that matters is 3c2 before 3d.)
         group_completion = _complete_grouped_families(schema, dump_path)
 
         # 3d. Deterministically backfill any fillable dump widget NO field claims
@@ -1370,6 +1373,41 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #     different widget); this guarantees every widget is covered instead
         #     of trusting the model to enumerate all of them.
         widgets_backfilled = _backfill_unclaimed_widgets(schema, dump_path)
+
+        # 3d2. RE-RUN the position pass over whatever 3c2 just appended
+        #      (bd polyglot-pdf-u4r0). Step 3 cannot cover it: that pass runs
+        #      first, and family completion appends options carrying only
+        #      {value, label, pdf_field_name} -- no rect -- so a completed
+        #      option shipped POSITIONLESS even though its widget resolves in
+        #      the dump, and nothing downstream filled it. Not cosmetic: the
+        #      runtime option-rect painter is ALL-OR-NOTHING
+        #      (frontend/src/pdf-view/valuePainting.ts), so ONE positionless
+        #      option silently disables per-option mark painting for the WHOLE
+        #      choice field. It also violated the invariant bd
+        #      polyglot-pdf-icyi established -- "where a widget resolves, the
+        #      deterministic dump rect OWNS pdf_position".
+        #
+        #      A RE-RUN rather than moving step 3 down: the pass is idempotent
+        #      (verified byte-identical on a second run over the real i-90
+        #      kit), it derives unconditionally since icyi so there is no
+        #      trusted model rect left to clobber, and the steps in between
+        #      (3a /TU, 3c2, 3d) read and write pdf_field_name, never
+        #      positions -- so this is a pure addition, not a reordering that
+        #      could perturb them. 3d's own minted fields already carry a
+        #      converted rect, so they are a no-op here.
+        late_positions = _backfill_positions(schema, dump_path)
+        positions_filled = {
+            # Report the TOTAL derived across both passes: the counter means
+            # "positions this run derived", and the late pass is part of the
+            # same run (bd polyglot-pdf-2hxu tracks that this counter's meaning
+            # shifted from "repaired" to "derived" at icyi).
+            "fields_filled": late_positions["fields_filled"],
+            "options_filled": late_positions["options_filled"],
+            "unmatched": late_positions["unmatched"],
+            "model_pages_normalized":
+                positions_filled.get("model_pages_normalized", 0)
+                + late_positions.get("model_pages_normalized", 0),
+        }
 
         # Keep the dump IN MEMORY for the lint pass at step 4 (the temp file is
         # removed in the finally below; the dump powers the widget-claim rule).
