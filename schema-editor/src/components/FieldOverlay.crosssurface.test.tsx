@@ -15,6 +15,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FieldOverlay } from './FieldOverlay';
 import { FieldList } from './FieldList';
+import { isReviewTargetFromFindings, statusFromFindings }
+  from '../utils/reviewStatus';
 import type { FormField, FormSchema } from '../types/schema';
 import type { LintFinding } from '../utils/remoteKitStore';
 
@@ -182,6 +184,34 @@ describe('FieldOverlay agrees with FieldList (bd polyglot-pdf-l7u0)', () => {
     } as Partial<FormField>);
     expect(overlayBand(unreviewed)).toBe('yellow');
     expect(overlayBandWithPages(unreviewed, 1)).toBe('yellow');
+  });
+
+  it('the review-JUMP agrees with the row icon on every field state', () => {
+    // Third surface (bd polyglot-pdf-l7u0, fresh-eyes round 8). FieldList
+    // routed its icon through statusFromFindings but re-assembled the gate's
+    // two booleans by hand for "next to review" -- identical results at the
+    // time, but a change to the gate's inputs would land on one path and not
+    // the other, and a jump that skips a visibly-amber row reports "nothing
+    // left to review" while flagged rows sit on screen. Both now derive from
+    // the same findings; this pins that they cannot disagree.
+    const cases: Array<[string, FormField, LintFinding[]]> = [
+      ['clean reviewed', field(), []],
+      ['lint ERROR', field(), [errorFinding]],
+      ['stale unacked', field(), [staleFinding]],
+      ['stale acked', field({
+        _review: { status: 'reviewed_correct', guidance_ack_sha1: IDENTITY },
+      } as Partial<FormField>), [staleFinding]],
+      ['superseded ack', field({
+        _review: { status: 'reviewed_correct', guidance_ack_sha1: 'OLD' },
+      } as Partial<FormField>), [staleFinding]],
+      ['unreviewed', field({ _review: undefined } as Partial<FormField>), []],
+    ];
+    for (const [label, f, findings] of cases) {
+      const status = statusFromFindings(f, findings);
+      const isTarget = isReviewTargetFromFindings(f, findings);
+      // A field is a jump target exactly when it is NOT settled green.
+      expect(isTarget, `${label}: jump/icon disagree`).toBe(status !== 'complete');
+    }
   });
 
   it('DEGRADES to previous behavior with no findings prop (criterion 2)', () => {

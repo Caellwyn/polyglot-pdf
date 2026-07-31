@@ -3,7 +3,8 @@ import type { FormSchema, FormField } from '../types/schema';
 import { currentIdentity, needsGuidanceAck, staleFieldIds }
   from '../utils/guidanceStaleness';
 import { checkFieldComplete } from '../utils/validation';
-import { getReview, isReviewTarget, statusFromFindings } from '../utils/reviewStatus';
+import { getReview, isReviewTargetFromFindings, statusFromFindings }
+  from '../utils/reviewStatus';
 import { getIgnoredFields } from '../utils/ignoreField';
 import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
 import { isToReviewSection } from '../utils/sectionOps';
@@ -181,12 +182,6 @@ export const FieldList: React.FC<FieldListProps> = ({
       return next;
     });
   };
-
-  // A backend lint ERROR anchored to this field is as red as a local
-  // completeness error -- the row should agree with the bottom strip
-  // (bd polyglot-pdf-0x10.6).
-  const fieldHasLintError = (field: FormField) =>
-    (lintFindingsByField?.get(field.id) ?? []).some(f => f.severity === 'ERROR');
 
   // The row's effective status layers the human review sign-off over the
   // automatic derivation (bd polyglot-pdf-u8t6, amended by bd g63j): a real
@@ -386,7 +381,12 @@ export const FieldList: React.FC<FieldListProps> = ({
   // field IS one (bd polyglot-pdf-u8t6) -- both flow through isReviewTarget's
   // effective-status precedence.
   const hasReviewTarget = React.useMemo(
-    () => visibleOrderedFields.some(f => isReviewTarget(f, fieldHasLintError(f), pageCount, guidanceAckPending(f))),
+    // Routed through the SAME findings-driven helper the row icon uses
+    // (bd polyglot-pdf-l7u0), not a hand-reassembled pair of booleans: the
+    // jump and the icon must never disagree about whether a field still needs
+    // review.
+    () => visibleOrderedFields.some(
+      f => isReviewTargetFromFindings(f, lintFindingsByField?.get(f.id), pageCount)),
     // isReviewTarget is a pure per-field check; the memo keys on the fields,
     // the lint findings (a backend ERROR also makes a row a review target),
     // and pageCount (which arrives asynchronously when the PDF finishes
@@ -403,8 +403,8 @@ export const FieldList: React.FC<FieldListProps> = ({
       : -1;
     for (let step = 1; step <= fields.length; step++) {
       const candidate = fields[(current + step) % fields.length];
-      if (isReviewTarget(candidate, fieldHasLintError(candidate), pageCount,
-                        guidanceAckPending(candidate))) {
+      if (isReviewTargetFromFindings(
+            candidate, lintFindingsByField?.get(candidate.id), pageCount)) {
         onSelectField(candidate.id);
         return;
       }

@@ -238,3 +238,23 @@ export function isReviewTarget(
   return effectiveStatus(field, hasLintError, pageCount, needsGuidanceAck)
     !== 'complete';
 }
+
+/**
+ * isReviewTarget, derived from the RAW findings -- the review-jump's twin of
+ * statusFromFindings (bd polyglot-pdf-l7u0).
+ *
+ * The row icon and the "next to review" jump must agree about the same field:
+ * a jump that skips a row the author can plainly see is amber reports "nothing
+ * left to review" while flagged rows sit on screen. Before this, FieldList
+ * routed its icon through statusFromFindings but re-assembled the two booleans
+ * by hand for the jump -- identical results today, but a change to the gate's
+ * inputs would land on one path and not the other, which is the same
+ * two-surfaces-disagree defect one layer in.
+ */
+export function isReviewTargetFromFindings(
+  field: FormField,
+  findings?: LintFinding[],
+  pageCount?: number,
+): boolean {
+  return statusFromFindings(field, findings, pageCount) !== 'complete';
+}

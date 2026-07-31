@@ -430,28 +430,6 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                      round(w.rect.width, 2), round(w.rect.height, 2)),
                     acroform_dump._on_state(w)))
 
-        def _widget_for(claim):
-            """The widget rect for a schema-side pdf_field_name claim.
-
-            SUFFIX-AWARE, matching what the extractor itself does
-            (schema_lint._match_dump_names' exact-then-dot-boundary-suffix
-            rule). Exact-match-only skipped 100% of i-90's 132 fields -- the
-            schema stores the XFA LEAF (P1_Line1_AlienNumber[0]) while the PDF
-            widget carries the fully-qualified path
-            (form1[0].#subform[0].P1_Line1_AlienNumber[0]) -- so this guard
-            verified NOTHING on the largest, most XFA-complex kit while
-            appearing to pass (fresh-eyes Opus round 3). A guard weaker than
-            the code it guards is decoration.
-
-            Delegates the NAME MATCHING to _widget_entries_for (fresh-eyes
-            round 6) so the exact-then-dot-boundary rule exists once. It used
-            to be a second hand-written copy, and the dot boundary -- the part
-            that stops a claim of "date" binding "...signature_date" -- was
-            untested in BOTH copies simultaneously. Field level takes the
-            FIRST widget of the group, which is the field-level convention."""
-            entries = _widget_entries_for(real_all, claim)
-            return _widget_for_field(real_all, claim)
-
         def _expected_for_field(field):
             """The widget rect a FIELD's pdf_position should equal.
 
@@ -463,14 +441,14 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
             guards: the extractor DOES derive their rects. Same defect shape as
             the exact-vs-suffix miss that had already blanked 132 i-90 fields.
             """
-            expected = _widget_for(field.get("pdf_field_name"))
+            expected = _widget_for_field(real_all, field.get("pdf_field_name"))
             if expected:
                 return expected
             if field.get("pdf_field_name"):
                 return None      # named but unresolved: the ledger's concern
             for o in field.get("options") or []:
                 if isinstance(o, dict) and o.get("pdf_field_name"):
-                    return _widget_for(o["pdf_field_name"])
+                    return _widget_for_field(real_all, o["pdf_field_name"])
             return None
 
         bad_pages, wrong_rects, compared = [], [], 0
@@ -1551,6 +1529,46 @@ def test_options_appended_by_family_completion_get_positions(tmp_path):
     # ...and therefore the painter's all-or-nothing precondition holds: no
     # option is missing a usable rect, so per-option marks stay enabled.
     assert all(ef._has_usable_position(o.get("pdf_position")) for o in opts)
+
+
+def test_provenance_counts_reflect_BOTH_position_passes(tmp_path):
+    """bd polyglot-pdf-2hxu + u4r0 together: the provenance block must be
+    stamped from the state AFTER the second position pass, not the first.
+
+    The pieces are each unit-tested (_backfill_positions counts per call;
+    _count_unresolved_positions counts unresolved fields), but the ASSEMBLY is
+    what can silently break: stamping from the first pass's result, or counting
+    unresolved before the completion pass runs, would report a field as
+    underived when the pipeline actually positioned it. That is a wiring bug no
+    unit test can see (fresh-eyes round 8), and the exact shape of the bug u4r0
+    itself was -- two correct pieces in the wrong order.
+
+    Drives the real stage order over a family the completion pass must finish.
+    """
+    fam = [f"form1[0].#s[0].C[{i}]" for i in range(4)]
+    dump = _write_family_dump_with_rects(tmp_path, fam)
+    schema = {"fields": [{"id": "reason", "type": "radio", "options": [
+        {"value": "first", "label": "x", "pdf_field_name": fam[0]}]}]}
+
+    first = ef._backfill_positions(schema, dump)          # step 3
+    ef._complete_grouped_families(schema, dump)           # step 3c2
+    ef._backfill_unclaimed_widgets(schema, dump)          # step 3d
+    second = ef._backfill_positions(schema, dump)         # step 3d2
+
+    # The SECOND pass is the one whose counts the provenance block stamps: it
+    # sees the completed options, the first pass could not.
+    assert second["options_filled"] > first["options_filled"], (
+        "the post-completion pass must position MORE options than the pass "
+        "that ran before the family was completed")
+    # ...and every field resolves by the end, so the diagnostic reads clean.
+    assert ef._count_unresolved_positions(schema) == 0
+
+    # A field whose widget never resolves is what the diagnostic exists to
+    # surface -- and it must still be counted after both passes.
+    schema["fields"].append({"id": "ghost", "type": "text",
+                             "pdf_field_name": "nowhere[0]"})
+    ef._backfill_positions(schema, dump)
+    assert ef._count_unresolved_positions(schema) == 1
 
 
 def test_the_completion_position_fix_is_idempotent(tmp_path):
