@@ -152,8 +152,14 @@ distinction, and the zoom-invariance above.
 
 ## Verification
 
-- 33 new tests (26 overlay, 7 viewer integration).
-- Full schema-editor suite: 973 passed across 68 files. (A trailing "Timeout
+- 36 new tests (29 overlay, 7 viewer integration). Recompute rather than trust:
+  `node node_modules/vitest/vitest.mjs run --reporter=json --outputFile=X`, then
+  read `numTotalTests` and the two `assertionResults.length` values for
+  `*.fieldids.test.tsx`. These counts were hand-maintained across seven review
+  rounds and drifted once (they sat at 33/973 while the last three tests, added
+  by the final two review fixes, went uncounted) -- the same
+  claim-nobody-executed shape this entry is otherwise about.
+- Full schema-editor suite: 976 passed across 68 files. (A trailing "Timeout
   starting forks runner" error is Windows fork-startup noise, not a test failure --
   read the counts.)
 - `tsc --noEmit` clean -- `paintOrder` and `WebkitTextStrokeWidth` are typed in
