@@ -298,3 +298,77 @@ def test_an_unwritable_png_dir_exits_two(tmp_path, capsys):
                   "--out", str(tmp_path / "o.pdf"), "--png-dir", str(blocker)])
     capsys.readouterr()
     assert rc == 2
+
+
+# --------------------------------------------------------------------------- #
+# Schema-name -> widget-name resolution (bd polyglot-pdf-wjxs)
+# --------------------------------------------------------------------------- #
+
+def test_a_leaf_claim_resolves_to_the_fully_qualified_widget():
+    """Schemas may store the XFA LEAF while the PDF carries the full path. i-90
+    does exactly this, and matching raw strings missed 146 of 189 claims --
+    reported as 152 widgets falsely 'unclaimed' on a correctly bound kit."""
+    claimants = {"P1_Line1_AlienNumber[0]": {("fld_a", "field"): "A"}}
+    widgets = ["form1[0].#subform[0].P1_Line1_AlienNumber[0]", "other[0]"]
+    out = ov._resolve_claimants(claimants, widgets)
+    assert list(out) == ["form1[0].#subform[0].P1_Line1_AlienNumber[0]"]
+
+
+def test_resolution_requires_a_DOT_boundary():
+    """A bare endswith would let 'x_name[0]' claim 'prefix_x_name[0]'. Same
+    convention as schema_lint._match_dump_names and pdf_fill_routes.find_widget."""
+    claimants = {"name[0]": {("fld_a", "field"): "A"}}
+    assert ov._resolve_claimants(claimants, ["prefix_name[0]"]) == {
+        "name[0]": {("fld_a", "field"): "A"}  # unresolved: kept, draws nothing
+    }
+    assert list(ov._resolve_claimants(claimants, ["a.name[0]"])) == ["a.name[0]"]
+
+
+def test_an_exact_match_wins_over_a_suffix_match():
+    claimants = {"f[0]": {("fld_a", "field"): "A"}}
+    out = ov._resolve_claimants(claimants, ["f[0]", "sub.f[0]"])
+    assert list(out) == ["f[0]"]
+
+
+def test_resolution_happens_BEFORE_the_multiclaim_collapse():
+    """The ordering bug this fix originally introduced. A field-level claim and
+    its option-level twin can be written as two DIFFERENT schema strings that
+    resolve to the SAME widget -- the benign groups-of-one carve-out can only see
+    that once they share a key. Collapsing first re-creates the pair afterwards
+    and reports a false multiclaim: i-90's P7_checkbox7Extend[0] did exactly
+    that until resolution moved ahead of the collapse."""
+    claimants = {
+        # field level, written as the full path...
+        "form1[0].#subform[5].P7_checkbox7Extend[0]": {("cb", "field"): "cb"},
+        # ...and the option, written as the bare leaf.
+        "P7_checkbox7Extend[0]": {("cb", "option[0]"): "cb=yes"},
+    }
+    widgets = ["form1[0].#subform[5].P7_checkbox7Extend[0]"]
+    collapsed = ov._collapse_claimants(ov._resolve_claimants(claimants, widgets))
+    assert collapsed == {"form1[0].#subform[5].P7_checkbox7Extend[0]": ["cb=yes"]}, \
+        "the benign groups-of-one pair was re-created as a multiclaim"
+
+
+def test_a_genuine_multiclaim_still_survives_resolution():
+    """Two DIFFERENT fields whose distinct schema strings resolve to one widget
+    must still merge into a flagged collision -- resolution must not hide it."""
+    claimants = {
+        "A[0]": {("fld_a", "field"): "A"},
+        "sub.A[0]": {("fld_b", "field"): "B"},
+    }
+    widgets = ["sub.A[0]"]
+    collapsed = ov._collapse_claimants(ov._resolve_claimants(claimants, widgets))
+    assert sorted(collapsed["sub.A[0]"]) == ["A", "B"]
+
+
+@needs_w7
+def test_resolution_leaves_a_fully_qualified_kit_unchanged(tmp_path):
+    """w7 already stores fully-qualified names, so resolution must be a no-op
+    there -- the guard that this fix helps i-90 without disturbing the others.
+
+    Output goes to tmp_path: form-kits/ is READ-ONLY (maintainer constraint --
+    i-90 in particular is the verified golden copy used for demos)."""
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    result = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "review.pdf"))
+    assert result["unclaimed"] == 2      # the two ivh9 write-ins, as before
+    assert result["multiclaimed"] == 0
