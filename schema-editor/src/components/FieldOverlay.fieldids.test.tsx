@@ -373,9 +373,12 @@ describe('FieldOverlay -- ID mode', () => {
 
   describe('existing behaviour survives ID mode', () => {
     it('still shows the spoken-name tooltip on hover', () => {
-      // Depends on pointerEvents:none on the label -- without it the label
-      // becomes the hover target and the overlay's non-bubbling mouseenter
-      // never fires.
+      // NOTE: this does NOT exercise the pointerEvents dependency, despite being
+      // the behaviour that dependency protects. jsdom's fireEvent dispatches
+      // straight at the overlay and does no hit-testing, so this passes even
+      // with the label set to pointerEvents:'auto'. The rule itself is pinned by
+      // the declared-CSS test below -- do not delete that one as redundant with
+      // this one.
       const field = createMockField({ spoken_name: 'Given Name' });
       const { container } = renderOverlay({ field, showFieldId: true });
       const overlay = container.querySelector('.field-overlay') as HTMLElement;

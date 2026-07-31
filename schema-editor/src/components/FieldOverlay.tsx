@@ -140,8 +140,11 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   const labelFontSize = Math.min(rawLabelFontSize, MAX_LABEL_FONT_PX);
   // Below this the glyphs are noise, so draw no label and leave the coloured box
   // as the fallback -- it still carries review status, and hover/click still
-  // identify the field. Keyed on SIZE, not field type: a 36pt select is exactly
-  // as unreadable as a checkbox. Because screenPos is scaled, a SUPPRESSED label
+  // identify the field. Keyed on SIZE, not field type -- not because a type list
+  // would miss fields (measured: all 71 suppressed fields across the three kits
+  // ARE checkboxes/radios), but because size is ZOOM-AWARE where a type list is
+  // not, and cannot go stale as kits and field types change.
+  // Because screenPos is scaled, a SUPPRESSED label
   // reappears as the user zooms in (every label on the real kits is shown by
   // 150%), which is what makes suppression acceptable rather than lossy.
   //

@@ -57,12 +57,33 @@ Sizing follows the widget: `font = screenPos.height * 0.72`. `screenPos` is
 already multiplied by `scale`, so the label tracks zoom with no scale term --
 pinned by a test, because reintroducing one is the obvious way to break it.
 
-**Vertical (too small to read) -> suppress the label, keep the FULL box.** Keyed
-on SIZE, not field type. A 36pt `select` on i-90 is exactly as unreadable as a
-checkbox, and a type-based rule (the maintainer's first instinct) was measured to
-miss 29 of 49 illegible fields there while the size rule catches all of them.
-A suppressed field keeps its full-width box rather than the 1px hairline a
-labelled field gets -- that box is then the only thing marking it.
+**Vertical (too short to read) -> suppress the label, keep the FULL box.** Keyed
+on SIZE, not field type. A suppressed field keeps its full-width box rather than
+the 1px hairline a labelled field gets -- that box is then the only thing
+marking it.
+
+Measured with the shipped constant (`height * 0.72 < 6px`): **71 fields
+suppressed** -- f1040 58, w7 13, **i-90 zero**, because i-90's smallest widget is
+10pt (7.2px), above the floor. All 71 are checkboxes or radios.
+
+**Correction, and it undercuts the argument I first wrote here.** An earlier
+draft justified size-over-type with "128 illegible fields, 29 of 49 on i-90". Those
+numbers are real but measure a DIFFERENT quantity: they count fields whose ID
+cannot render legibly **in the box's WIDTH** -- which is the TRUNCATION set, not
+the suppression set. Against the height-only floor actually shipped, a
+checkbox-type exclusion would have caught all 71. The size rule remains the right
+call for the reasons below, but the "type rule misses 29 of 49" claim does not
+support it and is withdrawn.
+
+Why size still wins:
+- It is **zoom-aware**. A type rule hides a checkbox's label at every zoom; the
+  size rule restores it as soon as the box is big enough (all 71 are labelled by
+  150%). That is the escape hatch that makes suppression acceptable.
+- It **cannot go stale**. It is derived from the same geometry that drives the
+  font, so a future kit with a 5pt text input, or a new field type, needs no list
+  maintenance.
+- It is **one rule instead of two**, and the type list would still need a size
+  fallback for the width-illegible fields it does not cover.
 
 **Vertical (too TALL) -> cap the font at 18px.** The half I originally missed:
 I reasoned carefully about the small end and never considered the large. Height
@@ -80,8 +101,10 @@ label back above the legibility floor.
 neighbour.
 
 **Zoom recovers the first and NOT the second.** This is the correction worth
-recording. Suppressed labels genuinely reappear on zoom -- verified live, i-90's
-8pt checkboxes go from no label at 100% to legible at 200%. But truncation is
+recording. Suppressed labels genuinely reappear on zoom -- verified live in a
+browser against 8pt checkbox geometry (f1040's and w7's smallest widgets; i-90
+has none that small), which goes from no label at 100% to legible at 200%. But
+truncation is
 zoom-INVARIANT: box width and font size both scale linearly, so the overflow
 ratio is constant and a label cut at 100% is cut identically at 300%.
 
@@ -112,10 +135,13 @@ distinction, and the zoom-invariance above.
 ## Decisions (defended)
 
 - **Size threshold rather than a checkbox-type exclusion.** The maintainer
-  proposed excluding checkboxes; measured, that misses 29 of 49 illegible fields
-  on i-90 (they are small `select`/`text`, not checkboxes) and would keep them
-  unlabelled even zoomed in where they would fit. The size rule catches all 128
-  illegible fields across the three kits and is zoom-aware.
+  proposed excluding checkboxes. On the height-only floor as shipped, a type rule
+  would in fact have caught all 71 suppressed fields -- so the original
+  "misses 29 of 49" argument was measuring the wrong quantity and is withdrawn
+  (see the correction above). Size still wins because it is zoom-aware (a type
+  rule hides a checkbox's label at EVERY zoom; all 71 are labelled by 150%),
+  cannot go stale as kits and field types change, and is one rule rather than a
+  list plus a size fallback.
 - **Reversed the earlier "never drop a label" decision.** That decision produced
   4px labels; suppression replaced it once the numbers were on the table.
 - **Kept a 1px hairline in ID mode instead of removing the border.** It preserves
