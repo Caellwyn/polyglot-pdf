@@ -1025,6 +1025,49 @@ def test_option_label_change_flags_but_plumbing_does_not():
     assert _stale(lint_schema(_identity_schema(replumbed, baked))) == []
 
 
+def test_type_change_flags_even_though_type_is_never_spoken():
+    """bd polyglot-pdf-stkz: a type change rewrites the expected ANSWER SHAPE
+    while leaving every spoken text untouched -- name, spoken_name and
+    options[] are all identical, so before this the hash never moved and the
+    gate stayed silent on guidance that no longer fits the field.
+
+    type is not read aloud, but the payload's test is "does changing it make
+    the authored guidance wrong?", not "is it spoken?" -- it is one of the
+    seven inputs the authoring model sees (field_digest) and CONTRACT_TEXT
+    names answer format an explicit content priority."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "Date of birth", "spoken_name": "date of birth",
+         "type": "text",
+         "help": {"instructions": "Enter it as digits only, no spaces."}}
+    baked = gc.identity_sha1(f)
+    # the ONLY change is type; every voice-facing text is byte-identical
+    retyped = dict(f, type="date")
+    hits = _stale(lint_schema(_identity_schema(retyped, baked)))
+    assert len(hits) == 1
+    assert hits[0].severity == "WARNING"
+    assert "id=a" in hits[0].path
+    # text -> number likewise
+    assert len(_stale(lint_schema(
+        _identity_schema(dict(f, type="number"), baked)))) == 1
+    # and the unchanged field still says nothing
+    assert _stale(lint_schema(_identity_schema(f, baked))) == []
+
+
+def test_type_is_hashed_without_disturbing_the_other_elements():
+    """The type element is APPENDED to the positional payload, so the existing
+    elements keep their indices and the pre-existing cases are untouched."""
+    from backend.services import guidance_contract as gc
+    import json
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "text"}
+    payload = json.loads(gc.identity_payload(f))
+    assert payload[0] == "N" and payload[1] == "n" and payload[2] == []
+    assert payload[-1] == "text"
+    # a missing / non-string type coerces to "" rather than throwing, matching
+    # how name and spoken_name are already handled
+    assert json.loads(gc.identity_payload({"id": "a"}))[-1] == ""
+    assert json.loads(gc.identity_payload({"id": "a", "type": 7}))[-1] == ""
+
+
 def test_option_label_swap_flags_even_with_identical_label_multiset():
     """THE HANDOFF CASE (bd anim): two labels trading places while their
     values stay put left the sorted-bare-label hash unchanged, yet the

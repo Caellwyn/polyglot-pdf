@@ -105,7 +105,21 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks, NOT clearAllMocks (bd polyglot-pdf-79tz). clearAllMocks
+  // wipes call history but leaves QUEUED ONE-TIME implementations in place,
+  // and an unconsumed mockRejectedValueOnce is NOT overwritten by the
+  // beforeEach mockResolvedValue above -- once-values are consumed ahead of
+  // the persistent one. So a test that queues a one-time rejection and does
+  // not spend it (an early assertion failure, a save the UI coalesces, a
+  // timing-dependent second click) leaks that rejection into whichever test
+  // runs next, where it fires on the FIRST call and fails a test that is
+  // correct in isolation. That is the order-dependent flake seen once in a
+  // full run on 'a later successful save clears a lingering failure banner':
+  // it queues one rejection then expects the SECOND save to resolve, so an
+  // inherited rejection makes the banner never clear. reset drains the queue
+  // (and beforeEach re-establishes every default), so each test starts from
+  // the same mock state no matter what ran before it.
+  vi.resetAllMocks();
   window.localStorage.clear();
   clearAccessCode();
 });
@@ -449,6 +463,18 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
     await waitFor(() => expect(screen.getByTestId('edit-field')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('edit-field'));
   }
+
+  it('an unconsumed once-mock cannot leak into the next test (bd 79tz)', async () => {
+    // REGRESSION PIN for the order-dependent flake. This test deliberately
+    // queues a one-time rejection and never spends it -- the shape any test
+    // can accidentally produce when an assertion fails early or the UI
+    // coalesces a save. Under the old afterEach (clearAllMocks) the queue
+    // survived and fired on the NEXT test's first save, failing a test that
+    // passes in isolation. afterEach now uses resetAllMocks, which drains it.
+    // If that ever regresses, the test immediately following this one fails.
+    vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new Error('leaked'));
+    expect(vi.isMockFunction(saveRemoteSchema)).toBe(true);
+  });
 
   it('a failed remote save shows a dismissible banner and keeps the editor alive', async () => {
     vi.mocked(saveRemoteSchema).mockRejectedValue(

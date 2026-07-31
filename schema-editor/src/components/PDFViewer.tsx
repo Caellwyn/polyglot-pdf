@@ -1,5 +1,6 @@
 import React from 'react';
 import type { FormSchema } from '../types/schema';
+import type { LintFinding } from '../utils/remoteKitStore';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import { usePDFDocument } from '../hooks/usePDFDocument';
 import { PDFPage } from './PDFPage';
@@ -17,6 +18,11 @@ interface PDFViewerProps {
   // App load the PDF a second time just to count pages. Optional: the viewer
   // works standalone without it.
   onPageCountChange?: (pageCount: number) => void;
+  // Backend lint findings bucketed by field id, passed straight through to
+  // each FieldOverlay so the canvas status matches the FieldList row
+  // (bd polyglot-pdf-l7u0). OPTIONAL: omitted by a call site with no lint
+  // report, which leaves the overlays on their previous behavior.
+  lintFindingsByField?: Map<string, LintFinding[]>;
 }
 
 export const PDFViewer: React.FC<PDFViewerProps> = ({
@@ -25,6 +31,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   selectedFieldId,
   onSelectField,
   onPageCountChange,
+  lintFindingsByField,
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const pageRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
@@ -398,6 +405,8 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                           scale={scale}
                           isSelected={field.id === selectedFieldId}
                           onClick={() => onSelectField(field.id)}
+                          lintFindings={lintFindingsByField?.get(field.id)}
+                          pageCount={numPages}
                         />
                       ))}
                   </div>

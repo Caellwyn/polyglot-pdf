@@ -35,7 +35,10 @@
  * the session STASH_KEY, so stripEditorState leaves it intact on save.
  */
 import type { FormField, FieldReview, FieldReviewStatus } from '../types/schema';
+import type { LintFinding } from './remoteKitStore';
 import { checkFieldComplete } from './validation';
+import { currentIdentity, needsGuidanceAck, staleFieldIds }
+  from './guidanceStaleness';
 
 // The status a row/icon actually shows, after layering human review over the
 // automatic derivation. 'followup' is the human-flagged state; the other three
@@ -181,6 +184,38 @@ export function effectiveStatus(
   // automatic checks find nothing to complain about. `auto` still governs the
   // WHY-list (auto.reviewReasons) and, above, the red band.
   return 'review';
+}
+
+/**
+ * The effective status of a field given the RAW lint findings for it -- the
+ * one place the "findings -> status" rule lives (bd polyglot-pdf-l7u0).
+ *
+ * effectiveStatus takes two already-derived booleans (hasLintError,
+ * needsGuidanceAck). Deriving those correctly means knowing that an ERROR-
+ * severity finding reds the field and that the guidance gate needs BOTH the
+ * stale-id set and the current identity -- a three-call recipe FieldList had
+ * open-coded and FieldOverlay simply did not perform, which is how the PDF
+ * overlay could paint a field GREEN while the FieldList row for the SAME field
+ * rendered AMBER. Two surfaces claiming to show "the same status" must not
+ * each reimplement how to compute it.
+ *
+ * `findings` is this field's findings (App buckets them by field_id). Passing
+ * undefined -- the honest state for a call site with no lint report -- yields
+ * exactly today's no-findings behavior rather than throwing, so the overlay
+ * degrades instead of breaking when it renders standalone.
+ */
+export function statusFromFindings(
+  field: FormField,
+  findings?: LintFinding[],
+  pageCount?: number,
+): EffectiveStatus {
+  const hasLintError = (findings ?? []).some(f => f.severity === 'ERROR');
+  const ackPending = needsGuidanceAck(
+    field,
+    staleFieldIds(findings),
+    currentIdentity(findings, field.id),
+  );
+  return effectiveStatus(field, hasLintError, pageCount, ackPending);
 }
 
 /**

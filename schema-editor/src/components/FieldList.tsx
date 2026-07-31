@@ -3,7 +3,7 @@ import type { FormSchema, FormField } from '../types/schema';
 import { currentIdentity, needsGuidanceAck, staleFieldIds }
   from '../utils/guidanceStaleness';
 import { checkFieldComplete } from '../utils/validation';
-import { effectiveStatus, getReview, isReviewTarget } from '../utils/reviewStatus';
+import { getReview, isReviewTarget, statusFromFindings } from '../utils/reviewStatus';
 import { getIgnoredFields } from '../utils/ignoreField';
 import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
 import { isToReviewSection } from '../utils/sectionOps';
@@ -203,9 +203,11 @@ export const FieldList: React.FC<FieldListProps> = ({
       currentIdentity(lintFindingsByField?.get(field.id), field.id),
     );
 
+  // Routed through the SHARED helper (bd polyglot-pdf-l7u0) rather than
+  // re-deriving the two booleans here: FieldOverlay paints from the same
+  // function, so the canvas and this row cannot disagree about one field.
   const getFieldStatus = (field: FormField) =>
-    effectiveStatus(field, fieldHasLintError(field), pageCount,
-                    guidanceAckPending(field));
+    statusFromFindings(field, lintFindingsByField?.get(field.id), pageCount);
 
   // Every reason a row is red, amber, or flagged, in plain language, for the
   // icon's tooltip: the human review state (sign-off / follow-up + its note)

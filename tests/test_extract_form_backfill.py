@@ -216,6 +216,35 @@ def test_deterministic_pages_are_never_shifted_by_normalization(tmp_path):
     assert schema["fields"][1]["pdf_position"]["page"] == 1   # model: 0 -> 1
 
 
+# The 8 committed i-90 choice fields whose stored field-level rect disagrees
+# with the FIRST OPTION's widget (bd polyglot-pdf-ks1y). Both rects are real
+# widget rects from this PDF; the stored one anchors to a DIFFERENT option of
+# the same field, so it predates the documented first-option rule. Deltas are
+# 42-108pt -- far past any rounding tolerance, so they cannot be absorbed by
+# widening it.
+#
+# EXEMPTED, NOT IGNORED. ks1y owns deciding which rect is correct against a
+# rendered overlay, and is scoped to a PARALLEL form-kits/i-90_v2/ extraction
+# because the live demo serves form-kits/i-90 and it must stay byte-identical
+# until the maintainer promotes a replacement (maintainer directive
+# 2026-07-30). Enumerating them here is what lets this guard verify the other
+# 24 consolidated fields NOW instead of staying switched off for all 32.
+#
+# This list is a LEDGER OF KNOWN DIVERGENCE, so it must only ever shrink: an
+# entry that stops diverging is asserted below to be removed from it, which
+# keeps a fixed kit from silently re-earning its exemption.
+_KS1Y_FIRST_OPTION_DIVERGENCE = {
+    ("i-90", "p1_unit_type6c_unit"),
+    ("i-90", "p2_checkbox2[5]"),
+    ("i-90", "p2_checkbox3"),
+    ("i-90", "p3_checkbox4[1]"),
+    ("i-90", "p3_checkbox5[1]"),
+    ("i-90", "p4_checkbox1[1]"),
+    ("i-90", "p6_unit_type3b_unit"),
+    ("i-90", "p7_unit_type3b_unit"),
+}
+
+
 def test_every_shipped_kit_has_in_range_pages_and_real_rects():
     """REAL-KIT REGRESSION (bd polyglot-pdf-icyi): the shipped kits' field
     positions must land on a page the document actually has, and match the PDF's
@@ -226,6 +255,15 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
     matches against 1..numPages by exact equality -- so every text-field overlay
     silently vanished and only the 6 dump-derived choice fields drew. Nothing in
     the suite noticed, because the schema was internally well-formed.
+
+    Covers THREE classes (bd polyglot-pdf-r5q1 widened the last two): fields
+    with their own pdf_field_name; CONSOLIDATED CHOICE fields, which carry no
+    field-level name and anchor to their first option's widget (32 across the
+    committed kits, previously all skipped); and every options[].pdf_position
+    (112 across the committed kits, previously never inspected at all). Each
+    class carries its own non-vacuity floor, because the whole-kit floor is
+    held up by the named text fields alone and so cannot notice a regression
+    confined to either of the other two.
 
     Skips a kit whose PDF or schema is absent from the checkout rather than
     failing (the same degrade-quietly convention the other real-kit guards use);
@@ -281,7 +319,30 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     return rect
             return None
 
+        def _expected_for_field(field):
+            """The widget rect a FIELD's pdf_position should equal.
+
+            Mirrors _backfill_positions' own rule (bd polyglot-pdf-r5q1): a
+            field with no pdf_field_name of its own -- a CONSOLIDATED CHOICE
+            field -- anchors to its FIRST option's widget. Resolving only the
+            field-level name skipped all 32 such positioned fields across
+            f1040/i-90/w7, making the guard strictly weaker than the code it
+            guards: the extractor DOES derive their rects. Same defect shape as
+            the exact-vs-suffix miss that had already blanked 132 i-90 fields.
+            """
+            expected = _widget_for(field.get("pdf_field_name"))
+            if expected:
+                return expected
+            if field.get("pdf_field_name"):
+                return None      # named but unresolved: the ledger's concern
+            for o in field.get("options") or []:
+                if isinstance(o, dict) and o.get("pdf_field_name"):
+                    return _widget_for(o["pdf_field_name"])
+            return None
+
         bad_pages, wrong_rects, compared = [], [], 0
+        opt_wrong, opt_compared = [], 0
+        stale_exemptions: list = []
         for field in schema.get("fields") or []:
             pos = field.get("pdf_position")
             if not isinstance(pos, dict):
@@ -291,10 +352,24 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     or page < 1 or page > page_count):
                 bad_pages.append((field.get("id"), page))
                 continue
-            expected = _widget_for(field.get("pdf_field_name"))
+            expected = _expected_for_field(field)
             if not expected:
                 continue  # unresolved widget name: the ledger's concern
             compared += 1
+            exempt_key = (kit.name, field.get("id"))
+            if exempt_key in _KS1Y_FIRST_OPTION_DIVERGENCE:
+                # KNOWN, OWNED divergence -- not a hole in this guard. See the
+                # constant's comment: these 8 committed i-90 rects predate the
+                # first-option rule and are owned by bd polyglot-pdf-ks1y,
+                # which is scoped to a PARALLEL i-90_v2 extraction because the
+                # live demo serves form-kits/i-90 byte-identical. Still
+                # COMPARED (above) so the non-vacuity floor sees it, and still
+                # checked below so a resolved entry must leave the ledger.
+                got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
+                if got[0] == expected[0] and all(
+                        abs(g - e) <= 0.06 for g, e in zip(got[1:], expected[1:])):
+                    stale_exemptions.append(exempt_key)
+                continue
             got = (page, pos["x"], pos["y"], pos["width"], pos["height"])
             # TOLERANCE, not equality. Sized to the worst case MEASURED with
             # this exact arithmetic (expected rounded to 2dp, `got` as stored)
@@ -317,6 +392,48 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     abs(g - e) > 0.06 for g, e in zip(got[1:], expected[1:])):
                 wrong_rects.append((field.get("id"), got, expected))
 
+            # OPTION rects (bd polyglot-pdf-r5q1). The guard used to iterate
+            # schema['fields'] only and never look inside options[], leaving
+            # all 112 committed option positions unverified -- and option rects
+            # are precisely the class that kept drawing through the page-0 bug
+            # (they were dump-derived while the text fields were not), and the
+            # class backfill_option_positions.py exists to maintain.
+            for oi, opt in enumerate(field.get("options") or []):
+                if not isinstance(opt, dict):
+                    continue
+                opos = opt.get("pdf_position")
+                if not isinstance(opos, dict):
+                    continue
+                opage = opos.get("page")
+                if (not isinstance(opage, int) or isinstance(opage, bool)
+                        or opage < 1 or opage > page_count):
+                    bad_pages.append((f"{field.get('id')}.option[{oi}]", opage))
+                    continue
+                # Resolved by the option's OWN name, matching
+                # _backfill_positions' option branch. on_value disambiguation
+                # is not re-implemented here: _widget_for takes the FIRST
+                # widget of a name, which is the same first-wins convention the
+                # extractor falls back to, and every committed option position
+                # agrees with it (measured: 0 mismatches across all 112).
+                oexp = _widget_for(opt.get("pdf_field_name"))
+                if not oexp:
+                    continue
+                opt_compared += 1
+                ogot = (opage, opos["x"], opos["y"],
+                        opos["width"], opos["height"])
+                if ogot[0] != oexp[0] or any(
+                        abs(g - e) > 0.06 for g, e in zip(ogot[1:], oexp[1:])):
+                    opt_wrong.append(
+                        (f"{field.get('id')}.option[{oi}]", ogot, oexp))
+
+        assert not opt_wrong, (
+            f"{kit.name}: options[].pdf_position does not match the PDF's own "
+            f"widget rect: {opt_wrong[:5]}")
+        assert not stale_exemptions, (
+            f"{kit.name}: these fields now AGREE with the first-option rule "
+            f"but are still listed in _KS1Y_FIRST_OPTION_DIVERGENCE -- remove "
+            f"them so the ledger keeps shrinking and cannot hide a future "
+            f"regression: {stale_exemptions}")
         assert not bad_pages, (
             f"{kit.name}: pdf_position.page out of range 1..{page_count} "
             f"(the editor preview draws NOTHING for these): {bad_pages[:10]}")
@@ -335,6 +452,21 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                 f"{kit.name}: {positioned} field(s) carry a pdf_position but "
                 f"NONE resolved to a PDF widget -- this guard is verifying "
                 f"nothing on this kit (widget-name matching is broken)")
+        # PER-CLASS floor (bd polyglot-pdf-r5q1): the whole-kit floor above
+        # cannot catch a regression confined to one class, because the
+        # top-level-named text fields keep `compared` non-zero on their own --
+        # which is exactly how 32 consolidated fields and 112 option rects sat
+        # unverified while this test stayed green. A kit that CARRIES option
+        # positions must yield option comparisons.
+        opt_positioned = sum(
+            1 for f in schema.get("fields") or []
+            for o in (f.get("options") or [])
+            if isinstance(o, dict) and isinstance(o.get("pdf_position"), dict))
+        if opt_positioned:
+            assert opt_compared, (
+                f"{kit.name}: {opt_positioned} option(s) carry a pdf_position "
+                f"but NONE resolved to a PDF widget -- option-rect "
+                f"verification is silently doing nothing on this kit")
         checked_kits += 1
 
     if not checked_kits:
@@ -968,3 +1100,87 @@ def test_backfill_claim_is_suffix_aware(tmp_path):
     schema = {"fields": [{"id": "a", "type": "text", "pdf_field_name": "x[0]"}],
               "sections": [{"id": "s", "page_numbers": [1], "fields": ["a"]}]}
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
+
+
+# --- completed family members get positions (bd polyglot-pdf-u4r0) --------- #
+
+def _write_family_dump_with_rects(tmp_path, names):
+    """A checkbox family whose members carry DISTINCT rects, so a test can tell
+    which widget each option's position actually came from."""
+    dump = {"fields": [
+        {"name": n, "logical_type": "checkbox",
+         "widgets": [{"type": "checkbox", "on_value": "1",
+                      "rect": {"page": 0, "x": 10.0, "y": 20.0 + 10 * i,
+                               "width": 8.0, "height": 8.0}}]}
+        for i, n in enumerate(names)
+    ]}
+    p = tmp_path / "famdump.json"
+    p.write_text(json.dumps(dump), encoding="utf-8")
+    return str(p)
+
+
+def test_options_appended_by_family_completion_get_positions(tmp_path):
+    """bd polyglot-pdf-u4r0 -- THE PIPELINE STAGE-ORDER BUG.
+
+    extract() ran the position pass (step 3) BEFORE _complete_grouped_families
+    (step 3c2), and the completer appends missing family members carrying only
+    {value, label, pdf_field_name}. So every appended option shipped with NO
+    pdf_position even though its widget resolves in the dump, and nothing
+    later filled it.
+
+    Not cosmetic: the runtime option-rect painter is ALL-OR-NOTHING
+    (frontend/src/pdf-view/valuePainting.ts returns [] for the WHOLE field if
+    ANY selected option lacks a usable rect), so ONE positionless completed
+    option silently disabled per-option marks for the entire choice field.
+
+    This drives the REAL stage order -- position pass, then completion, then
+    the re-run (step 3d2) -- rather than calling the fixed helper directly, so
+    it fails on the ordering itself.
+    """
+    fam = [f"form1[0].#s[0].C[{i}]" for i in range(5)]
+    dump = _write_family_dump_with_rects(tmp_path, fam)
+    # The LLM consolidated only the FIRST member into options[].
+    schema = {"fields": [{"id": "reason", "type": "radio", "options": [
+        {"value": "first", "label": "x", "pdf_field_name": fam[0]}]}]}
+
+    # --- the real stage order ---
+    ef._backfill_positions(schema, dump)          # step 3
+    completion = ef._complete_grouped_families(schema, dump)   # step 3c2
+    ef._backfill_unclaimed_widgets(schema, dump)  # step 3d
+    ef._backfill_positions(schema, dump)          # step 3d2 (the fix)
+
+    assert completion == {"fields_completed": 1, "options_added": 4}
+    opts = schema["fields"][0]["options"]
+    assert len(opts) == 5
+
+    # EVERY option -- the pre-existing one and the 4 appended -- carries a
+    # deterministic position matching ITS OWN dump widget rect (1-based page).
+    for i, o in enumerate(opts):
+        pos = o.get("pdf_position")
+        assert pos, f"option {i} ({o['pdf_field_name']}) has no pdf_position"
+        assert pos["page"] == 1                    # 0-based dump -> 1-based
+        assert pos["x"] == 10.0
+        assert pos["y"] == 20.0 + 10 * i           # its own widget, not a shared one
+        assert pos["width"] == 8.0 and pos["height"] == 8.0
+
+    # ...and therefore the painter's all-or-nothing precondition holds: no
+    # option is missing a usable rect, so per-option marks stay enabled.
+    assert all(ef._has_usable_position(o.get("pdf_position")) for o in opts)
+
+
+def test_the_completion_position_fix_is_idempotent(tmp_path):
+    """Re-running the position pass is safe BECAUSE the deterministic dump rect
+    wins unconditionally (bd polyglot-pdf-icyi): a second pass recomputes the
+    same rect from the same dump, so it can only ADD positions, never move an
+    already-correct one."""
+    fam = [f"form1[0].#s[0].C[{i}]" for i in range(3)]
+    dump = _write_family_dump_with_rects(tmp_path, fam)
+    schema = {"fields": [{"id": "r", "type": "radio", "options": [
+        {"value": "first", "label": "x", "pdf_field_name": fam[0]}]}]}
+
+    ef._backfill_positions(schema, dump)
+    ef._complete_grouped_families(schema, dump)
+    ef._backfill_positions(schema, dump)
+    once = json.loads(json.dumps(schema))
+    ef._backfill_positions(schema, dump)
+    assert schema == once, "a further pass must not change anything"

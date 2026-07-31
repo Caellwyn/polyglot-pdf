@@ -1150,16 +1150,22 @@ def _emit_translation_flags(schema: Dict[str, Any], out: List[LintFinding]) -> N
 def _check_guidance_identity_drift(
     schema: Dict[str, Any], out: List[LintFinding]
 ) -> None:
-    """Flag fields whose voice-facing identity changed since their guidance was
-    authored (bd polyglot-pdf-anim).
+    """Flag fields whose answer-shaping identity changed since their guidance
+    was authored (bd polyglot-pdf-anim).
 
     The bake records identity_sha1 (name + spoken_name + option
-    label/spoken_label/value bindings) in
-    _bakeoff.authoring.instructions_enrich.provenance. A human rename
-    or option relabel afterwards may leave the authored guidance describing
-    something the AI no longer says -- but a trivial rename does not warrant an
-    LLM re-author, so this is a WARNING that drives the editor's
+    label/spoken_label/value bindings + type) in
+    _bakeoff.authoring.instructions_enrich.provenance. A human rename,
+    option relabel or TYPE CHANGE afterwards may leave the authored guidance
+    describing something the AI no longer says, or asking for an answer in a
+    shape the field no longer accepts -- but a trivial rename does not warrant
+    an LLM re-author, so this is a WARNING that drives the editor's
     human-acknowledgment gate, not an ERROR and not an automatic re-bake.
+
+    A TYPE change (text -> date, text -> number) flags because it rewrites the
+    expected answer shape without touching any spoken text (bd
+    polyglot-pdf-stkz); see identity_payload's docstring for why the test is
+    "does this make the guidance wrong?" rather than "is this spoken?".
 
     A label SWAP (labels trading places across values, label multiset
     unchanged) flags too: the assistant's unchanged words would select a

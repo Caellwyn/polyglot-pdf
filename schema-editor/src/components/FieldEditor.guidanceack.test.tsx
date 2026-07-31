@@ -144,3 +144,92 @@ describe('the DISPLAY pins to current identity too (round-3 regression)', () => 
       .toBe(true);
   });
 });
+
+describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', () => {
+  // Post-ack, every other surface agreed the field was clear -- green row,
+  // no amber ring, counted complete -- while the banner two inches above the
+  // checkbox kept repeating the instruction the human had just carried out.
+  // The reviewer could not tell whether their click registered.
+  const banner = () => screen.queryByTestId('field-problems');
+
+  it('drops the staleness line once the ack pins the CURRENT identity', () => {
+    const acked = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
+    } as FormField;
+    render(
+      <FieldEditor field={acked} schema={makeSchema(acked)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect(banner()?.textContent ?? '').not.toContain(staleFinding.message);
+  });
+
+  it('still shows it when there is NO ack at all', () => {
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect(banner()?.textContent ?? '').toContain(staleFinding.message);
+  });
+
+  it('still shows it when the ack pins a SUPERSEDED identity', () => {
+    // The whole point of pinning: an ack for older content is not a waiver
+    // for the current content, so the banner must nag again.
+    const staleAck = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: 'OLD-H2' },
+    } as FormField;
+    render(
+      <FieldEditor field={staleAck} schema={makeSchema(staleAck)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect(banner()?.textContent ?? '').toContain(staleFinding.message);
+  });
+
+  it('suppresses ONLY the staleness rule -- unrelated findings still render', () => {
+    // Criterion 2: no other finding's banner behavior changes. This field
+    // carries an ack AND an unrelated WARNING and ERROR; only the staleness
+    // line may disappear.
+    const acked = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
+    } as FormField;
+    const otherWarning: LintFinding = {
+      severity: 'WARNING', rule: 'help-details-oversize',
+      path: 'fields (id=phone).help', message: 'details are oversize',
+      field_id: 'phone',
+    };
+    const anError: LintFinding = {
+      severity: 'ERROR', rule: 'field-unbacked',
+      path: 'fields (id=phone)', message: 'no backing widget',
+      field_id: 'phone',
+    };
+    render(
+      <FieldEditor field={acked} schema={makeSchema(acked)}
+        onUpdateField={vi.fn()} authorTier
+        lintFindings={[staleFinding, otherWarning, anError]} />,
+    );
+    const text = banner()?.textContent ?? '';
+    expect(text).not.toContain(staleFinding.message);
+    expect(text).toContain('details are oversize');
+    expect(text).toContain('no backing widget');
+  });
+
+  it('another field\'s acked staleness does not suppress THIS field\'s', () => {
+    // The suppression is scoped by field_id, so a whole-schema findings list
+    // cannot let one field's ack silence another field's warning.
+    const otherFieldFinding: LintFinding = {
+      severity: 'WARNING', rule: 'guidance-identity-stale',
+      path: `fields (id=zip).help[identity:${IDENTITY}]`,
+      message: 'zip changed since its guidance was written', field_id: 'zip',
+    };
+    const acked = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
+    } as FormField;
+    render(
+      <FieldEditor field={acked} schema={makeSchema(acked)}
+        onUpdateField={vi.fn()} authorTier
+        lintFindings={[staleFinding, otherFieldFinding]} />,
+    );
+    const text = banner()?.textContent ?? '';
+    expect(text).not.toContain(staleFinding.message);
+    expect(text).toContain('zip changed since its guidance was written');
+  });
+});

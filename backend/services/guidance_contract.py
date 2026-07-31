@@ -400,20 +400,38 @@ no advice, and no omission_concerns you judge material.
 
 
 def identity_payload(field: dict) -> str:
-    """The stable serialization of a field's voice-facing identity.
+    """The stable serialization of a field's ANSWER-SHAPING identity.
 
     Covers ONLY what the guidance actually describes: the field's name, its
-    spoken name, and its options -- each option contributing a
+    spoken name, its options -- each option contributing a
     [label, spoken_label, value] triple, so both voice-facing texts are BOUND
-    to the option's stored value. spoken_label rides along because it
-    OUTRANKS label as the voice join key (secretary_context resolves
-    spoken_label or label; manifest_service ships it to the live model), so a
-    spoken_label swap is the same wrong-answer hazard as a label swap
-    (closeout Opus round 3, bd polyglot-pdf-w028). Deliberately excludes the
-    field id (renames are retargeted wholesale and an id is never spoken) and
-    plumbing (pdf_field_name, positions, conditions) -- changing those does
-    not make authored guidance wrong, and hashing them would manufacture
+    to the option's stored value -- and its TYPE. spoken_label rides along
+    because it OUTRANKS label as the voice join key (secretary_context
+    resolves spoken_label or label; manifest_service ships it to the live
+    model), so a spoken_label swap is the same wrong-answer hazard as a label
+    swap (closeout Opus round 3, bd polyglot-pdf-w028). Deliberately excludes
+    the field id (renames are retargeted wholesale and an id is never spoken)
+    and plumbing (pdf_field_name, positions, conditions) -- changing those
+    does not make authored guidance wrong, and hashing them would manufacture
     false staleness that trains editors to click through the gate.
+
+    WHY type is hashed even though it is not itself SPOKEN (bd
+    polyglot-pdf-stkz): the test this payload applies is not "is it read
+    aloud?" but "does changing it make the authored guidance WRONG?" -- which
+    is what the exclusions above are actually justified by. type passes that
+    test. It is one of the seven inputs the authoring model is shown
+    (enrich_instructions.field_digest: id, name, type, spoken_name, options,
+    show_if, existing_instructions), and CONTRACT_TEXT makes answer format an
+    explicit content priority ("format only when help.format_hint cannot
+    carry it"). So a text -> date or text -> number change rewrites the
+    expected answer SHAPE while leaving name, spoken_name and options[]
+    untouched: instructions phrased for free text, or a format_hint like
+    "digits only, no spaces", become wrong with the hash unmoved and the gate
+    silent. The type picker is a live editor control for fields without
+    options[], so this is a reachable path, not a script-only one. Of the
+    seven digest inputs, id and show_if are excluded above with stated
+    reasons; type was the one input neither hashed nor documented as
+    excluded, which is the gap this closes.
 
     The triples are SORTED, so a pure REORDER (whole options moving, each
     keeping its own texts and value) does not re-raise the gate -- the
@@ -456,10 +474,18 @@ def identity_payload(field: dict) -> str:
                 ("" if val is None else str(val))])
     name = field.get("name")
     spoken = field.get("spoken_name")
+    ftype = field.get("type")
     return json.dumps(
         [name if isinstance(name, str) else "",
          spoken if isinstance(spoken, str) else "",
-         sorted(triples)],   # order-insensitive triples: see the docstring
+         sorted(triples),   # order-insensitive triples: see the docstring
+         # APPENDED, not inserted: a positional array keeps the existing
+         # elements at their existing indices, so the diff to the formula is
+         # additive. Free to do because NO shipped kit carries a baked
+         # identity_sha1 yet (all three committed kits: 0 of 44 provenance
+         # records) -- the window the bead flagged as closing on the first
+         # re-bake is still open.
+         ftype if isinstance(ftype, str) else ""],
         ensure_ascii=False, separators=(",", ":"))
 
 

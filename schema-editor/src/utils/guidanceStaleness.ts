@@ -80,7 +80,18 @@ export function currentIdentity(findings: LintFinding[] | undefined,
     if (f.field_id !== fieldId) continue;   // centralized id (bd h76m.11)
     // The hash rides the PATH, never the message: `message` is rendered to
     // humans in three places, so a raw hash there is unexplained noise.
-    const hm = /\[identity:([0-9a-f]+)\]/.exec(f.path ?? '');
+    //
+    // ANCHORED to the end of the path (bd polyglot-pdf-g5vj). The backend
+    // builds `fields (id=<fid>).help[identity:<sha1>]`, interpolating the
+    // field id AHEAD of the token, so an unanchored .exec would return an
+    // id's own embedded `[identity:<hex>]` substring instead of the real
+    // trailing hash. That mis-parse pins the ack to a string that never
+    // changes, turning one click into a PERMANENT WAIVER -- precisely the
+    // hole current-identity pinning exists to close. Unreachable today (ids
+    // are slugified to alnum+underscore), so this is hardening, but the
+    // parse is the contract's only client-side anchor and deserves to be
+    // robust rather than merely lucky.
+    const hm = /\[identity:([0-9a-f]+)\]$/.exec(f.path ?? '');
     if (hm) return hm[1];
   }
   return undefined;

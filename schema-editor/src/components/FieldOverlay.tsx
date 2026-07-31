@@ -11,14 +11,25 @@
  * Color indicates field status (the SAME effective status the FieldList row
  * shows, so a review sign-off agrees across surfaces -- bd polyglot-pdf-u8t6):
  * - Green: complete, OR reviewed-correct (human sign-off over an auto-amber)
- * - Yellow: needs review (automatic) OR needs-follow-up (human flag)
- * - Red: has errors (always wins -- a sign-off never greens a broken field)
+ * - Yellow: needs review (automatic), needs-follow-up (human flag), OR
+ *   un-acknowledged stale guidance (bd polyglot-pdf-anim's gate)
+ * - Red: has errors -- local completeness OR a backend lint ERROR (always
+ *   wins; a sign-off never greens a broken field)
+ *
+ * Both backend-driven bands reach this component through the optional
+ * lintFindings prop (bd polyglot-pdf-l7u0). Before it, the overlay derived
+ * status from the field alone and so ignored lint ERRORs and the guidance
+ * gate entirely, letting the canvas paint green over a row the list showed
+ * amber -- the exact cross-surface contradiction the u8t6 line above promises
+ * is absent. A call site that has no lint report omits the prop and gets the
+ * previous field-only behavior.
  */
 
 import React from 'react';
 import type { FormField } from '../types/schema';
+import type { LintFinding } from '../utils/remoteKitStore';
 import { pdfToScreenCoords, hasValidCoordinates } from '../utils/pdfCoordinates';
-import { effectiveStatus } from '../utils/reviewStatus';
+import { statusFromFindings } from '../utils/reviewStatus';
 import { checkFieldComplete } from '../utils/validation';
 
 export interface FieldOverlayProps {
@@ -29,6 +40,12 @@ export interface FieldOverlayProps {
   onClick?: () => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  // This field's backend lint findings, and the document's page count
+  // (bd polyglot-pdf-l7u0). BOTH OPTIONAL: a call site with no lint report
+  // omits them and gets exactly the previous behavior, so the overlay
+  // degrades rather than breaking when it renders standalone.
+  lintFindings?: LintFinding[];
+  pageCount?: number;
 }
 
 /**
@@ -42,6 +59,8 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
   onClick,
   onMouseEnter,
   onMouseLeave,
+  lintFindings,
+  pageCount,
 }) => {
   const [isHovered, setIsHovered] = React.useState(false);
 
@@ -55,12 +74,18 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
 
   // Determine border color from the EFFECTIVE status (review sign-off layered
   // over the automatic derivation), so the overlay agrees with the FieldList
-  // row instead of contradicting it (bd polyglot-pdf-u8t6). The overlay has no
-  // backend lint findings threaded in, so hasLintError stays false here -- a
-  // lint ERROR already reds the row via FieldList; the overlay keeps mirroring
-  // local completeness + the review layer, which is what changed. 'followup'
-  // and the automatic 'review' both sit in the yellow (needs-attention) band.
-  const status = effectiveStatus(field);
+  // row instead of contradicting it (bd polyglot-pdf-u8t6). 'followup' and the
+  // automatic 'review' both sit in the yellow (needs-attention) band.
+  //
+  // statusFromFindings is the SAME entry point FieldList uses (bd
+  // polyglot-pdf-l7u0). Previously this called effectiveStatus with no
+  // findings at all, so the overlay silently ignored both backend lint ERRORs
+  // and the guidance-acknowledgment gate -- it could paint a field GREEN while
+  // the row for that same field rendered AMBER, which is precisely the
+  // cross-surface contradiction the docstring above claims not to have. When
+  // no findings are threaded in (a standalone call site) the shared helper
+  // yields today's behavior unchanged.
+  const status = statusFromFindings(field, lintFindings, pageCount);
   let borderColor: string;
   let bgColor: string;
 

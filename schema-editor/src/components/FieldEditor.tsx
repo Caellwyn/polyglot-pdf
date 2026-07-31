@@ -633,6 +633,20 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               .filter(f => f.severity === 'ERROR')
               .map(f => f.message),
           ];
+          // An ACKNOWLEDGED staleness finding is no longer a reason the field
+          // is flagged (bd polyglot-pdf-hii0). Post-ack every other surface
+          // agrees the field is clear -- FieldList paints the row green,
+          // the Instructions textarea drops its amber ring, getCompletionStats
+          // counts it complete -- but the banner kept repeating an instruction
+          // ("confirm it still reads correctly BEFORE MARKING THE FIELD
+          // REVIEWED") the human had just carried out two inches below. The
+          // reviewer could not tell whether their click registered, which
+          // trains exactly the click-through-the-gate habit the feature exists
+          // to prevent. The ack pins the CURRENT identity, so the next drift
+          // moves that identity and the line returns on its own.
+          const ackedIdentity = currentIdentity(lintFindings, field.id);
+          const staleAcked = ackedIdentity !== undefined
+            && isAcknowledged(field, ackedIdentity);
           const warnings = [
             // The automatic amber reasons (bd polyglot-pdf-g63j): the banner
             // used to show only errors + lint, so a field flagged amber in the
@@ -641,6 +655,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             ...completeness.reviewReasons,
             ...(lintFindings ?? [])
               .filter(f => f.severity !== 'ERROR')
+              // Scope the suppression to THIS field's staleness finding and to
+              // that rule alone: no other finding's banner behavior changes.
+              .filter(f => !(staleAcked
+                && f.rule === GUIDANCE_STALE_RULE
+                && f.field_id === field.id))
               .map(f => f.message),
           ];
           if (errors.length === 0 && warnings.length === 0) return null;
