@@ -294,7 +294,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         <div className="flex items-center gap-4">
         <label
           className="flex items-center gap-2 cursor-pointer select-none"
-          title="Replace the coloured field boxes with each field's ID. Small boxes show no name until you zoom in, and long names are shortened -- hover any box for the full name."
+          title="Replace the coloured field boxes with each field's ID. Small boxes show no ID until you zoom in, and long IDs are shortened -- hover any box to see its full ID."
         >
           <input
             type="checkbox"

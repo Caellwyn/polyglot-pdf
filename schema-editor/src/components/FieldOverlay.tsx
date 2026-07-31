@@ -205,7 +205,14 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
       onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      title={field.spoken_name || field.id}
+      title={
+        // Same reason as the custom tooltip below: in ID mode the on-screen
+        // label is the id and it may be truncated, so the native tooltip must
+        // carry the whole id too.
+        showFieldId && field.spoken_name && field.id
+          ? `${field.spoken_name} (${field.id})`
+          : field.spoken_name || field.id
+      }
       data-field-id={field.id}
       data-testid={`field-overlay-${field.id}`}
     >
@@ -265,6 +272,24 @@ export const FieldOverlay: React.FC<FieldOverlayProps> = ({
           }}
         >
           {field.spoken_name || field.id}
+          {/* In ID mode the label IS the id, and long ids truncate on screen --
+              so hover has to be able to recover the WHOLE id. Every field in
+              every shipped kit has a spoken_name, so the `|| field.id` fallback
+              above never fires and hover would otherwise show only the
+              plain-English name: no help at all to a reviewer trying to tell
+              p3_line9_heightinches1 from its two identically-named siblings.
+              Only added in ID mode; box mode's tooltip is unchanged. */}
+          {showFieldId && field.spoken_name && field.id ? (
+            <span
+              className="field-id-tooltip-id"
+              style={{ marginLeft: '8px', opacity: 0.85, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+            >
+              {/* Parenthesised, matching the native title: the margin separates
+                  these visually but NOT in text, and a screen reader or a
+                  copy-paste would otherwise run them together. */}
+              ({field.id})
+            </span>
+          ) : null}
           <span style={{ marginLeft: '8px', opacity: 0.7 }}>
             [{field.type}]
           </span>

@@ -372,6 +372,46 @@ describe('FieldOverlay -- ID mode', () => {
   });
 
   describe('existing behaviour survives ID mode', () => {
+    it('hover recovers the FULL id in ID mode, not just the spoken name', () => {
+      // The mitigation the whole truncation tradeoff rests on. Every field in
+      // every shipped kit (471 of 471) has a spoken_name, so the `|| field.id`
+      // fallback never fires -- hover used to show ONLY the plain-English name,
+      // which cannot tell p3_line9_heightinches1 from its two identically-named
+      // siblings. That was the exact defect this feature exists to catch.
+      const field = createMockField({
+        id: 'p3_line9_heightinches1',
+        spoken_name: 'height inches',
+      });
+      const { container } = renderOverlay({ field, showFieldId: true });
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+
+      // Native tooltip carries both.
+      expect(overlay.title).toBe('height inches (p3_line9_heightinches1)');
+
+      // ...and so does the custom hover tooltip.
+      fireEvent.mouseEnter(overlay);
+      const tip = container.querySelector('.field-label-tooltip') as HTMLElement;
+      expect(tip.textContent).toContain('height inches');
+      // Parenthesised: the margin separates them visually but not in text, so a
+      // screen reader or a copy-paste would otherwise run the two together.
+      expect(tip.textContent).toContain('(p3_line9_heightinches1)');
+    });
+
+    it('leaves the BOX-mode tooltip untouched', () => {
+      // Box mode shows no id on screen, so appending one would be noise.
+      const field = createMockField({
+        id: 'p3_line9_heightinches1',
+        spoken_name: 'height inches',
+      });
+      const { container } = renderOverlay({ field });
+      const overlay = container.querySelector('.field-overlay') as HTMLElement;
+      expect(overlay.title).toBe('height inches');
+
+      fireEvent.mouseEnter(overlay);
+      const tip = container.querySelector('.field-label-tooltip') as HTMLElement;
+      expect(tip.textContent).not.toContain('p3_line9_heightinches1');
+    });
+
     it('still shows the spoken-name tooltip on hover', () => {
       // NOTE: this does NOT exercise the pointerEvents dependency, despite being
       // the behaviour that dependency protects. jsdom's fireEvent dispatches
