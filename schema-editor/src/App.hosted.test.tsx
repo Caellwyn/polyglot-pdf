@@ -464,26 +464,31 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
     fireEvent.click(screen.getByTestId('edit-field'));
   }
 
-  it('an unconsumed once-mock cannot leak into the next test (bd 79tz)', async () => {
-    // REGRESSION PIN for the order-dependent flake, SELF-CONTAINED: it queues
-    // a one-time rejection, then proves within this same test that the reset
-    // afterEach performs would drain it. An earlier version only queued the
-    // rejection and asserted vi.isMockFunction(...) -- true under BOTH
-    // clearAllMocks and resetAllMocks -- so it protected nothing and relied
-    // entirely on the NEXT test happening to fail (Opus outer review). That
-    // made it order-dependent in exactly the way it was written to prevent.
+  // REGRESSION PIN for the order-dependent flake (bd 79tz) -- a PAIR of tests,
+  // because the thing being pinned is what the suite's afterEach does, and no
+  // single test can observe that from the inside.
+  //
+  // The first queues a one-time rejection and never spends it (the shape any
+  // test can accidentally produce when an assertion fails early or the UI
+  // coalesces a save). The second asserts the mock is clean. Under
+  // afterEach's resetAllMocks the queue is drained and the pair passes; revert
+  // it to clearAllMocks and the queue survives into the second test, which
+  // fails BY NAME rather than corrupting some unrelated test downstream.
+  //
+  // Two earlier versions of this pin were both hollow: one asserted only
+  // vi.isMockFunction(...) (true under either hook) and relied on an
+  // unrelated later test failing; the rewrite proved vitest's own
+  // clear-vs-reset semantics using LOCAL calls, which never touch the hook
+  // under test at all -- reverting afterEach left it green (Opus outer review,
+  // both passes). The hook is observable only across a test boundary.
+  it('79tz pin (1/2): queues an unconsumed once-rejection', () => {
     vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new Error('leaked'));
+    expect(vi.isMockFunction(saveRemoteSchema)).toBe(true);
+  });
 
-    // clearAllMocks does NOT drain the queue: the rejection is still armed.
-    vi.clearAllMocks();
-    await expect(saveRemoteSchema('k', {} as never)).rejects.toThrow('leaked');
-
-    // resetAllMocks DOES drain it -- which is why afterEach uses it. Re-arm
-    // the queue, reset, and confirm the leak is gone.
-    vi.mocked(saveRemoteSchema).mockRejectedValueOnce(new Error('leaked'));
-    vi.resetAllMocks();
-    vi.mocked(saveRemoteSchema).mockResolvedValue(undefined);  // beforeEach's default
-    await expect(saveRemoteSchema('k', {} as never)).resolves.toBeUndefined();
+  it('79tz pin (2/2): the next test does NOT inherit it', async () => {
+    // Fails with "leaked" if afterEach stops draining queued once-mocks.
+    await expect(saveRemoteSchema('kit', {} as never)).resolves.toBeUndefined();
   });
 
   it('a failed remote save shows a dismissible banner and keeps the editor alive', async () => {

@@ -101,12 +101,14 @@ Rules (stable ids; one finding per violation site):
 - help-details-headings-missing WARNING a long details block has no heading
                                 lines (unnavigable for secretary/human review)
 - guidance-identity-stale WARNING a field's name / spoken_name / option
-                                label/spoken-label/value bindings changed
-                                since its guidance was authored (the bake's
-                                identity_sha1 no longer matches), so the
+                                label/spoken-label/value bindings / TYPE
+                                changed since its guidance was authored (the
+                                bake's identity_sha1 no longer matches), so the
                                 guidance may describe something the assistant
                                 no longer says -- or a spoken label may now
-                                select a different stored answer (label swap).
+                                select a different stored answer (label swap),
+                                or a type change may have rewritten the
+                                expected answer shape (bd polyglot-pdf-stkz).
                                 Drives the editor's human acknowledgment gate
                                 -- never an auto re-bake (bd polyglot-pdf-anim)
 

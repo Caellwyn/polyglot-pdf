@@ -204,17 +204,31 @@ export function effectiveStatus(
  * exactly today's no-findings behavior rather than throwing, so the overlay
  * degrades instead of breaking when it renders standalone.
  */
+/**
+ * The two booleans every findings-driven status call needs, derived ONCE.
+ * Both statusFromFindings and isReviewTargetFromFindings go through here, so
+ * the "how do findings become a lint-error flag and a gate flag" recipe has a
+ * single definition (Opus outer review, pass 2).
+ */
+function gateFlags(field: FormField, findings?: LintFinding[]): {
+  hasLintError: boolean; ackPending: boolean;
+} {
+  return {
+    hasLintError: (findings ?? []).some(f => f.severity === 'ERROR'),
+    ackPending: needsGuidanceAck(
+      field,
+      staleFieldIds(findings),
+      currentIdentity(findings, field.id),
+    ),
+  };
+}
+
 export function statusFromFindings(
   field: FormField,
   findings?: LintFinding[],
   pageCount?: number,
 ): EffectiveStatus {
-  const hasLintError = (findings ?? []).some(f => f.severity === 'ERROR');
-  const ackPending = needsGuidanceAck(
-    field,
-    staleFieldIds(findings),
-    currentIdentity(findings, field.id),
-  );
+  const { hasLintError, ackPending } = gateFlags(field, findings);
   return effectiveStatus(field, hasLintError, pageCount, ackPending);
 }
 
@@ -256,5 +270,11 @@ export function isReviewTargetFromFindings(
   findings?: LintFinding[],
   pageCount?: number,
 ): boolean {
-  return statusFromFindings(field, findings, pageCount) !== 'complete';
+  // Shares gateFlags with statusFromFindings, then hands off to isReviewTarget
+  // rather than re-stating its `!== 'complete'` rule. Forking either would be
+  // the same duplicate-definition shape this bead set out to remove, one level
+  // down (Opus outer review, pass 2) -- and it keeps isReviewTarget a live
+  // production path rather than a test-only export.
+  const { hasLintError, ackPending } = gateFlags(field, findings);
+  return isReviewTarget(field, hasLintError, pageCount, ackPending);
 }

@@ -212,6 +212,26 @@ describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', (
     expect(text).toContain('no backing widget');
   });
 
+  it('an UNPARSEABLE identity fails open in the banner too (row parity)', () => {
+    // needsGuidanceAck and the ack checkbox both fail open when the finding
+    // carries no parseable identity: nothing can be pinned, so the row stays
+    // green and no control renders. The banner must agree -- otherwise it
+    // alone shows an amber warning beside a green row with no way to act on
+    // it, which is the cross-surface contradiction this bead removes, on the
+    // very surface it removes it from (Opus outer review, pass 2).
+    const unparseable: LintFinding = {
+      ...staleFinding, path: 'fields (id=phone).help',   // no [identity:...]
+    };
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[unparseable]} />,
+    );
+    // no gate control...
+    expect(screen.queryByTestId('guidance-ack-checkbox')).toBeNull();
+    // ...and no banner line demanding one.
+    expect(banner()?.textContent ?? '').not.toContain(unparseable.message);
+  });
+
   it('THIS field\'s ack does not suppress ANOTHER field\'s staleness', () => {
     // The suppression is scoped by field_id, so a whole-schema findings list
     // cannot let one field's ack silence another field's warning. (The title
