@@ -48,6 +48,10 @@ import pytest
 
 _REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO / "scripts" / "bakeoff"))
+# The real-kit guard reads widget on-states through the SAME helper that wrote
+# the dump's on_value, so the guard and the extractor can never match on
+# different keys (bd polyglot-pdf-r5q1, fresh-eyes rounds 2 + 3).
+import acroform_dump  # noqa: E402
 _SCRIPT = _REPO / "scripts" / "authoring" / "extract_form.py"
 spec = importlib.util.spec_from_file_location("extract_form", _SCRIPT)
 ef = importlib.util.module_from_spec(spec)
@@ -300,20 +304,30 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
         # cannot express it is once again weaker than the code it guards.
         real_all: dict = {}
         for pno in range(page_count):
-            for w in doc.load_page(pno).widgets() or []:
-                # on_state() is a METHOD on fitz.Widget, not a property. Reading
-                # it with getattr and no call captures the bound method, which
-                # then compares unequal to every string -- so the whole
-                # disambiguation below silently degrades to first-wins while
-                # LOOKING correct. Call it.
-                try:
-                    on_state = w.on_state()
-                except Exception:
-                    on_state = None     # non-toggle widget (text field, etc.)
+            # BIND the page: a widget's button_states() reads through its owning
+            # page, and PyMuPDF invalidates the widget once that page is
+            # released. Iterating `doc.load_page(pno).widgets()` directly leaves
+            # the page as a temporary, so _on_state() below silently returns
+            # None for EVERY widget -- a third way to break this same
+            # disambiguation, found while fixing the second.
+            page = doc.load_page(pno)
+            for w in page.widgets() or []:
+                # The on-state is read through acroform_dump._on_state -- the
+                # SAME function that produced the dump's `on_value`, which is
+                # what _backfill_positions actually matches pdf_on_value
+                # against. Deriving it any other way makes the guard compare a
+                # different key than the code it guards, which is exactly how
+                # this line was wrong TWICE: first as an uncalled bound method,
+                # then as fitz.Widget.on_state(), which returns the constant
+                # "Yes" for every checkbox (78/78 on i-90) while the real
+                # on_values are "Y"/"N"/"NA"/... and the schema's
+                # pdf_on_values are "0".."11". Both compared unequal always and
+                # silently fell through to first-wins. Import the producer
+                # instead of re-deriving it.
                 real_all.setdefault(w.field_name, []).append((
                     (pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
                      round(w.rect.width, 2), round(w.rect.height, 2)),
-                    on_state))
+                    acroform_dump._on_state(w)))
         real = {name: entries[0][0] for name, entries in real_all.items()}
 
         def _widget_for(claim):
@@ -1154,37 +1168,107 @@ def test_backfill_claim_is_suffix_aware(tmp_path):
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
 
 
-def test_pymupdf_on_state_is_a_method_not_a_property():
-    """The real-kit guard's on_value disambiguation reads each widget's ON
-    state to match against option.pdf_on_value. `fitz.Widget.on_state` is a
-    METHOD -- reading it via getattr WITHOUT calling it yields a bound method
-    that compares unequal to every string, so the disambiguation silently
-    degrades to first-wins while looking correct. That is exactly the bug this
-    guard's first version shipped (fresh-eyes round 2).
+def test_the_guard_reads_the_same_on_state_key_the_dump_writes():
+    """THE CONTRACT the real-kit guard's disambiguation depends on (bd
+    polyglot-pdf-r5q1; fresh-eyes rounds 2 AND 3 each caught a different way of
+    getting this wrong).
 
-    The disambiguation branch is unreachable on every committed kit (0 names
-    cover more than one widget across f1040/i-90/w7), so NO real-kit assertion
-    can catch a broken resolver. Pin the API shape directly instead.
+    _backfill_positions matches option.pdf_on_value against the DUMP's
+    `on_value`, which acroform_dump._on_state derives from
+    button_states()["normal"]. The guard must read the identical key. Two
+    plausible-looking alternatives are both silently WRONG:
+
+      - `getattr(w, "on_state", None)` -- on_state is a METHOD, so this is a
+        bound method object, unequal to every string (round 2);
+      - `w.on_state()` -- PyMuPDF documents checkboxes as always returning
+        "Yes", so it is a CONSTANT carrying no discriminating information
+        (round 3): 78/78 of i-90's toggle widgets return "Yes", while the real
+        on_values are "Y"/"N"/"NA"/... and the schema's pdf_on_values are
+        "0".."11".
+
+    Either way every comparison is False and the disambiguation silently
+    degrades to first-wins while LOOKING correct. The branch is unreachable on
+    committed kits (0 names cover >1 widget), so no real-kit assertion can
+    catch it -- this pins the key agreement directly.
     """
     fitz = pytest.importorskip("fitz")
     kit = _REPO / "form-kits" / "i-90" / "form.pdf"
     if not kit.exists():
         pytest.skip("i-90 form.pdf not present in this checkout")
     doc = fitz.open(kit)
-    widget = None
+    # Computed DURING iteration with the page BOUND -- see below.
+    states, n_toggles = [], 0
     for pno in range(doc.page_count):
-        for w in doc.load_page(pno).widgets() or []:
-            widget = w
-            break
-        if widget:
-            break
-    assert widget is not None, "expected at least one widget in i-90"
-    # UNCALLED: a bound method, never equal to an on_value string.
-    assert callable(getattr(widget, "on_state", None))
-    assert getattr(widget, "on_state") != "yes"
-    # CALLED: a value (or None) -- what the comparison actually needs.
-    called = widget.on_state()
-    assert called is None or isinstance(called, str)
+        page = doc.load_page(pno)
+        for w in page.widgets() or []:
+            if w.field_type_string not in ("CheckBox", "RadioButton"):
+                continue
+            n_toggles += 1
+            states.append(acroform_dump._on_state(w))
+    assert n_toggles, "expected toggle widgets in i-90"
+
+    # The producer yields REAL, VARYING export values...
+    assert any(s for s in states), "every on-state came back empty"
+    assert len(set(states)) > 1, (
+        "on-states are constant -- a constant cannot disambiguate anything, "
+        "which is exactly the round-3 defect (on_state() -> always 'Yes')")
+    # ...and specifically NOT the constant fitz.Widget.on_state() returns.
+    assert set(states) != {"Yes"}
+
+    # THIRD trap, found while fixing the second: a widget outlives its page
+    # only as long as something holds the page. Collecting widgets into a list
+    # from a TEMPORARY page and reading on-states afterwards yields None for
+    # every one -- silently disabling the disambiguation again, with no error.
+    stale = [w for pno in range(doc.page_count)
+             for w in (doc.load_page(pno).widgets() or [])
+             if w.field_type_string in ("CheckBox", "RadioButton")]
+    assert stale, "expected toggle widgets"
+    assert not any(acroform_dump._on_state(w) for w in stale), (
+        "PyMuPDF now keeps widgets valid after their page is released -- the "
+        "bound-page requirement above can be relaxed, and this assertion "
+        "should be removed")
+
+
+def test_committed_pdf_on_values_belong_to_DROPDOWNS_not_toggle_groups():
+    """WHY the disambiguation branch is unreachable on committed data -- the
+    fact that makes a synthetic pin the only possible evidence.
+
+    An earlier draft of this test asserted that widget on-states and the
+    schema's pdf_on_values must OVERLAP. They do not, and correctly so: on
+    i-90 the only two fields carrying pdf_on_value are the height DROPDOWNS
+    (P3_Line8_HeightFeet / HeightInches), whose options are choice values of
+    ONE shared combobox widget -- "0".."11" -- rather than separate printed
+    boxes. _backfill_positions deliberately skips that shape (no widget in the
+    group carries an on_value), which is why those options carry no
+    pdf_position. Toggle widgets' export states ("Y"/"N"/"NA"/...) are a
+    different vocabulary serving a different purpose, and the two were never
+    meant to intersect.
+
+    Pinning this stops a future reader (or reviewer) from "fixing" the
+    disambiguation to match dropdown values, and records that the multi-widget
+    toggle-group shape the branch exists for simply does not occur in any
+    committed kit yet.
+    """
+    kit = _REPO / "form-kits" / "i-90" / "schema.json"
+    if not kit.exists():
+        pytest.skip("i-90 schema not present in this checkout")
+    schema = json.loads(kit.read_text(encoding="utf-8"))
+    carriers = [f for f in schema.get("fields") or []
+                if any(isinstance(o, dict) and o.get("pdf_on_value") is not None
+                       for o in (f.get("options") or []))]
+    assert carriers, "expected i-90 to carry pdf_on_value somewhere"
+    for f in carriers:
+        # Each is a SHARED-NAME group: the field owns the widget name and no
+        # option has its own, i.e. the dropdown shape, not a toggle family.
+        assert f.get("pdf_field_name"), f"{f['id']} should own the widget name"
+        for o in f.get("options") or []:
+            assert not o.get("pdf_field_name"), (
+                f"{f['id']} option {o.get('value')!r} has its own widget name "
+                f"-- that would be a toggle family, not a dropdown")
+            # ...and the extractor correctly leaves these unpositioned.
+            assert not o.get("pdf_position"), (
+                f"{f['id']} option {o.get('value')!r} carries a position; "
+                f"dropdown choice values are not printed boxes")
 
 
 def test_option_rects_are_on_value_disambiguated_in_the_extractor(tmp_path):
