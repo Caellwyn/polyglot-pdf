@@ -28,21 +28,21 @@ describe('initialViewMode', () => {
   const MOBILE = 390;
 
   it('defaults simplified with nothing stored, any width', () => {
-    expect(initialViewMode(true, null, DESKTOP)).toBe('simplified');
-    expect(initialViewMode(true, null, MOBILE)).toBe('simplified');
+    expect(initialViewMode(null, DESKTOP)).toBe('simplified');
+    expect(initialViewMode(null, MOBILE)).toBe('simplified');
   });
 
-  it('honors a stored preview choice at desktop width, flag on', () => {
-    expect(initialViewMode(true, 'preview', DESKTOP)).toBe('preview');
+  it('honors a stored preview choice at desktop width', () => {
+    expect(initialViewMode('preview', DESKTOP)).toBe('preview');
+  });
+
+  it('honors a stored simplified choice at desktop width', () => {
+    expect(initialViewMode('simplified', DESKTOP)).toBe('simplified');
   });
 
   it('mobile width ALWAYS starts simplified, even with stored preview (epic rubric #5)', () => {
-    expect(initialViewMode(true, 'preview', MOBILE)).toBe('simplified');
-    expect(initialViewMode(true, 'preview', MOBILE_INITIAL_BREAKPOINT)).toBe('simplified');
-  });
-
-  it('flag off is always simplified regardless of stored mode', () => {
-    expect(initialViewMode(false, 'preview', DESKTOP)).toBe('simplified');
+    expect(initialViewMode('preview', MOBILE)).toBe('simplified');
+    expect(initialViewMode('preview', MOBILE_INITIAL_BREAKPOINT)).toBe('simplified');
   });
 });
 

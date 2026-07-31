@@ -2,7 +2,7 @@
 
 **Tracks:** frontend/src/schema-forms/state/schemaFormState.ts frontend/src/schema-forms/types/schema.ts frontend/src/schema-forms/components/SchemaForm.tsx frontend/src/schema-forms/components/FieldRenderer.tsx frontend/src/schema-forms/utils/fieldValue.ts frontend/src/schema-forms/utils/validation.ts frontend/src/schema-forms/utils/normalizeToComposite.ts frontend/src/schema-forms/utils/conditionalFieldCheck.ts
 
-*Last updated: 2026-07-25 (bd polyglot-pdf-wsao.1: the `FieldHelp` type gained `details` and `FormMetadata` gained `details`/`booklet_text` -- verbatim official-booklet guidance for the AI (voice guidance block + secretary catalog). All three are MODEL-FACING ONLY: never rendered on-screen (the `instructions-not-rendered` guard test now covers details) and never in the spoken ask-hint.) Prior: 2026-07-16. Production continuous-DTI runs the whole form as one session: `completedSections` never grows and the nav block (manual prev/next AND the "Submit Form" button) is hidden entirely; `currentSectionId` FOLLOWS the voice model -- the simplified view pages to the section of the model-focused field (`onNextField` -> `setVisibleSection`) and the state listeners preserve that paged section so a confirmation no longer rubber-bands to section 1 (bd polyglot-pdf-rvac). Submit is hidden pending a real submission target. See [../journal/entries/2026-07-16-bd-rvac-fix-voice-ux-tester-session-ux-fixes-slower-pace.md](../journal/entries/2026-07-16-bd-rvac-fix-voice-ux-tester-session-ux-fixes-slower-pace.md). Prior: 2026-07-15 (bd 55jg currentSectionId follows the model); 2026-07-12 (continuous-DTI); 2026-07-08 (bd ipin/jq17/fdz8 preview polish; bd w146 checkbox_group cleanup).*
+*Last updated: 2026-07-31 (bd polyglot-pdf-v437: the preview-UI flag is gone -- SchemaForm renders the "Preview Filled PDF" button and the Simplified/Preview toggle unconditionally, still landing on Simplified). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for closeout details.*
 
 The schema-driven form surface: a `FormSchema` (JSON) drives a React form whose
 state lives entirely in the browser. This is the client half of the
@@ -105,20 +105,22 @@ target (bd polyglot-pdf-rvac) -- re-add it in the nav block when a real target
 exists. It also mounts the voice overlay
 (desktop `VoiceOverlay` / mobile `VoiceOverlayMobile`, `window.innerWidth <= 768`)
 and the PDF print/download buttons, and creates the shared mic `MediaStream` +
-`ConnectionManager` once the stream is ready. Behind the preview-UI flag
-(`?previewUi=1`, `frontend/src/pdf-view/featureFlag.ts` -- epic polyglot-pdf-js7q,
-default OFF until maintainer cutover) it also renders: a "Preview Filled PDF"
-button that lazy-loads `frontend/src/pdf-view/FilledPreviewModal.tsx` (pdf.js
-render of the real `/api/fill-pdf` output), and a Simplified/Preview view-mode
-toggle (`frontend/src/pdf-view/viewMode.ts`, sessionStorage-persisted, default
-Simplified) that swaps the form for the lazy
+`ConnectionManager` once the stream is ready. It also renders, with no flag gate
+(the preview UI is cut over, bd `polyglot-pdf-v437`) -- the toggle always, the
+button whenever `pdfUrl` is present (it sits in the same `pdfUrl`-gated
+print/download block): a "Preview Filled PDF" button that lazy-loads
+`frontend/src/pdf-view/FilledPreviewModal.tsx` (pdf.js render of the real
+`/api/fill-pdf` output), and a Simplified/Preview view-mode toggle
+(`frontend/src/pdf-view/viewMode.ts`, sessionStorage-persisted, still landing
+on Simplified) that swaps the form for the lazy
 `frontend/src/pdf-view/PreviewPane.tsx` PDF surface -- the overlays +
 ConnectionManager sit outside the switched container, so toggling never
 disturbs the voice session (pinned by `SchemaForm.test.tsx`, an overlay-DOM-
 identity-survives-toggle test, bd `polyglot-pdf-fdz8`). A live same-tab resize
 into mobile width also drops Preview back to Simplified (`viewModeAfterResize`,
-bd `polyglot-pdf-ipin`; details in [pdf-view.md](pdf-view.md)). With the flag
-off, none of that UI or its pdfjs chunks load.
+bd `polyglot-pdf-ipin`; details in [pdf-view.md](pdf-view.md)). The pdfjs
+chunks stay unfetched until the user actually opens one of those preview
+surfaces, so a session that stays in Simplified never loads them.
 
 `FieldRenderer.tsx` routes by `field.type` to a component. **Implemented:** `text`,
 `email`, `tel`, `textarea`, `radio`, `checkbox`, `checkbox_group`, `date`, `select`
@@ -137,6 +139,17 @@ never enters client state -- the client is authoritative over its own field stat
 `validateField` enforces option membership (enum) for option-backed fields
 (`select`/`radio`/checkbox groups) independently of any `validation` block, since
 the option set itself is the constraint.
+
+**`help.instructions`, `help.details` and `FormMetadata.details`/`booklet_text`
+are MODEL-FACING ONLY** (bd `polyglot-pdf-wsao.1`): they feed the voice guidance
+block and the secretary catalog, and are **never rendered on-screen** and never
+spoken in the ask-hint. `frontend/src/schema-forms/components/fields/instructions-not-rendered.test.tsx`
+guards the two FIELD-level names (`help.instructions`, `help.details`) across
+every field component -- if you add either to a rendered surface, that test
+fails on purpose. **`FormMetadata.details` and `booklet_text` have no such
+guard**: the invariant is identical, but nothing mechanically enforces it, so
+putting either on-screen would ship a model-facing booklet excerpt to the user
+with a green suite.
 
 ## Conditional fields
 

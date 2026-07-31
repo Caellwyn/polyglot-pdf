@@ -17,10 +17,6 @@ import { render, screen, cleanup, act, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import type { FormSchema } from '../types/schema';
 
-const isPreviewUiEnabled = vi.fn(() => true);
-vi.mock('../../pdf-view/featureFlag', () => ({
-  isPreviewUiEnabled: () => isPreviewUiEnabled(),
-}));
 vi.mock('../../shared/config', () => ({
   isTestHarnessEnabled: () => true,
 }));
@@ -106,7 +102,13 @@ async function mountInPreview() {
 describe('Preview click-to-edit (bd polyglot-pdf-7esr)', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    isPreviewUiEnabled.mockReturnValue(true);
+    // Preview is NOT the landing view (bd polyglot-pdf-v437 kept Simplified
+    // first), so mountInPreview() clicks the Preview tab to get there. Seeding
+    // preview_view_mode here would be dead weight -- the click already lands in
+    // Preview, so a seed could not fail and would only make this suite LOOK
+    // like it covers stored-preference-honoring. That contract is pinned where
+    // it belongs: SchemaForm.test.tsx's 'honors a stored preview choice at
+    // desktop width' (component mount) and viewMode.test.ts (the pure helper).
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       writable: true,
