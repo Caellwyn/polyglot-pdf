@@ -365,10 +365,19 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
     with their own pdf_field_name; CONSOLIDATED CHOICE fields, which carry no
     field-level name and anchor to their first option's widget (32 across the
     committed kits, previously all skipped); and every options[].pdf_position
-    (112 across the committed kits, previously never inspected at all). Each
-    class carries its own non-vacuity floor, because the whole-kit floor is
-    held up by the named text fields alone and so cannot notice a regression
-    confined to either of the other two.
+    (112 across the committed kits, previously never inspected at all).
+
+    NON-VACUITY FLOORS: two, not three. `assert compared` covers the field
+    level and `assert opt_compared` the option level -- but the CONSOLIDATED
+    class has NO floor of its own: its 32 fields are counted into the same
+    `compared` as the 172/132/59 top-level-named text fields, which keep it
+    non-zero on their own. A regression confined to the consolidated fallback
+    below would be caught today only INCIDENTALLY (the option loop sits inside
+    the field-position block, so zeroing consolidated resolution also zeroes
+    option resolution on f1040), which is a property of today's data and of
+    this loop's nesting rather than a deliberate guard. Tracked as bd
+    polyglot-pdf-ea2n; stated honestly here rather than claimed away (Opus
+    outer review, second clearing pass).
 
     Skips a kit whose PDF or schema is absent from the checkout rather than
     failing (the same degrade-quietly convention the other real-kit guards use);

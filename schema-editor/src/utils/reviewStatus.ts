@@ -187,24 +187,6 @@ export function effectiveStatus(
 }
 
 /**
- * The effective status of a field given the RAW lint findings for it -- the
- * one place the "findings -> status" rule lives (bd polyglot-pdf-l7u0).
- *
- * effectiveStatus takes two already-derived booleans (hasLintError,
- * needsGuidanceAck). Deriving those correctly means knowing that an ERROR-
- * severity finding reds the field and that the guidance gate needs BOTH the
- * stale-id set and the current identity -- a three-call recipe FieldList had
- * open-coded and FieldOverlay simply did not perform, which is how the PDF
- * overlay could paint a field GREEN while the FieldList row for the SAME field
- * rendered AMBER. Two surfaces claiming to show "the same status" must not
- * each reimplement how to compute it.
- *
- * `findings` is this field's findings (App buckets them by field_id). Passing
- * undefined -- the honest state for a call site with no lint report -- yields
- * exactly today's no-findings behavior rather than throwing, so the overlay
- * degrades instead of breaking when it renders standalone.
- */
-/**
  * The two booleans every findings-driven status call needs, derived ONCE.
  * Both statusFromFindings and isReviewTargetFromFindings go through here, so
  * the "how do findings become a lint-error flag and a gate flag" recipe has a
@@ -223,6 +205,24 @@ function gateFlags(field: FormField, findings?: LintFinding[]): {
   };
 }
 
+/**
+ * The effective status of a field given the RAW lint findings for it -- the
+ * one place the "findings -> status" rule lives (bd polyglot-pdf-l7u0).
+ *
+ * effectiveStatus takes two already-derived booleans (hasLintError,
+ * needsGuidanceAck). Deriving those correctly means knowing that an ERROR-
+ * severity finding reds the field and that the guidance gate needs BOTH the
+ * stale-id set and the current identity -- a three-call recipe FieldList had
+ * open-coded and FieldOverlay simply did not perform, which is how the PDF
+ * overlay could paint a field GREEN while the FieldList row for the SAME field
+ * rendered AMBER. Two surfaces claiming to show "the same status" must not
+ * each reimplement how to compute it.
+ *
+ * `findings` is this field's findings (App buckets them by field_id). Passing
+ * undefined -- the honest state for a call site with no lint report -- yields
+ * exactly today's no-findings behavior rather than throwing, so the overlay
+ * degrades instead of breaking when it renders standalone.
+ */
 export function statusFromFindings(
   field: FormField,
   findings?: LintFinding[],

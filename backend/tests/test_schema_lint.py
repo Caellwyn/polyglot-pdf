@@ -1179,10 +1179,27 @@ def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
     drifted = dict(f, spoken_name="v2")
     hit = _stale(lint_schema(_identity_schema(drifted, baked)))[0]
 
-    # the editor's EXACT regex must find the CURRENT identity in the path
-    m = re.search(r"\[identity:([0-9a-f]+)\]", hit.path)
+    # The editor's EXACT regex must find the CURRENT identity in the path.
+    # ANCHORED, matching guidanceStaleness.currentIdentity since bd
+    # polyglot-pdf-g5vj anchored it. This pin was left unanchored when the
+    # editor moved, making it LOOSER than the thing it exists to protect: a
+    # path that grew a trailing segment would keep this test green while the
+    # editor's parse returned undefined, silently failing the gate open on
+    # every field (Opus outer review, second clearing pass). That failure is
+    # now invisible to humans too -- with no parseable identity the row stays
+    # green, no ack checkbox renders, AND (since bd polyglot-pdf-hii0) the
+    # banner drops the warning as well -- so this test is the only thing left
+    # that can catch it. It must be at least as strict as the editor.
+    m = re.search(r"\[identity:([0-9a-f]+)\]$", hit.path)
     assert m, f"editor's identity regex no longer matches path: {hit.path!r}"
     assert m.group(1) == gc.identity_sha1(drifted)
+    # ...and a path with ANY trailing segment must NOT satisfy that parse --
+    # the exact shape that would silently disable the gate.
+    assert not re.search(r"\[identity:([0-9a-f]+)\]$",
+                         hit.path + ".instructions"), (
+        "a suffixed path must not satisfy the editor's anchored parse; if "
+        "the lint path ever gains a trailing segment, currentIdentity() "
+        "returns undefined and the staleness gate fails open silently")
     # ...and the human-facing message must NOT carry it
     assert "identity:" not in hit.message
     # field_id must still resolve for click-to-focus despite the suffix
