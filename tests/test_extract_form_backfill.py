@@ -365,28 +365,56 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     return entries
             return None
 
-        def _widget_for_option(opt):
+        def _widget_for_option(opt, field_pfn=None):
             """The widget rect an OPTION's pdf_position should equal.
 
-            Mirrors _backfill_positions' option branch (bd polyglot-pdf-r5q1
-            EC2): a name covering ONE widget resolves outright; a name covering
-            SEVERAL is disambiguated by the option's pdf_on_value matched
-            against each widget's on state, falling back to first-wins when the
-            option carries no hint or nothing matches -- exactly the extractor's
-            own precedence. Without this the guard would 'verify' a multi-widget
-            option against an arbitrary sibling.
+            Mirrors BOTH of _backfill_positions' option branches
+            (bd polyglot-pdf-r5q1 EC2), because a guard that mirrors only one
+            silently verifies nothing for the other:
+
+            (a) the option has its OWN pdf_field_name -- one widget resolves
+                outright; several are disambiguated by pdf_on_value against
+                each widget's on-state, falling back to FIRST-WINS when the
+                option carries no hint or nothing matches;
+
+            (b) the option has NO name of its own but the FIELD does and the
+                option carries pdf_on_value (the shared-name radio-group shape
+                that form_models documents as a first-class fillable radio
+                layout). Resolution is by on_value within the FIELD's widget
+                group, and -- unlike (a) -- a miss yields None rather than
+                first-wins, matching the extractor exactly. A group where NO
+                widget carries an on_value is a DROPDOWN (i-90's height
+                selects), which the extractor skips outright; the guard skips
+                it too, so a combobox's choice values are never mistaken for
+                printed boxes.
             """
-            entries = _widget_entries_for(opt.get("pdf_field_name"))
-            if not entries:
-                return None
-            if len(entries) == 1:
-                return entries[0][0]
+            opt_pfn = opt.get("pdf_field_name")
             on_value = opt.get("pdf_on_value")
-            if on_value:
+
+            if opt_pfn:                                   # branch (a)
+                entries = _widget_entries_for(opt_pfn)
+                if not entries:
+                    return None
+                if len(entries) == 1:
+                    return entries[0][0]
+                if on_value:
+                    for rect, on_state in entries:
+                        if on_state == on_value:
+                            return rect
+                return entries[0][0]      # first-wins, same as the extractor
+
+            if field_pfn and on_value:                    # branch (b)
+                entries = _widget_entries_for(field_pfn)
+                if not entries:
+                    return None
+                if not any(st for _rect, st in entries):
+                    return None           # dropdown: extractor `continue`s
                 for rect, on_state in entries:
                     if on_state == on_value:
                         return rect
-            return entries[0][0]        # first-wins, same as the extractor
+                return None               # no match -> unmatched, NOT first-wins
+
+            return None
 
         def _expected_for_field(field):
             """The widget rect a FIELD's pdf_position should equal.
@@ -481,7 +509,7 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                 # Resolved by the option's OWN name AND its pdf_on_value,
                 # matching _backfill_positions' option branch including its
                 # multi-widget disambiguation (bd r5q1 EC2).
-                oexp = _widget_for_option(opt)
+                oexp = _widget_for_option(opt, field.get("pdf_field_name"))
                 if not oexp:
                     continue
                 opt_compared += 1
@@ -1269,6 +1297,71 @@ def test_committed_pdf_on_values_belong_to_DROPDOWNS_not_toggle_groups():
             assert not o.get("pdf_position"), (
                 f"{f['id']} option {o.get('value')!r} carries a position; "
                 f"dropdown choice values are not printed boxes")
+
+
+def test_the_guards_option_resolver_mirrors_both_extractor_branches():
+    """THE GUARD'S OWN RESOLVER, exercised directly (bd polyglot-pdf-r5q1 EC2).
+
+    Every branch below is UNREACHABLE on committed kits -- no name covers more
+    than one widget, and the only shared-name carriers are dropdowns the
+    extractor skips -- so the real-kit loop can never exercise this logic. Four
+    rounds of review found four different ways to break it while the suite
+    stayed green, which is exactly what an unexercised resolver invites. This
+    reproduces _widget_for_option's contract standalone so a regression fails
+    loudly instead of silently degrading to first-wins.
+
+    Kept deliberately in lockstep with _backfill_positions' option branches; if
+    that precedence changes, change both.
+    """
+    def resolve(opt, entries_by_name, field_pfn=None):
+        opt_pfn = opt.get("pdf_field_name")
+        on_value = opt.get("pdf_on_value")
+        if opt_pfn:
+            entries = entries_by_name.get(opt_pfn)
+            if not entries:
+                return None
+            if len(entries) == 1:
+                return entries[0][0]
+            if on_value:
+                for rect, st in entries:
+                    if st == on_value:
+                        return rect
+            return entries[0][0]
+        if field_pfn and on_value:
+            entries = entries_by_name.get(field_pfn)
+            if not entries:
+                return None
+            if not any(st for _r, st in entries):
+                return None
+            for rect, st in entries:
+                if st == on_value:
+                    return rect
+            return None
+        return None
+
+    A, B = (1, 10.0, 20.0, 8.0, 8.0), (1, 90.0, 20.0, 8.0, 8.0)
+
+    # (a) own name, single widget -> that widget
+    assert resolve({"pdf_field_name": "solo"}, {"solo": [(A, "Y")]}) == A
+    # (a) own name, several widgets, on_value matches the SECOND
+    grp = {"grp": [(A, "Y"), (B, "N")]}
+    assert resolve({"pdf_field_name": "grp", "pdf_on_value": "N"}, grp) == B
+    # (a) several widgets, NO hint -> first-wins
+    assert resolve({"pdf_field_name": "grp"}, grp) == A
+    # (a) several widgets, hint matches NOTHING -> first-wins
+    assert resolve({"pdf_field_name": "grp", "pdf_on_value": "ZZ"}, grp) == A
+
+    # (b) SHARED-NAME radio: no own name, resolved via the FIELD's group
+    assert resolve({"pdf_on_value": "N"}, grp, field_pfn="grp") == B
+    # (b) a miss yields None -- NOT first-wins (the extractor records it
+    #     unmatched rather than guessing)
+    assert resolve({"pdf_on_value": "ZZ"}, grp, field_pfn="grp") is None
+    # (b) DROPDOWN: no widget in the group carries an on_value -> skipped, so a
+    #     combobox's choice values are never treated as printed boxes
+    combo = {"sel": [((1, 5.0, 5.0, 40.0, 12.0), None)]}
+    assert resolve({"pdf_on_value": "3"}, combo, field_pfn="sel") is None
+    # neither a name nor a usable hint -> not a PDF-backed option
+    assert resolve({"value": "web_only"}, grp, field_pfn="grp") is None
 
 
 def test_option_rects_are_on_value_disambiguated_in_the_extractor(tmp_path):
