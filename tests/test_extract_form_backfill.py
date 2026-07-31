@@ -290,12 +290,24 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         doc = fitz.open(form_pdf)
         page_count = doc.page_count
-        real: dict = {}
+        # EVERY widget per name, in document order -- not just the first.
+        # Keeping only the first (real.setdefault) made on_value
+        # disambiguation impossible, so a name covering several physical
+        # widgets would always be compared against whichever one PyMuPDF
+        # happened to enumerate first (fresh-eyes finding 1). No committed kit
+        # has such a group today (measured: 0 across f1040/i-90/w7), but
+        # _backfill_positions explicitly supports the shape, so a guard that
+        # cannot express it is once again weaker than the code it guards.
+        real_all: dict = {}
         for pno in range(page_count):
             for w in doc.load_page(pno).widgets() or []:
-                real.setdefault(w.field_name, (
-                    pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
-                    round(w.rect.width, 2), round(w.rect.height, 2)))
+                real_all.setdefault(w.field_name, []).append((
+                    (pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
+                     round(w.rect.width, 2), round(w.rect.height, 2)),
+                    # The widget's ON state, the same key _backfill_positions
+                    # matches option.pdf_on_value against.
+                    getattr(w, "on_state", None)))
+        real = {name: entries[0][0] for name, entries in real_all.items()}
 
         def _widget_for(claim):
             """The widget rect for a schema-side pdf_field_name claim.
@@ -318,6 +330,42 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                 if name.endswith("." + claim):
                     return rect
             return None
+
+        def _widget_entries_for(claim):
+            """Every widget of a claim's name, suffix-aware (same lookup as
+            _widget_for, but keeping the whole group)."""
+            if not claim:
+                return None
+            hit = real_all.get(claim)
+            if hit:
+                return hit
+            for name, entries in real_all.items():
+                if name.endswith("." + claim):
+                    return entries
+            return None
+
+        def _widget_for_option(opt):
+            """The widget rect an OPTION's pdf_position should equal.
+
+            Mirrors _backfill_positions' option branch (bd polyglot-pdf-r5q1
+            EC2): a name covering ONE widget resolves outright; a name covering
+            SEVERAL is disambiguated by the option's pdf_on_value matched
+            against each widget's on state, falling back to first-wins when the
+            option carries no hint or nothing matches -- exactly the extractor's
+            own precedence. Without this the guard would 'verify' a multi-widget
+            option against an arbitrary sibling.
+            """
+            entries = _widget_entries_for(opt.get("pdf_field_name"))
+            if not entries:
+                return None
+            if len(entries) == 1:
+                return entries[0][0]
+            on_value = opt.get("pdf_on_value")
+            if on_value:
+                for rect, on_state in entries:
+                    if on_state == on_value:
+                        return rect
+            return entries[0][0]        # first-wins, same as the extractor
 
         def _expected_for_field(field):
             """The widget rect a FIELD's pdf_position should equal.
@@ -409,13 +457,10 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                         or opage < 1 or opage > page_count):
                     bad_pages.append((f"{field.get('id')}.option[{oi}]", opage))
                     continue
-                # Resolved by the option's OWN name, matching
-                # _backfill_positions' option branch. on_value disambiguation
-                # is not re-implemented here: _widget_for takes the FIRST
-                # widget of a name, which is the same first-wins convention the
-                # extractor falls back to, and every committed option position
-                # agrees with it (measured: 0 mismatches across all 112).
-                oexp = _widget_for(opt.get("pdf_field_name"))
+                # Resolved by the option's OWN name AND its pdf_on_value,
+                # matching _backfill_positions' option branch including its
+                # multi-widget disambiguation (bd r5q1 EC2).
+                oexp = _widget_for_option(opt)
                 if not oexp:
                     continue
                 opt_compared += 1
@@ -1100,6 +1145,45 @@ def test_backfill_claim_is_suffix_aware(tmp_path):
     schema = {"fields": [{"id": "a", "type": "text", "pdf_field_name": "x[0]"}],
               "sections": [{"id": "s", "page_numbers": [1], "fields": ["a"]}]}
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
+
+
+def test_option_rects_are_on_value_disambiguated_in_the_extractor(tmp_path):
+    """bd polyglot-pdf-r5q1 EC2, the SHAPE the real-kit guard must mirror.
+
+    No committed kit has a name covering several physical widgets (measured: 0
+    across f1040/i-90/w7), so the real-kit guard's disambiguation branch is
+    unreachable on today's data. That is exactly why it needs a synthetic pin:
+    an option in a shared-name group must take the rect of the widget whose
+    on_value matches, NOT whichever sibling happens to come first. Without
+    this, both the extractor and any guard mirroring it could silently pair an
+    option with the wrong printed box.
+    """
+    dump = {"fields": [{
+        "name": "grp[0]", "logical_type": "checkbox",
+        "widgets": [
+            {"type": "checkbox", "on_value": "yes",
+             "rect": {"page": 0, "x": 10.0, "y": 20.0, "width": 8.0, "height": 8.0}},
+            {"type": "checkbox", "on_value": "no",
+             "rect": {"page": 0, "x": 90.0, "y": 20.0, "width": 8.0, "height": 8.0}},
+        ]}]}
+    p = tmp_path / "d.json"
+    p.write_text(json.dumps(dump), encoding="utf-8")
+    schema = {"fields": [{"id": "q", "type": "radio", "options": [
+        # deliberately listed so the on_value match is NOT the first widget
+        {"value": "n", "label": "No", "pdf_field_name": "grp[0]",
+         "pdf_on_value": "no"},
+        {"value": "y", "label": "Yes", "pdf_field_name": "grp[0]",
+         "pdf_on_value": "yes"},
+    ]}]}
+    ef._backfill_positions(schema, str(p))
+    opts = schema["fields"][0]["options"]
+    # the "no" option must take the SECOND widget's rect, not the first.
+    # (VACUITY: if disambiguation regressed to first-wins, both options would
+    # take x==10.0 and this first assertion fails.)
+    assert opts[0]["pdf_position"]["x"] == 90.0
+    assert opts[1]["pdf_position"]["x"] == 10.0
+    # and the two options must not collapse onto the SAME widget
+    assert opts[0]["pdf_position"] != opts[1]["pdf_position"]
 
 
 # --- completed family members get positions (bd polyglot-pdf-u4r0) --------- #

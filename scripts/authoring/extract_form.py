@@ -1410,6 +1410,15 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #      keeps step 3 where it is, ahead of the /TU instructions pass
         #      that depends on it.
         completion_positions = _backfill_positions(schema, dump_path)
+        # Surface this pass's normalizations too. The first pass prints its
+        # count; dropping the second's would make a page-base fix applied to a
+        # field recovered at 3c2/3d silently invisible, a small observability
+        # regression introduced by re-running the pass at all.
+        if completion_positions.get("model_pages_normalized"):
+            print(f"  [positions] normalized "
+                  f"{completion_positions['model_pages_normalized']} "
+                  f"model-supplied page number(s) from 0-based to 1-based "
+                  f"(post-completion pass)")
 
         # Keep the dump IN MEMORY for the lint pass at step 4 (the temp file is
         # removed in the finally below; the dump powers the widget-claim rule).

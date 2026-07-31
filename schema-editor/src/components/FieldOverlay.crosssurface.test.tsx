@@ -73,6 +73,20 @@ function overlayBand(f: FormField, findings?: LintFinding[]): string {
   return `unknown(${border})`;
 }
 
+/** overlayBand, but with a document page count threaded in. */
+function overlayBandWithPages(f: FormField, pageCount: number): string {
+  const { container, unmount } = render(
+    <FieldOverlay field={f} pageHeight={792} scale={1} isSelected={false}
+      pageCount={pageCount} />,
+  );
+  const border = (container.querySelector('.field-overlay') as HTMLElement).style.border;
+  unmount();
+  if (border.includes('74, 222, 128')) return 'green';
+  if (border.includes('250, 204, 21')) return 'yellow';
+  if (border.includes('248, 113, 113')) return 'red';
+  return `unknown(${border})`;
+}
+
 /**
  * The band the FieldList ROW actually renders, read off its status icon's
  * Tailwind colour class -- not re-derived from the helper, so this genuinely
@@ -141,6 +155,33 @@ describe('FieldOverlay agrees with FieldList (bd polyglot-pdf-l7u0)', () => {
     const both = [staleFinding, errorFinding];
     expect(listBand(f, both)).toBe('red');
     expect(overlayBand(f, both)).toBe('red');
+  });
+
+  it('threading pageCount cannot re-colour a SIGNED-OFF field (no side effect)', () => {
+    // PDFViewer now passes pageCount={numPages}, which FieldOverlay never
+    // received before. Fresh-eyes flagged this as a possible unintended
+    // re-colouring. It is NOT: an out-of-range page feeds `needsReview`, not
+    // `errors`, and per the g63j rule an explicit reviewed_correct sign-off
+    // outranks automatic amber. So a signed-off field is green either way.
+    // Pinned so the new prop's blast radius stays provably nil.
+    const offDoc = field({          // reviewed_correct, page 9 of a 1-page doc
+      pdf_position: { page: 9, x: 100, y: 700, width: 150, height: 30 },
+    } as Partial<FormField>);
+    expect(overlayBand(offDoc)).toBe('green');                    // no pageCount
+    expect(overlayBandWithPages(offDoc, 1)).toBe('green');        // with pageCount
+  });
+
+  it('...but an UNREVIEWED out-of-range field is amber either way', () => {
+    // The automatic band DOES govern an unreviewed field -- and it is already
+    // amber without pageCount (unreviewed is always amber, bd g63j), so
+    // threading the prop still changes no colour. This is what makes the new
+    // prop safe rather than merely untested.
+    const unreviewed = field({
+      _review: undefined,
+      pdf_position: { page: 9, x: 100, y: 700, width: 150, height: 30 },
+    } as Partial<FormField>);
+    expect(overlayBand(unreviewed)).toBe('yellow');
+    expect(overlayBandWithPages(unreviewed, 1)).toBe('yellow');
   });
 
   it('DEGRADES to previous behavior with no findings prop (criterion 2)', () => {
