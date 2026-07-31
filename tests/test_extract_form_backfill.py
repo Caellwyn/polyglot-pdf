@@ -403,7 +403,6 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
                     (pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
                      round(w.rect.width, 2), round(w.rect.height, 2)),
                     acroform_dump._on_state(w)))
-        real = {name: entries[0][0] for name, entries in real_all.items()}
 
         def _widget_for(claim):
             """The widget rect for a schema-side pdf_field_name claim.
@@ -416,16 +415,16 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
             (form1[0].#subform[0].P1_Line1_AlienNumber[0]) -- so this guard
             verified NOTHING on the largest, most XFA-complex kit while
             appearing to pass (fresh-eyes Opus round 3). A guard weaker than
-            the code it guards is decoration."""
-            if not claim:
-                return None
-            hit = real.get(claim)
-            if hit:
-                return hit
-            for name, rect in real.items():
-                if name.endswith("." + claim):
-                    return rect
-            return None
+            the code it guards is decoration.
+
+            Delegates the NAME MATCHING to _widget_entries_for (fresh-eyes
+            round 6) so the exact-then-dot-boundary rule exists once. It used
+            to be a second hand-written copy, and the dot boundary -- the part
+            that stops a claim of "date" binding "...signature_date" -- was
+            untested in BOTH copies simultaneously. Field level takes the
+            FIRST widget of the group, which is the field-level convention."""
+            entries = _widget_entries_for(real_all, claim)
+            return entries[0][0] if entries else None
 
         def _expected_for_field(field):
             """The widget rect a FIELD's pdf_position should equal.
@@ -1345,6 +1344,19 @@ def test_the_guards_option_resolver_mirrors_both_extractor_branches():
     qualified = {"form1[0].#s[0].grp": [(A, "Y"), (B, "N")]}
     assert _widget_for_option(
         qualified, {"pdf_field_name": "grp", "pdf_on_value": "N"}) == B
+    # ...but ONLY at a DOT BOUNDARY (fresh-eyes round 6). A dump name that
+    # merely ENDS WITH the claim, without a '.' before it, is a DIFFERENT
+    # widget and must not resolve: claiming "date" must not bind
+    # "...signature_date". Without the boundary the guard would silently
+    # verify a field/option against an unrelated widget's rect. The
+    # fully-qualified case above cannot catch this -- it is a real dot suffix,
+    # so it passes under both the correct and the naive rule.
+    decoy = {"form1[0].#s[0].signature_date": [(A, "Y")]}
+    assert _widget_for_option(decoy, {"pdf_field_name": "date"}) is None
+    assert _widget_for_option(decoy, {"pdf_field_name": "_date"}) is None
+    # the exact leaf still resolves
+    assert _widget_for_option(
+        decoy, {"pdf_field_name": "signature_date"}) == A
 
     # (b) SHARED-NAME radio: no own name, resolved via the FIELD's group
     assert _widget_for_option(grp, {"pdf_on_value": "N"}, field_pfn="grp") == B
