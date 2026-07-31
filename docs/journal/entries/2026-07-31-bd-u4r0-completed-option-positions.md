@@ -56,10 +56,17 @@ step 3 down was the other candidate and was rejected on evidence:
 - since icyi it derives UNCONDITIONALLY, so there is no trusted model rect left
   for a second pass to clobber -- the property that makes a re-run safe now and
   would NOT have been true before that bead;
-- the steps in between (3a `/TU`, 3c2, 3d) read and write `pdf_field_name`,
-  never positions, so a re-derive is a pure addition rather than a reordering
-  that could perturb them;
-- 3d's own minted fields already carry a converted rect, so they are a no-op.
+- of the steps in between, 3a (`/TU`) and 3c2 write no positions at all, and 3d
+  DOES write one per minted field -- but a deterministic already-converted rect
+  from the same dump with the same `+1`, so re-deriving reproduces it exactly.
+  Measured: the late pass changes ZERO pre-existing position values on w7 or
+  f1040, and that is now pinned by
+  `test_the_late_pass_reproduces_3d_minted_positions_exactly` rather than only
+  asserted in prose. (An earlier draft of this bullet -- and the matching code
+  comment -- claimed the intervening steps touch "never positions", which is
+  simply false for 3d and self-contradicted two lines later. Fresh-eyes round 2
+  caught it in both places; the load-bearing part of the safety argument had a
+  false premise a reader would hit on the first step they checked.)
 
 **But "the pass is idempotent" was too broad, and the review caught it.** Rect
 derivation is; the PAGE-BASE SHIFT inside the same function is not. It one-shot
@@ -100,6 +107,14 @@ consistent enough to name: **when the thing under test is a pipeline's
 ORCHESTRATION -- the order in which it calls things -- a test that calls those
 things itself has replaced the subject with a re-implementation.** Drive the
 real entry point, and mutate the production step to confirm the test can fail.
+
+**A commit message is not a change. I made this exact mistake twice in one
+bead.** Both times I described a journal correction in a commit message and did
+not write it into the entry -- first the i-90 select-option measurement, then
+the "never positions" claim above. Both were caught only because I re-read the
+file afterward to check. The commit message is the most convincing possible
+place to record a fix that does not exist, because it reads like evidence. When
+a message says "also corrected X in the journal", grep for X before committing.
 
 **An idempotence claim needs to name WHICH part is idempotent.** The whole
 design rested on "the pass is idempotent, so re-running it is safe". That was
