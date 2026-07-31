@@ -230,16 +230,42 @@ def _widget_entries_for(real_all, claim):
     while the suite stayed green, because no committed kit reaches these
     branches. One implementation, called by both the guard and its unit test,
     is the only arrangement where the test can actually protect the code.
+
+    PRECEDENCE, mirroring schema_lint._match_dump_names exactly: EXACT match
+    first, and only when there is none does a DOT-BOUNDARY suffix match apply.
+    Both parts matter and both are pinned by tests -- checking suffix first
+    would bind the wrong widget wherever a leaf name repeats across subforms,
+    and dropping the dot would let a claim of "date" bind
+    "...signature_date". Entries stay in document order, so callers that want
+    the field-level convention take entries[0].
     """
     if not claim:
         return None
-    hit = real_all.get(claim)
+    hit = real_all.get(claim)          # EXACT wins
     if hit:
         return hit
     for name, entries in real_all.items():
-        if name.endswith("." + claim):
+        if name.endswith("." + claim):  # else dot-boundary suffix
             return entries
     return None
+
+
+def _widget_for_field(real_all, claim):
+    """The widget rect a FIELD's pdf_position should equal: the FIRST widget of
+    its name's group.
+
+    Module level for the same reason as its option-level sibling (fresh-eyes
+    round 7): while this was one inline `entries[0][0]` expression inside the
+    guard's closure, mutating it to last-wins escaped every test in the file --
+    all three committed kits measure 0 names covering more than one widget, so
+    the real-kit loop can never tell first from last. A convention only a
+    unit test can reach must live where a unit test can call it.
+
+    First-wins matches _backfill_positions' field level, which has no on_value
+    hint available to disambiguate with (only options carry one).
+    """
+    entries = _widget_entries_for(real_all, claim)
+    return entries[0][0] if entries else None
 
 
 def _widget_for_option(real_all, opt, field_pfn=None):
@@ -424,7 +450,7 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
             untested in BOTH copies simultaneously. Field level takes the
             FIRST widget of the group, which is the field-level convention."""
             entries = _widget_entries_for(real_all, claim)
-            return entries[0][0] if entries else None
+            return _widget_for_field(real_all, claim)
 
         def _expected_for_field(field):
             """The widget rect a FIELD's pdf_position should equal.
@@ -1358,6 +1384,19 @@ def test_the_guards_option_resolver_mirrors_both_extractor_branches():
     assert _widget_for_option(
         decoy, {"pdf_field_name": "signature_date"}) == A
 
+    # EXACT MATCH BEATS SUFFIX (fresh-eyes round 7). When a claim matches BOTH
+    # a top-level name and another widget's dot-suffix, the exact one wins --
+    # the canonical rule in schema_lint._match_dump_names, which returns the
+    # exact hits and only falls back to suffix when there are none. Checking
+    # suffix first would bind the WRONG widget on any AcroForm that repeats a
+    # leaf name across subforms. Both candidates must be present for this to
+    # discriminate, which is why no earlier case caught a swapped precedence.
+    both = {"grp": [(A, "Y")], "other[0].grp": [(B, "N")]}
+    assert _widget_for_option(both, {"pdf_field_name": "grp"}) == A
+    # ...and with the exact name absent, the suffix still resolves.
+    suffix_only = {"other[0].grp": [(B, "N")]}
+    assert _widget_for_option(suffix_only, {"pdf_field_name": "grp"}) == B
+
     # (b) SHARED-NAME radio: no own name, resolved via the FIELD's group
     assert _widget_for_option(grp, {"pdf_on_value": "N"}, field_pfn="grp") == B
     # (b) a miss yields None -- NOT first-wins (the extractor records it
@@ -1373,6 +1412,40 @@ def test_the_guards_option_resolver_mirrors_both_extractor_branches():
     assert _widget_for_option({}, {"pdf_on_value": "N"}, field_pfn="gone") is None
     # neither a name nor a usable hint -> not a PDF-backed option
     assert _widget_for_option(grp, {"value": "web_only"}, field_pfn="grp") is None
+
+
+def test_field_level_resolution_takes_the_FIRST_widget_of_a_group():
+    """The FIELD-level convention (bd polyglot-pdf-r5q1; fresh-eyes round 7).
+
+    A field's rect is the FIRST widget of its name's group -- the same
+    first-wins rule _backfill_positions uses at the field level, where no
+    on_value hint exists to disambiguate with. Mutating this to last-wins
+    escaped every test in this file, because all three committed kits measure
+    0 names covering more than one widget, so the real-kit loop can never tell
+    first from last. Pin it directly.
+
+    Calls the REAL _widget_for_field -- the same function the guard's
+    field-level lookup delegates to -- so it cannot drift from it.
+    """
+    A = (1, 10.0, 20.0, 8.0, 8.0)
+    B = (1, 90.0, 20.0, 8.0, 8.0)
+    grp = {"grp": [(A, "Y"), (B, "N")]}
+
+    # FIRST, not last: the field anchors to the group's leading widget.
+    assert _widget_for_field(grp, "grp") == A
+    assert _widget_for_field(grp, "grp") != B   # what a last-wins bug returns
+
+    # the same name rules apply here as at the option level
+    assert _widget_for_field({"other[0].grp": [(B, "N")]}, "grp") == B
+    assert _widget_for_field({"grp": [(A, "Y")],
+                              "other[0].grp": [(B, "N")]}, "grp") == A
+    assert _widget_for_field(
+        {"form1[0].#s[0].signature_date": [(A, "Y")]}, "date") is None
+
+    # an absent claim resolves to nothing rather than raising
+    assert _widget_for_field(grp, "missing") is None
+    assert _widget_for_field(grp, None) is None
+    assert _widget_for_field({}, "grp") is None
 
 
 def test_option_rects_are_on_value_disambiguated_in_the_extractor(tmp_path):
