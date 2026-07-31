@@ -83,7 +83,7 @@ def _label_for(field: dict, mode: str) -> str:
     return "?"
 
 
-def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
+def _claimants(schema: dict, mode: str) -> dict[str, dict[tuple[str, str], str]]:
     """widget name -> the label(s) claiming it. Includes option-level claims,
     which is where choice fields carry their real widget identity.
 
@@ -170,6 +170,29 @@ def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
             claimants.setdefault(oc, {})[(fid, f"option[{idx}]")] = (
                 f"{label}{suffix}")
 
+    return claimants
+
+
+def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
+    """widget name -> label(s), with lint's multiclaim rule applied.
+
+    Kept for callers that have no PDF to resolve against; annotate() uses
+    _claimants + _resolve_claimants + _collapse_claimants so that resolution
+    happens BEFORE the collapse."""
+    return _collapse_claimants(_claimants(schema, mode))
+
+
+def _collapse_claimants(
+    claimants: dict[str, dict[tuple[str, str], str]],
+) -> dict[str, list[str]]:
+    """Apply lint's multiclaim rule to a (owner, kind) -> label map.
+
+    Split out so RESOLUTION can happen first: a field-level claim and its
+    option-level twin may be written as two different schema strings that
+    resolve to the SAME widget, and the benign groups-of-one carve-out can only
+    see that once they share a key. Collapsing before resolving re-creates the
+    pair afterwards and reports it as a multiclaim.
+    """
     out: dict[str, list[str]] = {}
     for name, by_claimant in claimants.items():
         owners = {fid for fid, _ in by_claimant}
@@ -186,6 +209,42 @@ def _claims(schema: dict, mode: str) -> dict[str, list[str]]:
     return out
 
 
+def _resolve_claimants(
+    claimants: dict[str, dict[tuple[str, str], str]],
+    widget_names: list[str],
+) -> dict[str, dict[tuple[str, str], str]]:
+    """Re-key a claims map from SCHEMA names onto the PDF's actual widget names.
+
+    Schemas may store the XFA LEAF name ("P1_Line10_CityTownOfBirth[0]") while
+    the PDF's widgets carry the fully-qualified path
+    ("form1[0].#pageSet[0].Page1[0]....P1_Line10_CityTownOfBirth[0]"). Matching
+    the raw strings therefore misses: on i-90 that is 146 of 189 claims, which
+    the tool reported as 152 widgets "unclaimed" -- a false coverage gap on a
+    correctly bound kit.
+
+    Same convention as every other consumer in the repo (schema_lint's
+    _match_dump_names, pdf_fill_routes.find_widget, schema_repair's
+    _check_widgets_exist): exact match first, else a DOT-BOUNDARY suffix match.
+    The dot boundary matters -- a bare `endswith` would let "x_name[0]" claim
+    "prefix_name[0]".
+
+    A claim resolving to SEVERAL widgets (a repeated leaf across pages) labels
+    each of them; two different claims landing on ONE widget merge their
+    claimants, so the multiclaim signal survives resolution rather than being
+    split across two unresolved keys.
+    """
+    by_name: dict[str, dict[tuple[str, str], str]] = {}
+    for claim, by_claimant in claimants.items():
+        matches = [n for n in widget_names if n == claim]
+        if not matches:
+            matches = [n for n in widget_names if n.endswith("." + claim)]
+        # An unresolvable claim keeps its original key: it then matches no
+        # widget and simply draws nothing, exactly as before.
+        for name in (matches or [claim]):
+            by_name.setdefault(name, {}).update(by_claimant)
+    return by_name
+
+
 def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
              png_dir: Optional[str] = None) -> dict:
     try:
@@ -193,11 +252,16 @@ def annotate(schema: dict, pdf_path: str, out_path: str, mode: str = "spoken",
     except ImportError:  # pragma: no cover - env-dependent
         return {"error": "PyMuPDF (fitz) is required"}
 
-    claims = _claims(schema, mode)
+    claimants = _claimants(schema, mode)
     try:
         doc = fitz.open(pdf_path)
     except Exception as exc:  # unreadable/missing PDF is a USAGE error (rc 2)
         return {"error": f"cannot open PDF {pdf_path!r}: {exc}"}
+
+    widget_names = [w.field_name for page in doc for w in page.widgets()
+                    if isinstance(w.field_name, str)]
+    claims = _collapse_claimants(_resolve_claimants(claimants, widget_names))
+
     drawn = unclaimed = multiclaimed = 0
 
     for page in doc:
