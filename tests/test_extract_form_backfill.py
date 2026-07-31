@@ -301,12 +301,19 @@ def test_every_shipped_kit_has_in_range_pages_and_real_rects():
         real_all: dict = {}
         for pno in range(page_count):
             for w in doc.load_page(pno).widgets() or []:
+                # on_state() is a METHOD on fitz.Widget, not a property. Reading
+                # it with getattr and no call captures the bound method, which
+                # then compares unequal to every string -- so the whole
+                # disambiguation below silently degrades to first-wins while
+                # LOOKING correct. Call it.
+                try:
+                    on_state = w.on_state()
+                except Exception:
+                    on_state = None     # non-toggle widget (text field, etc.)
                 real_all.setdefault(w.field_name, []).append((
                     (pno + 1, round(w.rect.x0, 2), round(w.rect.y0, 2),
                      round(w.rect.width, 2), round(w.rect.height, 2)),
-                    # The widget's ON state, the same key _backfill_positions
-                    # matches option.pdf_on_value against.
-                    getattr(w, "on_state", None)))
+                    on_state))
         real = {name: entries[0][0] for name, entries in real_all.items()}
 
         def _widget_for(claim):
@@ -1145,6 +1152,39 @@ def test_backfill_claim_is_suffix_aware(tmp_path):
     schema = {"fields": [{"id": "a", "type": "text", "pdf_field_name": "x[0]"}],
               "sections": [{"id": "s", "page_numbers": [1], "fields": ["a"]}]}
     assert ef._backfill_unclaimed_widgets(schema, str(p)) == 0
+
+
+def test_pymupdf_on_state_is_a_method_not_a_property():
+    """The real-kit guard's on_value disambiguation reads each widget's ON
+    state to match against option.pdf_on_value. `fitz.Widget.on_state` is a
+    METHOD -- reading it via getattr WITHOUT calling it yields a bound method
+    that compares unequal to every string, so the disambiguation silently
+    degrades to first-wins while looking correct. That is exactly the bug this
+    guard's first version shipped (fresh-eyes round 2).
+
+    The disambiguation branch is unreachable on every committed kit (0 names
+    cover more than one widget across f1040/i-90/w7), so NO real-kit assertion
+    can catch a broken resolver. Pin the API shape directly instead.
+    """
+    fitz = pytest.importorskip("fitz")
+    kit = _REPO / "form-kits" / "i-90" / "form.pdf"
+    if not kit.exists():
+        pytest.skip("i-90 form.pdf not present in this checkout")
+    doc = fitz.open(kit)
+    widget = None
+    for pno in range(doc.page_count):
+        for w in doc.load_page(pno).widgets() or []:
+            widget = w
+            break
+        if widget:
+            break
+    assert widget is not None, "expected at least one widget in i-90"
+    # UNCALLED: a bound method, never equal to an on_value string.
+    assert callable(getattr(widget, "on_state", None))
+    assert getattr(widget, "on_state") != "yes"
+    # CALLED: a value (or None) -- what the comparison actually needs.
+    called = widget.on_state()
+    assert called is None or isinstance(called, str)
 
 
 def test_option_rects_are_on_value_disambiguated_in_the_extractor(tmp_path):
