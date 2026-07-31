@@ -325,7 +325,7 @@ def _widget_for_option(real_all, opt, field_pfn=None):
 # with the FIRST OPTION's widget (bd polyglot-pdf-ks1y). Both rects are real
 # widget rects from this PDF; the stored one anchors to a DIFFERENT option of
 # the same field, so it predates the documented first-option rule. Deltas are
-# 42-108pt -- far past any rounding tolerance, so they cannot be absorbed by
+# 18-108pt -- far past any rounding tolerance, so they cannot be absorbed by
 # widening it.
 #
 # EXEMPTED, NOT IGNORED. ks1y owns deciding which rect is correct against a
