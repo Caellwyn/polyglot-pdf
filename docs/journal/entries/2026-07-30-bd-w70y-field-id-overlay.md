@@ -126,8 +126,8 @@ distinction, and the zoom-invariance above.
 
 ## Verification
 
-- 30 new tests (23 overlay, 7 viewer integration).
-- Full schema-editor suite: 970 passed across 68 files. (A trailing "Timeout
+- 31 new tests (24 overlay, 7 viewer integration).
+- Full schema-editor suite: 971 passed across 68 files. (A trailing "Timeout
   starting forks runner" error is Windows fork-startup noise, not a test failure --
   read the counts.)
 - `tsc --noEmit` clean -- `paintOrder` and `WebkitTextStrokeWidth` are typed in

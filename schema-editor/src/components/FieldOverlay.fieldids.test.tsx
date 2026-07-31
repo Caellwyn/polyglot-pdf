@@ -7,9 +7,10 @@
  * a field<->widget misassignment that no automated gate can detect, because the
  * claimed widget is real and claimed exactly once, just wrong.
  *
- * jsdom has no layout engine, so truncation and the text halo can only be pinned
- * as CSS contracts here, not as observed rendering. Stated so nobody reads these
- * as proof the label visually clips.
+ * jsdom has no layout engine, so truncation and the text halo are pinned here as
+ * DECLARED CSS only -- these assertions prove the properties are set, never that
+ * the label visually clips or that the halo renders. Real clipping was confirmed
+ * once in a browser (see the journal entry); this file cannot re-confirm it.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -240,6 +241,29 @@ describe('FieldOverlay -- ID mode', () => {
       // flex container -- the two decisions are a pair. Pinned so a future edit
       // cannot top-align every label without a signal.
       expect(label.style.lineHeight).toBe('30px');  // the box height
+      // inset:0 is what gives the absolutely-positioned label a WIDTH to clip
+      // against. Without it the label shrinks to its content, overflow/ellipsis
+      // have no box to bite on, and a long ID spills across its neighbours --
+      // breaking "never spill" while every other assertion here still passes.
+      expect(label.style.inset).toBe('0');
+    });
+
+    it('draws the label with a white HALO, not an opaque plate', () => {
+      // Load-bearing for legibility: thin coloured glyphs sit directly over
+      // black-on-white form print. A halo keeps the paper visible BETWEEN the
+      // strokes, where a solid plate would hide the very text the reviewer is
+      // checking the label against. Was described in the source and claimed in
+      // this file's header, but executed by nothing.
+      const { container } = renderOverlay({
+        field: createMockField(), showFieldId: true,
+      });
+      const label = container.querySelector('.field-id-label') as HTMLElement;
+      expect(label.style.webkitTextStrokeWidth).toBe('2px');
+      expect(label.style.webkitTextStrokeColor).toBe('rgba(255, 255, 255, 0.9)');
+      // stroke UNDER fill, so the halo never eats into the glyph itself.
+      expect(label.style.paintOrder).toBe('stroke fill');
+      // And NOT a plate: no opaque background behind the text.
+      expect(label.style.backgroundColor).toBe('');
     });
   });
 
