@@ -333,6 +333,27 @@ def test_resolution_requires_a_DOT_boundary():
     assert list(ov._resolve_claimants(claimants, ["a.name[0]"])) == ["a.name[0]"]
 
 
+def test_one_claim_labels_EVERY_widget_it_resolves_to():
+    """A leaf repeated across pages (a signature block on each page, say) matches
+    several fully-qualified widgets, and all of them belong to that field -- so
+    all of them get labelled.
+
+    Pinned because no shipped kit has a repeated leaf today, so nothing else
+    exercises it: truncating the fan-out to the first match left all 27 tests AND
+    all three real kits green. The rule would be missing exactly when a future
+    kit first needs it.
+    """
+    claimants = {"P1_Signature[0]": {("sig", "field"): "Signature"}}
+    widgets = ["form1[0].Page1[0].P1_Signature[0]",
+               "form1[0].Page2[0].P1_Signature[0]",
+               "form1[0].Page1[0].Other[0]"]
+    out = ov._resolve_claimants(claimants, widgets)
+    assert sorted(out) == ["form1[0].Page1[0].P1_Signature[0]",
+                           "form1[0].Page2[0].P1_Signature[0]"]
+    for labels in out.values():
+        assert labels == {("sig", "field"): "Signature"}
+
+
 def test_an_exact_match_wins_over_a_suffix_match():
     claimants = {"f[0]": {("fld_a", "field"): "A"}}
     out = ov._resolve_claimants(claimants, ["f[0]", "sub.f[0]"])

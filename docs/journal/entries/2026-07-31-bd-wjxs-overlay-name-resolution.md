@@ -76,12 +76,12 @@ kit deliberately leaves unmodelled.
 
 ## Verification
 
-- 7 new tests: an annotate()-level guard on the ordering invariant (below),
+- 8 new tests: an annotate()-level guard on the ordering invariant (below),
   leaf->qualified resolution, the dot-boundary requirement,
   exact-beats-suffix, resolution-before-collapse (the ordering bug, pinned with
   i-90's real shape), a genuine cross-style multiclaim still surviving, and w7
   unchanged as the no-op guard.
-- Full backend suite: 2379 passed, 2 skipped.
+- Full backend suite: 2380 passed, 2 skipped.
 - **No form kit was modified.** `form-kits/` is read-only by maintainer
   constraint -- i-90 in particular is the verified golden copy used for demos --
   so the w7 test writes its output to `tmp_path`. (A first draft of that test
