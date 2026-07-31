@@ -34,8 +34,12 @@ plausible-but-wrong model rect is OVERWRITTEN by the dump; a degenerate rect
 with no dump match is dropped entirely.
 
 Imports extract_form by file path (repo precedent: test_bd_safe.py); it adds
-scripts/bakeoff to sys.path at import for acroform_dump/arm_llm_native, which is
-harmless here since we never call those.
+scripts/bakeoff to sys.path at import for acroform_dump/arm_llm_native. MOST
+tests here are synthetic and call neither -- but the pipeline-level test added
+by bd polyglot-pdf-u4r0 drives the real extract(), which runs acroform_dump
+against a PyMuPDF-generated PDF (so fitz is required, via importorskip) and
+monkeypatches arm_llm_native.run rather than calling a model. No metered API
+call is made: that test passes translate_options=False, enrich_guidance=False.
 """
 
 import importlib.util
@@ -1074,3 +1078,34 @@ def test_the_late_pass_does_NOT_re_shift_model_pages(tmp_path):
     assert [f["pdf_position"]["page"] for f in schema["fields"]] == [0, 1], (
         "the late pass re-shifted model pages -- a second shift moves them off "
         "the document")
+
+
+def test_the_late_pass_reproduces_3d_minted_positions_exactly(tmp_path):
+    """The 3d2 rationale claims 3d's minted positions survive the re-derive
+    UNCHANGED -- assert it rather than only asserting it in a comment.
+
+    3d (_backfill_unclaimed_widgets) DOES write a position per minted field, so
+    "nothing in between touches positions" was false (fresh-eyes round 2). The
+    real argument is narrower and testable: 3d writes a deterministic rect from
+    the same dump with the same +1 conversion, so re-deriving reproduces it
+    byte-for-byte.
+    """
+    dump = _write_dump(tmp_path, {
+        "claimed": {"page": 0, "x": 5.5, "y": 6.5, "width": 7.5, "height": 9.5},
+        "orphan": {"page": 0, "x": 1.25, "y": 2.25, "width": 3.25, "height": 4.25},
+    })
+    schema = {"fields": [{"id": "a", "pdf_field_name": "claimed"}]}
+
+    ef._backfill_positions(schema, dump)                 # step 3
+    ef._backfill_unclaimed_widgets(schema, dump)         # step 3d mints "orphan"
+    minted = [f for f in schema["fields"] if f["id"] != "a"]
+    assert minted, "3d minted nothing -- this test would be vacuous"
+    before = {f["id"]: dict(f["pdf_position"]) for f in schema["fields"]
+              if f.get("pdf_position")}
+
+    ef._backfill_positions(schema, dump, normalize_pages=False)   # step 3d2
+    after = {f["id"]: dict(f["pdf_position"]) for f in schema["fields"]
+             if f.get("pdf_position")}
+    assert after == before, (
+        "the late pass changed a position 3d had already written: "
+        f"{before} -> {after}")

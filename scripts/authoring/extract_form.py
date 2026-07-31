@@ -222,12 +222,21 @@ def _backfill_positions(schema: dict, dump_path: str, *,
     (e.g. "form1[0].#subform[0].P1_checkbox6c_Unit[1]") -- i-90 alone has 32
     option pdf_field_names that only resolve this way.
 
+    normalize_pages: pass FALSE for any SECOND pass over the same schema (the
+    3d2 late re-derive, bd polyglot-pdf-u4r0). Rect derivation is idempotent,
+    but the page-base shift is NOT -- it one-shot corrects the MODEL's ordinal
+    base, so re-running it moves positions an earlier pass already shifted a
+    second page, off the document. The default is the SAFE value for a first
+    pass and the WRONG one for a repeat, so any new caller that runs this over
+    an already-processed schema must pass False (there is no runtime guard).
+
     Returns {"fields_filled": int, "options_filled": int, "unmatched": [...],
     "model_pages_normalized": int} -- the fourth key counts model-supplied pages
-    shifted from 0-based to 1-based (bd polyglot-pdf-icyi). EVERY return path
-    carries all four: an early return that omitted one made the shape only
-    sometimes-four-keyed, so a caller indexing it directly would KeyError on the
-    error path alone (fresh-eyes Opus round 3)."""
+    shifted from 0-based to 1-based (bd polyglot-pdf-icyi), and is always 0 when
+    normalize_pages is False. EVERY return path carries all four: an early
+    return that omitted one made the shape only sometimes-four-keyed, so a
+    caller indexing it directly would KeyError on the error path alone
+    (fresh-eyes Opus round 3)."""
     try:
         with open(dump_path, encoding="utf-8") as fh:
             dump = json.load(fh)
@@ -1402,12 +1411,15 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #
         #      A RE-RUN rather than moving step 3 down: RECT derivation is
         #      idempotent (verified byte-identical on a second run over the
-        #      real i-90 kit), it derives unconditionally since icyi so there
-        #      is no trusted model rect left to clobber, and the steps in
-        #      between (3a /TU, 3c2, 3d) read and write pdf_field_name, never
-        #      positions -- so this is a pure addition, not a reordering that
-        #      could perturb them. 3d's own minted fields already carry a
-        #      converted rect, so they are a no-op here.
+        #      real i-90 kit) and it derives unconditionally since icyi, so
+        #      there is no trusted model rect left to clobber. Of the steps in
+        #      between, 3a and 3c2 write no positions at all; 3d DOES write one
+        #      per minted field (_backfill_unclaimed_widgets), but a
+        #      deterministic already-converted rect from the same dump with the
+        #      same +1, so re-deriving reproduces it exactly -- measured, the
+        #      late pass changes ZERO pre-existing position values on w7 or
+        #      f1040. So this is a pure addition, not a reordering that could
+        #      perturb anything.
         #
         #      normalize_pages=False because the page-base shift is the ONE
         #      part of the pass that is NOT idempotent: it one-shot corrects
@@ -1425,10 +1437,13 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
             "fields_filled": late_positions["fields_filled"],
             "options_filled": late_positions["options_filled"],
             "unmatched": late_positions["unmatched"],
-            # Pass 1's value verbatim: the late pass runs with
-            # normalize_pages=False and always reports 0, so this stays equal
-            # to the number the console line above printed -- the log and the
-            # provenance stanza can never disagree (fresh-eyes, bd u4r0).
+            # Pass 1's value verbatim, preserving the documented FOUR-key
+            # shape. NOT read by anything downstream -- the provenance stanza
+            # below stores only the three counts -- so this is shape parity,
+            # not a consumer contract. Carrying pass 1 forward (rather than
+            # summing) keeps it equal to what the console line above printed;
+            # the late pass runs normalize_pages=False and always reports 0
+            # (fresh-eyes, bd u4r0).
             "model_pages_normalized":
                 positions_filled.get("model_pages_normalized", 0),
         }
