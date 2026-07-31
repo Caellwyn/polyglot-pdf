@@ -33,6 +33,15 @@ _W7_PDF = _REPO / "form-kits" / "w7" / "form.pdf"
 _W7_SCHEMA = _REPO / "form-kits" / "w7" / "schema.json"
 
 needs_w7 = pytest.mark.skipif(not _W7_PDF.exists(), reason="w7 kit not present")
+
+# i-90 stores XFA LEAF names against fully-qualified widgets, so it is the only
+# real fixture that exercises resolution end to end. READ-ONLY: never write into
+# form-kits/ -- i-90 is the verified golden copy used for demos.
+_I90_PDF = _REPO / "form-kits" / "i-90" / "form.pdf"
+_I90_SCHEMA = _REPO / "form-kits" / "i-90" / "schema.json"
+needs_i90 = pytest.mark.skipif(
+    not _I90_PDF.exists(), reason="i-90 kit not present")
+
 pytest.importorskip("fitz", reason="PyMuPDF required to render the overlay")
 
 
@@ -328,6 +337,32 @@ def test_an_exact_match_wins_over_a_suffix_match():
     claimants = {"f[0]": {("fld_a", "field"): "A"}}
     out = ov._resolve_claimants(claimants, ["f[0]", "sub.f[0]"])
     assert list(out) == ["f[0]"]
+
+
+@needs_i90
+def test_annotate_ITSELF_resolves_before_collapsing(tmp_path):
+    """The bead's central invariant, asserted where it actually matters.
+
+    The helper-level test below composes the call order by hand, so it proves the
+    two helpers compose correctly but CANNOT see annotate() calling them the
+    wrong way round -- reverting annotate() to collapse-then-resolve left all 26
+    tests green while i-90 regressed to 1 false multiclaim. This closes that:
+    i-90 writes P7_checkbox7Extend[0]'s field claim as the full path and its
+    single option as the bare leaf, so collapsing first splits the benign
+    groups-of-one pair and re-merges it into a phantom collision.
+
+    Reads the kit; writes only to tmp_path (form-kits/ is read-only).
+    """
+    schema = json.loads(_I90_SCHEMA.read_text(encoding="utf-8"))
+    result = ov.annotate(schema, str(_I90_PDF), str(tmp_path / "review.pdf"))
+
+    assert result["multiclaimed"] == 0, (
+        "a correctly-bound widget was flagged as multiclaimed -- annotate() is "
+        "collapsing before it resolves")
+    # ...and resolution genuinely happened: without it this kit reports 43
+    # labelled / 152 unclaimed instead.
+    assert result["drawn"] == 188
+    assert result["unclaimed"] == 7
 
 
 def test_resolution_happens_BEFORE_the_multiclaim_collapse():
