@@ -97,7 +97,7 @@ byte-identical afterwards (sha256 `93bc4083...` before and after) -- while an
 ungated POST for that same id demonstrably resolves to the host's copy, which is
 what makes the refusal load-bearing rather than decorative.
 
-23 new tests (12 endpoint, 7 client asker, 5 component -- one of the 5 pins the
+23 new tests (11 endpoint, 7 client asker, 5 component -- one of the 5 pins the
 fresh-nonce/cleanup contract rather than the refusal itself). Both gates were
 **mutation-verified rather than assumed**: forcing the endpoint to report
 `sameFolder=true` fails 4 endpoint tests, and removing the UI refusal fails 5
@@ -127,13 +127,20 @@ asserts the copy-elsewhere text is gone.
 
 ## One thing worth flagging for the next person
 
-The six existing run-extraction component tests started failing the moment the
-gate landed -- their fetch mock routed *every* POST through one handler, so the
-new handshake POST received the extraction payload and read as a refusal. That is
-the mock being too coarse, not a product defect, and the fix belonged in the mock:
-it now routes by URL and **defaults to agreement**, so those tests keep testing
-what they were written to test rather than accidentally testing the refusal.
+Five existing run-extraction component tests started failing the moment the gate
+landed -- their fetch mock routed *every* POST through one handler, so the new
+handshake POST received the extraction payload and read as a refusal. That is the
+mock being too coarse, not a product defect, and the fix belonged in the mock: it
+now routes by URL and **defaults to agreement**, so those tests keep testing what
+they were written to test rather than accidentally testing the refusal.
 
 Worth noting because the failure looked like a regression at first glance. The
-tell was that all six failures were exactly the tests that *run* an extraction,
-and none of the ones that merely show or hide the button.
+tell was that the failures were the tests that *complete* an extraction, and none
+of the ones that merely show or hide the button.
+
+Note the count is five, not six, even though six tests in that block POST. The
+sixth ("disables folder controls ... WHILE extraction is in flight") holds its
+POST promise open, which satisfies the handshake and the extraction alike, so it
+survives the coarse mock. Recording the exact signature because the *shape* of
+the failure set is the diagnostic -- "every test that finishes an extraction, and
+only those" is what tells you the mock is at fault rather than the gate.

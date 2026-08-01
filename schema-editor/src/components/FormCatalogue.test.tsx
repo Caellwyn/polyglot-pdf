@@ -887,7 +887,7 @@ describe('FormCatalogue -- run extraction', () => {
     expect(kit.children.has('instructions.pdf')).toBe(false);
   });
 
-  it('refuses when the picked folder cannot be written to, with the copy hint', async () => {
+  it('refuses when the picked folder cannot be written to, pointing at the HOST root', async () => {
     // verifySameFolder cannot even drop its marker -- a read-only source folder
     // is not a viable extraction target either way.
     let posted: unknown = null;

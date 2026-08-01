@@ -87,6 +87,14 @@ The editor is a stand-alone PDF -> schema tool when run locally:
    writes `form-kits/<id>/schema.json` (a validated draft). The kit then becomes
    openable for review.
 
+The folder you open in step 1 must be **the same `form-kits/` the dev server
+uses** -- extraction runs on the host and writes `schema.json` under the server's
+own root (`FORM_KITS_ROOT`, default the repo's `form-kits/`), not into whatever
+folder the browser picked. Opening a copy elsewhere is refused with a message
+naming the folder the server uses, so it can never overwrite a different copy of
+a kit behind your back (bd polyglot-pdf-ball). To work from a folder elsewhere,
+point the dev server at it: `FORM_KITS_ROOT=/path/to/form-kits npm run dev`.
+
 The "Run extraction" button needs the host-side endpoint that only the dev
 server provides, so it appears under `npm run dev` / `run-schema-editor.sh`, not
 in a deployed static build. From a terminal, equivalently:
