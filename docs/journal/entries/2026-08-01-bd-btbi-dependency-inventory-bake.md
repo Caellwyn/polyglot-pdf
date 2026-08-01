@@ -75,6 +75,16 @@ confirmed (both now beads + memories):
 Also: the extractor caught a genuine gold error (W-7 `exp_date` was not marked
 required); the maintainer fixed it.
 
+## i-90 no-regression guard
+
+n=2 per arm: recall 19/19 in ALL four runs (no regression on the saturated
+form), field F1 actually better with the scaffold (99.2 vs 96.7-97.1),
+trigger-correctness unchanged. Spurious rises 5-8 -> 13-15, but i-90 gold
+carries ZERO require_if anywhere, so every conditional requirement the model
+finds scores spurious by construction -- the baseline already emits 5-8. Left
+UNRESOLVED (no maintainer verdict set exists for i-90); plausibly the same
+gold-under-encoding pattern confirmed on W-7, but that is an inference.
+
 ## Recommendation
 
 Confirmed at modest effect size. Ship it AFTER `opjo` -- fixing the

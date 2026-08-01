@@ -67,6 +67,33 @@ downgrades an always-required field to conditionally-required.
 The unadjudicated cases are all 1-of-7 flukes (`mailing_city_state_country`,
 `date_of_entry_us`, `us_visa_type_number_expiration`) with no stable pattern.
 
+## i-90 no-regression guard (n=2 per arm)
+
+| metric | B0 | B1 |
+|---|---|---|
+| relationships found (of 19) | **19/19** both runs | **19/19** both runs |
+| trigger-correct | 17-18/19 | 17/19 |
+| field F1 | 96.7 / 97.1 | **99.2 / 99.2** |
+| spurious | 5, 8 | 13+2, 15 |
+| inventory entries | - | 21, 23 |
+
+**No recall regression** on the saturated form (19/19 in all four runs), and
+field extraction is actually BETTER with the scaffold (99.2 vs 96.7-97.1).
+Trigger-correctness is unchanged within the known P5-consolidation artifact
+(bd kfni's logged rubric amendment).
+
+The spurious jump (5-8 -> 13-15) is the SAME class as W-7's, not a new defect:
+**i-90 gold carries ZERO `require_if` anywhere** (19 show_if, 19
+conditional_behavior, 0 require_if), so every conditional-requirement the model
+identifies scores spurious BY CONSTRUCTION. The baseline already emits 5-8 of
+them; the scaffold finds more of the same category. Spot-check: the most
+frequent are `p1_line5a_familyname` / `p1_line5b_givenname` -- the "if you
+checked yes, provide your other names" fields, which genuinely ARE required
+once shown. NOT adjudicated field-by-field (i-90 has no maintainer verdict set
+like W-7's), so this is reported as UNRESOLVED rather than counted either way:
+it is plausibly the same gold-under-encoding pattern the maintainer confirmed
+on W-7, but that is an inference, not a ruling.
+
 ## Why it works (visible in the model's own inventory)
 
 The scaffold's inventory enumerated the printed cross-references the model
