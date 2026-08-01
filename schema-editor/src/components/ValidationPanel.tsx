@@ -5,6 +5,7 @@ import { needsAckFieldIds } from '../utils/guidanceStaleness';
 import {
   AuthError,
   hasBackend,
+  isHostedMode,
   lintSchema,
   type LintFinding,
   type LintReport,
@@ -124,6 +125,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   onReport,
 }) => {
   const backendAvailable = React.useMemo(hasBackend, []);
+  const hosted = React.useMemo(isHostedMode, []);
 
   const [report, setReport] = React.useState<LintReport | null>(null);
   // The completion figure honours the guidance-ack gate (bd anim): a
@@ -173,6 +175,17 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
         if (seq !== seqRef.current) return;
         if (err instanceof AuthError) {
           onAuthError?.();
+          // HOSTED re-prompts with the access-code gate, so returning here is
+          // enough. LOCAL has no gate screen (App renders it on `hosted &&
+          // !role`), so a 401 would otherwise render NOTHING: no findings, no
+          // banner, green completion -- the exact silent-clean state this bead
+          // exists to remove. It is reachable: relaunching the editor mints a
+          // FRESH per-run token while an already-open tab still holds the
+          // previous one. Fall through to the banner instead.
+          if (hosted) return;
+          setLintError(
+            'the editor was not accepted by its backend (the access token '
+            + 'may be from an earlier run -- reload this page)');
           return;
         }
         // A lint failure is non-blocking: the editor stays usable, the panel
@@ -184,7 +197,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       .finally(() => {
         if (seq === seqRef.current) setLinting(false);
       });
-  }, [schema, backendAvailable, onAuthError]);
+  }, [schema, backendAvailable, hosted, onAuthError]);
 
   // Mirror each fresh report up to the host (App feeds it to the field list).
   // An effect, not a call inside the fetch handlers, so the local-mode

@@ -907,6 +907,18 @@ def _find_booklet_file(files, form_pdf: str = "form.pdf") -> Optional[str]:
     return None
 
 
+def _help_snapshot(schema: dict, field_id: str) -> tuple:
+    """A field's guidance channels, for before/after comparison."""
+    for f in schema.get("fields", []):
+        if isinstance(f, dict) and f.get("id") == field_id:
+            help_obj = f.get("help") if isinstance(f.get("help"), dict) else {}
+            return tuple(
+                help_obj.get(k) for k in ("instructions", "details",
+                                          "format_hint")
+            )
+    return ()
+
+
 def _load_enrich_instructions():
     """Import scripts/authoring/enrich_instructions.py (bd polyglot-pdf-cpiw).
 
@@ -1065,11 +1077,20 @@ async def regenerate_editor_kit_guidance(
 
     proposals = result.get("proposals") or {}
 
-    # Nothing came back -> do not write. enrich_schema filters to askable
-    # fields, so a fieldIds list of only read_only/signature fields yields zero
-    # chunks and zero proposals; falling through would re-stamp the bake block
-    # for no benefit -- a destructive no-op.
-    if not (proposals.get("fields") or {}):
+    # No usable CONTENT came back -> do not write, and say so. Two ways to get
+    # here, and an empty-dict check catches only the first:
+    #   - enrich_schema filters to ASKABLE fields, so a fieldIds list of only
+    #     read_only/signature fields yields zero chunks and no entries at all;
+    #   - verify_and_rectify fails SAFE on a judge outage by blanking each
+    #     entry to {} while KEEPING its key, so `fields` stays truthy.
+    # Either way, falling through re-stamps the bake block and returns a
+    # success the reviewer will read as "the guidance was re-authored".
+    if not any(
+        isinstance(e, dict)
+        and any((e.get(k) or "").strip()
+                for k in ("instructions", "details", "format_hint"))
+        for e in (proposals.get("fields") or {}).values()
+    ):
         _log.info("editor_guidance_regen_no_proposals", kit_id=kit_id,
                   requested=len(requested))
         dump_data = await _load_kit_dump(store, kit_id)
@@ -1099,6 +1120,13 @@ async def regenerate_editor_kit_guidance(
              .get("instructions_enrich") or {})
     prior_flags = prior.get("flags")
     prior_judge = prior.get("judge_model")
+    # Snapshot BEFORE the apply so `regenerated` can report what actually
+    # changed (see the comment where it is computed).
+    help_before = {
+        f["id"]: _help_snapshot(schema, f["id"])
+        for f in schema.get("fields", [])
+        if isinstance(f, dict) and isinstance(f.get("id"), str)
+    }
     merged_flags = (list(prior_flags) if isinstance(prior_flags, list) else [])
     merged_flags += list(verify_flags or [])
     summary = enrich.apply_proposals(
@@ -1107,15 +1135,21 @@ async def regenerate_editor_kit_guidance(
         model=model,
         judge_model=prior_judge if isinstance(prior_judge, str) else "",
     )
-    proposed_ids = {
-        fid for fid, e in (proposals.get("fields") or {}).items()
-        if isinstance(e, dict)
-    }
+    # Report what was actually WRITTEN, not what was proposed. apply_proposals
+    # deliberately SKIPS any field whose guidance a human edited (its
+    # per-channel hashes no longer match provenance), so a proposal-derived
+    # list would tell the reviewer their hand-written text was overwritten
+    # when the route's whole contract is that it was not. Compared against the
+    # pre-call snapshot, so this tracks apply_proposals' real behavior rather
+    # than re-implementing its skip rule.
     schema_ids = {f.get("id") for f in schema.get("fields", [])
                   if isinstance(f, dict)}
     scope = set(requested) & schema_ids if requested else schema_ids
-    regenerated = sorted(proposed_ids & scope)
-    skipped = sorted(scope - proposed_ids) if requested else []
+    regenerated = sorted(
+        fid for fid in scope
+        if _help_snapshot(schema, fid) != help_before.get(fid)
+    )
+    skipped = sorted(scope - set(regenerated))
 
     try:
         await store.put_schema(kit_id, schema, schema_file)

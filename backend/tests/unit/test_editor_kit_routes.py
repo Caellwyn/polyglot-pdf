@@ -2832,3 +2832,55 @@ def test_regenerate_guidance_runs_the_verify_loop_before_writing(
                headers={"X-Editor-Token": "auth-tok"}, json={})
     assert r.status_code == 200, r.text
     assert called["verify"], "the judge did not run before the write"
+
+
+def test_regenerate_guidance_reports_nothing_when_the_judge_is_out(
+        client, monkeypatch):
+    # verify_and_rectify fails SAFE by blanking each entry to {} but KEEPING
+    # its key, so `fields` stays truthy. An empty-dict guard misses that, and
+    # the route would return 200 with a non-empty `regenerated` having written
+    # nothing -- the reviewer believes the guidance was re-authored.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    before = (root / "fresh" / "schema.json").read_text(encoding="utf-8")
+
+    class _JudgeDown(_FakeEnrich):
+        @staticmethod
+        def verify_and_rectify(schema, proposals, booklet, form_name,
+                               author_model, judge_model=None):
+            for fid in list((proposals.get("fields") or {})):
+                proposals["fields"][fid] = {}   # the real fail-safe shape
+            return [{"severity": "WARNING",
+                     "rule": "instructions-enrich-unavailable",
+                     "path": "x", "message": "judge down"}]
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _JudgeDown)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["regenerated"] == []
+    assert (root / "fresh" / "schema.json").read_text(encoding="utf-8") == before
+
+
+def test_regenerate_guidance_does_not_claim_it_overwrote_human_edits(
+        client, monkeypatch):
+    # apply_proposals SKIPS a field whose guidance a human edited. Reporting
+    # the proposal ids would tell the reviewer their hand-written text was
+    # overwritten -- the opposite of the route's contract.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+
+    class _HumanOwned(_FakeEnrich):
+        @staticmethod
+        def apply_proposals(schema, proposals, booklet, flags, model,
+                            judge_model, tu_map=None):
+            # writes nothing: every field reads as hand-edited
+            return {"written": 0, "skipped_human": 1, "flags": 0,
+                    "unmatched_proposal_ids": []}
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _HumanOwned)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["regenerated"] == []
+    assert r.json()["skipped"] == ["a"]

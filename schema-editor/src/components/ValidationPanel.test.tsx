@@ -215,6 +215,45 @@ describe('ValidationPanel load-time lint display', () => {
     await waitFor(() => expect(lintSchema).toHaveBeenCalled());
     expect(screen.queryByText(/Limited checking/)).toBeNull();
   });
+
+  // The reachable-but-FAILING half of criterion 2. An empty finding list next
+  // to a green completion figure reads as "this form is fine", so a lint that
+  // never ran has to say so loudly, not just in the small gray note.
+  it('says the checks did NOT run when a reachable backend fails', async () => {
+    lintSchema.mockRejectedValue(new Error('boom'));
+    render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);
+    expect(await screen.findByText(/Checks did not run/)).toBeInTheDocument();
+    expect(screen.queryByText(/Limited checking/)).toBeNull();
+  });
+
+  // A 401 in LOCAL mode used to render NOTHING: the AuthError branch returned
+  // early and the access-code gate is hosted-only. Reachable for real --
+  // relaunching mints a fresh per-run token while an open tab holds the old
+  // one (bd polyglot-pdf-cpiw).
+  it('surfaces a 401 in LOCAL mode instead of rendering nothing', async () => {
+    hostedMode = false;          // backendReachable stays true
+    lintSchema.mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onAuthError={onAuthError} />,
+    );
+    expect(await screen.findByText(/Checks did not run/)).toBeInTheDocument();
+    expect(screen.getByText(/from an earlier run/)).toBeInTheDocument();
+    expect(onAuthError).toHaveBeenCalled(); // host still told, as before
+  });
+
+  it('a 401 in HOSTED mode still defers to the access-code gate', async () => {
+    hostedMode = true;
+    lintSchema.mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onAuthError={onAuthError} />,
+    );
+    await waitFor(() => expect(onAuthError).toHaveBeenCalled());
+    expect(screen.queryByText(/Checks did not run/)).toBeNull();
+  });
 });
 
 describe('ValidationPanel Repair-all (bd zgln, P5.3b)', () => {

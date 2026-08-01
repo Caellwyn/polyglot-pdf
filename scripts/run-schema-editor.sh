@@ -40,6 +40,17 @@ for arg in "$@"; do
     esac
 done
 
+# Kill the backend and everything it spawned. On Windows (Git Bash) taskkill
+# /T is what reaches uvicorn's reloader child; elsewhere the process GROUP is.
+stop_backend() {
+    [ -n "$BACKEND_PID" ] || return 0
+    if command -v taskkill >/dev/null 2>&1; then
+        taskkill //F //T //PID "$BACKEND_PID" >/dev/null 2>&1 || true
+    fi
+    kill -- "-$BACKEND_PID" 2>/dev/null || kill "$BACKEND_PID" 2>/dev/null || true
+    BACKEND_PID=""
+}
+
 echo "======================================"
 echo " PDF Schema Editor - Launch Script"
 echo "======================================"
@@ -117,14 +128,25 @@ if [ "$START_BACKEND" = "1" ]; then
 
     # Stop the backend when this script exits (Ctrl+C on the frontend, or any
     # error under `set -e`) so a re-run never collides on the port.
-    trap 'if [ -n "$BACKEND_PID" ]; then kill "$BACKEND_PID" 2>/dev/null || true; fi' EXIT INT TERM
+    #
+    # Kill the whole TREE, not just $!. $! is the SUBSHELL's pid and
+    # `uvicorn --reload` forks a reloader child under it -- killing the parent
+    # alone orphans that child, which keeps :8000 bound. The next launch then
+    # fails to bind, the readiness probe finds the OLD backend still answering
+    # /health with the OLD token, and every editor call 401s. The sibling
+    # launcher documents the same hazard (scripts/dev-local.ps1: "taskkill /T
+    # kills the WHOLE process tree ... would orphan those and leave port
+    # 8000/5173 bound for the next run").
+    trap 'stop_backend' EXIT INT TERM
 
     # Wait for readiness rather than sleeping a fixed amount: a cold import of
     # the backend takes a few seconds, and the editor reads VITE_BACKEND_URL at
     # load, so a frontend that opened first would render its no-backend state.
     echo -n "  waiting for the backend to answer"
+    BACKEND_READY=0
     for _ in $(seq 1 60); do
         if curl -sf "${BACKEND_URL}/health" >/dev/null 2>&1; then
+            BACKEND_READY=1
             echo " ready"
             break
         fi
@@ -136,6 +158,19 @@ if [ "$START_BACKEND" = "1" ]; then
         echo -n "."
         sleep 1
     done
+    # Never fall through QUIETLY. Starting the frontend with VITE_BACKEND_URL
+    # set but nothing answering is the worst of both worlds: hasBackend() is
+    # true, so the editor suppresses its "limited checking" notice, and every
+    # lint fails against a backend that is not there -- a session that looks
+    # configured but silently checks nothing.
+    if [ "$BACKEND_READY" != "1" ]; then
+        echo ""
+        echo "  ERROR: the backend did not answer ${BACKEND_URL}/health within 60s."
+        echo "  Not starting the editor against a backend that is not ready --"
+        echo "  it would look configured while checking nothing. See the backend"
+        echo "  output above, or run with --no-backend for frontend-only."
+        exit 1
+    fi
     echo ""
 fi
 

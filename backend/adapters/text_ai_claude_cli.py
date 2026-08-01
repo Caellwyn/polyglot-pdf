@@ -63,6 +63,17 @@ class TextAIClaudeCli(TextAIGemini):
         self._model_chain = [model]
         self._thinking_budget = None
         self._log = _log.bind(provider="claude-cli", model=model)
+        # The remaining attributes the base __init__ sets. Today they are read
+        # only inside that __init__, so nothing needs them -- but the class's
+        # whole premise is "inherit everything, override only the transport",
+        # and that premise silently would not hold for these four. Setting them
+        # means a future inherited method that reads self._vertexai (say, for a
+        # log line) cannot AttributeError on the local path, where test
+        # coverage is thinnest.
+        self._api_key = None
+        self._vertexai = False
+        self._project = None
+        self._location = None
         # Inherited methods check `self._client is None` as their "no provider,
         # fail open" guard. A non-None sentinel keeps them on the normal path;
         # nothing in this class ever calls a method on it.
