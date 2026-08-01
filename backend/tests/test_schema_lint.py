@@ -1229,21 +1229,29 @@ def test_a_field_baked_before_identity_tracking_never_reads_stale():
 # only a count over the SHIPPED kit can catch a mass false alarm (a hash-formula
 # change lighting up every field) or a silent regression (the rule going dark).
 #
-# WHY these 14 are stale: the guidance was baked against an EARLIER field
-# layout, not against edits made since. The tell is in the kit's own
-# _bakeoff.authoring.instructions_enrich.flags, which still names the field
-# `agent_ein_ptin_office_code` -- a combined field that no longer exists (it was
-# later split into agent_ein / agent_ptin / agent_office_code). Records baked
-# against a field set that has since been re-cut can never match the current
-# hash, so this set does not shrink by re-checking labels.
+# WHY these 14 are stale -- stated as what is PROVABLE from the data, because
+# this comment is the only thing telling a maintainer the fix is a re-bake
+# rather than a label re-check:
+#
+# Some provenance shas describe the field ONE POSITION OVER, i.e. the ivh9
+# off-by-one is fossilized in the bake metadata itself. Reproduce with:
+#   cur = {identity_sha1(f): f["id"] for f in schema["fields"]}
+#   [(k, cur.get(r["identity_sha1"])) for k, r in prov.items()]
+# which yields prov[reason_h_details] -> treaty_country and
+# prov[treaty_country] -> treaty_article_number. Those records were baked
+# against the pre-correction assignment, so they cannot match now.
+#
+# The rest simply predate later edits to name/spoken_name. identity_sha1 hashes
+# ONLY name + spoken_name + option triples (guidance_contract.identity_payload),
+# so nothing about the field set or the plumbing enters the hash.
 #
 # Note what this is NOT: the set is byte-identical before and after the
 # bd polyglot-pdf-fjxe 'name' correction (verified by hashing both revisions),
 # so the corrected names neither caused nor cleared any of it.
 #
-# Clearing them means RE-BAKING the guidance against the current field set,
-# which is maintainer work tracked separately -- not something a test should
-# paper over.
+# Clearing them means RE-BAKING the guidance against the current fields, which
+# is maintainer work (bd polyglot-pdf-im2u criterion 2, bd polyglot-pdf-aliu)
+# -- not something a test should paper over.
 _W7_EXPECTED_STALE = {
     "us_person_name_ssn_itin", "reason_h_details", "treaty_country",
     "id_document_issued_by", "itin_issued_first_name",
