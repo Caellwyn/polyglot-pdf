@@ -123,3 +123,129 @@ def test_gemini_provider_rejects_non_gemini_model():
     msg = str(exc.value)
     assert "gemini" in msg.lower()
     assert "EXTRACTOR_MODEL" in msg  # tells the caller how to fix it
+
+
+# --- Vertex-only: no AI Studio key path anywhere in scripts/bakeoff/ --------- #
+# bd polyglot-pdf-kgmn (+ f3lm / w99b). The AI Studio gate is closed fleet-wide:
+# arm_gemini._client used to fall back to genai.Client(api_key=...) when
+# VERTEXAI=false, silently billing off the tracked project. It now delegates to
+# llm_providers._vertex_gemini_client, so NO env state can produce an api_key
+# client.
+
+def _load_arm_gemini():
+    """arm_gemini imports sibling bakeoff modules by bare name, so its own
+    directory must be on sys.path (it does this itself at import time)."""
+    path = (pathlib.Path(__file__).resolve().parent.parent
+            / "scripts" / "bakeoff" / "arm_gemini.py")
+    spec_ag = importlib.util.spec_from_file_location("arm_gemini", path)
+    mod = importlib.util.module_from_spec(spec_ag)
+    sys.modules["arm_gemini"] = mod
+    spec_ag.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize("vertexai_env", [None, "true", "false", "TRUE", "0"])
+def test_arm_gemini_client_is_vertex_only_under_every_env(monkeypatch,
+                                                          vertexai_env):
+    """No VERTEXAI value -- including the former escape hatch 'false' -- may
+    produce an api_key client. Captures the kwargs genai.Client is built with."""
+    if vertexai_env is None:
+        monkeypatch.delenv("VERTEXAI", raising=False)
+    else:
+        monkeypatch.setenv("VERTEXAI", vertexai_env)
+    # A key IS present in env: the point is that it must be ignored outright.
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-should-never-be-used")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+
+    captured = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    ag = _load_arm_gemini()
+    monkeypatch.setattr(lp.genai if hasattr(lp, "genai") else ag.genai,
+                        "Client", _FakeClient, raising=False)
+    # _vertex_gemini_client imports google.genai lazily inside the function.
+    import google.genai as _genai
+    monkeypatch.setattr(_genai, "Client", _FakeClient)
+
+    ag._client(http_options=None)
+
+    assert "api_key" not in captured, captured
+    assert captured.get("vertexai") is True, captured
+    assert captured.get("project") == "test-project", captured
+
+
+def test_bakeoff_sources_have_no_api_key_client_construction():
+    """Static guard: no ACTIVE scripts/bakeoff/ module may construct an
+    AI-Studio client. Catches a NEW file reintroducing the closed gate, which
+    the behavioral test above (arm_gemini only) would not see.
+
+    Parses with ast rather than scanning lines: the repo has historically
+    produced the multiline form
+
+        genai.Client(
+            api_key=key,
+        )
+
+    (bd rve5 found four of them), which any line-by-line grep misses.
+
+    SCOPE: the top-level bakeoff modules only -- deliberately NOT recursive.
+    scripts/bakeoff/prior_extractor/ is a vendored snapshot of the PRIOR
+    extractor kept for reference/comparison, not a live call path, and
+    gemini_enhancer_v2.py there still builds api_key clients by design. Closing
+    that one is the fleet-wide sweep's call (bd polyglot-pdf-w99b), not this
+    guard's.
+    """
+    import ast
+
+    bakeoff = (pathlib.Path(__file__).resolve().parent.parent
+               / "scripts" / "bakeoff")
+    offenders = []
+    for py in sorted(bakeoff.glob("*.py")):
+        tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = (func.attr if isinstance(func, ast.Attribute)
+                    else getattr(func, "id", ""))
+            if name != "Client":
+                continue
+            if any(kw.arg == "api_key" for kw in node.keywords):
+                offenders.append(f"{py.name}:{node.lineno}")
+    assert offenders == [], (
+        "AI Studio api_key client construction found (the gate is closed; bd "
+        "polyglot-pdf-f3lm / kgmn):\n" + "\n".join(offenders))
+
+
+@pytest.mark.parametrize("env,expected", [
+    ({"VERTEX_LOCATION": "europe-west4"}, "europe-west4"),
+    ({"GOOGLE_CLOUD_LOCATION": "asia-northeast1"}, "asia-northeast1"),
+    # VERTEX_LOCATION is the repo's canonical knob, so it WINS on conflict.
+    ({"VERTEX_LOCATION": "europe-west4",
+      "GOOGLE_CLOUD_LOCATION": "asia-northeast1"}, "europe-west4"),
+    ({}, "us-central1"),
+])
+def test_vertex_client_honors_vertex_location_first(monkeypatch, env, expected):
+    """The bakeoff arms used to read VERTEX_LOCATION directly; delegating to the
+    shared helper must not silently swap them to GOOGLE_CLOUD_LOCATION and drop
+    a non-default region on the floor (bd polyglot-pdf-kgmn)."""
+    monkeypatch.delenv("VERTEX_LOCATION", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+
+    captured = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    import google.genai as _genai
+    monkeypatch.setattr(_genai, "Client", _FakeClient)
+
+    lp._vertex_gemini_client(None)
+    assert captured.get("location") == expected, captured

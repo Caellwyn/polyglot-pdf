@@ -72,8 +72,8 @@ export function useGeminiSpeaking(audioManager: AudioManager | null | undefined)
 		// The manager went away (disconnect nulls it) while we believed audio was
 		// playing. There is nothing left to reconcile against and no end event is
 		// ever coming, so clear the flag rather than letting it stick true across a
-		// reconnect -- which would leave Sol permanently "speaking" with a flat,
-		// zero-amplitude halo.
+		// reconnect -- which would leave Sol permanently "speaking" with flat,
+		// zero-amplitude ray-breathing.
 		if (!audioManager?.isSpeaking) {
 			setSpeaking(false)
 			return

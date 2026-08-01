@@ -16,20 +16,30 @@ and the closeout counters. Nothing appends to them anymore.
 
 | Source | Coverage | Shape |
 |--------|----------|-------|
-| [`../harness_ledger.jsonl`](../harness_ledger.jsonl) | **pre-2026-06-10 archive** (last appended 2026-06-10) | one JSON object per line |
-| `docs/journal/telemetry/*.json` (this dir) | **2026-06-10 .. 2026-07-28** (final) | one JSON file per closeout |
+| [`../harness_ledger.jsonl`](../harness_ledger.jsonl) | **2026-06-01 .. 2026-06-10** (74 rows; last appended 2026-06-10T17:21:03Z) | one JSON object per line |
+| `docs/journal/telemetry/*.json` (this dir) | **2026-06-01 .. 2026-07-29** (378 rows, final) | one JSON file per closeout |
 
 Reading only the JSONL makes it look like telemetry stopped on 2026-06-10 -- it did
 not; it moved here (the per-file layout avoids merge conflicts on parallel PRs).
 That misread actually happened once during a bd polyglot-pdf-h2r.4 review, which is
 why this note exists (bd polyglot-pdf-icjr).
 
+**The two sources OVERLAP -- they do not partition at 2026-06-10.** The per-file
+rows begin 2026-06-01, the same day the JSONL's first row was recorded, so the
+JSONL's ENTIRE range (2026-06-01 .. 2026-06-10) sits inside the per-file range;
+66 of the 378 per-file rows predate 2026-06-10. The redundancy is near-total:
+**71 of the JSONL's 74 rows repeat a per-file row** on the same
+`(session_id, recorded_at)` key (measured 2026-07-31). Concatenating both
+sources therefore double-counts almost the whole JSONL unless you dedup, so the
+dedup below is **mandatory, not a precaution** (bd polyglot-pdf-64i9).
+
 **To analyze the full history:** load both sources and **dedup by
 `(session_id, recorded_at)`** -- the two share the same row schema (`session_id`,
 `recorded_at`, `beads`, `arm`, `cost_category`, `tokens`, `wall_clock`, and the
-closeout counters), so a row from either source is directly comparable. A given
-session appears in at most one source, but dedup on the composite key is the safe
-join if the cutover window ever double-counts.
+closeout counters), so a row from either source is directly comparable. Do NOT
+skip the dedup: because the sources overlap over 2026-06-01 .. 2026-06-10 (see
+above), a session in that window can appear in BOTH, and a plain concatenation
+over-counts it.
 
 Nothing writes new rows here (the ledger script is removed); see
 [`../../doc-architecture.md`](../../doc-architecture.md) for where this sits in the

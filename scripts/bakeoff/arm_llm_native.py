@@ -22,9 +22,14 @@ Pluggable model via --model. Two backends, dispatched by model name:
       subscription auth, so it is effectively FREE in-environment (no metered
       API token cost). This is the DEFAULT (claude-opus-5) because schema
       extraction runs in the maintainer's environment.
-  gemini*                             -> the google-genai SDK with GEMINI_API_KEY
-      (metered/paid). Kept as a fallback in case external help is hired and the
-      Gemini path is useful for them.
+  gemini*                             -> the google-genai SDK on VERTEX
+      (metered/paid), authenticated by ADC + GOOGLE_CLOUD_PROJECT so the spend
+      lands on the tracked billing project. There is NO AI Studio path here:
+      this arm dispatches through the llm_providers seam, whose
+      _vertex_gemini_client is Vertex-only (maintainer directive 2026-07-28 --
+      the AI Studio gate is closed; bd polyglot-pdf-f3lm / w99b). Kept as a
+      fallback in case external help is hired and the Gemini path is useful
+      for them.
 
 ASCII only (cp1252 safe).
 

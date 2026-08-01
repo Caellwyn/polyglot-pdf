@@ -674,6 +674,7 @@ def build_output(form_id: str, strategy: str, sections: list[DerivedSection],
         sections.append(sec)
 
     used_ids: set = set()
+    used_part_ids: set = set()
     parts: "OrderedDict[Any, dict]" = OrderedDict()
     out_sections = []
     to_review_section_ids: list[str] = []
@@ -696,7 +697,17 @@ def build_output(form_id: str, strategy: str, sections: list[DerivedSection],
             n += 1
         used_ids.add(sid)
         if sec.part_key not in parts:
-            pid = f"part_{_slug(sec.part_label)}"
+            # Dedup like section ids above: two DISTINCT part_keys whose labels
+            # slug identically ("Part 1. Info" vs "Part 1 -- Info") would
+            # otherwise emit the same part id, and get_part/get_sections_in_part
+            # silently first-match the collision (bd polyglot-pdf-n2t3).
+            part_base = f"part_{_slug(sec.part_label)}"
+            pid = part_base
+            pn = 2
+            while pid in used_part_ids:
+                pid = f"{part_base}_{pn}"
+                pn += 1
+            used_part_ids.add(pid)
             parts[sec.part_key] = {
                 "id": pid, "label": sec.part_label,
                 "order": len(parts) + 1, "section_ids": [],

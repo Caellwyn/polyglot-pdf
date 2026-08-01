@@ -30,8 +30,19 @@ booklet's reason section: Exceptions 1-2) -> capture the spoken answer
 fills reason_a (sessionStorage, not DOM -- a checkbox's `domValue` is always
 "on") -> confirm. Details applied to the LOCAL kit copy via
 `tests/e2e/voice-harness/apply_details_w7.py` (verbatim programmatic
-extraction from the booklet PDF; `--trim` for the 1,717-token variant), plus
+extraction from the booklet PDF; `--trim` produced the 1,717-token variant
+measured below -- it emits ~996 tokens today, see the note), plus
 `metadata.booklet_text` (81 KB floor) in all details arms.
+
+> **Reproduction note (bd polyglot-pdf-r0za, 2026-07-31).** The 1,717-token
+> figure below was produced by a `--trim` slicer whose "Exception 2." anchor
+> matched a cross-reference inside category f's prose instead of the real body
+> heading, so the artifact silently re-included box h and all of Exception 1.
+> That anchoring bug is now fixed, and `--trim` today emits ~996 tokens (3,984
+> chars, 42% smaller) with four non-overlapping slices. **The measurements in
+> this doc are still valid as recorded** -- a 1,717-token details payload really
+> did open a healthy session and answer correctly, so the ceiling bound below
+> holds -- but re-running `--trim` will NOT reproduce 1,717 tokens.
 
 ## Results
 

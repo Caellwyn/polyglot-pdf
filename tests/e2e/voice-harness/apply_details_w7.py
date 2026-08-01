@@ -96,29 +96,52 @@ BACKUP = SCHEMA.with_suffix(".json.vff-backup")
 
 
 def extract_trimmed_section() -> str:
-    """A ~1.7k-token TRIMMED variant that fits inside the ctu8-tuned
-    compression window (the full ~3.4k-token section breached it -- Vertex
-    closed 1007 'above the context window size'; wsao.2 finding). Verbatim
-    slices from the full extraction. KNOWN DEFECT (bd polyglot-pdf-r0za): the
-    "Exception 2." anchor matches a cross-reference inside category f before
-    the real heading, so the slice set includes more than the docstring's
-    intended intro+a+h+Exceptions-1-2 -- the measured 1,717-token artifact in
-    scripts/spikes/data/wsao2_runs.json reflects THIS slice; do not "fix" the
-    anchors without re-running the measurement."""
+    """A TRIMMED variant that fits inside the ctu8-tuned compression window (the
+    full ~3.4k-token section breached it -- Vertex closed 1007 'above the context
+    window size'; wsao.2 finding). Verbatim slices from the full extraction:
+    section intro + category a + box h + Exceptions 1-2.
+
+    Each slice is anchored on the real BODY heading, not on an earlier in-prose
+    cross-reference (bd polyglot-pdf-r0za). The booklet refers forward to its own
+    exceptions inside category f's prose ("attach the documents required under
+    Exception 2."), so a bare full.find("Exception 2.") lands ~2.9k chars early,
+    mid-category-f -- which used to make the Exception-2 slice re-include box h
+    and ALL of Exception 1, duplicating the two slices above it. Same TOC/
+    cross-reference collision extract_reason_section() already guards with a
+    second find.
+
+    NOTE: this changes the artifact. The 1,717-token figure recorded in
+    scripts/spikes/data/wsao2_runs.json was measured against the OLD overlapping
+    slice; re-measure before quoting a trimmed-budget number from it.
+    """
     full = extract_reason_section()
 
-    def slice_between(start_key: str, end_key: str) -> str:
-        s = full.find(start_key)
-        e = full.find(end_key, s + 1)
+    def slice_between(start_key: str, end_key: str, after: int = 0) -> str:
+        """Slice [start_key, end_key). `after` skips earlier cross-references:
+        the search for start_key begins at that offset, not at 0."""
+        s = full.find(start_key, after)
         if s < 0:
             raise SystemExit("trim anchor missing: %r" % start_key)
+        e = full.find(end_key, s + len(start_key))
         return full[s:e].strip() if e > s else full[s:].strip()
+
+    # Box h is the last lettered category, so every real Exception heading sits
+    # after it; anchoring the exception slices there skips the category-f
+    # cross-references without hard-coding character offsets.
+    box_h = full.find("h. Other.")
+    if box_h < 0:
+        raise SystemExit("trim anchor missing: 'h. Other.'")
+    exc1 = full.find("Exception 1.", box_h)
+    exc2 = full.find("Exception 2.", exc1 + 1 if exc1 >= 0 else box_h)
+    exc3 = full.find("Exception 3.", exc2 + 1 if exc2 >= 0 else box_h)
+    if exc1 < 0 or exc2 < 0 or exc3 < 0:
+        raise SystemExit("could not locate the Exception 1/2/3 body headings")
 
     parts = [
         slice_between("Reason You", "b. Nonresident alien filing"),  # intro + a
-        slice_between("h. Other.", "Exception 1."),
-        slice_between("Exception 1.", "Exception 2."),
-        slice_between("Exception 2.", "Exception 3."),
+        slice_between("h. Other.", "Exception 1.", after=box_h),
+        full[exc1:exc2].strip(),   # Exception 1
+        full[exc2:exc3].strip(),   # Exception 2
     ]
     return "\n\n".join(parts)
 
@@ -162,7 +185,7 @@ if __name__ == "__main__":
     group.add_argument("--apply", action="store_true")
     group.add_argument("--revert", action="store_true")
     ap.add_argument("--trim", action="store_true",
-                    help="apply the ~1.7k-token trimmed details variant")
+                    help="apply the ~1k-token trimmed details variant")
     args = ap.parse_args()
     if args.apply:
         apply(trim=args.trim)

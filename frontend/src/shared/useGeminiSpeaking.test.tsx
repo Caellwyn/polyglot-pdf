@@ -146,8 +146,8 @@ describe('useGeminiSpeaking', () => {
   it('clears a stuck speaking flag when the audio manager goes away', () => {
     // disconnect() nulls the manager. If we kept believing audio was playing,
     // no end event would ever arrive and there would be nothing to reconcile
-    // against -- leaving Sol permanently "speaking" with a flat halo across the
-    // reconnect. Clearing is the only honest option.
+    // against -- leaving Sol permanently "speaking" with flat, zero-amplitude
+    // ray-breathing across the reconnect. Clearing is the only honest option.
     const am = makeAudioManager(true)
     const { container, rerender } = render(<Probe am={am} />)
     act(() => { window.vffOnAudioPlaybackStart!() })

@@ -161,3 +161,106 @@ def test_f1040_dependents_cap_split_is_balanced():
     assert [s["label"] for s in dep] == ["Dependents (1 of 2)",
                                          "Dependents (2 of 2)"]
     assert [len(s["fields"]) for s in dep] == [21, 21]
+
+
+@pytest.mark.parametrize("kit", [_W7, _I90, _F1040],
+                         ids=["w7", "i90", "f1040"])
+def test_derive_then_repair_keeps_sections_and_fields_consistent(kit):
+    """derive_and_apply THEN repair leaves every section/field reference intact
+    on the real checked-in kits (bd polyglot-pdf-n2t3). No LLM, no network.
+
+    SCOPE, precisely: this calls the two functions in the order extract_form
+    happens to call them (derive at step 3e ~line 1490, repair at step 4 ~line
+    1520). It does NOT invoke extract_form itself, so it does NOT detect a
+    future refactor that REORDERS the pipeline -- swapping those two calls in
+    extract_form.py leaves this file green. What it guards is that repair does
+    not break references derivation established.
+
+    NOTE: the committed kits are already clean, so repair() is a NO-OP here (0
+    repairs on all three) and this case pins the composition's SHAPE only. The
+    mutating case -- where repair actually re-mints values and rewrites
+    conditions -- is pinned by test_derive_then_MUTATING_repair_* below, which
+    is the one that catches a real regression.
+    """
+    from backend.services.schema_repair import repair
+
+    schema = _load_kit(kit)
+    ds.derive_and_apply(schema, str(kit / "form.pdf"))
+    repaired, _repairs = repair(copy.deepcopy(schema), None)
+
+    section_ids = {s["id"] for s in repaired["sections"]}
+    field_ids = {f["id"] for f in repaired["fields"]}
+
+    # Every field still resolves to a real section...
+    for f in repaired["fields"]:
+        assert f["section_id"] in section_ids, (f["id"], f["section_id"])
+    # ...and every id a section lists is still a real field, filed exactly once.
+    listed = [fid for s in repaired["sections"] for fid in s["fields"]]
+    assert set(listed) == field_ids
+    assert len(listed) == len(field_ids)
+    # Parts still reference only real sections, with unique ids (n2t3 item 1).
+    part_ids = [p["id"] for p in repaired["parts"]]
+    assert len(part_ids) == len(set(part_ids)), part_ids
+    for p in repaired["parts"]:
+        assert set(p["section_ids"]) <= section_ids
+
+
+def test_derive_then_MUTATING_repair_keeps_section_references_intact():
+    """A repair that ACTUALLY rewrites the schema must not break the section
+    references derivation established (bd polyglot-pdf-n2t3).
+
+    The committed kits are clean, so repair() no-ops on them -- a consistency
+    assertion over that composition pins nothing (fresh-eyes review). This case
+    forces real mutation: a choice field whose option values collide ("1"/"1")
+    and violate the slug convention, which drives _mint_slugs to re-mint them
+    and rewrite the show_if conditions that referenced the old values.
+
+    What must survive: every section_id still resolves, and every id listed in a
+    section's fields[] is still a real field. Like its sibling above, this does
+    NOT invoke extract_form, so it does not detect a pipeline REORDER -- it
+    guards repair's behavior, not the call order.
+    """
+    from backend.services.schema_repair import repair
+
+    schema = {
+        "form_id": "synthetic",
+        "title": "Synthetic",
+        "fields": [
+            {"id": "choice", "type": "radio", "label": "Pick one",
+             "section_id": "sec_only",
+             "options": [
+                 {"value": "1", "label": "Alpha", "pdf_field_name": "w_a"},
+                 {"value": "1", "label": "Beta", "pdf_field_name": "w_b"},
+             ]},
+            {"id": "dependent", "type": "text", "label": "Why?",
+             "section_id": "sec_only",
+             "show_if": {"field": "choice", "equals": "1"}},
+        ],
+        "sections": [
+            {"id": "sec_only", "label": "Only", "order": 1,
+             "fields": ["choice", "dependent"]},
+        ],
+        "parts": [
+            {"id": "part_only", "label": "Only", "order": 1,
+             "section_ids": ["sec_only"]},
+        ],
+    }
+
+    repaired, repairs = repair(copy.deepcopy(schema), None)
+
+    # The premise: this repair really did mutate (otherwise the test is vacuous).
+    substantive = [r for r in repairs if r.get("action") != "alias-hit-rate"]
+    assert substantive, "expected repair() to re-mint the colliding option values"
+    values = [o["value"] for o in repaired["fields"][0]["options"]]
+    assert len(set(values)) == 2, values  # the "1"/"1" collision is resolved
+
+    # The contract: section <-> field references survive the rewrite.
+    section_ids = {s["id"] for s in repaired["sections"]}
+    field_ids = {f["id"] for f in repaired["fields"]}
+    for f in repaired["fields"]:
+        assert f["section_id"] in section_ids, (f["id"], f["section_id"])
+    listed = [fid for s in repaired["sections"] for fid in s["fields"]]
+    assert set(listed) == field_ids
+    assert len(listed) == len(field_ids)
+    for p in repaired["parts"]:
+        assert set(p["section_ids"]) <= section_ids

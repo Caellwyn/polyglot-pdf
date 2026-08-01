@@ -140,6 +140,28 @@ def test_strays_and_unplaced_gather_into_to_review_sections():
                                                "sec_to_review_unplaced"}
 
 
+def test_colliding_part_labels_get_unique_part_ids():
+    # Section ids have always been deduped; part ids were not, so two DISTINCT
+    # part_keys whose labels slug identically emitted the SAME part id and
+    # get_part/get_sections_in_part silently first-matched (bd polyglot-pdf-n2t3).
+    labels = ["Part 1. Info", "Part 1 -- Info", "Part 1   Info"]
+    sections = []
+    for i, label in enumerate(labels, start=1):
+        sec = ds.DerivedSection(f"Sec{i}", i, i, [_field(f"f{i}", page=i)])
+        sec.part_label = label
+        sections.append(sec)
+
+    out = ds.build_output("t", "name-convention", sections, [], [], cap=40)
+
+    pids = [p["id"] for p in out["parts"]]
+    assert len(pids) == len(set(pids)) == 3, pids
+    # Every part keeps its OWN section -- dedup must not merge the buckets.
+    assert [p["section_ids"] for p in out["parts"]] == [
+        ["sec_sec1_p1"], ["sec_sec2_p2"], ["sec_sec3_p3"]]
+    # Labels are untouched; only the minted id is disambiguated.
+    assert [p["label"] for p in out["parts"]] == labels
+
+
 def test_clean_derivation_has_empty_to_review():
     fields = [_field(f"p1_line{i}", page=1, y=float(i),
                      name=f"P1_Line{i}_Thing[0]") for i in range(1, 6)]
