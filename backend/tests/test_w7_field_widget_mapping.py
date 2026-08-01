@@ -11,6 +11,13 @@ field_id -> widget-leaf table was verified against the AcroForm widget rects and
 a render of the filled page (each test value landed in its printed cell). If the
 extraction / a re-derivation ever re-scrambles the mapping, these fail.
 
+The table tracks the maintainer's hand-verified gold schema (bd
+polyglot-pdf-fjxe), which re-ran extraction and gave several fields longer,
+more descriptive ids (dob -> date_of_birth, visa_type ->
+us_visa_type_number_expiration, ...). Only the IDS moved: every widget in the
+off-by-one run still carries the same semantic field, which is what this pin
+exists to defend.
+
 Pure data assertions on the committed schema.json -- no PDF render, no paid API.
 """
 from __future__ import annotations
@@ -41,7 +48,7 @@ def _leaf(pfn: str | None) -> str | None:
 _EXPECTED = {
     "w7": {
         "treaty_country": "f1_05[0]",
-        "treaty_article": "f1_06[0]",
+        "treaty_article_number": "f1_06[0]",
         "name_1a_first": "f1_07[0]",
         "name_1a_middle": "f1_08[0]",
         "name_1a_last": "f1_09[0]",
@@ -49,29 +56,37 @@ _EXPECTED = {
         "name_1b_middle": "f1_11[0]",
         "name_1b_last": "f1_12[0]",
         "mailing_street": "f1_13[0]",
-        "mailing_city": "f1_14[0]",
+        "mailing_city_state_country": "f1_14[0]",
         "foreign_street": "f1_15[0]",
-        "foreign_city": "f1_16[0]",
-        "dob": "f1_17[0]",
+        "foreign_city_state_country": "f1_16[0]",
+        "date_of_birth": "f1_17[0]",
         "country_of_birth": "f1_18[0]",
         "city_state_of_birth": "f1_19[0]",
-        "citizenship": "f1_20[0]",
-        "foreign_tax_id": "f1_21[0]",
-        "visa_type": "f1_22[0]",
-        "id_doc_issued_by": "f1_24[0]",
-        "id_doc_number": "f1_25[0]",
-        "id_doc_exp_date": "f1_26[0]",
-        "date_of_entry": "f1_27[0]",
+        "countries_of_citizenship": "f1_20[0]",
+        "foreign_tax_id_number": "f1_21[0]",
+        "us_visa_type_number_expiration": "f1_22[0]",
+        "id_document_issued_by": "f1_24[0]",
+        "id_document_number": "f1_25[0]",
+        "id_document_expiration_date": "f1_26[0]",
+        "date_of_entry_us": "f1_27[0]",
     },
 }
 
-# The two "Other" free-text lines are real fillable widgets that NO field models
-# (box-h "Other" reason line f1_04; 6d "Other" ID-document line f1_23). Before
-# the fix these were mis-claimed by treaty_country / id_number, masking the
-# off-by-one. They must NOT be claimed by any field now -- modeling them is a
-# follow-up bead. (Their unclaimed status is also pinned by the
-# test_kit_unfillable_field_inventory baseline in test_schema_lint.py.)
-_MUST_STAY_UNCLAIMED = {"f1_04[0]", "f1_23[0]"}
+# The two "Other" free-text lines (box-h "Other" reason line f1_04; 6d "Other"
+# ID-document line f1_23) are real fillable widgets. Before the ivh9 fix they
+# were MIS-claimed by treaty_country / id_number, masking the off-by-one; the
+# fix parked them unclaimed and left modeling them to a follow-up. The
+# maintainer's hand-verified gold pass (bd polyglot-pdf-fjxe) did that
+# modeling, so each is now claimed by its OWN dedicated field.
+#
+# What still matters here is the ANTI-REGRESSION half: neither line may be
+# claimed by a field belonging to the off-by-one run above. Pinning the exact
+# owner keeps that guarantee -- a re-scramble that walks treaty_country or
+# id_document_number back onto these widgets still fails.
+_OTHER_LINE_OWNERS = {
+    "f1_04[0]": "reason_h_details",
+    "f1_23[0]": "id_document_other_detail",
+}
 
 
 @pytest.mark.parametrize("kit", ["w7"])
@@ -88,18 +103,21 @@ def test_field_widget_mapping_is_corrected(kit: str) -> None:
 
 
 @pytest.mark.parametrize("kit", ["w7"])
-def test_other_lines_stay_unmodeled(kit: str) -> None:
+def test_other_lines_keep_their_own_field(kit: str) -> None:
     schema = _load(kit)
-    claimed = {
-        _leaf(f.get("pdf_field_name"))
-        for f in schema["fields"]
-        if f.get("pdf_field_name")
-    }
-    for leaf in _MUST_STAY_UNCLAIMED:
-        assert leaf not in claimed, (
-            f"{kit}: widget {leaf} is claimed again -- it is the 'Other' free-text "
-            f"line with no modeled field; re-parking a field on it reintroduces "
-            f"the off-by-one (bd polyglot-pdf-ivh9)"
+    owner_by_leaf: dict[str, str] = {}
+    for f in schema["fields"]:
+        leaf = _leaf(f.get("pdf_field_name"))
+        if leaf:
+            owner_by_leaf[leaf] = f["id"]
+
+    for leaf, want_owner in _OTHER_LINE_OWNERS.items():
+        got = owner_by_leaf.get(leaf)
+        assert got == want_owner, (
+            f"{kit}: widget {leaf} is claimed by {got!r}, expected its own "
+            f"dedicated 'Other' free-text field {want_owner!r}. A field from the "
+            f"treaty/name/address/id run landing here reintroduces the "
+            f"off-by-one (bd polyglot-pdf-ivh9)"
         )
 
 

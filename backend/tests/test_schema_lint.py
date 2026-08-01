@@ -627,7 +627,10 @@ def _dump_kit(kit):
 # baseline update as the inventory shrinks toward zero.
 _UNFILLABLE_BASELINE = {
     "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
-    "w7": {"dump-widget-unclaimed": 2, "readonly-conditional-no-unlock": 0},
+    # w7 dropped 2 -> 1 when the maintainer's hand-verified gold pass (bd
+    # polyglot-pdf-fjxe) modeled the box-h "Other" write-in line (f1_04) as its
+    # own field. Lowered per this test's own contract: a form got fixed.
+    "w7": {"dump-widget-unclaimed": 1, "readonly-conditional-no-unlock": 0},
     "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
 }
 
@@ -1184,19 +1187,36 @@ def test_pure_option_reorder_does_NOT_flag_but_real_changes_do():
         assert len(_stale(lint_schema(_identity_schema(changed, baked)))) == 1
 
 
-def test_a_kit_baked_before_identity_tracking_never_reads_stale():
-    """REAL-KIT SAFETY (bd anim outer review round 2): the shipped w7 kit's 44
-    provenance records predate identity tracking and carry NO identity_sha1.
-    The rule must stay silent for them -- otherwise changing the hash formula
-    (as the reorder fix did) would light up every previously-baked field at
-    once, the mass false alarm that destroys the gate's credibility."""
+def test_a_field_baked_before_identity_tracking_never_reads_stale():
+    """REAL-KIT SAFETY (bd anim outer review round 2): a provenance record that
+    predates identity tracking carries NO identity_sha1, and the rule must stay
+    silent for it -- otherwise changing the hash formula (as the reorder fix
+    did) would light up every previously-baked field at once, the mass false
+    alarm that destroys the gate's credibility.
+
+    Asserted against the real w7 kit but keyed on the RECORD, not the kit: the
+    hand-verified gold pass (bd polyglot-pdf-fjxe) re-baked w7 WITH identity
+    hashes, so a blanket 'this kit never reads stale' no longer describes
+    anything (its post-edit fields legitimately do read stale, which is the
+    gate working). The invariant that must never break is the hash-less one.
+    """
     import json, pathlib
     kit = pathlib.Path(__file__).resolve().parents[2] / "form-kits" / "w7" / "schema.json"
     if not kit.exists():          # kit not present in this checkout
         return
     schema = json.loads(kit.read_text(encoding="utf-8"))
+    prov = (((schema.get("_bakeoff") or {}).get("authoring") or {})
+            .get("instructions_enrich") or {}).get("provenance") or {}
+
+    # Strip every identity_sha1: the whole kit now looks pre-anim, which is
+    # exactly the shape the mass-false-alarm guard has to survive.
+    for rec in prov.values():
+        if isinstance(rec, dict):
+            rec.pop("identity_sha1", None)
+    assert prov, "w7 provenance missing -- test no longer exercises the rule"
+
     hits = [f for f in lint_schema(schema)
             if f.rule == "guidance-identity-stale"]
     assert hits == [], (
-        "a kit baked before identity tracking must never read stale; "
+        "a field baked before identity tracking must never read stale; "
         f"got {len(hits)} findings")

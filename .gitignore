@@ -56,6 +56,22 @@ frontend/public/form-kits/
 # Temporary files
 tmp_*
 *.tmp
+# Ad-hoc rescue/backup copies made while hand-correcting a schema. The kit's
+# real provenance is schema_archived.json + migration_report.json (the
+# migrate_schema_v2.py backup convention) plus git history -- a *.bak snapshot
+# is a working-copy artifact that must never reach the tree.
+*.json.bak
+# acroform_dump.py scratch output. The dump is regenerable from the kit's
+# form.pdf in one command, so a temp copy is never worth committing.
+*_acroform.json
+
+# Instruction booklets (IRS/USCIS PDFs). These are large, freely re-downloadable
+# upstream documents that the enrichment tooling reads from the kit dir
+# (scripts/authoring/enrich_instructions.py globs *instructions*.pdf / *instr*.pdf).
+# Only w7-instructions.pdf predates this rule and stays tracked; new booklets are
+# kept LOCAL so a multi-megabyte binary does not land in a repo with no LFS.
+form-kits/*/*instructions*.pdf
+!form-kits/w7/w7-instructions.pdf
 
 # Beads / Dolt files (added by bd init)
 .dolt/
