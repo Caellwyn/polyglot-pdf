@@ -86,6 +86,10 @@ def test_provider_uses_vertex_when_VERTEXAI_true_and_no_key(
     monkeypatch.setenv("VERTEXAI", "true")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)  # the Cloud Run reality
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-x")
+    # VERTEX_LOCATION outranks GOOGLE_CLOUD_LOCATION in _vertex_gemini_client
+    # (bd polyglot-pdf-kgmn), so clear it or this test reads the developer's
+    # ambient shell instead of the value it sets.
+    monkeypatch.delenv("VERTEX_LOCATION", raising=False)
     monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
     provider.run("prompt", "gemini-2.5-pro", None)
