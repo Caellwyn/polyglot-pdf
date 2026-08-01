@@ -355,10 +355,12 @@ def test_w7_kit_coverage_matches_reality():
                  if not f.get("read_only") and f.get("type") != "signature"
                  and not ((f.get("help") or {}).get("instructions") or "").strip()]
 
-    if uncovered:
-        assert len(missing) == 1  # ONE aggregated worklist finding
-        assert f"{len(uncovered)} of" in missing[0].message
-    else:
-        # Fully covered: the rule must stay silent rather than emit an empty
-        # worklist. This is w7's state today.
-        assert missing == []
+    # w7's state today, asserted DIRECTLY rather than via a branch: the gold
+    # pass authored guidance for every field, so a regression that drops
+    # guidance fails here loudly instead of quietly taking the other branch.
+    assert uncovered == [], (
+        "w7 lost authored guidance for "
+        f"{[f['id'] for f in uncovered]} -- the kit was fully covered by the "
+        "hand-verified gold pass (bd polyglot-pdf-fjxe)")
+    # Fully covered means the rule must stay SILENT, not emit an empty worklist.
+    assert missing == []

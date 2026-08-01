@@ -105,19 +105,73 @@ def test_field_widget_mapping_is_corrected(kit: str) -> None:
 @pytest.mark.parametrize("kit", ["w7"])
 def test_other_lines_keep_their_own_field(kit: str) -> None:
     schema = _load(kit)
-    owner_by_leaf: dict[str, str] = {}
+    # Collect ALL claimants per widget, not last-write-wins: a dict assignment
+    # would hide a second field landing on the same leaf behind whichever came
+    # later in the list, and hiding a duplicate claim is exactly the failure
+    # this guard exists to catch.
+    owners_by_leaf: dict[str, list[str]] = {}
     for f in schema["fields"]:
         leaf = _leaf(f.get("pdf_field_name"))
         if leaf:
-            owner_by_leaf[leaf] = f["id"]
+            owners_by_leaf.setdefault(leaf, []).append(f["id"])
 
     for leaf, want_owner in _OTHER_LINE_OWNERS.items():
-        got = owner_by_leaf.get(leaf)
-        assert got == want_owner, (
-            f"{kit}: widget {leaf} is claimed by {got!r}, expected its own "
-            f"dedicated 'Other' free-text field {want_owner!r}. A field from the "
-            f"treaty/name/address/id run landing here reintroduces the "
+        got = owners_by_leaf.get(leaf, [])
+        assert got == [want_owner], (
+            f"{kit}: widget {leaf} is claimed by {got!r}, expected exactly its "
+            f"own dedicated 'Other' free-text field [{want_owner!r}]. A field "
+            f"from the treaty/name/address/id run landing here reintroduces the "
             f"off-by-one (bd polyglot-pdf-ivh9)"
+        )
+
+
+# The human-facing 'name' for every widget the ivh9-era off-by-one touched,
+# plus the signature/agent block that the hand-verified gold pass re-mapped.
+# Each string is the caption actually PRINTED above/left of that widget's rect
+# in form.pdf (read out of the page text with PyMuPDF, then matched to the
+# widget by rect).
+#
+# WHY this table exists (bd polyglot-pdf-fjxe, Opus outer review): the id ->
+# pdf_field_name pin above only defends the mapping. The gold pass shipped a
+# SECOND off-by-one one key over -- ids and spoken_names were geometrically
+# right, but 'name' lagged by one widget through this run, so phone_number read
+# "Date (month / day / year) of applicant signature". That is not cosmetic:
+# ai_context.py renders 'name' into the Gemini system instruction, and the
+# frontend field components render it as the visible <label>. The full suite was
+# green because nothing asserted on 'name'. This closes that hole.
+_EXPECTED_NAME = {
+    "w7": {
+        "us_person_name_ssn_itin":
+            "If d or e, enter name and SSN/ITIN of U.S. citizen/resident alien",
+        "reason_h_details": "If h, other reason (see instructions)",
+        "treaty_country":
+            "Additional information for a and f: Enter treaty country",
+        "treaty_article_number": "Treaty article number",
+        "phone_number": "Applicant phone number",
+        "name_of_delegate":
+            "Name of delegate, if applicable (type or print)",
+        "delegate_name": "Acceptance Agent's Use ONLY -- Phone",
+        "agent_fax": "Acceptance Agent's Use ONLY -- Fax",
+        "agent_ein": "Acceptance Agent's Use ONLY -- EIN",
+        "agent_ptin": "Acceptance Agent's Use ONLY -- PTIN",
+        "agent_office_code": "Acceptance Agent's Use ONLY -- Office code",
+    },
+}
+
+
+@pytest.mark.parametrize("kit", ["w7"])
+def test_human_facing_name_matches_the_printed_caption(kit: str) -> None:
+    schema = _load(kit)
+    by_id = {f["id"]: f for f in schema["fields"]}
+    for fid, want_name in _EXPECTED_NAME[kit].items():
+        assert fid in by_id, f"{kit}: field {fid} missing"
+        got = by_id[fid].get("name")
+        assert got == want_name, (
+            f"{kit}: {fid}.name is {got!r}, expected {want_name!r} -- the "
+            f"caption printed above its widget. A shifted 'name' mislabels the "
+            f"field for BOTH the voice model (ai_context renders 'Name: ...' "
+            f"into the system instruction) and the on-screen <label> "
+            f"(bd polyglot-pdf-fjxe)"
         )
 
 

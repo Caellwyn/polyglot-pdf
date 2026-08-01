@@ -1220,3 +1220,46 @@ def test_a_field_baked_before_identity_tracking_never_reads_stale():
     assert hits == [], (
         "a field baked before identity tracking must never read stale; "
         f"got {len(hits)} findings")
+
+
+# Fields whose voice-facing identity (name / spoken_name / option bindings)
+# was edited AFTER their guidance was baked, so the acknowledgment gate is
+# correctly raised on them. Pinned as a real-kit signal, NOT waived: the
+# mutation test above proves the rule stays silent on hash-less records, but
+# only a count over the SHIPPED kit can catch a mass false alarm (a hash-formula
+# change lighting up every field) or a silent regression (the rule going dark).
+#
+# 11 of these were re-flagged by the bd polyglot-pdf-fjxe 'name' correction
+# itself -- fixing a wrong label IS an identity edit, and re-raising the gate is
+# the intended behavior. Clearing them means a human confirming each field's
+# guidance still reads correctly and re-baking; that is maintainer review work,
+# tracked separately, not something a test should paper over.
+_W7_EXPECTED_STALE = {
+    "us_person_name_ssn_itin", "reason_h_details", "treaty_country",
+    "id_document_issued_by", "itin_issued_first_name",
+    "itin_issued_middle_name", "itin_issued_last_name", "phone_number",
+    "name_of_delegate", "delegate_name", "agent_fax", "agent_ein",
+    "agent_ptin", "agent_office_code",
+}
+
+
+def test_w7_identity_stale_set_is_pinned():
+    """The shipped kit's stale set must match reality, not drift silently.
+
+    A count that JUMPS means the hash formula changed and every baked field lit
+    up at once (the mass false alarm bd anim guards against). A count that
+    DROPS to zero unexpectedly means the rule went dark. Either way a human
+    should look, so this pins the exact set."""
+    import json, pathlib
+    kit = pathlib.Path(__file__).resolve().parents[2] / "form-kits" / "w7" / "schema.json"
+    if not kit.exists():          # kit not present in this checkout
+        return
+    schema = json.loads(kit.read_text(encoding="utf-8"))
+    got = {field_id_of(f.path) for f in lint_schema(schema)
+           if f.rule == "guidance-identity-stale"}
+    assert got == _W7_EXPECTED_STALE, (
+        f"w7 guidance-identity-stale set changed.\n"
+        f"  newly stale: {sorted(got - _W7_EXPECTED_STALE)}\n"
+        f"  no longer stale: {sorted(_W7_EXPECTED_STALE - got)}\n"
+        f"If guidance was re-baked, shrink the pin; if the hash formula moved, "
+        f"check for a mass false alarm before widening it.")

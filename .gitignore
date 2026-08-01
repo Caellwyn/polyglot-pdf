@@ -61,9 +61,12 @@ tmp_*
 # migrate_schema_v2.py backup convention) plus git history -- a *.bak snapshot
 # is a working-copy artifact that must never reach the tree.
 *.json.bak
-# acroform_dump.py scratch output. The dump is regenerable from the kit's
-# form.pdf in one command, so a temp copy is never worth committing.
-*_acroform.json
+# acroform_dump.py scratch output landing in a kit dir. The dump is regenerable
+# from the kit's form.pdf in one command, so a temp copy is never worth
+# committing. ANCHORED to form-kits/ on purpose: an unanchored *_acroform.json
+# would also swallow a future backend/tests/fixtures/<kit>_acroform.json, which
+# is a natural name for a committed test input.
+form-kits/*/*_acroform.json
 
 # Instruction booklets (IRS/USCIS PDFs). These are large, freely re-downloadable
 # upstream documents that the enrichment tooling reads from the kit dir

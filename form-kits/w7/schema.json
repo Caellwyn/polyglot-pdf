@@ -238,7 +238,7 @@
     },
     {
       "id": "us_person_name_ssn_itin",
-      "name": "If h, other reason (see instructions)",
+      "name": "If d or e, enter name and SSN/ITIN of U.S. citizen/resident alien",
       "spoken_name": "U.S. citizen name and number",
       "type": "text",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_03[0]",
@@ -288,7 +288,7 @@
     },
     {
       "id": "reason_h_details",
-      "name": "Additional information for a and f: Enter treaty country",
+      "name": "If h, other reason (see instructions)",
       "spoken_name": "Details for application reason h",
       "type": "text",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_04[0]",
@@ -341,7 +341,7 @@
     },
     {
       "id": "treaty_country",
-      "name": "Treaty article number",
+      "name": "Additional information for a and f: Enter treaty country",
       "spoken_name": "treaty country",
       "type": "text",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_05[0]",
@@ -391,7 +391,7 @@
     },
     {
       "id": "treaty_article_number",
-      "name": "Additional information (right column continuation)",
+      "name": "Treaty article number",
       "spoken_name": "treaty article number",
       "type": "text",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_06[0]",
@@ -1499,7 +1499,7 @@
     },
     {
       "id": "phone_number",
-      "name": "Date (month / day / year) of applicant signature",
+      "name": "Applicant phone number",
       "spoken_name": "Phone Number",
       "type": "tel",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_40[0]",
@@ -1525,7 +1525,7 @@
     },
     {
       "id": "name_of_delegate",
-      "name": "Applicant phone number",
+      "name": "Name of delegate, if applicable (type or print)",
       "spoken_name": "Name of Delegate if applicable",
       "type": "text",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_41[0]",
@@ -1547,7 +1547,7 @@
     },
     {
       "id": "delegate_name",
-      "name": "Name of delegate, if applicable (type or print)",
+      "name": "Acceptance Agent's Use ONLY -- Phone",
       "spoken_name": "Phone number of Acceptance Agent",
       "type": "tel",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_42[0]",
@@ -1642,7 +1642,7 @@
     },
     {
       "id": "agent_fax",
-      "name": "Acceptance Agent's Use ONLY -- Date (month / day / year)",
+      "name": "Acceptance Agent's Use ONLY -- Fax",
       "spoken_name": "acceptance agent Fax Number",
       "type": "tel",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_43[0]",
@@ -1667,7 +1667,7 @@
     },
     {
       "id": "agent_ein",
-      "name": "Acceptance Agent's Use ONLY -- Phone",
+      "name": "Acceptance Agent's Use ONLY -- EIN",
       "spoken_name": "agent ein",
       "type": "number",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_46[0]",
@@ -1692,7 +1692,7 @@
     },
     {
       "id": "agent_ptin",
-      "name": "Acceptance Agent's Use ONLY -- Fax",
+      "name": "Acceptance Agent's Use ONLY -- PTIN",
       "spoken_name": "acceptance agent PTIN",
       "type": "number",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
@@ -1765,7 +1765,7 @@
     },
     {
       "id": "agent_office_code",
-      "name": "Acceptance Agent's Use ONLY -- EIN, PTIN, and office code",
+      "name": "Acceptance Agent's Use ONLY -- Office code",
       "spoken_name": "acceptance agent office code",
       "type": "text",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_48[0]",
