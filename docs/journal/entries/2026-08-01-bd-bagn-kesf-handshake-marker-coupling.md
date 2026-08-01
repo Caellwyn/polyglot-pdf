@@ -68,15 +68,35 @@ like coverage while asserting nothing useful is worse than no test.
 
 Both by mutation, not by inspection:
 
-- **bagn:** giving both channels the same marker again fails 4 tests, including
-  the interference reproduction -- a held-open backend check released to complete
-  *during* an extraction check, with the asker reading what is actually on disk
-  at ask time.
+- **bagn:** giving both channels the same marker again fails 5 tests (1059
+  passing) -- the interference reproduction in BOTH directions, the
+  both-markers-coexist check, and two of the cross-language contract assertions.
+  The reproduction is a held-open check released to complete *during* the other
+  channel's check, with the asker reading what is actually on disk at ask time.
 - **kesf:** running the bead's exact recipe (rename `_HANDSHAKE_FILE` **and** all
   four Python test literals) leaves the Python suite GREEN -- 5 passed -- and
   turns the contract test RED with the drift named: `expected
   '.editor-renamed-check.json' to be '.editor-store-check.json'`. That is exit
   criterion 1 verbatim, including its "today it is green" precondition.
+
+## What this pin does NOT cover
+
+Worth stating plainly, because a contract test that reads source text can only
+see the shapes it is written to parse:
+
+- **A concatenated declaration with an unchanged leading segment.**
+  `_HANDSHAKE_FILE = ".editor-store-check.json" + ".BROKEN"` passes, because the
+  helper captures the first string literal. Filed as `polyglot-pdf-2cot`. Plain
+  renames -- the shape the bead is about, and the shape a real refactor takes --
+  are caught, verified four ways.
+- **An indirection past the pinned name.** If the Python reader stopped using
+  `_HANDSHAKE_FILE` and read some other constant, the pin would still compare the
+  now-unused one. The backend's own tests write the literal and assert
+  `sameFolder is True`, so that direction is covered there rather than here.
+
+Both are inherent to scraping rather than importing, which is forced: the Python
+is unimportable from vitest and the Vite plugin is outside the `src/` tsconfig
+scope. The pin is a large improvement on a comment, not a proof.
 
 ## The general lesson
 
