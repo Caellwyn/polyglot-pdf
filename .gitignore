@@ -69,11 +69,15 @@ tmp_*
 form-kits/*/*_acroform.json
 
 # Instruction booklets (IRS/USCIS PDFs). These are large, freely re-downloadable
-# upstream documents that the enrichment tooling reads from the kit dir
-# (scripts/authoring/enrich_instructions.py globs *instructions*.pdf / *instr*.pdf).
+# upstream documents that the enrichment tooling reads from the kit dir. Both
+# globs below mirror scripts/authoring/enrich_instructions.py::find_booklet,
+# which accepts *instructions*.pdf AND the abbreviated *instr*.pdf shape (its
+# docstring cites i-90instr.pdf) -- matching only the long form would leave the
+# abbreviated one tracked.
 # Only w7-instructions.pdf predates this rule and stays tracked; new booklets are
 # kept LOCAL so a multi-megabyte binary does not land in a repo with no LFS.
 form-kits/*/*instructions*.pdf
+form-kits/*/*instr*.pdf
 !form-kits/w7/w7-instructions.pdf
 
 # Beads / Dolt files (added by bd init)
