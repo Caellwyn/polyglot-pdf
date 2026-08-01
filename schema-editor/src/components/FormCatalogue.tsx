@@ -25,6 +25,13 @@ interface FormCatalogueProps {
    * same-named kit in the new folder can't inherit the prior form's live progress.
    */
   clearOpenKit?: () => void;
+  /**
+   * The folder now in use (bd polyglot-pdf-s2bf). The host runs the same-folder
+   * handshake against it: the backend resolves kit ids against its OWN root, so
+   * the server-side actions must be disabled unless both sides agree on the
+   * directory -- otherwise they rewrite a different copy than the one on screen.
+   */
+  onRootChange?: (dir: FsDirectoryHandle | null) => void;
   /** The currently-open kit id (to highlight it in the list). */
   selectedKitId: string | null;
   /**
@@ -55,9 +62,15 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   onOpenKit, confirmFolderChange, clearOpenKit, selectedKitId, liveProgress,
+  onRootChange,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
+  // Tell the host which folder is in use so it can run the same-folder
+  // handshake (bd polyglot-pdf-s2bf). An effect rather than a call beside
+  // setRoot, so it stays correct if a second path to change the root is ever
+  // added (today the picker is the only one) and fires exactly once per change.
+  React.useEffect(() => { onRootChange?.(root); }, [root, onRootChange]);
   const [kits, setKits] = React.useState<CatalogueEntry[]>([]);
   // bd tynm parity: the card grid is collapsed by default behind a compact
   // selector strip (a dropdown to switch forms + a "Show form cards" toggle), so

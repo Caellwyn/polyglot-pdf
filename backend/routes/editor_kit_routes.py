@@ -79,6 +79,7 @@ from backend.services.widget_picker import unclaimed_button_widgets
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
+    LocalFormKitStore,
     get_form_kit_store,
     safe_filename,
 )
@@ -148,6 +149,38 @@ async def require_author_role(
 
 class EditorSessionResponse(BaseModel):
     role: str
+
+
+class StoreHandshakeBody(BaseModel):
+    """One half of the same-folder handshake (bd polyglot-pdf-s2bf).
+
+    In LOCAL mode the editor reads and writes the directory the human PICKED
+    with the File System Access API, while the backend resolves the same kit id
+    against its own FORM_KITS_LOCAL_ROOT. Those are the same folder in the
+    normal flow, but nothing enforced it -- so pointing the editor at a copy
+    elsewhere meant the server-side actions (repair, regenerate divisions,
+    regenerate guidance) silently rewrote the OTHER copy while the editor
+    re-read the picked one. Destructive, and invisible.
+
+    The browser cannot read a filesystem path out of a directory handle (by
+    design), so the two sides cannot compare paths. Instead the editor writes a
+    nonce into the picked folder and asks the backend to read it back from its
+    OWN root: if the backend sees the same nonce, both are looking at one
+    directory. Proof by shared observation rather than by comparing names.
+    """
+
+    nonce: str
+
+
+class StoreHandshakeResponse(BaseModel):
+    # True when the backend read the SAME nonce from its own root.
+    sameFolder: bool
+    # The backend's root, for the error dialog. Local dev only, and it is a
+    # path the operator already knows -- it is their own working copy.
+    backendRoot: Optional[str] = None
+    # Why the handshake failed, for the dialog: "mismatch" (a different folder)
+    # or "unwritable" (the backend cannot read its own root).
+    reason: Optional[str] = None
 
 
 class EditorKitInfo(BaseModel):
@@ -383,6 +416,59 @@ async def editor_session(
     learn the caller's role (author-only UI is gated on it) and to validate the
     code before any kit traffic."""
     return EditorSessionResponse(role=role)
+
+
+# The handshake file the editor drops into the picked folder. Written and
+# deleted by the BROWSER; the backend only ever READS it.
+_HANDSHAKE_FILE = ".editor-store-check.json"
+
+
+@router.post("/store-handshake", response_model=StoreHandshakeResponse)
+async def editor_store_handshake(
+    body: StoreHandshakeBody,
+    role: Annotated[str, Depends(require_editor_role)],
+) -> StoreHandshakeResponse:
+    """Confirm the editor and the backend are looking at the SAME folder.
+
+    See StoreHandshakeBody for why this exists and why it is a nonce rather
+    than a path comparison. The editor writes `.editor-store-check.json` into
+    the folder the human picked; this reads that file from the backend's own
+    root and reports whether the nonce matches.
+
+    Read-only on the backend side: it never creates or deletes the file, so a
+    read-only store simply reports sameFolder=false with reason="unwritable"
+    (the file was never observed) instead of failing.
+    """
+    store = get_form_kit_store()
+    if not isinstance(store, LocalFormKitStore):
+        # A GCS-backed store shares no directory with the browser, so there is
+        # nothing to agree on. Hosted mode does not call this.
+        return StoreHandshakeResponse(
+            sameFolder=False, reason="not-a-local-store")
+
+    root = Path(store.root)
+    path = root / _HANDSHAKE_FILE
+
+    def _read() -> Optional[str]:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data.get("nonce") if isinstance(data, dict) else None
+
+    seen = await anyio.to_thread.run_sync(_read)
+    if seen is None:
+        # Either the editor is pointed somewhere else, or it could not write
+        # its marker. The editor knows which -- it just tried the write -- so
+        # it picks the message; this only reports that nothing was observed.
+        return StoreHandshakeResponse(
+            sameFolder=False, backendRoot=str(root), reason="mismatch")
+    if seen != body.nonce:
+        # A STALE marker from an earlier session in a different folder. Same
+        # verdict, but worth distinguishing from "no file at all".
+        return StoreHandshakeResponse(
+            sameFolder=False, backendRoot=str(root), reason="stale")
+    return StoreHandshakeResponse(sameFolder=True, backendRoot=str(root))
 
 
 @router.get("/kits", response_model=EditorKitListResponse)

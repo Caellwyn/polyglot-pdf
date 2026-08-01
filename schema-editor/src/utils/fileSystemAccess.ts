@@ -42,6 +42,11 @@ export interface FsDirectoryHandle {
   entries(): AsyncIterableIterator<[string, FsFileHandle | FsDirectoryHandle]>;
   getDirectoryHandle(name: string, opts?: { create?: boolean }): Promise<FsDirectoryHandle>;
   getFileHandle(name: string, opts?: { create?: boolean }): Promise<FsFileHandle>;
+  // Optional: used to clean up the same-folder handshake marker (bd
+  // polyglot-pdf-s2bf). Marked optional because a stale marker is harmless
+  // (the nonce is per-run, so an old one reads as "stale" not "match") and
+  // older implementations may not expose it.
+  removeEntry?(name: string, opts?: { recursive?: boolean }): Promise<void>;
 }
 
 interface SaveFilePickerOptions {

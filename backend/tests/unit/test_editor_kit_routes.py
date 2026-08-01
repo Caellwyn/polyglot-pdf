@@ -2892,3 +2892,67 @@ def test_regenerate_guidance_does_not_claim_it_overwrote_human_edits(
     assert r.status_code == 200, r.text
     assert r.json()["regenerated"] == []
     assert r.json()["skipped"] == ["a"]
+
+
+# --- same-folder handshake (bd polyglot-pdf-s2bf) --------------------------- #
+#
+# In LOCAL mode the editor reads/writes the folder the human PICKED while the
+# backend resolves kit ids against its OWN root. When those differ, the
+# server-side actions rewrite the OTHER copy while the editor re-reads the
+# picked one -- destructive and invisible. The browser cannot read a path out
+# of a directory handle, so agreement is proved by shared observation: the
+# editor writes a nonce, the backend reads it back from its own root.
+
+def test_handshake_confirms_the_same_folder(client):
+    c, store, root = client
+    (root / ".editor-store-check.json").write_text(
+        json.dumps({"nonce": "n1"}), encoding="utf-8")
+    r = c.post("/api/editor/store-handshake", json={"nonce": "n1"},
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["sameFolder"] is True
+    assert body["backendRoot"] == str(root)
+
+
+def test_handshake_reports_a_mismatch_when_the_marker_is_absent(client):
+    # The editor wrote its marker somewhere ELSE -- i.e. a different folder.
+    c, store, root = client
+    r = c.post("/api/editor/store-handshake", json={"nonce": "n1"},
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 200
+    assert r.json()["sameFolder"] is False
+    assert r.json()["reason"] == "mismatch"
+
+
+def test_handshake_rejects_a_stale_marker(client):
+    # A leftover from an earlier session in a DIFFERENT folder must not pass.
+    # This is why the nonce is minted per check rather than being a constant.
+    c, store, root = client
+    (root / ".editor-store-check.json").write_text(
+        json.dumps({"nonce": "old"}), encoding="utf-8")
+    r = c.post("/api/editor/store-handshake", json={"nonce": "fresh"},
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.json()["sameFolder"] is False
+    assert r.json()["reason"] == "stale"
+
+
+def test_handshake_survives_a_corrupt_marker(client):
+    # Unparseable = not observed. Never a 500.
+    c, store, root = client
+    (root / ".editor-store-check.json").write_text("{not json", encoding="utf-8")
+    r = c.post("/api/editor/store-handshake", json={"nonce": "n1"},
+               headers={"X-Editor-Token": "auth-tok"})
+    assert r.status_code == 200
+    assert r.json()["sameFolder"] is False
+
+
+def test_handshake_never_writes_or_deletes(client):
+    # The backend only ever READS the marker: a read-only store must degrade to
+    # sameFolder=false, not fail. The editor owns the file's lifecycle.
+    c, store, root = client
+    marker = root / ".editor-store-check.json"
+    marker.write_text(json.dumps({"nonce": "n1"}), encoding="utf-8")
+    c.post("/api/editor/store-handshake", json={"nonce": "n1"},
+           headers={"X-Editor-Token": "auth-tok"})
+    assert marker.exists(), "the backend must not delete the editor's marker"

@@ -56,6 +56,12 @@ frontend/public/form-kits/
 # Temporary files
 tmp_*
 *.tmp
+# The schema editor's same-folder handshake marker (bd polyglot-pdf-s2bf). The
+# browser writes it into the picked form-kits/ folder, the backend reads it back
+# from its own root to prove both are looking at one directory, and the browser
+# deletes it. Ignored because a crash mid-check can leave one behind, and it is
+# per-run scratch either way.
+.editor-store-check.json
 # Ad-hoc rescue/backup copies made while hand-correcting a schema. The kit's
 # real provenance is schema_archived.json + migration_report.json (the
 # migrate_schema_v2.py backup convention) plus git history -- a *.bak snapshot
