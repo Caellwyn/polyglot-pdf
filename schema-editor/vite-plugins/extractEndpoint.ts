@@ -33,6 +33,13 @@ import type { Plugin, Connect } from 'vite';
 /** A kit id must be ONE safe path segment: no separators, no `..`, no leading dot. */
 const KIT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+/**
+ * The marker the browser drops in the picked folder for this host to read
+ * (bd polyglot-pdf-ball). MUST match HANDSHAKE_FILE in
+ * src/utils/formKitDirectory.ts -- the browser writes it, this host reads it.
+ */
+const HANDSHAKE_FILE = '.editor-store-check.json';
+
 // Monotonic per-process counter so each extraction gets a UNIQUE temp filename
 // (process.pid is constant for the Vite server, so it alone cannot disambiguate
 // two concurrent requests for the same kit).
@@ -200,6 +207,11 @@ function readJsonBody(req: Connect.IncomingMessage): Promise<ExtractRequest> {
 }
 
 function sendJson(res: ServerResponse, status: number, body: ExtractResponse): void {
+  sendRaw(res, status, body);
+}
+
+/** JSON responder for any payload shape (the handshake's differs from ExtractResponse). */
+function sendRaw(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -223,10 +235,94 @@ export function isSameOrigin(req: Connect.IncomingMessage): boolean {
   }
 }
 
+export interface HandshakeResponse {
+  /** True when THIS host read the same nonce back from its own form-kits root. */
+  sameFolder: boolean;
+  /** This host's root, so the refusal message can name the folder it would use. */
+  extractorRoot?: string;
+  /** Why it failed: "mismatch" (nothing observed) or "stale" (a different nonce). */
+  reason?: 'mismatch' | 'stale';
+}
+
+/**
+ * Confirm the editor's picked folder and THIS host's form-kits root are one
+ * directory (bd polyglot-pdf-ball).
+ *
+ * The backend's same-folder handshake (bd polyglot-pdf-s2bf) does NOT cover this
+ * channel: extraction is served by the VITE DEV SERVER, whose FORM_KITS_ROOT is a
+ * separate setting from the backend's FORM_KITS_LOCAL_ROOT. Proving the editor
+ * agrees with the backend therefore proves nothing about where the extractor
+ * writes -- so this host needs its own nonce read.
+ *
+ * Same proof-by-shared-observation as the backend's: the browser writes a fresh
+ * nonce into the picked folder, this reads it back from the root it would
+ * actually resolve kit ids against, and a match means both are looking at one
+ * directory. READ-ONLY -- the browser owns the marker's lifecycle, so a
+ * read-only root degrades to sameFolder=false rather than failing.
+ *
+ * Exported for unit tests.
+ */
+export async function handleHandshake(
+  req: Connect.IncomingMessage,
+  res: ServerResponse,
+  ctx: { formKitsRoot: string },
+): Promise<void> {
+  let body: ExtractRequest & { nonce?: unknown };
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    sendRaw(res, 400, { sameFolder: false, detail: err instanceof Error ? err.message : 'bad request' });
+    return;
+  }
+  const nonce = body.nonce;
+  if (typeof nonce !== 'string' || !nonce) {
+    sendRaw(res, 400, { sameFolder: false, detail: 'missing or invalid nonce' });
+    return;
+  }
+  const markerPath = path.join(ctx.formKitsRoot, HANDSHAKE_FILE);
+  let seen: string | null = null;
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const val = (parsed as { nonce?: unknown }).nonce;
+      seen = typeof val === 'string' ? val : null;
+    }
+  } catch {
+    // Absent, unreadable, or unparseable -- all "nothing observed".
+    seen = null;
+  }
+  const payload: HandshakeResponse = seen === null
+    // Either the editor is pointed somewhere else, or it could not write its
+    // marker. The browser knows which (it just tried the write), so it picks
+    // the message; this only reports that nothing was observed.
+    ? { sameFolder: false, extractorRoot: ctx.formKitsRoot, reason: 'mismatch' }
+    : seen !== nonce
+      // A STALE marker from an earlier session in a different folder. Same
+      // verdict, but worth distinguishing from "no file at all".
+      ? { sameFolder: false, extractorRoot: ctx.formKitsRoot, reason: 'stale' }
+      : { sameFolder: true, extractorRoot: ctx.formKitsRoot };
+  sendRaw(res, 200, payload);
+}
+
+/**
+ * Whether a request targets the handshake sub-route. Connect's `use()` mounts on
+ * a prefix and REWRITES req.url to the remainder ("/handshake"), but accept the
+ * full path too so the check does not depend on that rewrite. Query/hash are
+ * stripped first so "/handshake?x=1" still matches.
+ *
+ * Exported for unit tests.
+ */
+export function isHandshakePath(url: string | undefined): boolean {
+  if (!url) return false;
+  const pathOnly = url.split(/[?#]/)[0].replace(/\/+$/, '');
+  return pathOnly === '/handshake' || pathOnly === '/api/extract/handshake';
+}
+
 /**
  * Vite plugin: registers POST/GET /api/extract on the dev server. GET is a cheap
  * capability probe (the UI uses it to decide whether to show the button); POST
- * runs the extraction for one kit.
+ * runs the extraction for one kit. POST /api/extract/handshake proves the picked
+ * folder is this host's own form-kits root before any extraction is allowed.
  */
 export function extractEndpoint(options: ExtractEndpointOptions = {}): Plugin {
   return {
@@ -259,6 +355,21 @@ export function extractEndpoint(options: ExtractEndpointOptions = {}): Plugin {
         // request whose Origin host is not this dev server's own host.
         if (!isSameOrigin(req)) {
           sendJson(res, 403, { ok: false, detail: 'cross-origin extraction requests are refused' });
+          return;
+        }
+        // The same-folder handshake (bd polyglot-pdf-ball). `use()` mounts on a
+        // PREFIX, so the sub-path arrives here with req.url rewritten to
+        // "/handshake" -- dispatch on it before the extraction path. Guarded by
+        // the same-origin check above: it reveals this host's form-kits root.
+        if (isHandshakePath(req.url)) {
+          handleHandshake(req, res, { formKitsRoot }).catch((err) => {
+            if (!res.headersSent) {
+              sendRaw(res, 500, {
+                sameFolder: false,
+                detail: err instanceof Error ? err.message : 'internal error',
+              });
+            }
+          });
           return;
         }
         // Convert any async throw into the JSON error contract (Codex): a floating

@@ -39,13 +39,49 @@ export async function isExtractionAvailable(): Promise<boolean> {
 }
 
 /**
+ * Ask the EXTRACTOR HOST whether it can see a nonce the browser just wrote into
+ * the picked folder (bd polyglot-pdf-ball) -- the asker half of
+ * verifySameFolder() for this channel.
+ *
+ * Why this exists separately from the backend's store-handshake
+ * (bd polyglot-pdf-s2bf): extraction is served by the VITE DEV SERVER, whose
+ * FORM_KITS_ROOT is a different setting from the backend's FORM_KITS_LOCAL_ROOT.
+ * Agreement with the backend therefore does NOT prove agreement with the host
+ * that actually writes schema.json, so this channel needs its own nonce read.
+ *
+ * A network failure or non-OK response resolves sameFolder=false: unproven must
+ * never read as proven, because the action it gates is destructive.
+ */
+export async function verifyExtractorFolder(
+  nonce: string,
+): Promise<{ sameFolder: boolean; backendRoot?: string | null }> {
+  try {
+    const res = await fetch(`${ENDPOINT}/handshake`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nonce }),
+    });
+    if (!res.ok) return { sameFolder: false };
+    const body = (await res.json()) as { sameFolder?: boolean; extractorRoot?: string };
+    // Map extractorRoot -> backendRoot: verifySameFolder's asker contract (and
+    // the dialog that renders it) speaks of "the root the server uses"; here
+    // that server is the extractor host.
+    return { sameFolder: body.sameFolder === true, backendRoot: body.extractorRoot ?? null };
+  } catch {
+    return { sameFolder: false };
+  }
+}
+
+/**
  * Run extraction for one kit by id. The server resolves the kit dir against its
  * own form-kits root (the browser's directory handle is opaque to the host), so
- * this works when the editor's open folder is the server's form-kits root -- the
- * normal local-dev case. pdfFile/schemaFile carry the kit's metadata overrides
- * so a non-default layout still resolves. instructionsPdfFile (optional, bd
- * s4dp.3) names an instructions PDF already written into the kit dir; when set the
- * server enriches help.instructions from it, otherwise extraction is /TU-only.
+ * this is only safe once verifyExtractorFolder() has proven the editor's open
+ * folder IS that root -- callers MUST gate on it (bd polyglot-pdf-ball), or the
+ * extractor overwrites a same-id kit in a DIFFERENT copy, invisibly. pdfFile/
+ * schemaFile carry the kit's metadata overrides so a non-default layout still
+ * resolves. instructionsPdfFile (optional, bd s4dp.3) names an instructions PDF
+ * already written into the kit dir; when set the server enriches help.instructions
+ * from it, otherwise extraction is /TU-only.
  */
 export async function runExtraction(
   id: string,

@@ -5,10 +5,12 @@ import {
 } from '../utils/fileSystemAccess';
 import {
   listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitLabel, setKitStatus,
-  writeInstructionsPdf,
+  verifySameFolder, writeInstructionsPdf,
   type CatalogueEntry, type KitProgress, type KitStatus, type KitVersionInfo,
 } from '../utils/formKitDirectory';
-import { isExtractionAvailable, runExtraction } from '../utils/extractionClient';
+import {
+  isExtractionAvailable, runExtraction, verifyExtractorFolder,
+} from '../utils/extractionClient';
 
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -294,9 +296,38 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setExtractingId(kit.id);
     const extractionRoot = root;
     try {
+      // SAME-FOLDER GATE (bd polyglot-pdf-ball). The extractor resolves this kit
+      // id against the VITE HOST's own FORM_KITS_ROOT and WRITES schema.json
+      // there -- so if the picked folder is a copy elsewhere, "Run extraction"
+      // silently overwrites a DIFFERENT kit while the catalogue refreshes the
+      // picked one and shows no change. Prove the two are one directory first.
+      //
+      // This is its own channel, NOT the App-level serverActionsOk gate (bd
+      // polyglot-pdf-s2bf): that one proves agreement with the FastAPI backend's
+      // FORM_KITS_LOCAL_ROOT, a separate setting from the Vite host's root, so it
+      // cannot vouch for where the extractor writes.
+      //
+      // Checked HERE rather than once per folder because it must hold at the
+      // moment of the write: it is the last thing before any file is touched.
+      const folder = await verifySameFolder(extractionRoot, verifyExtractorFolder);
+      if (!folder.ok) {
+        setError(
+          folder.reason === 'unwritable'
+            ? `Cannot run extraction for "${kit.id}": the folder you opened cannot be `
+              + 'written to. Make a copy somewhere writable and open that.'
+            : 'Cannot run extraction: the folder you opened is not the one the extractor '
+              + `uses${folder.backendRoot ? ` (it uses ${folder.backendRoot})` : ''}, so it `
+              + 'would rewrite a different copy of this form. Open that folder, or set '
+              + 'FORM_KITS_ROOT to the folder you opened and restart the dev server.',
+        );
+        return;
+      }
       // Optional instructions PDF (bd s4dp.3): write it into the kit dir first so
       // the host extractor can read it by filename, then pass that filename. None
-      // selected -> /TU-only extraction (no error).
+      // selected -> /TU-only extraction (no error). Written only AFTER the gate
+      // above -- on a mismatched folder it would land here while the endpoint
+      // looked for it in the host's root, and 400 with "instructions PDF not
+      // found" despite the browser having just written it.
       let instructionsPdfFile: string | undefined;
       const instructionsPdf = instructionsPdfByKit[kit.id];
       if (instructionsPdf) {

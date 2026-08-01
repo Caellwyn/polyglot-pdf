@@ -5,7 +5,9 @@
  * static build (no endpoint) simply hides the button instead of erroring.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isExtractionAvailable, runExtraction } from './extractionClient';
+import {
+  isExtractionAvailable, runExtraction, verifyExtractorFolder,
+} from './extractionClient';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -79,5 +81,68 @@ describe('runExtraction', () => {
     const result = await runExtraction('w7');
     expect(result.ok).toBe(false);
     expect(result.detail).toMatch(/non-JSON/i);
+  });
+});
+
+// --- same-folder handshake asker (bd polyglot-pdf-ball) --------------------- //
+//
+// The extractor writes schema.json under the VITE HOST's own form-kits root, so
+// running it against a picked folder that is a copy elsewhere silently
+// overwrites a DIFFERENT kit. This asker is what proves the two are one
+// directory. Every failure mode must resolve sameFolder=FALSE: unproven can
+// never read as proven, because the action it gates is destructive.
+describe('verifyExtractorFolder', () => {
+  it('reports agreement and the host root when the nonce is read back', async () => {
+    mockFetch(async () => jsonResponse({ sameFolder: true, extractorRoot: '/repo/form-kits' }));
+    const res = await verifyExtractorFolder('n1');
+    expect(res.sameFolder).toBe(true);
+    // Surfaced as backendRoot: verifySameFolder's asker contract speaks of "the
+    // root the server uses" -- here that server is the extractor host.
+    expect(res.backendRoot).toBe('/repo/form-kits');
+  });
+
+  it('POSTs the nonce to the handshake sub-route', async () => {
+    let url = '';
+    let body: unknown = null;
+    mockFetch(async (u, init) => {
+      url = u;
+      body = JSON.parse(init?.body as string);
+      return jsonResponse({ sameFolder: true });
+    });
+    await verifyExtractorFolder('abc123');
+    expect(url).toBe('/api/extract/handshake');
+    expect(body).toEqual({ nonce: 'abc123' });
+  });
+
+  it('reports a MISMATCH as sameFolder:false', async () => {
+    mockFetch(async () => jsonResponse(
+      { sameFolder: false, reason: 'mismatch', extractorRoot: '/repo/form-kits' }));
+    const res = await verifyExtractorFolder('n1');
+    expect(res.sameFolder).toBe(false);
+    expect(res.backendRoot).toBe('/repo/form-kits');
+  });
+
+  it('does NOT read a rejected fetch as agreement', async () => {
+    mockFetch(async () => { throw new Error('network down'); });
+    expect((await verifyExtractorFolder('n1')).sameFolder).toBe(false);
+  });
+
+  it('does NOT read a non-OK response as agreement', async () => {
+    mockFetch(async () => jsonResponse({ sameFolder: true }, false, 500));
+    expect((await verifyExtractorFolder('n1')).sameFolder).toBe(false);
+  });
+
+  it('does NOT read a non-JSON response as agreement', async () => {
+    mockFetch(async () => ({
+      ok: true, status: 200, json: async () => { throw new Error('not json'); },
+    } as unknown as Response));
+    expect((await verifyExtractorFolder('n1')).sameFolder).toBe(false);
+  });
+
+  it('requires sameFolder to be exactly true, not merely truthy', async () => {
+    // A static build's 404 HTML, or an older host that does not know this route,
+    // must not squeak through on a coerced value.
+    mockFetch(async () => jsonResponse({ sameFolder: 'yes' }));
+    expect((await verifyExtractorFolder('n1')).sameFolder).toBe(false);
   });
 });
