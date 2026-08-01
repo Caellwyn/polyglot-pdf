@@ -156,3 +156,77 @@ def test_a_value_that_fits_the_comb_is_untouched():
         "a value that fits triggered the relax path"
     )
     assert "03/14/90" in _rendered_text(filled, _DOB_SUFFIX).replace(" ", "")
+
+
+@pytest.mark.parametrize("field_id,suffix", [
+    (_DOB_FIELD, _DOB_SUFFIX),
+    ("id_document_expiration_date", "f1_26[0]"),
+    ("date_of_entry_us", "f1_27[0]"),
+], ids=["date_of_birth", "id_doc_expiration", "date_of_entry"])
+def test_all_three_comb8_date_fields_print_a_full_4_digit_year(field_id, suffix):
+    """All three W-7 comb-8 dates, not just DOB.
+
+    f1_26 and f1_27 sit in NARROW 64.8pt boxes (DOB's is 100.8pt), so they are the
+    ones most likely to regress if the relax path changes.
+    """
+    value = "03/14/1990"
+    printed = _rendered_text(_fill({field_id: value}), suffix)
+    assert printed.endswith("1990"), (
+        f"{field_id} printed as {printed!r} -- the 4-digit year was truncated"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Separator stripping keeps the comb on the OTHER kits' identifier boxes.
+# The first cut of this fix relaxed any overflowing comb, which silently
+# un-combed i-90 / f1040 SSN and A-Number boxes as soon as a user typed the
+# punctuation those formats invite ('123-45-6789'). Stripping first keeps the
+# one-digit-per-cell rendering the form intends (fresh-eyes review of br7t).
+# --------------------------------------------------------------------------- #
+
+_I90_KIT = Path(__file__).resolve().parents[2] / "form-kits" / "i-90"
+_F1040_KIT = Path(__file__).resolve().parents[2] / "form-kits" / "f1040"
+
+
+def _fill_kit(kit_id: str, kit_root: Path, field_values: dict) -> bytes:
+    schema = json.loads((kit_root / "schema.json").read_text(encoding="utf-8"))
+    resp = asyncio.run(fill_pdf(PDFFillRequest(
+        kit_id=kit_id, pdf_filename="form.pdf",
+        field_values=field_values, form_schema=schema,
+    )))
+    assert resp.status_code == 200
+    return resp.body
+
+
+@pytest.mark.skipif(not (_I90_KIT / "form.pdf").exists(), reason="i-90 kit absent")
+def test_dashed_ssn_strips_and_keeps_the_i90_comb():
+    """'123-45-6789' overflows comb-9 only because of punctuation.
+
+    Stripping makes it fit, so the box keeps its intended one-digit-per-cell
+    look; relaxing instead would visibly change a form that was rendering fine.
+    """
+    filled = _fill_kit("i-90", _I90_KIT, {"p1_line16_ssn": "123-45-6789"})
+    printed = _rendered_text(filled, "P1_Line16_SSN[0]")
+    assert "123456789" in printed, printed
+    assert _comb_flag(filled, "P1_Line16_SSN[0]") is True, (
+        "a dashed SSN un-combed the box instead of being stripped to fit"
+    )
+
+
+@pytest.mark.skipif(not (_F1040_KIT / "form.pdf").exists(), reason="f1040 kit absent")
+def test_dashed_ssn_strips_and_keeps_the_f1040_comb():
+    filled = _fill_kit("f1040", _F1040_KIT, {"fld_your_ssn": "123-45-6789"})
+    printed = _rendered_text(filled, "f1_16[0]")
+    assert "123456789" in printed, printed
+    assert _comb_flag(filled, "f1_16[0]") is True
+
+
+@pytest.mark.skipif(not (_I90_KIT / "form.pdf").exists(), reason="i-90 kit absent")
+def test_a_number_with_its_letter_prefix_relaxes_rather_than_truncating():
+    """'A123456789' is 10 chars in 9 cells and the 'A' is MEANINGFUL, so it
+    cannot be stripped -- relaxing is correct here, and beats printing
+    'A12345678'."""
+    filled = _fill_kit("i-90", _I90_KIT, {"p1_line1_aliennumber": "A123456789"})
+    printed = _rendered_text(filled, "P1_Line1_AlienNumber[0]")
+    assert printed.endswith("A123456789"), printed
+

@@ -64,6 +64,24 @@ gap, but never shadows a distinct real field that happens to lack its own
 
 ### The widget gotchas (scar tissue)
 
+- **COMB widgets truncate on RENDER, not on read-back.** A text widget with the
+  Comb flag (`field_flags & 1<<24`) splits its box into exactly `MaxLen` cells and
+  prints ONE glyph per cell -- there is no cell `MaxLen+1`. PyMuPDF stores and
+  reads back a longer value perfectly, so the AcroForm VALUE round-trips while the
+  **rendered page** silently shows only the first `MaxLen` characters. Three W-7
+  fields are comb-8, so `03/14/1990` printed as `03/14/19` -- a wrong date of birth
+  on a filed ITIN application that no value-level check, lint, or test could see
+  (bd `polyglot-pdf-br7t`). `fit_comb_value` handles it in two steps: strip
+  formatting punctuation when the value is digits+separators and that makes it fit
+  (an i-90/f1040 SSN typed `123-45-6789` keeps its intended one-digit-per-cell
+  look), otherwise clear the Comb flag so the value renders in full as ordinary
+  text. **Verify any change here by RENDERING** -- `page.get_text("text",
+  clip=widget.rect)` -- never by reading `widget.field_value` back, which is
+  exactly the check this class of bug defeats. Note `widget.text_maxlen = 0` does
+  NOT persist through save (bd `polyglot-pdf-9oae`); clearing the flag is what
+  works. Relaxing also does not make an arbitrarily long value fit -- it still
+  clips at the box WIDTH (bd `polyglot-pdf-tmun`).
+
 - **Same-name kids: re-fetch by xref, not name.** `fill_widget` re-fetches a
   fresh widget from the page to dodge PyMuPDF weakrefs; radio kids of a
   shared AcroForm field all carry the SAME `field_name`, so the re-fetch

@@ -147,8 +147,9 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 		# AcroForm text-field flag bit 25 (1-based in the spec) = Comb.
 		_COMB_FLAG = 1 << 24
 
-		def relax_comb_if_value_overflows(widget, value: str) -> bool:
-			"""Clear the Comb flag when the value is longer than the widget's cells.
+		def fit_comb_value(widget, value: str) -> str:
+			"""Make an over-long value PRINT on a Comb widget, preferring to keep the
+			comb.
 
 			A Comb text field splits its box into exactly MaxLen cells and prints ONE
 			glyph per cell -- there is no cell MaxLen+1. PyMuPDF stores and reads back
@@ -160,30 +161,52 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			'03/14/1990' printed as '03/14/19' -- a wrong date of birth on a filed
 			ITIN application, invisible to every value-level check.
 
-			Only relaxes a widget whose value ACTUALLY overflows: the ITIN/IRSN digit
-			groups (comb-3/2/4) are meant to render as separate cells and always fit,
-			so they keep their comb appearance untouched. Returns True if relaxed.
+			Two-step, because comb boxes come in two flavours across the shipped kits:
+
+			1. STRIP SEPARATORS. Every comb widget outside W-7's three dates is an
+			   all-digit identifier (i-90 SSN/A-Number comb-9, f1040 SSN/routing/PIN
+			   comb-5..17) whose printed cells already supply the visual grouping. A
+			   user typing '123-45-6789' into a comb-9 SSN overflows only because of
+			   punctuation, so dropping the separators makes it fit and KEEPS the
+			   one-digit-per-cell rendering the form intends.
+			2. RELAX. If it still does not fit, the value is genuinely longer than the
+			   box models (W-7's '03/14/1990' in 8 cells), so clear the Comb flag and
+			   let it render as ordinary text -- readable in full beats silently losing
+			   the last characters.
+
+			Returns the string to write (possibly separator-stripped).
 			"""
 			try:
 				maxlen = widget.text_maxlen or 0
 				if not (widget.field_flags & _COMB_FLAG) or not maxlen:
-					return False
+					return value
 				if len(value) <= maxlen:
-					return False
+					return value
+
+				# Step 1 -- only for a value that is digits + separators; never strip
+				# from free text (a date's slashes are meaningful, and '03141990'
+				# would be unreadable).
+				stripped = re.sub(r"[\s\-().]", "", value)
+				if stripped.isdigit() and len(stripped) <= maxlen:
+					_log.info(
+						"comb_separators_stripped",  # never log the value -- bd hjo
+						widget_name=widget.field_name, maxlen=maxlen,
+						before=len(value), after=len(stripped),
+					)
+					return stripped
+
+				# Step 2 -- genuinely too long for the cells.
 				widget.field_flags = widget.field_flags & ~_COMB_FLAG
-				# MaxLen would still hard-cap input in a viewer; clear it too so the
-				# value the user supplied is the value that prints.
-				widget.text_maxlen = 0
 				_log.info(
 					"comb_relaxed_for_overflow",  # never log the value itself -- bd hjo
 					widget_name=widget.field_name, maxlen=maxlen, value_length=len(value),
 				)
-				return True
+				return value
 			except Exception as e:
 				# Never fail a fill over an appearance tweak -- worst case the value
 				# renders truncated, which is the pre-fix behavior.
-				_log.warning("comb_relax_failed", widget_name=widget.field_name, error=str(e))
-				return False
+				_log.warning("comb_fit_failed", widget_name=widget.field_name, error=str(e))
+				return value
 
 		def fill_widget(widget, page, value, field_type: Optional[str] = None) -> None:
 			"""Apply a value to a widget using its page reference to avoid weak reference issues.
@@ -237,8 +260,9 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					text_value = str(value)
 					# Must precede the assignment: a comb widget prints only MaxLen
 					# glyphs, so an over-long value would render truncated even though
-					# it stores fine (bd polyglot-pdf-br7t).
-					relax_comb_if_value_overflows(fresh_widget, text_value)
+					# it stores fine (bd polyglot-pdf-br7t). May also rewrite the value
+					# (separator strip) to keep the comb rendering where it fits.
+					text_value = fit_comb_value(fresh_widget, text_value)
 					fresh_widget.field_value = text_value
 					fresh_widget.update()
 					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(text_value))
