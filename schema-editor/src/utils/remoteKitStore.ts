@@ -292,6 +292,44 @@ export async function regenerateDivisions(kitId: string): Promise<DeriveDivision
   return (await res.json()) as DeriveDivisionsReport;
 }
 
+/** Guidance-regeneration result (bd polyglot-pdf-cpiw). The kit's stored
+ * schema was rewritten server-side, so the caller must RELOAD it. */
+export interface RegenerateGuidanceReport {
+  regenerated: string[];   // field ids whose guidance was rewritten
+  skipped: string[];       // requested ids the model returned nothing for
+  model: string;           // which model produced it
+  booklet: string | null;  // the instructions PDF it was grounded in
+  errorCount: number;
+  warningCount: number;
+}
+
+/**
+ * Re-author field guidance from the form's instruction booklet -- the COSTLY
+ * half of the staleness gate (bd anim), which previously had no
+ * implementation, leaving "re-author it" as hand-copying prose out of the IRS
+ * booklet.
+ *
+ * `fieldIds` scopes the rewrite (the staleness banner already knows which
+ * fields drifted, so this avoids re-billing the whole form); omit for every
+ * field. Author tier, draft-only. Rewrites the STORED schema, so RELOAD after
+ * this resolves. A successful rewrite re-stamps provenance, which is what
+ * clears the staleness flag for those fields.
+ */
+export async function regenerateGuidance(
+  kitId: string, fieldIds?: string[],
+): Promise<RegenerateGuidanceReport> {
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/regenerate-guidance`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fieldIds: fieldIds ?? [] }),
+    },
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not regenerate guidance'));
+  return (await res.json()) as RegenerateGuidanceReport;
+}
+
 /** One PDF button widget the schema does not yet claim (bd polyglot-pdf-nivy,
  * P5.3c) -- a candidate the "Add from PDF widgets" picker offers. */
 export interface UnclaimedWidget {

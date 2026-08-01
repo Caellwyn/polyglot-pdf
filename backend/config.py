@@ -669,6 +669,13 @@ class Settings(BaseModel):
 	# Model id handed to the claude-cli provider ("sonnet", "opus", "haiku", or
 	# a full model id). Ignored unless EDITOR_TEXT_PROVIDER=claude-cli.
 	EDITOR_CLAUDE_MODEL: str = os.getenv("EDITOR_CLAUDE_MODEL", "sonnet")
+	# Model for the editor's GUIDANCE regeneration (re-authoring help.instructions
+	# / help.details from the form's instruction booklet). Empty means "follow
+	# EDITOR_TEXT_PROVIDER": claude-cli -> EDITOR_CLAUDE_MODEL, gemini ->
+	# EXTRACTOR_MODEL. The enrichment path dispatches on the MODEL NAME
+	# (scripts/bakeoff/llm_providers.resolve_json_runner), so a non-gemini name
+	# routes itself to the local CLI.
+	EDITOR_GUIDANCE_MODEL: str = os.getenv("EDITOR_GUIDANCE_MODEL", "")
 	# Translation quality gate (epic polyglot-pdf-sekc, V3): the verify/rectify
 	# loop that runs inside bake_label_translations on freshly baked strings.
 	# DEFAULT-ON, opt-out (maintainer decision 2026-07-23) -- this does NOT

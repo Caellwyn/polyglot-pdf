@@ -2572,3 +2572,160 @@ def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     assert r.status_code == 200, r.text
     assert "--no-enrich-guidance" in seen_cmds[2]
     assert "--guidance-model" not in seen_cmds[2]
+
+
+# --- guidance regeneration (bd polyglot-pdf-cpiw) --------------------------- #
+#
+# The staleness gate (bd anim) offers a reviewer two ways out of a drifted
+# field: acknowledge (free) or RE-AUTHOR (costly). Only the free half existed,
+# so re-authoring meant hand-copying prose out of the instructions booklet.
+# These pin the route that closes that gap. The model call itself is stubbed --
+# what matters here is the gating, the scoping, and that a successful rewrite
+# re-stamps provenance (which is what CLEARS the staleness flag).
+
+_GUIDANCE_SCHEMA = {
+    "schema_version": "2",
+    "form_metadata": {"title": "T", "version": "1", "form_number": "X"},
+    "sections": [],
+    "fields": [
+        {"id": "a", "name": "A", "type": "text", "spoken_name": "a",
+         "pdf_field_name": "f1"},
+        {"id": "b", "name": "B", "type": "text", "spoken_name": "b",
+         "pdf_field_name": "f2"},
+    ],
+}
+
+
+class _FakeEnrich:
+    """Stand-in for scripts/authoring/enrich_instructions."""
+
+    last_fields = None
+
+    @staticmethod
+    def booklet_text(path):
+        return "BOOKLET TEXT"
+
+    @classmethod
+    def enrich_schema(cls, schema, booklet, form_name, model, chunk_size):
+        # Record which fields were handed to the model -- that is how the
+        # fieldIds scoping is asserted.
+        cls.last_fields = [f["id"] for f in schema.get("fields", [])]
+        return {"proposals": {
+            "fields": {fid: {"instructions": f"new guidance for {fid}"}
+                       for fid in cls.last_fields},
+            "form_details": "",
+        }}
+
+    @staticmethod
+    def apply_proposals(schema, proposals, booklet, flags, model, judge_model,
+                        tu_map=None):
+        written = 0
+        for f in schema.get("fields", []):
+            entry = (proposals.get("fields") or {}).get(f.get("id"))
+            if isinstance(entry, dict) and entry.get("instructions"):
+                f["help"] = {"instructions": entry["instructions"]}
+                written += 1
+        return {"written": written, "skipped_human": 0, "flags": 0,
+                "unmatched_proposal_ids": []}
+
+
+@pytest.fixture()
+def guidance_enrich(monkeypatch):
+    _FakeEnrich.last_fields = None
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _FakeEnrich)
+    return _FakeEnrich
+
+
+def _kit_with_booklet(root, kit_id, *, status="draft", schema=None):
+    kit_dir = _make_kit(root, kit_id, status=status,
+                        schema=schema or _GUIDANCE_SCHEMA)
+    (kit_dir / "w7-instructions.pdf").write_bytes(b"%PDF-1.7 booklet")
+    return kit_dir
+
+
+def test_regenerate_guidance_rewrites_and_stores(client, guidance_enrich):
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert sorted(body["regenerated"]) == ["a", "b"]
+    assert body["booklet"] == "w7-instructions.pdf"
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    assert stored["fields"][0]["help"]["instructions"] == "new guidance for a"
+
+
+def test_regenerate_guidance_scopes_to_requested_fields(client, guidance_enrich):
+    # The staleness banner knows exactly which fields drifted, so the costly
+    # rewrite must be limited to them rather than re-billing the whole form.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"},
+               json={"fieldIds": ["b"]})
+    assert r.status_code == 200, r.text
+    assert guidance_enrich.last_fields == ["b"]
+    assert r.json()["regenerated"] == ["b"]
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    assert "help" not in stored["fields"][0]        # 'a' untouched
+    assert stored["fields"][1]["help"]["instructions"] == "new guidance for b"
+
+
+def test_regenerate_guidance_refuses_without_a_booklet(client, guidance_enrich):
+    # The booklet is the GROUNDING for every proposal; without one the model
+    # would be inventing legal-form prose. Refuse rather than fabricate.
+    c, store, root = client
+    _make_kit(root, "nobook", schema=_GUIDANCE_SCHEMA)  # form.pdf only
+    r = c.post("/api/editor/kits/nobook/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 409
+    assert "instructions booklet" in r.json()["detail"]
+
+
+def test_regenerate_guidance_refuses_on_a_published_kit(client, guidance_enrich):
+    c, store, root = client
+    _kit_with_booklet(root, "done", status="complete")
+    r = c.post("/api/editor/kits/done/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 409
+    assert "draft" in r.json()["detail"]
+
+
+def test_regenerate_guidance_needs_the_author_tier(client, guidance_enrich):
+    # It spends model tokens and rewrites the stored schema, like extract.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "edit-tok"}, json={})
+    assert r.status_code == 403
+
+
+def test_regenerate_guidance_rejects_unknown_field_ids(client, guidance_enrich):
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"},
+               json={"fieldIds": ["ghost"]})
+    assert r.status_code == 422
+
+
+def test_regenerate_guidance_reports_a_model_failure_without_writing(
+        client, monkeypatch):
+    # A transport/model failure must leave the stored schema BYTE-UNTOUCHED --
+    # a half-written guidance rewrite is worse than none.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    before = (root / "fresh" / "schema.json").read_text(encoding="utf-8")
+
+    class _Boom(_FakeEnrich):
+        @staticmethod
+        def enrich_schema(*a, **kw):
+            raise RuntimeError("model exploded")
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Boom)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 502
+    assert "Nothing was changed" in r.json()["detail"]
+    assert (root / "fresh" / "schema.json").read_text(encoding="utf-8") == before
