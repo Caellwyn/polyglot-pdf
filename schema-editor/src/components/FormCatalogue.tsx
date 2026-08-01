@@ -319,11 +319,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       );
       if (!folder.ok) {
         setError(
-          // No `&& reason !== 'unwritable'` guard: verifySameFolder returns
-          // unwritable BEFORE it ever calls the asker, so hostAnswered is still
-          // true on that path and the two can never both be set. Spelling out a
-          // condition that cannot occur would imply an interaction that does not
-          // exist.
+          // No `&& reason !== 'unwritable'` guard: verifySameFolderForExtractor
+          // returns unwritable BEFORE it ever calls the asker (the marker write
+          // is what failed), so hostAnswered is still true on that path and the
+          // two can never both be set. Spelling out a condition that cannot
+          // occur would imply an interaction that does not exist.
           !hostAnswered
             ? `Cannot run extraction for "${kit.id}": the editor could not reach the `
               + 'extraction service to confirm which folder it uses. Check the dev server '
