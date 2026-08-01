@@ -62,31 +62,19 @@ def _extract_json(text: str) -> dict:
 
 
 def _client(http_options=None) -> genai.Client:
-    """Vertex by DEFAULT (maintainer directive 2026-07-12: all live-model work
-    runs on Vertex so costs land on the tracked billing project). VERTEXAI=true
-    (default) -> ADC + GOOGLE_CLOUD_PROJECT; set VERTEXAI=false with GEMINI_API_KEY
-    only for a deliberate AI Studio run. Threads http_options (per-request timeout)
-    through either path. (bd polyglot-pdf-rve5)
+    """VERTEX-ONLY: every gemini call lands on Vertex (ADC +
+    GOOGLE_CLOUD_PROJECT) on the tracked billing project.
+
+    There is NO AI Studio / GEMINI_API_KEY path, and VERTEXAI is NOT consulted --
+    the AI Studio gate is closed fleet-wide (maintainer directive 2026-07-28; bd
+    polyglot-pdf-f3lm / w99b / kgmn). Previously VERTEXAI=false silently swapped
+    in an AI-Studio key, which is the escape hatch f3lm closed in the sibling
+    llm_providers.py. Delegates to that module's helper so there is ONE
+    client-construction path for the whole bakeoff directory; http_options (the
+    per-request timeout) threads through unchanged.
     """
-    if os.environ.get("VERTEXAI", "true").lower() == "true":
-        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        if not project:
-            print(
-                "VERTEXAI mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
-                "default project (gcloud config get-value project).",
-                flush=True,
-            )
-        return genai.Client(
-            vertexai=True,
-            project=project,
-            location=os.environ.get("VERTEX_LOCATION", "us-central1"),
-            http_options=http_options,
-        )
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
-        print("VERTEXAI=false but NO KEY in env GEMINI_API_KEY", flush=True)
-        sys.exit(2)
-    return genai.Client(api_key=key, http_options=http_options)
+    from llm_providers import _vertex_gemini_client  # noqa: PLC0415 (lazy)
+    return _vertex_gemini_client(http_options)
 
 
 def run(pdf_path: str, mode: str, model: str,
