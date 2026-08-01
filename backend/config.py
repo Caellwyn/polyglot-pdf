@@ -659,9 +659,9 @@ class Settings(BaseModel):
 	#   "gemini"     -- metered Vertex tokens. The hosted/Cloud Run default.
 	#   "claude-cli" -- the local `claude` CLI on the maintainer's Claude Code
 	#                   subscription, effectively free in-environment. The
-	#                   local-dev default (scripts/dev-local.ps1 sets it), and
-	#                   the same seam scripts/bakeoff/llm_providers.py already
-	#                   uses for extraction.
+	#                   local-dev default (scripts/run-schema-editor.sh sets it
+	#                   when the CLI is on PATH), and the same seam
+	#                   scripts/bakeoff/llm_providers.py uses for extraction.
 	# Deliberately NOT auto-detected from "is the CLI on PATH": a developer with
 	# the CLI installed must still get Gemini when running a hosted-parity check,
 	# and Cloud Run must never silently pick a provider it cannot run.

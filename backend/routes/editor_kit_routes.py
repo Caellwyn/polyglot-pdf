@@ -889,12 +889,18 @@ _GUIDANCE_CHUNK_SIZE = 12
 _BOOKLET_PATTERNS = ("instructions.pdf", "*instructions*.pdf", "*instr*.pdf")
 
 
-def _find_booklet_file(files) -> Optional[str]:
-    """The kit's instructions booklet filename, or None."""
+def _find_booklet_file(files, form_pdf: str = "form.pdf") -> Optional[str]:
+    """The kit's instructions booklet filename, or None.
+
+    `form_pdf` is the kit's OWN form (metadata-declared, so not always
+    "form.pdf") and is excluded: a kit whose PDF happened to match one of the
+    booklet globs would otherwise have its blank form fed to the enrichment
+    engine as the grounding text.
+    """
     names = [n for n in (files or []) if str(n).lower().endswith(".pdf")]
     for pattern in _BOOKLET_PATTERNS:
         for name in names:
-            if name == "form.pdf":
+            if name == form_pdf or name == "form.pdf":
                 continue
             if fnmatch.fnmatch(name.lower(), pattern):
                 return name
@@ -987,7 +993,7 @@ async def regenerate_editor_kit_guidance(
     # The booklet is the GROUNDING for every proposal -- the enrichment prompt
     # quotes it and a contiguity repairer drops anything not verbatim from it.
     # No booklet, no honest guidance.
-    booklet_file = _find_booklet_file(files)
+    booklet_file = _find_booklet_file(files, _pdf)
     if not booklet_file:
         raise HTTPException(
             status_code=409,
@@ -1024,7 +1030,7 @@ async def regenerate_editor_kit_guidance(
 
     form_name = ((schema.get("form_metadata") or {}).get("title") or kit_id)
 
-    def _run() -> tuple[dict, str]:
+    def _run() -> tuple[dict, str, list]:
         with tempfile.TemporaryDirectory() as td:
             path = os.path.join(td, booklet_file)
             with open(path, "wb") as fh:
@@ -1032,10 +1038,20 @@ async def regenerate_editor_kit_guidance(
             text = enrich.booklet_text(path)
         result = enrich.enrich_schema(
             target, text, form_name, model, _GUIDANCE_CHUNK_SIZE)
-        return result, text
+        # NEVER write unverified guidance. apply_proposals stamps
+        # source="llm-verified", and every other caller (the CLI --write path
+        # and the extraction pipeline) earns that label by running the judge +
+        # bounded rectify first. This is legal-form prose read aloud to
+        # applicants; skipping the judge here would put unreviewed model text
+        # into a stored kit under a "verified" label. verify_and_rectify
+        # MUTATES proposals per the KEEP rule and fails SAFE (a judge outage
+        # empties the proposals rather than passing them through).
+        flags = enrich.verify_and_rectify(
+            target, result.get("proposals") or {}, text, form_name, model)
+        return result, text, flags
 
     try:
-        result, booklet = await anyio.to_thread.run_sync(_run)
+        result, booklet, verify_flags = await anyio.to_thread.run_sync(_run)
     except Exception as exc:  # noqa: BLE001
         # A model/transport failure is not a server bug -- report it so the
         # editor can retry, exactly like the translate path's failed languages.
@@ -1048,8 +1064,48 @@ async def regenerate_editor_kit_guidance(
         ) from exc
 
     proposals = result.get("proposals") or {}
+
+    # Nothing came back -> do not write. enrich_schema filters to askable
+    # fields, so a fieldIds list of only read_only/signature fields yields zero
+    # chunks and zero proposals; falling through would re-stamp the bake block
+    # for no benefit -- a destructive no-op.
+    if not (proposals.get("fields") or {}):
+        _log.info("editor_guidance_regen_no_proposals", kit_id=kit_id,
+                  requested=len(requested))
+        dump_data = await _load_kit_dump(store, kit_id)
+        findings = lint_schema(schema, dump_data)
+        return RegenerateGuidanceResponse(
+            regenerated=[], skipped=sorted(requested), model=model,
+            booklet=booklet_file,
+            errorCount=sum(1 for f in findings if f.severity == SEVERITY_ERROR),
+            warningCount=sum(
+                1 for f in findings if f.severity == SEVERITY_WARNING),
+        )
+
+    # A field-scoped rewrite must not touch FORM-level prose. enrich_schema
+    # asks for form_details in every chunk (each chunk sees the whole booklet),
+    # and apply_proposals writes it unconditionally -- so rewriting one field
+    # would replace the kit's whole eligibility/where-to-file block with
+    # whatever that one chunk happened to emit. Drop it when scoped.
+    if requested:
+        proposals = dict(proposals)
+        proposals["form_details"] = ""
+
+    # apply_proposals REPLACES the whole instructions_enrich block, so the
+    # prior flags + judge_model must be carried through or a rewrite silently
+    # wipes the reviewer's guidance worklist (schema_lint re-emits those flags
+    # as findings) and blanks the record of which judge verified the kit.
+    prior = (((schema.get("_bakeoff") or {}).get("authoring") or {})
+             .get("instructions_enrich") or {})
+    prior_flags = prior.get("flags")
+    prior_judge = prior.get("judge_model")
+    merged_flags = (list(prior_flags) if isinstance(prior_flags, list) else [])
+    merged_flags += list(verify_flags or [])
     summary = enrich.apply_proposals(
-        schema, proposals, booklet, flags=[], model=model, judge_model="",
+        schema, proposals, booklet,
+        flags=merged_flags,
+        model=model,
+        judge_model=prior_judge if isinstance(prior_judge, str) else "",
     )
     proposed_ids = {
         fid for fid, e in (proposals.get("fields") or {}).items()

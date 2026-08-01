@@ -47,6 +47,18 @@ const RULE_LABELS: Record<string, string> = {
   'composite-depth': 'Nested condition too deep',
   'show-if-cycle': 'Circular show-if dependency',
   'dump-widget-multiclaim': 'PDF widget claimed twice',
+  // PDF-mapping + review-state rules. These were reaching reviewers as their
+  // raw internal ids ("field-claim-unresolvable"), which reads as a system
+  // error rather than something to fix -- caught by the rule-label parity test
+  // (backend/tests/unit/test_lint_rule_parity.py, bd polyglot-pdf-cpiw).
+  'dump-widget-unclaimed': 'PDF box not used by any field',
+  'field-claim-unresolvable': 'Field points at a missing PDF box',
+  'field-unbacked': 'Field has no PDF box',
+  'readonly-conditional-no-unlock': 'Read-only field can never be filled',
+  'unlock-missing-flag-change': 'Unlock is missing its PDF flag change',
+  'required-top-level': 'Required in the wrong place',
+  'legacy-trigger-side-logic': 'Old-style trigger logic',
+  'to-review-pending': 'Section still needs re-filing',
   // Translation verify/rectify gate flags (bd polyglot-pdf-9djc): persisted by
   // the bake into _bakeoff provenance and re-emitted by the backend linter.
   // All WARNING -- the human-review worklist for baked translations.
@@ -301,21 +313,36 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
         </div>
       )}
 
-      {/* No backend at all -> the reduced client-side ruleset is running. SAY
-          SO (bd polyglot-pdf-cpiw exit criterion 2): a short list of findings
-          from a lighter ruleset is indistinguishable from a clean form, which
-          is exactly how the guidance-staleness gate went unnoticed in local
-          mode. Start the backend (scripts/run-schema-editor.sh does) for the
-          full rules. */}
-      {!backendAvailable && (
+      {/* The checks did NOT fully run -- say so LOUDLY (bd polyglot-pdf-cpiw
+          exit criterion 2). Two ways to get here, and both look identical to a
+          clean form if we stay quiet, which is exactly how the staleness gate
+          went unnoticed in local mode for so long:
+            - no backend at all  -> the reduced client-side ruleset ran
+            - backend present but the lint call FAILED (503 unconfigured, 401,
+              server down mid-session) -> NOTHING ran, and `findings` is empty
+              or a stale earlier report.
+          The small gray "could not check" line above is not enough on its own:
+          an empty finding list next to a green completion figure reads as
+          "this form is fine". */}
+      {(!backendAvailable || lintError) && (
         <div
           className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1"
           role="status"
         >
-          Limited checking: no backend connected, so only basic checks ran.
-          Some issues (including out-of-date guidance) cannot be detected.
-          Start the editor with <code>scripts/run-schema-editor.sh</code> for
-          the full checks.
+          {backendAvailable ? (
+            <>
+              Checks did not run: the editor could not reach its backend, so
+              this form has NOT been fully checked. Issues (including
+              out-of-date guidance) may be missing from the list above.
+            </>
+          ) : (
+            <>
+              Limited checking: no backend connected, so only basic checks ran.
+              Some issues (including out-of-date guidance) cannot be detected.
+              Start the editor with <code>scripts/run-schema-editor.sh</code>{' '}
+              for the full checks.
+            </>
+          )}
         </div>
       )}
 

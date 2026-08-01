@@ -2605,6 +2605,15 @@ class _FakeEnrich:
     def booklet_text(path):
         return "BOOKLET TEXT"
 
+    @staticmethod
+    def verify_and_rectify(schema, proposals, booklet, form_name,
+                           author_model, judge_model=None):
+        # The real one judges every proposal and MUTATES per the KEEP rule.
+        # The route must call it before writing (it is what earns the
+        # "llm-verified" provenance stamp); the fake just records the flags.
+        return [{"severity": "WARNING", "rule": "instructions-rectified",
+                 "path": "x", "message": "judged"}]
+
     @classmethod
     def enrich_schema(cls, schema, booklet, form_name, model, chunk_size):
         # Record which fields were handed to the model -- that is how the
@@ -2729,3 +2738,97 @@ def test_regenerate_guidance_reports_a_model_failure_without_writing(
     assert r.status_code == 502
     assert "Nothing was changed" in r.json()["detail"]
     assert (root / "fresh" / "schema.json").read_text(encoding="utf-8") == before
+
+
+def test_regenerate_guidance_preserves_flags_and_judge_model(
+        client, guidance_enrich):
+    # apply_proposals REPLACES the whole instructions_enrich block. Passing
+    # flags=[] wiped the reviewer's guidance worklist (schema_lint re-emits
+    # those flags as findings) and blanked which judge verified the kit.
+    c, store, root = client
+    schema = json.loads(json.dumps(_GUIDANCE_SCHEMA))
+    schema["_bakeoff"] = {"authoring": {"instructions_enrich": {
+        "model": "old", "judge_model": "gemini-2.5-flash",
+        "flags": [{"severity": "WARNING", "rule": "instructions-rectified",
+                   "path": "p", "message": "m"}],
+        "provenance": {},
+    }}}
+    _kit_with_booklet(root, "fresh", schema=schema)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    block = stored["_bakeoff"]["authoring"]["instructions_enrich"]
+    assert block["judge_model"] == "gemini-2.5-flash"
+    assert any(f["rule"] == "instructions-rectified" for f in block["flags"])
+
+
+def test_regenerate_guidance_scoped_does_not_clobber_form_details(
+        client, monkeypatch):
+    # enrich_schema asks for form_details in EVERY chunk, so a one-field
+    # rewrite would otherwise replace the kit's whole eligibility/where-to-file
+    # block with whatever that chunk emitted.
+    c, store, root = client
+    schema = json.loads(json.dumps(_GUIDANCE_SCHEMA))
+    schema["form_metadata"]["details"] = "THE REAL FORM-LEVEL PROSE"
+    _kit_with_booklet(root, "fresh", schema=schema)
+
+    class _Chatty(_FakeEnrich):
+        @classmethod
+        def enrich_schema(cls, s, booklet, form_name, model, chunk_size):
+            out = _FakeEnrich.enrich_schema(s, booklet, form_name, model,
+                                            chunk_size)
+            out["proposals"]["form_details"] = "a one-chunk fragment"
+            return out
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Chatty)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    assert stored["form_metadata"]["details"] == "THE REAL FORM-LEVEL PROSE"
+
+
+def test_regenerate_guidance_writes_nothing_when_no_proposals(
+        client, monkeypatch):
+    # enrich_schema filters to ASKABLE fields, so a fieldIds list of only
+    # read_only/signature fields yields zero proposals. Falling through would
+    # re-stamp the bake block for no benefit -- a destructive no-op.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    before = (root / "fresh" / "schema.json").read_text(encoding="utf-8")
+
+    class _Empty(_FakeEnrich):
+        @classmethod
+        def enrich_schema(cls, s, booklet, form_name, model, chunk_size):
+            return {"proposals": {"fields": {}, "form_details": ""}}
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Empty)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["regenerated"] == []
+    assert (root / "fresh" / "schema.json").read_text(encoding="utf-8") == before
+
+
+def test_regenerate_guidance_runs_the_verify_loop_before_writing(
+        client, monkeypatch):
+    # apply_proposals stamps source="llm-verified". Every other caller earns
+    # that label by judging first; this route must too, or unreviewed model
+    # prose lands in a stored kit labelled verified.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    called = {"verify": False}
+
+    class _Tracked(_FakeEnrich):
+        @staticmethod
+        def verify_and_rectify(schema, proposals, booklet, form_name,
+                               author_model, judge_model=None):
+            called["verify"] = True
+            return []
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Tracked)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 200, r.text
+    assert called["verify"], "the judge did not run before the write"

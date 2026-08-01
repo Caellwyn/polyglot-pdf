@@ -110,6 +110,15 @@ export function apiBaseUrl(): string {
  * in-memory fallback for storage-less browsers) wins, else a baked
  * VITE_EDITOR_TOKEN (single-contractor compat), else null (prompt). */
 export function getAccessCode(): string | null {
+  const baked = import.meta.env.VITE_EDITOR_TOKEN as string | undefined;
+  // LOCAL dev inverts the precedence: run-schema-editor.sh mints a FRESH
+  // per-run token and gives the same value to the backend and this bundle, so
+  // the baked one is authoritative. A code left in localStorage by an earlier
+  // run would otherwise shadow it and 401 every request -- which reads exactly
+  // like the silent no-lint failure this change exists to remove
+  // (bd polyglot-pdf-cpiw). Hosted keeps the human-entered code on top: there
+  // the baked value is a build-time fallback, and one build serves both tiers.
+  if (baked && !isHostedMode()) return baked;
   try {
     const stored = window.localStorage.getItem(ACCESS_CODE_KEY);
     if (stored) return stored;
@@ -117,7 +126,6 @@ export function getAccessCode(): string | null {
     // storage unavailable -> fall through to the in-memory copy
   }
   if (memoryAccessCode) return memoryAccessCode;
-  const baked = import.meta.env.VITE_EDITOR_TOKEN as string | undefined;
   return baked || null;
 }
 

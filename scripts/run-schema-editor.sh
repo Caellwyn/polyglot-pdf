@@ -85,11 +85,30 @@ if [ "$START_BACKEND" = "1" ]; then
     fi
     echo "  Text provider: ${EDITOR_PROVIDER}"
 
+    # The editor API is fail-CLOSED: with NEITHER token configured every
+    # /api/editor route 503s ("the editor surface is not configured"), and a
+    # request without a matching X-Editor-Token is 401. So a local backend
+    # started with no tokens is a backend the editor cannot actually use -- the
+    # lint would silently return nothing and the staleness gate would look
+    # clean, which is the exact failure this whole change exists to remove.
+    #
+    # Mint a random per-run token and hand the SAME value to both sides. It is
+    # author-tier because local dev is full author tier (App.tsx treats
+    # !hosted as author), and it never leaves this machine: the backend binds
+    # 127.0.0.1 only. Respect an operator-supplied token if there is one.
+    if [ -z "$SCHEMA_AUTHOR_TOKEN" ]; then
+        SCHEMA_AUTHOR_TOKEN="$(
+            "$VENV_PYTHON" -c 'import secrets; print(secrets.token_urlsafe(24))' \
+            2>/dev/null || echo "local-dev-$$"
+        )"
+    fi
+
     (
         cd "$ROOT_DIR"
         PYTHONPATH="$ROOT_DIR" \
         PYTHONUNBUFFERED=1 \
         EDITOR_TEXT_PROVIDER="$EDITOR_PROVIDER" \
+        SCHEMA_AUTHOR_TOKEN="$SCHEMA_AUTHOR_TOKEN" \
         GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-polyglot-demo-aa709}" \
         "$VENV_PYTHON" -m uvicorn backend.main:app \
             --host 127.0.0.1 --port "$BACKEND_PORT" --reload
@@ -155,7 +174,14 @@ echo ""
 # a local session can never inherit the committed Cloud Run URL and start
 # writing to the shared store.
 if [ "$START_BACKEND" = "1" ]; then
-    VITE_BACKEND_URL="$BACKEND_URL" npm run dev
+    # VITE_EDITOR_TOKEN is the SAME per-run token the backend was given, so the
+    # local editor authenticates without a login prompt. Baking a token into a
+    # bundle is only acceptable because this bundle never leaves the machine
+    # (vite dev on localhost, a token minted fresh each run); a HOSTED build
+    # must never do this -- see the warning in schema-editor/.env.hosted.
+    VITE_BACKEND_URL="$BACKEND_URL" \
+    VITE_EDITOR_TOKEN="$SCHEMA_AUTHOR_TOKEN" \
+    npm run dev
 else
     npm run dev
 fi
