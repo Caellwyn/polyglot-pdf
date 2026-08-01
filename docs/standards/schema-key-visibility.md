@@ -8,6 +8,10 @@ single answer to "if I add a key to a form-kit schema, who sees it?"
 Asserted by `backend/tests/unit/test_52qm4_secretary_visibility_boundary.py`
 against the shipped W-7 kit -- if you change a row here, change that test.
 
+This is the key-level detail under the broader INCLUDE/EXCLUDE contract in
+[`validation-delegation.md`](validation-delegation.md); that doc says what the
+secretary is *for*, this one says which keys reach it.
+
 ## The two surfaces
 
 | Surface | Built by | Scope | Cost profile |
@@ -64,6 +68,12 @@ is a **cost** bug, not a tidiness one.
 On W-7 that is the 7 `agent_*` Acceptance-Agent fields. Pinned by
 `backend/tests/unit/test_52qm7_static_field_states.py` as characterization tests
 (they assert the CURRENT behavior and say what to flip when fixed).
+
+The same flags are also missing from every completion denominator
+(`schema.fields.length` in `SchemaFormStateManager.getProgress`, `VoiceOverlay`,
+`VoiceOverlayMobile`), so W-7 progress caps at 46/53. Pinned by
+`frontend/src/schema-forms/state/hiddenFieldCounting.test.ts`, which drives the
+real `getProgress` so a fix flips it.
 
 ## Logging a rejected field id
 

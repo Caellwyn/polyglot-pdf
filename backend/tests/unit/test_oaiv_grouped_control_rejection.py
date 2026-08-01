@@ -162,6 +162,33 @@ def test_without_a_known_field_predicate_nothing_is_echoed():
 
 
 @pytest.mark.skipif(not W7_SCHEMA.exists(), reason="W-7 kit not present")
+def test_is_known_field_predicate_changes_logging_only_not_validation():
+    """The predicate must not alter what is accepted or rejected.
+
+    It exists purely to decide whether a rejected key is safe to echo. If it ever
+    fed matching, it would become a second, quieter fuzzy-match path -- exactly
+    the mis-fill trap strict_ids exists to prevent.
+    """
+    schema, fields = _w7_fields()
+    known = {f["id"] for f in schema["fields"]}
+    pool = [f for f in fields if f.id == "reason"]
+    handler = ValidationHandler(session_id="test-oaiv")
+
+    for payload in ({"reason": "a_treaty_benefit"},      # accepted
+                    {"application_type": "x"},           # real sibling -> unknown
+                    {"garbage_key": "y"}):               # not an id at all
+        without = handler.validate_field_updates(
+            pool, dict(payload), strict_ids=True
+        )
+        with_pred = handler.validate_field_updates(
+            pool, dict(payload), strict_ids=True,
+            is_known_field=lambda k: k in known,
+        )
+        for key in ("applied_fields", "unknown_fields", "form_state"):
+            assert without[key] == with_pred[key], f"{key} differs for {payload!r}"
+
+
+@pytest.mark.skipif(not W7_SCHEMA.exists(), reason="W-7 kit not present")
 def test_checkbox_group_accepts_scalar_list_and_csv_option_values():
     """Control: the backend accepts every reasonable multi-select shape.
 

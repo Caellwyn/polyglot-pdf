@@ -10,8 +10,10 @@ Two models see the form and they must see DIFFERENT things:
       (bd wsao.1), so form-level and orphaned-passage questions are answerable.
 
 Both surfaces exclude PDF mechanics and authoring metadata. These tests pin the
-contract in docs/standards/validation-delegation.md against the real kit, so a
-future schema key (or a new enrichment pass) cannot silently cross the line.
+per-key matrix in docs/standards/schema-key-visibility.md (which cites this file)
+against the real kit, so a future schema key -- or a new enrichment pass -- cannot
+silently cross the line. That matrix is the key-level detail under the broader
+INCLUDE/EXCLUDE contract in docs/standards/validation-delegation.md.
 """
 import json
 from pathlib import Path

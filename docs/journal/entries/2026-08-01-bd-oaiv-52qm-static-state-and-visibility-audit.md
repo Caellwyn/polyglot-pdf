@@ -62,11 +62,24 @@ entry parks a field that still owns a PDF widget.
    `'555-1234'` *is* rejected -- for a tel **format** error, not a guard. A
    format-valid value applies cleanly with zero errors. Testing the first value
    would have produced a false all-clear.
-3. **The completion denominator counts hidden fields.** `VoiceOverlay.tsx` uses
-   `schema.fields.length` at four sites with no filter, while navigation
-   elsewhere correctly uses `!f.hidden && shouldShowField(...)`. On W-7 that is 53
-   counted vs 46 fillable: progress **caps at 87%** and the form never reads
-   complete. This is visible on the live demo as "0 of 53 fields".
+3. **The completion denominator counts hidden fields.** `schema.fields.length` is
+   used as the denominator with no filter, while navigation elsewhere correctly
+   uses `!f.hidden && shouldShowField(...)`. On W-7 that is 53 counted vs 46
+   fillable: progress **caps at 87%** and the form never reads complete. Visible
+   on the live demo as "0 of 53 fields".
+
+   The blast radius is wider than the voice overlay -- a fix scoped to one
+   component would leave the bug live elsewhere:
+   - `SchemaFormStateManager.getProgress` (`schemaFormState.ts:682`), which drives
+     the schema-forms UI progress bar via `SchemaForm.tsx` and
+     `webFormConnection.ts` -- a separately reachable surface from the overlay;
+   - `VoiceOverlay.tsx` (4 sites) and `VoiceOverlayMobile.tsx` (1 site), which
+     inline the same expression in React state.
+
+   `getProgress` is the one the characterization test drives directly, so the
+   test flips the moment that site is fixed (verified by simulating the fix: both
+   GAP assertions fail). The inline overlay sites need the same treatment in the
+   same change.
 
 Clean, and pinned so a future edit cannot quietly change it: `_ignored_fields`
 never becomes a live field, and its widget (`f1_02[0]`) is claimed by no live
