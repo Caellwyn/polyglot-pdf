@@ -100,7 +100,7 @@ expect `git show HEAD:...` to reproduce it) -- while an
 ungated POST for that same id demonstrably resolves to the host's copy, which is
 what makes the refusal load-bearing rather than decorative.
 
-24 new tests (12 endpoint, 7 client asker, 5 component -- one of the 5 pins the
+25 new tests (12 endpoint, 8 client asker, 5 component -- one of the 5 pins the
 fresh-nonce/cleanup contract rather than the refusal itself). Both gates were
 **mutation-verified rather than assumed**: forcing the endpoint to report
 `sameFolder=true` fails 4 endpoint tests, and removing the UI refusal fails 5
@@ -165,9 +165,21 @@ copy cannot work.
 **The test I had written to prevent exactly this did not catch it**, and that is
 the part worth keeping. It asserted the *literal s2bf phrase* was absent
 (`/make a copy somewhere writable and open that/`), so a reworded copy-elsewhere
-sailed through untouched. It pinned a string, not a rule. It now bans the word
-`copy` from that branch outright, and re-introducing the regression fails it --
-verified, not assumed.
+sailed through untouched. It pinned a string, not a rule.
+
+So I banned the word `copy` -- and the NEXT review defeated that too, with
+"**duplicate** it somewhere writable and open that duplicate". 38 of 38 green.
+I had written "banning the word is what actually holds" in this very entry, and
+it did not: a blacklist is always one synonym from being defeated, and the
+demonstration cost one reviewer one mutation.
+
+What holds is an **allowlist**. This branch has exactly two remedies that reach a
+working state -- make this folder writable, or open the server's own folder -- so
+the test now asserts both are present, strips them plus the framing, and requires
+that **no further instruction survives**. A third remedy fails it regardless of
+wording. Verified against four bypasses, including one containing no copy-word at
+all ("set FORM_KITS_ROOT to this folder"), which every blacklist version would
+have missed.
 
 Four rounds, four instances of the same shape. Two lessons, both general:
 
@@ -176,10 +188,17 @@ Four rounds, four instances of the same shape. Two lessons, both general:
    checked by running it -- including the two-variable one, confirmed by pointing
    the real backend at a temp root and watching `get_form_kit_store().root`
    follow.
-2. **Pin the defect, not the phrasing.** A negative assertion against one exact
-   sentence only blocks that sentence. If the rule is "never tell the user to open
-   a copy," the test has to say that -- otherwise the next rewrite walks straight
-   past it, which is precisely what happened here.
+2. **Allowlist the correct advice; do not blacklist the wrong advice.** Three
+   versions of one test failed here, and the first two failed the same way: they
+   described what the message must NOT say (a literal sentence, then a single
+   word), and each was beaten by a rewording. You cannot enumerate the wrong
+   answers -- there are infinitely many, and only one has to slip through. You
+   can enumerate the RIGHT ones, because a branch that offers two working
+   remedies offers exactly two. Assert those, then assert nothing else remains.
+
+   The generalization: when a test guards *prose*, blacklists rot and allowlists
+   hold. Worth remembering the next time a message needs pinning, because the
+   blacklist is always the one that comes to mind first.
 
 ## One thing worth flagging for the next person
 

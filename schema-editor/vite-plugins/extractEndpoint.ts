@@ -240,7 +240,16 @@ export interface HandshakeResponse {
   sameFolder: boolean;
   /** This host's root, so the refusal message can name the folder it would use. */
   extractorRoot?: string;
-  /** Why it failed: "mismatch" (nothing observed) or "stale" (a different nonce). */
+  /**
+   * Why it failed: "mismatch" (nothing observed) or "stale" (a different nonce).
+   *
+   * DIAGNOSTIC ONLY -- no client reads this. The browser collapses both into one
+   * refusal, because the remedy is identical (open the folder this host uses) and
+   * the user cannot act on the difference. It is emitted for parity with the
+   * backend's StoreHandshakeResponse (editor_kit_routes.py) and for anyone
+   * reading the response by hand; do not wire a message off it without first
+   * plumbing it through verifyExtractorFolder, which today drops it.
+   */
   reason?: 'mismatch' | 'stale';
 }
 
@@ -455,8 +464,14 @@ export async function handleExtract(
   if (!fs.existsSync(kitDir) || !fs.statSync(kitDir).isDirectory()) {
     sendJson(res, 404, {
       ok: false,
+      // Do NOT say "set FORM_KITS_ROOT to match" (bd polyglot-pdf-ball): the
+      // launcher starts TWO servers resolving kit ids independently, so naming
+      // only the extractor's variable unblocks extraction while silently
+      // switching every backend action off. Opening the named folder always
+      // works; the README carries the two-variable recipe for the other route.
       detail: `kit "${id}" not found under the server's form-kits root (${ctx.formKitsRoot}). `
-        + 'Open that folder in the editor, or set FORM_KITS_ROOT to match.',
+        + 'Open that folder in the editor (see the editor README to point the dev '
+        + 'server somewhere else).',
     });
     return;
   }

@@ -913,13 +913,32 @@ describe('FormCatalogue -- run extraction', () => {
     // construction not that root and the next click just fails the mismatch
     // branch instead.
     //
-    // Pin the DEFECT, not a phrase. The first version of this test asserted the
-    // literal s2bf wording was absent, which let a reworded copy-elsewhere
-    // ("open a writable COPY of the folder the dev server uses") sail straight
-    // through -- it caught nothing, and an Opus review found the regression the
-    // test was supposed to block. Banning the word is what actually holds.
-    expect(msg.textContent).toMatch(/open the folder the dev server uses/i);
-    expect(msg.textContent).not.toMatch(/copy/i);
+    // ALLOWLIST, not a blacklist. Two earlier versions of this test failed to
+    // hold, each time because they described the WRONG advice instead of the
+    // right advice:
+    //   v1 banned the literal s2bf sentence -> a reworded copy-elsewhere ("open
+    //      a writable COPY of the folder the dev server uses") sailed through.
+    //   v2 banned the word "copy" -> "DUPLICATE it somewhere writable" sailed
+    //      through. Every blacklist is one synonym from being defeated.
+    // So pin what the message may SAY. This branch has exactly two remedies that
+    // reach a working state -- make this folder writable, or open the server's
+    // own folder -- and anything else is a bug regardless of how it is worded.
+    const SANCTIONED = [
+      /make this folder writable/i,
+      /open the folder the dev server uses/i,
+    ];
+    for (const remedy of SANCTIONED) expect(msg.textContent).toMatch(remedy);
+    // Strip the sanctioned remedies and the framing, then require that NO further
+    // instruction survives. A third remedy -- copy, duplicate, clone, "point
+    // FORM_KITS_ROOT at...", anything -- leaves residue here and fails, without
+    // this test having to guess the word.
+    const residue = (msg.textContent ?? '')
+      .replace(/Cannot run extraction for "[^"]*":/i, '')
+      .replace(/the folder you opened cannot be written to, so the editor cannot confirm it is the folder the extractor uses\./i, '')
+      .replace(SANCTIONED[0], '')
+      .replace(SANCTIONED[1], '')
+      .replace(/[\s,.;:-]|\bor\b/gi, '');
+    expect(residue).toBe('');
   });
 
   it('treats an unreachable handshake as UNPROVEN, not as agreement', async () => {

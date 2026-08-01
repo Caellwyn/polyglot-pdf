@@ -344,7 +344,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             // ids independently -- so naming only the extractor's would unblock
             // extraction while silently switching the backend actions off. The
             // README carries the full two-variable recipe.
-            : 'Cannot run extraction: the folder you opened is not the one the extractor '
+            : `Cannot run extraction for "${kit.id}": the folder you opened is not the one the extractor `
               + `uses${folder.backendRoot ? ` (it uses ${folder.backendRoot})` : ''}, so it `
               + 'would rewrite a different copy of this form. Open that folder instead '
               + "(see the editor README to point the dev server somewhere else).",
