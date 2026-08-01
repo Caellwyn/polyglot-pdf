@@ -1229,11 +1229,21 @@ def test_a_field_baked_before_identity_tracking_never_reads_stale():
 # only a count over the SHIPPED kit can catch a mass false alarm (a hash-formula
 # change lighting up every field) or a silent regression (the rule going dark).
 #
-# 11 of these were re-flagged by the bd polyglot-pdf-fjxe 'name' correction
-# itself -- fixing a wrong label IS an identity edit, and re-raising the gate is
-# the intended behavior. Clearing them means a human confirming each field's
-# guidance still reads correctly and re-baking; that is maintainer review work,
-# tracked separately, not something a test should paper over.
+# WHY these 14 are stale: the guidance was baked against an EARLIER field
+# layout, not against edits made since. The tell is in the kit's own
+# _bakeoff.authoring.instructions_enrich.flags, which still names the field
+# `agent_ein_ptin_office_code` -- a combined field that no longer exists (it was
+# later split into agent_ein / agent_ptin / agent_office_code). Records baked
+# against a field set that has since been re-cut can never match the current
+# hash, so this set does not shrink by re-checking labels.
+#
+# Note what this is NOT: the set is byte-identical before and after the
+# bd polyglot-pdf-fjxe 'name' correction (verified by hashing both revisions),
+# so the corrected names neither caused nor cleared any of it.
+#
+# Clearing them means RE-BAKING the guidance against the current field set,
+# which is maintainer work tracked separately -- not something a test should
+# paper over.
 _W7_EXPECTED_STALE = {
     "us_person_name_ssn_itin", "reason_h_details", "treaty_country",
     "id_document_issued_by", "itin_issued_first_name",

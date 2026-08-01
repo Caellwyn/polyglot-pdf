@@ -139,24 +139,102 @@ def test_other_lines_keep_their_own_field(kit: str) -> None:
 # ai_context.py renders 'name' into the Gemini system instruction, and the
 # frontend field components render it as the visible <label>. The full suite was
 # green because nothing asserted on 'name'. This closes that hole.
+#
+# COVERS EVERY f1_* text field, not just the run that was found broken. Pinning
+# only the known-bad fields would leave the same hole open exactly where the
+# next off-by-one is most likely to hide: runs of adjacent, same-shaped widgets
+# (name_1a_*, name_1b_*, itin_part*, irsn_part*, itin_issued_*) where a shift
+# still produces plausible-looking text.
 _EXPECTED_NAME = {
     "w7": {
+        "relationship_to_us_person":
+            "If d, enter relationship to U.S. citizen/resident alien",
         "us_person_name_ssn_itin":
             "If d or e, enter name and SSN/ITIN of U.S. citizen/resident alien",
         "reason_h_details": "If h, other reason (see instructions)",
         "treaty_country":
             "Additional information for a and f: Enter treaty country",
         "treaty_article_number": "Treaty article number",
+        "name_1a_first": "1a First name",
+        "name_1a_middle": "1a Middle name",
+        "name_1a_last": "1a Last name",
+        "name_1b_first": "1b Name at birth if different -- First name",
+        "name_1b_middle": "1b Name at birth if different -- Middle name",
+        "name_1b_last": "1b Name at birth if different -- Last name",
+        "mailing_street":
+            "2 Street address, apartment number, or rural route number. If you "
+            "have a P.O. box, see separate instructions.",
+        "mailing_city_state_country":
+            "2 City or town, state or province, and country. Include ZIP code "
+            "or postal code where appropriate.",
+        "foreign_street":
+            "3 Foreign (non-U.S.) address -- Street address, apartment number, "
+            "or rural route number. Don't use a P.O. box number.",
+        "foreign_city_state_country":
+            "3 Foreign (non-U.S.) address -- City or town, state or province, "
+            "and country. Include postal code where appropriate.",
+        "date_of_birth": "4 Date of birth (month / day / year)",
+        "country_of_birth": "4 Country of birth",
+        "city_state_of_birth":
+            "4 City and state or province of birth (optional)",
+        "countries_of_citizenship": "6a Country(ies) of citizenship",
+        "foreign_tax_id_number": "6b Foreign tax I.D. number (if any)",
+        "us_visa_type_number_expiration":
+            "6c Type of U.S. visa (if any), number, and expiration date",
+        "id_document_other_detail":
+            "6d Other identification document (specify)",
+        "id_document_issued_by": "6d Issued by",
+        "id_document_number": "6d Number",
+        "id_document_expiration_date": "6d Exp. date",
+        "date_of_entry_us":
+            "6d Date of entry into the United States (MM/DD/YYYY)",
+        "itin_part1": "6f ITIN -- first three digits",
+        "itin_part2": "6f ITIN -- middle two digits",
+        "itin_part3": "6f ITIN -- last four digits",
+        "irsn_part1": "6f IRSN -- first three digits",
+        "irsn_part2": "6f IRSN -- middle two digits",
+        "irsn_part3": "6f IRSN -- last four digits",
+        "itin_issued_first_name":
+            "6f Name under which ITIN/IRSN was issued -- First name",
+        "itin_issued_middle_name":
+            "6f Name under which ITIN/IRSN was issued -- Middle name",
+        "itin_issued_last_name":
+            "6f Name under which ITIN/IRSN was issued -- Last name",
+        "college_or_company_name": "6g Name of college/university or company",
+        "college_city_and_state": "6g City and state",
+        "length_of_stay": "6g Length of stay",
         "phone_number": "Applicant phone number",
         "name_of_delegate":
             "Name of delegate, if applicable (type or print)",
         "delegate_name": "Acceptance Agent's Use ONLY -- Phone",
         "agent_fax": "Acceptance Agent's Use ONLY -- Fax",
+        "agent_name_and_title":
+            "Acceptance Agent's Use ONLY -- Name and title (type or print)",
+        "agent_company_name":
+            "Acceptance Agent's Use ONLY -- Name of company",
         "agent_ein": "Acceptance Agent's Use ONLY -- EIN",
         "agent_ptin": "Acceptance Agent's Use ONLY -- PTIN",
         "agent_office_code": "Acceptance Agent's Use ONLY -- Office code",
     },
 }
+
+
+@pytest.mark.parametrize("kit", ["w7"])
+def test_every_text_widget_has_a_pinned_name(kit: str) -> None:
+    # Non-vacuity floor: the pin above is only worth anything while it covers
+    # the whole f1_* run. A new text field added without a pin entry would
+    # otherwise inherit zero name coverage silently.
+    schema = _load(kit)
+    on_page = {
+        f["id"] for f in schema["fields"]
+        if (_leaf(f.get("pdf_field_name")) or "").startswith("f1_")
+    }
+    unpinned = sorted(on_page - set(_EXPECTED_NAME[kit]))
+    assert unpinned == [], (
+        f"{kit}: these f1_* fields have no pinned 'name': {unpinned}. Add the "
+        f"caption printed above each widget to _EXPECTED_NAME -- an unpinned "
+        f"field is one an off-by-one can shift undetected."
+    )
 
 
 @pytest.mark.parametrize("kit", ["w7"])
@@ -173,6 +251,28 @@ def test_human_facing_name_matches_the_printed_caption(kit: str) -> None:
             f"into the system instruction) and the on-screen <label> "
             f"(bd polyglot-pdf-fjxe)"
         )
+
+
+@pytest.mark.parametrize("kit", ["w7"])
+def test_the_agent_phone_does_not_reuse_the_delegate_guidance(kit: str) -> None:
+    """bd polyglot-pdf-im2u exit criterion 1.
+
+    `delegate_name` is the Acceptance Agent PHONE box (f1_42), but it shipped
+    `name_of_delegate`'s guidance verbatim -- text about who may SIGN for an
+    applicant. Guidance is voice-facing (ai_context / manifest_service ship
+    help.instructions to the live model without filtering on hidden/read_only),
+    so a copied block makes the assistant explain the wrong thing.
+    """
+    schema = _load(kit)
+    by_id = {f["id"]: f for f in schema["fields"]}
+    agent_phone = (by_id["delegate_name"].get("help") or {}).get("instructions")
+    delegate = (by_id["name_of_delegate"].get("help") or {}).get("instructions")
+    assert agent_phone, "delegate_name lost its guidance entirely"
+    assert agent_phone != delegate, (
+        "delegate_name (the Acceptance Agent phone widget f1_42) is reusing "
+        "name_of_delegate's delegate-signature guidance verbatim -- it must "
+        "describe the agent's phone number (bd polyglot-pdf-im2u)"
+    )
 
 
 @pytest.mark.parametrize("kit", ["w7"])
