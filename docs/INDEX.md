@@ -56,6 +56,7 @@ ground truth -- fix the doc first as a separate commit.
 | SI reduction (system-instruction shape + reduced-SI floor) | [`standards/si-reduction.md`](standards/si-reduction.md) |
 | WebSocket protocol (handshake + message-type union) | [`standards/ws-protocol.md`](standards/ws-protocol.md) |
 | Validation delegation (cheap-model validator contracts) | [`standards/validation-delegation.md`](standards/validation-delegation.md) |
+| Schema-key visibility (which model sees which schema key) | [`standards/schema-key-visibility.md`](standards/schema-key-visibility.md) |
 | Section-reset deprecation (DEPRECATED-but-LIVE fallback; deletion inventory) | [`standards/section-reset-deprecation.md`](standards/section-reset-deprecation.md) |
 
 ## External references (vendored SDK docs)

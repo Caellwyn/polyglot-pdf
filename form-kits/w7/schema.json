@@ -955,7 +955,7 @@
       },
       "read_only": false,
       "validation": {
-        "required": true
+        "required": false
       }
     },
     {
@@ -1000,7 +1000,7 @@
         "afrikaans": "middelnaam by geboorte"
       },
       "validation": {
-        "required": true
+        "required": false
       },
       "read_only": false
     },
@@ -1046,7 +1046,7 @@
         "afrikaans": "van by geboorte"
       },
       "validation": {
-        "required": true
+        "required": false
       },
       "read_only": false
     },
@@ -1368,7 +1368,7 @@
         "afrikaans": "stad van geboorte"
       },
       "validation": {
-        "required": true
+        "required": false
       }
     },
     {

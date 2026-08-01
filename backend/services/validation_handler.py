@@ -14,6 +14,39 @@ from backend.utils.field_validator import validate_updates
 
 _log = structlog.get_logger().bind(module="validation_handler")
 
+# Max rejected field ids recorded on a single validation_failures line. The
+# caller collapses multi-field calls to one key before validation, so this is a
+# defensive bound, not an expected truncation.
+UNKNOWN_FIELD_ID_LOG_CAP = 10
+
+# A rejected key is RAW MODEL INPUT, not necessarily a schema id: if the model
+# swaps args it can carry the user's ANSWER (Codex PR #264 P0 -- the same reason
+# form_filling_service and callback_handler never log a raw sent_id). So a key
+# is echoed ONLY when it matches a real field id in the session's schema; any
+# other key is reduced to a PII-free shape descriptor. That still answers the
+# diagnostic question this logging exists for (bd polyglot-pdf-oaiv: WHICH id did
+# the model send when the update was rejected?) without ever emitting free text.
+_UNKNOWN_ID_REDACTED = "<unrecognized:{n} chars>"
+
+
+def _safe_unknown_ids(unknown_fields, is_known_field=None) -> List[str]:
+    """Render rejected keys for logging: keys that are REAL schema ids verbatim,
+    everything else as a length-only descriptor. Never emits raw model text.
+
+    is_known_field: predicate over the SESSION's full id space (schema + merged
+    + manifest -- FormFillingService._is_known_field_id). It must not be the
+    active validation pool, which holds only 1-2 fields: the whole diagnostic
+    value here is naming a real SIBLING id the model targeted, and a pool-scoped
+    check would redact exactly that case. With no predicate, nothing is echoed.
+    """
+    out = []
+    for key in list(unknown_fields)[:UNKNOWN_FIELD_ID_LOG_CAP]:
+        if is_known_field is not None and is_known_field(key):
+            out.append(key)
+        else:
+            out.append(_UNKNOWN_ID_REDACTED.format(n=len(str(key))))
+    return out
+
 
 class ValidationHandler:
     """Handles field matching and validation for form updates."""
@@ -31,7 +64,8 @@ class ValidationHandler:
         self,
         fields: List[FormField],
         updates: Dict[str, Any],
-        strict_ids: bool = False
+        strict_ids: bool = False,
+        is_known_field=None
     ) -> Optional[Dict[str, Any]]:
         """
         Match and validate field updates against schema.
@@ -83,12 +117,18 @@ class ValidationHandler:
                 "form_state": form_state,
             }
             
-            # Log validation failures concisely
+            # Log validation failures concisely. unknown_field_ids answers the
+            # question that stalled bd polyglot-pdf-oaiv -- WHICH id did the model
+            # send when the update was rejected? -- but a rejected key is RAW
+            # MODEL INPUT and can carry the user's answer on an arg swap, so it
+            # is echoed only when it is a real schema id and redacted to a
+            # length-only shape otherwise (see _safe_unknown_ids).
             if validation_errors or unknown_fields:
                 _log.warning(
                     "validation_failures",
                     error_count=len(validation_errors),
                     unknown_count=len(unknown_fields),
+                    unknown_field_ids=_safe_unknown_ids(unknown_fields, is_known_field),
                     session_id=self._session_id
                 )
             
