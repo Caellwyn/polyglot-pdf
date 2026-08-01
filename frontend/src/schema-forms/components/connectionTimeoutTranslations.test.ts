@@ -9,8 +9,14 @@
  * silently fall back to English with nothing red in CI.
  *
  * The language set is anchored to SPOKEN_LANGUAGES because that is where a new
- * language actually gets added; the sibling map is checked too, so the three
- * stay in lockstep.
+ * language actually gets added, and cross-checked against OVERLAY_TRANSLATIONS.
+ *
+ * NOT covered here: DISCLAIMER_TRANSLATIONS is never compared to
+ * SPOKEN_LANGUAGES by any test -- DisclaimerModal.test.tsx derives its audit set
+ * from that map's OWN keys, so a language added to SPOKEN_LANGUAGES and missed
+ * in the disclaimer map still renders English with CI green. All three maps hold
+ * the same 18 languages today, so the gap is latent; closing it is bd
+ * polyglot-pdf-cnwz.
  */
 
 import { describe, it, expect } from 'vitest';

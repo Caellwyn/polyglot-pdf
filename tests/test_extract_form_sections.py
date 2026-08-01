@@ -166,21 +166,21 @@ def test_f1040_dependents_cap_split_is_balanced():
 @pytest.mark.parametrize("kit", [_W7, _I90, _F1040],
                          ids=["w7", "i90", "f1040"])
 def test_derive_then_repair_keeps_sections_and_fields_consistent(kit):
-    """Pins the step-3e-BEFORE-repair ordering contract (bd polyglot-pdf-n2t3).
+    """derive_and_apply THEN repair leaves every section/field reference intact
+    on the real checked-in kits (bd polyglot-pdf-n2t3). No LLM, no network.
 
-    extract_form runs derive_and_apply at step 3e (line ~1490) and the
-    deterministic repair pass at step 4 (line ~1520) -- derivation files every
-    field into a section FIRST, then repair rewrites the schema. Nothing pinned
-    that composition, so a future repair change that renames or drops a field id
-    would leave sections[].fields[] pointing at ids that no longer exist (or a
-    field whose section_id resolves nowhere) with every existing test still
-    green. Runs on the real checked-in kits: no LLM, no network.
+    SCOPE, precisely: this calls the two functions in the order extract_form
+    happens to call them (derive at step 3e ~line 1490, repair at step 4 ~line
+    1520). It does NOT invoke extract_form itself, so it does NOT detect a
+    future refactor that REORDERS the pipeline -- swapping those two calls in
+    extract_form.py leaves this file green. What it guards is that repair does
+    not break references derivation established.
 
     NOTE: the committed kits are already clean, so repair() is a NO-OP here (0
-    repairs on all three). This case therefore pins the composition's SHAPE
-    only; the mutating case -- where repair actually re-mints values -- is
-    pinned separately by test_derive_then_MUTATING_repair_* below, which is the
-    one that would catch a regression.
+    repairs on all three) and this case pins the composition's SHAPE only. The
+    mutating case -- where repair actually re-mints values and rewrites
+    conditions -- is pinned by test_derive_then_MUTATING_repair_* below, which
+    is the one that catches a real regression.
     """
     from backend.services.schema_repair import repair
 
@@ -206,18 +206,19 @@ def test_derive_then_repair_keeps_sections_and_fields_consistent(kit):
 
 
 def test_derive_then_MUTATING_repair_keeps_section_references_intact():
-    """The ordering contract with a repair that ACTUALLY rewrites the schema.
+    """A repair that ACTUALLY rewrites the schema must not break the section
+    references derivation established (bd polyglot-pdf-n2t3).
 
     The committed kits are clean, so repair() no-ops on them -- a consistency
-    assertion over that composition would pass with the two steps in EITHER
-    order and pin nothing (fresh-eyes review of bd polyglot-pdf-n2t3). This case
+    assertion over that composition pins nothing (fresh-eyes review). This case
     forces real mutation: a choice field whose option values collide ("1"/"1")
     and violate the slug convention, which drives _mint_slugs to re-mint them
     and rewrite the show_if conditions that referenced the old values.
 
-    What must survive: derivation filed every field into a section FIRST, so
-    after repair every section_id must still resolve and every id listed in a
-    section's fields[] must still be a real field.
+    What must survive: every section_id still resolves, and every id listed in a
+    section's fields[] is still a real field. Like its sibling above, this does
+    NOT invoke extract_form, so it does not detect a pipeline REORDER -- it
+    guards repair's behavior, not the call order.
     """
     from backend.services.schema_repair import repair
 

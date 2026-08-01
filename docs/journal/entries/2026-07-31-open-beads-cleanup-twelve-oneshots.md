@@ -1,7 +1,7 @@
 ---
 date: 2026-07-31
 bead: polyglot-pdf-v208
-title: "Overnight cleanup: twelve standalone one-shot beads, two of them duplicate pairs"
+title: "Overnight cleanup: thirteen standalone one-shot beads, two of them duplicate pairs"
 tags: [maintenance, testing, authoring, i18n, bakeoff, telemetry]
 ---
 
@@ -12,7 +12,9 @@ standalone one-shots (no epic parent, no dependencies) -- the bug squashes and
 nits left behind by earlier reviews -- and close as many as possible without
 blocking on input.
 
-Of 119 ready beads, 99 were standalone non-epics. This pass took twelve.
+Of 119 ready beads, 99 were standalone non-epics. This pass closed thirteen:
+twelve with code/test changes, plus `1wtu`, closed as already-resolved after
+investigation (see below).
 
 ## What shipped
 
@@ -49,8 +51,12 @@ Six commits, grouped so each is independently reviewable:
      local repo path, never the GCS bucket.
    - `derive_sections.build_output` deduped section ids but not **part** ids, so
      two part labels that slug identically collided. Reproduced, mirrored the
-     existing section dedup, and pinned the step-3e-before-repair ordering
-     contract with a derive+repair composition test over the three real kits.
+     existing section dedup, and added derive+repair composition tests asserting
+     that a repair does not break the section references derivation established.
+     Note the precise scope: those tests call the two functions in the pipeline's
+     order but do **not** invoke `extract_form`, so they do not detect a future
+     *reorder* of the pipeline itself -- they guard repair's behavior, not the
+     call order.
 
 5. **Once-mock leak** (`kas0`). `usePDFDocument.test.ts` reset with
    `clearAllMocks`, which does not drain queued one-time implementations.
@@ -123,6 +129,36 @@ false alarm before widening it", so each needs a judgement call. Related:
   points across the two overlays, with the state doing double duty as both state
   machine and rendered display string, and load-bearing prefix matching
   (`startsWith('connected ')`). Left a scoping comment with a staged plan.
+
+## What the review rounds caught
+
+Three Opus outer-review rounds found twelve findings; all were fixed rather than
+argued away. The ones worth remembering:
+
+- **A CI-red I would have shipped.** The new once-mock guard constructed a
+  `Promise.reject` it deliberately never consumed, so vitest reported an
+  unhandled rejection and exited **non-zero with every test passing**. CI runs
+  that suite, so the required check would have failed on every run.
+- **A test that pinned nothing.** The first derive+repair test passed with the
+  ordering *reversed*, because `repair()` makes zero repairs on all three
+  committed kits -- it asserted only invariants an existing test already covered.
+  Replaced with a synthetic colliding-option schema that forces real mutation,
+  and it asserts the mutation happened so it cannot silently go vacuous again.
+- **A silent behavior change inside a "pure delegation."** Routing both bakeoff
+  arms through the shared helper swapped the location knob from `VERTEX_LOCATION`
+  (the repo's canonical one, 23 sites) to `GOOGLE_CLOUD_LOCATION`, so a
+  non-`us-central1` run would have quietly hit the default. Fixing that then
+  made an **untouched** backend test depend on ambient shell state -- caught only
+  because a reviewer ran it with `VERTEX_LOCATION` exported.
+- **Prose claiming more than the tests deliver.** Several docstrings (and one
+  line of this journal) said the tests "pin the step-3e-before-repair ordering
+  contract." They do not: nothing invokes `extract_form`, so a pipeline reorder
+  passes clean. Narrowed the claims to what is actually enforced. Follow-ups filed
+  as `polyglot-pdf-kow7` (a real ordering guard) and `polyglot-pdf-cnwz`
+  (`DISCLAIMER_TRANSLATIONS` has no `SPOKEN_LANGUAGES` anchor either).
+
+The through-line: every one of these was found by *running* something -- a
+mutation, an env var, a reverted fix -- not by reading the diff.
 
 ## Doc-freshness note
 
