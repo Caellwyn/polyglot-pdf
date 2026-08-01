@@ -1,6 +1,6 @@
 ---
 date: 2026-07-30
-bead: polyglot-pdf-hii0, polyglot-pdf-stkz, polyglot-pdf-g5vj, polyglot-pdf-u4r0, polyglot-pdf-2hxu, polyglot-pdf-r5q1, polyglot-pdf-l7u0, polyglot-pdf-79tz
+bead: polyglot-pdf-hii0, polyglot-pdf-stkz, polyglot-pdf-g5vj, polyglot-pdf-2hxu, polyglot-pdf-r5q1, polyglot-pdf-l7u0, polyglot-pdf-79tz
 title: "Eight follow-ups from the anim + icyi closeouts: the gate's blind spots, the painter's all-or-nothing rect, and a once-mock that leaked"
 tags: [editor, extractor, guidance, testing, postmortem]
 ---
@@ -48,13 +48,22 @@ The other five:
   real trailing hash -- pinning the ack to a string that can never change, i.e.
   a permanent waiver, the exact hole current-identity pinning exists to close.
 
-- **u4r0** -- the position pass ran BEFORE `_complete_grouped_families`, which
-  appends missing family members carrying only `{value, label,
-  pdf_field_name}`. Those options shipped positionless. Not cosmetic: the
-  runtime option-rect painter is ALL-OR-NOTHING
+- **u4r0** (COLLISION -- fixed independently by PR #514 mid-review, which
+  closed the bead; this PR does NOT close it) -- the position pass ran BEFORE
+  `_complete_grouped_families`, which appends missing family members carrying
+  only `{value, label, pdf_field_name}`. Those options shipped positionless.
+  Not cosmetic: the runtime option-rect painter is ALL-OR-NOTHING
   (`valuePainting.ts` returns `[]` for the WHOLE field if ANY selected option
   lacks a usable rect), so one completed option silently disabled per-option
-  marks for the entire choice field.
+  marks for the entire choice field. Both fixes re-ran the position pass after
+  completion; #514's adds an explicit `normalize_pages=False` parameter so the
+  one non-idempotent part of the pass (the one-shot page-base shift) cannot
+  run twice -- the maintainer chose that implementation, and this PR keeps it,
+  layering the 2hxu provenance renames and the r5q1 guard on top. This PR's
+  surviving u4r0-adjacent contribution is `test_provenance_counts_reflect_
+  BOTH_position_passes` (the two-pass provenance wiring pin) plus the stage-
+  order unit tests, which complement #514's end-to-end tests rather than
+  duplicate them.
 
 - **2hxu** -- since icyi made the deterministic rect win unconditionally,
   `positions_filled` counts DERIVATIONS ("did it run?") rather than REPAIRS
