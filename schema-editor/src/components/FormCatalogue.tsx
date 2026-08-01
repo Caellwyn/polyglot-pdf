@@ -313,8 +313,16 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       if (!folder.ok) {
         setError(
           folder.reason === 'unwritable'
+            // NOT the "make a copy elsewhere and open that" advice the s2bf modal
+            // gives. That fits SAVING (which targets whatever folder you picked),
+            // but extraction always writes under the HOST's FORM_KITS_ROOT -- so a
+            // copy made anywhere else is by construction not the host root, and the
+            // next click would just fail the mismatch branch instead. The only
+            // route to a working state here is a writable host root.
             ? `Cannot run extraction for "${kit.id}": the folder you opened cannot be `
-              + 'written to. Make a copy somewhere writable and open that.'
+              + 'written to, so the editor cannot confirm it is the folder the extractor '
+              + 'uses. Make this folder writable, or point the dev server at a writable '
+              + 'form-kits folder (FORM_KITS_ROOT) and open that one.'
             : 'Cannot run extraction: the folder you opened is not the one the extractor '
               + `uses${folder.backendRoot ? ` (it uses ${folder.backendRoot})` : ''}, so it `
               + 'would rewrite a different copy of this form. Open that folder, or set '

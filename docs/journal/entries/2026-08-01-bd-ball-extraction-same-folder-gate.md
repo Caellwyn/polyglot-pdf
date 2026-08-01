@@ -97,9 +97,33 @@ byte-identical afterwards (sha256 `93bc4083...` before and after) -- while an
 ungated POST for that same id demonstrably resolves to the host's copy, which is
 what makes the refusal load-bearing rather than decorative.
 
-23 new tests. Both gates were **mutation-verified rather than assumed**: forcing
-the endpoint to report `sameFolder=true` fails 4 endpoint tests, and removing the
-UI refusal fails the 4 component tests.
+23 new tests (12 endpoint, 7 client asker, 5 component -- one of the 5 pins the
+fresh-nonce/cleanup contract rather than the refusal itself). Both gates were
+**mutation-verified rather than assumed**: forcing the endpoint to report
+`sameFolder=true` fails 4 endpoint tests, and removing the UI refusal fails 5
+component tests -- the 4 refusal tests plus the nonce test, which stops observing
+a handshake once the gate no longer runs one.
+
+## A refusal message that was a dead end (bd polyglot-pdf-6pzs, folded in)
+
+The Opus outer review caught that the `unwritable` branch had inherited s2bf's
+advice verbatim -- "make a copy somewhere writable and open that" -- which is
+right for that channel and **wrong for this one**. Saving targets whatever folder
+you picked, so any writable copy fixes it; extraction always writes under the
+host's `FORM_KITS_ROOT`, so a copy made anywhere else is by construction not the
+host root and the next click just fails the *mismatch* branch instead. The advice
+could not reach a working state.
+
+Now it directs the user at the host's own root (make it writable, or point
+`FORM_KITS_ROOT` at a writable folder and restart). Note the `unwritable` branch
+short-circuits *before* the handshake is asked (`formKitDirectory.ts` returns
+early on the failed marker write), so `backendRoot` is undefined there and the
+message cannot name the root -- it says what to do without naming it.
+
+Worth recording because it is a general hazard when mirroring a guard onto a new
+channel: the *mechanism* transfers, but the remediation advice may not, because
+the two channels write to different places. A test now pins the new wording and
+asserts the copy-elsewhere text is gone.
 
 ## One thing worth flagging for the next person
 
