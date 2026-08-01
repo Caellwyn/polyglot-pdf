@@ -55,6 +55,14 @@ Adjudicated against the maintainer's field-by-field verdicts (encoded in
 | genuine extractor defects | 0.0 | 0.6 |
 | gold was actually wrong (extractor caught it) | 0.0 | 0.4 |
 | unadjudicated | 0.0 | 0.7 |
+| unmatched draft field (no gold twin) | 2.0 | 2.0 |
+
+These buckets now RECONCILE with the raw spurious counts (the script asserts
+it). An earlier version bucketed only matched pairs, leaving the
+unmatched-draft-field class -- 2.0/run, IDENTICAL in both arms -- undisclosed
+(fresh-eyes finding, bd `polyglot-pdf-8pmb`). It never affected the
+comparison, being the same magnitude on both sides, but the tables understated
+total emissions.
 
 The scaffold's extra emissions are dominated by the ITIN/IRSN case: the form
 DOES state that one of those groups is required, and our schema **cannot

@@ -84,6 +84,7 @@ def adjudicate(draft_path: str, gold_path: str) -> dict[str, Any]:
         "extractor-incorrect": [],
         "unexpressible": [],
         "unadjudicated": [],
+        "unmatched-draft-field": [],
     }
     for t, d in match.pairs:
         for key in ("show_if", "require_if"):
@@ -92,6 +93,20 @@ def adjudicate(draft_path: str, gold_path: str) -> dict[str, Any]:
                 verdict, note = _W7_VERDICTS.get(fid, ("unadjudicated", ""))
                 buckets[verdict].append({"field": fid, "key": key,
                                          "note": note})
+    # Draft fields with NO gold twin also count toward schema_score's spurious
+    # total, and they are the TRUE-hallucination class this script exists to
+    # separate out -- bucketing only matched pairs left ~2/run undisclosed in
+    # both arms (fresh-eyes finding, bd polyglot-pdf-8pmb). Bucket them as
+    # unmatched-draft-field so the buckets reconcile with raw_spurious.
+    for d in match.unmatched_draft:
+        if not isinstance(d, dict):
+            continue
+        for key in ("show_if", "require_if"):
+            if d.get(key):
+                buckets["unmatched-draft-field"].append({
+                    "field": str(d.get("id")), "key": key,
+                    "note": "draft field with no gold twin (invented field, "
+                            "or a real field gold lacks) -- needs a human"})
 
     keys = ("show_if", "require_if")
     total = sum(conds[k]["total"] for k in keys)
@@ -103,6 +118,10 @@ def adjudicate(draft_path: str, gold_path: str) -> dict[str, Any]:
     # count against precision; a gold error does not.
     charged = len(buckets["extractor-incorrect"]) + len(buckets["unexpressible"])
     uncharged = len(buckets["extractor-correct-gold-was-wrong"])
+    bucketed = sum(len(v) for v in buckets.values())
+    assert bucketed == raw_spurious, (
+        f"buckets ({bucketed}) must reconcile with raw_spurious "
+        f"({raw_spurious}) -- an emission class is going unreported")
 
     return {
         "draft": draft_path,
@@ -134,7 +153,9 @@ def render(a: dict[str, Any]) -> str:
                         ("unexpressible", "UNEXPRESSIBLE (schema gap)"),
                         ("extractor-correct-gold-was-wrong",
                          "GOLD WAS WRONG (extractor caught it)"),
-                        ("unadjudicated", "UNADJUDICATED (needs a human)")):
+                        ("unadjudicated", "UNADJUDICATED (needs a human)"),
+                        ("unmatched-draft-field",
+                         "UNMATCHED DRAFT FIELD (no gold twin -- needs a human)")):
         rows = a["buckets"][name]
         if not rows:
             continue

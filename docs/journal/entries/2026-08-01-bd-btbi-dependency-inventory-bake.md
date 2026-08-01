@@ -47,7 +47,11 @@ n=7 per arm on W-7: recall **+4.0 of 32, p=0.040** (15.4 -> 19.4); spurious
 +5.3, p=0.007; trigger-correctness +3.6, p=0.071 (undecided). Adjudicated, the
 extra spurious is dominated by the ITIN/IRSN "exactly one of" case our schema
 cannot express (4.1/run) plus real gold gaps (0.4/run); genuine defects are
-0.6/run (the absolute-vs-conditional `required` confusion, bd `opjo`).
+0.6/run (the absolute-vs-conditional `required` confusion, bd `opjo`). A
+further 2.0/run in BOTH arms are draft fields with no gold twin -- a class the
+first adjudicator version silently omitted (bd `polyglot-pdf-8pmb`); it is
+identical on both sides so the verdict stands, but the tables understated
+total emissions until fixed.
 
 ## Process lesson (recorded because it nearly shipped a wrong claim)
 
