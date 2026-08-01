@@ -85,6 +85,16 @@ finds scores spurious by construction -- the baseline already emits 5-8. Left
 UNRESOLVED (no maintainer verdict set exists for i-90); plausibly the same
 gold-under-encoding pattern confirmed on W-7, but that is an inference.
 
+## Test-gate note (NOT caused by this branch)
+
+closeout_prep's test gate fails on FIVE tests that also fail on clean
+origin/dev (verified by checking dev out and running them): they pin the OLD
+W-7 schema and broke when the hand-verified gold landed in PR #519 -- e.g.
+test_scored_draft_carries_relationship_summaries hardcodes the old 21-total
+(12 show_if + 9 require_if) where the real total is now 32. Filed as bd
+polyglot-pdf-lzyi (P1); it blocks the test gate for every branch until fixed.
+This research diff touches only scripts/spikes/ + this entry.
+
 ## Recommendation
 
 Confirmed at modest effect size. Ship it AFTER `opjo` -- fixing the
