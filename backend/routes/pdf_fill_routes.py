@@ -144,6 +144,47 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			_log.debug("button_on_state_default", widget_name=widget.field_name, default="Yes")
 			return "Yes"
 
+		# AcroForm text-field flag bit 25 (1-based in the spec) = Comb.
+		_COMB_FLAG = 1 << 24
+
+		def relax_comb_if_value_overflows(widget, value: str) -> bool:
+			"""Clear the Comb flag when the value is longer than the widget's cells.
+
+			A Comb text field splits its box into exactly MaxLen cells and prints ONE
+			glyph per cell -- there is no cell MaxLen+1. PyMuPDF stores and reads back
+			the full string regardless, so an over-long value round-trips perfectly in
+			the AcroForm while the RENDERED page silently shows only the first MaxLen
+			characters (bd polyglot-pdf-br7t).
+
+			On W-7 that truncated every 4-digit year: date_of_birth is comb-8, so
+			'03/14/1990' printed as '03/14/19' -- a wrong date of birth on a filed
+			ITIN application, invisible to every value-level check.
+
+			Only relaxes a widget whose value ACTUALLY overflows: the ITIN/IRSN digit
+			groups (comb-3/2/4) are meant to render as separate cells and always fit,
+			so they keep their comb appearance untouched. Returns True if relaxed.
+			"""
+			try:
+				maxlen = widget.text_maxlen or 0
+				if not (widget.field_flags & _COMB_FLAG) or not maxlen:
+					return False
+				if len(value) <= maxlen:
+					return False
+				widget.field_flags = widget.field_flags & ~_COMB_FLAG
+				# MaxLen would still hard-cap input in a viewer; clear it too so the
+				# value the user supplied is the value that prints.
+				widget.text_maxlen = 0
+				_log.info(
+					"comb_relaxed_for_overflow",  # never log the value itself -- bd hjo
+					widget_name=widget.field_name, maxlen=maxlen, value_length=len(value),
+				)
+				return True
+			except Exception as e:
+				# Never fail a fill over an appearance tweak -- worst case the value
+				# renders truncated, which is the pre-fix behavior.
+				_log.warning("comb_relax_failed", widget_name=widget.field_name, error=str(e))
+				return False
+
 		def fill_widget(widget, page, value, field_type: Optional[str] = None) -> None:
 			"""Apply a value to a widget using its page reference to avoid weak reference issues.
 
@@ -193,9 +234,14 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			else:
 				# Text field
 				try:
-					fresh_widget.field_value = str(value)
+					text_value = str(value)
+					# Must precede the assignment: a comb widget prints only MaxLen
+					# glyphs, so an over-long value would render truncated even though
+					# it stores fine (bd polyglot-pdf-br7t).
+					relax_comb_if_value_overflows(fresh_widget, text_value)
+					fresh_widget.field_value = text_value
 					fresh_widget.update()
-					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(str(value)))
+					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(text_value))
 				except Exception as e:
 					_log.error("text_field_fill_failed", widget_name=fresh_widget.field_name, error=str(e))
 					raise
