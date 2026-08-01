@@ -43,12 +43,36 @@ function read(rel: string): string {
   return src;
 }
 
-/** Pull `<NAME> = '<value>'` (TS) or `<NAME> = "<value>"` (Python). */
+/**
+ * Pull `<NAME> = '<value>'` (TS) or `<NAME> = "<value>"` (Python).
+ *
+ * ANCHORED TO A REAL DECLARATION, and deliberately so. An unanchored
+ * `src.match()` takes the FIRST hit anywhere in the file -- including inside a
+ * COMMENT -- so a line like
+ *
+ *   // NOTE: was EXTRACTOR_HANDSHAKE_FILE = '.editor-extract-check.json'
+ *   const EXTRACTOR_HANDSHAKE_FILE = '.editor-RENAMED.json';
+ *
+ * made this whole file pass green while production had genuinely drifted. That
+ * is exactly the silent failure the contract exists to prevent, re-introduced
+ * inside its own guard. Found by an Opus review and reproduced before fixing.
+ *
+ * Two defences, both load-bearing:
+ *   1. Require line-start + an optional declaring keyword, so a `//` or `#`
+ *      comment cannot satisfy the pattern.
+ *   2. Require EXACTLY ONE match. If a constant is ever declared twice, fail
+ *      loudly rather than silently picking whichever comes first.
+ */
 function declared(src: string, rel: string, name: string): string {
-  const m = src.match(new RegExp(`\\b${name}\\s*=\\s*['"]([^'"]+)['"]`));
+  const pattern = new RegExp(
+    `^[ \\t]*(?:export\\s+)?(?:const|let|var)?[ \\t]*${name}\\s*(?::[^=]+)?=\\s*['"]([^'"]+)['"]`,
+    'gm',
+  );
+  const hits = [...src.matchAll(pattern)];
   // Never return null into an equality assertion -- two nulls would "match".
-  expect(m, `${name} not found in ${rel} (renamed? then fix this test too)`).toBeTruthy();
-  return (m as RegExpMatchArray)[1];
+  expect(hits.length, `${name}: expected exactly 1 declaration in ${rel}, found ${hits.length}`)
+    .toBe(1);
+  return hits[0][1];
 }
 
 const BROWSER = 'schema-editor/src/utils/formKitDirectory.ts';
@@ -78,11 +102,19 @@ describe('handshake marker filenames stay coupled across languages', () => {
   });
 
   it('both markers are gitignored (they are transient, never committed)', () => {
-    const ignored = read('.gitignore');
+    // Whole-LINE match, not a substring. `toContain` would be satisfied by a
+    // commented-out `# .editor-store-check.json` or by a longer entry such as
+    // `.editor-store-check.json.bak` -- neither of which actually ignores the
+    // marker. The marker is written into the user's own form-kits/ folder, so a
+    // missed rule means transient scratch gets committed into a form kit.
+    const rules = read('.gitignore')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'));
     const src = read(BROWSER);
     for (const name of ['HANDSHAKE_FILE', 'EXTRACTOR_HANDSHAKE_FILE']) {
-      expect(ignored, `${declared(src, BROWSER, name)} missing from .gitignore`)
-        .toContain(declared(src, BROWSER, name));
+      const marker = declared(src, BROWSER, name);
+      expect(rules, `${marker} has no active .gitignore rule`).toContain(marker);
     }
   });
 });

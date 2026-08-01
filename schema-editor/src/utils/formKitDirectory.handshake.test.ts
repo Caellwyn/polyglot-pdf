@@ -189,22 +189,63 @@ describe('two channels on one folder (bd polyglot-pdf-bagn)', () => {
     expect(b).toEqual({ ok: true }); // and the agreeing folder is NOT refused
   });
 
-  it('each channel writes a DISTINCT marker, so neither can delete the other', async () => {
+  it('both markers coexist while BOTH checks are in flight', async () => {
+    // Genuinely concurrent, which is the property the name claims. An earlier
+    // version awaited the two calls in sequence, so only one marker ever existed
+    // at a time -- it proved the constants differ (already covered by
+    // markerNames.contract.test.ts) but not that the files coexist.
     const { dir, files } = sharedDir();
-    const names: string[] = [];
-    // Capture the name each channel writes while its check is still in flight.
-    await verifySameFolder(dir, async () => {
-      names.push(...files.keys());
+    let releaseA: () => void = () => {};
+    let releaseB: () => void = () => {};
+    const aHeld = new Promise<void>((r) => { releaseA = r; });
+    const bHeld = new Promise<void>((r) => { releaseB = r; });
+    let bothInFlight: string[] = [];
+
+    const a = verifySameFolder(dir, async () => { await aHeld; return { sameFolder: true }; });
+    const b = verifySameFolderForExtractor(dir, async () => {
+      // Both markers are now written and neither check has cleaned up.
+      bothInFlight = [...files.keys()].sort();
+      await bHeld;
       return { sameFolder: true };
     });
-    await verifySameFolderForExtractor(dir, async () => {
-      names.push(...files.keys());
+    // Let B reach its asker, snapshot, then unwind both.
+    await Promise.resolve();
+    releaseB(); releaseA();
+    await Promise.all([a, b]);
+
+    expect(bothInFlight).toHaveLength(2);            // two distinct files on disk
+    expect(bothInFlight[0]).not.toBe(bothInFlight[1]);
+    expect(files.size).toBe(0);                      // both cleaned up after
+  });
+
+  it('the reverse direction too: an extraction check cannot void a backend check', async () => {
+    // The bagn fix is symmetric, but this direction has the LARGER blast radius:
+    // a voided backend check sets folderCheck={ok:false}, which opens the s2bf
+    // mismatch modal and drives serverActionsOk false -- disabling Repair all,
+    // Regenerate divisions, Rewrite guidance and the widget picker. Pin it too,
+    // so a refactor that re-shares the backend marker cannot pass on the
+    // extractor-direction test alone.
+    const { dir, files } = sharedDir();
+    let releaseExtractor: () => void = () => {};
+    const held = new Promise<void>((r) => { releaseExtractor = r; });
+
+    const extractorDone = verifySameFolderForExtractor(dir, async () => {
+      await held;
       return { sameFolder: true };
     });
-    expect(names).toHaveLength(2);
-    expect(names[0]).not.toBe(names[1]);
-    // Both cleaned up after themselves.
-    expect(files.size).toBe(0);
+
+    let backendSaw: string | null = null;
+    const backendDone = verifySameFolder(dir, async (nonce) => {
+      releaseExtractor();      // the extractor check completes, running cleanup
+      await extractorDone;
+      backendSaw = [...files.values()]
+        .map((raw) => { try { return JSON.parse(raw).nonce; } catch { return null; } })
+        .find((n) => n === nonce) ?? null;
+      return { sameFolder: backendSaw === nonce };
+    });
+
+    expect(await backendDone).toEqual({ ok: true });
+    expect(backendSaw).not.toBeNull();
   });
 
   it('STILL fail-closed: a distinct marker cannot satisfy the other channel', async () => {
