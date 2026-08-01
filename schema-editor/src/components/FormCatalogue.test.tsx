@@ -994,7 +994,7 @@ describe('FormCatalogue -- run extraction', () => {
     expect(nonces).toHaveLength(1);
     expect(nonces[0]).toBeTruthy();
     // The marker does not outlive the check.
-    expect(root.files.has('.editor-store-check.json')).toBe(false);
+    expect(root.files.has('.editor-extract-check.json')).toBe(false);
   });
 
   it('disables folder controls and refuses drops WHILE extraction is in flight (Codex r3)', async () => {

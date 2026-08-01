@@ -328,8 +328,27 @@ async function writeFile(
 
 // --- same-folder handshake (bd polyglot-pdf-s2bf) --------------------------- //
 
-/** The marker the browser drops in the picked folder for the backend to read. */
+/**
+ * The marker the browser drops in the picked folder for the BACKEND to read.
+ * Must stay byte-identical to _HANDSHAKE_FILE in backend/routes/editor_kit_routes.py
+ * (pinned by a test -- see markerNames.contract.test.ts).
+ */
 const HANDSHAKE_FILE = '.editor-store-check.json';
+
+/**
+ * The marker for the EXTRACTOR channel (bd polyglot-pdf-ball). Must stay
+ * byte-identical to HANDSHAKE_FILE in vite-plugins/extractEndpoint.ts.
+ *
+ * A SEPARATE name from the backend's, deliberately (bd polyglot-pdf-bagn). Both
+ * channels run verifySameFolder against the same picked folder and are not
+ * serialized against each other -- the App-level backend check is already in
+ * flight from the folder pick when an extraction check starts. Sharing one
+ * filename meant either channel's cleanup deleted the other's in-flight marker,
+ * so the host read an ABSENT marker and refused a folder that genuinely agrees.
+ * Distinct names make that interference structurally impossible instead of
+ * merely unlikely, and keep both readers a simple fixed-path read.
+ */
+const EXTRACTOR_HANDSHAKE_FILE = '.editor-extract-check.json';
 
 /** What the handshake concluded, and why. */
 export type FolderCheck =
@@ -361,20 +380,47 @@ export async function verifySameFolder(
     sameFolder: boolean; backendRoot?: string | null;
   }>,
 ): Promise<FolderCheck> {
+  return runHandshake(dir, HANDSHAKE_FILE, askBackend);
+}
+
+/**
+ * The same proof for the EXTRACTOR channel (bd polyglot-pdf-ball), against the
+ * Vite dev host's FORM_KITS_ROOT rather than the backend's FORM_KITS_LOCAL_ROOT.
+ *
+ * Identical logic, DIFFERENT marker file -- see EXTRACTOR_HANDSHAKE_FILE for why
+ * the two channels must not share one (bd polyglot-pdf-bagn).
+ */
+export async function verifySameFolderForExtractor(
+  dir: FsDirectoryHandle,
+  askHost: (nonce: string) => Promise<{
+    sameFolder: boolean; backendRoot?: string | null;
+  }>,
+): Promise<FolderCheck> {
+  return runHandshake(dir, EXTRACTOR_HANDSHAKE_FILE, askHost);
+}
+
+/** Shared implementation: write a fresh nonce, ask, always clean up. */
+async function runHandshake(
+  dir: FsDirectoryHandle,
+  markerFile: string,
+  ask: (nonce: string) => Promise<{
+    sameFolder: boolean; backendRoot?: string | null;
+  }>,
+): Promise<FolderCheck> {
   const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   try {
-    await writeFile(dir, HANDSHAKE_FILE, JSON.stringify({ nonce }));
+    await writeFile(dir, markerFile, JSON.stringify({ nonce }));
   } catch {
     return { ok: false, reason: 'unwritable' };
   }
   try {
-    const res = await askBackend(nonce);
+    const res = await ask(nonce);
     return res.sameFolder
       ? { ok: true }
       : { ok: false, reason: 'mismatch', backendRoot: res.backendRoot };
   } finally {
     try {
-      await dir.removeEntry?.(HANDSHAKE_FILE);
+      await dir.removeEntry?.(markerFile);
     } catch {
       // Best-effort: a leftover marker cannot cause a FALSE match (the next
       // check mints a new nonce), so failing to delete is not worth surfacing.

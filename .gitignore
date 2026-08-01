@@ -62,6 +62,12 @@ tmp_*
 # deletes it. Ignored because a crash mid-check can leave one behind, and it is
 # per-run scratch either way.
 .editor-store-check.json
+# The same marker for the EXTRACTOR channel (bd polyglot-pdf-ball), read by the
+# Vite dev host instead of the backend. A SEPARATE file from the one above on
+# purpose (bd polyglot-pdf-bagn): the two checks run unserialized against the
+# same folder, so sharing one name let either channel's cleanup delete the
+# other's in-flight marker and refuse a folder that genuinely agrees.
+.editor-extract-check.json
 # Ad-hoc rescue/backup copies made while hand-correcting a schema. The kit's
 # real provenance is schema_archived.json + migration_report.json (the
 # migrate_schema_v2.py backup convention) plus git history -- a *.bak snapshot
