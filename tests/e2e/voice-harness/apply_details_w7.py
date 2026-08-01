@@ -185,7 +185,7 @@ if __name__ == "__main__":
     group.add_argument("--apply", action="store_true")
     group.add_argument("--revert", action="store_true")
     ap.add_argument("--trim", action="store_true",
-                    help="apply the ~1.7k-token trimmed details variant")
+                    help="apply the ~1k-token trimmed details variant")
     args = ap.parse_args()
     if args.apply:
         apply(trim=args.trim)

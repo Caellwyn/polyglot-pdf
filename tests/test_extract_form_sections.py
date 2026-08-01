@@ -175,6 +175,12 @@ def test_derive_then_repair_keeps_sections_and_fields_consistent(kit):
     would leave sections[].fields[] pointing at ids that no longer exist (or a
     field whose section_id resolves nowhere) with every existing test still
     green. Runs on the real checked-in kits: no LLM, no network.
+
+    NOTE: the committed kits are already clean, so repair() is a NO-OP here (0
+    repairs on all three). This case therefore pins the composition's SHAPE
+    only; the mutating case -- where repair actually re-mints values -- is
+    pinned separately by test_derive_then_MUTATING_repair_* below, which is the
+    one that would catch a regression.
     """
     from backend.services.schema_repair import repair
 
@@ -195,5 +201,65 @@ def test_derive_then_repair_keeps_sections_and_fields_consistent(kit):
     # Parts still reference only real sections, with unique ids (n2t3 item 1).
     part_ids = [p["id"] for p in repaired["parts"]]
     assert len(part_ids) == len(set(part_ids)), part_ids
+    for p in repaired["parts"]:
+        assert set(p["section_ids"]) <= section_ids
+
+
+def test_derive_then_MUTATING_repair_keeps_section_references_intact():
+    """The ordering contract with a repair that ACTUALLY rewrites the schema.
+
+    The committed kits are clean, so repair() no-ops on them -- a consistency
+    assertion over that composition would pass with the two steps in EITHER
+    order and pin nothing (fresh-eyes review of bd polyglot-pdf-n2t3). This case
+    forces real mutation: a choice field whose option values collide ("1"/"1")
+    and violate the slug convention, which drives _mint_slugs to re-mint them
+    and rewrite the show_if conditions that referenced the old values.
+
+    What must survive: derivation filed every field into a section FIRST, so
+    after repair every section_id must still resolve and every id listed in a
+    section's fields[] must still be a real field.
+    """
+    from backend.services.schema_repair import repair
+
+    schema = {
+        "form_id": "synthetic",
+        "title": "Synthetic",
+        "fields": [
+            {"id": "choice", "type": "radio", "label": "Pick one",
+             "section_id": "sec_only",
+             "options": [
+                 {"value": "1", "label": "Alpha", "pdf_field_name": "w_a"},
+                 {"value": "1", "label": "Beta", "pdf_field_name": "w_b"},
+             ]},
+            {"id": "dependent", "type": "text", "label": "Why?",
+             "section_id": "sec_only",
+             "show_if": {"field": "choice", "equals": "1"}},
+        ],
+        "sections": [
+            {"id": "sec_only", "label": "Only", "order": 1,
+             "fields": ["choice", "dependent"]},
+        ],
+        "parts": [
+            {"id": "part_only", "label": "Only", "order": 1,
+             "section_ids": ["sec_only"]},
+        ],
+    }
+
+    repaired, repairs = repair(copy.deepcopy(schema), None)
+
+    # The premise: this repair really did mutate (otherwise the test is vacuous).
+    substantive = [r for r in repairs if r.get("action") != "alias-hit-rate"]
+    assert substantive, "expected repair() to re-mint the colliding option values"
+    values = [o["value"] for o in repaired["fields"][0]["options"]]
+    assert len(set(values)) == 2, values  # the "1"/"1" collision is resolved
+
+    # The contract: section <-> field references survive the rewrite.
+    section_ids = {s["id"] for s in repaired["sections"]}
+    field_ids = {f["id"] for f in repaired["fields"]}
+    for f in repaired["fields"]:
+        assert f["section_id"] in section_ids, (f["id"], f["section_id"])
+    listed = [fid for s in repaired["sections"] for fid in s["fields"]]
+    assert set(listed) == field_ids
+    assert len(listed) == len(field_ids)
     for p in repaired["parts"]:
         assert set(p["section_ids"]) <= section_ids

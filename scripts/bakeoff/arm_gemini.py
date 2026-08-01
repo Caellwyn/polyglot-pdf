@@ -67,11 +67,10 @@ def _client(http_options=None) -> genai.Client:
 
     There is NO AI Studio / GEMINI_API_KEY path, and VERTEXAI is NOT consulted --
     the AI Studio gate is closed fleet-wide (maintainer directive 2026-07-28; bd
-    polyglot-pdf-f3lm / w99b / kgmn). Previously VERTEXAI=false silently swapped
-    in an AI-Studio key, which is the escape hatch f3lm closed in the sibling
-    llm_providers.py. Delegates to that module's helper so there is ONE
+    polyglot-pdf-f3lm / w99b / kgmn). Delegates to llm_providers so there is ONE
     client-construction path for the whole bakeoff directory; http_options (the
-    per-request timeout) threads through unchanged.
+    per-request timeout) threads through unchanged, and the location comes from
+    VERTEX_LOCATION (then GOOGLE_CLOUD_LOCATION).
     """
     from llm_providers import _vertex_gemini_client  # noqa: PLC0415 (lazy)
     return _vertex_gemini_client(http_options)

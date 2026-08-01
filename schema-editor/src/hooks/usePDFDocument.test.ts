@@ -107,8 +107,14 @@ describe('usePDFDocument', () => {
   // vi.clearAllMocks() and the second test fails -- that is the regression.
 
   it('queues an UNCONSUMED once-mock (setup for the leak guard below)', () => {
+    // The rejection is never awaited (that is the point), so attach a no-op
+    // handler: an unhandled rejection makes vitest exit NON-ZERO even when
+    // every test passes, which would fail CI. The once-impl stays unconsumed,
+    // so the guard below still bites.
+    const neverConsumed = Promise.reject(new Error('leaked from the previous test'));
+    neverConsumed.catch(() => {});
     vi.mocked(pdfjsLib.getDocument).mockReturnValueOnce({
-      promise: Promise.reject(new Error('leaked from the previous test')),
+      promise: neverConsumed,
       destroy: vi.fn(),
     } as any);
     // Intentionally never renders the hook, so the queued once-impl is left

@@ -44,12 +44,25 @@ def _vertex_gemini_client(http_opts):
     directive 2026-07-28: the AI Studio gate is closed; bd polyglot-pdf-f3lm /
     w99b). A bare local run uses ADC directly; the hosted Cloud Run extractor
     uses its service account. GOOGLE_CLOUD_PROJECT unset falls back to ADC's
-    own default project, matching the fleet-wide probe convention."""
+    own default project, matching the fleet-wide probe convention.
+
+    Location precedence is VERTEX_LOCATION then GOOGLE_CLOUD_LOCATION:
+    VERTEX_LOCATION is the repo's canonical knob (bd polyglot-pdf-rve5), and the
+    bakeoff arms that delegate here were previously reading it directly -- honor
+    it first so a non-us-central1 run does not silently fall back to the default
+    (bd polyglot-pdf-kgmn)."""
     from google import genai  # lazy
+    if not os.getenv("GOOGLE_CLOUD_PROJECT"):
+        print(
+            "Vertex mode but GOOGLE_CLOUD_PROJECT unset; relying on ADC's "
+            "default project (gcloud config get-value project).",
+            flush=True,
+        )
     return genai.Client(
         vertexai=True,
         project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-        location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+        location=(os.getenv("VERTEX_LOCATION")
+                  or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")),
         http_options=http_opts,
     )
 

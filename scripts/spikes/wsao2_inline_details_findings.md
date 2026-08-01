@@ -30,7 +30,8 @@ booklet's reason section: Exceptions 1-2) -> capture the spoken answer
 fills reason_a (sessionStorage, not DOM -- a checkbox's `domValue` is always
 "on") -> confirm. Details applied to the LOCAL kit copy via
 `tests/e2e/voice-harness/apply_details_w7.py` (verbatim programmatic
-extraction from the booklet PDF; `--trim` for the 1,717-token variant), plus
+extraction from the booklet PDF; `--trim` produced the 1,717-token variant
+measured below -- it emits ~996 tokens today, see the note), plus
 `metadata.booklet_text` (81 KB floor) in all details arms.
 
 > **Reproduction note (bd polyglot-pdf-r0za, 2026-07-31).** The 1,717-token
