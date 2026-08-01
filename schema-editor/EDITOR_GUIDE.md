@@ -68,7 +68,20 @@ Manual JSON editing of PDF schemas is **painful and error-prone**. With 50+ form
    model itself). The LLM out-call is behind a provider seam (default: the local
    `claude` CLI, free in-env; swappable by env -- see "Extraction backends"
    below). It is DEV/LOCAL only: a deployed static editor shows the manual step
-   instead. You can always run it from a terminal:
+   instead.
+
+   NOTE: the folder you opened must be the SAME form-kits/ the dev server uses.
+   Extraction writes schema.json under the server's own root (FORM_KITS_ROOT,
+   default the repo's form-kits/), so opening a copy elsewhere is refused rather
+   than silently rewriting the server's copy of the kit (bd polyglot-pdf-ball).
+   To work from a folder elsewhere, put BOTH variables on the launcher -- it
+   starts two servers that resolve kit ids independently, and setting only one
+   unblocks that half while the other keeps refusing (FORM_KITS_ROOT is the Vite
+   host / extraction; FORM_KITS_LOCAL_ROOT is the backend / Repair + Regenerate +
+   the widget picker). Both are read once at server start, so a restart is needed:
+   FORM_KITS_ROOT=/path/to/fk FORM_KITS_LOCAL_ROOT=/path/to/fk ./scripts/run-schema-editor.sh
+
+   You can always run it from a terminal:
    python scripts/authoring/extract_form.py --pdf form-kits/<id>/form.pdf \
        --out form-kits/<id>/schema.json
 

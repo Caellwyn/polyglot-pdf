@@ -5,10 +5,12 @@ import {
 } from '../utils/fileSystemAccess';
 import {
   listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitLabel, setKitStatus,
-  writeInstructionsPdf,
+  verifySameFolder, writeInstructionsPdf,
   type CatalogueEntry, type KitProgress, type KitStatus, type KitVersionInfo,
 } from '../utils/formKitDirectory';
-import { isExtractionAvailable, runExtraction } from '../utils/extractionClient';
+import {
+  isExtractionAvailable, runExtraction, verifyExtractorFolder,
+} from '../utils/extractionClient';
 
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -294,9 +296,67 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setExtractingId(kit.id);
     const extractionRoot = root;
     try {
+      // SAME-FOLDER GATE (bd polyglot-pdf-ball). The extractor resolves this kit
+      // id against the VITE HOST's own FORM_KITS_ROOT and WRITES schema.json
+      // there -- so if the picked folder is a copy elsewhere, "Run extraction"
+      // silently overwrites a DIFFERENT kit while the catalogue refreshes the
+      // picked one and shows no change. Prove the two are one directory first.
+      //
+      // This is its own channel, NOT the App-level serverActionsOk gate (bd
+      // polyglot-pdf-s2bf): that one proves agreement with the FastAPI backend's
+      // FORM_KITS_LOCAL_ROOT, a separate setting from the Vite host's root, so it
+      // cannot vouch for where the extractor writes.
+      //
+      // Checked HERE rather than once per folder because it must hold at the
+      // moment of the write: it is the last thing before any file is touched.
+      // Tracks whether the host ANSWERED. The verdict is the same either way
+      // (refuse -- fail closed), but a dead dev server needs different advice
+      // than a wrong folder: telling that user to open a different folder or
+      // edit FORM_KITS_ROOT sends them to change correct configuration.
+      let hostAnswered = true;
+      const folder = await verifySameFolder(
+        extractionRoot, (nonce) => verifyExtractorFolder(nonce, () => { hostAnswered = false; }),
+      );
+      if (!folder.ok) {
+        setError(
+          // No `&& reason !== 'unwritable'` guard: verifySameFolder returns
+          // unwritable BEFORE it ever calls the asker, so hostAnswered is still
+          // true on that path and the two can never both be set. Spelling out a
+          // condition that cannot occur would imply an interaction that does not
+          // exist.
+          !hostAnswered
+            ? `Cannot run extraction for "${kit.id}": the editor could not reach the `
+              + 'extraction service to confirm which folder it uses. Check the dev server '
+              + 'is still running, then try again.'
+            : folder.reason === 'unwritable'
+            // NOT the "make a copy elsewhere and open that" advice the s2bf modal
+            // gives. That fits SAVING (which targets whatever folder you picked),
+            // but extraction always writes under the HOST's FORM_KITS_ROOT -- so a
+            // copy made anywhere else is by construction not the host root, and the
+            // next click would just fail the mismatch branch instead. The only
+            // route to a working state here is a writable host root.
+            ? `Cannot run extraction for "${kit.id}": the folder you opened cannot be `
+              + 'written to, so the editor cannot confirm it is the folder the extractor '
+              + 'uses. Make this folder writable, or open the folder the dev server uses.'
+            // Recommend OPENING the server's folder rather than repointing the
+            // server at this one. Repointing takes TWO env vars -- the Vite host
+            // (FORM_KITS_ROOT) and the backend (FORM_KITS_LOCAL_ROOT) resolve kit
+            // ids independently -- so naming only the extractor's would unblock
+            // extraction while silently switching the backend actions off. The
+            // README carries the full two-variable recipe.
+            : `Cannot run extraction for "${kit.id}": the folder you opened is not the one the extractor `
+              + `uses${folder.backendRoot ? ` (it uses ${folder.backendRoot})` : ''}, so it `
+              + 'would rewrite a different copy of this form. Open that folder instead '
+              + "(see the editor README to point the dev server somewhere else).",
+        );
+        return;
+      }
       // Optional instructions PDF (bd s4dp.3): write it into the kit dir first so
       // the host extractor can read it by filename, then pass that filename. None
-      // selected -> /TU-only extraction (no error).
+      // selected -> /TU-only extraction (no error). Written only AFTER the gate
+      // above -- on a mismatched folder it would land here while the endpoint
+      // looked for it in the host's root, and 400 with "instructions PDF not
+      // found" despite the browser having just written it.
       let instructionsPdfFile: string | undefined;
       const instructionsPdf = instructionsPdfByKit[kit.id];
       if (instructionsPdf) {

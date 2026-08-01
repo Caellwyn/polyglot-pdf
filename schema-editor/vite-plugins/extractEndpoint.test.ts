@@ -11,7 +11,9 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { handleExtract, isSameOrigin } from './extractEndpoint';
+import {
+  handleExtract, handleHandshake, isHandshakePath, isSameOrigin,
+} from './extractEndpoint';
 
 // --- mock req/res ----------------------------------------------------------- //
 function mockReq(opts: {
@@ -179,5 +181,135 @@ describe('handleExtract -- request validation (no spawn)', () => {
     const withForce = await run({ id: 'w7', force: true });
     expect(withForce.statusCode).toBe(500);
     expect(withForce.body.detail).toMatch(/extractor not found/i);
+  });
+});
+
+// --- same-folder handshake (bd polyglot-pdf-ball) --------------------------- //
+//
+// The extractor resolves a kit id against THIS host's form-kits root and writes
+// schema.json there. If the editor's picked folder is a copy elsewhere, that is a
+// silent overwrite of a DIFFERENT kit. These pin the nonce read that proves the
+// two are one directory -- the gate the browser refuses on.
+
+const HANDSHAKE_FILE = '.editor-store-check.json';
+
+async function handshake(body: unknown): Promise<CapturedRes> {
+  const req = mockReq({ body });
+  const res = mockRes();
+  await handleHandshake(req as never, res as never, { formKitsRoot: root });
+  return res;
+}
+
+describe('isHandshakePath', () => {
+  it('matches the rewritten sub-path connect mounts on a prefix', () => {
+    expect(isHandshakePath('/handshake')).toBe(true);
+  });
+  it('matches the full path too (independent of the use() rewrite)', () => {
+    expect(isHandshakePath('/api/extract/handshake')).toBe(true);
+  });
+  it('ignores a query string', () => {
+    expect(isHandshakePath('/handshake?x=1')).toBe(true);
+  });
+  it('does NOT match the extraction path itself', () => {
+    expect(isHandshakePath('/')).toBe(false);
+    expect(isHandshakePath(undefined)).toBe(false);
+  });
+});
+
+describe('extract handshake', () => {
+  it('reports sameFolder when it reads the SAME nonce from its own root', () => {
+    fs.writeFileSync(path.join(root, HANDSHAKE_FILE), JSON.stringify({ nonce: 'n1' }));
+    return handshake({ nonce: 'n1' }).then((res) => {
+      expect(res.statusCode).toBe(200);
+      expect((res.body as unknown as { sameFolder: boolean }).sameFolder).toBe(true);
+    });
+  });
+
+  it('refuses when the marker is ABSENT -- the picked folder is a different one', async () => {
+    // The bead's exact failure: the editor wrote its nonce into the folder it
+    // opened, and this host cannot see it, because it is looking elsewhere.
+    const res = await handshake({ nonce: 'n1' });
+    const body = res.body as unknown as { sameFolder: boolean; reason: string; extractorRoot: string };
+    expect(body.sameFolder).toBe(false);
+    expect(body.reason).toBe('mismatch');
+    // The refusal names the root the extractor WOULD have written to, so the
+    // message can tell the human which folder to open.
+    expect(body.extractorRoot).toBe(root);
+  });
+
+  it('refuses a STALE marker left by an earlier session', async () => {
+    // A leftover from a previous check must never read as a match -- this is why
+    // the nonce is minted per check rather than reused.
+    fs.writeFileSync(path.join(root, HANDSHAKE_FILE), JSON.stringify({ nonce: 'old' }));
+    const res = await handshake({ nonce: 'fresh' });
+    const body = res.body as unknown as { sameFolder: boolean; reason: string };
+    expect(body.sameFolder).toBe(false);
+    expect(body.reason).toBe('stale');
+  });
+
+  it('refuses a corrupt/unparseable marker rather than throwing', async () => {
+    fs.writeFileSync(path.join(root, HANDSHAKE_FILE), 'not json');
+    const res = await handshake({ nonce: 'n1' });
+    expect((res.body as unknown as { sameFolder: boolean }).sameFolder).toBe(false);
+  });
+
+  it('refuses a marker whose nonce is not a string', async () => {
+    fs.writeFileSync(path.join(root, HANDSHAKE_FILE), JSON.stringify({ nonce: 42 }));
+    const res = await handshake({ nonce: '42' });
+    expect((res.body as unknown as { sameFolder: boolean }).sameFolder).toBe(false);
+  });
+
+  it('rejects a missing/blank nonce', async () => {
+    expect((await handshake({})).statusCode).toBe(400);
+    expect((await handshake({ nonce: '' })).statusCode).toBe(400);
+    expect((await handshake({ nonce: 7 })).statusCode).toBe(400);
+  });
+
+  it('never creates or deletes the marker -- the browser owns its lifecycle', async () => {
+    // Read-only on this side, so a read-only root degrades to sameFolder=false
+    // instead of failing (mirrors the backend half, bd polyglot-pdf-s2bf).
+    await handshake({ nonce: 'n1' });
+    expect(fs.existsSync(path.join(root, HANDSHAKE_FILE))).toBe(false);
+
+    fs.writeFileSync(path.join(root, HANDSHAKE_FILE), JSON.stringify({ nonce: 'n1' }));
+    await handshake({ nonce: 'n1' });
+    expect(fs.existsSync(path.join(root, HANDSHAKE_FILE))).toBe(true);
+  });
+});
+
+// --- the coupled marker filename -------------------------------------------- //
+//
+// HANDSHAKE_FILE is declared independently in THREE places: the browser writer
+// (src/utils/formKitDirectory.ts), this host reader (extractEndpoint.ts), and the
+// backend reader (backend/routes/editor_kit_routes.py). They must agree, and
+// nothing in the type system makes them: the Vite plugin sits outside the src/
+// tsconfig scope, so it cannot simply import the constant.
+//
+// Other tests DO fail on a rename, but only incidentally -- they hardcode the
+// literal themselves while exercising something else, so their failure names the
+// wrong culprit. This one states the invariant, so the failure says what actually
+// broke. It also covers the case the incidental tests do not: renaming the
+// BROWSER-side constant fails only this test. The stakes are silent degradation --
+// the endpoint treats an unreadable marker as "nothing observed", so a rename
+// turns the handshake into a permanent, unexplained refusal on a folder that
+// genuinely agrees.
+//
+// The backend's third declaration (backend/routes/editor_kit_routes.py) is out of
+// reach from a vitest run and is pinned by its own Python tests; this covers the
+// two TS sides.
+describe('handshake marker filename stays coupled', () => {
+  const readDeclared = (file: string): string | null => {
+    const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    const m = src.match(/HANDSHAKE_FILE\s*=\s*'([^']+)'/);
+    return m ? m[1] : null;
+  };
+
+  it('is the same literal in the host reader and the browser writer', () => {
+    const host = readDeclared('extractEndpoint.ts');
+    const browser = readDeclared('../src/utils/formKitDirectory.ts');
+    // Both must actually be found -- a null would make the equality vacuous.
+    expect(host).toBeTruthy();
+    expect(browser).toBeTruthy();
+    expect(host).toBe(browser);
   });
 });

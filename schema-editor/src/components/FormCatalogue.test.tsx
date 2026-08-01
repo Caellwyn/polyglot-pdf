@@ -37,6 +37,7 @@ function mockRoot(kits: ReturnType<typeof mockKit>[]) {
   const children = new Map<string, ReturnType<typeof mockKit>>();
   for (const k of kits) children.set(k.name, k);
   const created: Record<string, ReturnType<typeof mockKit>> = {};
+  const files = new Map<string, ReturnType<typeof mockFile>>();
   return {
     kind: 'directory' as const, name: 'form-kits', children, created,
     async *entries() { for (const [n, h] of children) yield [n, h]; },
@@ -48,7 +49,19 @@ function mockRoot(kits: ReturnType<typeof mockKit>[]) {
       }
       return d;
     },
-    getFileHandle: async () => { throw new DOMException('x', 'NotFoundError'); },
+    // The same-folder handshake (bd polyglot-pdf-ball) writes a nonce marker
+    // into the ROOT and removes it after. Files created here are tracked in
+    // `files` so a test can assert the marker was cleaned up.
+    files,
+    getFileHandle: async (fn: string, opts?: { create?: boolean }) => {
+      let f = files.get(fn);
+      if (!f) {
+        if (!opts?.create) throw new DOMException('x', 'NotFoundError');
+        f = mockFile(fn); files.set(fn, f);
+      }
+      return f;
+    },
+    removeEntry: async (fn: string) => { files.delete(fn); },
   };
 }
 
@@ -608,13 +621,25 @@ describe('FormCatalogue -- run extraction', () => {
   function fetchMock(handlers: {
     get?: () => Response;
     post?: (body: unknown) => Response;
+    /**
+     * The same-folder handshake (bd polyglot-pdf-ball). Extraction is gated on
+     * it, so it DEFAULTS to agreement -- otherwise every test here would be
+     * testing the refusal instead of what it was written to test. Override it to
+     * exercise the refusal itself.
+     */
+    handshake?: (body: unknown) => Response;
   }): typeof fetch {
-    const impl = async (_input: unknown, init?: RequestInit) => {
+    const impl = async (input: unknown, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase();
       if (method === 'GET') {
         return handlers.get?.() ?? ({ ok: false, status: 404, json: async () => ({}) } as unknown as Response);
       }
       const body = init?.body ? JSON.parse(init.body as string) : {};
+      // Route by URL: the handshake and the extraction are both POSTs.
+      if (String(input).endsWith('/handshake')) {
+        return handlers.handshake?.(body)
+          ?? (okJson({ sameFolder: true, extractorRoot: '/repo/form-kits' }));
+      }
       return handlers.post?.(body) ?? ({ ok: false, status: 500, json: async () => ({ ok: false, detail: 'x' }) } as unknown as Response);
     };
     return vi.fn(impl) as unknown as typeof fetch;
@@ -792,6 +817,184 @@ describe('FormCatalogue -- run extraction', () => {
 
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() => expect(screen.getByText(/Extraction failed for "w7".*boom/i)).toBeTruthy());
+  });
+
+  // --- same-folder gate (bd polyglot-pdf-ball) ------------------------------ //
+  //
+  // The extractor resolves the kit id against the VITE HOST's FORM_KITS_ROOT and
+  // WRITES schema.json there. Point the editor at a copy elsewhere whose kit id
+  // also exists under that root, and "Run extraction" silently overwrites the
+  // HOST's copy while the catalogue refreshes the picked one and shows no change.
+  // These pin the refusal, so the gate cannot be dropped silently.
+  //
+  // NOT covered by the App-level serverActionsOk gate (bd polyglot-pdf-s2bf):
+  // that proves agreement with the FastAPI backend's FORM_KITS_LOCAL_ROOT, a
+  // SEPARATE setting from the Vite host's root.
+
+  it('REFUSES to extract when the picked folder is not the extractor host root', async () => {
+    let posted: unknown = null;
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: (body) => { posted = body; return okJson({ ok: true, detail: 'done', schemaFile: 'schema.json' }); },
+      // The host cannot see the nonce the browser just wrote -- it is looking at
+      // a different directory.
+      handshake: () => okJson({ sameFolder: false, reason: 'mismatch', extractorRoot: '/repo/form-kits' }),
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+
+    // THE INVARIANT: no extraction POST is made, so nothing on the host is
+    // overwritten. This is the assertion the bug would break.
+    await waitFor(() => expect(screen.getByText(/not the one the extractor uses/i)).toBeTruthy());
+    expect(posted).toBeNull();
+    // The message names the folder the extractor would have written to.
+    expect(screen.getByText(/\/repo\/form-kits/)).toBeTruthy();
+  });
+
+  it('does NOT write the instructions PDF into the kit when the folder is refused', async () => {
+    // Second-order bug in the bead: the browser writes instructions.pdf into the
+    // PICKED kit dir while the endpoint looks for it under the HOST's root, so a
+    // mismatched folder left a stray file behind AND 400d. Gate first, write after.
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      handshake: () => okJson({ sameFolder: false, reason: 'mismatch', extractorRoot: '/repo/form-kits' }),
+    });
+    const kit = pdfOnlyKit();
+    const root = mockRoot([kit]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    // Pick an instructions PDF via the hidden file input, as the s4dp.3 test does
+    // (jsdom's File lacks arrayBuffer(), so supply it).
+    const instrPdf = { name: 'instr.pdf', type: 'application/pdf',
+      arrayBuffer: async () => new ArrayBuffer(5) } as unknown as File;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [instrPdf] } });
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(screen.getByText(/not the one the extractor uses/i)).toBeTruthy());
+    expect(kit.children.has('instructions.pdf')).toBe(false);
+  });
+
+  it('refuses when the picked folder cannot be written to, pointing at the HOST root', async () => {
+    // verifySameFolder cannot even drop its marker -- a read-only source folder
+    // is not a viable extraction target either way.
+    let posted: unknown = null;
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: (body) => { posted = body; return okJson({ ok: true, detail: 'done' }); },
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    root.getFileHandle = async () => { throw new DOMException('read-only', 'NotAllowedError'); };
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    const msg = await screen.findByText(/cannot be written to/i);
+    expect(posted).toBeNull();
+    // The advice must lead somewhere that WORKS (bd polyglot-pdf-6pzs). The s2bf
+    // modal's "make a copy and open that" is right for SAVING but is a dead end
+    // here: extraction always writes under the HOST's root, so ANY copy is by
+    // construction not that root and the next click just fails the mismatch
+    // branch instead.
+    //
+    // ALLOWLIST, not a blacklist. Two earlier versions of this test failed to
+    // hold, each time because they described the WRONG advice instead of the
+    // right advice:
+    //   v1 banned the literal s2bf sentence -> a reworded copy-elsewhere ("open
+    //      a writable COPY of the folder the dev server uses") sailed through.
+    //   v2 banned the word "copy" -> "DUPLICATE it somewhere writable" sailed
+    //      through. Every blacklist is one synonym from being defeated.
+    // So pin what the message may SAY. This branch has exactly two remedies that
+    // reach a working state -- make this folder writable, or open the server's
+    // own folder -- and anything else is a bug regardless of how it is worded.
+    const SANCTIONED = [
+      /make this folder writable/i,
+      /open the folder the dev server uses/i,
+    ];
+    for (const remedy of SANCTIONED) expect(msg.textContent).toMatch(remedy);
+    // Strip the sanctioned remedies and the framing, then require that NO further
+    // instruction survives. A third remedy -- copy, duplicate, clone, "point
+    // FORM_KITS_ROOT at...", anything -- leaves residue here and fails, without
+    // this test having to guess the word.
+    const residue = (msg.textContent ?? '')
+      .replace(/Cannot run extraction for "[^"]*":/i, '')
+      .replace(/the folder you opened cannot be written to, so the editor cannot confirm it is the folder the extractor uses\./i, '')
+      .replace(SANCTIONED[0], '')
+      .replace(SANCTIONED[1], '')
+      .replace(/[\s,.;:-]|\bor\b/gi, '');
+    expect(residue).toBe('');
+  });
+
+  it('treats an unreachable handshake as UNPROVEN, not as agreement', async () => {
+    // Fail-closed: a network error must never read as "same folder", because the
+    // action it gates is a destructive overwrite.
+    let posted: unknown = null;
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: (body) => { posted = body; return okJson({ ok: true, detail: 'done' }); },
+      handshake: () => { throw new Error('network down'); },
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    // Refused (fail-closed) -- but NOT with the wrong-folder diagnosis. The host
+    // never answered, so claiming the folder is wrong would send the user to
+    // change configuration that is actually correct (same defect class as bd
+    // polyglot-pdf-6pzs, one branch over).
+    await waitFor(() => expect(screen.getByText(/could not reach the extraction service/i)).toBeTruthy());
+    expect(screen.queryByText(/not the one the extractor uses/i)).toBeNull();
+    expect(posted).toBeNull();
+  });
+
+  it('sends a FRESH nonce per check and cleans the marker up afterwards', async () => {
+    // A per-check nonce is what makes a leftover marker read as stale rather
+    // than as a false match.
+    const nonces: string[] = [];
+    global.fetch = fetchMock({
+      get: () => okJson({ ok: true, detail: 'available' }),
+      post: () => okJson({ ok: true, detail: 'done', schemaFile: 'schema.json' }),
+      handshake: (body) => {
+        nonces.push((body as { nonce: string }).nonce);
+        return okJson({ sameFolder: true, extractorRoot: '/repo/form-kits' });
+      },
+    });
+    const root = mockRoot([pdfOnlyKit()]);
+    (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+
+    render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+    fireEvent.click(screen.getByText('Open form-kits folder'));
+    await expandCards();
+    await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('Run extraction'));
+    await waitFor(() => expect(screen.getByText(/Extracted "w7"/)).toBeTruthy());
+
+    expect(nonces).toHaveLength(1);
+    expect(nonces[0]).toBeTruthy();
+    // The marker does not outlive the check.
+    expect(root.files.has('.editor-store-check.json')).toBe(false);
   });
 
   it('disables folder controls and refuses drops WHILE extraction is in flight (Codex r3)', async () => {
