@@ -627,9 +627,13 @@ def _dump_kit(kit):
 # baseline update as the inventory shrinks toward zero.
 _UNFILLABLE_BASELINE = {
     "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
-    # w7 dropped 2 -> 1 when the maintainer's hand-verified gold pass (bd
-    # polyglot-pdf-fjxe) modeled the box-h "Other" write-in line (f1_04) as its
-    # own field. Lowered per this test's own contract: a form got fixed.
+    # w7 went 2 -> 1, but read the SETS, not the count: they are disjoint.
+    # The gold pass (bd polyglot-pdf-fjxe) modeled BOTH previously-unclaimed
+    # "Other" lines (f1_04, f1_23), which is -2, and simultaneously quarantined
+    # f1_02 into _ignored_fields, which is +1. So the lowered number is not
+    # unambiguous progress: a widget was also lost. Whether f1_02 -- the
+    # caption-line continuation of the "d or e" name+SSN prompt -- should be
+    # modeled rather than ignored is tracked in bd polyglot-pdf-va4d.
     "w7": {"dump-widget-unclaimed": 1, "readonly-conditional-no-unlock": 0},
     "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
 }

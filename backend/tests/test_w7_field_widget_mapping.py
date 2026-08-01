@@ -69,6 +69,37 @@ _EXPECTED = {
         "id_document_number": "f1_25[0]",
         "id_document_expiration_date": "f1_26[0]",
         "date_of_entry_us": "f1_27[0]",
+        # Beyond the original ivh9 run. Pinned for the same reason the name
+        # table covers every field: `name` and `pdf_field_name` shift
+        # INDEPENDENTLY, so a re-extraction that permuted bindings inside the
+        # agent block would keep every name correct and pass the whole file.
+        # The digit-group and agent runs are adjacent same-shaped widgets --
+        # exactly where a swap stays plausible-looking.
+        "relationship_to_us_person": "f1_01[0]",
+        "us_person_name_ssn_itin": "f1_03[0]",
+        "reason_h_details": "f1_04[0]",
+        "id_document_other_detail": "f1_23[0]",
+        "itin_part1": "f1_28[0]",
+        "itin_part2": "f1_29[0]",
+        "itin_part3": "f1_30[0]",
+        "irsn_part1": "f1_31[0]",
+        "irsn_part2": "f1_32[0]",
+        "irsn_part3": "f1_33[0]",
+        "itin_issued_first_name": "f1_34[0]",
+        "itin_issued_middle_name": "f1_35[0]",
+        "itin_issued_last_name": "f1_36[0]",
+        "college_or_company_name": "f1_37[0]",
+        "college_city_and_state": "f1_38[0]",
+        "length_of_stay": "f1_39[0]",
+        "phone_number": "f1_40[0]",
+        "name_of_delegate": "f1_41[0]",
+        "delegate_name": "f1_42[0]",
+        "agent_fax": "f1_43[0]",
+        "agent_name_and_title": "f1_44[0]",
+        "agent_company_name": "f1_45[0]",
+        "agent_ein": "f1_46[0]",
+        "agent_ptin": "f1_47[0]",
+        "agent_office_code": "f1_48[0]",
     },
 }
 
@@ -235,6 +266,14 @@ def test_every_text_widget_has_a_pinned_name(kit: str) -> None:
         f"caption printed above each widget to _EXPECTED_NAME -- an unpinned "
         f"field is one an off-by-one can shift undetected."
     )
+    # Same floor for the widget-mapping table: `name` and `pdf_field_name`
+    # shift independently, so both tables have to stay complete or the pair
+    # leaves a blind spot.
+    unmapped = sorted(on_page - set(_EXPECTED[kit]))
+    assert unmapped == [], (
+        f"{kit}: these f1_* fields have no pinned widget: {unmapped}. Add the "
+        f"widget leaf each one claims to _EXPECTED."
+    )
 
 
 @pytest.mark.parametrize("kit", ["w7"])
@@ -272,6 +311,44 @@ def test_the_agent_phone_does_not_reuse_the_delegate_guidance(kit: str) -> None:
         "delegate_name (the Acceptance Agent phone widget f1_42) is reusing "
         "name_of_delegate's delegate-signature guidance verbatim -- it must "
         "describe the agent's phone number (bd polyglot-pdf-im2u)"
+    )
+
+
+@pytest.mark.parametrize("kit", ["i-90", "w7", "f1040"])
+def test_a_complete_kit_is_never_translation_less(kit: str) -> None:
+    """A kit marked `complete` must carry its baked translations.
+
+    `status: complete` is the publish gate -- the deploy ships only complete
+    kits to the voice app. The editor's own completion route runs a drift sweep
+    that re-translates every missing spoken name / option label / section label
+    and REFUSES completion until every supported language is covered
+    (editor_kit_routes.py, bd polyglot-pdf-783r), precisely because editing an
+    English string in the editor DROPS its baked translations.
+
+    Hand-editing metadata.json bypasses that sweep entirely. This catches it:
+    without translations the voice path speaks English field names to every
+    non-English user (form_filling_service.py loads spoken_name_translations as
+    spoken_name_overrides and threads them into the live model), which is a
+    silent, user-visible regression on a multilingual product.
+    """
+    meta_path = _REPO / "form-kits" / kit / "metadata.json"
+    schema_path = _REPO / "form-kits" / kit / "schema.json"
+    if not meta_path.exists() or not schema_path.exists():
+        pytest.skip(f"{kit} kit not present")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    if meta.get("status") != "complete":
+        pytest.skip(f"{kit} is not marked complete")
+
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    untranslated = [
+        f["id"] for f in schema.get("fields", [])
+        if f.get("spoken_name") and not f.get("spoken_name_translations")
+    ]
+    assert untranslated == [], (
+        f"{kit} is marked status:complete but {len(untranslated)} fields have "
+        f"no spoken_name_translations: {untranslated[:8]}... Flip it back to "
+        f"draft and complete it THROUGH the editor so the translation drift "
+        f"sweep runs, rather than hand-editing metadata.json."
     )
 
 
