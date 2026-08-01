@@ -2606,6 +2606,14 @@ class _FakeEnrich:
         return "BOOKLET TEXT"
 
     @staticmethod
+    def askable_fields(schema):
+        # The real one drops read_only/signature fields -- the route uses it so
+        # an UNSCOPED run does not report never-candidates as "skipped".
+        return [f for f in schema.get("fields", [])
+                if isinstance(f, dict) and not f.get("read_only")
+                and f.get("type") != "signature"]
+
+    @staticmethod
     def verify_and_rectify(schema, proposals, booklet, form_name,
                            author_model, judge_model=None):
         # The real one judges every proposal and MUTATES per the KEEP rule.

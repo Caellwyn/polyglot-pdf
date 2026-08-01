@@ -1058,8 +1058,17 @@ async def regenerate_editor_kit_guidance(
         # into a stored kit under a "verified" label. verify_and_rectify
         # MUTATES proposals per the KEEP rule and fails SAFE (a judge outage
         # empties the proposals rather than passing them through).
+        #
+        # The judge runs on the SAME provider as the author pass. Its default
+        # (GUIDANCE_JUDGE_MODEL, gemini-2.5-flash) dispatches by model name, so
+        # leaving it unset would send the author pass to the free local CLI and
+        # the judge to metered Vertex -- spending money in the one mode the
+        # maintainer directive says must not, and hard-failing on a machine with
+        # no ADC (which then blanks every proposal via the fail-safe and returns
+        # a success-shaped no-op).
         flags = enrich.verify_and_rectify(
-            target, result.get("proposals") or {}, text, form_name, model)
+            target, result.get("proposals") or {}, text, form_name, model,
+            judge_model=model)
         return result, text, flags
 
     try:
@@ -1144,7 +1153,14 @@ async def regenerate_editor_kit_guidance(
     # than re-implementing its skip rule.
     schema_ids = {f.get("id") for f in schema.get("fields", [])
                   if isinstance(f, dict)}
-    scope = set(requested) & schema_ids if requested else schema_ids
+    # An UNSCOPED run only ever offered the model the ASKABLE fields, so
+    # read_only/signature fields were never candidates and must not be reported
+    # as "skipped" -- that reads as a failure to rewrite something we tried to.
+    askable_ids = {
+        f.get("id") for f in enrich.askable_fields(schema)
+        if isinstance(f, dict)
+    }
+    scope = (set(requested) & schema_ids) if requested else askable_ids
     regenerated = sorted(
         fid for fid in scope
         if _help_snapshot(schema, fid) != help_before.get(fid)

@@ -280,7 +280,22 @@ export const App: React.FC = () => {
   // work is the chosen behavior, locked by a test in App.hosted.test.tsx.)
   const handleAuthExpired = React.useCallback(() => {
     setRole(null);
-  }, []);
+    // setRole(null) only DOES anything hosted, where it drops back to the
+    // access-code gate (`hosted && !role`). LOCAL mode has no gate, so every
+    // caller that catches AuthError and returns would leave the failure
+    // completely invisible -- the button stops spinning and nothing happens.
+    // That is reachable for real: relaunching the editor mints a FRESH per-run
+    // token while an already-open tab still holds the previous one, so every
+    // request 401s (bd polyglot-pdf-cpiw). Surface it once, centrally, so all
+    // six catch sites are covered rather than each remembering to.
+    if (!hosted) {
+      setSaveError(
+        'The editor was not accepted by its backend -- its access token is '
+        + 'probably from an earlier run. Reload this page to pick up the '
+        + 'current one.',
+      );
+    }
+  }, [hosted]);
 
   // Open a kit from the REMOTE catalogue (hosted mode, bd 92qe.2): pull its
   // schema + PDF through the token-gated routes and drive the same schema +
@@ -811,28 +826,35 @@ export const App: React.FC = () => {
   // Throws on failure rather than swallowing: the button renders the message
   // inline, next to the gate it belongs to.
   const handleRegenerateGuidance = React.useCallback(async (fieldId: string) => {
-    if (!backendAvailable || !selectedKitId) return;
+    if (!backendAvailable || !selectedKitId) return false;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Rewriting works on the saved version. Save your changes first, or '
         + 'click OK to discard unsaved edits and rewrite from the last-saved '
         + 'schema.'
       );
-      if (!ok) return;
+      if (!ok) return false;
     }
     const seq = ++openSeqRef.current;
     try {
-      await regenerateGuidance(selectedKitId, [fieldId]);
-      if (seq !== openSeqRef.current) return; // superseded while rewriting
+      const report = await regenerateGuidance(selectedKitId, [fieldId]);
+      if (seq !== openSeqRef.current) return false; // superseded while rewriting
       const fresh = await reloadStoredSchema();
-      if (seq !== openSeqRef.current) return; // superseded while reloading
+      if (seq !== openSeqRef.current) return false; // superseded while reloading
       if (fresh) loadSchemaState(fresh); // fresh baseline -> history cleared
       setSaveError(null);
+      // The route reports what it actually WROTE, not what it proposed: a
+      // hand-edited field is deliberately never clobbered, and a judge outage
+      // writes nothing. Hand that back so the button can say so.
+      return (report.regenerated || []).includes(fieldId);
     } catch (err) {
-      if (seq !== openSeqRef.current) return;
+      if (seq !== openSeqRef.current) return false;
       if (err instanceof AuthError) {
         handleAuthExpired();
-        return;
+        // LOCAL has no access-code gate to fall back to (App renders it on
+        // `hosted && !role`), so swallowing this would leave the button
+        // looking successful. Rethrow and let it render the message.
+        if (hosted) return false;
       }
       throw err; // surfaced inline by the button
     }

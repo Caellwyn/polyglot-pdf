@@ -40,14 +40,29 @@ for arg in "$@"; do
     esac
 done
 
-# Kill the backend and everything it spawned. On Windows (Git Bash) taskkill
-# /T is what reaches uvicorn's reloader child; elsewhere the process GROUP is.
+# Kill the backend and everything it spawned.
+#
+# `uvicorn --reload` forks a reloader child, so killing the parent alone
+# orphans it and leaves the port bound -- the next launch then fails to bind,
+# the readiness probe finds the OLD backend answering /health with the OLD
+# token, and every editor call 401s. scripts/dev-local.ps1 documents the same
+# hazard.
+#
+# On Windows the tree-kill is taskkill /T, but it needs the WINDOWS pid, and
+# `$!` is the MSYS one -- they differ (measured: MSYS 694598 vs WINPID 24988),
+# so passing $! directly always fails with "process not found". `ps -W` maps
+# one to the other. The plain `kill` afterwards is the portable fallback and
+# the only thing that fires on Linux/macOS.
 stop_backend() {
     [ -n "$BACKEND_PID" ] || return 0
-    if command -v taskkill >/dev/null 2>&1; then
-        taskkill //F //T //PID "$BACKEND_PID" >/dev/null 2>&1 || true
+    if command -v taskkill >/dev/null 2>&1 && command -v ps >/dev/null 2>&1; then
+        # ps -W lists WINPID; find the row whose MSYS pid is ours.
+        local winpid
+        winpid="$(ps -W 2>/dev/null \
+            | awk -v p="$BACKEND_PID" '$1==p {print $4; exit}')"
+        [ -n "$winpid" ] && taskkill //F //T //PID "$winpid" >/dev/null 2>&1 || true
     fi
-    kill -- "-$BACKEND_PID" 2>/dev/null || kill "$BACKEND_PID" 2>/dev/null || true
+    kill "$BACKEND_PID" 2>/dev/null || true
     BACKEND_PID=""
 }
 

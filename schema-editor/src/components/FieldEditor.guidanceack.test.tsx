@@ -157,14 +157,14 @@ describe('FieldEditor guidance regeneration (bd polyglot-pdf-cpiw)', () => {
     render(
       <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
         onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]}
-        onRegenerateGuidance={vi.fn().mockResolvedValue(undefined)} />,
+        onRegenerateGuidance={vi.fn().mockResolvedValue(true)} />,
     );
     expect(screen.getByTestId('regenerate-guidance')).toBeInTheDocument();
   });
 
   it('calls back with THIS field id and shows progress while it runs', async () => {
-    let release: () => void = () => {};
-    const pending = new Promise<void>((res) => { release = res; });
+    let release: (v: boolean) => void = () => {};
+    const pending = new Promise<boolean>((res) => { release = res; });
     const onRegenerate = vi.fn().mockReturnValue(pending);
     render(
       <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
@@ -178,7 +178,7 @@ describe('FieldEditor guidance regeneration (bd polyglot-pdf-cpiw)', () => {
     // double-submitted into two paid rewrites.
     expect((btn as HTMLButtonElement).disabled).toBe(true);
     expect(btn.textContent).toMatch(/Rewriting/);
-    release();
+    release(true);
     await screen.findByText(/Or rewrite it from the instructions booklet/);
     expect((screen.getByTestId('regenerate-guidance') as HTMLButtonElement).disabled)
       .toBe(false);
@@ -216,5 +216,20 @@ describe('FieldEditor guidance regeneration (bd polyglot-pdf-cpiw)', () => {
         onRegenerateGuidance={vi.fn()} />,
     );
     expect(screen.queryByTestId('regenerate-guidance')).toBeNull();
+  });
+
+  it('says so when the rewrite changed NOTHING (not just on an error)', async () => {
+    // A no-op resolves normally: the judge was unavailable, the guidance was
+    // hand-edited (never clobbered), or the booklet had nothing for this
+    // field. Without this the button just returns to idle and the amber banner
+    // is still there -- the silent success-shaped no-op this bead exists to
+    // remove (bd polyglot-pdf-cpiw).
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]}
+        onRegenerateGuidance={vi.fn().mockResolvedValue(false)} />,
+    );
+    fireEvent.click(screen.getByTestId('regenerate-guidance'));
+    expect(await screen.findByText(/Nothing was rewritten/)).toBeInTheDocument();
   });
 });
