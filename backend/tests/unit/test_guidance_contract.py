@@ -338,18 +338,29 @@ def test_guidance_metrics_never_throws_on_malformed_values():
 
 # --- exit criterion: fires on the real w7 kit --------------------------------
 
-def test_w7_kit_coverage_gap_is_flagged():
-    """The shipped w7 kit has 0/59 authored guidance (sprint-16 recon) -- the
-    coverage rule must surface that worklist. If a future backfill (wsao.7)
-    authors guidance, this asserts the remaining gap count matches reality
-    rather than a frozen number."""
+def test_w7_kit_coverage_matches_reality():
+    """The coverage rule must track the real w7 kit, not a frozen number.
+
+    Sprint-16 recon found 0/59 fields with authored guidance and this asserted
+    the gap was flagged. The maintainer's hand-verified gold pass (bd
+    polyglot-pdf-fjxe) authored guidance for every field, so the correct
+    assertion now is the SAME invariant read the other way: the aggregated
+    worklist finding fires if and only if a gap exists, and when it fires it
+    reports the true count."""
     kit = REPO / "form-kits" / "w7" / "schema.json"
     schema = json.loads(kit.read_text(encoding="utf-8"))
     findings = lint_schema(schema)
     missing = [f for f in findings if f.rule == "help-instructions-missing"]
-    assert len(missing) == 1  # ONE aggregated worklist finding
     uncovered = [f for f in schema["fields"]
                  if not f.get("read_only") and f.get("type") != "signature"
                  and not ((f.get("help") or {}).get("instructions") or "").strip()]
-    assert len(uncovered) > 0  # w7 has a real coverage gap today
-    assert f"{len(uncovered)} of" in missing[0].message
+
+    # w7's state today, asserted DIRECTLY rather than via a branch: the gold
+    # pass authored guidance for every field, so a regression that drops
+    # guidance fails here loudly instead of quietly taking the other branch.
+    assert uncovered == [], (
+        "w7 lost authored guidance for "
+        f"{[f['id'] for f in uncovered]} -- the kit was fully covered by the "
+        "hand-verified gold pass (bd polyglot-pdf-fjxe)")
+    # Fully covered means the rule must stay SILENT, not emit an empty worklist.
+    assert missing == []

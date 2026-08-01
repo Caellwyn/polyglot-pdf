@@ -627,7 +627,14 @@ def _dump_kit(kit):
 # baseline update as the inventory shrinks toward zero.
 _UNFILLABLE_BASELINE = {
     "i-90": {"dump-widget-unclaimed": 0, "readonly-conditional-no-unlock": 0},
-    "w7": {"dump-widget-unclaimed": 2, "readonly-conditional-no-unlock": 0},
+    # w7 went 2 -> 1, but read the SETS, not the count: they are disjoint.
+    # The gold pass (bd polyglot-pdf-fjxe) modeled BOTH previously-unclaimed
+    # "Other" lines (f1_04, f1_23), which is -2, and simultaneously quarantined
+    # f1_02 into _ignored_fields, which is +1. So the lowered number is not
+    # unambiguous progress: a widget was also lost. Whether f1_02 -- the
+    # caption-line continuation of the "d or e" name+SSN prompt -- should be
+    # modeled rather than ignored is tracked in bd polyglot-pdf-va4d.
+    "w7": {"dump-widget-unclaimed": 1, "readonly-conditional-no-unlock": 0},
     "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
 }
 
@@ -1184,19 +1191,97 @@ def test_pure_option_reorder_does_NOT_flag_but_real_changes_do():
         assert len(_stale(lint_schema(_identity_schema(changed, baked)))) == 1
 
 
-def test_a_kit_baked_before_identity_tracking_never_reads_stale():
-    """REAL-KIT SAFETY (bd anim outer review round 2): the shipped w7 kit's 44
-    provenance records predate identity tracking and carry NO identity_sha1.
-    The rule must stay silent for them -- otherwise changing the hash formula
-    (as the reorder fix did) would light up every previously-baked field at
-    once, the mass false alarm that destroys the gate's credibility."""
+def test_a_field_baked_before_identity_tracking_never_reads_stale():
+    """REAL-KIT SAFETY (bd anim outer review round 2): a provenance record that
+    predates identity tracking carries NO identity_sha1, and the rule must stay
+    silent for it -- otherwise changing the hash formula (as the reorder fix
+    did) would light up every previously-baked field at once, the mass false
+    alarm that destroys the gate's credibility.
+
+    Asserted against the real w7 kit but keyed on the RECORD, not the kit: the
+    hand-verified gold pass (bd polyglot-pdf-fjxe) re-baked w7 WITH identity
+    hashes, so a blanket 'this kit never reads stale' no longer describes
+    anything (its post-edit fields legitimately do read stale, which is the
+    gate working). The invariant that must never break is the hash-less one.
+    """
     import json, pathlib
     kit = pathlib.Path(__file__).resolve().parents[2] / "form-kits" / "w7" / "schema.json"
     if not kit.exists():          # kit not present in this checkout
         return
     schema = json.loads(kit.read_text(encoding="utf-8"))
+    prov = (((schema.get("_bakeoff") or {}).get("authoring") or {})
+            .get("instructions_enrich") or {}).get("provenance") or {}
+
+    # Strip every identity_sha1: the whole kit now looks pre-anim, which is
+    # exactly the shape the mass-false-alarm guard has to survive.
+    for rec in prov.values():
+        if isinstance(rec, dict):
+            rec.pop("identity_sha1", None)
+    assert prov, "w7 provenance missing -- test no longer exercises the rule"
+
     hits = [f for f in lint_schema(schema)
             if f.rule == "guidance-identity-stale"]
     assert hits == [], (
-        "a kit baked before identity tracking must never read stale; "
+        "a field baked before identity tracking must never read stale; "
         f"got {len(hits)} findings")
+
+
+# Fields whose voice-facing identity (name / spoken_name / option bindings)
+# was edited AFTER their guidance was baked, so the acknowledgment gate is
+# correctly raised on them. Pinned as a real-kit signal, NOT waived: the
+# mutation test above proves the rule stays silent on hash-less records, but
+# only a count over the SHIPPED kit can catch a mass false alarm (a hash-formula
+# change lighting up every field) or a silent regression (the rule going dark).
+#
+# WHY these 14 are stale -- stated as what is PROVABLE from the data, because
+# this comment is the only thing telling a maintainer the fix is a re-bake
+# rather than a label re-check:
+#
+# Some provenance shas describe the field ONE POSITION OVER, i.e. the ivh9
+# off-by-one is fossilized in the bake metadata itself. Reproduce with:
+#   cur = {identity_sha1(f): f["id"] for f in schema["fields"]}
+#   [(k, cur.get(r["identity_sha1"])) for k, r in prov.items()]
+# which yields prov[reason_h_details] -> treaty_country and
+# prov[treaty_country] -> treaty_article_number. Those records were baked
+# against the pre-correction assignment, so they cannot match now.
+#
+# The rest simply predate later edits to name/spoken_name. identity_sha1 hashes
+# ONLY name + spoken_name + option triples (guidance_contract.identity_payload),
+# so nothing about the field set or the plumbing enters the hash.
+#
+# Note what this is NOT: the set is byte-identical before and after the
+# bd polyglot-pdf-fjxe 'name' correction (verified by hashing both revisions),
+# so the corrected names neither caused nor cleared any of it.
+#
+# Clearing them means RE-BAKING the guidance against the current fields, which
+# is maintainer work (bd polyglot-pdf-im2u criterion 2, bd polyglot-pdf-aliu)
+# -- not something a test should paper over.
+_W7_EXPECTED_STALE = {
+    "us_person_name_ssn_itin", "reason_h_details", "treaty_country",
+    "id_document_issued_by", "itin_issued_first_name",
+    "itin_issued_middle_name", "itin_issued_last_name", "phone_number",
+    "name_of_delegate", "delegate_name", "agent_fax", "agent_ein",
+    "agent_ptin", "agent_office_code",
+}
+
+
+def test_w7_identity_stale_set_is_pinned():
+    """The shipped kit's stale set must match reality, not drift silently.
+
+    A count that JUMPS means the hash formula changed and every baked field lit
+    up at once (the mass false alarm bd anim guards against). A count that
+    DROPS to zero unexpectedly means the rule went dark. Either way a human
+    should look, so this pins the exact set."""
+    import json, pathlib
+    kit = pathlib.Path(__file__).resolve().parents[2] / "form-kits" / "w7" / "schema.json"
+    if not kit.exists():          # kit not present in this checkout
+        return
+    schema = json.loads(kit.read_text(encoding="utf-8"))
+    got = {field_id_of(f.path) for f in lint_schema(schema)
+           if f.rule == "guidance-identity-stale"}
+    assert got == _W7_EXPECTED_STALE, (
+        f"w7 guidance-identity-stale set changed.\n"
+        f"  newly stale: {sorted(got - _W7_EXPECTED_STALE)}\n"
+        f"  no longer stale: {sorted(_W7_EXPECTED_STALE - got)}\n"
+        f"If guidance was re-baked, shrink the pin; if the hash formula moved, "
+        f"check for a mass false alarm before widening it.")
