@@ -103,9 +103,14 @@ what makes the refusal load-bearing rather than decorative.
 25 new tests (12 endpoint, 8 client asker, 5 component -- one of the 5 pins the
 fresh-nonce/cleanup contract rather than the refusal itself). Both gates were
 **mutation-verified rather than assumed**: forcing the endpoint to report
-`sameFolder=true` fails 4 endpoint tests, and removing the UI refusal fails 5
-component tests -- the 4 refusal tests plus the nonce test, which stops observing
-a handshake once the gate no longer runs one.
+`sameFolder=true` fails 4 endpoint tests, and removing the UI gate fails 5
+component tests.
+
+The two UI mutations differ, and the distinction is the point: removing the WHOLE
+gate (the `verifySameFolder` call included) fails 5 -- the 4 refusal tests plus
+the nonce test, which stops observing a handshake once none is run. Removing only
+the REFUSAL (`if (!folder.ok)`) fails 4, because the handshake still happens and
+the nonce test is still satisfied. Both were run; quote whichever you mean.
 
 ## A refusal message that was a dead end (bd polyglot-pdf-6pzs, folded in)
 
@@ -199,6 +204,21 @@ Four rounds, four instances of the same shape. Two lessons, both general:
    The generalization: when a test guards *prose*, blacklists rot and allowlists
    hold. Worth remembering the next time a message needs pinning, because the
    blacklist is always the one that comes to mind first.
+
+## A harness trap that cost real time
+
+Twice during this work a suite ran green against code that no longer contained
+the change under test, and once a test failed on a string (`moveitsomewhere
+writable`) that exists in no file and no commit. Both are the same cause, which
+an Opus reviewer diagnosed independently after hitting it themselves:
+`schema-editor/node_modules` is a junction into the MAIN checkout, so the vitest
+transform cache under `node_modules/.vite/vitest` is SHARED across every worktree
+and every concurrent run. A reviewer mutating a file for their own mutation test
+can therefore serve a stale (or foreign) module to a run happening in parallel.
+
+Practical rule: **verify an edit is on disk before trusting a green suite**, and
+treat a failure quoting text you cannot find in the tree as cache contamination
+rather than as a real defect. Re-run in the foreground, alone, before chasing it.
 
 ## One thing worth flagging for the next person
 
