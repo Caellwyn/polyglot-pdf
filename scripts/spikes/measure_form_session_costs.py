@@ -3031,7 +3031,10 @@ def main() -> int:
                          "sliding-window arm (the jnjj.25-folded eviction test): "
                          "set --trigger/--window just above the arm's unevictable "
                          "SI+tools floor. The WINNING DTI-on-i90 calibration was "
-                         "--trigger 2800 --window 2200 (-21% unhappy); a LOOSER "
+                         # argparse's HelpFormatter runs `help % params`, so a
+                         # literal percent must be doubled or --help raises
+                         # TypeError for the WHOLE parser (bd polyglot-pdf-v208).
+                         "--trigger 2800 --window 2200 (-21%% unhappy); a LOOSER "
                          "window (2500/3500) barely evicted and did NOT help -- use "
                          "the tight values. Lets the accumulated per-field guidance "
                          "be evicted turn-over-turn instead of replayed.")

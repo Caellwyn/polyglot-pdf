@@ -137,8 +137,9 @@ describe('Sol rendering', () => {
   })
 
   it('reads OUTPUT energy while speaking and MIC energy while listening', async () => {
-    // The mic is near-silent while the assistant talks, so the speaking halo must
-    // not be driven by `energy` -- if it were, the state would look dead.
+    // The mic is near-silent while the assistant talks, so speaking's ray-length
+    // breathing must not be driven by `energy` -- if it were, the state would
+    // look dead. (Halo is listening's shape; swapped 2026-07-29.)
     const getOutputEnergy = vi.fn(() => 80)
 
     const { rerender } = render(
