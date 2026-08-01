@@ -10,6 +10,7 @@ import {
   clearAccessCode,
   extractRemoteKit,
   getAccessCode,
+  hasBackend,
   isHostedMode,
   listRemoteKits,
   loadRemotePdfBlobUrl,
@@ -54,6 +55,35 @@ describe('mode + access-code plumbing', () => {
     expect(apiBaseUrl()).toBe('');
     vi.stubEnv('VITE_API_BASE_URL', 'https://backend.example');
     expect(apiBaseUrl()).toBe('https://backend.example');
+  });
+
+  // bd polyglot-pdf-cpiw: local dev runs the backend too, so "where do kits
+  // live" and "can we call a server" are separate questions.
+  it('apiBaseUrl falls back to VITE_BACKEND_URL for local dev', () => {
+    expect(apiBaseUrl()).toBe('');
+    vi.stubEnv('VITE_BACKEND_URL', 'http://127.0.0.1:8000');
+    expect(apiBaseUrl()).toBe('http://127.0.0.1:8000');
+  });
+
+  it('the hosted URL always wins, so a hosted build never hits localhost', () => {
+    vi.stubEnv('VITE_BACKEND_URL', 'http://127.0.0.1:8000');
+    vi.stubEnv('VITE_API_BASE_URL', 'https://backend.example');
+    expect(apiBaseUrl()).toBe('https://backend.example');
+  });
+
+  it('hasBackend is true when hosted, regardless of VITE_BACKEND_URL', () => {
+    expect(hasBackend()).toBe(false);
+    vi.stubEnv('VITE_DELIVERY_MODE', 'hosted');
+    expect(hasBackend()).toBe(true);
+  });
+
+  it('hasBackend is true in LOCAL mode once a backend URL is set', () => {
+    expect(isHostedMode()).toBe(false);
+    expect(hasBackend()).toBe(false);
+    vi.stubEnv('VITE_BACKEND_URL', 'http://127.0.0.1:8000');
+    // Still local (kits stay on disk) but the server-side rules are reachable.
+    expect(isHostedMode()).toBe(false);
+    expect(hasBackend()).toBe(true);
   });
 
   it('stored access code wins over a baked token; clear falls back', () => {

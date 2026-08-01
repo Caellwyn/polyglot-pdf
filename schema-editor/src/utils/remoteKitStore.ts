@@ -60,11 +60,50 @@ export function isHostedMode(): boolean {
   return import.meta.env.VITE_DELIVERY_MODE === 'hosted';
 }
 
+/**
+ * True when a backend is reachable for SERVER-SIDE work (bd polyglot-pdf-cpiw).
+ *
+ * WHY THIS IS SEPARATE FROM isHostedMode(): the two answer different questions,
+ * and conflating them is what made local mode a second-class surface.
+ *   isHostedMode()  -- WHERE DO KITS LIVE? hosted = the shared store behind
+ *                      /api/editor; local = a directory picked with the File
+ *                      System Access API.
+ *   hasBackend()    -- CAN WE CALL THE SERVER? for the authoritative Python
+ *                      lint, the translation sweep, guidance regeneration.
+ *
+ * Local mode kept kits on disk AND assumed no server, so it fell back to a
+ * lighter client-side lint (rule ids dropped -> the guidance staleness gate
+ * silently never fired) and hid the regenerate affordances. But the local dev
+ * stack DOES run the backend, so that assumption was simply wrong.
+ *
+ * Hosted always has one. Local has one whenever VITE_BACKEND_URL is set --
+ * scripts/run-schema-editor.sh starts the backend and sets it, so the default
+ * local-dev experience now matches hosted feature-for-feature. The only
+ * sanctioned difference is the LLM provider (local: the free `claude` CLI;
+ * hosted: metered Gemini), which is a BACKEND-side choice the editor never sees.
+ */
+export function hasBackend(): boolean {
+  return isHostedMode() || Boolean(import.meta.env.VITE_BACKEND_URL);
+}
+
 /** Backend base URL ('' = same origin). Hosted builds set VITE_API_BASE_URL to
  * the Cloud Run URL (the editor calls it directly -- no Hosting /api rewrite,
- * whose 60s cap would kill minutes-long extraction). */
+ * whose 60s cap would kill minutes-long extraction).
+ *
+ * Local mode uses VITE_BACKEND_URL instead (set by run-schema-editor.sh, which
+ * launches the backend alongside the editor). Kept as a SEPARATE variable from
+ * VITE_API_BASE_URL so a local session can never accidentally inherit the
+ * committed Cloud Run URL from .env.hosted and start writing to the shared
+ * store -- bd polyglot-pdf-cpiw. */
 export function apiBaseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+  // VITE_API_BASE_URL wins wherever it is set (it is THE hosted contract and
+  // deploy-editor.sh injects it at build time). VITE_BACKEND_URL is the
+  // local-dev addition, consulted only when the hosted one is absent -- so a
+  // hosted build can never accidentally fall through to a localhost backend,
+  // and a local session can never inherit the committed Cloud Run URL.
+  const hosted = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+  if (hosted) return hosted;
+  return (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? '';
 }
 
 /** The active access code: the human-entered one (localStorage, with an

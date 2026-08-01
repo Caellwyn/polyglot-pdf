@@ -58,6 +58,10 @@ from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.adapters.text_ai_gemini import TextAIGemini
+from backend.services.editor_text_ai import (
+    EditorTextAIUnavailable,
+    resolve_editor_text_ai,
+)
 from backend.services.option_translation import (
     TRANSLATE_RETRY_DELAYS,
     bake_label_translations,
@@ -660,13 +664,9 @@ async def translate_editor_kit_options(
     """
     kit_id = _safe_kit_id(kit_id)
     settings = get_settings()
-    if not (settings.VERTEXAI or settings.GEMINI_API_KEY
-            or os.getenv("GEMINI_API_KEY")):
-        raise HTTPException(
-            status_code=503,
-            detail="Option translation is not configured (set VERTEXAI=true "
-                   "for service-account auth, or provide a GEMINI_API_KEY)",
-        )
+    # NOTE: provider availability is NOT pre-checked here. resolve_editor_text_ai
+    # below owns it for BOTH providers -- a Gemini-only precheck would 503 a
+    # perfectly working claude-cli local session (bd polyglot-pdf-cpiw).
     store = get_form_kit_store()
     meta, _files = await _load_meta_or_404(store, kit_id)
     if _status_of(meta) == "complete":
@@ -685,18 +685,12 @@ async def translate_editor_kit_options(
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
 
-    # Same constructor discipline as dependencies.get_text_ai_pro: an EMPTY
-    # fallback chain (a deliberately chosen tier fails loud, never silently
-    # degrades to lite) and a bounded thinking budget (2.5-pro cannot disable
-    # thinking).
-    model = settings.OPTION_TRANSLATION_MODEL
-    text_ai = TextAIGemini(
-        api_key=settings.GEMINI_API_KEY,
-        model=model,
-        vertexai=settings.VERTEXAI,
-        fallback_models=(),
-        thinking_budget=512 if "pro" in model else None,
-    )
+    # Provider choice (Gemini hosted / claude-cli local) is resolved in ONE
+    # place so local and hosted cannot drift -- bd polyglot-pdf-cpiw.
+    try:
+        text_ai, model = resolve_editor_text_ai(settings)
+    except EditorTextAIUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
                  if n != "english"}
     report = await bake_label_translations(
@@ -914,28 +908,20 @@ async def _sweep_drifted_translations(
         the "N of M" progress message; a re-press retries only the gaps).
     """
     settings = get_settings()
-    if not (settings.VERTEXAI or settings.GEMINI_API_KEY
-            or os.getenv("GEMINI_API_KEY")):
+    # Provider choice (Gemini hosted / claude-cli local) is resolved in ONE
+    # place so local and hosted cannot drift -- bd polyglot-pdf-cpiw.
+    try:
+        text_ai, model = resolve_editor_text_ai(settings)
+    except EditorTextAIUnavailable as exc:
         # A config/deployment issue, not something the editor can fix -- point
         # them at the maintainer and block (maintainer 2026-07-26).
         raise HTTPException(
             status_code=503,
-            detail="Translation is not configured on this server, so this form "
-                   "cannot be checked for translation drift before completion. "
-                   "Please contact the maintainer at josh@caellwynai.com.",
-        )
+            detail=f"{exc} This form cannot be checked for translation drift "
+                   "before completion. Please contact the maintainer at "
+                   "josh@caellwynai.com.",
+        ) from exc
 
-    # Same constructor discipline as /translate-options: an EMPTY fallback chain
-    # (a chosen tier fails loud, never silently degrades to lite) and a bounded
-    # thinking budget (2.5-pro cannot disable thinking).
-    model = settings.OPTION_TRANSLATION_MODEL
-    text_ai = TextAIGemini(
-        api_key=settings.GEMINI_API_KEY,
-        model=model,
-        vertexai=settings.VERTEXAI,
-        fallback_models=(),
-        thinking_budget=512 if "pro" in model else None,
-    )
     languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
                  if n != "english"}
     report = await bake_label_translations(

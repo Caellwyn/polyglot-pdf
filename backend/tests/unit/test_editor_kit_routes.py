@@ -2299,9 +2299,15 @@ class _OfflineLiteAI:
 
 @pytest.fixture()
 def translate_ai(monkeypatch):
+    # Patch the adapter where the RESOLVER builds it (bd polyglot-pdf-cpiw):
+    # provider selection moved out of the route and into
+    # backend.services.editor_text_ai, so patching ekr.TextAIGemini no longer
+    # intercepts anything -- the route would silently make real Gemini calls
+    # and every assertion on recorded calls would read zero.
+    import backend.services.editor_text_ai as _eta
     import backend.services.option_translation as _ot
     _FakeTranslateAI.instances = []
-    monkeypatch.setattr(ekr, "TextAIGemini", _FakeTranslateAI)
+    monkeypatch.setattr(_eta, "TextAIGemini", _FakeTranslateAI)
     monkeypatch.setattr(
         _ot, "_build_verify_lite_ai", lambda: _OfflineLiteAI())
     return _FakeTranslateAI

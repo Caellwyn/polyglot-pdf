@@ -4,7 +4,7 @@ import { getCompletionStats, validateSchema } from '../utils/validation';
 import { needsAckFieldIds } from '../utils/guidanceStaleness';
 import {
   AuthError,
-  isHostedMode,
+  hasBackend,
   lintSchema,
   type LintFinding,
   type LintReport,
@@ -76,13 +76,16 @@ const RULE_LABELS: Record<string, string> = {
   'instructions-enrich-unavailable': 'Guidance judge unavailable',
 };
 
-// Local (non-hosted) delivery mode has no backend and no access code to reach
-// the token-gated /api/editor/lint route, so it falls back to the network-free
-// client-side validateSchema -- mapped into the same LintFinding rows the panel
-// renders, so field-focus and display are identical to the hosted path (bd
-// polyglot-pdf-h903; without this, local mode silently lost all lint feedback).
-// The client ruleset is intentionally lighter than the Python one; hosted mode
-// is where the authoritative rules run.
+// LAST-RESORT fallback for a session with NO backend reachable at all: the
+// network-free client-side validateSchema, mapped into the same LintFinding
+// rows the panel renders so field-focus and display still work (bd
+// polyglot-pdf-h903).
+//
+// This is NOT the normal local path any more (bd polyglot-pdf-cpiw): local dev
+// runs the backend and gets the authoritative Python rules, same as hosted.
+// This ruleset is deliberately lighter AND emits rule:'' for every finding, so
+// any rule the UI keys on by id (the guidance-staleness ack gate) is invisible
+// here. Treat reaching this path as degraded, not equivalent.
 function localLintReport(schema: FormSchema): LintReport {
   const findings: LintFinding[] = validateSchema(schema).map((e) => ({
     // validateSchema does not carry the backend rule ids; render the message
@@ -108,7 +111,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   onRepairAll,
   onReport,
 }) => {
-  const hosted = React.useMemo(isHostedMode, []);
+  const backendAvailable = React.useMemo(hasBackend, []);
 
   const [report, setReport] = React.useState<LintReport | null>(null);
   // The completion figure honours the guidance-ack gate (bd anim): a
@@ -125,16 +128,21 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
   const [linting, setLinting] = React.useState(false);
   const [repairing, setRepairing] = React.useState(false);
 
-  // Re-lint whenever the schema changes. Hosted mode calls the backend's
-  // authoritative Python linter (P4.3); local mode -- which has no backend and
-  // no access code to reach the token-gated route -- lints synchronously
-  // client-side (bd polyglot-pdf-h903). A monotonic token drops a stale
-  // in-flight backend result: the schema edits faster than the round trip, so
-  // an earlier lint must never overwrite a newer one (same staleness guard the
+  // Re-lint whenever the schema changes, through the backend's AUTHORITATIVE
+  // Python linter (P4.3) whenever one is reachable -- which is now local dev
+  // too, not just hosted (bd polyglot-pdf-cpiw). A monotonic token drops a
+  // stale in-flight result: the schema edits faster than the round trip, so an
+  // earlier lint must never overwrite a newer one (same staleness guard the
   // remote-open path uses).
+  //
+  // The client-side ruleset below is a genuine FALLBACK now (no backend
+  // configured at all), not the normal local path. It is lighter than the
+  // Python one and drops rule ids, which is why the guidance-staleness gate
+  // silently never fired in local mode: GUIDANCE_STALE_RULE never matched, so
+  // the acknowledgment checkbox never rendered and edited fields read green.
   const seqRef = React.useRef(0);
   React.useEffect(() => {
-    if (!hosted) {
+    if (!backendAvailable) {
       // Synchronous, network-free: no staleness window, no failure path.
       setReport(localLintReport(schema));
       setLintError(null);
@@ -164,7 +172,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       .finally(() => {
         if (seq === seqRef.current) setLinting(false);
       });
-  }, [schema, hosted, onAuthError]);
+  }, [schema, backendAvailable, onAuthError]);
 
   // Mirror each fresh report up to the host (App feeds it to the field list).
   // An effect, not a call inside the fetch handlers, so the local-mode
@@ -290,6 +298,24 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
       {lintError && (
         <div className="mt-1 text-xs text-gray-500" role="status">
           Could not check for issues ({lintError}).
+        </div>
+      )}
+
+      {/* No backend at all -> the reduced client-side ruleset is running. SAY
+          SO (bd polyglot-pdf-cpiw exit criterion 2): a short list of findings
+          from a lighter ruleset is indistinguishable from a clean form, which
+          is exactly how the guidance-staleness gate went unnoticed in local
+          mode. Start the backend (scripts/run-schema-editor.sh does) for the
+          full rules. */}
+      {!backendAvailable && (
+        <div
+          className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1"
+          role="status"
+        >
+          Limited checking: no backend connected, so only basic checks ran.
+          Some issues (including out-of-date guidance) cannot be detected.
+          Start the editor with <code>scripts/run-schema-editor.sh</code> for
+          the full checks.
         </div>
       )}
 

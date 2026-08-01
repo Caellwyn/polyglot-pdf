@@ -22,6 +22,7 @@ import {
 import { loadKitSchema, versionInfoFromSchema, type CatalogueEntry, type KitVersionInfo } from './utils/formKitDirectory';
 import {
   AuthError,
+  hasBackend,
   isHostedMode,
   loadRemotePdfBlobUrl,
   loadRemoteSchema,
@@ -79,6 +80,15 @@ export const App: React.FC = () => {
   // folder. `role` is null until the access code validates (the gate screen);
   // author-only affordances (onboard/extract, bd 92qe.3) key off it later.
   const hosted = React.useMemo(isHostedMode, []);
+  // Can we call the server for authoritative lint / repair / regeneration?
+  // Hosted always can; local dev can whenever the backend is running
+  // (scripts/run-schema-editor.sh starts it). Kept SEPARATE from `hosted`,
+  // which answers the different question of WHERE KITS LIVE -- conflating the
+  // two is what silently made local a reduced-feature surface
+  // (bd polyglot-pdf-cpiw). Safe for local kit ids because the backend's
+  // default store is this same form-kits/ directory (LocalFormKitStore), so a
+  // kit id from the picked folder resolves server-side unchanged.
+  const backendAvailable = React.useMemo(hasBackend, []);
   const [role, setRole] = React.useState<EditorRole | null>(null);
   // Remote saves have real latency (a GCS write) -- surface a Saving... state.
   const [saving, setSaving] = React.useState(false);
@@ -664,7 +674,7 @@ export const App: React.FC = () => {
   // Hosted + author + an open kit only; the ValidationPanel gates the button so
   // this is not reached otherwise.
   const handleRepairAll = React.useCallback(async () => {
-    if (!hosted || !selectedKitId) return;
+    if (!backendAvailable || !selectedKitId) return;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Repair works on the saved version. Save your changes first, or click ' +
@@ -725,7 +735,7 @@ export const App: React.FC = () => {
   // unsaved-edits confirm, its own destructive confirm, the openSeqRef
   // stale-open guard, reload as a fresh baseline (history cleared).
   const handleRegenerateDivisions = React.useCallback(async () => {
-    if (!hosted || !selectedKitId) return;
+    if (!backendAvailable || !selectedKitId) return;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Regenerate works on the saved version. Save your changes first, or ' +
@@ -1080,7 +1090,7 @@ export const App: React.FC = () => {
           fields={schema.fields}
           sections={schema.sections}
           parts={schema.parts}
-          canRegenerate={hosted && role === 'author' && !!selectedKitId}
+          canRegenerate={backendAvailable && (!hosted || role === 'author') && !!selectedKitId}
           onApply={handleUpdateDivisions}
           onRegenerate={handleRegenerateDivisions}
           onClose={() => setShowSectionManager(false)}
@@ -1302,11 +1312,12 @@ export const App: React.FC = () => {
                   onUpdateMetadata={handleUpdateMetadata}
                   onUpdateFields={handleUpdateFields}
                   authorTier={!hosted || role === 'author'}
-                  // The "Add from PDF widgets" picker (bd nivy) is hosted
-                  // author-tier on an open kit only -- the callback fetches that
-                  // kit's unclaimed widgets; absent otherwise (no backend dump).
+                  // The "Add from PDF widgets" picker (bd nivy) needs a backend
+                  // (the callback fetches that kit's unclaimed widgets from the
+                  // AcroForm dump) + author tier + an open kit. Local dev with
+                  // the backend up now qualifies (bd polyglot-pdf-cpiw).
                   onLoadUnclaimedWidgets={
-                    hosted && role === 'author' && selectedKitId
+                    backendAvailable && (!hosted || role === 'author') && selectedKitId
                       ? handleLoadUnclaimedWidgets
                       : undefined
                   }
@@ -1343,10 +1354,10 @@ export const App: React.FC = () => {
           }}
           onAuthError={handleAuthExpired}
           onReport={handleLintReport}
-          // Repair-all is author-tier on an open hosted kit only (bd zgln); the
-          // panel additionally shows the button only when errors exist.
+          // Repair-all is author-tier on an open kit with a backend (bd zgln);
+          // the panel additionally shows the button only when errors exist.
           onRepairAll={
-            hosted && role === 'author' && selectedKitId
+            backendAvailable && (!hosted || role === 'author') && selectedKitId
               ? handleRepairAll
               : undefined
           }
