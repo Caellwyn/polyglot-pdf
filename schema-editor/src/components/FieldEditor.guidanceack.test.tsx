@@ -254,3 +254,92 @@ describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', (
     expect(text).toContain('zip changed since its guidance was written');
   });
 });
+
+// --- the OTHER way out of the gate (bd polyglot-pdf-cpiw) ------------------- //
+//
+// The gate offers "acknowledge it still reads correctly" (free) or "re-author
+// it" (costly). Only the free half existed, so re-authoring meant hand-copying
+// prose out of the IRS/USCIS instructions booklet. These pin the button that
+// closes that gap.
+
+describe('FieldEditor guidance regeneration (bd polyglot-pdf-cpiw)', () => {
+  it('offers the rewrite button inside the staleness banner', () => {
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]}
+        onRegenerateGuidance={vi.fn().mockResolvedValue(true)} />,
+    );
+    expect(screen.getByTestId('regenerate-guidance')).toBeInTheDocument();
+  });
+
+  it('calls back with THIS field id and shows progress while it runs', async () => {
+    let release: (v: boolean) => void = () => {};
+    const pending = new Promise<boolean>((res) => { release = res; });
+    const onRegenerate = vi.fn().mockReturnValue(pending);
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]}
+        onRegenerateGuidance={onRegenerate} />,
+    );
+    const btn = screen.getByTestId('regenerate-guidance');
+    fireEvent.click(btn);
+    expect(onRegenerate).toHaveBeenCalledWith('phone');
+    // Disabled + progress copy while in flight, so a slow model call cannot be
+    // double-submitted into two paid rewrites.
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    expect(btn.textContent).toMatch(/Rewriting/);
+    release(true);
+    await screen.findByText(/Or rewrite it from the instructions booklet/);
+    expect((screen.getByTestId('regenerate-guidance') as HTMLButtonElement).disabled)
+      .toBe(false);
+  });
+
+  it('shows the failure inline instead of losing it', async () => {
+    const onRegenerate = vi.fn().mockRejectedValue(
+      new Error('This form has no instructions booklet in its kit folder'));
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]}
+        onRegenerateGuidance={onRegenerate} />,
+    );
+    fireEvent.click(screen.getByTestId('regenerate-guidance'));
+    expect(await screen.findByText(/no instructions booklet/)).toBeInTheDocument();
+    // and the button is usable again after the failure
+    expect((screen.getByTestId('regenerate-guidance') as HTMLButtonElement).disabled)
+      .toBe(false);
+  });
+
+  it('is absent without the callback (no backend / editor tier)', () => {
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect(screen.queryByTestId('regenerate-guidance')).toBeNull();
+    // ...but the free half of the gate still stands.
+    expect(screen.getByTestId('guidance-ack-checkbox')).toBeInTheDocument();
+  });
+
+  it('is absent when the field has NOT drifted (no banner to host it)', () => {
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[]}
+        onRegenerateGuidance={vi.fn()} />,
+    );
+    expect(screen.queryByTestId('regenerate-guidance')).toBeNull();
+  });
+
+  it('says so when the rewrite changed NOTHING (not just on an error)', async () => {
+    // A no-op resolves normally: the judge was unavailable, the guidance was
+    // hand-edited (never clobbered), or the booklet had nothing for this
+    // field. Without this the button just returns to idle and the amber banner
+    // is still there -- the silent success-shaped no-op this bead exists to
+    // remove (bd polyglot-pdf-cpiw).
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]}
+        onRegenerateGuidance={vi.fn().mockResolvedValue(false)} />,
+    );
+    fireEvent.click(screen.getByTestId('regenerate-guidance'));
+    expect(await screen.findByText(/Nothing was rewritten/)).toBeInTheDocument();
+  });
+});

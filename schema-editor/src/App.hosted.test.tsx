@@ -75,6 +75,10 @@ vi.mock('./utils/remoteKitStore', async (importOriginal) => {
   return {
     ...actual,
     isHostedMode: vi.fn(() => true),
+    // Server-capability gates (repair, regenerate, widget picker) key on
+    // hasBackend(), not isHostedMode() -- local dev with the backend running
+    // gets them too (bd polyglot-pdf-cpiw). Hosted always has one.
+    hasBackend: vi.fn(() => true),
     probeSession: vi.fn(),
     listRemoteKits: vi.fn(),
     loadRemoteSchema: vi.fn(),

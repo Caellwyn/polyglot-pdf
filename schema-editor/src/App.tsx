@@ -22,11 +22,13 @@ import {
 import { loadKitSchema, versionInfoFromSchema, type CatalogueEntry, type KitVersionInfo } from './utils/formKitDirectory';
 import {
   AuthError,
+  hasBackend,
   isHostedMode,
   loadRemotePdfBlobUrl,
   loadRemoteSchema,
   loadUnclaimedWidgets,
   regenerateDivisions,
+  regenerateGuidance,
   repairKit,
   saveRemoteSchema,
   type EditorRole,
@@ -79,6 +81,15 @@ export const App: React.FC = () => {
   // folder. `role` is null until the access code validates (the gate screen);
   // author-only affordances (onboard/extract, bd 92qe.3) key off it later.
   const hosted = React.useMemo(isHostedMode, []);
+  // Can we call the server for authoritative lint / repair / regeneration?
+  // Hosted always can; local dev can whenever the backend is running
+  // (scripts/run-schema-editor.sh starts it). Kept SEPARATE from `hosted`,
+  // which answers the different question of WHERE KITS LIVE -- conflating the
+  // two is what silently made local a reduced-feature surface
+  // (bd polyglot-pdf-cpiw). Safe for local kit ids because the backend's
+  // default store is this same form-kits/ directory (LocalFormKitStore), so a
+  // kit id from the picked folder resolves server-side unchanged.
+  const backendAvailable = React.useMemo(hasBackend, []);
   const [role, setRole] = React.useState<EditorRole | null>(null);
   // Remote saves have real latency (a GCS write) -- surface a Saving... state.
   const [saving, setSaving] = React.useState(false);
@@ -143,6 +154,13 @@ export const App: React.FC = () => {
   // The File System Access handle the human picked: once set, saves write
   // straight to that file with no re-prompt (bd s1e2). Cleared on form switch.
   const fileHandleRef = React.useRef<FsFileHandle | null>(null);
+  // The OPEN kit's catalogue entry in local mode (null when hosted, or when
+  // nothing is open). Server-side actions -- repair, regenerate-divisions,
+  // regenerate-guidance -- rewrite the STORED schema and the editor must then
+  // reload it; local mode has to re-read the file from disk rather than call
+  // loadRemoteSchema, since its kits never went through the remote store
+  // (bd polyglot-pdf-cpiw).
+  const localEntryRef = React.useRef<CatalogueEntry | null>(null);
   const [savedFileName, setSavedFileName] = React.useState<string | null>(null);
   const fsAccess = React.useMemo(isFileSystemAccessSupported, []);
   const dirAccess = React.useMemo(isDirectoryAccessSupported, []);
@@ -173,6 +191,7 @@ export const App: React.FC = () => {
     // A new form means a new destination -- drop the prior file handle so the
     // next save prompts for where to put THIS form's schema.
     fileHandleRef.current = null;
+    localEntryRef.current = null;
     setSavedFileName(null);
     setSelectedKitId(null); // leaving catalogue mode
     if (pdfBlobUrlRef.current) {
@@ -216,6 +235,7 @@ export const App: React.FC = () => {
       }
       // Save target = the kit's own schema.json handle (in-place save).
       fileHandleRef.current = await entry.dirHandle.getFileHandle(entry.schemaFile);
+      localEntryRef.current = entry; // for re-reading after a server-side rewrite
       setSavedFileName(entry.schemaFile);
 
       // Build a blob URL for the PDF so PDFViewer (which takes a URL) can render
@@ -260,7 +280,22 @@ export const App: React.FC = () => {
   // work is the chosen behavior, locked by a test in App.hosted.test.tsx.)
   const handleAuthExpired = React.useCallback(() => {
     setRole(null);
-  }, []);
+    // setRole(null) only DOES anything hosted, where it drops back to the
+    // access-code gate (`hosted && !role`). LOCAL mode has no gate, so every
+    // caller that catches AuthError and returns would leave the failure
+    // completely invisible -- the button stops spinning and nothing happens.
+    // That is reachable for real: relaunching the editor mints a FRESH per-run
+    // token while an already-open tab still holds the previous one, so every
+    // request 401s (bd polyglot-pdf-cpiw). Surface it once, centrally, so all
+    // six catch sites are covered rather than each remembering to.
+    if (!hosted) {
+      setSaveError(
+        'The editor was not accepted by its backend -- its access token is '
+        + 'probably from an earlier run. Reload this page to pick up the '
+        + 'current one.',
+      );
+    }
+  }, [hosted]);
 
   // Open a kit from the REMOTE catalogue (hosted mode, bd 92qe.2): pull its
   // schema + PDF through the token-gated routes and drive the same schema +
@@ -288,6 +323,7 @@ export const App: React.FC = () => {
     setGroupSelection([]);
     setViewMode('edit');
     fileHandleRef.current = null; // hosted mode never saves via a file handle
+    localEntryRef.current = null;  // hosted reloads go through the remote store
     try {
       const loaded = await loadRemoteSchema(entry.id);
       if (seq !== openSeqRef.current) return; // superseded by a newer open
@@ -358,6 +394,7 @@ export const App: React.FC = () => {
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     clearSchema();
     fileHandleRef.current = null;
+    localEntryRef.current = null;
     if (pdfBlobUrlRef.current) {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
@@ -657,14 +694,27 @@ export const App: React.FC = () => {
     }
   }, [hasUnsavedChanges, loadSchemaState]);
 
+  // Re-read the open kit's STORED schema after a server-side rewrite (repair,
+  // regenerate-divisions, regenerate-guidance). Mode-aware: hosted kits come
+  // back through the remote store, local kits are re-read from the picked
+  // directory -- the backend wrote the same file on disk, so loadRemoteSchema
+  // would 404 there (bd polyglot-pdf-cpiw).
+  const reloadStoredSchema = React.useCallback(async (): Promise<FormSchema | null> => {
+    if (!hosted) {
+      const entry = localEntryRef.current;
+      return entry ? await loadKitSchema(entry) : null;
+    }
+    return selectedKitId ? await loadRemoteSchema(selectedKitId) : null;
+  }, [hosted, selectedKitId]);
+
   // One-click Repair-all (bd polyglot-pdf-zgln, P5.3b): runs the server-side
   // deterministic repair on the kit's STORED schema, then reloads the repaired
   // result. Because it operates on the stored draft, unsaved edits must be saved
   // first (or discarded) -- reloading would otherwise clobber them silently.
-  // Hosted + author + an open kit only; the ValidationPanel gates the button so
-  // this is not reached otherwise.
+  // Needs a backend + author + an open kit; the ValidationPanel gates the button
+  // so this is not reached otherwise.
   const handleRepairAll = React.useCallback(async () => {
-    if (!hosted || !selectedKitId) return;
+    if (!backendAvailable || !selectedKitId) return;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Repair works on the saved version. Save your changes first, or click ' +
@@ -682,7 +732,7 @@ export const App: React.FC = () => {
     try {
       await repairKit(selectedKitId);
       if (seq !== openSeqRef.current) return; // superseded while repairing
-      const repaired = await loadRemoteSchema(selectedKitId);
+      const repaired = await reloadStoredSchema();
       if (seq !== openSeqRef.current) return; // superseded while reloading
       if (repaired) {
         // Reset selection BEFORE the fresh baseline (parity with every other
@@ -705,7 +755,8 @@ export const App: React.FC = () => {
       setSaveError(err instanceof Error ? err.message : 'Failed to repair schema');
       console.error('Failed to repair schema:', err);
     }
-  }, [hosted, selectedKitId, hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
+  }, [backendAvailable, selectedKitId, hasUnsavedChanges, loadSchemaState,
+      reloadStoredSchema, handleAuthExpired]);
 
   // Section management (bd polyglot-pdf-6cfu.3): one atomic commit for the
   // {fields, sections, parts} triple a section add/rename/merge/remove
@@ -725,7 +776,7 @@ export const App: React.FC = () => {
   // unsaved-edits confirm, its own destructive confirm, the openSeqRef
   // stale-open guard, reload as a fresh baseline (history cleared).
   const handleRegenerateDivisions = React.useCallback(async () => {
-    if (!hosted || !selectedKitId) return;
+    if (!backendAvailable || !selectedKitId) return;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Regenerate works on the saved version. Save your changes first, or ' +
@@ -744,7 +795,7 @@ export const App: React.FC = () => {
     try {
       await regenerateDivisions(selectedKitId);
       if (seq !== openSeqRef.current) return; // superseded while deriving
-      const derived = await loadRemoteSchema(selectedKitId);
+      const derived = await reloadStoredSchema();
       if (seq !== openSeqRef.current) return; // superseded while reloading
       if (derived) {
         // Reset selection before the fresh baseline (bd 6hhc fresh-eyes):
@@ -763,7 +814,52 @@ export const App: React.FC = () => {
       setSaveError(err instanceof Error ? err.message : 'Failed to regenerate divisions');
       console.error('Failed to regenerate divisions:', err);
     }
-  }, [hosted, selectedKitId, hasUnsavedChanges, loadSchemaState, handleAuthExpired]);
+  }, [backendAvailable, selectedKitId, hasUnsavedChanges, loadSchemaState,
+      reloadStoredSchema, handleAuthExpired]);
+
+  // Re-author ONE field's guidance from the form's instruction booklet (bd
+  // polyglot-pdf-cpiw) -- the costly half of the staleness gate, which had no
+  // implementation, so "re-author it" meant hand-copying prose out of the IRS
+  // booklet. Server-side (it rewrites the STORED schema), so it follows the
+  // same shape as repair: unsaved edits must be settled first, then reload.
+  //
+  // Throws on failure rather than swallowing: the button renders the message
+  // inline, next to the gate it belongs to.
+  const handleRegenerateGuidance = React.useCallback(async (fieldId: string) => {
+    if (!backendAvailable || !selectedKitId) return false;
+    if (hasUnsavedChanges) {
+      const ok = window.confirm(
+        'Rewriting works on the saved version. Save your changes first, or '
+        + 'click OK to discard unsaved edits and rewrite from the last-saved '
+        + 'schema.'
+      );
+      if (!ok) return false;
+    }
+    const seq = ++openSeqRef.current;
+    try {
+      const report = await regenerateGuidance(selectedKitId, [fieldId]);
+      if (seq !== openSeqRef.current) return false; // superseded while rewriting
+      const fresh = await reloadStoredSchema();
+      if (seq !== openSeqRef.current) return false; // superseded while reloading
+      if (fresh) loadSchemaState(fresh); // fresh baseline -> history cleared
+      setSaveError(null);
+      // The route reports what it actually WROTE, not what it proposed: a
+      // hand-edited field is deliberately never clobbered, and a judge outage
+      // writes nothing. Hand that back so the button can say so.
+      return (report.regenerated || []).includes(fieldId);
+    } catch (err) {
+      if (seq !== openSeqRef.current) return false;
+      if (err instanceof AuthError) {
+        handleAuthExpired();
+        // LOCAL has no access-code gate to fall back to (App renders it on
+        // `hosted && !role`), so swallowing this would leave the button
+        // looking successful. Rethrow and let it render the message.
+        if (hosted) return false;
+      }
+      throw err; // surfaced inline by the button
+    }
+  }, [backendAvailable, selectedKitId, hasUnsavedChanges, loadSchemaState,
+      reloadStoredSchema, handleAuthExpired]);
 
   // Fetch the open kit's unclaimed PDF button widgets for the FieldEditor's
   // "Add from PDF widgets" picker (bd polyglot-pdf-nivy, P5.3c). Hosted + an open
@@ -1080,7 +1176,7 @@ export const App: React.FC = () => {
           fields={schema.fields}
           sections={schema.sections}
           parts={schema.parts}
-          canRegenerate={hosted && role === 'author' && !!selectedKitId}
+          canRegenerate={backendAvailable && (!hosted || role === 'author') && !!selectedKitId}
           onApply={handleUpdateDivisions}
           onRegenerate={handleRegenerateDivisions}
           onClose={() => setShowSectionManager(false)}
@@ -1305,12 +1401,21 @@ export const App: React.FC = () => {
                   onUpdateMetadata={handleUpdateMetadata}
                   onUpdateFields={handleUpdateFields}
                   authorTier={!hosted || role === 'author'}
-                  // The "Add from PDF widgets" picker (bd nivy) is hosted
-                  // author-tier on an open kit only -- the callback fetches that
-                  // kit's unclaimed widgets; absent otherwise (no backend dump).
+                  // The "Add from PDF widgets" picker (bd nivy) needs a backend
+                  // (the callback fetches that kit's unclaimed widgets from the
+                  // AcroForm dump) + author tier + an open kit. Local dev with
+                  // the backend up now qualifies (bd polyglot-pdf-cpiw).
                   onLoadUnclaimedWidgets={
-                    hosted && role === 'author' && selectedKitId
+                    backendAvailable && (!hosted || role === 'author') && selectedKitId
                       ? handleLoadUnclaimedWidgets
+                      : undefined
+                  }
+                  // Re-author guidance from the booklet (bd polyglot-pdf-cpiw).
+                  // Same gating as the other server-side author actions; the
+                  // button only renders inside the staleness banner anyway.
+                  onRegenerateGuidance={
+                    backendAvailable && (!hosted || role === 'author') && selectedKitId
+                      ? handleRegenerateGuidance
                       : undefined
                   }
                 />
@@ -1346,10 +1451,10 @@ export const App: React.FC = () => {
           }}
           onAuthError={handleAuthExpired}
           onReport={handleLintReport}
-          // Repair-all is author-tier on an open hosted kit only (bd zgln); the
-          // panel additionally shows the button only when errors exist.
+          // Repair-all is author-tier on an open kit with a backend (bd zgln);
+          // the panel additionally shows the button only when errors exist.
           onRepairAll={
-            hosted && role === 'author' && selectedKitId
+            backendAvailable && (!hosted || role === 'author') && selectedKitId
               ? handleRepairAll
               : undefined
           }

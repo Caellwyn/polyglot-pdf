@@ -12,9 +12,12 @@ import type { LintReport } from '../utils/remoteKitStore';
 const lintSchema = vi.fn((_schema: FormSchema): Promise<LintReport> =>
   Promise.resolve({ findings: [], errorCount: 0, warningCount: 0 }),
 );
-// Default to hosted mode: most tests exercise the backend /lint path. The
-// local-mode test flips this to false to hit the client-side fallback.
+// Default to "a backend is reachable": most tests exercise the backend /lint
+// path. The no-backend test flips this to false to hit the client-side
+// fallback. NOTE this is hasBackend(), not isHostedMode() -- the panel keys on
+// backend REACHABILITY, which local dev now also has (bd polyglot-pdf-cpiw).
 let hostedMode = true;
+let backendReachable = true;
 
 vi.mock('../utils/remoteKitStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/remoteKitStore')>();
@@ -22,6 +25,7 @@ vi.mock('../utils/remoteKitStore', async (importOriginal) => {
     ...actual,
     lintSchema: (schema: FormSchema) => lintSchema(schema),
     isHostedMode: () => hostedMode,
+    hasBackend: () => backendReachable,
   };
 });
 
@@ -46,6 +50,7 @@ function report(findings: LintReport['findings']): LintReport {
 beforeEach(() => {
   lintSchema.mockReset();
   hostedMode = true;
+  backendReachable = true;
 });
 afterEach(cleanup);
 
@@ -166,8 +171,9 @@ describe('ValidationPanel load-time lint display', () => {
     await waitFor(() => expect(onAuthError).toHaveBeenCalled());
   });
 
-  it('lints client-side in local mode (no backend call) -- bd h903', async () => {
+  it('lints client-side when NO backend is reachable (no backend call) -- bd h903', async () => {
     hostedMode = false;
+    backendReachable = false;
     // A schema with a bad conditional reference: validateSchema flags it as a
     // warning, and the panel must show it WITHOUT ever calling the backend.
     const local = {
@@ -188,6 +194,65 @@ describe('ValidationPanel load-time lint display', () => {
     expect(lintSchema).not.toHaveBeenCalled();
     // No "could not check" note -- the client-side lint succeeded.
     expect(screen.queryByText(/Could not check for issues/)).toBeNull();
+  });
+
+  // bd polyglot-pdf-cpiw exit criterion 2: a reduced ruleset must SAY it is
+  // reduced. A short finding list from the lighter client rules is otherwise
+  // indistinguishable from a clean form -- which is exactly how the
+  // guidance-staleness gate went unnoticed in local mode for so long.
+  it('says so visibly when only the reduced client-side rules ran', async () => {
+    hostedMode = false;
+    backendReachable = false;
+    render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByText(/Limited checking/)).toBeInTheDocument());
+    expect(screen.getByText(/out-of-date guidance/)).toBeInTheDocument();
+  });
+
+  it('shows no limited-checking notice once a backend is reachable', async () => {
+    lintSchema.mockResolvedValue(report([]));
+    render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);
+    await waitFor(() => expect(lintSchema).toHaveBeenCalled());
+    expect(screen.queryByText(/Limited checking/)).toBeNull();
+  });
+
+  // The reachable-but-FAILING half of criterion 2. An empty finding list next
+  // to a green completion figure reads as "this form is fine", so a lint that
+  // never ran has to say so loudly, not just in the small gray note.
+  it('says the checks did NOT run when a reachable backend fails', async () => {
+    lintSchema.mockRejectedValue(new Error('boom'));
+    render(<ValidationPanel schema={SCHEMA} onSelectField={() => {}} />);
+    expect(await screen.findByText(/Checks did not run/)).toBeInTheDocument();
+    expect(screen.queryByText(/Limited checking/)).toBeNull();
+  });
+
+  // A 401 in LOCAL mode used to render NOTHING: the AuthError branch returned
+  // early and the access-code gate is hosted-only. Reachable for real --
+  // relaunching mints a fresh per-run token while an open tab holds the old
+  // one (bd polyglot-pdf-cpiw).
+  it('surfaces a 401 in LOCAL mode instead of rendering nothing', async () => {
+    hostedMode = false;          // backendReachable stays true
+    lintSchema.mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onAuthError={onAuthError} />,
+    );
+    expect(await screen.findByText(/Checks did not run/)).toBeInTheDocument();
+    expect(screen.getByText(/from an earlier run/)).toBeInTheDocument();
+    expect(onAuthError).toHaveBeenCalled(); // host still told, as before
+  });
+
+  it('a 401 in HOSTED mode still defers to the access-code gate', async () => {
+    hostedMode = true;
+    lintSchema.mockRejectedValue(new AuthError());
+    const onAuthError = vi.fn();
+    render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onAuthError={onAuthError} />,
+    );
+    await waitFor(() => expect(onAuthError).toHaveBeenCalled());
+    expect(screen.queryByText(/Checks did not run/)).toBeNull();
   });
 });
 
@@ -257,8 +322,9 @@ describe('ValidationPanel onReport mirror (bd 0x10.6)', () => {
     });
   });
 
-  it('mirrors the local-mode synchronous report too', async () => {
+  it('mirrors the no-backend synchronous report too', async () => {
     hostedMode = false;
+    backendReachable = false;
     const onReport = vi.fn();
     // SCHEMA's two fields lack pdf_field_name etc., but validateSchema flags
     // schema-level problems only; whatever it produces, the report shape must

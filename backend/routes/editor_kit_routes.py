@@ -31,6 +31,7 @@ saves stay lenient (work-in-progress is allowed to be incomplete).
 """
 
 import asyncio
+import fnmatch
 import hmac
 import json
 import os
@@ -58,6 +59,10 @@ from backend.models import conditional_vocabulary as vocab
 from backend.models.form_models import FormSchema, FormSource
 from backend.routes.form_kit_routes import _safe_kit_id
 from backend.adapters.text_ai_gemini import TextAIGemini
+from backend.services.editor_text_ai import (
+    EditorTextAIUnavailable,
+    resolve_editor_text_ai,
+)
 from backend.services.option_translation import (
     TRANSLATE_RETRY_DELAYS,
     bake_label_translations,
@@ -281,6 +286,33 @@ class DeriveDivisionsResponse(BaseModel):
     notes: list[str]                  # derivation notes (cap splits, strays)
     errorCount: int                   # lint ERRORs after derivation
     warningCount: int                 # lint WARNINGs after derivation
+
+
+class RegenerateGuidanceBody(BaseModel):
+    """Optional scope for a guidance regeneration (bd polyglot-pdf-cpiw).
+
+    `fieldIds` limits the rewrite to those fields -- the natural call from the
+    staleness banner, which already knows exactly which fields drifted. Omitted
+    (or empty) rewrites every askable field."""
+
+    fieldIds: list[str] = []
+
+
+class RegenerateGuidanceResponse(BaseModel):
+    """Re-authored field guidance result (bd polyglot-pdf-cpiw).
+
+    The staleness gate (bd anim) tells a reviewer that a field's guidance may
+    no longer match what the assistant says, and offers two ways out:
+    acknowledge it still reads correctly (free), or RE-AUTHOR it (costly).
+    Only the free half existed -- this reports the costly half, so an editor
+    does not have to hand-write guidance out of the instruction booklet."""
+
+    regenerated: list[str]      # field ids whose guidance was rewritten
+    skipped: list[str]          # requested ids with no proposal from the model
+    model: str                  # which model produced it (recorded in provenance)
+    booklet: Optional[str]      # the instructions PDF used, if any
+    errorCount: int             # lint ERRORs after the rewrite
+    warningCount: int           # lint WARNINGs after the rewrite
 
 
 class UnclaimedWidget(BaseModel):
@@ -660,13 +692,9 @@ async def translate_editor_kit_options(
     """
     kit_id = _safe_kit_id(kit_id)
     settings = get_settings()
-    if not (settings.VERTEXAI or settings.GEMINI_API_KEY
-            or os.getenv("GEMINI_API_KEY")):
-        raise HTTPException(
-            status_code=503,
-            detail="Option translation is not configured (set VERTEXAI=true "
-                   "for service-account auth, or provide a GEMINI_API_KEY)",
-        )
+    # NOTE: provider availability is NOT pre-checked here. resolve_editor_text_ai
+    # below owns it for BOTH providers -- a Gemini-only precheck would 503 a
+    # perfectly working claude-cli local session (bd polyglot-pdf-cpiw).
     store = get_form_kit_store()
     meta, _files = await _load_meta_or_404(store, kit_id)
     if _status_of(meta) == "complete":
@@ -685,18 +713,12 @@ async def translate_editor_kit_options(
     except FormKitStoreError as exc:
         raise HTTPException(status_code=502, detail="Unable to load schema") from exc
 
-    # Same constructor discipline as dependencies.get_text_ai_pro: an EMPTY
-    # fallback chain (a deliberately chosen tier fails loud, never silently
-    # degrades to lite) and a bounded thinking budget (2.5-pro cannot disable
-    # thinking).
-    model = settings.OPTION_TRANSLATION_MODEL
-    text_ai = TextAIGemini(
-        api_key=settings.GEMINI_API_KEY,
-        model=model,
-        vertexai=settings.VERTEXAI,
-        fallback_models=(),
-        thinking_budget=512 if "pro" in model else None,
-    )
+    # Provider choice (Gemini hosted / claude-cli local) is resolved in ONE
+    # place so local and hosted cannot drift -- bd polyglot-pdf-cpiw.
+    try:
+        text_ai, model = resolve_editor_text_ai(settings)
+    except EditorTextAIUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
                  if n != "english"}
     report = await bake_label_translations(
@@ -854,6 +876,322 @@ async def derive_editor_kit_divisions(
     )
 
 
+# Fields per model call for guidance regeneration. Mirrors the CLI default
+# (scripts/authoring/enrich_instructions.py --chunk-size): the whole booklet
+# rides every chunk, so a smaller chunk costs more calls, and a larger one
+# risks a truncated response on a long form.
+_GUIDANCE_CHUNK_SIZE = 12
+
+# Instruction-booklet filenames vary by kit (w7-instructions.pdf, i-90instr.pdf,
+# the editor upload's instructions.pdf), so match the same shapes
+# enrich_instructions.find_booklet globs -- MOST specific first, and never the
+# form itself.
+_BOOKLET_PATTERNS = ("instructions.pdf", "*instructions*.pdf", "*instr*.pdf")
+
+
+def _find_booklet_file(files, form_pdf: str = "form.pdf") -> Optional[str]:
+    """The kit's instructions booklet filename, or None.
+
+    `form_pdf` is the kit's OWN form (metadata-declared, so not always
+    "form.pdf") and is excluded: a kit whose PDF happened to match one of the
+    booklet globs would otherwise have its blank form fed to the enrichment
+    engine as the grounding text.
+    """
+    names = [n for n in (files or []) if str(n).lower().endswith(".pdf")]
+    for pattern in _BOOKLET_PATTERNS:
+        for name in names:
+            if name == form_pdf or name == "form.pdf":
+                continue
+            if fnmatch.fnmatch(name.lower(), pattern):
+                return name
+    return None
+
+
+def _help_snapshot(schema: dict, field_id: str) -> tuple:
+    """A field's guidance channels, for before/after comparison."""
+    for f in schema.get("fields", []):
+        if isinstance(f, dict) and f.get("id") == field_id:
+            help_obj = f.get("help") if isinstance(f.get("help"), dict) else {}
+            return tuple(
+                help_obj.get(k) for k in ("instructions", "details",
+                                          "format_hint")
+            )
+    return ()
+
+
+def _load_enrich_instructions():
+    """Import scripts/authoring/enrich_instructions.py (bd polyglot-pdf-cpiw).
+
+    Same repo-layout import as _load_derive_sections: the authoring passes live
+    with the scripts, not in the backend package, and the enrichment core
+    (enrich_schema / apply_proposals) is pure Python calling the shared provider
+    seam."""
+    root = _repo_root()
+    for sub in (("scripts", "authoring"), ("scripts", "bakeoff")):
+        p = str(root.joinpath(*sub))
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import enrich_instructions  # noqa: PLC0415 (repo-layout import by design)
+    return enrich_instructions
+
+
+def _guidance_model(settings) -> str:
+    """The model for guidance regeneration.
+
+    An explicit EDITOR_GUIDANCE_MODEL wins. Otherwise follow the editor's text
+    provider, because the enrichment path dispatches on the MODEL NAME
+    (llm_providers.resolve_json_runner: gemini-* -> Gemini, anything else ->
+    the local claude CLI) -- so handing it "sonnet" is what routes it to the
+    free local CLI, and a gemini-* name is what keeps hosted on Gemini."""
+    explicit = (getattr(settings, "EDITOR_GUIDANCE_MODEL", "") or "").strip()
+    if explicit:
+        return explicit
+    provider = (getattr(settings, "EDITOR_TEXT_PROVIDER", "") or "").strip().lower()
+    if provider == "claude-cli":
+        return getattr(settings, "EDITOR_CLAUDE_MODEL", "sonnet") or "sonnet"
+    return settings.EXTRACTOR_MODEL
+
+
+@router.post("/kits/{kit_id}/regenerate-guidance",
+             response_model=RegenerateGuidanceResponse)
+async def regenerate_editor_kit_guidance(
+    kit_id: str,
+    role: Annotated[str, Depends(require_author_role)],
+    body: RegenerateGuidanceBody | None = None,
+) -> RegenerateGuidanceResponse:
+    """Re-author field guidance from the kit's instruction booklet.
+
+    THE MISSING HALF OF THE STALENESS GATE (bd anim / bd polyglot-pdf-cpiw).
+    When a reviewer renames a field, lint flags its guidance as possibly stale
+    and offers two ways out: acknowledge it still reads correctly (free), or
+    re-author it (costly). Only "acknowledge" existed, so the costly path meant
+    hand-copying prose out of the IRS/USCIS instructions booklet -- exactly the
+    editor time this is meant to save.
+
+    Scope: `fieldIds` limits the rewrite to those fields (the natural call from
+    the staleness banner); omitted means every askable field. Fields whose
+    guidance a HUMAN edited are never clobbered -- apply_proposals compares
+    per-channel hashes against provenance and skips anything hand-owned.
+
+    A successful rewrite re-stamps identity_sha1, which is what CLEARS the
+    staleness flag for those fields.
+
+    Author tier (it spends model tokens and rewrites the stored schema) and
+    draft-only (409 on complete), the same write-gating as repair/translate.
+    Needs an instructions booklet in the kit dir; without one there is nothing
+    to ground the guidance in, so it 409s rather than inventing prose.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    settings = get_settings()
+    store = get_form_kit_store()
+    meta, files = await _load_meta_or_404(store, kit_id)
+    if _status_of(meta) == "complete":
+        raise HTTPException(
+            status_code=409,
+            detail="This form is published (status complete). Revert it to "
+                   "draft before regenerating guidance -- it rewrites the "
+                   "schema.",
+        )
+    schema_file, _pdf = _resolve_meta_names(meta)
+    try:
+        schema = await store.load_schema(kit_id, schema_file)
+    except FormKitNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Kit {kit_id} has no schema"
+        ) from exc
+    except FormKitStoreError as exc:
+        raise HTTPException(status_code=502, detail="Unable to load schema") from exc
+
+    # The booklet is the GROUNDING for every proposal -- the enrichment prompt
+    # quotes it and a contiguity repairer drops anything not verbatim from it.
+    # No booklet, no honest guidance.
+    booklet_file = _find_booklet_file(files, _pdf)
+    if not booklet_file:
+        raise HTTPException(
+            status_code=409,
+            detail="This form has no instructions booklet in its kit folder, "
+                   "so guidance cannot be regenerated from source. Add the "
+                   "official instructions PDF (e.g. w7-instructions.pdf) to "
+                   "the kit and try again.",
+        )
+    try:
+        booklet_bytes = await store.load_pdf_bytes(kit_id, booklet_file)
+    except (FormKitNotFound, FormKitStoreError) as exc:
+        raise HTTPException(
+            status_code=502, detail="Unable to load the instructions booklet",
+        ) from exc
+
+    enrich = _load_enrich_instructions()
+    model = _guidance_model(settings)
+    requested = list(body.fieldIds) if body and body.fieldIds else []
+
+    # Restrict the rewrite to the requested fields by enriching a SHALLOW COPY
+    # holding only those fields. The proposals come back keyed by field id, so
+    # they apply cleanly to the real schema afterwards.
+    target = schema
+    if requested:
+        wanted = set(requested)
+        target = dict(schema)
+        target["fields"] = [f for f in schema.get("fields", [])
+                            if isinstance(f, dict) and f.get("id") in wanted]
+        if not target["fields"]:
+            raise HTTPException(
+                status_code=422,
+                detail="None of the requested field ids exist in this form",
+            )
+
+    form_name = ((schema.get("form_metadata") or {}).get("title") or kit_id)
+
+    def _run() -> tuple[dict, str, list]:
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, booklet_file)
+            with open(path, "wb") as fh:
+                fh.write(booklet_bytes)
+            text = enrich.booklet_text(path)
+        result = enrich.enrich_schema(
+            target, text, form_name, model, _GUIDANCE_CHUNK_SIZE)
+        # NEVER write unverified guidance. apply_proposals stamps
+        # source="llm-verified", and every other caller (the CLI --write path
+        # and the extraction pipeline) earns that label by running the judge +
+        # bounded rectify first. This is legal-form prose read aloud to
+        # applicants; skipping the judge here would put unreviewed model text
+        # into a stored kit under a "verified" label. verify_and_rectify
+        # MUTATES proposals per the KEEP rule and fails SAFE (a judge outage
+        # empties the proposals rather than passing them through).
+        #
+        # The judge runs on the SAME provider as the author pass. Its default
+        # (GUIDANCE_JUDGE_MODEL, gemini-2.5-flash) dispatches by model name, so
+        # leaving it unset would send the author pass to the free local CLI and
+        # the judge to metered Vertex -- spending money in the one mode the
+        # maintainer directive says must not, and hard-failing on a machine with
+        # no ADC (which then blanks every proposal via the fail-safe and returns
+        # a success-shaped no-op).
+        flags = enrich.verify_and_rectify(
+            target, result.get("proposals") or {}, text, form_name, model,
+            judge_model=model)
+        return result, text, flags
+
+    try:
+        result, booklet, verify_flags = await anyio.to_thread.run_sync(_run)
+    except Exception as exc:  # noqa: BLE001
+        # A model/transport failure is not a server bug -- report it so the
+        # editor can retry, exactly like the translate path's failed languages.
+        _log.error("editor_guidance_regen_failed", kit_id=kit_id,
+                   exc_type=type(exc).__name__)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Guidance regeneration failed ({type(exc).__name__}). "
+                   "Nothing was changed; try again.",
+        ) from exc
+
+    proposals = result.get("proposals") or {}
+
+    # No usable CONTENT came back -> do not write, and say so. Two ways to get
+    # here, and an empty-dict check catches only the first:
+    #   - enrich_schema filters to ASKABLE fields, so a fieldIds list of only
+    #     read_only/signature fields yields zero chunks and no entries at all;
+    #   - verify_and_rectify fails SAFE on a judge outage by blanking each
+    #     entry to {} while KEEPING its key, so `fields` stays truthy.
+    # Either way, falling through re-stamps the bake block and returns a
+    # success the reviewer will read as "the guidance was re-authored".
+    if not any(
+        isinstance(e, dict)
+        and any((e.get(k) or "").strip()
+                for k in ("instructions", "details", "format_hint"))
+        for e in (proposals.get("fields") or {}).values()
+    ):
+        _log.info("editor_guidance_regen_no_proposals", kit_id=kit_id,
+                  requested=len(requested))
+        dump_data = await _load_kit_dump(store, kit_id)
+        findings = lint_schema(schema, dump_data)
+        return RegenerateGuidanceResponse(
+            regenerated=[], skipped=sorted(requested), model=model,
+            booklet=booklet_file,
+            errorCount=sum(1 for f in findings if f.severity == SEVERITY_ERROR),
+            warningCount=sum(
+                1 for f in findings if f.severity == SEVERITY_WARNING),
+        )
+
+    # A field-scoped rewrite must not touch FORM-level prose. enrich_schema
+    # asks for form_details in every chunk (each chunk sees the whole booklet),
+    # and apply_proposals writes it unconditionally -- so rewriting one field
+    # would replace the kit's whole eligibility/where-to-file block with
+    # whatever that one chunk happened to emit. Drop it when scoped.
+    if requested:
+        proposals = dict(proposals)
+        proposals["form_details"] = ""
+
+    # apply_proposals REPLACES the whole instructions_enrich block, so the
+    # prior flags + judge_model must be carried through or a rewrite silently
+    # wipes the reviewer's guidance worklist (schema_lint re-emits those flags
+    # as findings) and blanks the record of which judge verified the kit.
+    prior = (((schema.get("_bakeoff") or {}).get("authoring") or {})
+             .get("instructions_enrich") or {})
+    prior_flags = prior.get("flags")
+    prior_judge = prior.get("judge_model")
+    # Snapshot BEFORE the apply so `regenerated` can report what actually
+    # changed (see the comment where it is computed).
+    help_before = {
+        f["id"]: _help_snapshot(schema, f["id"])
+        for f in schema.get("fields", [])
+        if isinstance(f, dict) and isinstance(f.get("id"), str)
+    }
+    merged_flags = (list(prior_flags) if isinstance(prior_flags, list) else [])
+    merged_flags += list(verify_flags or [])
+    summary = enrich.apply_proposals(
+        schema, proposals, booklet,
+        flags=merged_flags,
+        model=model,
+        judge_model=prior_judge if isinstance(prior_judge, str) else "",
+    )
+    # Report what was actually WRITTEN, not what was proposed. apply_proposals
+    # deliberately SKIPS any field whose guidance a human edited (its
+    # per-channel hashes no longer match provenance), so a proposal-derived
+    # list would tell the reviewer their hand-written text was overwritten
+    # when the route's whole contract is that it was not. Compared against the
+    # pre-call snapshot, so this tracks apply_proposals' real behavior rather
+    # than re-implementing its skip rule.
+    schema_ids = {f.get("id") for f in schema.get("fields", [])
+                  if isinstance(f, dict)}
+    # An UNSCOPED run only ever offered the model the ASKABLE fields, so
+    # read_only/signature fields were never candidates and must not be reported
+    # as "skipped" -- that reads as a failure to rewrite something we tried to.
+    askable_ids = {
+        f.get("id") for f in enrich.askable_fields(schema)
+        if isinstance(f, dict)
+    }
+    scope = (set(requested) & schema_ids) if requested else askable_ids
+    regenerated = sorted(
+        fid for fid in scope
+        if _help_snapshot(schema, fid) != help_before.get(fid)
+    )
+    skipped = sorted(scope - set(regenerated))
+
+    try:
+        await store.put_schema(kit_id, schema, schema_file)
+    except FormKitStoreError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Guidance was regenerated but the schema could not be "
+                   "stored",
+        ) from exc
+
+    dump_data = await _load_kit_dump(store, kit_id)
+    findings = lint_schema(schema, dump_data)
+    error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+    warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+    _log.info("editor_guidance_regenerated", kit_id=kit_id, role=role,
+              model=model, requested=len(requested),
+              written=summary.get("written"),
+              skipped_human=summary.get("skipped_human"),
+              errors_after=error_count, warnings_after=warning_count)
+    return RegenerateGuidanceResponse(
+        regenerated=regenerated, skipped=skipped, model=model,
+        booklet=booklet_file,
+        errorCount=error_count, warningCount=warning_count,
+    )
+
+
 @router.get("/kits/{kit_id}/unclaimed-widgets",
             response_model=UnclaimedWidgetsResponse)
 async def get_unclaimed_widgets(
@@ -914,28 +1252,20 @@ async def _sweep_drifted_translations(
         the "N of M" progress message; a re-press retries only the gaps).
     """
     settings = get_settings()
-    if not (settings.VERTEXAI or settings.GEMINI_API_KEY
-            or os.getenv("GEMINI_API_KEY")):
+    # Provider choice (Gemini hosted / claude-cli local) is resolved in ONE
+    # place so local and hosted cannot drift -- bd polyglot-pdf-cpiw.
+    try:
+        text_ai, model = resolve_editor_text_ai(settings)
+    except EditorTextAIUnavailable as exc:
         # A config/deployment issue, not something the editor can fix -- point
         # them at the maintainer and block (maintainer 2026-07-26).
         raise HTTPException(
             status_code=503,
-            detail="Translation is not configured on this server, so this form "
-                   "cannot be checked for translation drift before completion. "
-                   "Please contact the maintainer at josh@caellwynai.com.",
-        )
+            detail=f"{exc} This form cannot be checked for translation drift "
+                   "before completion. Please contact the maintainer at "
+                   "josh@caellwynai.com.",
+        ) from exc
 
-    # Same constructor discipline as /translate-options: an EMPTY fallback chain
-    # (a chosen tier fails loud, never silently degrades to lite) and a bounded
-    # thinking budget (2.5-pro cannot disable thinking).
-    model = settings.OPTION_TRANSLATION_MODEL
-    text_ai = TextAIGemini(
-        api_key=settings.GEMINI_API_KEY,
-        model=model,
-        vertexai=settings.VERTEXAI,
-        fallback_models=(),
-        thinking_budget=512 if "pro" in model else None,
-    )
     languages = {n: c for n, c in SPOKEN_LANGUAGE_BCP47.items()
                  if n != "english"}
     report = await bake_label_translations(

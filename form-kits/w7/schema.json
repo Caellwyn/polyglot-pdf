@@ -41,6 +41,25 @@
             "y": 97.75,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "التقديم للحصول على رقم ITIN جديد",
+            "spanish": "Solicitar un nuevo ITIN",
+            "chinese": "申请新的ITIN",
+            "portuguese": "Solicitar um novo ITIN",
+            "hindi": "नए ITIN के लिए आवेदन करें",
+            "german": "Neue ITIN beantragen",
+            "ukrainian": "Подати заяву на новий ITIN",
+            "persian": "درخواست ITIN جدید",
+            "urdu": "نئے ITIN کے لیے درخواست دیں",
+            "french": "Demander un nouvel ITIN",
+            "italian": "Richiedere un nuovo ITIN",
+            "tagalog": "Mag-apply para sa bagong ITIN",
+            "dutch": "Een nieuw ITIN aanvragen",
+            "afrikaans": "Doen aansoek om 'n nuwe ITIN",
+            "russian": "Подать заявление на новый ITIN",
+            "swedish": "Ansök om ett nytt ITIN",
+            "korean": "신규 ITIN 신청"
           }
         },
         {
@@ -54,6 +73,25 @@
             "y": 109,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "تجديد رقم ITIN حالي",
+            "spanish": "Renovar un ITIN existente",
+            "chinese": "续办现有ITIN",
+            "portuguese": "Renovar um ITIN existente",
+            "hindi": "मौजूदा ITIN का नवीनीकरण करें",
+            "german": "Bestehende ITIN erneuern",
+            "ukrainian": "Поновити наявний ITIN",
+            "persian": "تمدید ITIN موجود",
+            "urdu": "موجودہ ITIN کی تجدید کریں",
+            "french": "Renouveler un ITIN existant",
+            "italian": "Rinnovare un ITIN esistente",
+            "tagalog": "I-renew ang kasalukuyang ITIN",
+            "dutch": "Een bestaand ITIN verlengen",
+            "afrikaans": "Hernu 'n bestaande ITIN",
+            "russian": "Продлить существующий ITIN",
+            "swedish": "Förnya ett befintligt ITIN",
+            "korean": "기존 ITIN 갱신"
           }
         }
       ],
@@ -71,6 +109,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "نوع الطلب",
+        "tagalog": "uri ng aplikasyon",
+        "spanish": "tipo de solicitud",
+        "french": "type de demande",
+        "chinese": "申请类型",
+        "portuguese": "tipo de solicitação",
+        "hindi": "आवेदन का प्रकार",
+        "italian": "tipo di domanda",
+        "german": "Antragsart",
+        "korean": "신청 유형",
+        "dutch": "Type aanvraag",
+        "ukrainian": "тип заяви",
+        "russian": "Тип заявления",
+        "persian": "نوع درخواست",
+        "urdu": "درخواست کی قسم",
+        "swedish": "ansökningstyp",
+        "afrikaans": "aansoektipe"
       }
     },
     {
@@ -93,6 +150,25 @@
             "y": 146,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "أ. أجنبي غير مقيم مطالب بالحصول على رقم ITIN للمطالبة بمزايا معاهدة ضريبية (يجب أيضاً وضع علامة على المربع h وتعبئته)",
+            "spanish": "a. Extranjero no residente que necesita obtener un ITIN para reclamar un beneficio del tratado tributario (también debe marcar y completar el recuadro h)",
+            "chinese": "a. 非居民外国人，需获得ITIN以申请税收协定优惠（您还须勾选并填写h项）",
+            "portuguese": "a. Estrangeiro não residente que precisa obter um ITIN para reivindicar benefício de tratado fiscal (você também deve marcar e preencher a caixa h)",
+            "hindi": "a. गैर-निवासी विदेशी जिसे कर संधि लाभ का दावा करने के लिए ITIN प्राप्त करना आवश्यक है (आपको बॉक्स h भी चेक करना और पूरा करना होगा)",
+            "german": "a. Gebietsfremder Ausländer, der eine ITIN benötigt, um Vergünstigungen aus einem Steuerabkommen in Anspruch zu nehmen (Sie müssen zusätzlich Feld h ankreuzen und ausfüllen)",
+            "ukrainian": "a. Іноземець-нерезидент, якому потрібен ITIN для отримання пільги за податковим договором (також позначте та заповніть пункт h)",
+            "persian": "الف. بیگانه غیرمقیم که برای استفاده از مزایای معاهده مالیاتی باید ITIN دریافت کند (باید کادر h را نیز علامت بزنید و تکمیل کنید)",
+            "urdu": "a. غیر مقیم غیر ملکی جسے ٹیکس معاہدے کا فائدہ حاصل کرنے کے لیے ITIN لینا ضروری ہے (آپ کو خانہ h بھی چیک اور مکمل کرنا ہوگا)",
+            "french": "a. Etranger non-resident tenu d'obtenir un ITIN pour beneficier d'une convention fiscale (vous devez aussi cocher et remplir la case h)",
+            "italian": "a. Straniero non residente che deve ottenere un ITIN per richiedere un beneficio previsto da un trattato fiscale (deve anche selezionare e compilare la casella h)",
+            "tagalog": "a. Nonresident alien na kailangang kumuha ng ITIN para hingin ang benepisyo ng tax treaty (kailangan ninyo ring markahan at kumpletuhin ang kahon h)",
+            "dutch": "a. Buitenlandse ingezetene zonder verblijfsstatus die een ITIN nodig heeft om aanspraak te maken op een belastingverdragvoordeel (u moet ook vakje h aanvinken en invullen)",
+            "afrikaans": "a. Nie-inwonende vreemdeling wat 'n ITIN moet verkry om 'n belastingverdragvoordeel te eis (u moet ook blokkie h merk en voltooi)",
+            "russian": "a. Иностранец-нерезидент, которому необходимо получить ITIN для получения льготы по налоговому соглашению (вы также должны отметить и заполнить пункт h)",
+            "swedish": "a. Utländsk person utan hemvist i USA som måste skaffa ett ITIN för att göra anspråk på förmåner enligt ett skatteavtal (du måste även kryssa i och fylla i ruta h)",
+            "korean": "가. 조세 조약 혜택을 주장하기 위해 ITIN을 발급받아야 하는 비거주 외국인(항목 h에도 체크하고 작성하셔야 합니다)"
           }
         },
         {
@@ -106,6 +182,25 @@
             "y": 158,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "ب. أجنبي غير مقيم يقدم إقراراً ضريبياً فيدرالياً أمريكياً",
+            "spanish": "b. Extranjero no residente que presenta una declaración de impuestos federal de los EE. UU.",
+            "chinese": "b. 申报美国联邦税表的非居民外国人",
+            "portuguese": "b. Estrangeiro não residente que apresenta uma declaração de imposto de renda federal dos EUA",
+            "hindi": "b. गैर-निवासी विदेशी जो अमेरिकी संघीय कर रिटर्न दाखिल कर रहा है",
+            "german": "b. Gebietsfremder Ausländer, der eine US-Bundessteuererklärung einreicht",
+            "ukrainian": "b. Іноземець-нерезидент, який подає федеральну податкову декларацію США",
+            "persian": "ب. بیگانه غیرمقیم که اظهارنامه مالیاتی فدرال آمریکا ارائه می‌دهد",
+            "urdu": "b. غیر مقیم غیر ملکی جو امریکی وفاقی ٹیکس ریٹرن جمع کروا رہا ہے",
+            "french": "b. Etranger non-resident deposant une declaration de revenus federale des Etats-Unis",
+            "italian": "b. Straniero non residente che presenta una dichiarazione dei redditi federale degli Stati Uniti",
+            "tagalog": "b. Nonresident alien na nag-fa-file ng U.S. federal tax return",
+            "dutch": "b. Buitenlandse ingezetene zonder verblijfsstatus die een Amerikaanse federale belastingaangifte indient",
+            "afrikaans": "b. Nie-inwonende vreemdeling wat 'n Amerikaanse federale belastingopgawe indien",
+            "russian": "b. Иностранец-нерезидент, подающий федеральную налоговую декларацию США",
+            "swedish": "b. Utländsk person utan hemvist i USA som lämnar en federal amerikansk skattedeklaration",
+            "korean": "나. 미국 연방 세금 신고서를 제출하는 비거주 외국인"
           }
         },
         {
@@ -119,6 +214,25 @@
             "y": 170,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "ج. أجنبي مقيم في الولايات المتحدة (بناءً على عدد أيام التواجد في الولايات المتحدة) يقدم إقراراً ضريبياً فيدرالياً أمريكياً",
+            "spanish": "c. Extranjero residente de los EE. UU. (según los días de presencia en los Estados Unidos) que presenta una declaración de impuestos federal de los EE. UU.",
+            "chinese": "c. 申报美国联邦税表的美国居民外国人（依在美停留天数认定）",
+            "portuguese": "c. Estrangeiro residente dos EUA (com base nos dias de presença nos Estados Unidos) que apresenta uma declaração de imposto de renda federal dos EUA",
+            "hindi": "c. अमेरिकी निवासी विदेशी (संयुक्त राज्य में उपस्थिति के दिनों के आधार पर) जो अमेरिकी संघीय कर रिटर्न दाखिल कर रहा है",
+            "german": "c. In den USA ansässiger Ausländer (basierend auf Aufenthaltstagen in den Vereinigten Staaten), der eine US-Bundessteuererklärung einreicht",
+            "ukrainian": "c. Іноземець-резидент США (на основі кількості днів перебування у Сполучених Штатах), який подає федеральну податкову декларацію США",
+            "persian": "ج. بیگانه مقیم آمریکا (بر اساس روزهای حضور در ایالات متحده) که اظهارنامه مالیاتی فدرال آمریکا ارائه می‌دهد",
+            "urdu": "c. امریکی مقیم غیر ملکی (امریکہ میں موجودگی کے دنوں کی بنیاد پر) جو امریکی وفاقی ٹیکس ریٹرن جمع کروا رہا ہے",
+            "french": "c. Etranger resident des Etats-Unis (selon le nombre de jours de presence aux Etats-Unis) deposant une declaration de revenus federale des Etats-Unis",
+            "italian": "c. Straniero residente negli Stati Uniti (in base ai giorni di presenza negli Stati Uniti) che presenta una dichiarazione dei redditi federale degli Stati Uniti",
+            "tagalog": "c. U.S. resident alien (base sa bilang ng araw na naroon sa United States) na nag-fa-file ng U.S. federal tax return",
+            "dutch": "c. Buitenlandse ingezetene met verblijfsstatus in de VS (op basis van het aantal dagen aanwezig in de Verenigde Staten) die een Amerikaanse federale belastingaangifte indient",
+            "afrikaans": "c. Amerikaanse inwonende vreemdeling (gebaseer op dae teenwoordig in die Verenigde State) wat 'n Amerikaanse federale belastingopgawe indien",
+            "russian": "c. Иностранец-резидент США (на основании количества дней пребывания в США), подающий федеральную налоговую декларацию США",
+            "swedish": "c. Utländsk person med hemvist i USA (baserat på antal dagar i USA) som lämnar en federal amerikansk skattedeklaration",
+            "korean": "다. 미국 연방 세금 신고서를 제출하는 미국 거주 외국인(미국 내 체류 일수 기준)"
           }
         },
         {
@@ -132,6 +246,25 @@
             "y": 182,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "د. معال لمواطن أمريكي أو أجنبي مقيم",
+            "spanish": "d. Dependiente de un ciudadano estadounidense o extranjero residente",
+            "chinese": "d. 美国公民/居民外国人的被抚养人",
+            "portuguese": "d. Dependente de cidadão dos EUA/estrangeiro residente",
+            "hindi": "d. अमेरिकी नागरिक/निवासी विदेशी का आश्रित",
+            "german": "d. Angehöriger eines US-Bürgers/in den USA ansässigen Ausländers",
+            "ukrainian": "d. Утриманець громадянина США або іноземця-резидента",
+            "persian": "د. تحت تکفل شهروند آمریکا یا بیگانه مقیم آمریکا",
+            "urdu": "d. امریکی شہری/مقیم غیر ملکی کا زیرکفالت فرد",
+            "french": "d. Personne a charge d'un citoyen americain ou d'un etranger resident des Etats-Unis",
+            "italian": "d. Persona a carico di un cittadino statunitense o di uno straniero residente",
+            "tagalog": "d. Dependent ng U.S. citizen/resident alien",
+            "dutch": "d. Ten laste komende persoon van een Amerikaans staatsburger/ingezetene met verblijfsstatus",
+            "afrikaans": "d. Afhanklike van 'n Amerikaanse burger/inwonende vreemdeling",
+            "russian": "d. Иждивенец гражданина США/иностранца-резидента США",
+            "swedish": "d. Anhörig till en amerikansk medborgare eller person med hemvist i USA",
+            "korean": "라. 미국 시민권자/거주 외국인의 부양가족"
           }
         },
         {
@@ -145,6 +278,25 @@
             "y": 194,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "هـ. زوج أو زوجة مواطن أمريكي أو أجنبي مقيم",
+            "spanish": "e. Cónyuge de un ciudadano estadounidense o extranjero residente",
+            "chinese": "e. 美国公民/居民外国人的配偶",
+            "portuguese": "e. Cônjuge de cidadão dos EUA/estrangeiro residente",
+            "hindi": "e. अमेरिकी नागरिक/निवासी विदेशी का पति या पत्नी",
+            "german": "e. Ehepartner eines US-Bürgers/in den USA ansässigen Ausländers",
+            "ukrainian": "e. Подружжя громадянина США або іноземця-резидента",
+            "persian": "ه. همسر شهروند آمریکا یا بیگانه مقیم آمریکا",
+            "urdu": "e. امریکی شہری/مقیم غیر ملکی کا شریک حیات",
+            "french": "e. Conjoint d'un citoyen americain ou d'un etranger resident des Etats-Unis",
+            "italian": "e. Coniuge di un cittadino statunitense o di uno straniero residente",
+            "tagalog": "e. Asawa ng U.S. citizen/resident alien",
+            "dutch": "e. Echtgeno(o)t(e) van een Amerikaans staatsburger/ingezetene met verblijfsstatus",
+            "afrikaans": "e. Eggenoot van 'n Amerikaanse burger/inwonende vreemdeling",
+            "russian": "e. Супруг(а) гражданина США/иностранца-резидента США",
+            "swedish": "e. Make/maka till en amerikansk medborgare eller person med hemvist i USA",
+            "korean": "마. 미국 시민권자/거주 외국인의 배우자"
           }
         },
         {
@@ -158,6 +310,25 @@
             "y": 218.5,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "و. طالب أو أستاذ أو باحث أجنبي غير مقيم يقدم إقراراً ضريبياً فيدرالياً أمريكياً أو يطالب باستثناء (في حال المطالبة باستثناء، يجب أيضاً وضع علامة على المربع h وتعبئته)",
+            "spanish": "f. Estudiante, profesor o investigador extranjero no residente que presenta una declaración de impuestos federal de los EE. UU. o que reclama una excepción (si reclama una excepción, también debe marcar y completar el recuadro h)",
+            "chinese": "f. 申报美国联邦税表或申请豁免的非居民外国学生、教授或研究人员（如申请豁免，您还须勾选并填写h项）",
+            "portuguese": "f. Estudante, professor ou pesquisador estrangeiro não residente que apresenta uma declaração de imposto de renda federal dos EUA ou reivindica uma exceção (se reivindicar uma exceção, você também deve marcar e preencher a caixa h)",
+            "hindi": "f. गैर-निवासी विदेशी छात्र, प्रोफेसर, या शोधकर्ता जो अमेरिकी संघीय कर रिटर्न दाखिल कर रहा है या छूट का दावा कर रहा है (यदि छूट का दावा कर रहे हैं, तो आपको बॉक्स h भी चेक करना और पूरा करना होगा)",
+            "german": "f. Gebietsfremder ausländischer Student, Professor oder Forscher, der eine US-Bundessteuererklärung einreicht oder eine Ausnahme geltend macht (bei Geltendmachung einer Ausnahme müssen Sie zusätzlich Feld h ankreuzen und ausfüllen)",
+            "ukrainian": "f. Іноземець-нерезидент, студент, професор або дослідник, який подає федеральну податкову декларацію США або заявляє про виняток (у разі винятку також позначте та заповніть пункт h)",
+            "persian": "و. دانشجو، استاد یا پژوهشگر بیگانه غیرمقیم که اظهارنامه مالیاتی فدرال آمریکا ارائه می‌دهد یا درخواست استثنا دارد (در صورت درخواست استثنا، باید کادر h را نیز علامت بزنید و تکمیل کنید)",
+            "urdu": "f. غیر مقیم غیر ملکی طالب علم، پروفیسر، یا محقق جو امریکی وفاقی ٹیکس ریٹرن جمع کروا رہا ہے یا استثنیٰ کا دعویٰ کر رہا ہے (اگر استثنیٰ کا دعویٰ کر رہے ہیں تو آپ کو خانہ h بھی چیک اور مکمل کرنا ہوگا)",
+            "french": "f. Etudiant, professeur ou chercheur etranger non-resident deposant une declaration de revenus federale des Etats-Unis ou demandant une exception (si vous demandez une exception, vous devez aussi cocher et remplir la case h)",
+            "italian": "f. Studente, professore o ricercatore straniero non residente che presenta una dichiarazione dei redditi federale degli Stati Uniti o richiede un'eccezione (se richiede un'eccezione, deve anche selezionare e compilare la casella h)",
+            "tagalog": "f. Nonresident alien na estudyante, propesor, o mananaliksik na nag-fa-file ng U.S. federal tax return o humihingi ng exception (kung humihingi ng exception, kailangan ninyo ring markahan at kumpletuhin ang kahon h)",
+            "dutch": "f. Buitenlandse student, professor of onderzoeker zonder verblijfsstatus die een Amerikaanse federale belastingaangifte indient of aanspraak maakt op een uitzondering (als u aanspraak maakt op een uitzondering, moet u ook vakje h aanvinken en invullen)",
+            "afrikaans": "f. Nie-inwonende vreemdeling-student, -professor of -navorser wat 'n Amerikaanse federale belastingopgawe indien of 'n uitsondering eis (indien u 'n uitsondering eis, moet u ook blokkie h merk en voltooi)",
+            "russian": "f. Иностранец-нерезидент — студент, преподаватель или исследователь, подающий федеральную налоговую декларацию США или заявляющий об исключении (при заявлении об исключении вы также должны отметить и заполнить пункт h)",
+            "swedish": "f. Utländsk student, professor eller forskare utan hemvist i USA som lämnar en federal amerikansk skattedeklaration eller gör anspråk på ett undantag (om du gör anspråk på ett undantag måste du även kryssa i och fylla i ruta h)",
+            "korean": "바. 미국 연방 세금 신고서를 제출하거나 예외를 주장하는 비거주 외국인 학생, 교수 또는 연구원(예외를 주장하는 경우 항목 h에도 체크하고 작성하셔야 합니다)"
           }
         },
         {
@@ -171,6 +342,25 @@
             "y": 241.5,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "ز. معال أو زوج لأجنبي غير مقيم حامل لتأشيرة دخول أمريكية",
+            "spanish": "g. Dependiente o cónyuge de un extranjero no residente que posee una visa estadounidense",
+            "chinese": "g. 持有美国签证的非居民外国人的被抚养人/配偶",
+            "portuguese": "g. Dependente/cônjuge de um estrangeiro não residente titular de visto dos EUA",
+            "hindi": "g. अमेरिकी वीज़ा रखने वाले गैर-निवासी विदेशी का आश्रित/पति या पत्नी",
+            "german": "g. Angehöriger/Ehepartner eines gebietsfremden Ausländers mit einem US-Visum",
+            "ukrainian": "g. Утриманець або подружжя іноземця-нерезидента, який має візу США",
+            "persian": "ز. تحت تکفل یا همسر بیگانه غیرمقیم دارای ویزای آمریکا",
+            "urdu": "g. امریکی ویزا رکھنے والے غیر مقیم غیر ملکی کا زیرکفالت فرد/شریک حیات",
+            "french": "g. Personne a charge ou conjoint d'un etranger non-resident titulaire d'un visa americain",
+            "italian": "g. Persona a carico o coniuge di uno straniero non residente titolare di un visto statunitense",
+            "tagalog": "g. Dependent/asawa ng nonresident alien na may hawak na U.S. visa",
+            "dutch": "g. Ten laste komende persoon/echtgeno(o)t(e) van een buitenlandse ingezetene zonder verblijfsstatus met een Amerikaans visum",
+            "afrikaans": "g. Afhanklike/eggenoot van 'n nie-inwonende vreemdeling met 'n Amerikaanse visum",
+            "russian": "g. Иждивенец/супруг(а) иностранца-нерезидента, имеющего визу США",
+            "swedish": "g. Anhörig till eller make/maka till en utländsk person utan hemvist i USA som innehar ett amerikanskt visum",
+            "korean": "사. 미국 비자를 소지한 비거주 외국인의 부양가족/배우자"
           }
         },
         {
@@ -184,6 +374,25 @@
             "y": 254,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "ح. أخرى (راجع التعليمات)",
+            "spanish": "h. Otro (consulte las instrucciones)",
+            "chinese": "h. 其他（见说明）",
+            "portuguese": "h. Outro (consulte as instruções)",
+            "hindi": "h. अन्य (निर्देश देखें)",
+            "german": "h. Sonstiges (siehe Anleitung)",
+            "ukrainian": "h. Інше (див. інструкції)",
+            "persian": "ح. سایر موارد (به دفترچه راهنما مراجعه کنید)",
+            "urdu": "h. دیگر (ہدایات دیکھیں)",
+            "french": "h. Autre (voir les instructions)",
+            "italian": "h. Altro (vedere le istruzioni)",
+            "tagalog": "h. Iba pa (tingnan ang mga instructions)",
+            "dutch": "h. Overig (zie instructies)",
+            "afrikaans": "h. Ander (sien instruksies)",
+            "russian": "h. Другое (см. инструкции)",
+            "swedish": "h. Annat (se anvisningarna)",
+            "korean": "아. 기타(안내서 참조)"
           }
         }
       ],
@@ -201,6 +410,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "سبب التقديم",
+        "tagalog": "dahilan sa pag-apply",
+        "spanish": "motivo de la solicitud",
+        "french": "motif de la demande",
+        "chinese": "申请原因",
+        "portuguese": "motivo da solicitação",
+        "hindi": "आवेदन करने का कारण",
+        "italian": "motivo della richiesta",
+        "german": "Grund der Antragstellung",
+        "korean": "신청 사유",
+        "dutch": "Reden voor aanvraag",
+        "ukrainian": "причина подання заяви",
+        "russian": "Причина подачи заявления",
+        "persian": "دلیل درخواست",
+        "urdu": "درخواست دینے کی وجہ",
+        "swedish": "skäl för ansökan",
+        "afrikaans": "rede vir aansoek"
       }
     },
     {
@@ -234,6 +462,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "صلة القرابة بمواطن أمريكي",
+        "tagalog": "relasyon sa mamamayan ng U.S.",
+        "spanish": "relación con el ciudadano estadounidense",
+        "french": "lien de parente avec le citoyen americain",
+        "chinese": "与美国公民的关系",
+        "portuguese": "relação com o cidadão dos EUA",
+        "hindi": "अमेरिकी नागरिक से संबंध",
+        "italian": "relazione con il cittadino statunitense",
+        "german": "Beziehung zum US-Bürger",
+        "korean": "미국 시민과의 관계",
+        "dutch": "Relatie tot Amerikaans staatsburger",
+        "ukrainian": "стосунок до громадянина США",
+        "russian": "Родство с гражданином США",
+        "persian": "نسبت با شهروند آمریکا",
+        "urdu": "امریکی شہری سے تعلق",
+        "swedish": "relation till amerikansk medborgare",
+        "afrikaans": "verwantskap met VSA-burger"
       }
     },
     {
@@ -284,6 +531,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "اسم ورقم المواطن الأمريكي",
+        "tagalog": "pangalan at numero ng mamamayan ng U.S.",
+        "spanish": "nombre y número del ciudadano estadounidense",
+        "french": "nom et numero du citoyen americain",
+        "chinese": "美国公民姓名及号码",
+        "portuguese": "nome e número do cidadão dos EUA",
+        "hindi": "अमेरिकी नागरिक का नाम और नंबर",
+        "italian": "nome e numero del cittadino statunitense",
+        "german": "Name und Nummer des US-Bürgers",
+        "korean": "미국 시민의 이름 및 번호",
+        "dutch": "Naam en nummer van Amerikaans staatsburger",
+        "ukrainian": "ім'я та номер громадянина США",
+        "russian": "Имя и номер гражданина США",
+        "persian": "نام و شماره شهروند آمریکا",
+        "urdu": "امریکی شہری کا نام اور نمبر",
+        "swedish": "namn och nummer på amerikansk medborgare",
+        "afrikaans": "naam en nommer van VSA-burger"
       }
     },
     {
@@ -337,6 +603,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "تفاصيل سبب التقديم (البند h)",
+        "tagalog": "mga detalye para sa dahilan ng aplikasyon h",
+        "spanish": "detalles del motivo de la solicitud h",
+        "french": "precisions pour le motif de demande h",
+        "chinese": "申请原因h的详细说明",
+        "portuguese": "detalhes do motivo da solicitação h",
+        "hindi": "आवेदन कारण h के लिए विवरण",
+        "italian": "dettagli per il motivo della richiesta h",
+        "german": "Details zu Antragsgrund h",
+        "korean": "신청 사유 h에 대한 세부 사항",
+        "dutch": "Details voor aanvraagreden h",
+        "ukrainian": "деталі до пункту h причини подання заяви",
+        "russian": "Подробности для пункта h причины подачи заявления",
+        "persian": "جزئیات مربوط به دلیل درخواست h",
+        "urdu": "درخواست کی وجہ h کی تفصیلات",
+        "swedish": "detaljer for ansökningsskäl h",
+        "afrikaans": "besonderhede vir aansoekrede h"
       }
     },
     {
@@ -387,6 +672,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "دولة المعاهدة",
+        "tagalog": "bansang kasama sa kasunduan (treaty)",
+        "spanish": "país del tratado",
+        "french": "pays du traite",
+        "chinese": "税收协定国",
+        "portuguese": "país do tratado",
+        "hindi": "संधि देश",
+        "italian": "paese del trattato",
+        "german": "Vertragsstaat",
+        "korean": "조세조약 체결국",
+        "dutch": "Verdragsland",
+        "ukrainian": "країна договору",
+        "russian": "Страна договора",
+        "persian": "کشور معاهده",
+        "urdu": "معاہدہ کرنے والا ملک",
+        "swedish": "skatteavtalsland",
+        "afrikaans": "verdragland"
       }
     },
     {
@@ -437,6 +741,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "رقم مادة المعاهدة",
+        "tagalog": "numero ng artikulo ng kasunduan (treaty)",
+        "spanish": "número de artículo del tratado",
+        "french": "numero d'article du traite",
+        "chinese": "税收协定条款编号",
+        "portuguese": "número do artigo do tratado",
+        "hindi": "संधि अनुच्छेद संख्या",
+        "italian": "numero dell'articolo del trattato",
+        "german": "Artikelnummer des Abkommens",
+        "korean": "조세조약 조항 번호",
+        "dutch": "Artikelnummer van het verdrag",
+        "ukrainian": "номер статті договору",
+        "russian": "Номер статьи договора",
+        "persian": "شماره ماده معاهده",
+        "urdu": "معاہدے کے آرٹیکل کا نمبر",
+        "swedish": "artikelnummer i skatteavtalet",
+        "afrikaans": "verdragartikelnommer"
       }
     },
     {
@@ -462,6 +785,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الاسم الأول",
+        "tagalog": "unang pangalan",
+        "spanish": "primer nombre",
+        "french": "prenom",
+        "chinese": "名字",
+        "portuguese": "primeiro nome",
+        "hindi": "पहला नाम",
+        "italian": "nome",
+        "german": "Vorname",
+        "korean": "이름",
+        "dutch": "Voornaam",
+        "ukrainian": "ім'я",
+        "russian": "Имя",
+        "persian": "نام کوچک",
+        "urdu": "پہلا نام",
+        "swedish": "förnamn",
+        "afrikaans": "voornaam"
       }
     },
     {
@@ -484,6 +826,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الاسم الأوسط",
+        "tagalog": "gitnang pangalan",
+        "spanish": "segundo nombre",
+        "french": "deuxieme prenom",
+        "chinese": "中间名",
+        "portuguese": "nome do meio",
+        "hindi": "बीच का नाम",
+        "italian": "secondo nome",
+        "german": "Zweiter Vorname",
+        "korean": "중간 이름",
+        "dutch": "Tweede naam",
+        "ukrainian": "по батькові або друге ім'я",
+        "russian": "Отчество",
+        "persian": "نام میانی",
+        "urdu": "درمیانی نام",
+        "swedish": "mellannamn",
+        "afrikaans": "middelnaam"
       }
     },
     {
@@ -509,6 +870,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "اسم العائلة",
+        "tagalog": "apelyido",
+        "spanish": "apellido",
+        "french": "nom de famille",
+        "chinese": "姓氏",
+        "portuguese": "sobrenome",
+        "hindi": "अंतिम नाम",
+        "italian": "cognome",
+        "german": "Nachname",
+        "korean": "성",
+        "dutch": "Achternaam",
+        "ukrainian": "прізвище",
+        "russian": "Фамилия",
+        "persian": "نام خانوادگی",
+        "urdu": "آخری نام",
+        "swedish": "efternamn",
+        "afrikaans": "van"
       }
     },
     {
@@ -531,6 +911,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الاسم الأول عند الميلاد",
+        "tagalog": "unang pangalan sa kapanganakan",
+        "spanish": "primer nombre de nacimiento",
+        "french": "prenom de naissance",
+        "chinese": "出生时的名字",
+        "portuguese": "primeiro nome de nascimento",
+        "hindi": "जन्म के समय का पहला नाम",
+        "italian": "nome alla nascita",
+        "german": "Vorname bei Geburt",
+        "korean": "출생 시 이름",
+        "dutch": "Voornaam bij geboorte",
+        "ukrainian": "ім'я при народженні",
+        "russian": "Имя при рождении",
+        "persian": "نام کوچک هنگام تولد",
+        "urdu": "پیدائشی پہلا نام",
+        "swedish": "förnamn vid födseln",
+        "afrikaans": "voornaam by geboorte"
       }
     },
     {
@@ -553,6 +952,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الاسم الأوسط عند الميلاد",
+        "tagalog": "gitnang pangalan sa kapanganakan",
+        "spanish": "segundo nombre de nacimiento",
+        "french": "deuxieme prenom de naissance",
+        "chinese": "出生时的中间名",
+        "portuguese": "nome do meio de nascimento",
+        "hindi": "जन्म के समय का बीच का नाम",
+        "italian": "secondo nome alla nascita",
+        "german": "Zweiter Vorname bei Geburt",
+        "korean": "출생 시 중간 이름",
+        "dutch": "Tweede naam bij geboorte",
+        "ukrainian": "по батькові або друге ім'я при народженні",
+        "russian": "Отчество при рождении",
+        "persian": "نام میانی هنگام تولد",
+        "urdu": "پیدائشی درمیانی نام",
+        "swedish": "mellannamn vid födseln",
+        "afrikaans": "middelnaam by geboorte"
       }
     },
     {
@@ -575,6 +993,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "اسم العائلة عند الميلاد",
+        "tagalog": "apelyido sa kapanganakan",
+        "spanish": "apellido de nacimiento",
+        "french": "nom de famille de naissance",
+        "chinese": "出生时的姓氏",
+        "portuguese": "sobrenome de nascimento",
+        "hindi": "जन्म के समय का अंतिम नाम",
+        "italian": "cognome alla nascita",
+        "german": "Nachname bei Geburt",
+        "korean": "출생 시 성",
+        "dutch": "Achternaam bij geboorte",
+        "ukrainian": "прізвище при народженні",
+        "russian": "Фамилия при рождении",
+        "persian": "نام خانوادگی هنگام تولد",
+        "urdu": "پیدائشی آخری نام",
+        "swedish": "efternamn vid födseln",
+        "afrikaans": "van by geboorte"
       }
     },
     {
@@ -600,6 +1037,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "عنوان المراسلة (الشارع)",
+        "tagalog": "address ng kalye para sa koreo",
+        "spanish": "domicilio postal",
+        "french": "adresse postale",
+        "chinese": "邮寄街道地址",
+        "portuguese": "endereço de correspondência",
+        "hindi": "डाक पता (सड़क)",
+        "italian": "indirizzo postale",
+        "german": "Postanschrift, Straße",
+        "korean": "우편물 수령 주소(도로명)",
+        "dutch": "Postadres, straat",
+        "ukrainian": "поштова адреса (вулиця)",
+        "russian": "Почтовый адрес (улица)",
+        "persian": "آدرس پستی خیابان",
+        "urdu": "ڈاک کے پتے کی گلی",
+        "swedish": "gatuadress for post",
+        "afrikaans": "posadres straat"
       }
     },
     {
@@ -625,6 +1081,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "مدينة وولاية ودولة المراسلة",
+        "tagalog": "lungsod, estado, at bansa para sa koreo",
+        "spanish": "ciudad, estado y país de la dirección postal",
+        "french": "ville, Etat et pays de l'adresse postale",
+        "chinese": "邮寄地址所在城市、州及国家",
+        "portuguese": "cidade, estado e país de correspondência",
+        "hindi": "डाक पता (शहर, राज्य, और देश)",
+        "italian": "citta, stato e paese dell'indirizzo postale",
+        "german": "Postanschrift: Stadt, Bundesstaat und Land",
+        "korean": "우편물 수령 도시, 주 및 국가",
+        "dutch": "Postadres: plaats, staat en land",
+        "ukrainian": "поштова адреса: місто, штат і країна",
+        "russian": "Почтовый адрес: город, штат и страна",
+        "persian": "شهر، ایالت و کشورِ آدرس پستی",
+        "urdu": "ڈاک کا شہر، ریاست، اور ملک",
+        "swedish": "stad, delstat och land for post",
+        "afrikaans": "posadres stad, staat en land"
       }
     },
     {
@@ -647,6 +1122,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "العنوان الأجنبي (الشارع)",
+        "tagalog": "address ng kalye sa ibang bansa",
+        "spanish": "domicilio en el extranjero",
+        "french": "adresse a l'etranger",
+        "chinese": "国外街道地址",
+        "portuguese": "endereço estrangeiro",
+        "hindi": "विदेशी पता (सड़क)",
+        "italian": "indirizzo estero",
+        "german": "Ausländische Anschrift, Straße",
+        "korean": "해외 주소(도로명)",
+        "dutch": "Buitenlands straatadres",
+        "ukrainian": "закордонна адреса (вулиця)",
+        "russian": "Адрес за рубежом (улица)",
+        "persian": "آدرس خیابان در خارج از آمریکا",
+        "urdu": "بیرون ملک گلی کا پتہ",
+        "swedish": "utländsk gatuadress",
+        "afrikaans": "buitelandse straatadres"
       }
     },
     {
@@ -669,6 +1163,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "مدينة وولاية ودولة العنوان الأجنبي",
+        "tagalog": "lungsod, estado, at bansa sa ibang bansa",
+        "spanish": "ciudad, estado y país de la dirección en el extranjero",
+        "french": "ville, Etat et pays de l'adresse a l'etranger",
+        "chinese": "国外所在城市、州及国家",
+        "portuguese": "cidade, estado e país estrangeiros",
+        "hindi": "विदेशी पता (शहर, राज्य, और देश)",
+        "italian": "citta, stato e paese dell'indirizzo estero",
+        "german": "Ausländische Anschrift: Stadt, Bundesstaat/Region und Land",
+        "korean": "해외 도시, 주 및 국가",
+        "dutch": "Buitenlandse plaats, staat en land",
+        "ukrainian": "закордонна адреса: місто, штат і країна",
+        "russian": "Адрес за рубежом: город, штат и страна",
+        "persian": "شهر، ایالت و کشورِ آدرس خارج از آمریکا",
+        "urdu": "بیرون ملک شہر، ریاست، اور ملک",
+        "swedish": "utländsk stad, delstat och land",
+        "afrikaans": "buitelandse stad, staat en land"
       }
     },
     {
@@ -696,6 +1209,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "تاريخ الميلاد",
+        "tagalog": "petsa ng kapanganakan",
+        "spanish": "fecha de nacimiento",
+        "french": "date de naissance",
+        "chinese": "出生日期",
+        "portuguese": "data de nascimento",
+        "hindi": "जन्म तिथि",
+        "italian": "data di nascita",
+        "german": "Geburtsdatum",
+        "korean": "생년월일",
+        "dutch": "Geboortedatum",
+        "ukrainian": "дата народження",
+        "russian": "Дата рождения",
+        "persian": "تاریخ تولد",
+        "urdu": "تاریخ پیدائش",
+        "swedish": "födelsedatum",
+        "afrikaans": "geboortedatum"
       }
     },
     {
@@ -721,6 +1253,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "بلد الميلاد",
+        "tagalog": "bansang kinapanganakan",
+        "spanish": "país de nacimiento",
+        "french": "pays de naissance",
+        "chinese": "出生国",
+        "portuguese": "país de nascimento",
+        "hindi": "जन्म का देश",
+        "italian": "paese di nascita",
+        "german": "Geburtsland",
+        "korean": "출생 국가",
+        "dutch": "Geboorteland",
+        "ukrainian": "країна народження",
+        "russian": "Страна рождения",
+        "persian": "کشور محل تولد",
+        "urdu": "پیدائش کا ملک",
+        "swedish": "födelseland",
+        "afrikaans": "land van geboorte"
       }
     },
     {
@@ -742,12 +1293,31 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "مدينة الميلاد",
+        "tagalog": "lungsod na kinapanganakan",
+        "spanish": "ciudad de nacimiento",
+        "french": "ville de naissance",
+        "chinese": "出生城市",
+        "portuguese": "cidade de nascimento",
+        "hindi": "जन्म का शहर",
+        "italian": "citta di nascita",
+        "german": "Geburtsort",
+        "korean": "출생 도시",
+        "dutch": "Geboorteplaats",
+        "ukrainian": "місто народження",
+        "russian": "Город рождения",
+        "persian": "شهر محل تولد",
+        "urdu": "پیدائش کا شہر",
+        "swedish": "födelsestad",
+        "afrikaans": "stad van geboorte"
       }
     },
     {
       "id": "sex",
       "name": "5 Sex",
-      "spoken_name": "sex",
+      "spoken_name": "gender",
       "type": "radio",
       "validation": {
         "required": true
@@ -764,6 +1334,25 @@
             "y": 422,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "ذكر",
+            "spanish": "Masculino",
+            "chinese": "男",
+            "portuguese": "Masculino",
+            "hindi": "पुरुष",
+            "german": "Männlich",
+            "ukrainian": "Чоловіча",
+            "persian": "مرد",
+            "urdu": "مرد",
+            "french": "Homme",
+            "italian": "Maschio",
+            "tagalog": "Lalaki",
+            "dutch": "Man",
+            "afrikaans": "Manlik",
+            "russian": "Мужской",
+            "swedish": "Man",
+            "korean": "남성"
           }
         },
         {
@@ -777,6 +1366,25 @@
             "y": 433.5,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "أنثى",
+            "spanish": "Femenino",
+            "chinese": "女",
+            "portuguese": "Feminino",
+            "hindi": "महिला",
+            "german": "Weiblich",
+            "ukrainian": "Жіноча",
+            "persian": "زن",
+            "urdu": "عورت",
+            "french": "Femme",
+            "italian": "Femmina",
+            "tagalog": "Babae",
+            "dutch": "Vrouw",
+            "afrikaans": "Vroulik",
+            "russian": "Женский",
+            "swedish": "Kvinna",
+            "korean": "여성"
           }
         }
       ],
@@ -788,12 +1396,32 @@
         "height": 8
       },
       "section_id": "sec_birth_information_p1",
-      "_review": {
-        "status": "reviewed_correct"
-      },
       "help": {
         "instructions": "Sex/Gender listed on passport or other documents",
         "details": "This selection must match passport and other immigration documents."
+      },
+      "hidden": true,
+      "_review": {
+        "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الجنس",
+        "tagalog": "kasarian",
+        "spanish": "sexo",
+        "french": "sexe",
+        "chinese": "性别",
+        "portuguese": "gênero",
+        "hindi": "लिंग",
+        "italian": "sesso",
+        "german": "Geschlecht",
+        "korean": "성별",
+        "dutch": "Geslacht",
+        "ukrainian": "стать",
+        "russian": "Пол",
+        "persian": "جنسیت",
+        "urdu": "جنس",
+        "swedish": "kön",
+        "afrikaans": "geslag"
       }
     },
     {
@@ -819,6 +1447,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "بلد الجنسية",
+        "tagalog": "bansang pagkamamamayan",
+        "spanish": "país de ciudadanía",
+        "french": "pays de citoyennete",
+        "chinese": "公民身份所属国家",
+        "portuguese": "país de cidadania",
+        "hindi": "नागरिकता का देश",
+        "italian": "paese di cittadinanza",
+        "german": "Staatsangehörigkeit",
+        "korean": "시민권 국가",
+        "dutch": "Land van staatsburgerschap",
+        "ukrainian": "країна громадянства",
+        "russian": "Страна гражданства",
+        "persian": "کشور تابعیت",
+        "urdu": "شہریت کا ملک",
+        "swedish": "medborgarskapsland",
+        "afrikaans": "land van burgerskap"
       }
     },
     {
@@ -841,6 +1488,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "رقم التعريف الضريبي الأجنبي",
+        "tagalog": "banyagang numero ng I.D. sa buwis",
+        "spanish": "número de identificación fiscal extranjero",
+        "french": "numero d'identification fiscale etranger",
+        "chinese": "外国纳税人识别号码",
+        "portuguese": "número de identificação fiscal estrangeiro",
+        "hindi": "विदेशी टैक्स आई.डी. नंबर",
+        "italian": "numero di identificazione fiscale estero",
+        "german": "Ausländische Steuer-Identifikationsnummer",
+        "korean": "외국 납세자 번호",
+        "dutch": "Buitenlands belastingidentificatienummer",
+        "ukrainian": "закордонний податковий ідентифікаційний номер",
+        "russian": "Иностранный налоговый идентификационный номер",
+        "persian": "شماره شناسه مالیاتی خارجی",
+        "urdu": "غیر ملکی ٹیکس شناختی نمبر",
+        "swedish": "utländskt skatte-ID-nummer",
+        "afrikaans": "buitelandse belasting-ID-nommer"
       }
     },
     {
@@ -864,6 +1530,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "نوع ورقم تأشيرة الدخول الأمريكية وتاريخ انتهائها",
+        "tagalog": "uri, numero, at petsa ng pag-expire ng U.S. visa",
+        "spanish": "tipo, número y fecha de vencimiento de la visa estadounidense",
+        "french": "type, numero et date d'expiration du visa americain",
+        "chinese": "美国签证类型、号码及有效期",
+        "portuguese": "tipo, número e validade do visto dos EUA",
+        "hindi": "अमेरिकी वीज़ा का प्रकार, नंबर, और समाप्ति तिथि",
+        "italian": "tipo, numero e scadenza del visto statunitense",
+        "german": "US-Visumtyp, -nummer und Ablaufdatum",
+        "korean": "미국 비자 종류, 번호 및 만료일",
+        "dutch": "Amerikaans visumtype, -nummer en vervaldatum",
+        "ukrainian": "тип, номер і термін дії візи США",
+        "russian": "Тип, номер и срок действия визы США",
+        "persian": "نوع، شماره و تاریخ انقضای ویزای آمریکا",
+        "urdu": "امریکی ویزے کی قسم، نمبر، اور میعاد ختم ہونے کی تاریخ",
+        "swedish": "amerikanskt visum: typ, nummer och utgångsdatum",
+        "afrikaans": "VSA-visumtipe, -nommer en vervaldatum"
       }
     },
     {
@@ -886,6 +1571,25 @@
             "y": 482,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "جواز السفر",
+            "spanish": "Pasaporte",
+            "chinese": "护照",
+            "portuguese": "Passaporte",
+            "hindi": "पासपोर्ट",
+            "german": "Reisepass",
+            "ukrainian": "Паспорт",
+            "persian": "گذرنامه",
+            "urdu": "پاسپورٹ",
+            "french": "Passeport",
+            "italian": "Passaporto",
+            "tagalog": "Passport",
+            "dutch": "Paspoort",
+            "afrikaans": "Paspoort",
+            "russian": "Паспорт",
+            "swedish": "Pass",
+            "korean": "여권"
           }
         },
         {
@@ -899,6 +1603,25 @@
             "y": 482,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "رخصة القيادة/بطاقة هوية صادرة عن الولاية",
+            "spanish": "Licencia de conducir/identificación estatal",
+            "chinese": "驾照/州身份证",
+            "portuguese": "Carteira de motorista/Identidade estadual",
+            "hindi": "ड्राइविंग लाइसेंस/राज्य आई.डी.",
+            "german": "Führerschein/Staatlicher Ausweis",
+            "ukrainian": "Посвідчення водія / штатне посвідчення особи",
+            "persian": "گواهینامه رانندگی یا کارت شناسایی ایالتی",
+            "urdu": "ڈرائیونگ لائسنس/ریاستی شناختی کارڈ",
+            "french": "Permis de conduire ou carte d'identite d'Etat",
+            "italian": "Patente di guida/Carta d'identita statale",
+            "tagalog": "Driver's license/State I.D.",
+            "dutch": "Rijbewijs/identiteitskaart van de staat",
+            "afrikaans": "Bestuurslisensie/Staat-ID",
+            "russian": "Водительское удостоверение/удостоверение личности штата",
+            "swedish": "Körkort/delstatligt ID-kort",
+            "korean": "운전면허증/주 신분증"
           }
         },
         {
@@ -912,6 +1635,25 @@
             "y": 482,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "وثائق USCIS",
+            "spanish": "Documentación de USCIS",
+            "chinese": "USCIS证件",
+            "portuguese": "Documentação da USCIS",
+            "hindi": "USCIS दस्तावेज़",
+            "german": "USCIS-Unterlagen",
+            "ukrainian": "Документація USCIS",
+            "persian": "مدارک USCIS",
+            "urdu": "USCIS دستاویزات",
+            "french": "Documentation USCIS",
+            "italian": "Documentazione USCIS",
+            "tagalog": "Dokumentasyon ng USCIS",
+            "dutch": "USCIS-documentatie",
+            "afrikaans": "USCIS-dokumentasie",
+            "russian": "Документы USCIS",
+            "swedish": "USCIS-dokumentation",
+            "korean": "USCIS 서류"
           }
         },
         {
@@ -925,6 +1667,25 @@
             "y": 482,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "أخرى",
+            "spanish": "Otro",
+            "chinese": "其他",
+            "portuguese": "Outro",
+            "hindi": "अन्य",
+            "german": "Sonstiges",
+            "ukrainian": "Інше",
+            "persian": "سایر",
+            "urdu": "دیگر",
+            "french": "Autre",
+            "italian": "Altro",
+            "tagalog": "Iba pa",
+            "dutch": "Overig",
+            "afrikaans": "Ander",
+            "russian": "Другое",
+            "swedish": "Annat",
+            "korean": "기타"
           }
         }
       ],
@@ -942,6 +1703,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "نوع وثيقة الهوية",
+        "tagalog": "uri ng dokumento ng pagkakakilanlan",
+        "spanish": "tipo de documento de identificación",
+        "french": "type de document d'identification",
+        "chinese": "身份证件类型",
+        "portuguese": "tipo de documento de identificação",
+        "hindi": "पहचान दस्तावेज़ का प्रकार",
+        "italian": "tipo di documento di identita",
+        "german": "Art des Ausweisdokuments",
+        "korean": "신분증명서 종류",
+        "dutch": "Type identiteitsdocument",
+        "ukrainian": "тип документа, що посвідчує особу",
+        "russian": "Тип удостоверяющего документа",
+        "persian": "نوع مدرک شناسایی",
+        "urdu": "شناختی دستاویز کی قسم",
+        "swedish": "typ av identitetshandling",
+        "afrikaans": "tipe identifikasiedokument"
       }
     },
     {
@@ -974,6 +1754,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "نوع الوثيقة الأخرى",
+        "tagalog": "ibang uri ng dokumento",
+        "spanish": "otro tipo de documento",
+        "french": "autre type de document",
+        "chinese": "其他证件类型",
+        "portuguese": "outro tipo de documento",
+        "hindi": "अन्य दस्तावेज़ का प्रकार",
+        "italian": "altro tipo di documento",
+        "german": "Andere Dokumentenart",
+        "korean": "기타 서류 종류",
+        "dutch": "Ander documenttype",
+        "ukrainian": "інший тип документа",
+        "russian": "Другой тип документа",
+        "persian": "نوع مدرک دیگر",
+        "urdu": "دیگر دستاویز کی قسم",
+        "swedish": "annan dokumenttyp",
+        "afrikaans": "ander dokumenttipe"
       }
     },
     {
@@ -999,6 +1798,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الولاية أو الدولة التي أصدرت وثيقة الهوية",
+        "tagalog": "Estado o Bansa na nag-isyu ng inyong dokumentong ID",
+        "spanish": "estado o país que emitió su documento de identificación",
+        "french": "Etat ou pays ayant delivre votre document d'identification",
+        "chinese": "签发您身份证件的州或国家",
+        "portuguese": "estado ou país que emitiu seu documento de identificação",
+        "hindi": "वह राज्य या देश जिसने आपका आई.डी. दस्तावेज़ जारी किया",
+        "italian": "stato o paese che ha rilasciato il suo documento di identita",
+        "german": "Bundesstaat oder Land, das Ihr Ausweisdokument ausgestellt hat",
+        "korean": "신분증명서를 발급한 주 또는 국가",
+        "dutch": "Staat of land dat uw identiteitsdocument heeft afgegeven",
+        "ukrainian": "штат або країна, що видали ваш документ, який посвідчує особу",
+        "russian": "Штат или страна, выдавшие ваш документ",
+        "persian": "ایالت یا کشور صادرکننده مدرک شناسایی شما",
+        "urdu": "وہ ریاست یا ملک جس نے آپ کی شناختی دستاویز جاری کی",
+        "swedish": "delstat eller land som utfärdade din identitetshandling",
+        "afrikaans": "Staat of land wat u ID-dokument uitgereik het"
       }
     },
     {
@@ -1024,6 +1842,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "رقم الوثيقة",
+        "tagalog": "numero ng dokumento",
+        "spanish": "número de documento",
+        "french": "numero du document",
+        "chinese": "证件号码",
+        "portuguese": "número do documento",
+        "hindi": "दस्तावेज़ संख्या",
+        "italian": "numero del documento",
+        "german": "Dokumentnummer",
+        "korean": "서류 번호",
+        "dutch": "Documentnummer",
+        "ukrainian": "номер документа",
+        "russian": "Номер документа",
+        "persian": "شماره مدرک",
+        "urdu": "دستاویز نمبر",
+        "swedish": "dokumentnummer",
+        "afrikaans": "dokumentnommer"
       }
     },
     {
@@ -1048,6 +1885,28 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "validation": {
+        "required": true
+      },
+      "spoken_name_translations": {
+        "arabic": "تاريخ انتهاء صلاحية الوثيقة",
+        "tagalog": "petsa ng pag-expire ng dokumento",
+        "spanish": "fecha de vencimiento del documento",
+        "french": "date d'expiration du document",
+        "chinese": "证件有效期",
+        "portuguese": "data de validade do documento",
+        "hindi": "दस्तावेज़ की समाप्ति तिथि",
+        "italian": "data di scadenza del documento",
+        "german": "Ablaufdatum des Dokuments",
+        "korean": "서류 만료일",
+        "dutch": "Vervaldatum document",
+        "ukrainian": "термін дії документа",
+        "russian": "Срок действия документа",
+        "persian": "تاریخ انقضای مدرک",
+        "urdu": "دستاویز کی میعاد ختم ہونے کی تاریخ",
+        "swedish": "dokumentets utgångsdatum",
+        "afrikaans": "vervaldatum van dokument"
       }
     },
     {
@@ -1072,6 +1931,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "تاريخ الدخول إلى الولايات المتحدة",
+        "tagalog": "petsa ng pagpasok sa Estados Unidos",
+        "spanish": "fecha de entrada a los Estados Unidos",
+        "french": "date d'entree aux Etats-Unis",
+        "chinese": "入境美国的日期",
+        "portuguese": "data de entrada nos Estados Unidos",
+        "hindi": "संयुक्त राज्य अमेरिका में प्रवेश की तिथि",
+        "italian": "data di ingresso negli Stati Uniti",
+        "german": "Datum der Einreise in die Vereinigten Staaten",
+        "korean": "미국 입국일",
+        "dutch": "Datum van binnenkomst in de Verenigde Staten",
+        "ukrainian": "дата в'їзду до Сполучених Штатів",
+        "russian": "Дата въезда в США",
+        "persian": "تاریخ ورود به ایالات متحده",
+        "urdu": "امریکہ میں داخلے کی تاریخ",
+        "swedish": "datum for inresa i USA",
+        "afrikaans": "datum van binnekoms in die Verenigde State"
       }
     },
     {
@@ -1094,6 +1972,25 @@
             "y": 529.75,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "لا/لا أعرف. تخطَّ السطر 6f.",
+            "spanish": "No/No lo sé. Omita la línea 6f.",
+            "chinese": "否/不知道。请跳过第6f行。",
+            "portuguese": "Não/Não sei. Pule a linha 6f.",
+            "hindi": "नहीं/पता नहीं। पंक्ति 6f छोड़ें।",
+            "german": "Nein/Weiß nicht. Zeile 6f überspringen.",
+            "ukrainian": "Ні / не знаю. Пропустіть рядок 6f.",
+            "persian": "خیر یا نمی‌دانم. از خط 6f صرف‌نظر کنید.",
+            "urdu": "نہیں/معلوم نہیں۔ لائن 6f کو چھوڑ دیں۔",
+            "french": "Non ou je ne sais pas. Passez a la ligne 6f.",
+            "italian": "No/Non lo so. Saltare la riga 6f.",
+            "tagalog": "Hindi/Hindi po alam. Laktawan ang linya 6f.",
+            "dutch": "Nee/weet niet. Sla regel 6f over.",
+            "afrikaans": "Nee/Weet nie. Slaan lyn 6f oor.",
+            "russian": "Нет/Не знаю. Пропустите строку 6f.",
+            "swedish": "Nej/Vet inte. Hoppa över rad 6f.",
+            "korean": "아니요/모릅니다. 6f번 항목은 건너뛰세요."
           }
         },
         {
@@ -1107,6 +2004,25 @@
             "y": 541.5,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "نعم. أكمل السطر 6f. إذا كان هناك أكثر من رقم واحد، أدرجها في ورقة وأرفقها بهذا النموذج.",
+            "spanish": "Sí. Complete la línea 6f. Si tiene más de uno, haga una lista en una hoja aparte y adjúntela a este formulario.",
+            "chinese": "是。请填写第6f行。如有多个，请列表并附于本表。",
+            "portuguese": "Sim. Preencha a linha 6f. Se houver mais de um, liste em uma folha à parte e anexe a este formulário.",
+            "hindi": "हां। पंक्ति 6f पूरी करें। यदि एक से अधिक हैं, तो एक शीट पर सूची बनाएं और इस फ़ॉर्म के साथ संलग्न करें।",
+            "german": "Ja. Zeile 6f ausfüllen. Falls mehrere vorhanden sind, auf einem Blatt auflisten und diesem Formular beifügen.",
+            "ukrainian": "Так. Заповніть рядок 6f. Якщо номерів декілька, перелічіть їх на окремому аркуші та додайте до цієї форми.",
+            "persian": "بله. خط 6f را تکمیل کنید. در صورت وجود بیش از یک مورد، آن‌ها را در یک برگه فهرست کرده و به این فرم ضمیمه کنید.",
+            "urdu": "جی ہاں۔ لائن 6f مکمل کریں۔ اگر ایک سے زیادہ ہیں تو ایک شیٹ پر فہرست بنا کر اس فارم کے ساتھ منسلک کریں۔",
+            "french": "Oui. Remplissez la ligne 6f. S'il y en a plusieurs, dressez-en la liste sur une feuille a joindre a ce formulaire.",
+            "italian": "Si. Compilare la riga 6f. Se ce n'e piu di uno, elencarli su un foglio e allegarlo al presente modulo.",
+            "tagalog": "Oo po. Kumpletuhin ang linya 6f. Kung higit sa isa, ilista sa isang sheet at ikabit sa form na ito.",
+            "dutch": "Ja. Vul regel 6f in. Als er meer dan één is, vermeld deze dan op een apart blad en voeg dit bij dit formulier.",
+            "afrikaans": "Ja. Voltooi lyn 6f. Indien meer as een, lys op 'n aparte bladsy en heg dit by hierdie vorm aan.",
+            "russian": "Да. Заполните строку 6f. Если их несколько, перечислите на отдельном листе и приложите к этой форме.",
+            "swedish": "Ja. Fyll i rad 6f. Om det finns fler än ett, lista dem på ett separat blad och bifoga det till detta formulär.",
+            "korean": "예. 6f번 항목을 작성하세요. 한 명 이상인 경우 별지에 작성하여 이 양식에 첨부하세요."
           }
         }
       ],
@@ -1124,6 +2040,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "هل سبق أن حصلت على ITIN أو IRSN",
+        "tagalog": "dati nang nakatanggap ng ITIN o IRSN",
+        "spanish": "recibió anteriormente un ITIN o un IRSN",
+        "french": "avez-vous deja recu un ITIN ou un IRSN",
+        "chinese": "此前是否曾获得ITIN或IRSN",
+        "portuguese": "recebeu anteriormente um ITIN ou IRSN",
+        "hindi": "क्या आपको पहले कभी ITIN या IRSN मिला था",
+        "italian": "ha gia ricevuto un ITIN o un IRSN",
+        "german": "Bereits eine ITIN oder IRSN erhalten",
+        "korean": "이전에 ITIN 또는 IRSN을 발급받은 적이 있는지 여부",
+        "dutch": "Eerder een ITIN of IRSN ontvangen",
+        "ukrainian": "раніше отримували ITIN або IRSN",
+        "russian": "Ранее получали ITIN или IRSN",
+        "persian": "دریافت قبلی ITIN یا IRSN",
+        "urdu": "پہلے کبھی ITIN یا IRSN حاصل کیا تھا",
+        "swedish": "tidigare mottagit ett ITIN eller IRSN",
+        "afrikaans": "voorheen 'n ITIN of IRSN ontvang"
       }
     },
     {
@@ -1153,6 +2088,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الجزء الأول من رقم ITIN",
+        "tagalog": "unang bahagi ng ITIN",
+        "spanish": "primera parte del ITIN",
+        "french": "premiere partie de l'ITIN",
+        "chinese": "ITIN第一部分",
+        "portuguese": "primeira parte do ITIN",
+        "hindi": "ITIN का पहला भाग",
+        "italian": "prima parte dell'ITIN",
+        "german": "Erster Teil der ITIN",
+        "korean": "ITIN 첫 부분",
+        "dutch": "Eerste deel ITIN",
+        "ukrainian": "перша частина ITIN",
+        "russian": "Первая часть ITIN",
+        "persian": "بخش اول ITIN",
+        "urdu": "ITIN کا پہلا حصہ",
+        "swedish": "ITIN, forsta delen",
+        "afrikaans": "eerste deel van ITIN"
       }
     },
     {
@@ -1182,6 +2136,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الجزء الأوسط من رقم ITIN",
+        "tagalog": "gitnang bahagi ng ITIN",
+        "spanish": "parte intermedia del ITIN",
+        "french": "partie centrale de l'ITIN",
+        "chinese": "ITIN中间部分",
+        "portuguese": "parte do meio do ITIN",
+        "hindi": "ITIN का बीच का भाग",
+        "italian": "parte centrale dell'ITIN",
+        "german": "Mittlerer Teil der ITIN",
+        "korean": "ITIN 중간 부분",
+        "dutch": "Middelste deel ITIN",
+        "ukrainian": "середня частина ITIN",
+        "russian": "Средняя часть ITIN",
+        "persian": "بخش میانی ITIN",
+        "urdu": "ITIN کا درمیانی حصہ",
+        "swedish": "ITIN, mellersta delen",
+        "afrikaans": "middeldeel van ITIN"
       }
     },
     {
@@ -1211,6 +2184,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الجزء الأخير من رقم ITIN",
+        "tagalog": "huling bahagi ng ITIN",
+        "spanish": "última parte del ITIN",
+        "french": "derniere partie de l'ITIN",
+        "chinese": "ITIN最后部分",
+        "portuguese": "última parte do ITIN",
+        "hindi": "ITIN का अंतिम भाग",
+        "italian": "ultima parte dell'ITIN",
+        "german": "Letzter Teil der ITIN",
+        "korean": "ITIN 마지막 부분",
+        "dutch": "Laatste deel ITIN",
+        "ukrainian": "остання частина ITIN",
+        "russian": "Последняя часть ITIN",
+        "persian": "بخش آخر ITIN",
+        "urdu": "ITIN کا آخری حصہ",
+        "swedish": "ITIN, sista delen",
+        "afrikaans": "laaste deel van ITIN"
       }
     },
     {
@@ -1240,6 +2232,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الجزء الأول من رقم IRSN",
+        "tagalog": "unang bahagi ng IRSN",
+        "spanish": "primera parte del IRSN",
+        "french": "premiere partie de l'IRSN",
+        "chinese": "IRSN第一部分",
+        "portuguese": "primeira parte do IRSN",
+        "hindi": "IRSN का पहला भाग",
+        "italian": "prima parte dell'IRSN",
+        "german": "Erster Teil der IRSN",
+        "korean": "IRSN 첫 부분",
+        "dutch": "Eerste deel IRSN",
+        "ukrainian": "перша частина IRSN",
+        "russian": "Первая часть IRSN",
+        "persian": "بخش اول IRSN",
+        "urdu": "IRSN کا پہلا حصہ",
+        "swedish": "IRSN, forsta delen",
+        "afrikaans": "eerste deel van IRSN"
       }
     },
     {
@@ -1269,6 +2280,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الجزء الأوسط من رقم IRSN",
+        "tagalog": "gitnang bahagi ng IRSN",
+        "spanish": "parte intermedia del IRSN",
+        "french": "partie centrale de l'IRSN",
+        "chinese": "IRSN中间部分",
+        "portuguese": "parte do meio do IRSN",
+        "hindi": "IRSN का बीच का भाग",
+        "italian": "parte centrale dell'IRSN",
+        "german": "Mittlerer Teil der IRSN",
+        "korean": "IRSN 중간 부분",
+        "dutch": "Middelste deel IRSN",
+        "ukrainian": "середня частина IRSN",
+        "russian": "Средняя часть IRSN",
+        "persian": "بخش میانی IRSN",
+        "urdu": "IRSN کا درمیانی حصہ",
+        "swedish": "IRSN, mellersta delen",
+        "afrikaans": "middeldeel van IRSN"
       }
     },
     {
@@ -1298,6 +2328,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الجزء الأخير من رقم IRSN",
+        "tagalog": "huling bahagi ng IRSN",
+        "spanish": "última parte del IRSN",
+        "french": "derniere partie de l'IRSN",
+        "chinese": "IRSN最后部分",
+        "portuguese": "última parte do IRSN",
+        "hindi": "IRSN का अंतिम भाग",
+        "italian": "ultima parte dell'IRSN",
+        "german": "Letzter Teil der IRSN",
+        "korean": "IRSN 마지막 부분",
+        "dutch": "Laatste deel IRSN",
+        "ukrainian": "остання частина IRSN",
+        "russian": "Последняя часть IRSN",
+        "persian": "بخش آخر IRSN",
+        "urdu": "IRSN کا آخری حصہ",
+        "swedish": "IRSN, sista delen",
+        "afrikaans": "laaste deel van IRSN"
       }
     },
     {
@@ -1330,6 +2379,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الاسم الأول الذي صدر به الرقم السابق",
+        "tagalog": "unang pangalang ginamit noong inisyu ang naunang numero",
+        "spanish": "primer nombre bajo el cual se emitió el número anterior",
+        "french": "prenom sous lequel le numero anterieur a ete delivre",
+        "chinese": "此前号码签发时使用的名字",
+        "portuguese": "primeiro nome sob o qual o número anterior foi emitido",
+        "hindi": "वह पहला नाम जिसके तहत पूर्व नंबर जारी किया गया था",
+        "italian": "nome con cui e stato rilasciato il numero precedente",
+        "german": "Vorname, unter dem die vorherige Nummer ausgestellt wurde",
+        "korean": "이전 번호가 발급된 당시의 이름",
+        "dutch": "Voornaam waaronder eerder nummer werd afgegeven",
+        "ukrainian": "ім'я, під яким було видано попередній номер",
+        "russian": "Имя, на которое был выдан прежний номер",
+        "persian": "نام کوچکی که شماره قبلی با آن صادر شده است",
+        "urdu": "وہ پہلا نام جس کے تحت پچھلا نمبر جاری کیا گیا تھا",
+        "swedish": "förnamn som tidigare nummer utfärdades under",
+        "afrikaans": "voornaam waaronder vorige nommer uitgereik is"
       }
     },
     {
@@ -1362,6 +2430,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "الاسم الأوسط الذي صدر به الرقم السابق",
+        "tagalog": "gitnang pangalang ginamit noong inisyu ang naunang numero",
+        "spanish": "segundo nombre bajo el cual se emitió el número anterior",
+        "french": "deuxieme prenom sous lequel le numero anterieur a ete delivre",
+        "chinese": "此前号码签发时使用的中间名",
+        "portuguese": "nome do meio sob o qual o número anterior foi emitido",
+        "hindi": "वह बीच का नाम जिसके तहत पूर्व नंबर जारी किया गया था",
+        "italian": "secondo nome con cui e stato rilasciato il numero precedente",
+        "german": "Zweiter Vorname, unter dem die vorherige Nummer ausgestellt wurde",
+        "korean": "이전 번호가 발급된 당시의 중간 이름",
+        "dutch": "Tweede naam waaronder eerder nummer werd afgegeven",
+        "ukrainian": "по батькові або друге ім'я, під яким було видано попередній номер",
+        "russian": "Отчество, на которое был выдан прежний номер",
+        "persian": "نام میانی‌ای که شماره قبلی با آن صادر شده است",
+        "urdu": "وہ درمیانی نام جس کے تحت پچھلا نمبر جاری کیا گیا تھا",
+        "swedish": "mellannamn som tidigare nummer utfärdades under",
+        "afrikaans": "middelnaam waaronder vorige nommer uitgereik is"
       }
     },
     {
@@ -1397,6 +2484,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "اسم العائلة الذي صدر به الرقم السابق",
+        "tagalog": "apelyidong ginamit noong inisyu ang naunang numero",
+        "spanish": "apellido bajo el cual se emitió el número anterior",
+        "french": "nom de famille sous lequel le numero anterieur a ete delivre",
+        "chinese": "此前号码签发时使用的姓氏",
+        "portuguese": "sobrenome sob o qual o número anterior foi emitido",
+        "hindi": "वह अंतिम नाम जिसके तहत पूर्व नंबर जारी किया गया था",
+        "italian": "cognome con cui e stato rilasciato il numero precedente",
+        "german": "Nachname, unter dem die vorherige Nummer ausgestellt wurde",
+        "korean": "이전 번호가 발급된 당시의 성",
+        "dutch": "Achternaam waaronder eerder nummer werd afgegeven",
+        "ukrainian": "прізвище, під яким було видано попередній номер",
+        "russian": "Фамилия, на которую был выдан прежний номер",
+        "persian": "نام خانوادگی‌ای که شماره قبلی با آن صادر شده است",
+        "urdu": "وہ آخری نام جس کے تحت پچھلا نمبر جاری کیا گیا تھا",
+        "swedish": "efternamn som tidigare nummer utfärdades under",
+        "afrikaans": "van waaronder vorige nommer uitgereik is"
       }
     },
     {
@@ -1430,7 +2536,26 @@
       "_review": {
         "status": "reviewed_correct"
       },
-      "hidden": false
+      "hidden": false,
+      "spoken_name_translations": {
+        "arabic": "اسم الكلية أو الشركة",
+        "tagalog": "pangalan ng kolehiyo o kompanya",
+        "spanish": "nombre de la universidad o de la empresa",
+        "french": "nom de l'universite ou de l'entreprise",
+        "chinese": "学校或公司名称",
+        "portuguese": "nome da faculdade ou empresa",
+        "hindi": "कॉलेज या कंपनी का नाम",
+        "italian": "nome dell'universita o dell'azienda",
+        "german": "Name der Hochschule oder des Unternehmens",
+        "korean": "대학교 또는 회사명",
+        "dutch": "Naam van universiteit of bedrijf",
+        "ukrainian": "назва коледжу або компанії",
+        "russian": "Название колледжа или компании",
+        "persian": "نام دانشکده یا شرکت",
+        "urdu": "کالج یا کمپنی کا نام",
+        "swedish": "namn på högskola eller företag",
+        "afrikaans": "naam van kollege of maatskappy"
+      }
     },
     {
       "id": "college_city_and_state",
@@ -1463,6 +2588,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "مدينة وولاية الكلية",
+        "tagalog": "lungsod at estado ng kolehiyo",
+        "spanish": "ciudad y estado de la universidad",
+        "french": "ville et Etat de l'universite",
+        "chinese": "学校所在城市及州",
+        "portuguese": "cidade e estado da faculdade",
+        "hindi": "कॉलेज का शहर और राज्य",
+        "italian": "citta e stato dell'universita",
+        "german": "Stadt und Bundesstaat der Hochschule",
+        "korean": "대학교 소재 도시 및 주",
+        "dutch": "Plaats en staat van universiteit",
+        "ukrainian": "місто і штат коледжу",
+        "russian": "Город и штат колледжа",
+        "persian": "شهر و ایالت دانشکده",
+        "urdu": "کالج کا شہر اور ریاست",
+        "swedish": "högskolans stad och delstat",
+        "afrikaans": "kollege se stad en staat"
       }
     },
     {
@@ -1495,6 +2639,25 @@
         "field": "reason",
         "operator": "includes",
         "value": "f_student_professor_researcher"
+      },
+      "spoken_name_translations": {
+        "arabic": "مدة الإقامة",
+        "tagalog": "haba ng tagal ng pananatili",
+        "spanish": "duración de la estadía",
+        "french": "duree du sejour",
+        "chinese": "停留时长",
+        "portuguese": "duração da estadia",
+        "hindi": "ठहरने की अवधि",
+        "italian": "durata del soggiorno",
+        "german": "Aufenthaltsdauer",
+        "korean": "체류 기간",
+        "dutch": "Duur van verblijf",
+        "ukrainian": "тривалість перебування",
+        "russian": "Продолжительность пребывания",
+        "persian": "مدت اقامت",
+        "urdu": "قیام کی مدت",
+        "swedish": "vistelsens längd",
+        "afrikaans": "duur van verblyf"
       }
     },
     {
@@ -1521,6 +2684,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "رقم الهاتف",
+        "tagalog": "Numero ng Telepono",
+        "spanish": "número de teléfono",
+        "french": "numero de telephone",
+        "chinese": "电话号码",
+        "portuguese": "número de telefone",
+        "hindi": "फ़ोन नंबर",
+        "italian": "numero di telefono",
+        "german": "Telefonnummer",
+        "korean": "전화번호",
+        "dutch": "Telefoonnummer",
+        "ukrainian": "номер телефону",
+        "russian": "Номер телефона",
+        "persian": "شماره تلفن",
+        "urdu": "فون نمبر",
+        "swedish": "telefonnummer",
+        "afrikaans": "Telefoonnommer"
       }
     },
     {
@@ -1543,10 +2725,29 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "اسم المفوض إن وجد",
+        "tagalog": "Pangalan ng Kinatawan kung naaangkop",
+        "spanish": "nombre del delegado, si corresponde",
+        "french": "nom du delegue, le cas echeant",
+        "chinese": "代理人姓名（如适用）",
+        "portuguese": "nome do delegado, se aplicável",
+        "hindi": "यदि लागू हो तो प्रतिनिधि का नाम",
+        "italian": "nome del delegato, se applicabile",
+        "german": "Name des Vertreters, falls zutreffend",
+        "korean": "해당되는 경우 대리인 이름",
+        "dutch": "Naam van gemachtigde, indien van toepassing",
+        "ukrainian": "ім'я представника, якщо застосовно",
+        "russian": "Имя доверенного лица, если применимо",
+        "persian": "نام نماینده، در صورت وجود",
+        "urdu": "اگر لاگو ہو تو نمائندے کا نام",
+        "swedish": "namn på ombud, om tillämpligt",
+        "afrikaans": "Naam van gemagtigde verteenwoordiger, indien van toepassing"
       }
     },
     {
-      "id": "delegate_name",
+      "id": "agent_phone",
       "name": "Acceptance Agent's Use ONLY -- Phone",
       "spoken_name": "Phone number of Acceptance Agent",
       "type": "tel",
@@ -1568,6 +2769,25 @@
       "_review": {
         "status": "reviewed_correct",
         "note": "hide and ignore"
+      },
+      "spoken_name_translations": {
+        "arabic": "رقم هاتف وكيل القبول",
+        "tagalog": "Numero ng telepono ng Acceptance Agent",
+        "spanish": "número de teléfono del agente tramitador",
+        "french": "numero de telephone de l'agent agree",
+        "chinese": "受理代理机构电话号码",
+        "portuguese": "número de telefone do agente autorizado",
+        "hindi": "स्वीकृति एजेंट का फ़ोन नंबर",
+        "italian": "numero di telefono dell'agente di accettazione",
+        "german": "Telefonnummer der Acceptance Agent",
+        "korean": "승인 대행기관의 전화번호",
+        "dutch": "Telefoonnummer van erkende tussenpersoon",
+        "ukrainian": "номер телефону уповноваженого агента",
+        "russian": "Номер телефона уполномоченного агента",
+        "persian": "شماره تلفن نماینده پذیرش",
+        "urdu": "قبولیت ایجنٹ کا فون نمبر",
+        "swedish": "telefonnummer till mottagande ombud",
+        "afrikaans": "Telefoonnommer van aanvaardingsagent"
       }
     },
     {
@@ -1587,6 +2807,25 @@
             "y": 686,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "أحد الوالدين",
+            "spanish": "Padre o madre",
+            "chinese": "父母一方",
+            "portuguese": "Pai/Mãe",
+            "hindi": "माता-पिता",
+            "german": "Elternteil",
+            "ukrainian": "Батько або мати",
+            "persian": "پدر یا مادر",
+            "urdu": "والد یا والدہ",
+            "french": "Parent",
+            "italian": "Genitore",
+            "tagalog": "Magulang",
+            "dutch": "Ouder",
+            "afrikaans": "Ouer",
+            "russian": "Родитель",
+            "swedish": "Förälder",
+            "korean": "부모"
           }
         },
         {
@@ -1600,6 +2839,25 @@
             "y": 686,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "صاحب توكيل رسمي",
+            "spanish": "Poder notarial",
+            "chinese": "授权委托书代理人",
+            "portuguese": "Procurador",
+            "hindi": "पावर ऑफ़ अटॉर्नी",
+            "german": "Bevollmächtigter",
+            "ukrainian": "Довіреність",
+            "persian": "وکالت‌نامه",
+            "urdu": "پاورآف اٹارنی",
+            "french": "Procuration",
+            "italian": "Procura",
+            "tagalog": "May hawak na power of attorney",
+            "dutch": "Gevolmachtigde",
+            "afrikaans": "Prokurasie",
+            "russian": "Доверенное лицо (по доверенности)",
+            "swedish": "Fullmaktshavare",
+            "korean": "위임장 대리인"
           }
         },
         {
@@ -1613,15 +2871,34 @@
             "y": 686,
             "width": 8,
             "height": 8
+          },
+          "label_translations": {
+            "arabic": "وصي معيّن من المحكمة",
+            "spanish": "Tutor designado por un tribunal",
+            "chinese": "法院指定监护人",
+            "portuguese": "Tutor nomeado pelo tribunal",
+            "hindi": "न्यायालय द्वारा नियुक्त अभिभावक",
+            "german": "Gerichtlich bestellter Vormund",
+            "ukrainian": "Опікун, призначений судом",
+            "persian": "قیم منصوب‌شده توسط دادگاه",
+            "urdu": "عدالت کی طرف سے مقرر کردہ سرپرست",
+            "french": "Tuteur designe par le tribunal",
+            "italian": "Tutore nominato dal tribunale",
+            "tagalog": "Guardian na itinalaga ng korte",
+            "dutch": "Door de rechtbank aangestelde voogd",
+            "afrikaans": "Hofaangestelde voog",
+            "russian": "Опекун, назначенный судом",
+            "swedish": "Domstolsutsedd förmyndare",
+            "korean": "법원 지정 후견인"
           }
         }
       ],
       "show_if": {
-        "field": "delegate_name",
+        "field": "agent_phone",
         "operator": "is_not_empty"
       },
       "require_if": {
-        "field": "delegate_name",
+        "field": "agent_phone",
         "operator": "is_not_empty"
       },
       "pdf_position": {
@@ -1638,6 +2915,25 @@
       },
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "صلة القرابة بالمفوض",
+        "tagalog": "relasyon ng kinatawan",
+        "spanish": "relación del delegado",
+        "french": "lien de parente du delegue",
+        "chinese": "代理人关系",
+        "portuguese": "relação do delegado",
+        "hindi": "प्रतिनिधि से संबंध",
+        "italian": "relazione con il delegato",
+        "german": "Beziehung zum Vertreter",
+        "korean": "대리인과의 관계",
+        "dutch": "Relatie van gemachtigde",
+        "ukrainian": "стосунок представника",
+        "russian": "Родство доверенного лица",
+        "persian": "نسبت نماینده",
+        "urdu": "نمائندے سے تعلق",
+        "swedish": "ombudets relation",
+        "afrikaans": "verwantskap met gemagtigde verteenwoordiger"
       }
     },
     {
@@ -1663,7 +2959,26 @@
         "status": "reviewed_correct"
       },
       "hidden": true,
-      "read_only": true
+      "read_only": true,
+      "spoken_name_translations": {
+        "arabic": "رقم فاكس وكيل القبول",
+        "tagalog": "Numero ng Fax ng acceptance agent",
+        "spanish": "número de fax del agente tramitador",
+        "french": "numero de fax de l'agent agree",
+        "chinese": "受理代理机构传真号码",
+        "portuguese": "número de fax do agente autorizado",
+        "hindi": "स्वीकृति एजेंट का फ़ैक्स नंबर",
+        "italian": "numero di fax dell'agente di accettazione",
+        "german": "Faxnummer der Acceptance Agent",
+        "korean": "승인 대행기관의 팩스 번호",
+        "dutch": "Faxnummer van erkende tussenpersoon",
+        "ukrainian": "номер факсу уповноваженого агента",
+        "russian": "Номер факса уполномоченного агента",
+        "persian": "شماره فکس نماینده پذیرش",
+        "urdu": "قبولیت ایجنٹ کا فیکس نمبر",
+        "swedish": "faxnummer till mottagande ombud",
+        "afrikaans": "Faksnommer van aanvaardingsagent"
+      }
     },
     {
       "id": "agent_ein",
@@ -1688,6 +3003,25 @@
       "read_only": true,
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "رقم تعريف صاحب العمل الخاص بالوكيل",
+        "tagalog": "EIN ng agent",
+        "spanish": "EIN del agente",
+        "french": "EIN de l'agent",
+        "chinese": "代理机构雇主识别号码",
+        "portuguese": "EIN do agente",
+        "hindi": "एजेंट EIN",
+        "italian": "EIN dell'agente",
+        "german": "EIN des Agenten",
+        "korean": "대행기관 EIN",
+        "dutch": "EIN van tussenpersoon",
+        "ukrainian": "EIN агента",
+        "russian": "EIN агента",
+        "persian": "شماره EIN نماینده",
+        "urdu": "ایجنٹ کا EIN",
+        "swedish": "ombudets EIN",
+        "afrikaans": "agent se EIN"
       }
     },
     {
@@ -1713,6 +3047,25 @@
       "read_only": true,
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "رقم PTIN الخاص بوكيل القبول",
+        "tagalog": "PTIN ng acceptance agent",
+        "spanish": "PTIN del agente tramitador",
+        "french": "PTIN de l'agent agree",
+        "chinese": "受理代理机构PTIN",
+        "portuguese": "PTIN do agente autorizado",
+        "hindi": "स्वीकृति एजेंट का PTIN",
+        "italian": "PTIN dell'agente di accettazione",
+        "german": "PTIN der Acceptance Agent",
+        "korean": "승인 대행기관 PTIN",
+        "dutch": "PTIN van erkende tussenpersoon",
+        "ukrainian": "PTIN уповноваженого агента",
+        "russian": "PTIN уполномоченного агента",
+        "persian": "شماره PTIN نماینده پذیرش",
+        "urdu": "قبولیت ایجنٹ کا PTIN",
+        "swedish": "mottagande ombuds PTIN",
+        "afrikaans": "PTIN van aanvaardingsagent"
       }
     },
     {
@@ -1737,6 +3090,25 @@
       "read_only": true,
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "اسم الوكيل ومنصبه",
+        "tagalog": "pangalan at titulo ng agent",
+        "spanish": "nombre y cargo del agente",
+        "french": "nom et titre de l'agent",
+        "chinese": "代理人姓名及职衔",
+        "portuguese": "nome e cargo do agente",
+        "hindi": "एजेंट का नाम और पदनाम",
+        "italian": "nome e titolo dell'agente",
+        "german": "Name und Titel des Agenten",
+        "korean": "대행기관 담당자 이름 및 직함",
+        "dutch": "Naam en functie van tussenpersoon",
+        "ukrainian": "ім'я та посада агента",
+        "russian": "Имя и должность агента",
+        "persian": "نام و عنوان نماینده",
+        "urdu": "ایجنٹ کا نام اور عہدہ",
+        "swedish": "ombudets namn och titel",
+        "afrikaans": "agent se naam en titel"
       }
     },
     {
@@ -1761,6 +3133,25 @@
       "hidden": true,
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "اسم شركة الوكيل",
+        "tagalog": "pangalan ng kompanya ng agent",
+        "spanish": "nombre de la empresa del agente",
+        "french": "nom de l'entreprise de l'agent",
+        "chinese": "代理机构公司名称",
+        "portuguese": "nome da empresa do agente",
+        "hindi": "एजेंट की कंपनी का नाम",
+        "italian": "nome dell'azienda dell'agente",
+        "german": "Firmenname des Agenten",
+        "korean": "대행기관 회사명",
+        "dutch": "Bedrijfsnaam van tussenpersoon",
+        "ukrainian": "назва компанії агента",
+        "russian": "Название компании агента",
+        "persian": "نام شرکت نماینده",
+        "urdu": "ایجنٹ کی کمپنی کا نام",
+        "swedish": "ombudets företagsnamn",
+        "afrikaans": "agent se maatskappynaam"
       }
     },
     {
@@ -1785,6 +3176,25 @@
       "hidden": true,
       "_review": {
         "status": "reviewed_correct"
+      },
+      "spoken_name_translations": {
+        "arabic": "رمز مكتب وكيل القبول",
+        "tagalog": "code ng opisina ng acceptance agent",
+        "spanish": "código de oficina del agente tramitador",
+        "french": "code de bureau de l'agent agree",
+        "chinese": "受理代理机构办公室代码",
+        "portuguese": "código do escritório do agente autorizado",
+        "hindi": "स्वीकृति एजेंट का कार्यालय कोड",
+        "italian": "codice ufficio dell'agente di accettazione",
+        "german": "Büro-Code der Acceptance Agent",
+        "korean": "승인 대행기관 사무소 코드",
+        "dutch": "Kantoorcode van erkende tussenpersoon",
+        "ukrainian": "код офісу уповноваженого агента",
+        "russian": "Код офиса уполномоченного агента",
+        "persian": "کد دفتر نماینده پذیرش",
+        "urdu": "قبولیت ایجنٹ کا دفتری کوڈ",
+        "swedish": "mottagande ombuds kontorskod",
+        "afrikaans": "kantoorkode van aanvaardingsagent"
       }
     }
   ],
@@ -1879,7 +3289,356 @@
         ]
       },
       "option_translation": {
-        "skipped": "disabled"
+        "changed": true,
+        "failed_languages": [],
+        "languages": {
+          "spanish": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "chinese": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "tagalog": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 8,
+            "sections_translated": 8,
+            "sections_updated": 8,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 29,
+              "mechanical": 0,
+              "judge_flagged": 0,
+              "rectified": 0,
+              "unresolved": 0
+            }
+          },
+          "arabic": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "french": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 21,
+              "mechanical": 0,
+              "judge_flagged": 0,
+              "rectified": 0,
+              "unresolved": 0
+            }
+          },
+          "korean": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 21,
+              "mechanical": 0,
+              "judge_flagged": 1,
+              "rectified": 1,
+              "unresolved": 0
+            }
+          },
+          "german": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "portuguese": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "hindi": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "italian": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 21,
+              "mechanical": 0,
+              "judge_flagged": 0,
+              "rectified": 0,
+              "unresolved": 0
+            }
+          },
+          "urdu": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "persian": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "dutch": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 21,
+              "mechanical": 0,
+              "judge_flagged": 0,
+              "rectified": 0,
+              "unresolved": 0
+            }
+          },
+          "ukrainian": {
+            "labels": 21,
+            "missing": 0,
+            "translated": 0,
+            "options_updated": 0,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 0
+          },
+          "russian": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 8,
+            "sections_translated": 8,
+            "sections_updated": 8,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 29,
+              "mechanical": 0,
+              "judge_flagged": 0,
+              "rectified": 0,
+              "unresolved": 0
+            }
+          },
+          "swedish": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 8,
+            "sections_translated": 8,
+            "sections_updated": 8,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 29,
+              "mechanical": 0,
+              "judge_flagged": 0,
+              "rectified": 0,
+              "unresolved": 0
+            }
+          },
+          "afrikaans": {
+            "labels": 21,
+            "missing": 21,
+            "translated": 21,
+            "options_updated": 21,
+            "failed": false,
+            "spoken_names": 53,
+            "names_missing": 0,
+            "names_translated": 0,
+            "fields_updated": 0,
+            "section_labels": 8,
+            "sections_missing": 0,
+            "sections_translated": 0,
+            "sections_updated": 0,
+            "attempts": 1,
+            "verify": {
+              "available": true,
+              "checked": 21,
+              "mechanical": 0,
+              "judge_flagged": 0,
+              "rectified": 0,
+              "unresolved": 0
+            }
+          }
+        },
+        "flags": [
+          {
+            "severity": "WARNING",
+            "rule": "translation-drift-rectified",
+            "path": "fields[30] (id=previously_received_itin_or_irsn).options[yes].label_translations.korean",
+            "message": "judge: English says 'If more than one, list on a sheet' but translation says 'two or more' (두 개 이상).; rectified clean: '예. 6f번 항목을 작성하세요. 두 개 이상인 경우 별지에 작성하여 이 양식에 첨부하세요.' -> '예. 6f번 항목을 작성하세요. 한 명 이상인 경우 별지에 작성하여 이 양식에 첨부하세요.'",
+            "field_id": "previously_received_itin_or_irsn"
+          }
+        ],
+        "model": "sonnet"
       },
       "instructions_enrich": {
         "model": "claude-opus-5",
@@ -2194,7 +3953,7 @@
             "format_hint_sha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
             "identity_sha1": "e5e028e6f756c6fc9516f995f11c7d5ae63c0502"
           },
-          "delegate_name": {
+          "agent_phone": {
             "source": "llm-verified",
             "instructions_sha1": "bafcd29ee25745e9852b942993b33d09ce1f07b8",
             "details_sha1": "eb8a61912850350d830965559d84d8b309c541ee",
@@ -2301,7 +4060,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "الصفحة 1 (أعلى الصفحة)",
+        "spanish": "Página 1 (parte superior)",
+        "french": "Page 1 (haut)",
+        "chinese": "第1页（顶部）",
+        "portuguese": "Página 1 (topo)",
+        "hindi": "पृष्ठ 1 (शीर्ष)",
+        "italian": "Pagina 1 (in alto)",
+        "german": "Seite 1 (oben)",
+        "korean": "1페이지 (상단)",
+        "dutch": "Pagina 1 (bovenaan)",
+        "ukrainian": "Сторінка 1 (верх)",
+        "persian": "صفحه 1 (بالا)",
+        "urdu": "صفحہ 1 (اوپر)",
+        "afrikaans": "Bladsy 1 (bo)",
+        "tagalog": "Pahina 1 (itaas)",
+        "russian": "Страница 1 (верх)",
+        "swedish": "Sida 1 (överst)"
+      }
     },
     {
       "id": "sec_name_p1",
@@ -2318,7 +4096,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "الاسم",
+        "spanish": "Nombre",
+        "french": "Nom",
+        "chinese": "姓名",
+        "portuguese": "Nome",
+        "hindi": "नाम",
+        "italian": "Nome",
+        "german": "Name",
+        "korean": "이름",
+        "dutch": "Naam",
+        "ukrainian": "Ім'я",
+        "persian": "نام",
+        "urdu": "نام",
+        "afrikaans": "Naam",
+        "tagalog": "Pangalan",
+        "russian": "Имя",
+        "swedish": "Namn"
+      }
     },
     {
       "id": "sec_applicant_s_mailing_address_p1",
@@ -2331,7 +4128,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "عنوان المراسلة الخاص بمقدم الطلب",
+        "spanish": "Domicilio postal del solicitante",
+        "french": "Adresse postale du demandeur",
+        "chinese": "申请人邮寄地址",
+        "portuguese": "Endereço de Correspondência do Solicitante",
+        "hindi": "आवेदक का डाक पता",
+        "italian": "Indirizzo postale del richiedente",
+        "german": "Postanschrift des Antragstellers",
+        "korean": "신청인의 우편물 수령 주소",
+        "dutch": "Postadres van aanvrager",
+        "ukrainian": "Поштова адреса заявника",
+        "persian": "آدرس پستی متقاضی",
+        "urdu": "درخواست دہندہ کا ڈاک کا پتہ",
+        "afrikaans": "Aansoeker se Posadres",
+        "tagalog": "Address Pangkoreo ng Aplikante",
+        "russian": "Почтовый адрес заявителя",
+        "swedish": "Sökandens postadress"
+      }
     },
     {
       "id": "sec_foreign_non_u_s_address_p1",
@@ -2344,7 +4160,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "العنوان الأجنبي (خارج الولايات المتحدة)",
+        "spanish": "Domicilio en el extranjero (fuera de los EE. UU.)",
+        "french": "Adresse a l'etranger (hors Etats-Unis)",
+        "chinese": "国外（非美国）地址",
+        "portuguese": "Endereço Estrangeiro (fora dos EUA)",
+        "hindi": "विदेशी (गैर-अमेरिकी) पता",
+        "italian": "Indirizzo estero (non statunitense)",
+        "german": "Ausländische (Nicht-US-)Anschrift",
+        "korean": "해외(미국 외) 주소",
+        "dutch": "Buitenlands (niet-Amerikaans) adres",
+        "ukrainian": "Закордонна (не в США) адреса",
+        "persian": "آدرس خارج از آمریکا (غیر آمریکایی)",
+        "urdu": "غیر ملکی (غیر امریکی) پتہ",
+        "afrikaans": "Buitelandse (nie-VSA) Adres",
+        "tagalog": "Dayuhang (Hindi-U.S.) Address",
+        "russian": "Зарубежный (не американский) адрес",
+        "swedish": "Utländsk adress (utanför USA)"
+      }
     },
     {
       "id": "sec_birth_information_p1",
@@ -2359,7 +4194,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "معلومات الميلاد",
+        "spanish": "Información de nacimiento",
+        "french": "Informations sur la naissance",
+        "chinese": "出生信息",
+        "portuguese": "Informações de Nascimento",
+        "hindi": "जन्म संबंधी जानकारी",
+        "italian": "Informazioni sulla nascita",
+        "german": "Geburtsangaben",
+        "korean": "출생 정보",
+        "dutch": "Geboortegegevens",
+        "ukrainian": "Інформація про народження",
+        "persian": "اطلاعات تولد",
+        "urdu": "پیدائش کی معلومات",
+        "afrikaans": "Geboorte-inligting",
+        "tagalog": "Impormasyon sa Kapanganakan",
+        "russian": "Сведения о рождении",
+        "swedish": "Uppgifter om födsel"
+      }
     },
     {
       "id": "sec_other_information_p1",
@@ -2392,7 +4246,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "معلومات أخرى",
+        "spanish": "Otra información",
+        "french": "Autres informations",
+        "chinese": "其他信息",
+        "portuguese": "Outras Informações",
+        "hindi": "अन्य जानकारी",
+        "italian": "Altre informazioni",
+        "german": "Weitere Angaben",
+        "korean": "기타 정보",
+        "dutch": "Overige informatie",
+        "ukrainian": "Інша інформація",
+        "persian": "اطلاعات دیگر",
+        "urdu": "دیگر معلومات",
+        "afrikaans": "Ander Inligting",
+        "tagalog": "Iba Pang Impormasyon",
+        "russian": "Прочие сведения",
+        "swedish": "Övrig information"
+      }
     },
     {
       "id": "sec_sign_here_p1",
@@ -2406,14 +4279,33 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "التوقيع هنا",
+        "spanish": "Firme aquí",
+        "french": "Signature",
+        "chinese": "签名处",
+        "portuguese": "Assine Aqui",
+        "hindi": "यहां हस्ताक्षर करें",
+        "italian": "Firmi qui",
+        "german": "Hier unterschreiben",
+        "korean": "서명란",
+        "dutch": "Hier ondertekenen",
+        "ukrainian": "Підпис",
+        "persian": "اینجا امضا کنید",
+        "urdu": "یہاں دستخط کریں",
+        "afrikaans": "Teken Hier",
+        "tagalog": "Pumirma Dito",
+        "russian": "Подпись",
+        "swedish": "Underteckna här"
+      }
     },
     {
       "id": "sec_acceptance_agent_s_use_only_p1",
       "label": "Acceptance Agent's Use ONLY",
       "order": 8,
       "fields": [
-        "delegate_name",
+        "agent_phone",
         "agent_fax",
         "agent_ein",
         "agent_ptin",
@@ -2424,7 +4316,26 @@
       "page_number": 1,
       "page_numbers": [
         1
-      ]
+      ],
+      "label_translations": {
+        "arabic": "لاستخدام وكيل القبول فقط",
+        "spanish": "Uso exclusivo del agente tramitador",
+        "french": "Reserve a l'usage de l'agent agree",
+        "chinese": "仅供受理代理机构使用",
+        "portuguese": "Uso Exclusivo do Agente Autorizado",
+        "hindi": "केवल स्वीकृति एजेंट के उपयोग हेतु",
+        "italian": "Solo per uso dell'agente di accettazione",
+        "german": "Nur für den Gebrauch der Acceptance Agent",
+        "korean": "승인 대행기관 전용란",
+        "dutch": "Alleen voor gebruik door erkende tussenpersoon",
+        "ukrainian": "Лише для використання уповноваженим агентом",
+        "persian": "فقط برای استفاده نماینده پذیرش",
+        "urdu": "صرف قبولیت ایجنٹ کے استعمال کے لیے",
+        "afrikaans": "Slegs vir Gebruik deur Aanvaardingsagent",
+        "tagalog": "Para sa Paggamit Lamang ng Acceptance Agent",
+        "russian": "Только для уполномоченного агента",
+        "swedish": "Endast för godkänt ombud (Acceptance Agent)"
+      }
     }
   ],
   "parts": [

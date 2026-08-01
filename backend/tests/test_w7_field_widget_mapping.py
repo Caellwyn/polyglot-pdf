@@ -93,7 +93,7 @@ _EXPECTED = {
         "length_of_stay": "f1_39[0]",
         "phone_number": "f1_40[0]",
         "name_of_delegate": "f1_41[0]",
-        "delegate_name": "f1_42[0]",
+        "agent_phone": "f1_42[0]",
         "agent_fax": "f1_43[0]",
         "agent_name_and_title": "f1_44[0]",
         "agent_company_name": "f1_45[0]",
@@ -237,7 +237,7 @@ _EXPECTED_NAME = {
         "phone_number": "Applicant phone number",
         "name_of_delegate":
             "Name of delegate, if applicable (type or print)",
-        "delegate_name": "Acceptance Agent's Use ONLY -- Phone",
+        "agent_phone": "Acceptance Agent's Use ONLY -- Phone",
         "agent_fax": "Acceptance Agent's Use ONLY -- Fax",
         "agent_name_and_title":
             "Acceptance Agent's Use ONLY -- Name and title (type or print)",
@@ -296,19 +296,22 @@ def test_human_facing_name_matches_the_printed_caption(kit: str) -> None:
 def test_the_agent_phone_does_not_reuse_the_delegate_guidance(kit: str) -> None:
     """bd polyglot-pdf-im2u exit criterion 1.
 
-    `delegate_name` is the Acceptance Agent PHONE box (f1_42), but it shipped
-    `name_of_delegate`'s guidance verbatim -- text about who may SIGN for an
-    applicant. Guidance is voice-facing (ai_context / manifest_service ship
+    `agent_phone` (f1_42) shipped `name_of_delegate`'s guidance verbatim --
+    text about who may SIGN for an applicant, on the Acceptance Agent's PHONE
+    box. Guidance is voice-facing (ai_context / manifest_service ship
     help.instructions to the live model without filtering on hidden/read_only),
     so a copied block makes the assistant explain the wrong thing.
+
+    The field was called `delegate_name` when this was found -- a misnomer the
+    maintainer has since renamed to `agent_phone` (bd polyglot-pdf-oun5).
     """
     schema = _load(kit)
     by_id = {f["id"]: f for f in schema["fields"]}
-    agent_phone = (by_id["delegate_name"].get("help") or {}).get("instructions")
+    agent_phone = (by_id["agent_phone"].get("help") or {}).get("instructions")
     delegate = (by_id["name_of_delegate"].get("help") or {}).get("instructions")
-    assert agent_phone, "delegate_name lost its guidance entirely"
+    assert agent_phone, "agent_phone lost its guidance entirely"
     assert agent_phone != delegate, (
-        "delegate_name (the Acceptance Agent phone widget f1_42) is reusing "
+        "agent_phone (the Acceptance Agent phone widget f1_42) is reusing "
         "name_of_delegate's delegate-signature guidance verbatim -- it must "
         "describe the agent's phone number (bd polyglot-pdf-im2u)"
     )

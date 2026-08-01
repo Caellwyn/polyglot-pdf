@@ -652,6 +652,30 @@ class Settings(BaseModel):
 	# is untouched; it is only the fallback for unbaked strings.
 	OPTION_TRANSLATION_MODEL: str = os.getenv(
 		"OPTION_TRANSLATION_MODEL", "gemini-2.5-pro")
+	# Which LLM serves the EDITOR's authoring-time text work (translation sweep,
+	# guidance regeneration) -- bd polyglot-pdf-cpiw. This is the ONE sanctioned
+	# difference between local and hosted mode: everything else (lint rules,
+	# gates, UI affordances) must behave identically in both.
+	#   "gemini"     -- metered Vertex tokens. The hosted/Cloud Run default.
+	#   "claude-cli" -- the local `claude` CLI on the maintainer's Claude Code
+	#                   subscription, effectively free in-environment. The
+	#                   local-dev default (scripts/run-schema-editor.sh sets it
+	#                   when the CLI is on PATH), and the same seam
+	#                   scripts/bakeoff/llm_providers.py uses for extraction.
+	# Deliberately NOT auto-detected from "is the CLI on PATH": a developer with
+	# the CLI installed must still get Gemini when running a hosted-parity check,
+	# and Cloud Run must never silently pick a provider it cannot run.
+	EDITOR_TEXT_PROVIDER: str = os.getenv("EDITOR_TEXT_PROVIDER", "gemini")
+	# Model id handed to the claude-cli provider ("sonnet", "opus", "haiku", or
+	# a full model id). Ignored unless EDITOR_TEXT_PROVIDER=claude-cli.
+	EDITOR_CLAUDE_MODEL: str = os.getenv("EDITOR_CLAUDE_MODEL", "sonnet")
+	# Model for the editor's GUIDANCE regeneration (re-authoring help.instructions
+	# / help.details from the form's instruction booklet). Empty means "follow
+	# EDITOR_TEXT_PROVIDER": claude-cli -> EDITOR_CLAUDE_MODEL, gemini ->
+	# EXTRACTOR_MODEL. The enrichment path dispatches on the MODEL NAME
+	# (scripts/bakeoff/llm_providers.resolve_json_runner), so a non-gemini name
+	# routes itself to the local CLI.
+	EDITOR_GUIDANCE_MODEL: str = os.getenv("EDITOR_GUIDANCE_MODEL", "")
 	# Translation quality gate (epic polyglot-pdf-sekc, V3): the verify/rectify
 	# loop that runs inside bake_label_translations on freshly baked strings.
 	# DEFAULT-ON, opt-out (maintainer decision 2026-07-23) -- this does NOT

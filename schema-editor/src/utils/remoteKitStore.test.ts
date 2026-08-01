@@ -10,6 +10,7 @@ import {
   clearAccessCode,
   extractRemoteKit,
   getAccessCode,
+  hasBackend,
   isHostedMode,
   listRemoteKits,
   loadRemotePdfBlobUrl,
@@ -56,7 +57,59 @@ describe('mode + access-code plumbing', () => {
     expect(apiBaseUrl()).toBe('https://backend.example');
   });
 
+  // bd polyglot-pdf-cpiw: local dev runs the backend too, so "where do kits
+  // live" and "can we call a server" are separate questions.
+  it('apiBaseUrl falls back to VITE_BACKEND_URL for local dev', () => {
+    expect(apiBaseUrl()).toBe('');
+    vi.stubEnv('VITE_BACKEND_URL', 'http://127.0.0.1:8000');
+    expect(apiBaseUrl()).toBe('http://127.0.0.1:8000');
+  });
+
+  it('the hosted URL always wins, so a hosted build never hits localhost', () => {
+    vi.stubEnv('VITE_BACKEND_URL', 'http://127.0.0.1:8000');
+    vi.stubEnv('VITE_API_BASE_URL', 'https://backend.example');
+    expect(apiBaseUrl()).toBe('https://backend.example');
+  });
+
+  it('hasBackend is true when hosted, regardless of VITE_BACKEND_URL', () => {
+    expect(hasBackend()).toBe(false);
+    vi.stubEnv('VITE_DELIVERY_MODE', 'hosted');
+    expect(hasBackend()).toBe(true);
+  });
+
+  // bd polyglot-pdf-cpiw: run-schema-editor.sh mints a FRESH token per run and
+  // gives the same value to the backend and this bundle. A code left in
+  // localStorage by an earlier run must not shadow it -- that 401s every
+  // request, which looks exactly like the silent no-lint failure this change
+  // exists to remove.
+  it('LOCAL mode prefers the per-run baked token over a stale stored one', () => {
+    setAccessCode('stale-from-a-previous-run');
+    vi.stubEnv('VITE_EDITOR_TOKEN', 'fresh-per-run');
+    expect(isHostedMode()).toBe(false);
+    expect(getAccessCode()).toBe('fresh-per-run');
+  });
+
+  it('HOSTED mode still lets the human-entered code win', () => {
+    vi.stubEnv('VITE_DELIVERY_MODE', 'hosted');
+    vi.stubEnv('VITE_EDITOR_TOKEN', 'baked-fallback');
+    setAccessCode('typed-by-the-contractor');
+    expect(getAccessCode()).toBe('typed-by-the-contractor');
+  });
+
+  it('hasBackend is true in LOCAL mode once a backend URL is set', () => {
+    expect(isHostedMode()).toBe(false);
+    expect(hasBackend()).toBe(false);
+    vi.stubEnv('VITE_BACKEND_URL', 'http://127.0.0.1:8000');
+    // Still local (kits stay on disk) but the server-side rules are reachable.
+    expect(isHostedMode()).toBe(false);
+    expect(hasBackend()).toBe(true);
+  });
+
+  // HOSTED precedence: the human-entered code wins over the baked one, which
+  // is what lets ONE hosted build serve both access tiers. (Local dev inverts
+  // this on purpose -- see the per-run-token cases below, bd polyglot-pdf-cpiw.)
   it('stored access code wins over a baked token; clear falls back', () => {
+    vi.stubEnv('VITE_DELIVERY_MODE', 'hosted');
     vi.stubEnv('VITE_EDITOR_TOKEN', 'baked-tok');
     expect(getAccessCode()).toBe('baked-tok');
     setAccessCode('typed-tok');

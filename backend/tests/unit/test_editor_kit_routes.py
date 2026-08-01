@@ -2299,9 +2299,15 @@ class _OfflineLiteAI:
 
 @pytest.fixture()
 def translate_ai(monkeypatch):
+    # Patch the adapter where the RESOLVER builds it (bd polyglot-pdf-cpiw):
+    # provider selection moved out of the route and into
+    # backend.services.editor_text_ai, so patching ekr.TextAIGemini no longer
+    # intercepts anything -- the route would silently make real Gemini calls
+    # and every assertion on recorded calls would read zero.
+    import backend.services.editor_text_ai as _eta
     import backend.services.option_translation as _ot
     _FakeTranslateAI.instances = []
-    monkeypatch.setattr(ekr, "TextAIGemini", _FakeTranslateAI)
+    monkeypatch.setattr(_eta, "TextAIGemini", _FakeTranslateAI)
     monkeypatch.setattr(
         _ot, "_build_verify_lite_ai", lambda: _OfflineLiteAI())
     return _FakeTranslateAI
@@ -2566,3 +2572,323 @@ def test_extract_threads_the_translate_options_flag(client, monkeypatch):
     assert r.status_code == 200, r.text
     assert "--no-enrich-guidance" in seen_cmds[2]
     assert "--guidance-model" not in seen_cmds[2]
+
+
+# --- guidance regeneration (bd polyglot-pdf-cpiw) --------------------------- #
+#
+# The staleness gate (bd anim) offers a reviewer two ways out of a drifted
+# field: acknowledge (free) or RE-AUTHOR (costly). Only the free half existed,
+# so re-authoring meant hand-copying prose out of the instructions booklet.
+# These pin the route that closes that gap. The model call itself is stubbed --
+# what matters here is the gating, the scoping, and that a successful rewrite
+# re-stamps provenance (which is what CLEARS the staleness flag).
+
+_GUIDANCE_SCHEMA = {
+    "schema_version": "2",
+    "form_metadata": {"title": "T", "version": "1", "form_number": "X"},
+    "sections": [],
+    "fields": [
+        {"id": "a", "name": "A", "type": "text", "spoken_name": "a",
+         "pdf_field_name": "f1"},
+        {"id": "b", "name": "B", "type": "text", "spoken_name": "b",
+         "pdf_field_name": "f2"},
+    ],
+}
+
+
+class _FakeEnrich:
+    """Stand-in for scripts/authoring/enrich_instructions."""
+
+    last_fields = None
+
+    @staticmethod
+    def booklet_text(path):
+        return "BOOKLET TEXT"
+
+    @staticmethod
+    def askable_fields(schema):
+        # The real one drops read_only/signature fields -- the route uses it so
+        # an UNSCOPED run does not report never-candidates as "skipped".
+        return [f for f in schema.get("fields", [])
+                if isinstance(f, dict) and not f.get("read_only")
+                and f.get("type") != "signature"]
+
+    @staticmethod
+    def verify_and_rectify(schema, proposals, booklet, form_name,
+                           author_model, judge_model=None):
+        # The real one judges every proposal and MUTATES per the KEEP rule.
+        # The route must call it before writing (it is what earns the
+        # "llm-verified" provenance stamp); the fake just records the flags.
+        return [{"severity": "WARNING", "rule": "instructions-rectified",
+                 "path": "x", "message": "judged"}]
+
+    @classmethod
+    def enrich_schema(cls, schema, booklet, form_name, model, chunk_size):
+        # Record which fields were handed to the model -- that is how the
+        # fieldIds scoping is asserted.
+        cls.last_fields = [f["id"] for f in schema.get("fields", [])]
+        return {"proposals": {
+            "fields": {fid: {"instructions": f"new guidance for {fid}"}
+                       for fid in cls.last_fields},
+            "form_details": "",
+        }}
+
+    @staticmethod
+    def apply_proposals(schema, proposals, booklet, flags, model, judge_model,
+                        tu_map=None):
+        written = 0
+        for f in schema.get("fields", []):
+            entry = (proposals.get("fields") or {}).get(f.get("id"))
+            if isinstance(entry, dict) and entry.get("instructions"):
+                f["help"] = {"instructions": entry["instructions"]}
+                written += 1
+        return {"written": written, "skipped_human": 0, "flags": 0,
+                "unmatched_proposal_ids": []}
+
+
+@pytest.fixture()
+def guidance_enrich(monkeypatch):
+    _FakeEnrich.last_fields = None
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _FakeEnrich)
+    return _FakeEnrich
+
+
+def _kit_with_booklet(root, kit_id, *, status="draft", schema=None):
+    kit_dir = _make_kit(root, kit_id, status=status,
+                        schema=schema or _GUIDANCE_SCHEMA)
+    (kit_dir / "w7-instructions.pdf").write_bytes(b"%PDF-1.7 booklet")
+    return kit_dir
+
+
+def test_regenerate_guidance_rewrites_and_stores(client, guidance_enrich):
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert sorted(body["regenerated"]) == ["a", "b"]
+    assert body["booklet"] == "w7-instructions.pdf"
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    assert stored["fields"][0]["help"]["instructions"] == "new guidance for a"
+
+
+def test_regenerate_guidance_scopes_to_requested_fields(client, guidance_enrich):
+    # The staleness banner knows exactly which fields drifted, so the costly
+    # rewrite must be limited to them rather than re-billing the whole form.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"},
+               json={"fieldIds": ["b"]})
+    assert r.status_code == 200, r.text
+    assert guidance_enrich.last_fields == ["b"]
+    assert r.json()["regenerated"] == ["b"]
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    assert "help" not in stored["fields"][0]        # 'a' untouched
+    assert stored["fields"][1]["help"]["instructions"] == "new guidance for b"
+
+
+def test_regenerate_guidance_refuses_without_a_booklet(client, guidance_enrich):
+    # The booklet is the GROUNDING for every proposal; without one the model
+    # would be inventing legal-form prose. Refuse rather than fabricate.
+    c, store, root = client
+    _make_kit(root, "nobook", schema=_GUIDANCE_SCHEMA)  # form.pdf only
+    r = c.post("/api/editor/kits/nobook/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 409
+    assert "instructions booklet" in r.json()["detail"]
+
+
+def test_regenerate_guidance_refuses_on_a_published_kit(client, guidance_enrich):
+    c, store, root = client
+    _kit_with_booklet(root, "done", status="complete")
+    r = c.post("/api/editor/kits/done/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 409
+    assert "draft" in r.json()["detail"]
+
+
+def test_regenerate_guidance_needs_the_author_tier(client, guidance_enrich):
+    # It spends model tokens and rewrites the stored schema, like extract.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "edit-tok"}, json={})
+    assert r.status_code == 403
+
+
+def test_regenerate_guidance_rejects_unknown_field_ids(client, guidance_enrich):
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"},
+               json={"fieldIds": ["ghost"]})
+    assert r.status_code == 422
+
+
+def test_regenerate_guidance_reports_a_model_failure_without_writing(
+        client, monkeypatch):
+    # A transport/model failure must leave the stored schema BYTE-UNTOUCHED --
+    # a half-written guidance rewrite is worse than none.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    before = (root / "fresh" / "schema.json").read_text(encoding="utf-8")
+
+    class _Boom(_FakeEnrich):
+        @staticmethod
+        def enrich_schema(*a, **kw):
+            raise RuntimeError("model exploded")
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Boom)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 502
+    assert "Nothing was changed" in r.json()["detail"]
+    assert (root / "fresh" / "schema.json").read_text(encoding="utf-8") == before
+
+
+def test_regenerate_guidance_preserves_flags_and_judge_model(
+        client, guidance_enrich):
+    # apply_proposals REPLACES the whole instructions_enrich block. Passing
+    # flags=[] wiped the reviewer's guidance worklist (schema_lint re-emits
+    # those flags as findings) and blanked which judge verified the kit.
+    c, store, root = client
+    schema = json.loads(json.dumps(_GUIDANCE_SCHEMA))
+    schema["_bakeoff"] = {"authoring": {"instructions_enrich": {
+        "model": "old", "judge_model": "gemini-2.5-flash",
+        "flags": [{"severity": "WARNING", "rule": "instructions-rectified",
+                   "path": "p", "message": "m"}],
+        "provenance": {},
+    }}}
+    _kit_with_booklet(root, "fresh", schema=schema)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    block = stored["_bakeoff"]["authoring"]["instructions_enrich"]
+    assert block["judge_model"] == "gemini-2.5-flash"
+    assert any(f["rule"] == "instructions-rectified" for f in block["flags"])
+
+
+def test_regenerate_guidance_scoped_does_not_clobber_form_details(
+        client, monkeypatch):
+    # enrich_schema asks for form_details in EVERY chunk, so a one-field
+    # rewrite would otherwise replace the kit's whole eligibility/where-to-file
+    # block with whatever that chunk emitted.
+    c, store, root = client
+    schema = json.loads(json.dumps(_GUIDANCE_SCHEMA))
+    schema["form_metadata"]["details"] = "THE REAL FORM-LEVEL PROSE"
+    _kit_with_booklet(root, "fresh", schema=schema)
+
+    class _Chatty(_FakeEnrich):
+        @classmethod
+        def enrich_schema(cls, s, booklet, form_name, model, chunk_size):
+            out = _FakeEnrich.enrich_schema(s, booklet, form_name, model,
+                                            chunk_size)
+            out["proposals"]["form_details"] = "a one-chunk fragment"
+            return out
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Chatty)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    stored = json.loads((root / "fresh" / "schema.json").read_text(encoding="utf-8"))
+    assert stored["form_metadata"]["details"] == "THE REAL FORM-LEVEL PROSE"
+
+
+def test_regenerate_guidance_writes_nothing_when_no_proposals(
+        client, monkeypatch):
+    # enrich_schema filters to ASKABLE fields, so a fieldIds list of only
+    # read_only/signature fields yields zero proposals. Falling through would
+    # re-stamp the bake block for no benefit -- a destructive no-op.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    before = (root / "fresh" / "schema.json").read_text(encoding="utf-8")
+
+    class _Empty(_FakeEnrich):
+        @classmethod
+        def enrich_schema(cls, s, booklet, form_name, model, chunk_size):
+            return {"proposals": {"fields": {}, "form_details": ""}}
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Empty)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["regenerated"] == []
+    assert (root / "fresh" / "schema.json").read_text(encoding="utf-8") == before
+
+
+def test_regenerate_guidance_runs_the_verify_loop_before_writing(
+        client, monkeypatch):
+    # apply_proposals stamps source="llm-verified". Every other caller earns
+    # that label by judging first; this route must too, or unreviewed model
+    # prose lands in a stored kit labelled verified.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    called = {"verify": False}
+
+    class _Tracked(_FakeEnrich):
+        @staticmethod
+        def verify_and_rectify(schema, proposals, booklet, form_name,
+                               author_model, judge_model=None):
+            called["verify"] = True
+            return []
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _Tracked)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 200, r.text
+    assert called["verify"], "the judge did not run before the write"
+
+
+def test_regenerate_guidance_reports_nothing_when_the_judge_is_out(
+        client, monkeypatch):
+    # verify_and_rectify fails SAFE by blanking each entry to {} but KEEPING
+    # its key, so `fields` stays truthy. An empty-dict guard misses that, and
+    # the route would return 200 with a non-empty `regenerated` having written
+    # nothing -- the reviewer believes the guidance was re-authored.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+    before = (root / "fresh" / "schema.json").read_text(encoding="utf-8")
+
+    class _JudgeDown(_FakeEnrich):
+        @staticmethod
+        def verify_and_rectify(schema, proposals, booklet, form_name,
+                               author_model, judge_model=None):
+            for fid in list((proposals.get("fields") or {})):
+                proposals["fields"][fid] = {}   # the real fail-safe shape
+            return [{"severity": "WARNING",
+                     "rule": "instructions-enrich-unavailable",
+                     "path": "x", "message": "judge down"}]
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _JudgeDown)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["regenerated"] == []
+    assert (root / "fresh" / "schema.json").read_text(encoding="utf-8") == before
+
+
+def test_regenerate_guidance_does_not_claim_it_overwrote_human_edits(
+        client, monkeypatch):
+    # apply_proposals SKIPS a field whose guidance a human edited. Reporting
+    # the proposal ids would tell the reviewer their hand-written text was
+    # overwritten -- the opposite of the route's contract.
+    c, store, root = client
+    _kit_with_booklet(root, "fresh")
+
+    class _HumanOwned(_FakeEnrich):
+        @staticmethod
+        def apply_proposals(schema, proposals, booklet, flags, model,
+                            judge_model, tu_map=None):
+            # writes nothing: every field reads as hand-edited
+            return {"written": 0, "skipped_human": 1, "flags": 0,
+                    "unmatched_proposal_ids": []}
+
+    monkeypatch.setattr(ekr, "_load_enrich_instructions", lambda: _HumanOwned)
+    r = c.post("/api/editor/kits/fresh/regenerate-guidance",
+               headers={"X-Editor-Token": "auth-tok"}, json={"fieldIds": ["a"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["regenerated"] == []
+    assert r.json()["skipped"] == ["a"]

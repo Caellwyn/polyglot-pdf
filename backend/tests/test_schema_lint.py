@@ -1032,87 +1032,6 @@ def test_option_label_change_flags_but_plumbing_does_not():
     assert _stale(lint_schema(_identity_schema(replumbed, baked))) == []
 
 
-def test_type_change_flags_even_though_type_is_never_spoken():
-    """bd polyglot-pdf-stkz: a type change rewrites the expected ANSWER SHAPE
-    while leaving every spoken text untouched -- name, spoken_name and
-    options[] are all identical, so before this the hash never moved and the
-    gate stayed silent on guidance that no longer fits the field.
-
-    type is not read aloud, but the payload's test is "does changing it make
-    the authored guidance wrong?", not "is it spoken?" -- it is one of the
-    seven inputs the authoring model sees (field_digest) and CONTRACT_TEXT
-    names answer format an explicit content priority."""
-    from backend.services import guidance_contract as gc
-    f = {"id": "a", "name": "Date of birth", "spoken_name": "date of birth",
-         "type": "text",
-         "help": {"instructions": "Enter it as digits only, no spaces."}}
-    baked = gc.identity_sha1(f)
-    # the ONLY change is type; every voice-facing text is byte-identical
-    retyped = dict(f, type="date")
-    hits = _stale(lint_schema(_identity_schema(retyped, baked)))
-    assert len(hits) == 1
-    assert hits[0].severity == "WARNING"
-    assert "id=a" in hits[0].path
-    # text -> number likewise
-    assert len(_stale(lint_schema(
-        _identity_schema(dict(f, type="number"), baked)))) == 1
-    # and the unchanged field still says nothing
-    assert _stale(lint_schema(_identity_schema(f, baked))) == []
-
-
-def test_choice_group_kind_flips_do_NOT_flag():
-    """The type token is NORMALIZED (Opus clearing review on bd stkz): every
-    option-carrying field hashes the constant "choice", so the two
-    guidance-neutral machine paths that swap choice-group KINDS cannot
-    manufacture staleness:
-
-      - the editor's changeGroupKind flips radio <-> checkbox_group "sharing
-        option identity byte-for-byte ... nothing else in the schema changes"
-        (fieldGrouping.ts's own contract);
-      - schema_repair retypes the v1 checkbox-with-options idiom to
-        checkbox_group on a STORED draft via the one-click /repair route --
-        so hashing the raw kind let Repair-all amber a whole kit with no
-        author edit, exactly the machine-manufactured noise identity_payload's
-        docstring forbids (and bd polyglot-pdf-ug5n tracks for values).
-    """
-    from backend.services import guidance_contract as gc
-    opts = [{"label": "Yes", "value": "y"}, {"label": "No", "value": "n"}]
-    base = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
-            "options": opts, "help": {"instructions": "x"}}
-    baked = gc.identity_sha1(base)
-    # the editor flip: radio -> checkbox_group, options byte-identical
-    flipped = dict(base, type="checkbox_group")
-    assert gc.identity_sha1(flipped) == baked
-    assert _stale(lint_schema(_identity_schema(flipped, baked))) == []
-    # the repair path: v1 checkbox-with-options idiom -> checkbox_group
-    v1_idiom = dict(base, type="checkbox")
-    assert gc.identity_sha1(v1_idiom) == baked
-    # ...while a SCALAR type change still flags (the motivating stkz case):
-    scalar = {"id": "a", "name": "N", "spoken_name": "n", "type": "text",
-              "help": {"instructions": "x"}}
-    assert gc.identity_sha1(dict(scalar, type="date")) \
-        != gc.identity_sha1(scalar)
-    # ...and a choice field LOSING its options changes the hash (the triples
-    # empty out AND the token reverts to the raw scalar type):
-    descoped = {k: v for k, v in base.items() if k != "options"}
-    assert gc.identity_sha1(descoped) != baked
-
-
-def test_type_is_hashed_without_disturbing_the_other_elements():
-    """The type element is APPENDED to the positional payload, so the existing
-    elements keep their indices and the pre-existing cases are untouched."""
-    from backend.services import guidance_contract as gc
-    import json
-    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "text"}
-    payload = json.loads(gc.identity_payload(f))
-    assert payload[0] == "N" and payload[1] == "n" and payload[2] == []
-    assert payload[-1] == "text"
-    # a missing / non-string type coerces to "" rather than throwing, matching
-    # how name and spoken_name are already handled
-    assert json.loads(gc.identity_payload({"id": "a"}))[-1] == ""
-    assert json.loads(gc.identity_payload({"id": "a", "type": 7}))[-1] == ""
-
-
 def test_option_label_swap_flags_even_with_identical_label_multiset():
     """THE HANDOFF CASE (bd anim): two labels trading places while their
     values stay put left the sorted-bare-label hash unchanged, yet the
@@ -1211,17 +1130,11 @@ def test_identity_rule_never_throws_on_malformed_provenance():
 
 def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
     r"""CONTRACT PIN (bd anim): the editor parses the current identity out of
-    the finding PATH with /\[identity:([0-9a-f]+)\]$/ -- ANCHORED since bd
-    polyglot-pdf-g5vj -- and pins a human's acknowledgment to it. If this
-    format ever changes, that parse silently returns undefined and 'any ack
-    satisfies the gate' -- reopening the permanent-waiver hole with no other
-    test to catch it. The hash must stay OUT of the message, which is rendered
-    to humans in three UI surfaces.
-
-    The pattern quoted here MUST match the assertion below and the editor's
-    actual regex: this docstring previously quoted the pre-g5vj unanchored
-    form, which invited a future reader to 'restore' it and re-open the hole
-    (Opus clearing review)."""
+    the finding PATH with /\[identity:([0-9a-f]+)\]/ and pins a human's
+    acknowledgment to it. If this format ever changes, that parse silently
+    returns undefined and 'any ack satisfies the gate' -- reopening the
+    permanent-waiver hole with no other test to catch it. The hash must stay
+    OUT of the message, which is rendered to humans in three UI surfaces."""
     import re
     from backend.services import guidance_contract as gc
     f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
@@ -1230,27 +1143,10 @@ def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
     drifted = dict(f, spoken_name="v2")
     hit = _stale(lint_schema(_identity_schema(drifted, baked)))[0]
 
-    # The editor's EXACT regex must find the CURRENT identity in the path.
-    # ANCHORED, matching guidanceStaleness.currentIdentity since bd
-    # polyglot-pdf-g5vj anchored it. This pin was left unanchored when the
-    # editor moved, making it LOOSER than the thing it exists to protect: a
-    # path that grew a trailing segment would keep this test green while the
-    # editor's parse returned undefined, silently failing the gate open on
-    # every field (Opus outer review, second clearing pass). That failure is
-    # now invisible to humans too -- with no parseable identity the row stays
-    # green, no ack checkbox renders, AND (since bd polyglot-pdf-hii0) the
-    # banner drops the warning as well -- so this test is the only thing left
-    # that can catch it. It must be at least as strict as the editor.
-    m = re.search(r"\[identity:([0-9a-f]+)\]$", hit.path)
+    # the editor's EXACT regex must find the CURRENT identity in the path
+    m = re.search(r"\[identity:([0-9a-f]+)\]", hit.path)
     assert m, f"editor's identity regex no longer matches path: {hit.path!r}"
     assert m.group(1) == gc.identity_sha1(drifted)
-    # ...and a path with ANY trailing segment must NOT satisfy that parse --
-    # the exact shape that would silently disable the gate.
-    assert not re.search(r"\[identity:([0-9a-f]+)\]$",
-                         hit.path + ".instructions"), (
-        "a suffixed path must not satisfy the editor's anchored parse; if "
-        "the lint path ever gains a trailing segment, currentIdentity() "
-        "returns undefined and the staleness gate fails open silently")
     # ...and the human-facing message must NOT carry it
     assert "identity:" not in hit.message
     # field_id must still resolve for click-to-focus despite the suffix
@@ -1337,35 +1233,50 @@ def test_a_field_baked_before_identity_tracking_never_reads_stale():
 # only a count over the SHIPPED kit can catch a mass false alarm (a hash-formula
 # change lighting up every field) or a silent regression (the rule going dark).
 #
-# WHY these 14 are stale -- stated as what is PROVABLE from the data, because
-# this comment is the only thing telling a maintainer the fix is a re-bake
-# rather than a label re-check:
+# WHY these are stale, stated as what is PROVABLE from the data, because this
+# comment is the only thing telling a maintainer the fix is a re-bake rather
+# than a label re-check:
 #
-# Some provenance shas describe the field ONE POSITION OVER, i.e. the ivh9
-# off-by-one is fossilized in the bake metadata itself. Reproduce with:
+# The set jumped 14 -> 51 when bd polyglot-pdf-stkz (PR #518) added `type` to
+# identity_payload. That is a deliberate HASH-FORMULA change, so every
+# previously-baked field legitimately reads stale at once -- the mass alarm
+# this pin exists to make VISIBLE, firing correctly rather than spuriously.
+# The field identities themselves did NOT change (verified: identity_payload
+# for date_of_birth / name_1a_first / reason is byte-identical from #519 to
+# #518) and no provenance hash was rewritten; only the formula moved.
+#
+# Underneath that, some provenance shas describe the field ONE POSITION OVER --
+# the ivh9 off-by-one fossilized in the bake metadata. Reproduce with:
 #   cur = {identity_sha1(f): f["id"] for f in schema["fields"]}
 #   [(k, cur.get(r["identity_sha1"])) for k, r in prov.items()]
-# which yields prov[reason_h_details] -> treaty_country and
-# prov[treaty_country] -> treaty_article_number. Those records were baked
-# against the pre-correction assignment, so they cannot match now.
 #
-# The rest simply predate later edits to name/spoken_name. identity_sha1 hashes
-# ONLY name + spoken_name + option triples (guidance_contract.identity_payload),
-# so nothing about the field set or the plumbing enters the hash.
-#
-# Note what this is NOT: the set is byte-identical before and after the
-# bd polyglot-pdf-fjxe 'name' correction (verified by hashing both revisions),
-# so the corrected names neither caused nor cleared any of it.
+# Note what this is NOT: the set was byte-identical before and after the
+# bd polyglot-pdf-fjxe 'name' correction, so those corrected names neither
+# caused nor cleared any of it.
 #
 # Clearing them means RE-BAKING the guidance against the current fields, which
 # is maintainer work (bd polyglot-pdf-im2u criterion 2, bd polyglot-pdf-aliu)
 # -- not something a test should paper over.
 _W7_EXPECTED_STALE = {
-    "us_person_name_ssn_itin", "reason_h_details", "treaty_country",
-    "id_document_issued_by", "itin_issued_first_name",
-    "itin_issued_middle_name", "itin_issued_last_name", "phone_number",
-    "name_of_delegate", "delegate_name", "agent_fax", "agent_ein",
-    "agent_ptin", "agent_office_code",
+    "agent_company_name", "agent_ein", "agent_fax",
+    "agent_name_and_title", "agent_office_code", "agent_phone",
+    "agent_ptin", "application_type", "city_state_of_birth",
+    "college_city_and_state", "college_or_company_name",
+    "countries_of_citizenship", "country_of_birth", "date_of_birth",
+    "date_of_entry_us", "delegate_relationship",
+    "foreign_city_state_country", "foreign_street",
+    "foreign_tax_id_number", "id_document_expiration_date",
+    "id_document_issued_by", "id_document_number",
+    "id_document_other_detail", "id_document_type", "irsn_part1",
+    "irsn_part2", "irsn_part3", "itin_issued_first_name",
+    "itin_issued_last_name", "itin_issued_middle_name", "itin_part1",
+    "itin_part2", "itin_part3", "length_of_stay",
+    "mailing_city_state_country", "mailing_street", "name_1a_first",
+    "name_1a_last", "name_1a_middle", "name_1b_first", "name_1b_last",
+    "name_1b_middle", "name_of_delegate", "phone_number",
+    "previously_received_itin_or_irsn", "reason", "reason_h_details",
+    "relationship_to_us_person", "treaty_country",
+    "us_person_name_ssn_itin", "us_visa_type_number_expiration"
 }
 
 

@@ -60,17 +60,65 @@ export function isHostedMode(): boolean {
   return import.meta.env.VITE_DELIVERY_MODE === 'hosted';
 }
 
+/**
+ * True when a backend is reachable for SERVER-SIDE work (bd polyglot-pdf-cpiw).
+ *
+ * WHY THIS IS SEPARATE FROM isHostedMode(): the two answer different questions,
+ * and conflating them is what made local mode a second-class surface.
+ *   isHostedMode()  -- WHERE DO KITS LIVE? hosted = the shared store behind
+ *                      /api/editor; local = a directory picked with the File
+ *                      System Access API.
+ *   hasBackend()    -- CAN WE CALL THE SERVER? for the authoritative Python
+ *                      lint, the translation sweep, guidance regeneration.
+ *
+ * Local mode kept kits on disk AND assumed no server, so it fell back to a
+ * lighter client-side lint (rule ids dropped -> the guidance staleness gate
+ * silently never fired) and hid the regenerate affordances. But the local dev
+ * stack DOES run the backend, so that assumption was simply wrong.
+ *
+ * Hosted always has one. Local has one whenever VITE_BACKEND_URL is set --
+ * scripts/run-schema-editor.sh starts the backend and sets it, so the default
+ * local-dev experience now matches hosted feature-for-feature. The only
+ * sanctioned difference is the LLM provider (local: the free `claude` CLI;
+ * hosted: metered Gemini), which is a BACKEND-side choice the editor never sees.
+ */
+export function hasBackend(): boolean {
+  return isHostedMode() || Boolean(import.meta.env.VITE_BACKEND_URL);
+}
+
 /** Backend base URL ('' = same origin). Hosted builds set VITE_API_BASE_URL to
  * the Cloud Run URL (the editor calls it directly -- no Hosting /api rewrite,
- * whose 60s cap would kill minutes-long extraction). */
+ * whose 60s cap would kill minutes-long extraction).
+ *
+ * Local mode uses VITE_BACKEND_URL instead (set by run-schema-editor.sh, which
+ * launches the backend alongside the editor). Kept as a SEPARATE variable from
+ * VITE_API_BASE_URL so a local session can never accidentally inherit the
+ * committed Cloud Run URL from .env.hosted and start writing to the shared
+ * store -- bd polyglot-pdf-cpiw. */
 export function apiBaseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+  // VITE_API_BASE_URL wins wherever it is set (it is THE hosted contract and
+  // deploy-editor.sh injects it at build time). VITE_BACKEND_URL is the
+  // local-dev addition, consulted only when the hosted one is absent -- so a
+  // hosted build can never accidentally fall through to a localhost backend,
+  // and a local session can never inherit the committed Cloud Run URL.
+  const hosted = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+  if (hosted) return hosted;
+  return (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? '';
 }
 
 /** The active access code: the human-entered one (localStorage, with an
  * in-memory fallback for storage-less browsers) wins, else a baked
  * VITE_EDITOR_TOKEN (single-contractor compat), else null (prompt). */
 export function getAccessCode(): string | null {
+  const baked = import.meta.env.VITE_EDITOR_TOKEN as string | undefined;
+  // LOCAL dev inverts the precedence: run-schema-editor.sh mints a FRESH
+  // per-run token and gives the same value to the backend and this bundle, so
+  // the baked one is authoritative. A code left in localStorage by an earlier
+  // run would otherwise shadow it and 401 every request -- which reads exactly
+  // like the silent no-lint failure this change exists to remove
+  // (bd polyglot-pdf-cpiw). Hosted keeps the human-entered code on top: there
+  // the baked value is a build-time fallback, and one build serves both tiers.
+  if (baked && !isHostedMode()) return baked;
   try {
     const stored = window.localStorage.getItem(ACCESS_CODE_KEY);
     if (stored) return stored;
@@ -78,7 +126,6 @@ export function getAccessCode(): string | null {
     // storage unavailable -> fall through to the in-memory copy
   }
   if (memoryAccessCode) return memoryAccessCode;
-  const baked = import.meta.env.VITE_EDITOR_TOKEN as string | undefined;
   return baked || null;
 }
 
@@ -251,6 +298,44 @@ export async function regenerateDivisions(kitId: string): Promise<DeriveDivision
   );
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not regenerate divisions'));
   return (await res.json()) as DeriveDivisionsReport;
+}
+
+/** Guidance-regeneration result (bd polyglot-pdf-cpiw). The kit's stored
+ * schema was rewritten server-side, so the caller must RELOAD it. */
+export interface RegenerateGuidanceReport {
+  regenerated: string[];   // field ids whose guidance was rewritten
+  skipped: string[];       // requested ids the model returned nothing for
+  model: string;           // which model produced it
+  booklet: string | null;  // the instructions PDF it was grounded in
+  errorCount: number;
+  warningCount: number;
+}
+
+/**
+ * Re-author field guidance from the form's instruction booklet -- the COSTLY
+ * half of the staleness gate (bd anim), which previously had no
+ * implementation, leaving "re-author it" as hand-copying prose out of the IRS
+ * booklet.
+ *
+ * `fieldIds` scopes the rewrite (the staleness banner already knows which
+ * fields drifted, so this avoids re-billing the whole form); omit for every
+ * field. Author tier, draft-only. Rewrites the STORED schema, so RELOAD after
+ * this resolves. A successful rewrite re-stamps provenance, which is what
+ * clears the staleness flag for those fields.
+ */
+export async function regenerateGuidance(
+  kitId: string, fieldIds?: string[],
+): Promise<RegenerateGuidanceReport> {
+  const res = await editorFetch(
+    `/api/editor/kits/${encodeURIComponent(kitId)}/regenerate-guidance`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fieldIds: fieldIds ?? [] }),
+    },
+  );
+  if (!res.ok) throw new Error(await errorDetail(res, 'Could not regenerate guidance'));
+  return (await res.json()) as RegenerateGuidanceReport;
 }
 
 /** One PDF button widget the schema does not yet claim (bd polyglot-pdf-nivy,

@@ -77,6 +77,16 @@ interface FieldEditorProps {
   // Why ignoring is currently refused for the selected field, or null when it
   // is allowed (computed by App, which owns the whole schema).
   ignoreBlocked?: string | null;
+  // Re-author THIS field's guidance from the form's instruction booklet (bd
+  // polyglot-pdf-cpiw) -- the costly half of the staleness gate, offered right
+  // where the gate is raised so a reviewer does not have to hand-copy prose out
+  // of the booklet. Rewrites the STORED schema server-side, so App reloads the
+  // kit afterwards. Optional: absent without a backend + author tier + open kit.
+  // Resolves TRUE when the guidance actually changed -- false means the rewrite
+  // ran but wrote nothing (judge unavailable, hand-edited guidance the route
+  // never clobbers, or the booklet had nothing for this field), which the
+  // button explains rather than looking like success.
+  onRegenerateGuidance?: (fieldId: string) => Promise<boolean>;
 }
 
 // Editable field-id header (bd polyglot-pdf-0x10.1). The id is the schema's
@@ -577,6 +587,68 @@ const OptionWidgetSelect: React.FC<{
   );
 };
 
+/**
+ * "Rewrite it from the instructions booklet" -- the costly half of the
+ * guidance staleness gate (bd polyglot-pdf-cpiw).
+ *
+ * Its own component because FieldEditor returns early when no field is
+ * selected, so it cannot hold hooks; the in-flight and error state lives here
+ * instead. Keyed by field id at the call site so switching fields resets it.
+ */
+const RegenerateGuidanceButton: React.FC<{
+  fieldId: string;
+  onRegenerate: (fieldId: string) => Promise<boolean>;
+}> = ({ fieldId, onRegenerate }) => {
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  // A rewrite that CHANGED NOTHING resolves normally, so without this the
+  // button just returns to its idle label and the amber banner is still there
+  // with no explanation -- the same silent, success-shaped no-op this whole
+  // change exists to remove. Three real ways to get here: the judge was
+  // unavailable, the guidance was hand-edited (which the route deliberately
+  // never clobbers), or the booklet yielded nothing for this field.
+  const [noChange, setNoChange] = React.useState(false);
+  return (
+    <div className="mt-2 border-t border-amber-200 pt-2">
+      <button
+        type="button"
+        className="text-xs font-medium text-amber-900 underline disabled:no-underline disabled:opacity-60"
+        data-testid="regenerate-guidance"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          setNoChange(false);
+          try {
+            const changed = await onRegenerate(fieldId);
+            setNoChange(!changed);
+          } catch (err) {
+            setError(err instanceof Error
+              ? err.message
+              : 'Could not regenerate the guidance');
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy
+          ? 'Rewriting from the instructions booklet...'
+          : 'Or rewrite it from the instructions booklet'}
+      </button>
+      {error && (
+        <p className="mt-1 text-xs text-red-700" role="status">{error}</p>
+      )}
+      {noChange && !error && (
+        <p className="mt-1 text-xs text-amber-900" role="status">
+          Nothing was rewritten. The guidance may have been edited by hand
+          (which is never overwritten), or the booklet had nothing to say about
+          this field -- confirm the existing text instead.
+        </p>
+      )}
+    </div>
+  );
+};
+
 export const FieldEditor: React.FC<FieldEditorProps> = ({
   field,
   schema,
@@ -592,6 +664,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
   pageCount,
   onIgnoreField,
   ignoreBlocked,
+  onRegenerateGuidance,
 }) => {
   if (!field) {
     // No field selected -> show the editable form-metadata panel (bd s4dp.2), so
@@ -1013,6 +1086,16 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                         )}
                       </span>
                     </label>
+                    {/* The OTHER way out of the gate (bd polyglot-pdf-cpiw):
+                        re-author from the booklet instead of confirming the
+                        old text. Offered right here so a reviewer never has
+                        to hand-copy prose out of the instructions PDF. */}
+                    {onRegenerateGuidance && (
+                      <RegenerateGuidanceButton
+                        fieldId={field.id}
+                        onRegenerate={onRegenerateGuidance}
+                      />
+                    )}
                   </div>
                 )}
               </div>
