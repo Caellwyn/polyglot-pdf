@@ -146,6 +146,55 @@ describe('the ack pins to CURRENT content, never the frozen bake (fresh-eyes fin
   });
 });
 
+describe('currentIdentity parses the TRAILING token (bd polyglot-pdf-g5vj)', () => {
+  // The backend builds the path by interpolating the field id AHEAD of the
+  // identity token (schema_lint.py::_check_guidance_identity_drift), so an
+  // UNANCHORED regex returns the id's own embedded hex instead of the real
+  // current hash. That mis-parse pins the ack to a string that can never
+  // change again, making one click a PERMANENT WAIVER for the field -- the
+  // exact hole current-identity pinning was built to close.
+  const REAL = '1d4f89c8aa';
+  const DECOY = 'deadbeef';
+  const WEIRD_ID = `weird[identity:${DECOY}]id`;
+
+  // Built exactly as the backend does, so this test breaks if the path shape
+  // on either side drifts.
+  const path = `fields (id=${WEIRD_ID}).help[identity:${REAL}]`;
+  const finding: LintFinding = {
+    severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+    path, message: 'identity changed', field_id: WEIRD_ID,
+  };
+
+  it('returns the real trailing hash, not an id-embedded decoy', () => {
+    expect(currentIdentity([finding], WEIRD_ID)).toBe(REAL);
+    expect(currentIdentity([finding], WEIRD_ID)).not.toBe(DECOY);
+  });
+
+  it('so the ack is NOT a permanent waiver for such a field', () => {
+    // Ack the real current identity; a later drift moves it and re-gates.
+    const acked = withGuidanceAck(
+      field({ id: WEIRD_ID } as Partial<FormField>), REAL, true);
+    const ids = staleFieldIds([finding]);
+    expect(needsGuidanceAck(acked, ids, currentIdentity([finding], WEIRD_ID)))
+      .toBe(false);
+    const next: LintFinding = {
+      ...finding,
+      path: `fields (id=${WEIRD_ID}).help[identity:99aa00bb]`,
+    };
+    expect(needsGuidanceAck(acked, staleFieldIds([next]),
+      currentIdentity([next], WEIRD_ID))).toBe(true);
+  });
+
+  it('an ordinary slugified id is unaffected', () => {
+    const plain: LintFinding = {
+      severity: 'WARNING', rule: GUIDANCE_STALE_RULE,
+      path: `fields (id=phone).help[identity:${REAL}]`,
+      message: 'x', field_id: 'phone',
+    };
+    expect(currentIdentity([plain], 'phone')).toBe(REAL);
+  });
+});
+
 describe('staleFieldIds uses the centralized field_id (bd h76m.11)', () => {
   it('reads field_id, not a re-parse of path', () => {
     const odd: LintFinding = {

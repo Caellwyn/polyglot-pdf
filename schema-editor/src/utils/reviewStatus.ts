@@ -35,7 +35,10 @@
  * the session STASH_KEY, so stripEditorState leaves it intact on save.
  */
 import type { FormField, FieldReview, FieldReviewStatus } from '../types/schema';
+import type { LintFinding } from './remoteKitStore';
 import { checkFieldComplete } from './validation';
+import { currentIdentity, needsGuidanceAck, staleFieldIds }
+  from './guidanceStaleness';
 
 // The status a row/icon actually shows, after layering human review over the
 // automatic derivation. 'followup' is the human-flagged state; the other three
@@ -184,6 +187,52 @@ export function effectiveStatus(
 }
 
 /**
+ * The two booleans every findings-driven status call needs, derived ONCE.
+ * Both statusFromFindings and isReviewTargetFromFindings go through here, so
+ * the "how do findings become a lint-error flag and a gate flag" recipe has a
+ * single definition (Opus outer review, pass 2).
+ */
+function gateFlags(field: FormField, findings?: LintFinding[]): {
+  hasLintError: boolean; ackPending: boolean;
+} {
+  return {
+    hasLintError: (findings ?? []).some(f => f.severity === 'ERROR'),
+    ackPending: needsGuidanceAck(
+      field,
+      staleFieldIds(findings),
+      currentIdentity(findings, field.id),
+    ),
+  };
+}
+
+/**
+ * The effective status of a field given the RAW lint findings for it -- the
+ * one place the "findings -> status" rule lives (bd polyglot-pdf-l7u0).
+ *
+ * effectiveStatus takes two already-derived booleans (hasLintError,
+ * needsGuidanceAck). Deriving those correctly means knowing that an ERROR-
+ * severity finding reds the field and that the guidance gate needs BOTH the
+ * stale-id set and the current identity -- a three-call recipe FieldList had
+ * open-coded and FieldOverlay simply did not perform, which is how the PDF
+ * overlay could paint a field GREEN while the FieldList row for the SAME field
+ * rendered AMBER. Two surfaces claiming to show "the same status" must not
+ * each reimplement how to compute it.
+ *
+ * `findings` is this field's findings (App buckets them by field_id). Passing
+ * undefined -- the honest state for a call site with no lint report -- yields
+ * exactly today's no-findings behavior rather than throwing, so the overlay
+ * degrades instead of breaking when it renders standalone.
+ */
+export function statusFromFindings(
+  field: FormField,
+  findings?: LintFinding[],
+  pageCount?: number,
+): EffectiveStatus {
+  const { hasLintError, ackPending } = gateFlags(field, findings);
+  return effectiveStatus(field, hasLintError, pageCount, ackPending);
+}
+
+/**
  * Whether a field is a "review target" -- something the "Next to review" jump
  * should stop on and a work-remaining count should include. Everything except a
  * settled green field: errors, auto-amber, and human-flagged follow-ups all
@@ -202,4 +251,30 @@ export function isReviewTarget(
   // is flagged.
   return effectiveStatus(field, hasLintError, pageCount, needsGuidanceAck)
     !== 'complete';
+}
+
+/**
+ * isReviewTarget, derived from the RAW findings -- the review-jump's twin of
+ * statusFromFindings (bd polyglot-pdf-l7u0).
+ *
+ * The row icon and the "next to review" jump must agree about the same field:
+ * a jump that skips a row the author can plainly see is amber reports "nothing
+ * left to review" while flagged rows sit on screen. Before this, FieldList
+ * routed its icon through statusFromFindings but re-assembled the two booleans
+ * by hand for the jump -- identical results today, but a change to the gate's
+ * inputs would land on one path and not the other, which is the same
+ * two-surfaces-disagree defect one layer in.
+ */
+export function isReviewTargetFromFindings(
+  field: FormField,
+  findings?: LintFinding[],
+  pageCount?: number,
+): boolean {
+  // Shares gateFlags with statusFromFindings, then hands off to isReviewTarget
+  // rather than re-stating its `!== 'complete'` rule. Forking either would be
+  // the same duplicate-definition shape this bead set out to remove, one level
+  // down (Opus outer review, pass 2) -- and it keeps isReviewTarget a live
+  // production path rather than a test-only export.
+  const { hasLintError, ackPending } = gateFlags(field, findings);
+  return isReviewTarget(field, hasLintError, pageCount, ackPending);
 }

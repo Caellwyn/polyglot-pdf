@@ -400,20 +400,47 @@ no advice, and no omission_concerns you judge material.
 
 
 def identity_payload(field: dict) -> str:
-    """The stable serialization of a field's voice-facing identity.
+    """The stable serialization of a field's ANSWER-SHAPING identity.
 
     Covers ONLY what the guidance actually describes: the field's name, its
-    spoken name, and its options -- each option contributing a
+    spoken name, its options -- each option contributing a
     [label, spoken_label, value] triple, so both voice-facing texts are BOUND
-    to the option's stored value. spoken_label rides along because it
-    OUTRANKS label as the voice join key (secretary_context resolves
-    spoken_label or label; manifest_service ships it to the live model), so a
-    spoken_label swap is the same wrong-answer hazard as a label swap
-    (closeout Opus round 3, bd polyglot-pdf-w028). Deliberately excludes the
-    field id (renames are retargeted wholesale and an id is never spoken) and
-    plumbing (pdf_field_name, positions, conditions) -- changing those does
-    not make authored guidance wrong, and hashing them would manufacture
+    to the option's stored value -- and its TYPE. spoken_label rides along
+    because it OUTRANKS label as the voice join key (secretary_context
+    resolves spoken_label or label; manifest_service ships it to the live
+    model), so a spoken_label swap is the same wrong-answer hazard as a label
+    swap (closeout Opus round 3, bd polyglot-pdf-w028). Deliberately excludes
+    the field id (renames are retargeted wholesale and an id is never spoken)
+    and plumbing (pdf_field_name, positions, conditions) -- changing those
+    does not make authored guidance wrong, and hashing them would manufacture
     false staleness that trains editors to click through the gate.
+
+    WHY type is hashed even though it is not itself SPOKEN (bd
+    polyglot-pdf-stkz): the test this payload applies is not "is it read
+    aloud?" but "does changing it make the authored guidance WRONG?" -- which
+    is what the exclusions above are actually justified by. type passes that
+    test. It is one of the seven inputs the authoring model is shown
+    (enrich_instructions.field_digest: id, name, type, spoken_name, options,
+    show_if, existing_instructions), and CONTRACT_TEXT makes answer format an
+    explicit content priority ("format only when help.format_hint cannot
+    carry it"). So a text -> date or text -> number change rewrites the
+    expected answer SHAPE while leaving name, spoken_name and options[]
+    untouched: instructions phrased for free text, or a format_hint like
+    "digits only, no spaces", become wrong with the hash unmoved and the gate
+    silent. The type picker is a live editor control for fields without
+    options[], so this is a reachable path, not a script-only one. Of the
+    seven digest inputs, id and show_if are excluded above with stated
+    reasons; type was the one input neither hashed nor documented as
+    excluded, which is the gap this closes.
+
+    The type is hashed NORMALIZED, not raw: every option-carrying field
+    contributes the constant "choice", and only a scalar field contributes
+    its actual type. Choice-group KINDS (radio / checkbox_group / the v1
+    checkbox-with-options idiom) are interchangeable by guidance-neutral
+    machinery -- the editor's changeGroupKind flip and schema_repair's group
+    retype -- and hashing them raw let one-click Repair-all amber a whole
+    stored kit with no author edit. See the inline comment at the token for
+    the full rationale and the accepted single/multi tradeoff.
 
     The triples are SORTED, so a pure REORDER (whole options moving, each
     keeping its own texts and value) does not re-raise the gate -- the
@@ -456,10 +483,39 @@ def identity_payload(field: dict) -> str:
                 ("" if val is None else str(val))])
     name = field.get("name")
     spoken = field.get("spoken_name")
+    ftype = field.get("type")
+    # NORMALIZED type token. For an OPTION-CARRYING field the answer identity
+    # already lives in the option triples above, and the widget KIND is
+    # interchangeable by machinery whose own contracts declare it
+    # guidance-neutral: the editor's changeGroupKind flips radio <->
+    # checkbox_group "sharing option identity byte-for-byte ... nothing else
+    # in the schema changes" (fieldGrouping.ts), and schema_repair retypes the
+    # v1 checkbox-with-options idiom to checkbox_group on STORED drafts via
+    # the one-click /repair route. Hashing the raw kind made both of those
+    # no-spoken-word-changed actions raise the gate -- Repair-all could amber
+    # a whole kit with no author edit (Opus clearing review; the adjacent
+    # machine-noise concern is bd polyglot-pdf-ug5n). So every optioned field
+    # hashes the constant "choice", and only a SCALAR field hashes its raw
+    # type -- which is precisely the case the type hash exists for
+    # (text -> date rewrites the expected answer shape).
+    # ACCEPTED TRADEOFF: a deliberate radio -> checkbox_group flip (one
+    # answer -> several) no longer flags on its own. The contract already
+    # discourages guidance that restates selection mechanics, and any real
+    # single/multi rewrite in practice edits labels or options too, which
+    # still flags via the triples.
+    type_token = ("choice" if triples
+                  else (ftype if isinstance(ftype, str) else ""))
     return json.dumps(
         [name if isinstance(name, str) else "",
          spoken if isinstance(spoken, str) else "",
-         sorted(triples)],   # order-insensitive triples: see the docstring
+         sorted(triples),   # order-insensitive triples: see the docstring
+         # APPENDED, not inserted: a positional array keeps the existing
+         # elements at their existing indices, so the diff to the formula is
+         # additive. Free to do because NO shipped kit carries a baked
+         # identity_sha1 yet (all three committed kits: 0 of 44 provenance
+         # records) -- the window the bead flagged as closing on the first
+         # re-bake is still open.
+         type_token],
         ensure_ascii=False, separators=(",", ":"))
 
 

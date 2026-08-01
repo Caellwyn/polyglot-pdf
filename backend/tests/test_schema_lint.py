@@ -1233,37 +1233,50 @@ def test_a_field_baked_before_identity_tracking_never_reads_stale():
 # only a count over the SHIPPED kit can catch a mass false alarm (a hash-formula
 # change lighting up every field) or a silent regression (the rule going dark).
 #
-# WHY these 14 are stale -- stated as what is PROVABLE from the data, because
-# this comment is the only thing telling a maintainer the fix is a re-bake
-# rather than a label re-check:
+# WHY these are stale, stated as what is PROVABLE from the data, because this
+# comment is the only thing telling a maintainer the fix is a re-bake rather
+# than a label re-check:
 #
-# Some provenance shas describe the field ONE POSITION OVER, i.e. the ivh9
-# off-by-one is fossilized in the bake metadata itself. Reproduce with:
+# The set jumped 14 -> 51 when bd polyglot-pdf-stkz (PR #518) added `type` to
+# identity_payload. That is a deliberate HASH-FORMULA change, so every
+# previously-baked field legitimately reads stale at once -- the mass alarm
+# this pin exists to make VISIBLE, firing correctly rather than spuriously.
+# The field identities themselves did NOT change (verified: identity_payload
+# for date_of_birth / name_1a_first / reason is byte-identical from #519 to
+# #518) and no provenance hash was rewritten; only the formula moved.
+#
+# Underneath that, some provenance shas describe the field ONE POSITION OVER --
+# the ivh9 off-by-one fossilized in the bake metadata. Reproduce with:
 #   cur = {identity_sha1(f): f["id"] for f in schema["fields"]}
 #   [(k, cur.get(r["identity_sha1"])) for k, r in prov.items()]
-# which yields prov[reason_h_details] -> treaty_country and
-# prov[treaty_country] -> treaty_article_number. Those records were baked
-# against the pre-correction assignment, so they cannot match now.
 #
-# The rest simply predate later edits to name/spoken_name. identity_sha1 hashes
-# ONLY name + spoken_name + option triples (guidance_contract.identity_payload),
-# so nothing about the field set or the plumbing enters the hash.
-#
-# Note what this is NOT: the set is byte-identical before and after the
-# bd polyglot-pdf-fjxe 'name' correction (verified by hashing both revisions),
-# so the corrected names neither caused nor cleared any of it.
+# Note what this is NOT: the set was byte-identical before and after the
+# bd polyglot-pdf-fjxe 'name' correction, so those corrected names neither
+# caused nor cleared any of it.
 #
 # Clearing them means RE-BAKING the guidance against the current fields, which
 # is maintainer work (bd polyglot-pdf-im2u criterion 2, bd polyglot-pdf-aliu)
 # -- not something a test should paper over.
 _W7_EXPECTED_STALE = {
-    "us_person_name_ssn_itin", "reason_h_details", "treaty_country",
-    "id_document_issued_by", "itin_issued_first_name",
-    "itin_issued_middle_name", "itin_issued_last_name", "phone_number",
-    # `agent_phone` was `delegate_name` until the maintainer fixed that
-    # misnomer (bd polyglot-pdf-oun5). Same field, same widget (f1_42).
-    "name_of_delegate", "agent_phone", "agent_fax", "agent_ein",
-    "agent_ptin", "agent_office_code",
+    "agent_company_name", "agent_ein", "agent_fax",
+    "agent_name_and_title", "agent_office_code", "agent_phone",
+    "agent_ptin", "application_type", "city_state_of_birth",
+    "college_city_and_state", "college_or_company_name",
+    "countries_of_citizenship", "country_of_birth", "date_of_birth",
+    "date_of_entry_us", "delegate_relationship",
+    "foreign_city_state_country", "foreign_street",
+    "foreign_tax_id_number", "id_document_expiration_date",
+    "id_document_issued_by", "id_document_number",
+    "id_document_other_detail", "id_document_type", "irsn_part1",
+    "irsn_part2", "irsn_part3", "itin_issued_first_name",
+    "itin_issued_last_name", "itin_issued_middle_name", "itin_part1",
+    "itin_part2", "itin_part3", "length_of_stay",
+    "mailing_city_state_country", "mailing_street", "name_1a_first",
+    "name_1a_last", "name_1a_middle", "name_1b_first", "name_1b_last",
+    "name_1b_middle", "name_of_delegate", "phone_number",
+    "previously_received_itin_or_irsn", "reason", "reason_h_details",
+    "relationship_to_us_person", "treaty_country",
+    "us_person_name_ssn_itin", "us_visa_type_number_expiration"
 }
 
 

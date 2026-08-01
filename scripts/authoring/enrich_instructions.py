@@ -912,9 +912,13 @@ def apply_proposals(schema: dict, proposals: dict, booklet: str,
                 "instructions_sha1": _sha1(help_obj.get("instructions", "")),
                 "details_sha1": _sha1(help_obj.get("details", "")),
                 "format_hint_sha1": _sha1(help_obj.get("format_hint", "")),
-                # The field's voice-facing identity AS AUTHORED (bd anim): if a
-                # human later renames it or relabels an option, lint compares
-                # this and flags the guidance for human re-confirmation.
+                # The field's ANSWER-SHAPING identity AS AUTHORED (bd anim,
+                # widened by bd polyglot-pdf-stkz): if a human later renames
+                # it, relabels an option, or changes its TYPE, lint compares
+                # this and flags the guidance for human re-confirmation. Type
+                # is hashed despite never being spoken -- the test is "does
+                # changing it make the authored guidance wrong?" See
+                # identity_payload's docstring for the full rationale.
                 "identity_sha1": guidance_contract.identity_sha1(f),
             }
             written += 1

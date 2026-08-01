@@ -1003,6 +1003,26 @@ def _stamp_extraction_info(schema: dict) -> None:
     }
 
 
+def _count_unresolved_positions(schema: dict) -> int:
+    """Fields carrying NO pdf_position after every position pass (bd
+    polyglot-pdf-2hxu) -- the live "was it needed?" diagnostic.
+
+    The provenance count that used to serve this role, positions_filled, was a
+    REPAIR tally: it incremented only for fields the back-fill had to fix, so
+    `positions_filled: 0` on a kit with degenerate rects was a real (if missed)
+    alarm -- see docs/journal/entries/2026-07-09-bd-5f41-*.md. Since bd
+    polyglot-pdf-icyi made the deterministic dump rect win UNCONDITIONALLY, the
+    same counter increments for every field whose widget resolves -- "did it
+    run?" -- so it is now ~= the field count on any AcroForm and can never
+    raise that alarm again. This counts the condition that still means
+    something: on an AcroForm every field should resolve a widget, so a
+    non-zero result is the thing worth chasing.
+    """
+    return sum(1 for f in schema.get("fields", [])
+               if isinstance(f, dict) and not _has_usable_position(
+                   f.get("pdf_position")))
+
+
 def _check_dump_coverage(schema: dict, dump: dict | None) -> list[str]:
     """Fillable dump widgets claimed by NO field/option, post-backfill (bd
     polyglot-pdf-l1a9).
@@ -1361,11 +1381,22 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #    It also normalizes any SURVIVING model-supplied page from 0-based to
         #    1-based (an ordinal counting difference, not corrupt data) -- a
         #    no-op on AcroForms, where every field resolves a widget.
-        positions_filled = _backfill_positions(schema, dump_path)
-        if positions_filled.get("model_pages_normalized"):
+        # Named for WHICH PASS it is, not what it counts: 2hxu retired
+        # "positions_filled" as a misleading repair-tally name, and a local
+        # still carrying it invites a future edit to stamp provenance from the
+        # FIRST pass. That wiring is pinned END-TO-END by
+        # test_stamped_provenance_discriminates_all_three_wirings, which
+        # drives the real extract() and reads the written schema -- the
+        # helper-level tests cannot see the stamp (an earlier comment here
+        # named one of them as the guard, which mutation testing proved
+        # false; Opus clearing review). Only model_pages_normalized is read
+        # from this local; the provenance block stamps completion_positions
+        # (the post-completion pass).
+        first_pass_positions = _backfill_positions(schema, dump_path)
+        if first_pass_positions.get("model_pages_normalized"):
             print(f"  [positions] normalized "
-                  f"{positions_filled['model_pages_normalized']} model-supplied "
-                  f"page number(s) from 0-based to 1-based")
+                  f"{first_pass_positions['model_pages_normalized']} "
+                  f"model-supplied page number(s) from 0-based to 1-based")
 
         # 3a. Deterministically populate help.instructions from each field's /TU
         #     tooltip (free baseline -- extraction otherwise leaves it blank). Runs
@@ -1395,19 +1426,19 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         widgets_backfilled = _backfill_unclaimed_widgets(schema, dump_path)
 
         # 3d2. RE-RUN the position pass over whatever 3c2 just appended
-        #      (bd polyglot-pdf-u4r0). Step 3 cannot cover it: that pass runs
-        #      first, and family completion appends options carrying only
-        #      {value, label, pdf_field_name} -- no rect -- so a completed
-        #      option shipped POSITIONLESS even though its widget resolves in
-        #      the dump, and nothing downstream filled it. Not cosmetic: the
-        #      runtime option-rect painter bails out for the WHOLE field when
-        #      any SELECTED value lacks a rect (valuePainting.selectedOptionRects
-        #      returns [] mid-loop), falling back to a label at the field rect --
-        #      so a user who ticks the completed option loses the per-option
-        #      marks for every other selection on that field too. It also
-        #      violated the invariant bd polyglot-pdf-icyi established --
-        #      "where a widget resolves, the deterministic dump rect OWNS
-        #      pdf_position".
+        #      (bd polyglot-pdf-u4r0, PR #514's implementation). Step 3 cannot
+        #      cover it: that pass runs first, and family completion appends
+        #      options carrying only {value, label, pdf_field_name} -- no rect
+        #      -- so a completed option shipped POSITIONLESS even though its
+        #      widget resolves in the dump, and nothing downstream filled it.
+        #      Not cosmetic: the runtime option-rect painter bails out for the
+        #      WHOLE field when any SELECTED value lacks a rect
+        #      (valuePainting.selectedOptionRects returns [] mid-loop),
+        #      falling back to a label at the field rect -- so a user who
+        #      ticks the completed option loses the per-option marks for every
+        #      other selection on that field too. It also violated the
+        #      invariant bd polyglot-pdf-icyi established -- "where a widget
+        #      resolves, the deterministic dump rect OWNS pdf_position".
         #
         #      A RE-RUN rather than moving step 3 down: RECT derivation is
         #      idempotent (verified byte-identical on a second run over the
@@ -1425,28 +1456,18 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         #      part of the pass that is NOT idempotent: it one-shot corrects
         #      the model's ordinal base, so re-running it would move positions
         #      pass 1 already shifted a second page, off the document. See the
-        #      note at the end of _backfill_positions.
-        late_positions = _backfill_positions(schema, dump_path,
-                                             normalize_pages=False)
-        positions_filled = {
-            # The late pass re-derives EVERYTHING pass 1 did, plus whatever
-            # 3c2/3d added, so its counts are a superset -- take them, never a
-            # sum (summing would double-count every field). The counter means
-            # "positions this run derived" (bd polyglot-pdf-2hxu tracks that
-            # meaning shifting from "repaired" to "derived" at icyi).
-            "fields_filled": late_positions["fields_filled"],
-            "options_filled": late_positions["options_filled"],
-            "unmatched": late_positions["unmatched"],
-            # Pass 1's value verbatim, preserving the documented FOUR-key
-            # shape. NOT read by anything downstream -- the provenance stanza
-            # below stores only the three counts -- so this is shape parity,
-            # not a consumer contract. Carrying pass 1 forward (rather than
-            # summing) keeps it equal to what the console line above printed;
-            # the late pass runs normalize_pages=False and always reports 0
-            # (fresh-eyes, bd u4r0).
-            "model_pages_normalized":
-                positions_filled.get("model_pages_normalized", 0),
-        }
+        #      note at the end of _backfill_positions. (It also means this
+        #      pass ALWAYS reports model_pages_normalized == 0, so there is
+        #      nothing to print here.)
+        #
+        #      The provenance stanza below stamps ITS counts from this pass --
+        #      the late pass re-derives everything pass 1 did plus whatever
+        #      3c2/3d added, so its counts are a superset; taking them (never
+        #      a sum, which would double-count every field) is what makes
+        #      positions_derived mean "positions this run derived"
+        #      (bd polyglot-pdf-2hxu).
+        completion_positions = _backfill_positions(schema, dump_path,
+                                                   normalize_pages=False)
 
         # Keep the dump IN MEMORY for the lint pass at step 4 (the temp file is
         # removed in the finally below; the dump powers the widget-claim rule).
@@ -1537,11 +1558,23 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
     lint_report = _lint_schema(schema, dump_data)
     schema.setdefault("_bakeoff", {})["authoring"] = {
         "tool": "extract_form.py", "prompt": "plain" if plain else "enriched",
-        # positions_filled stays the historical int (field-level count); the
-        # option-level pass (bd 5f41) reports its own keys alongside.
-        "positions_filled": positions_filled["fields_filled"],
-        "option_positions_filled": positions_filled["options_filled"],
-        "option_positions_unmatched": positions_filled["unmatched"],
+        # DERIVATION COUNTS, not repair counts (bd polyglot-pdf-2hxu). Since
+        # the deterministic dump rect began winning UNCONDITIONALLY (bd
+        # polyglot-pdf-icyi), these increment for every field/option whose
+        # widget resolves -- "did it run?", not "was it needed?". They are
+        # therefore ~= the field count on any AcroForm. The old name
+        # positions_filled read as a repair tally, and the historical
+        # `positions_filled: 0` alarm it used to raise (form-kits/w7 shipped
+        # 0 with 61 degenerate rects and nobody chased it -- journal
+        # 2026-07-09-bd-5f41) can never fire again. Renamed so the key states
+        # what it counts; the diagnostic signal moved to positions_unresolved
+        # below, which IS still "was it needed?".
+        "positions_derived": completion_positions["fields_filled"],
+        "option_positions_derived": completion_positions["options_filled"],
+        "option_positions_unmatched": completion_positions["unmatched"],
+        # THE LIVE DIAGNOSTIC that positions_filled: 0 used to be -- see
+        # _count_unresolved_positions. Expected 0 on an AcroForm.
+        "positions_unresolved": _count_unresolved_positions(schema),
         "instructions_filled": instructions_filled,
         "instructions_enriched": instructions_enriched,
         "group_completion": group_completion,

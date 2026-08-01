@@ -109,7 +109,21 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks, NOT clearAllMocks (bd polyglot-pdf-79tz). clearAllMocks
+  // wipes call history but leaves QUEUED ONE-TIME implementations in place,
+  // and an unconsumed mockRejectedValueOnce is NOT overwritten by the
+  // beforeEach mockResolvedValue above -- once-values are consumed ahead of
+  // the persistent one. So a test that queues a one-time rejection and does
+  // not spend it (an early assertion failure, a save the UI coalesces, a
+  // timing-dependent second click) leaks that rejection into whichever test
+  // runs next, where it fires on the FIRST call and fails a test that is
+  // correct in isolation. That is the order-dependent flake seen once in a
+  // full run on 'a later successful save clears a lingering failure banner':
+  // it queues one rejection then expects the SECOND save to resolve, so an
+  // inherited rejection makes the banner never clear. reset drains the queue
+  // (and beforeEach re-establishes every default), so each test starts from
+  // the same mock state no matter what ran before it.
+  vi.resetAllMocks();
   window.localStorage.clear();
   clearAccessCode();
 });
@@ -547,5 +561,45 @@ describe('App hosted UX pass (bd 92qe.5)', () => {
       expect(screen.getByText(/Welcome to PDF Schema Editor/)).toBeInTheDocument());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('Help')).toBeInTheDocument();
+  });
+});
+
+/**
+ * REGRESSION PIN for the order-dependent flake (bd polyglot-pdf-79tz).
+ *
+ * What is being pinned is what this file's `afterEach` does -- and a hook is
+ * observable only ACROSS a test boundary, so the pin has to be a PAIR: one
+ * test queues a one-time rejection and never spends it (the shape any test
+ * accidentally produces when an assertion fails early or the UI coalesces a
+ * save), the next asserts the mock comes back clean. Under `resetAllMocks`
+ * the queue is drained and both pass; revert the hook to `clearAllMocks` and
+ * the second fails BY NAME instead of corrupting an unrelated test.
+ *
+ * ISOLATED IN ITS OWN describe, with a mock NO App render touches. Three
+ * earlier versions were each hollow or fragile:
+ *   1. asserted only vi.isMockFunction(...) -- true under either hook -- and
+ *      leaned on some unrelated later test failing;
+ *   2. proved vitest's clear-vs-reset semantics with LOCAL calls that never
+ *      touched the hook under test, so reverting afterEach left it green;
+ *   3. sat inside the UX describe, where a neighbouring test leaves a mounted
+ *      App with an in-flight setTimeout whose continuation can still call
+ *      saveRemoteSchema -- the very mock the pin arms. That made the pin
+ *      ITSELF an intermittent flake (observed once in six full runs, Opus
+ *      clearing review), which is worse than no pin: a red that names the fix
+ *      invites someone to revert the fix.
+ *
+ * `probeSession` is the mock used here precisely because no test in this file
+ * renders anything that calls it after the gate has passed, so no ambient
+ * async tail can reach it.
+ */
+describe('bd 79tz: afterEach drains queued one-time mocks', () => {
+  it('pin (1/2): queues an unconsumed once-rejection', () => {
+    vi.mocked(probeSession).mockRejectedValueOnce(new Error('leaked'));
+    expect(vi.isMockFunction(probeSession)).toBe(true);
+  });
+
+  it('pin (2/2): the next test does NOT inherit it', async () => {
+    // Fails with "leaked" if afterEach stops draining queued once-mocks.
+    await expect(probeSession()).resolves.toEqual({ role: 'editor' });
   });
 });

@@ -1285,6 +1285,9 @@ export const App: React.FC = () => {
               selectedFieldId={selectedFieldId}
               onSelectField={setSelectedFieldId}
               onPageCountChange={setPdfPageCount}
+              // Same findings the FieldList reads, so the canvas overlay and
+              // the row agree on every field (bd polyglot-pdf-l7u0).
+              lintFindingsByField={lintFindingsByField}
             />
           </div>
 

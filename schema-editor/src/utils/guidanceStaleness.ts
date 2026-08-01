@@ -27,17 +27,26 @@
  * where they are produced removes that whole class of bug; the editor consumes a
  * finding, exactly like every other lint signal it already renders.
  *
- * The hash covers ONLY voice-facing identity -- name, spoken_name, and each
- * option's label and spoken label BOUND to its stored value. The binding is
- * what makes a SWAP flag (two labels -- or two spoken labels, which outrank
- * labels as the voice join key -- trading places, values fixed): the text
- * multiset is unchanged, but the assistant's unchanged words would select a
- * different stored answer -- a wrong answer on the form, not just stale
- * wording (bd anim handoff decision; tradeoffs in identity_payload's
- * docstring, backend/services/guidance_contract.py). It never covers the field
- * id (renames are retargeted wholesale by fieldRename, and an id is not
- * spoken) or plumbing like pdf_field_name. Changing those does not make
- * guidance wrong, so hashing them would manufacture false staleness.
+ * The hash covers what SHAPES THE AUTHORED GUIDANCE -- name, spoken_name, each
+ * option's label and spoken label BOUND to its stored value, and the field's
+ * TYPE. The binding is what makes a SWAP flag (two labels -- or two spoken
+ * labels, which outrank labels as the voice join key -- trading places, values
+ * fixed): the text multiset is unchanged, but the assistant's unchanged words
+ * would select a different stored answer -- a wrong answer on the form, not
+ * just stale wording (bd anim handoff decision; tradeoffs in identity_payload's
+ * docstring, backend/services/guidance_contract.py).
+ *
+ * TYPE is hashed even though it is never SPOKEN (bd polyglot-pdf-stkz): the
+ * test is "does changing it make the authored guidance WRONG?", not "is it read
+ * aloud?" -- a text -> date change rewrites the expected answer SHAPE while
+ * every spoken text stays identical. The type is hashed NORMALIZED: every
+ * option-carrying field contributes one "choice" token, so the
+ * guidance-neutral kind flips (changeGroupKind's radio <-> checkbox_group,
+ * schema_repair's checkbox -> checkbox_group) cannot raise the gate -- only a
+ * SCALAR type change flags. It never covers the field id (renames are
+ * retargeted wholesale by fieldRename, and an id is not spoken) or plumbing
+ * like pdf_field_name. Changing those does not make guidance wrong, so hashing
+ * them would manufacture false staleness.
  */
 import type { FormField } from '../types/schema';
 import type { LintFinding } from './remoteKitStore';
@@ -80,7 +89,18 @@ export function currentIdentity(findings: LintFinding[] | undefined,
     if (f.field_id !== fieldId) continue;   // centralized id (bd h76m.11)
     // The hash rides the PATH, never the message: `message` is rendered to
     // humans in three places, so a raw hash there is unexplained noise.
-    const hm = /\[identity:([0-9a-f]+)\]/.exec(f.path ?? '');
+    //
+    // ANCHORED to the end of the path (bd polyglot-pdf-g5vj). The backend
+    // builds `fields (id=<fid>).help[identity:<sha1>]`, interpolating the
+    // field id AHEAD of the token, so an unanchored .exec would return an
+    // id's own embedded `[identity:<hex>]` substring instead of the real
+    // trailing hash. That mis-parse pins the ack to a string that never
+    // changes, turning one click into a PERMANENT WAIVER -- precisely the
+    // hole current-identity pinning exists to close. Unreachable today (ids
+    // are slugified to alnum+underscore), so this is hardening, but the
+    // parse is the contract's only client-side anchor and deserves to be
+    // robust rather than merely lucky.
+    const hm = /\[identity:([0-9a-f]+)\]$/.exec(f.path ?? '');
     if (hm) return hm[1];
   }
   return undefined;
