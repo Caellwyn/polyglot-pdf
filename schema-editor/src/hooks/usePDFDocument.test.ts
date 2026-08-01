@@ -7,9 +7,34 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { usePDFDocument } from './usePDFDocument';
 import * as pdfjsLib from 'pdfjs-dist';
 
+/** The module-level pdfjs-dist mock's happy-path document (src/test/setup.ts).
+ * Re-established per test because resetAllMocks() strips implementations, not
+ * just call history -- see the beforeEach below. */
+const mockPDFDocument = () => ({
+  promise: Promise.resolve({
+    numPages: 1,
+    getPage: vi.fn(() => Promise.resolve({
+      getViewport: vi.fn(() => ({ width: 612, height: 792, scale: 1 })),
+      render: vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() })),
+    })),
+    destroy: vi.fn(),
+  }),
+  destroy: vi.fn(),
+});
+
 describe('usePDFDocument', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks, NOT clearAllMocks: pdfjs-dist is mocked at MODULE scope,
+    // so the mock outlives each test. clearAllMocks wipes call history but does
+    // NOT drain queued one-time implementations, so an unconsumed
+    // mockReturnValueOnce would survive and fire on the NEXT test's first call
+    // (bd polyglot-pdf-kas0, same class as polyglot-pdf-79tz). resetAllMocks
+    // drains the queue -- but it also strips the setup.ts factory's default
+    // implementation, so the happy path is re-established here per test.
+    vi.resetAllMocks();
+    vi.mocked(pdfjsLib.getDocument).mockImplementation(
+      () => mockPDFDocument() as any
+    );
   });
 
   it('should return null document when pdfUrl is null', () => {
@@ -73,6 +98,35 @@ describe('usePDFDocument', () => {
     rerender({ url: '/test2.pdf' });
 
     expect(result.current.isLoading).toBe(true);
+  });
+
+  // --- once-mock leak guard (bd polyglot-pdf-kas0) -------------------------
+  // These two run as a PAIR and must stay adjacent and in this order. The first
+  // deliberately queues a once-rejection it never spends; the second is the
+  // victim that would inherit it under clearAllMocks. Revert the beforeEach to
+  // vi.clearAllMocks() and the second test fails -- that is the regression.
+
+  it('queues an UNCONSUMED once-mock (setup for the leak guard below)', () => {
+    vi.mocked(pdfjsLib.getDocument).mockReturnValueOnce({
+      promise: Promise.reject(new Error('leaked from the previous test')),
+      destroy: vi.fn(),
+    } as any);
+    // Intentionally never renders the hook, so the queued once-impl is left
+    // unconsumed for the next test to (not) inherit.
+    expect(vi.isMockFunction(pdfjsLib.getDocument)).toBe(true);
+  });
+
+  it('does not inherit the previous test\'s unconsumed once-mock', async () => {
+    const { result } = renderHook(() => usePDFDocument('/clean.pdf'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    // If the once-rejection leaked, error would be 'leaked from the previous
+    // test' and document would be null.
+    expect(result.current.error).toBeNull();
+    expect(result.current.document).toBeTruthy();
   });
 
   it('should cleanup document on unmount', async () => {
