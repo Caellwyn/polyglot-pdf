@@ -142,6 +142,24 @@ that case gets its own message. The general form: **fail-closed is a property of
 the verdict, not of the message**, and a guard that refuses correctly can still
 send someone down a dead end.
 
+And then a THIRD time, in the docs written to explain the first two. The
+remediation "point the dev server at your folder with `FORM_KITS_ROOT`" fixes
+extraction and **silently breaks the backend gate**, because the launcher starts
+two servers that resolve kit ids from two different variables -- so the user
+follows the advice, extraction starts working, and Repair all / Regenerate /
+Rewrite guidance / the widget picker all quietly switch off behind the s2bf
+mismatch modal. Both docs now name `FORM_KITS_ROOT` **and**
+`FORM_KITS_LOCAL_ROOT` and say why; the in-app message recommends simply opening
+the server's folder (always correct) and defers the env-var route to the README,
+rather than half-specifying it in a toast.
+
+Three rounds, three instances of the same shape. The lesson is not about any one
+message: **when you add a guard, the remediation path is part of the deliverable,
+and it has to be verified like code.** Every recommendation here was ultimately
+checked by running it -- including the two-variable one, which was confirmed by
+pointing the real backend at a temp root and watching `get_form_kit_store().root`
+follow.
+
 ## One thing worth flagging for the next person
 
 Five existing run-extraction component tests started failing the moment the gate

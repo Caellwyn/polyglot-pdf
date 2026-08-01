@@ -332,12 +332,18 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             // route to a working state here is a writable host root.
             ? `Cannot run extraction for "${kit.id}": the folder you opened cannot be `
               + 'written to, so the editor cannot confirm it is the folder the extractor '
-              + 'uses. Make this folder writable, or point the dev server at a writable '
-              + 'form-kits folder (FORM_KITS_ROOT) and open that one.'
+              + 'uses. Make this folder writable, or open a writable copy of the folder '
+              + 'the dev server uses.'
+            // Recommend OPENING the server's folder rather than repointing the
+            // server at this one. Repointing takes TWO env vars -- the Vite host
+            // (FORM_KITS_ROOT) and the backend (FORM_KITS_LOCAL_ROOT) resolve kit
+            // ids independently -- so naming only the extractor's would unblock
+            // extraction while silently switching the backend actions off. The
+            // README carries the full two-variable recipe.
             : 'Cannot run extraction: the folder you opened is not the one the extractor '
               + `uses${folder.backendRoot ? ` (it uses ${folder.backendRoot})` : ''}, so it `
-              + 'would rewrite a different copy of this form. Open that folder, or set '
-              + 'FORM_KITS_ROOT to the folder you opened and restart the dev server.',
+              + 'would rewrite a different copy of this form. Open that folder instead '
+              + "(see the editor README to point the dev server somewhere else).",
         );
         return;
       }

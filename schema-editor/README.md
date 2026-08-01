@@ -93,11 +93,15 @@ own root (`FORM_KITS_ROOT`, default the repo's `form-kits/`), not into whatever
 folder the browser picked. Opening a copy elsewhere is refused with a message
 naming the folder the server uses, so it can never overwrite a different copy of
 a kit behind your back (bd polyglot-pdf-ball). To work from a folder elsewhere,
-point the dev server at it -- the variable is read once at server start, so it
-goes on the launcher and needs a restart to take effect:
+point the dev server at it. Set **both** variables: the launcher starts two
+servers that each resolve kit ids independently -- `FORM_KITS_ROOT` for the Vite
+host (extraction) and `FORM_KITS_LOCAL_ROOT` for the backend (Repair all,
+Regenerate divisions, Rewrite guidance, and the "Add from PDF widgets" picker).
+Setting only one unblocks that half and leaves the other refusing. Both are read
+once at server start, so they go on the launcher and need a restart:
 
 ```bash
-FORM_KITS_ROOT=/path/to/form-kits ./scripts/run-schema-editor.sh
+FORM_KITS_ROOT=/path/to/form-kits FORM_KITS_LOCAL_ROOT=/path/to/form-kits ./scripts/run-schema-editor.sh
 ```
 
 The "Run extraction" button needs the host-side endpoint that only the dev

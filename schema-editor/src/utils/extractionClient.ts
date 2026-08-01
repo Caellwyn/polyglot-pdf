@@ -52,8 +52,8 @@ export async function isExtractionAvailable(): Promise<boolean> {
  * A network failure or non-OK response resolves sameFolder=false: unproven must
  * never read as proven, because the action it gates is destructive.
  *
- * `reachable` distinguishes "the host answered, and said no" from "the host never
- * answered at all". Both refuse -- the verdict is identical and fail-closed -- but
+ * `onUnreachable` distinguishes "the host answered, and said no" from "the host
+ * never answered". Both refuse -- the verdict is identical and fail-closed -- but
  * they need DIFFERENT messages: a wrong folder is fixed by opening another one,
  * while a dead dev server is not, and telling that user their folder is wrong
  * sends them to change correct configuration. verifySameFolder's asker contract

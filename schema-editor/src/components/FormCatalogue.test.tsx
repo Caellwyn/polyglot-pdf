@@ -907,11 +907,11 @@ describe('FormCatalogue -- run extraction', () => {
     fireEvent.click(screen.getByText('Run extraction'));
     await waitFor(() => expect(screen.getByText(/cannot be written to/i)).toBeTruthy());
     expect(posted).toBeNull();
-    // The advice must point at the HOST's root (bd polyglot-pdf-6pzs). The s2bf
+    // The advice must lead somewhere that works (bd polyglot-pdf-6pzs). The s2bf
     // modal's "make a copy elsewhere and open that" is right for SAVING but is a
-    // dead end here: extraction always writes under the host's FORM_KITS_ROOT, so
-    // a copy made anywhere else just fails the mismatch branch on the next click.
-    expect(screen.getByText(/FORM_KITS_ROOT/)).toBeTruthy();
+    // dead end here: extraction always writes under the HOST's root, so a copy
+    // made anywhere else just fails the mismatch branch on the next click.
+    expect(screen.getByText(/folder the dev server uses/i)).toBeTruthy();
     expect(screen.queryByText(/make a copy somewhere writable and open that/i)).toBeNull();
   });
 

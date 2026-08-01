@@ -285,10 +285,18 @@ describe('extract handshake', () => {
 // nothing in the type system makes them: the Vite plugin sits outside the src/
 // tsconfig scope, so it cannot simply import the constant.
 //
-// A rename on either side would NOT fail any other test -- the endpoint treats an
-// unreadable marker as "nothing observed", so the handshake would silently
-// degrade to a permanent, unexplained refusal on a folder that genuinely agrees,
-// with the whole suite still green. This reads both files and pins the equality.
+// Other tests DO fail on a rename, but only incidentally -- they hardcode the
+// literal themselves while exercising something else, so their failure names the
+// wrong culprit. This one states the invariant, so the failure says what actually
+// broke. It also covers the case the incidental tests do not: renaming the
+// BROWSER-side constant fails only this test. The stakes are silent degradation --
+// the endpoint treats an unreadable marker as "nothing observed", so a rename
+// turns the handshake into a permanent, unexplained refusal on a folder that
+// genuinely agrees.
+//
+// The backend's third declaration (backend/routes/editor_kit_routes.py) is out of
+// reach from a vitest run and is pinned by its own Python tests; this covers the
+// two TS sides.
 describe('handshake marker filename stays coupled', () => {
   const readDeclared = (file: string): string | null => {
     const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
