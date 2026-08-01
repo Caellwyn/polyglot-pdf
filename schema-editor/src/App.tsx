@@ -17,9 +17,13 @@ import {
   pickSchemaFile,
   readSchemaFromHandle,
   writeSchemaToHandle,
+  type FsDirectoryHandle,
   type FsFileHandle,
 } from './utils/fileSystemAccess';
-import { loadKitSchema, versionInfoFromSchema, type CatalogueEntry, type KitVersionInfo } from './utils/formKitDirectory';
+import {
+  loadKitSchema, verifySameFolder, versionInfoFromSchema,
+  type CatalogueEntry, type FolderCheck, type KitVersionInfo,
+} from './utils/formKitDirectory';
 import {
   AuthError,
   hasBackend,
@@ -30,6 +34,7 @@ import {
   regenerateDivisions,
   regenerateGuidance,
   repairKit,
+  verifyStoreFolder,
   saveRemoteSchema,
   type EditorRole,
   type LintFinding,
@@ -90,6 +95,16 @@ export const App: React.FC = () => {
   // default store is this same form-kits/ directory (LocalFormKitStore), so a
   // kit id from the picked folder resolves server-side unchanged.
   const backendAvailable = React.useMemo(hasBackend, []);
+  // Same-folder handshake (bd polyglot-pdf-s2bf). In LOCAL mode the editor
+  // reads/writes the folder the human PICKED while the backend resolves kit ids
+  // against its OWN root; when those differ, the server-side actions rewrite a
+  // DIFFERENT copy than the one on screen -- destructive and invisible. Until
+  // the two are proven to agree, those actions stay off.
+  //   null    -> not checked yet (or nothing picked): server actions OFF
+  //   {ok}    -> proven same folder: server actions ON
+  //   {!ok}   -> proven different / unwritable: OFF, and the modal explains
+  const [folderCheck, setFolderCheck] = React.useState<FolderCheck | null>(null);
+  const [folderModalOpen, setFolderModalOpen] = React.useState(false);
   const [role, setRole] = React.useState<EditorRole | null>(null);
   // Remote saves have real latency (a GCS write) -- surface a Saving... state.
   const [saving, setSaving] = React.useState(false);
@@ -694,6 +709,32 @@ export const App: React.FC = () => {
     }
   }, [hasUnsavedChanges, loadSchemaState]);
 
+  // Run the same-folder handshake whenever the picked folder changes
+  // (bd polyglot-pdf-s2bf). Hosted skips it: kits live in the shared store, so
+  // there is no local directory for the two sides to agree on.
+  const handleRootChange = React.useCallback(async (dir: FsDirectoryHandle | null) => {
+    if (hosted || !backendAvailable || !dir) {
+      setFolderCheck(null);
+      return;
+    }
+    try {
+      const res = await verifySameFolder(dir, verifyStoreFolder);
+      setFolderCheck(res);
+      // Only NAG on a real mismatch. An unwritable folder is surfaced the same
+      // way, since it cannot be the write target either.
+      if (!res.ok) setFolderModalOpen(true);
+    } catch {
+      // The backend could not answer (down, 401). Treat as unproven: the
+      // server-side actions stay off, and the lint path already reports the
+      // failure -- no second dialog for the same cause.
+      setFolderCheck(null);
+    }
+  }, [hosted, backendAvailable]);
+
+  // Server-side actions need BOTH a backend and proof it writes where we read.
+  // Hosted has no local folder, so the handshake does not apply there.
+  const serverActionsOk = backendAvailable && (hosted || folderCheck?.ok === true);
+
   // Re-read the open kit's STORED schema after a server-side rewrite (repair,
   // regenerate-divisions, regenerate-guidance). Mode-aware: hosted kits come
   // back through the remote store, local kits are re-read from the picked
@@ -714,7 +755,7 @@ export const App: React.FC = () => {
   // Needs a backend + author + an open kit; the ValidationPanel gates the button
   // so this is not reached otherwise.
   const handleRepairAll = React.useCallback(async () => {
-    if (!backendAvailable || !selectedKitId) return;
+    if (!serverActionsOk || !selectedKitId) return;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Repair works on the saved version. Save your changes first, or click ' +
@@ -755,7 +796,7 @@ export const App: React.FC = () => {
       setSaveError(err instanceof Error ? err.message : 'Failed to repair schema');
       console.error('Failed to repair schema:', err);
     }
-  }, [backendAvailable, selectedKitId, hasUnsavedChanges, loadSchemaState,
+  }, [serverActionsOk, selectedKitId, hasUnsavedChanges, loadSchemaState,
       reloadStoredSchema, handleAuthExpired]);
 
   // Section management (bd polyglot-pdf-6cfu.3): one atomic commit for the
@@ -776,7 +817,7 @@ export const App: React.FC = () => {
   // unsaved-edits confirm, its own destructive confirm, the openSeqRef
   // stale-open guard, reload as a fresh baseline (history cleared).
   const handleRegenerateDivisions = React.useCallback(async () => {
-    if (!backendAvailable || !selectedKitId) return;
+    if (!serverActionsOk || !selectedKitId) return;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Regenerate works on the saved version. Save your changes first, or ' +
@@ -814,7 +855,7 @@ export const App: React.FC = () => {
       setSaveError(err instanceof Error ? err.message : 'Failed to regenerate divisions');
       console.error('Failed to regenerate divisions:', err);
     }
-  }, [backendAvailable, selectedKitId, hasUnsavedChanges, loadSchemaState,
+  }, [serverActionsOk, selectedKitId, hasUnsavedChanges, loadSchemaState,
       reloadStoredSchema, handleAuthExpired]);
 
   // Re-author ONE field's guidance from the form's instruction booklet (bd
@@ -826,7 +867,7 @@ export const App: React.FC = () => {
   // Throws on failure rather than swallowing: the button renders the message
   // inline, next to the gate it belongs to.
   const handleRegenerateGuidance = React.useCallback(async (fieldId: string) => {
-    if (!backendAvailable || !selectedKitId) return false;
+    if (!serverActionsOk || !selectedKitId) return false;
     if (hasUnsavedChanges) {
       const ok = window.confirm(
         'Rewriting works on the saved version. Save your changes first, or '
@@ -858,7 +899,7 @@ export const App: React.FC = () => {
       }
       throw err; // surfaced inline by the button
     }
-  }, [backendAvailable, selectedKitId, hasUnsavedChanges, loadSchemaState,
+  }, [serverActionsOk, selectedKitId, hasUnsavedChanges, loadSchemaState,
       reloadStoredSchema, handleAuthExpired]);
 
   // Fetch the open kit's unclaimed PDF button widgets for the FieldEditor's
@@ -1111,6 +1152,7 @@ export const App: React.FC = () => {
             onOpenKit={handleOpenKit}
             confirmFolderChange={confirmFolderChange}
             clearOpenKit={clearOpenKit}
+            onRootChange={handleRootChange}
             selectedKitId={selectedKitId}
             liveProgress={
               // Keep the open kit's catalogue bar in sync with in-editor edits:
@@ -1171,12 +1213,76 @@ export const App: React.FC = () => {
       {guideOpen && <HostedGuide role={role} onClose={() => setGuideOpen(false)} />}
 
       {/* Section management (bd polyglot-pdf-6cfu.3) */}
+      {/* Same-folder guard (bd polyglot-pdf-s2bf). The editor reads and writes
+          the folder the human picked; the backend resolves kit ids against its
+          OWN root. If they differ, Repair / Regenerate would rewrite a
+          DIFFERENT copy than the one on screen -- so they are disabled and this
+          explains why, with the fix. */}
+      {folderModalOpen && folderCheck && !folderCheck.ok && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="folder-guard-title"
+        >
+          <div className="max-w-lg rounded-lg bg-white p-5 shadow-xl">
+            <h2 id="folder-guard-title" className="text-lg font-semibold text-gray-900">
+              {folderCheck.reason === 'unwritable'
+                ? 'This folder cannot be written to'
+                : 'This folder is not the one the server uses'}
+            </h2>
+            <div className="mt-3 space-y-3 text-sm text-gray-700">
+              {folderCheck.reason === 'unwritable' ? (
+                <p>
+                  The editor could not write to the folder you opened, so it
+                  cannot save your changes there.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    You opened a form-kits folder that the server does not use,
+                    so the two would work on different copies: your edits would
+                    save to the folder you picked, while Repair and Regenerate
+                    would quietly rewrite the server's copy instead.
+                  </p>
+                  {folderCheck.backendRoot && (
+                    <p className="rounded bg-gray-50 p-2 font-mono text-xs break-all">
+                      The server uses: {folderCheck.backendRoot}
+                    </p>
+                  )}
+                </>
+              )}
+              <p className="font-medium text-gray-900">
+                {folderCheck.reason === 'unwritable'
+                  ? 'Make a copy of this folder somewhere you can write to, and open the copy instead.'
+                  : 'Open the folder shown above, or make a copy of it and point the server at the copy.'}
+              </p>
+              <p className="text-xs text-gray-500">
+                You can keep reviewing and saving to the folder you opened.
+                Only the server-side actions -- Repair all, Regenerate
+                divisions, and Rewrite guidance -- are switched off.
+              </p>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="btn-sm btn-primary"
+                data-testid="folder-guard-dismiss"
+                onClick={() => setFolderModalOpen(false)}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSectionManager && schema && (
         <SectionManager
           fields={schema.fields}
           sections={schema.sections}
           parts={schema.parts}
-          canRegenerate={backendAvailable && (!hosted || role === 'author') && !!selectedKitId}
+          canRegenerate={serverActionsOk && (!hosted || role === 'author') && !!selectedKitId}
           onApply={handleUpdateDivisions}
           onRegenerate={handleRegenerateDivisions}
           onClose={() => setShowSectionManager(false)}
@@ -1406,7 +1512,7 @@ export const App: React.FC = () => {
                   // AcroForm dump) + author tier + an open kit. Local dev with
                   // the backend up now qualifies (bd polyglot-pdf-cpiw).
                   onLoadUnclaimedWidgets={
-                    backendAvailable && (!hosted || role === 'author') && selectedKitId
+                    serverActionsOk && (!hosted || role === 'author') && selectedKitId
                       ? handleLoadUnclaimedWidgets
                       : undefined
                   }
@@ -1414,7 +1520,7 @@ export const App: React.FC = () => {
                   // Same gating as the other server-side author actions; the
                   // button only renders inside the staleness banner anyway.
                   onRegenerateGuidance={
-                    backendAvailable && (!hosted || role === 'author') && selectedKitId
+                    serverActionsOk && (!hosted || role === 'author') && selectedKitId
                       ? handleRegenerateGuidance
                       : undefined
                   }
@@ -1454,7 +1560,7 @@ export const App: React.FC = () => {
           // Repair-all is author-tier on an open kit with a backend (bd zgln);
           // the panel additionally shows the button only when errors exist.
           onRepairAll={
-            backendAvailable && (!hosted || role === 'author') && selectedKitId
+            serverActionsOk && (!hosted || role === 'author') && selectedKitId
               ? handleRepairAll
               : undefined
           }

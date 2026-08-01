@@ -171,10 +171,43 @@ async function errorDetail(res: Response, fallback: string): Promise<string> {
 
 /** Validate the access code and learn the caller's role. AuthError on a bad
  * code; a thrown Error with the server detail on 503 (surface is off). */
-export async function probeSession(): Promise<{ role: EditorRole }> {
+export async function probeSession(): Promise<{
+  role: EditorRole; localStore?: boolean;
+}> {
   const res = await editorFetch('/api/editor/session');
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not validate the access code'));
-  return (await res.json()) as { role: EditorRole };
+  return (await res.json()) as { role: EditorRole; localStore?: boolean };
+}
+
+/** Result of the same-folder handshake (bd polyglot-pdf-s2bf). */
+export interface StoreHandshake {
+  sameFolder: boolean;
+  backendRoot?: string | null;
+  reason?: 'mismatch' | 'stale' | 'unwritable' | 'not-a-local-store' | null;
+}
+
+/**
+ * Ask the backend whether it can see a nonce the caller just wrote into the
+ * folder the human picked -- i.e. whether both sides are looking at the SAME
+ * directory.
+ *
+ * WHY (bd polyglot-pdf-s2bf): in local mode the editor reads and writes the
+ * picked folder while the backend resolves the same kit id against its own
+ * FORM_KITS_LOCAL_ROOT. When those differ, the server-side actions rewrite the
+ * OTHER copy while the editor re-reads the picked one -- destructive and
+ * invisible. The browser cannot read a path out of a directory handle, so
+ * agreement is proved by shared observation rather than by comparing names.
+ */
+export async function verifyStoreFolder(nonce: string): Promise<StoreHandshake> {
+  const res = await editorFetch('/api/editor/store-handshake', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nonce }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorDetail(res, 'Could not verify the form-kits folder'));
+  }
+  return (await res.json()) as StoreHandshake;
 }
 
 /** Every kit in the shared store, DRAFTS INCLUDED -- the contractor work list. */

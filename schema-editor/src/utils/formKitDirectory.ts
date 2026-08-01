@@ -326,6 +326,62 @@ async function writeFile(
   }
 }
 
+// --- same-folder handshake (bd polyglot-pdf-s2bf) --------------------------- //
+
+/** The marker the browser drops in the picked folder for the backend to read. */
+const HANDSHAKE_FILE = '.editor-store-check.json';
+
+/** What the handshake concluded, and why. */
+export type FolderCheck =
+  | { ok: true }
+  | { ok: false; reason: 'unwritable' | 'mismatch'; backendRoot?: string | null };
+
+/**
+ * Prove the editor and the backend are reading/writing the SAME folder.
+ *
+ * The editor reads and writes the directory the human picked; the backend
+ * resolves the same kit id against its own FORM_KITS_LOCAL_ROOT. When those
+ * differ, every server-side action (repair, regenerate divisions, regenerate
+ * guidance) rewrites the OTHER copy while the editor re-reads the picked one --
+ * destructive, and completely invisible to the human.
+ *
+ * A path comparison is impossible (the browser cannot read a filesystem path
+ * out of a directory handle, by design), so this proves agreement by shared
+ * observation: write a fresh nonce here, ask the backend to read it back from
+ * its own root, and require a match.
+ *
+ * A write failure is its OWN answer -- a read-only source folder cannot be the
+ * write target either way, and the caller shows the "make a copy" dialog for it.
+ * The marker is deleted afterwards; a leftover is harmless because the nonce is
+ * per-check, so a stale file reads as a mismatch rather than a false match.
+ */
+export async function verifySameFolder(
+  dir: FsDirectoryHandle,
+  askBackend: (nonce: string) => Promise<{
+    sameFolder: boolean; backendRoot?: string | null;
+  }>,
+): Promise<FolderCheck> {
+  const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    await writeFile(dir, HANDSHAKE_FILE, JSON.stringify({ nonce }));
+  } catch {
+    return { ok: false, reason: 'unwritable' };
+  }
+  try {
+    const res = await askBackend(nonce);
+    return res.sameFolder
+      ? { ok: true }
+      : { ok: false, reason: 'mismatch', backendRoot: res.backendRoot };
+  } finally {
+    try {
+      await dir.removeEntry?.(HANDSHAKE_FILE);
+    } catch {
+      // Best-effort: a leftover marker cannot cause a FALSE match (the next
+      // check mints a new nonce), so failing to delete is not worth surfacing.
+    }
+  }
+}
+
 export interface OnboardResult {
   id: string;
   entry: CatalogueEntry;
