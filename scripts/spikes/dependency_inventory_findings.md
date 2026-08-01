@@ -102,6 +102,18 @@ the 6d document block, the 6e yes/no branch -- 11-13 dependencies covering
 ~21 field rules. It still missed the student/college block, so the search
 ceiling is real but much higher than the baseline's.
 
+## Reproducing these numbers
+
+    python scripts/spikes/analyze_dependency_inventory.py                    # w7 present
+    python scripts/spikes/analyze_dependency_inventory.py --metric trigger_correct
+    python scripts/spikes/analyze_dependency_inventory.py --form i-90        # the guard
+
+The analyzer defaults to w7 and REFUSES to silently pool forms (`--form ALL`
+warns): i-90 is saturated at 19/19 and would drag both arms together, changing
+the verdict. An earlier version had no form filter -- running it after the i-90
+rows were appended produced numbers that did not match this doc (fresh-eyes
+gap, fixed 2026-08-01).
+
 ## Honest caveats
 
 - **No clean held-out form.** W-7 is the tuning target; i-90 is the only other

@@ -176,13 +176,21 @@ def _rel_summary(score: dict, inventory: Optional[list]) -> dict:
     return out
 
 
-def run_arm(arm: str, form: str, model: str) -> dict:
+def run_arm(arm: str, form: str, model: str,
+            draft_dir: Optional[str] = None, tag: str = "") -> dict:
     spec = ARMS[arm]
     f = _FORMS[form]
     restore = _patch_contract(spec["contract_append"])
     inventory = None
     try:
-        out = tempfile.mkstemp(suffix=f"_{arm}_{form}.json")[1]
+        if draft_dir:
+            # Keep drafts somewhere durable: the committed JSONL used to point
+            # at OS temp paths that vanish, so an individual run could never be
+            # re-adjudicated afterwards (fresh-eyes gap, 2026-08-01).
+            os.makedirs(draft_dir, exist_ok=True)
+            out = os.path.join(draft_dir, f"{form}_{arm}{tag}.json")
+        else:
+            out = tempfile.mkstemp(suffix=f"_{arm}_{form}.json")[1]
         draft = extract_form.extract(f["pdf"], out, model=model,
                                      translate_options=False)
         # Capture + strip the scaffold key: it is reasoning scaffolding, never
@@ -209,6 +217,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--round", type=int, default=1,
                     help="round tag in each JSONL row (rep is per-invocation)")
     ap.add_argument("--out", default=None, help="append runs as JSONL")
+    ap.add_argument("--draft-dir", default=None,
+                    help="keep each run's draft schema here (recommended: the "
+                         "JSONL's draft paths stay resolvable for later "
+                         "re-adjudication instead of pointing at OS temp)")
     args = ap.parse_args(argv)
 
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
@@ -226,7 +238,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(f"[run] {arm}/{form} rep{rep} ({ARMS[arm]['desc']}) ...",
                       flush=True)
                 try:
-                    row = run_arm(arm, form, args.model)
+                    row = run_arm(arm, form, args.model,
+                                  draft_dir=args.draft_dir,
+                                  tag=f"_r{args.round}rep{rep}")
                     row["round"] = args.round
                     row["rep"] = rep
                     s = row["summary"]
