@@ -149,11 +149,6 @@ async def require_author_role(
 
 class EditorSessionResponse(BaseModel):
     role: str
-    # True when the backend serves kits from a LOCAL directory (as local dev
-    # does) rather than GCS. The editor uses it to decide whether the
-    # same-folder handshake below is applicable at all -- against a GCS-backed
-    # backend there is no shared directory to agree on, so hosted skips it.
-    localStore: bool = False
 
 
 class StoreHandshakeBody(BaseModel):
@@ -419,14 +414,8 @@ async def editor_session(
 ) -> EditorSessionResponse:
     """Access-code probe: the hosted editor calls this once after code entry to
     learn the caller's role (author-only UI is gated on it) and to validate the
-    code before any kit traffic.
-
-    Also reports whether the store is a LOCAL directory, which tells the editor
-    whether the same-folder handshake applies (bd polyglot-pdf-s2bf)."""
-    store = get_form_kit_store()
-    return EditorSessionResponse(
-        role=role, localStore=isinstance(store, LocalFormKitStore),
-    )
+    code before any kit traffic."""
+    return EditorSessionResponse(role=role)
 
 
 # The handshake file the editor drops into the picked folder. Written and

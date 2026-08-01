@@ -15,7 +15,7 @@
  * whether App handed down the server-side callback.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import type { FormSchema } from './types/schema';
 import type { CatalogueEntry } from './utils/formKitDirectory';
 
@@ -36,6 +36,7 @@ vi.mock('./components/FormCatalogue', () => ({
   }) => (
     <div>
       <button onClick={() => onRootChange?.({ name: 'form-kits' })}>pick-folder</button>
+      <button onClick={() => onRootChange?.({ name: 'other-copy' })}>pick-other</button>
       <button onClick={() => onOpenKit(kit())}>open-kit</button>
     </div>
   ),
@@ -147,5 +148,46 @@ describe('App same-folder guard (bd polyglot-pdf-s2bf)', () => {
     verifySameFolder.mockResolvedValue({ ok: true });
     render(<App />);
     expect(verifySameFolder).not.toHaveBeenCalled();
+  });
+
+  it('a SLOW check for an abandoned folder cannot re-enable the actions', async () => {
+    // The fail-open race: folder A (which AGREES) is still in flight when the
+    // human switches to folder B (a copy, which does NOT). A's late {ok:true}
+    // must not land after B's {ok:false}, or the server actions would be
+    // enabled while B is on screen -- the wrong-folder write this guard exists
+    // to stop. Only the seq token can catch this: clearing on entry does not,
+    // because A's stale TRUE arrives last either way.
+    let resolveA: (v: unknown) => void = () => {};
+    verifySameFolder
+      .mockReturnValueOnce(new Promise((res) => { resolveA = res; }))  // A: slow
+      .mockResolvedValueOnce({ ok: false, reason: 'mismatch' });       // B: fast
+
+    render(<App />);
+    fireEvent.click(screen.getByText('pick-folder'));  // A -- in flight
+    fireEvent.click(screen.getByText('pick-other'));   // B -- settles first
+    fireEvent.click(screen.getByText('open-kit'));
+    await waitFor(() =>
+      expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('no'));
+
+    // A finally answers, for a folder the human already left.
+    await act(async () => { resolveA({ ok: true }); });
+    expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('no');
+  });
+
+  it('turns the actions OFF the instant a new folder is reported', async () => {
+    // Agreement is unproven from the moment the folder changes, so the actions
+    // must be off for the whole in-flight window rather than riding the
+    // PREVIOUS folder's verdict.
+    verifySameFolder.mockResolvedValueOnce({ ok: true });
+    render(<App />);
+    fireEvent.click(screen.getByText('pick-folder'));
+    fireEvent.click(screen.getByText('open-kit'));
+    await waitFor(() =>
+      expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('yes'));
+
+    verifySameFolder.mockReturnValueOnce(new Promise(() => {}));  // never settles
+    fireEvent.click(screen.getByText('pick-other'));
+    await waitFor(() =>
+      expect(screen.getByTestId('vp').getAttribute('data-has-repair')).toBe('no'));
   });
 });

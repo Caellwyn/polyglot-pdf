@@ -171,12 +171,10 @@ async function errorDetail(res: Response, fallback: string): Promise<string> {
 
 /** Validate the access code and learn the caller's role. AuthError on a bad
  * code; a thrown Error with the server detail on 503 (surface is off). */
-export async function probeSession(): Promise<{
-  role: EditorRole; localStore?: boolean;
-}> {
+export async function probeSession(): Promise<{ role: EditorRole }> {
   const res = await editorFetch('/api/editor/session');
   if (!res.ok) throw new Error(await errorDetail(res, 'Could not validate the access code'));
-  return (await res.json()) as { role: EditorRole; localStore?: boolean };
+  return (await res.json()) as { role: EditorRole };
 }
 
 /** Result of the same-folder handshake (bd polyglot-pdf-s2bf). */

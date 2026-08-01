@@ -105,6 +105,9 @@ export const App: React.FC = () => {
   //   {!ok}   -> proven different / unwritable: OFF, and the modal explains
   const [folderCheck, setFolderCheck] = React.useState<FolderCheck | null>(null);
   const [folderModalOpen, setFolderModalOpen] = React.useState(false);
+  // Drops a stale handshake result when the folder changes mid-flight -- see
+  // handleRootChange for why this guard is load-bearing rather than tidy.
+  const folderSeqRef = React.useRef(0);
   const [role, setRole] = React.useState<EditorRole | null>(null);
   // Remote saves have real latency (a GCS write) -- surface a Saving... state.
   const [saving, setSaving] = React.useState(false);
@@ -713,12 +716,22 @@ export const App: React.FC = () => {
   // (bd polyglot-pdf-s2bf). Hosted skips it: kits live in the shared store, so
   // there is no local directory for the two sides to agree on.
   const handleRootChange = React.useCallback(async (dir: FsDirectoryHandle | null) => {
-    if (hosted || !backendAvailable || !dir) {
-      setFolderCheck(null);
-      return;
-    }
+    // Monotonic token, same discipline as openSeqRef / refreshSeq. WITHOUT it
+    // this guard can FAIL OPEN: switch from folder A (which agrees) to folder B
+    // (a copy) while A's handshake is still in flight, and A's late {ok:true}
+    // lands after B's {ok:false} -- leaving the server actions ENABLED while B
+    // is on screen, which is the exact wrong-folder write this exists to stop.
+    // Nothing else serializes it (the Change-folder button gates on busy /
+    // extractingId, neither of which tracks the handshake).
+    const seq = ++folderSeqRef.current;
+    // Clear FIRST: from the instant a new folder is reported, agreement is
+    // unproven, so the actions must be off for the whole in-flight window
+    // rather than riding the previous folder's verdict.
+    setFolderCheck(null);
+    if (hosted || !backendAvailable || !dir) return;
     try {
       const res = await verifySameFolder(dir, verifyStoreFolder);
+      if (seq !== folderSeqRef.current) return; // superseded by a newer folder
       setFolderCheck(res);
       // Only NAG on a real mismatch. An unwritable folder is surfaced the same
       // way, since it cannot be the write target either.
@@ -727,6 +740,7 @@ export const App: React.FC = () => {
       // The backend could not answer (down, 401). Treat as unproven: the
       // server-side actions stay off, and the lint path already reports the
       // failure -- no second dialog for the same cause.
+      if (seq !== folderSeqRef.current) return;
       setFolderCheck(null);
     }
   }, [hosted, backendAvailable]);
@@ -1259,8 +1273,11 @@ export const App: React.FC = () => {
               </p>
               <p className="text-xs text-gray-500">
                 You can keep reviewing and saving to the folder you opened.
-                Only the server-side actions -- Repair all, Regenerate
-                divisions, and Rewrite guidance -- are switched off.
+                What is switched off is anything that goes through the server:
+                Repair all, Regenerate divisions, Rewrite guidance, and the
+                &ldquo;Add from PDF widgets&rdquo; picker (it reads the
+                server&rsquo;s copy of the PDF, so its answers would describe
+                the wrong form).
               </p>
             </div>
             <div className="mt-4 flex justify-end">

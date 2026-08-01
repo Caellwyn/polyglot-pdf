@@ -67,9 +67,9 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
   // Tell the host which folder is in use so it can run the same-folder
-  // handshake (bd polyglot-pdf-s2bf). An effect rather than a call at each
-  // setRoot site, so every path that changes the root -- picker, restore,
-  // clear -- reports exactly once.
+  // handshake (bd polyglot-pdf-s2bf). An effect rather than a call beside
+  // setRoot, so it stays correct if a second path to change the root is ever
+  // added (today the picker is the only one) and fires exactly once per change.
   React.useEffect(() => { onRootChange?.(root); }, [root, onRootChange]);
   const [kits, setKits] = React.useState<CatalogueEntry[]>([]);
   // bd tynm parity: the card grid is collapsed by default behind a compact
