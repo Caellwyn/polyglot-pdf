@@ -1260,7 +1260,9 @@ _W7_EXPECTED_STALE = {
     "us_person_name_ssn_itin", "reason_h_details", "treaty_country",
     "id_document_issued_by", "itin_issued_first_name",
     "itin_issued_middle_name", "itin_issued_last_name", "phone_number",
-    "name_of_delegate", "delegate_name", "agent_fax", "agent_ein",
+    # `agent_phone` was `delegate_name` until the maintainer fixed that
+    # misnomer (bd polyglot-pdf-oun5). Same field, same widget (f1_42).
+    "name_of_delegate", "agent_phone", "agent_fax", "agent_ein",
     "agent_ptin", "agent_office_code",
 }
 
