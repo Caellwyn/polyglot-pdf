@@ -161,3 +161,39 @@ def test_f1040_dependents_cap_split_is_balanced():
     assert [s["label"] for s in dep] == ["Dependents (1 of 2)",
                                          "Dependents (2 of 2)"]
     assert [len(s["fields"]) for s in dep] == [21, 21]
+
+
+@pytest.mark.parametrize("kit", [_W7, _I90, _F1040],
+                         ids=["w7", "i90", "f1040"])
+def test_derive_then_repair_keeps_sections_and_fields_consistent(kit):
+    """Pins the step-3e-BEFORE-repair ordering contract (bd polyglot-pdf-n2t3).
+
+    extract_form runs derive_and_apply at step 3e (line ~1490) and the
+    deterministic repair pass at step 4 (line ~1520) -- derivation files every
+    field into a section FIRST, then repair rewrites the schema. Nothing pinned
+    that composition, so a future repair change that renames or drops a field id
+    would leave sections[].fields[] pointing at ids that no longer exist (or a
+    field whose section_id resolves nowhere) with every existing test still
+    green. Runs on the real checked-in kits: no LLM, no network.
+    """
+    from backend.services.schema_repair import repair
+
+    schema = _load_kit(kit)
+    ds.derive_and_apply(schema, str(kit / "form.pdf"))
+    repaired, _repairs = repair(copy.deepcopy(schema), None)
+
+    section_ids = {s["id"] for s in repaired["sections"]}
+    field_ids = {f["id"] for f in repaired["fields"]}
+
+    # Every field still resolves to a real section...
+    for f in repaired["fields"]:
+        assert f["section_id"] in section_ids, (f["id"], f["section_id"])
+    # ...and every id a section lists is still a real field, filed exactly once.
+    listed = [fid for s in repaired["sections"] for fid in s["fields"]]
+    assert set(listed) == field_ids
+    assert len(listed) == len(field_ids)
+    # Parts still reference only real sections, with unique ids (n2t3 item 1).
+    part_ids = [p["id"] for p in repaired["parts"]]
+    assert len(part_ids) == len(set(part_ids)), part_ids
+    for p in repaired["parts"]:
+        assert set(p["section_ids"]) <= section_ids

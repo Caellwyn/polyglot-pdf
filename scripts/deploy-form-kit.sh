@@ -161,6 +161,12 @@ generate_manifest() {
 
         local kit_id=$(basename "$kit_dir")
 
+        # An _-prefixed dir is shared authoring data, not a kit (e.g.
+        # form-kits/_translation/, the glossary from bd polyglot-pdf-ch7j).
+        # Skip SILENTLY -- warning about it on every deploy erodes trust in
+        # the deploy log's real warnings (bd polyglot-pdf-qwex).
+        case "$kit_id" in _*) continue ;; esac
+
         # Skip if no schema.json
         if [ ! -f "$kit_dir/schema.json" ]; then
             log_warn "Skipping $kit_id - no schema.json found"
@@ -257,6 +263,9 @@ main() {
             for kit_dir in "$FORM_KITS_DIR"/*/; do
                 [ -d "$kit_dir" ] || continue
                 kit_id=$(basename "$kit_dir")
+                # Shared authoring data, not a kit -- skip silently (see the
+                # matching guard in generate_manifest; bd polyglot-pdf-qwex).
+                case "$kit_id" in _*) continue ;; esac
                 upload_kit "$kit_id" || log_warn "Failed to upload $kit_id, continuing..."
             done
             generate_manifest

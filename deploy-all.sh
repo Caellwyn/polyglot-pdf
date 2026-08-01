@@ -308,6 +308,12 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
         [ -d "$kit_dir" ] || continue
         kit_id=$(basename "$kit_dir")
 
+        # An _-prefixed dir is shared authoring data, not a kit (e.g.
+        # form-kits/_translation/, the glossary from bd polyglot-pdf-ch7j).
+        # Skip SILENTLY so it does not warn on every full deploy
+        # (bd polyglot-pdf-qwex).
+        case "$kit_id" in _*) continue ;; esac
+
         schema_file=$(kit_schema_file "$kit_dir")
         if [ ! -f "$kit_dir/$schema_file" ]; then
             log_warn "Skipping $kit_id - no $schema_file found"
@@ -332,6 +338,12 @@ if [ "$DEPLOY_FORM_KITS" = true ]; then
     for kit_dir in "$FORM_KITS_DIR"/*/; do
         [ -d "$kit_dir" ] || continue
         kit_id=$(basename "$kit_dir")
+
+        # An _-prefixed dir is shared authoring data, not a kit (e.g.
+        # form-kits/_translation/, the glossary from bd polyglot-pdf-ch7j).
+        # Skip SILENTLY so it does not warn on every full deploy
+        # (bd polyglot-pdf-qwex).
+        case "$kit_id" in _*) continue ;; esac
 
         schema_file=$(kit_schema_file "$kit_dir")
         if [ ! -f "$kit_dir/$schema_file" ]; then
