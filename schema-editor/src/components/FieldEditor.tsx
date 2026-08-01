@@ -633,6 +633,29 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
               .filter(f => f.severity === 'ERROR')
               .map(f => f.message),
           ];
+          // An ACKNOWLEDGED staleness finding is no longer a reason the field
+          // is flagged (bd polyglot-pdf-hii0). Post-ack every other surface
+          // agrees the field is clear -- FieldList paints the row green,
+          // the Instructions textarea drops its amber ring, getCompletionStats
+          // counts it complete -- but the banner kept repeating an instruction
+          // ("confirm it still reads correctly BEFORE MARKING THE FIELD
+          // REVIEWED") the human had just carried out two inches below. The
+          // reviewer could not tell whether their click registered, which
+          // trains exactly the click-through-the-gate habit the feature exists
+          // to prevent. The ack pins the CURRENT identity, so the next drift
+          // moves that identity and the line returns on its own.
+          const ackedIdentity = currentIdentity(lintFindings, field.id);
+          // Suppress when the ack covers the current identity -- OR when there
+          // is no parseable identity at all. The latter is the FAIL-OPEN case
+          // needsGuidanceAck and the gate control below both already take: with
+          // nothing to pin an ack to, the row stays green and no checkbox
+          // renders. Without matching it here the banner alone would show an
+          // amber warning next to a green row and no control to act on it --
+          // re-creating, on this very surface, the cross-surface contradiction
+          // hii0 exists to remove (Opus outer review, pass 2). Unreachable from
+          // today's contract-pinned backend, like the g5vj parse it pairs with.
+          const staleAcked = ackedIdentity === undefined
+            || isAcknowledged(field, ackedIdentity);
           const warnings = [
             // The automatic amber reasons (bd polyglot-pdf-g63j): the banner
             // used to show only errors + lint, so a field flagged amber in the
@@ -641,6 +664,11 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
             ...completeness.reviewReasons,
             ...(lintFindings ?? [])
               .filter(f => f.severity !== 'ERROR')
+              // Scope the suppression to THIS field's staleness finding and to
+              // that rule alone: no other finding's banner behavior changes.
+              .filter(f => !(staleAcked
+                && f.rule === GUIDANCE_STALE_RULE
+                && f.field_id === field.id))
               .map(f => f.message),
           ];
           if (errors.length === 0 && warnings.length === 0) return null;
@@ -952,9 +980,18 @@ export const FieldEditor: React.FC<FieldEditorProps> = ({
                 {gated && (
                   <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 p-2">
                     <p className="text-xs text-amber-900">
-                      This field's name, spoken name or options changed
-                      after this guidance was written, so it may no longer
-                      match what the assistant says.
+                      {/* Names every hashed input, including the answer type
+                          (bd polyglot-pdf-stkz). This is the sentence a
+                          reviewer reads immediately before ticking the box, so
+                          it is the copy that most has to be true: after a
+                          text -> date edit, a message naming only the other
+                          three sends them to check attributes that did not
+                          change, and a gate that looks broken gets clicked
+                          through. Kept in step with the backend lint message
+                          (schema_lint._check_guidance_identity_drift). */}
+                      This field's name, spoken name, options or answer type
+                      changed after this guidance was written, so it may no
+                      longer match what the assistant says.
                     </p>
                     <label className="mt-1 flex items-start gap-2 text-xs text-amber-900 cursor-pointer">
                       <input

@@ -146,3 +146,39 @@ def test_coverage_gap_classifies_issues():
 
 def test_empty_draft_still_hard_fails():
     assert xf._classify_exit({"fields": []}) == xf.EXIT_HARD_FAIL
+
+
+# --------------------------------------------------------------------------- #
+# 4. _count_unresolved_positions -- the provenance diagnostic (bd 2hxu)
+# --------------------------------------------------------------------------- #
+
+def test_unresolved_position_count_is_a_was_it_needed_signal():
+    """bd polyglot-pdf-2hxu: pins the MEANING of the diagnostic, so a future
+    inversion of the derivation rule fails loudly instead of silently
+    redefining the field (exit criterion 2).
+
+    The retired positions_filled counted DERIVATIONS after bd icyi ("did it
+    run?"), making it ~= the field count on any AcroForm. This counts fields
+    with no usable position -- a quantity that stays 0 on a healthy AcroForm
+    however the derivation rule changes, and goes non-zero exactly when
+    something needs chasing.
+    """
+    good = {"page": 1, "x": 1.0, "y": 2.0, "width": 8.0, "height": 8.0}
+    # a healthy kit: every field resolved -> 0, regardless of field count
+    assert _count({"fields": [{"id": "a", "pdf_position": good},
+                              {"id": "b", "pdf_position": good}]}) == 0
+    # a MISSING position is the condition worth chasing
+    assert _count({"fields": [{"id": "a", "pdf_position": good},
+                              {"id": "b"}]}) == 1
+    # ...and so is a DEGENERATE one: a truthy zero-size dict is exactly the
+    # shape that shipped the original bug, so "has a key" is not enough
+    degenerate = {"page": 1, "x": 0, "y": 0, "width": 0, "height": 0}
+    assert _count({"fields": [{"id": "a", "pdf_position": degenerate}]}) == 1
+    # never throws on junk / empty input
+    assert _count({"fields": []}) == 0
+    assert _count({}) == 0
+    assert _count({"fields": [None, "junk"]}) == 0
+
+
+def _count(schema):
+    return xf._count_unresolved_positions(schema)

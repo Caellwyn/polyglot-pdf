@@ -1032,6 +1032,87 @@ def test_option_label_change_flags_but_plumbing_does_not():
     assert _stale(lint_schema(_identity_schema(replumbed, baked))) == []
 
 
+def test_type_change_flags_even_though_type_is_never_spoken():
+    """bd polyglot-pdf-stkz: a type change rewrites the expected ANSWER SHAPE
+    while leaving every spoken text untouched -- name, spoken_name and
+    options[] are all identical, so before this the hash never moved and the
+    gate stayed silent on guidance that no longer fits the field.
+
+    type is not read aloud, but the payload's test is "does changing it make
+    the authored guidance wrong?", not "is it spoken?" -- it is one of the
+    seven inputs the authoring model sees (field_digest) and CONTRACT_TEXT
+    names answer format an explicit content priority."""
+    from backend.services import guidance_contract as gc
+    f = {"id": "a", "name": "Date of birth", "spoken_name": "date of birth",
+         "type": "text",
+         "help": {"instructions": "Enter it as digits only, no spaces."}}
+    baked = gc.identity_sha1(f)
+    # the ONLY change is type; every voice-facing text is byte-identical
+    retyped = dict(f, type="date")
+    hits = _stale(lint_schema(_identity_schema(retyped, baked)))
+    assert len(hits) == 1
+    assert hits[0].severity == "WARNING"
+    assert "id=a" in hits[0].path
+    # text -> number likewise
+    assert len(_stale(lint_schema(
+        _identity_schema(dict(f, type="number"), baked)))) == 1
+    # and the unchanged field still says nothing
+    assert _stale(lint_schema(_identity_schema(f, baked))) == []
+
+
+def test_choice_group_kind_flips_do_NOT_flag():
+    """The type token is NORMALIZED (Opus clearing review on bd stkz): every
+    option-carrying field hashes the constant "choice", so the two
+    guidance-neutral machine paths that swap choice-group KINDS cannot
+    manufacture staleness:
+
+      - the editor's changeGroupKind flips radio <-> checkbox_group "sharing
+        option identity byte-for-byte ... nothing else in the schema changes"
+        (fieldGrouping.ts's own contract);
+      - schema_repair retypes the v1 checkbox-with-options idiom to
+        checkbox_group on a STORED draft via the one-click /repair route --
+        so hashing the raw kind let Repair-all amber a whole kit with no
+        author edit, exactly the machine-manufactured noise identity_payload's
+        docstring forbids (and bd polyglot-pdf-ug5n tracks for values).
+    """
+    from backend.services import guidance_contract as gc
+    opts = [{"label": "Yes", "value": "y"}, {"label": "No", "value": "n"}]
+    base = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+            "options": opts, "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+    # the editor flip: radio -> checkbox_group, options byte-identical
+    flipped = dict(base, type="checkbox_group")
+    assert gc.identity_sha1(flipped) == baked
+    assert _stale(lint_schema(_identity_schema(flipped, baked))) == []
+    # the repair path: v1 checkbox-with-options idiom -> checkbox_group
+    v1_idiom = dict(base, type="checkbox")
+    assert gc.identity_sha1(v1_idiom) == baked
+    # ...while a SCALAR type change still flags (the motivating stkz case):
+    scalar = {"id": "a", "name": "N", "spoken_name": "n", "type": "text",
+              "help": {"instructions": "x"}}
+    assert gc.identity_sha1(dict(scalar, type="date")) \
+        != gc.identity_sha1(scalar)
+    # ...and a choice field LOSING its options changes the hash (the triples
+    # empty out AND the token reverts to the raw scalar type):
+    descoped = {k: v for k, v in base.items() if k != "options"}
+    assert gc.identity_sha1(descoped) != baked
+
+
+def test_type_is_hashed_without_disturbing_the_other_elements():
+    """The type element is APPENDED to the positional payload, so the existing
+    elements keep their indices and the pre-existing cases are untouched."""
+    from backend.services import guidance_contract as gc
+    import json
+    f = {"id": "a", "name": "N", "spoken_name": "n", "type": "text"}
+    payload = json.loads(gc.identity_payload(f))
+    assert payload[0] == "N" and payload[1] == "n" and payload[2] == []
+    assert payload[-1] == "text"
+    # a missing / non-string type coerces to "" rather than throwing, matching
+    # how name and spoken_name are already handled
+    assert json.loads(gc.identity_payload({"id": "a"}))[-1] == ""
+    assert json.loads(gc.identity_payload({"id": "a", "type": 7}))[-1] == ""
+
+
 def test_option_label_swap_flags_even_with_identical_label_multiset():
     """THE HANDOFF CASE (bd anim): two labels trading places while their
     values stay put left the sorted-bare-label hash unchanged, yet the
@@ -1130,11 +1211,17 @@ def test_identity_rule_never_throws_on_malformed_provenance():
 
 def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
     r"""CONTRACT PIN (bd anim): the editor parses the current identity out of
-    the finding PATH with /\[identity:([0-9a-f]+)\]/ and pins a human's
-    acknowledgment to it. If this format ever changes, that parse silently
-    returns undefined and 'any ack satisfies the gate' -- reopening the
-    permanent-waiver hole with no other test to catch it. The hash must stay
-    OUT of the message, which is rendered to humans in three UI surfaces."""
+    the finding PATH with /\[identity:([0-9a-f]+)\]$/ -- ANCHORED since bd
+    polyglot-pdf-g5vj -- and pins a human's acknowledgment to it. If this
+    format ever changes, that parse silently returns undefined and 'any ack
+    satisfies the gate' -- reopening the permanent-waiver hole with no other
+    test to catch it. The hash must stay OUT of the message, which is rendered
+    to humans in three UI surfaces.
+
+    The pattern quoted here MUST match the assertion below and the editor's
+    actual regex: this docstring previously quoted the pre-g5vj unanchored
+    form, which invited a future reader to 'restore' it and re-open the hole
+    (Opus clearing review)."""
     import re
     from backend.services import guidance_contract as gc
     f = {"id": "a", "name": "N", "spoken_name": "v1", "type": "text",
@@ -1143,10 +1230,27 @@ def test_stale_finding_carries_current_identity_in_the_PATH_not_the_message():
     drifted = dict(f, spoken_name="v2")
     hit = _stale(lint_schema(_identity_schema(drifted, baked)))[0]
 
-    # the editor's EXACT regex must find the CURRENT identity in the path
-    m = re.search(r"\[identity:([0-9a-f]+)\]", hit.path)
+    # The editor's EXACT regex must find the CURRENT identity in the path.
+    # ANCHORED, matching guidanceStaleness.currentIdentity since bd
+    # polyglot-pdf-g5vj anchored it. This pin was left unanchored when the
+    # editor moved, making it LOOSER than the thing it exists to protect: a
+    # path that grew a trailing segment would keep this test green while the
+    # editor's parse returned undefined, silently failing the gate open on
+    # every field (Opus outer review, second clearing pass). That failure is
+    # now invisible to humans too -- with no parseable identity the row stays
+    # green, no ack checkbox renders, AND (since bd polyglot-pdf-hii0) the
+    # banner drops the warning as well -- so this test is the only thing left
+    # that can catch it. It must be at least as strict as the editor.
+    m = re.search(r"\[identity:([0-9a-f]+)\]$", hit.path)
     assert m, f"editor's identity regex no longer matches path: {hit.path!r}"
     assert m.group(1) == gc.identity_sha1(drifted)
+    # ...and a path with ANY trailing segment must NOT satisfy that parse --
+    # the exact shape that would silently disable the gate.
+    assert not re.search(r"\[identity:([0-9a-f]+)\]$",
+                         hit.path + ".instructions"), (
+        "a suffixed path must not satisfy the editor's anchored parse; if "
+        "the lint path ever gains a trailing segment, currentIdentity() "
+        "returns undefined and the staleness gate fails open silently")
     # ...and the human-facing message must NOT carry it
     assert "identity:" not in hit.message
     # field_id must still resolve for click-to-focus despite the suffix

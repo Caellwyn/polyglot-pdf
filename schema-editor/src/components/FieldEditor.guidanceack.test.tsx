@@ -144,3 +144,113 @@ describe('the DISPLAY pins to current identity too (round-3 regression)', () => 
       .toBe(true);
   });
 });
+
+describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', () => {
+  // Post-ack, every other surface agreed the field was clear -- green row,
+  // no amber ring, counted complete -- while the banner two inches above the
+  // checkbox kept repeating the instruction the human had just carried out.
+  // The reviewer could not tell whether their click registered.
+  const banner = () => screen.queryByTestId('field-problems');
+
+  it('drops the staleness line once the ack pins the CURRENT identity', () => {
+    const acked = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
+    } as FormField;
+    render(
+      <FieldEditor field={acked} schema={makeSchema(acked)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect(banner()?.textContent ?? '').not.toContain(staleFinding.message);
+  });
+
+  it('still shows it when there is NO ack at all', () => {
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect(banner()?.textContent ?? '').toContain(staleFinding.message);
+  });
+
+  it('still shows it when the ack pins a SUPERSEDED identity', () => {
+    // The whole point of pinning: an ack for older content is not a waiver
+    // for the current content, so the banner must nag again.
+    const staleAck = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: 'OLD-H2' },
+    } as FormField;
+    render(
+      <FieldEditor field={staleAck} schema={makeSchema(staleAck)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
+    );
+    expect(banner()?.textContent ?? '').toContain(staleFinding.message);
+  });
+
+  it('suppresses ONLY the staleness rule -- unrelated findings still render', () => {
+    // Criterion 2: no other finding's banner behavior changes. This field
+    // carries an ack AND an unrelated WARNING and ERROR; only the staleness
+    // line may disappear.
+    const acked = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
+    } as FormField;
+    const otherWarning: LintFinding = {
+      severity: 'WARNING', rule: 'help-details-oversize',
+      path: 'fields (id=phone).help', message: 'details are oversize',
+      field_id: 'phone',
+    };
+    const anError: LintFinding = {
+      severity: 'ERROR', rule: 'field-unbacked',
+      path: 'fields (id=phone)', message: 'no backing widget',
+      field_id: 'phone',
+    };
+    render(
+      <FieldEditor field={acked} schema={makeSchema(acked)}
+        onUpdateField={vi.fn()} authorTier
+        lintFindings={[staleFinding, otherWarning, anError]} />,
+    );
+    const text = banner()?.textContent ?? '';
+    expect(text).not.toContain(staleFinding.message);
+    expect(text).toContain('details are oversize');
+    expect(text).toContain('no backing widget');
+  });
+
+  it('an UNPARSEABLE identity fails open in the banner too (row parity)', () => {
+    // needsGuidanceAck and the ack checkbox both fail open when the finding
+    // carries no parseable identity: nothing can be pinned, so the row stays
+    // green and no control renders. The banner must agree -- otherwise it
+    // alone shows an amber warning beside a green row with no way to act on
+    // it, which is the cross-surface contradiction this bead removes, on the
+    // very surface it removes it from (Opus outer review, pass 2).
+    const unparseable: LintFinding = {
+      ...staleFinding, path: 'fields (id=phone).help',   // no [identity:...]
+    };
+    render(
+      <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[unparseable]} />,
+    );
+    // no gate control...
+    expect(screen.queryByTestId('guidance-ack-checkbox')).toBeNull();
+    // ...and no banner line demanding one.
+    expect(banner()?.textContent ?? '').not.toContain(unparseable.message);
+  });
+
+  it('THIS field\'s ack does not suppress ANOTHER field\'s staleness', () => {
+    // The suppression is scoped by field_id, so a whole-schema findings list
+    // cannot let one field's ack silence another field's warning. (The title
+    // used to state the inverse direction of what is asserted below.)
+    const otherFieldFinding: LintFinding = {
+      severity: 'WARNING', rule: 'guidance-identity-stale',
+      path: `fields (id=zip).help[identity:${IDENTITY}]`,
+      message: 'zip changed since its guidance was written', field_id: 'zip',
+    };
+    const acked = {
+      ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
+    } as FormField;
+    render(
+      <FieldEditor field={acked} schema={makeSchema(acked)}
+        onUpdateField={vi.fn()} authorTier
+        lintFindings={[staleFinding, otherFieldFinding]} />,
+    );
+    const text = banner()?.textContent ?? '';
+    expect(text).not.toContain(staleFinding.message);
+    expect(text).toContain('zip changed since its guidance was written');
+  });
+});
