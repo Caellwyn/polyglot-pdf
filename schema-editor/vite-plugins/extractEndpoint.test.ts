@@ -276,3 +276,32 @@ describe('extract handshake', () => {
     expect(fs.existsSync(path.join(root, HANDSHAKE_FILE))).toBe(true);
   });
 });
+
+// --- the coupled marker filename -------------------------------------------- //
+//
+// HANDSHAKE_FILE is declared independently in THREE places: the browser writer
+// (src/utils/formKitDirectory.ts), this host reader (extractEndpoint.ts), and the
+// backend reader (backend/routes/editor_kit_routes.py). They must agree, and
+// nothing in the type system makes them: the Vite plugin sits outside the src/
+// tsconfig scope, so it cannot simply import the constant.
+//
+// A rename on either side would NOT fail any other test -- the endpoint treats an
+// unreadable marker as "nothing observed", so the handshake would silently
+// degrade to a permanent, unexplained refusal on a folder that genuinely agrees,
+// with the whole suite still green. This reads both files and pins the equality.
+describe('handshake marker filename stays coupled', () => {
+  const readDeclared = (file: string): string | null => {
+    const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    const m = src.match(/HANDSHAKE_FILE\s*=\s*'([^']+)'/);
+    return m ? m[1] : null;
+  };
+
+  it('is the same literal in the host reader and the browser writer', () => {
+    const host = readDeclared('extractEndpoint.ts');
+    const browser = readDeclared('../src/utils/formKitDirectory.ts');
+    // Both must actually be found -- a null would make the equality vacuous.
+    expect(host).toBeTruthy();
+    expect(browser).toBeTruthy();
+    expect(host).toBe(browser);
+  });
+});

@@ -97,7 +97,7 @@ byte-identical afterwards (sha256 `93bc4083...` before and after) -- while an
 ungated POST for that same id demonstrably resolves to the host's copy, which is
 what makes the refusal load-bearing rather than decorative.
 
-23 new tests (11 endpoint, 7 client asker, 5 component -- one of the 5 pins the
+24 new tests (12 endpoint, 7 client asker, 5 component -- one of the 5 pins the
 fresh-nonce/cleanup contract rather than the refusal itself). Both gates were
 **mutation-verified rather than assumed**: forcing the endpoint to report
 `sameFolder=true` fails 4 endpoint tests, and removing the UI refusal fails 5
@@ -124,6 +124,23 @@ Worth recording because it is a general hazard when mirroring a guard onto a new
 channel: the *mechanism* transfers, but the remediation advice may not, because
 the two channels write to different places. A test now pins the new wording and
 asserts the copy-elsewhere text is gone.
+
+A later review round found the **same defect class one branch over**, which is
+the more useful lesson. `verifyExtractorFolder` collapsed four outcomes into one
+bare `sameFolder: false` -- fetch rejection, non-OK, unreadable body, and a real
+mismatch -- and `verifySameFolder` labels every one of them `mismatch`. So a dev
+server that had simply died rendered "the folder you opened is not the one the
+extractor uses ... it would rewrite a different copy", confidently misdiagnosing a
+transport failure as a wrong folder and sending the user to change configuration
+that was already correct. Worse, the test I wrote for that case *asserted* the
+wrong wording, entrenching it.
+
+The verdict was never wrong -- all four outcomes must refuse, and did. Only the
+explanation was. The asker now reports unreachability out-of-band (its return
+shape is shared with the backend channel, so widening it was not an option) and
+that case gets its own message. The general form: **fail-closed is a property of
+the verdict, not of the message**, and a guard that refuses correctly can still
+send someone down a dead end.
 
 ## One thing worth flagging for the next person
 

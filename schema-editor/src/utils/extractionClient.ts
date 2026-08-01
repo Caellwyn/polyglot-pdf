@@ -51,24 +51,40 @@ export async function isExtractionAvailable(): Promise<boolean> {
  *
  * A network failure or non-OK response resolves sameFolder=false: unproven must
  * never read as proven, because the action it gates is destructive.
+ *
+ * `reachable` distinguishes "the host answered, and said no" from "the host never
+ * answered at all". Both refuse -- the verdict is identical and fail-closed -- but
+ * they need DIFFERENT messages: a wrong folder is fixed by opening another one,
+ * while a dead dev server is not, and telling that user their folder is wrong
+ * sends them to change correct configuration. verifySameFolder's asker contract
+ * has no slot for it, so it is reported out-of-band via `onUnreachable` rather
+ * than by widening a shape shared with the backend channel.
  */
 export async function verifyExtractorFolder(
   nonce: string,
+  onUnreachable?: () => void,
 ): Promise<{ sameFolder: boolean; backendRoot?: string | null }> {
+  const unreachable = () => {
+    onUnreachable?.();
+    return { sameFolder: false };
+  };
   try {
     const res = await fetch(`${ENDPOINT}/handshake`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nonce }),
     });
-    if (!res.ok) return { sameFolder: false };
+    if (!res.ok) return unreachable();
     const body = (await res.json()) as { sameFolder?: boolean; extractorRoot?: string };
+    // A body we cannot read as a verdict is the host failing to answer, not the
+    // host answering "different folder".
+    if (typeof body?.sameFolder !== 'boolean') return unreachable();
     // Map extractorRoot -> backendRoot: verifySameFolder's asker contract (and
     // the dialog that renders it) speaks of "the root the server uses"; here
     // that server is the extractor host.
     return { sameFolder: body.sameFolder === true, backendRoot: body.extractorRoot ?? null };
   } catch {
-    return { sameFolder: false };
+    return unreachable();
   }
 }
 

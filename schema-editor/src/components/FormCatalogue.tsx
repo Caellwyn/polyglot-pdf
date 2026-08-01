@@ -309,10 +309,21 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       //
       // Checked HERE rather than once per folder because it must hold at the
       // moment of the write: it is the last thing before any file is touched.
-      const folder = await verifySameFolder(extractionRoot, verifyExtractorFolder);
+      // Tracks whether the host ANSWERED. The verdict is the same either way
+      // (refuse -- fail closed), but a dead dev server needs different advice
+      // than a wrong folder: telling that user to open a different folder or
+      // edit FORM_KITS_ROOT sends them to change correct configuration.
+      let hostAnswered = true;
+      const folder = await verifySameFolder(
+        extractionRoot, (nonce) => verifyExtractorFolder(nonce, () => { hostAnswered = false; }),
+      );
       if (!folder.ok) {
         setError(
-          folder.reason === 'unwritable'
+          !hostAnswered && folder.reason !== 'unwritable'
+            ? `Cannot run extraction for "${kit.id}": the editor could not reach the `
+              + 'extraction service to confirm which folder it uses. Check the dev server '
+              + 'is still running, then try again.'
+            : folder.reason === 'unwritable'
             // NOT the "make a copy elsewhere and open that" advice the s2bf modal
             // gives. That fits SAVING (which targets whatever folder you picked),
             // but extraction always writes under the HOST's FORM_KITS_ROOT -- so a

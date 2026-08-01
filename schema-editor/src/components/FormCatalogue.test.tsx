@@ -933,7 +933,12 @@ describe('FormCatalogue -- run extraction', () => {
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     fireEvent.click(screen.getByText('Run extraction'));
-    await waitFor(() => expect(screen.getByText(/not the one the extractor uses/i)).toBeTruthy());
+    // Refused (fail-closed) -- but NOT with the wrong-folder diagnosis. The host
+    // never answered, so claiming the folder is wrong would send the user to
+    // change configuration that is actually correct (same defect class as bd
+    // polyglot-pdf-6pzs, one branch over).
+    await waitFor(() => expect(screen.getByText(/could not reach the extraction service/i)).toBeTruthy());
+    expect(screen.queryByText(/not the one the extractor uses/i)).toBeNull();
     expect(posted).toBeNull();
   });
 
