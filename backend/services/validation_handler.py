@@ -14,6 +14,11 @@ from backend.utils.field_validator import validate_updates
 
 _log = structlog.get_logger().bind(module="validation_handler")
 
+# Max rejected field ids recorded on a single validation_failures line. The
+# caller collapses multi-field calls to one key before validation, so this is a
+# defensive bound, not an expected truncation.
+UNKNOWN_FIELD_ID_LOG_CAP = 10
+
 
 class ValidationHandler:
     """Handles field matching and validation for form updates."""
@@ -83,12 +88,19 @@ class ValidationHandler:
                 "form_state": form_state,
             }
             
-            # Log validation failures concisely
+            # Log validation failures concisely. unknown_field_ids carries the
+            # rejected KEYS (schema field ids the model sent), never their values
+            # -- without them an unknown-field rejection is undiagnosable from
+            # logs alone, which is exactly what stalled bd polyglot-pdf-oaiv (the
+            # W-7 checkbox_group rejection). Field ids are schema metadata, not
+            # PII: pdf_fill_sample_field_ids already logs them the same way.
+            # Capped so a pathological multi-key call cannot flood the log.
             if validation_errors or unknown_fields:
                 _log.warning(
                     "validation_failures",
                     error_count=len(validation_errors),
                     unknown_count=len(unknown_fields),
+                    unknown_field_ids=list(unknown_fields)[:UNKNOWN_FIELD_ID_LOG_CAP],
                     session_id=self._session_id
                 )
             
