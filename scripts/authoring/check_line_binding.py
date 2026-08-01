@@ -131,7 +131,7 @@ def _iter_fields(schema: dict):
     the oracle reads its label as a stated line -- an option labelled "1 Yes" on a
     correctly bound widget printed on row 6a produces a confident FALSE finding,
     because the "1" is list-item text, not a line number. This is the exclusion
-    overlay_field_guesses._claims makes for the same reason.
+    overlay_field_guesses._claimants makes for the same reason.
     """
     option_dict_ids: set[int] = set()
 

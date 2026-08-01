@@ -7,7 +7,7 @@
  * Ported from schema-editor/src/utils/pdfWorker.ts (copy-then-diverge,
  * bd polyglot-pdf-vfkv). Everything in pdf-view/ that imports pdfjs-dist is
  * reached only via a React.lazy() chunk, so the default bundle never pulls
- * pdf.js in while the preview flag is off.
+ * pdf.js in -- it loads when the user first opens a preview surface.
  *
  * The LEGACY pdf.js build is required here: the modern build uses top-level
  * await, which this app's Vite target (es2020, vite.config.schema.ts) rejects

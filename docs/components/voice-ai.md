@@ -2,7 +2,7 @@
 
 **Tracks:** backend/adapters/live_ai_gemini.py backend/services/callback_handler.py frontend/src/shared/connection.ts frontend/src/shared/audioManager.ts
 
-*Last updated: 2026-07-22b (bd polyglot-pdf-m1lg + zmlo, sprint-13 probes: the Live connect config now carries `speech_config.language_code` from the session's bias code (endpoint-verified on the native-audio tier; kill-switch `SPEECH_LANGUAGE_CODE_ENABLED`, default on), and both SIs carry a language-agnostic REGISTER rule (warm/conversational/plain in EVERY session language + translate form/section titles); see [../journal/entries/2026-07-22-bd-m1lg-sprint13-probes.md](../journal/entries/2026-07-22-bd-m1lg-sprint13-probes.md)). Prior: 2026-07-22 (bd polyglot-pdf-nb2c + s39z + djnk, sprint-13 Bundle C: both SIs now pin declines to the EMPTY stored value (never literal "N/A" in any session language) and pin name spell-back to ENGLISH letter names in every session language (a ru session had verified a Latin name in Cyrillic letter names); update_form_fields validation errors carry a DISCARD-the-rejected-value instruction; see [../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md](../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md)). Prior: 2026-07-16 (bd polyglot-pdf-f7h7: the stored-value echo is success-branch-only -- a collapsed multi-field update_form_fields call no longer echoes stored_values on its error branch, where the client stored nothing. Same-day: bd polyglot-pdf-yo5t/h7wx/oqkj/y25o voice-misfire batch: ASR language bias on the transcription configs + the stored-value echo on update_form_fields + the debounced post-unpause re-prompt caller in connection.ts -- see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-15 (bd polyglot-pdf-b1gj + ghv4: actionable unknown-field rejections + the STOP-RETRYING loop-breaker on update_form_fields; per-injection spoken-language re-anchor and the no-quoted-English rule for prompts/tool descriptions -- see the tool-calling section). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-07-30 (bd polyglot-pdf-e1x9: new "Spoken delivery (pace + articulation)" section -- both SIs now instruct ARTICULATION (full sound through the end of each word, no slurring/fillers, clause pauses) alongside the pre-existing pace rules, with a sustain clause against mid-sentence acceleration; records that no voice is configured and that all 11 prebuilt voices are endpoint-verified available on the 2.5 native-audio tier. See [../journal/entries/2026-07-30-bd-e1x9-si-articulation-pace.md](../journal/entries/2026-07-30-bd-e1x9-si-articulation-pace.md)). Prior: 2026-07-22b (bd polyglot-pdf-m1lg + zmlo, sprint-13 probes: the Live connect config now carries `speech_config.language_code` from the session's bias code (endpoint-verified on the native-audio tier; kill-switch `SPEECH_LANGUAGE_CODE_ENABLED`, default on), and both SIs carry a language-agnostic REGISTER rule (warm/conversational/plain in EVERY session language + translate form/section titles); see [../journal/entries/2026-07-22-bd-m1lg-sprint13-probes.md](../journal/entries/2026-07-22-bd-m1lg-sprint13-probes.md)). Prior: 2026-07-22 (bd polyglot-pdf-nb2c + s39z + djnk, sprint-13 Bundle C: both SIs now pin declines to the EMPTY stored value (never literal "N/A" in any session language) and pin name spell-back to ENGLISH letter names in every session language (a ru session had verified a Latin name in Cyrillic letter names); update_form_fields validation errors carry a DISCARD-the-rejected-value instruction; see [../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md](../journal/entries/2026-07-22-bd-mccl-bundle-c-multilingual-quick-fixes.md)). Prior: 2026-07-16 (bd polyglot-pdf-f7h7: the stored-value echo is success-branch-only -- a collapsed multi-field update_form_fields call no longer echoes stored_values on its error branch, where the client stored nothing. Same-day: bd polyglot-pdf-yo5t/h7wx/oqkj/y25o voice-misfire batch: ASR language bias on the transcription configs + the stored-value echo on update_form_fields + the debounced post-unpause re-prompt caller in connection.ts -- see [../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md](../journal/entries/2026-07-16-bd-yo5t-voice-misfire-batch.md)). Prior: 2026-07-15 (bd polyglot-pdf-b1gj + ghv4: actionable unknown-field rejections + the STOP-RETRYING loop-breaker on update_form_fields; per-injection spoken-language re-anchor and the no-quoted-English rule for prompts/tool descriptions -- see the tool-calling section). Prior: 2026-07-12 (continuous-DTI is the production law; switch_section is a deprecated section-reset-fallback tool, bd polyglot-pdf-55jg). Prior: 2026-07-09 (bd polyglot-pdf-7yra: added the seventh tool `skip_field` -- voice skip of a required field, distinct from N/A -- to the tool-calling section). Prior: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: added the sixth tool `ask_secretary` to the tool-calling section, added the `on_processing_done` callback to session lifecycle + barge-in, noted `send_client_content()`'s bool return). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 `LiveAIGemini` (`backend/adapters/live_ai_gemini.py`) is the single wrapper around
 the Gemini Live API: it owns the bidirectional session, streams audio, routes tool
@@ -119,6 +119,51 @@ push a flush signal to the client; the actual playback flush is **frontend-drive
 -- `connection.ts onVADSpeechStart` calls `audioManager.flushAudioQueue()` the
 instant the local VAD fires, for sub-perceptual latency (see
 [../standards/voice-and-vad.md](../standards/voice-and-vad.md)).
+
+## Spoken delivery (pace + articulation)
+
+Both SIs govern HOW the model speaks, not just what it says -- but they LABEL it
+differently, which matters when you go to tune it:
+
+- **DTI** (`DTI_SYSTEM_INSTRUCTION`, the production path): one `SPEECH STYLE`
+  block holds the pace prose (UNLABELLED -- there is no `PACE:` token in this
+  constant, so grepping `PACE:` will miss it), followed by `ARTICULATION`.
+- **Legacy** (`SYSTEM_INSTRUCTION`): labelled `PACE:` + `ARTICULATION` inside
+  `REGISTER`.
+
+Grepping for `PACE:` alone therefore finds ONLY the legacy, non-production
+constant. Tune the DTI copy via `SPEECH STYLE` or `ARTICULATION`; the two SIs'
+ARTICULATION text is byte-identical and must be edited together.
+
+Three concerns, kept deliberately separate (bd polyglot-pdf-e1x9):
+
+- **Pace** -- distinctly slower than natural conversational speed, targeted as
+  "about ten percent slower again than the measured pace you would otherwise
+  choose", plus a **sustain** rule (hold it from the first word to the last;
+  never speed up mid-sentence or rush a sentence ending). Observed rushing was
+  mid-sentence DRIFT, so the sustain rule is pinned separately from the target
+  pace -- tuning one must not silently drop the other.
+- **Per-character read-back** (DTI only) -- digits and spelled names go MUCH
+  slower still, one character at a time with deliberate pauses.
+- **Articulation** -- full sound through the END of each word, no
+  slurring/swallowed syllables/mumbling, deliberate pauses between clauses, and
+  no casual contractions or filler sounds. Written to generalize across the
+  17+ session languages: it names the tonal / evenly-timed-syllable equivalent
+  alongside inflectional word endings, since "word endings" alone is meaningless
+  in Chinese, Vietnamese, Thai, or Japanese.
+
+The articulation rules explicitly govern **delivery, not word choice** -- they
+must not be read as overriding `REGISTER`'s warm, conversational register.
+
+**"Speak slowly" does not imply "speak clearly."** The SI instructed pace long
+before it instructed articulation, and the model hit an unhurried pace while
+still slurring word endings. They are independent controls; instruct both.
+
+No **voice** is configured -- the connect config sets no `speech_config.voice_config`,
+so the API uses its default. All 11 prebuilt voices (incl. `Erinome`,
+`Rasalgethi`) are endpoint-verified ACCEPTED on the Vertex 2.5 native-audio tier,
+with an invalid name correctly rejected as `1007 Invalid voice name`; selecting
+one is deferred (voices can only be auditioned on the AI-Studio 3.1 tier today).
 
 ## Tool calling
 

@@ -1,8 +1,8 @@
 # pdf-view -- the Preview-mode PDF surface
 
-**Tracks:** frontend/src/pdf-view/featureFlag.ts frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
+**Tracks:** frontend/src/pdf-view/viewMode.ts frontend/src/pdf-view/PreviewPane.tsx frontend/src/pdf-view/PDFViewer.tsx frontend/src/pdf-view/FieldOverlay.tsx frontend/src/pdf-view/FieldEditPopover.tsx frontend/src/pdf-view/valuePainting.ts frontend/src/pdf-view/useSnapToField.ts frontend/src/pdf-view/FilledPreviewModal.tsx frontend/src/pdf-view/usePDFDocument.ts frontend/src/pdf-view/PDFPage.tsx frontend/src/pdf-view/pdfWorker.ts frontend/src/pdf-view/pdfCoordinates.ts
 
-*Last updated: 2026-07-25. See [../journal/entries/2026-07-25-bd-c6td-r9a7-v5-followups.md](../journal/entries/2026-07-25-bd-c6td-r9a7-v5-followups.md) for closeout details.*
+*Last updated: 2026-07-31 (bd polyglot-pdf-v437: the preview UI is CUT OVER -- the `?previewUi=1` opt-in flag and `featureFlag.ts` are deleted; the toggle now renders unconditionally, while Simplified remains the landing view). See [../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md](../journal/entries/2026-07-31-bd-v437-preview-ui-cutover.md) for closeout details.*
 
 `frontend/src/pdf-view/` renders the actual form PDF in the browser (pdf.js)
 with the user's answers painted at their printed positions -- the "Preview"
@@ -12,27 +12,47 @@ Related: the linear form and its state layer are in
 [schema-forms.md](schema-forms.md); server-side fill is in
 [pdf-filling.md](pdf-filling.md).
 
-## The gate: default-off until cutover
+## Reachability: cut over, always on
 
-Every UI surface here renders only behind the opt-in flag
-(`featureFlag.ts::isPreviewUiEnabled`): URL `?previewUi=1`, persisted in
-sessionStorage for the browser session; `?previewUi=0` opts out; fail-closed.
-With the flag off, the deployed UI is unchanged and NO pdf.js bytes are
-fetched: `SchemaForm` reaches this module only through two `React.lazy`
-boundaries (`FilledPreviewModal`, `PreviewPane`), so Rollup keeps pdfjs-dist in
-a shared lazy `pdf-view-*.js` chunk that `index.html` does not modulepreload.
-The only statically-imported files (`featureFlag.ts`, `viewMode.ts`) are
-pdfjs-free -- keep them that way. Flipping the default is a maintainer-gated
-cutover decision, not part of this module.
+The Preview UI is CUT OVER (bd `polyglot-pdf-v437`, maintainer-approved
+2026-07-31): the Simplified/Preview toggle renders unconditionally, with no
+query param or sessionStorage opt-in. The former `featureFlag.ts` /
+`?previewUi=1` gate is deleted -- do not reintroduce a flag check here.
+
+The cutover made Preview REACHABLE, not the landing view: a fresh mount still
+starts in Simplified (see "View modes" below), and promoting Preview to the
+default remains a separate maintainer call.
+
+pdf.js is still lazy and is fetched only when the user actually opens a preview
+surface: `SchemaForm` reaches this module through two `React.lazy` boundaries
+(`FilledPreviewModal`, `PreviewPane`), so Rollup keeps pdfjs-dist in a shared
+lazy `pdf-view-*.js` chunk that `index.html` does not modulepreload. The one
+statically-imported file (`viewMode.ts`) is pdfjs-free -- keep it that way.
 
 ## View modes
 
 `viewMode.ts`: `'simplified' | 'preview'`, sessionStorage-persisted,
 deliberately OUTSIDE `SchemaFormState` (purely presentational; never in the WS
-handshake). `initialViewMode(flagOn, stored, viewportWidth)` decides fresh
+handshake). `initialViewMode(stored, viewportWidth)` decides fresh
 mounts: Simplified by default everywhere; a stored `'preview'` choice is
-honored only flag-on at desktop width (mobile-width mounts always start
-Simplified, epic rubric #5). `viewModeAfterResize(current)`
+honored at desktop width (mobile-width mounts always start
+Simplified, epic rubric #5).
+
+**Caller contract: `initialViewMode` RESOLVES a mode but does not PERSIST it.**
+Whenever the resolved mode differs from what is stored, the caller must write
+the result back (`storeViewMode`) -- i.e. the guard is `mode !== stored`, not
+just the mobile case. That covers three situations: the mobile-width demotion of
+a stored `'preview'` (otherwise state says Simplified while storage still says
+`preview`, and the stale value resurrects Preview at the next desktop-width
+mount); a junk stored value, which gets normalized; and a fresh mount with
+nothing stored, which writes `'simplified'` (inert -- `stored ?? 'simplified'`
+makes "never chose" and "chose Simplified" indistinguishable). SchemaForm's
+`viewMode` initialiser implements exactly this; a second caller must too. This
+mirrors the resize path, which has always written its demotion back, and the two
+silently diverging is exactly the bug bd `polyglot-pdf-v437` had to fix once the
+cutover made mobile Preview reachable.
+
+`viewModeAfterResize(current)`
 extends that intent to a LIVE same-tab resize (or device rotation): once the
 resize classifies the viewport as MOBILE, it forces Preview back to Simplified
 mid-session. It is one-directional -- leaving mobile never auto-restores

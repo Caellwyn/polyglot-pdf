@@ -2,7 +2,8 @@
  * Styles for the pdf-view module (epic polyglot-pdf-js7q).
  *
  * Imported only by lazy-loaded pdf-view components, so none of this ships in
- * the default bundle while the preview flag is off.
+ * the default bundle -- it arrives with the pdf-view chunk, when the user
+ * first opens a preview surface.
  */
 
 /* --- Single rendered PDF page --- */

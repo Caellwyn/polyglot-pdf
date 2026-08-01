@@ -34,8 +34,12 @@ plausible-but-wrong model rect is OVERWRITTEN by the dump; a degenerate rect
 with no dump match is dropped entirely.
 
 Imports extract_form by file path (repo precedent: test_bd_safe.py); it adds
-scripts/bakeoff to sys.path at import for acroform_dump/arm_llm_native, which is
-harmless here since we never call those.
+scripts/bakeoff to sys.path at import for acroform_dump/arm_llm_native. MOST
+tests here are synthetic and call neither -- but the pipeline-level test added
+by bd polyglot-pdf-u4r0 drives the real extract(), which runs acroform_dump
+against a PyMuPDF-generated PDF (so fitz is required, via importorskip) and
+monkeypatches arm_llm_native.run rather than calling a model. No metered API
+call is made: that test passes translate_options=False, enrich_guidance=False.
 """
 
 import importlib.util
@@ -1569,7 +1573,10 @@ def test_provenance_counts_reflect_BOTH_position_passes(tmp_path):
     first = ef._backfill_positions(schema, dump)          # step 3
     ef._complete_grouped_families(schema, dump)           # step 3c2
     ef._backfill_unclaimed_widgets(schema, dump)          # step 3d
-    second = ef._backfill_positions(schema, dump)         # step 3d2
+    # normalize_pages=False, mirroring the production 3d2 call (PR #514): the
+    # page-base shift is one-shot, so the late pass must not re-run it.
+    second = ef._backfill_positions(schema, dump,
+                                    normalize_pages=False)   # step 3d2
 
     # The SECOND pass is the one whose counts the provenance block stamps: it
     # sees the completed options, the first pass could not.
@@ -1603,3 +1610,139 @@ def test_the_completion_position_fix_is_idempotent(tmp_path):
     once = json.loads(json.dumps(schema))
     ef._backfill_positions(schema, dump)
     assert schema == once, "a further pass must not change anything"
+
+
+# --- 3c2 completion + the late position pass (bd polyglot-pdf-u4r0) ---------- #
+
+
+def _family_pdf(tmp_path, leaf="P2_checkbox3", n=3):
+    """A real 1-page PDF carrying ONE minable checkbox family."""
+    fitz = pytest.importorskip("fitz")
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    for i in range(n):
+        w = fitz.Widget()
+        w.field_name = f"{leaf}[{i}]"
+        w.field_type = fitz.PDF_WIDGET_TYPE_CHECKBOX
+        w.rect = fitz.Rect(100 + 20 * i, 200, 110 + 20 * i, 210)
+        page.add_widget(w)
+    out = tmp_path / "form.pdf"
+    doc.save(str(out))
+    doc.close()
+    return str(out)
+
+
+def test_extract_gives_family_completed_options_a_position(tmp_path, monkeypatch):
+    """THE u4r0 DEFECT, driven through the REAL extract() stage order.
+
+    Asserted at the pipeline level on purpose. A first draft of this test called
+    _backfill_positions / _complete_grouped_families directly and asserted the
+    result -- and DISABLING the real 3d2 step left it green, because the test
+    was performing the fix itself rather than checking the pipeline performs it.
+    That is the same vacuity trap bd polyglot-pdf-icyi hit twice, so this drives
+    extract() with the model arm stubbed: the only thing that can make the
+    appended options positioned is the pipeline's own late pass.
+
+    Setup: the stub models only member [0] of a 3-widget family -- the
+    partial-grouping shape 3c2 exists to complete (bd qmxb / 0nxh). Steps 3a/3d
+    and the guidance/translation stages are off or naturally inert here.
+    """
+    pdf = _family_pdf(tmp_path)
+    out = str(tmp_path / "schema.json")
+
+    def _stub_run(pdf_path, dump_path, model, **kw):
+        return {
+            "form_metadata": {"title": "T", "form_number": "T-1",
+                              "version": "1", "language": "en"},
+            "fields": [{
+                "id": "grp", "name": "Group", "spoken_name": "group",
+                "type": "checkbox_group",
+                "options": [{"value": "a", "label": "A",
+                             "pdf_field_name": "P2_checkbox3[0]"}],
+            }],
+        }
+
+    monkeypatch.setattr(ef.arm_llm_native, "run", _stub_run)
+    ef.extract(pdf, out, translate_options=False, enrich_guidance=False)
+
+    schema = json.loads(pathlib.Path(out).read_text(encoding="utf-8"))
+    grp = next(f for f in schema["fields"] if f["id"] == "grp")
+    opts = grp.get("options") or []
+    assert len(opts) == 3, (
+        f"family completion did not append the 2 missing members -- this test "
+        f"would be vacuous: {[o.get('value') for o in opts]}")
+
+    for opt in opts:
+        pos = opt.get("pdf_position")
+        assert pos, (
+            f"option {opt.get('value')} shipped with NO pdf_position -- if a "
+            "user SELECTS it, valuePainting.selectedOptionRects bails for the "
+            "WHOLE field, losing the per-option marks for every other "
+            "selection on it too")
+        assert pos["page"] == 1, f"page {pos['page']} is not 1-based"
+        assert pos["width"] > 0 and pos["height"] > 0
+
+    # each option took ITS OWN widget rect, not a sibling's
+    xs = sorted(o["pdf_position"]["x"] for o in opts)
+    assert xs == [100.0, 120.0, 140.0], f"options took the wrong rects: {xs}"
+
+
+def test_the_late_pass_does_NOT_re_shift_model_pages(tmp_path):
+    """REGRESSION PIN for the 3d2 re-run (bd polyglot-pdf-u4r0, fresh-eyes).
+
+    Rect derivation is idempotent, but the page-base shift is NOT: it one-shot
+    corrects the MODEL's ordinal base. My first draft of 3d2 called
+    _backfill_positions plainly, which re-ran that shift over positions pass 1
+    had already moved -- model pages [-1, 0] went to [0, 1] and then to [1, 2],
+    and that 2 is off a 1-page document. Exactly the off-the-document failure
+    the deterministic-exempt set exists to prevent, arriving from the other
+    direction. The late pass now passes normalize_pages=False.
+    """
+    dump = tmp_path / "dump.json"
+    dump.write_text(json.dumps({"fields": []}), encoding="utf-8")  # nothing resolves
+    schema = {"fields": [
+        {"id": "a", "pdf_field_name": "nope1",
+         "pdf_position": {"page": -1, "x": 1, "y": 1, "width": 5, "height": 5}},
+        {"id": "b", "pdf_field_name": "nope2",
+         "pdf_position": {"page": 0, "x": 1, "y": 1, "width": 5, "height": 5}},
+    ]}
+    first = ef._backfill_positions(schema, str(dump))
+    assert first["model_pages_normalized"] == 2
+    assert [f["pdf_position"]["page"] for f in schema["fields"]] == [0, 1]
+
+    late = ef._backfill_positions(schema, str(dump), normalize_pages=False)
+    assert late["model_pages_normalized"] == 0
+    assert [f["pdf_position"]["page"] for f in schema["fields"]] == [0, 1], (
+        "the late pass re-shifted model pages -- a second shift moves them off "
+        "the document")
+
+
+def test_the_late_pass_reproduces_3d_minted_positions_exactly(tmp_path):
+    """The 3d2 rationale claims 3d's minted positions survive the re-derive
+    UNCHANGED -- assert it rather than only asserting it in a comment.
+
+    3d (_backfill_unclaimed_widgets) DOES write a position per minted field, so
+    "nothing in between touches positions" was false (fresh-eyes round 2). The
+    real argument is narrower and testable: 3d writes a deterministic rect from
+    the same dump with the same +1 conversion, so re-deriving reproduces it
+    byte-for-byte.
+    """
+    dump = _write_dump(tmp_path, {
+        "claimed": {"page": 0, "x": 5.5, "y": 6.5, "width": 7.5, "height": 9.5},
+        "orphan": {"page": 0, "x": 1.25, "y": 2.25, "width": 3.25, "height": 4.25},
+    })
+    schema = {"fields": [{"id": "a", "pdf_field_name": "claimed"}]}
+
+    ef._backfill_positions(schema, dump)                 # step 3
+    ef._backfill_unclaimed_widgets(schema, dump)         # step 3d mints "orphan"
+    minted = [f for f in schema["fields"] if f["id"] != "a"]
+    assert minted, "3d minted nothing -- this test would be vacuous"
+    before = {f["id"]: dict(f["pdf_position"]) for f in schema["fields"]
+              if f.get("pdf_position")}
+
+    ef._backfill_positions(schema, dump, normalize_pages=False)   # step 3d2
+    after = {f["id"]: dict(f["pdf_position"]) for f in schema["fields"]
+             if f.get("pdf_position")}
+    assert after == before, (
+        "the late pass changed a position 3d had already written: "
+        f"{before} -> {after}")

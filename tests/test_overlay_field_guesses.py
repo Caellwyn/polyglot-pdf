@@ -33,6 +33,15 @@ _W7_PDF = _REPO / "form-kits" / "w7" / "form.pdf"
 _W7_SCHEMA = _REPO / "form-kits" / "w7" / "schema.json"
 
 needs_w7 = pytest.mark.skipif(not _W7_PDF.exists(), reason="w7 kit not present")
+
+# i-90 stores XFA LEAF names against fully-qualified widgets, so it is the only
+# real fixture that exercises resolution end to end. READ-ONLY: never write into
+# form-kits/ -- i-90 is the verified golden copy used for demos.
+_I90_PDF = _REPO / "form-kits" / "i-90" / "form.pdf"
+_I90_SCHEMA = _REPO / "form-kits" / "i-90" / "schema.json"
+needs_i90 = pytest.mark.skipif(
+    not _I90_PDF.exists(), reason="i-90 kit not present")
+
 pytest.importorskip("fitz", reason="PyMuPDF required to render the overlay")
 
 
@@ -298,3 +307,124 @@ def test_an_unwritable_png_dir_exits_two(tmp_path, capsys):
                   "--out", str(tmp_path / "o.pdf"), "--png-dir", str(blocker)])
     capsys.readouterr()
     assert rc == 2
+
+
+# --------------------------------------------------------------------------- #
+# Schema-name -> widget-name resolution (bd polyglot-pdf-wjxs)
+# --------------------------------------------------------------------------- #
+
+def test_a_leaf_claim_resolves_to_the_fully_qualified_widget():
+    """Schemas may store the XFA LEAF while the PDF carries the full path. i-90
+    does exactly this, and matching raw strings missed 146 of 189 claims --
+    reported as 152 widgets falsely 'unclaimed' on a correctly bound kit."""
+    claimants = {"P1_Line1_AlienNumber[0]": {("fld_a", "field"): "A"}}
+    widgets = ["form1[0].#subform[0].P1_Line1_AlienNumber[0]", "other[0]"]
+    out = ov._resolve_claimants(claimants, widgets)
+    assert list(out) == ["form1[0].#subform[0].P1_Line1_AlienNumber[0]"]
+
+
+def test_resolution_requires_a_DOT_boundary():
+    """A bare endswith would let 'x_name[0]' claim 'prefix_x_name[0]'. Same
+    convention as schema_lint._match_dump_names and pdf_fill_routes.find_widget."""
+    claimants = {"name[0]": {("fld_a", "field"): "A"}}
+    assert ov._resolve_claimants(claimants, ["prefix_name[0]"]) == {
+        "name[0]": {("fld_a", "field"): "A"}  # unresolved: kept, draws nothing
+    }
+    assert list(ov._resolve_claimants(claimants, ["a.name[0]"])) == ["a.name[0]"]
+
+
+def test_one_claim_labels_EVERY_widget_it_resolves_to():
+    """A leaf repeated across pages (a signature block on each page, say) matches
+    several fully-qualified widgets, and all of them belong to that field -- so
+    all of them get labelled.
+
+    Pinned because no shipped kit has a repeated leaf today, so nothing else
+    exercises it: truncating the fan-out to the first match left all 27 tests AND
+    all three real kits green. The rule would be missing exactly when a future
+    kit first needs it.
+    """
+    claimants = {"P1_Signature[0]": {("sig", "field"): "Signature"}}
+    widgets = ["form1[0].Page1[0].P1_Signature[0]",
+               "form1[0].Page2[0].P1_Signature[0]",
+               "form1[0].Page1[0].Other[0]"]
+    out = ov._resolve_claimants(claimants, widgets)
+    assert sorted(out) == ["form1[0].Page1[0].P1_Signature[0]",
+                           "form1[0].Page2[0].P1_Signature[0]"]
+    for labels in out.values():
+        assert labels == {("sig", "field"): "Signature"}
+
+
+def test_an_exact_match_wins_over_a_suffix_match():
+    claimants = {"f[0]": {("fld_a", "field"): "A"}}
+    out = ov._resolve_claimants(claimants, ["f[0]", "sub.f[0]"])
+    assert list(out) == ["f[0]"]
+
+
+@needs_i90
+def test_annotate_ITSELF_resolves_before_collapsing(tmp_path):
+    """The bead's central invariant, asserted where it actually matters.
+
+    The helper-level test below composes the call order by hand, so it proves the
+    two helpers compose correctly but CANNOT see annotate() calling them the
+    wrong way round -- reverting annotate() to collapse-then-resolve left all 26
+    tests green while i-90 regressed to 1 false multiclaim. This closes that:
+    i-90 writes P7_checkbox7Extend[0]'s field claim as the full path and its
+    single option as the bare leaf, so collapsing first splits the benign
+    groups-of-one pair and re-merges it into a phantom collision.
+
+    Reads the kit; writes only to tmp_path (form-kits/ is read-only).
+    """
+    schema = json.loads(_I90_SCHEMA.read_text(encoding="utf-8"))
+    result = ov.annotate(schema, str(_I90_PDF), str(tmp_path / "review.pdf"))
+
+    assert result["multiclaimed"] == 0, (
+        "a correctly-bound widget was flagged as multiclaimed -- annotate() is "
+        "collapsing before it resolves")
+    # ...and resolution genuinely happened: without it this kit reports 43
+    # labelled / 152 unclaimed instead.
+    assert result["drawn"] == 188
+    assert result["unclaimed"] == 7
+
+
+def test_resolution_happens_BEFORE_the_multiclaim_collapse():
+    """The ordering bug this fix originally introduced. A field-level claim and
+    its option-level twin can be written as two DIFFERENT schema strings that
+    resolve to the SAME widget -- the benign groups-of-one carve-out can only see
+    that once they share a key. Collapsing first re-creates the pair afterwards
+    and reports a false multiclaim: i-90's P7_checkbox7Extend[0] did exactly
+    that until resolution moved ahead of the collapse."""
+    claimants = {
+        # field level, written as the full path...
+        "form1[0].#subform[5].P7_checkbox7Extend[0]": {("cb", "field"): "cb"},
+        # ...and the option, written as the bare leaf.
+        "P7_checkbox7Extend[0]": {("cb", "option[0]"): "cb=yes"},
+    }
+    widgets = ["form1[0].#subform[5].P7_checkbox7Extend[0]"]
+    collapsed = ov._collapse_claimants(ov._resolve_claimants(claimants, widgets))
+    assert collapsed == {"form1[0].#subform[5].P7_checkbox7Extend[0]": ["cb=yes"]}, \
+        "the benign groups-of-one pair was re-created as a multiclaim"
+
+
+def test_a_genuine_multiclaim_still_survives_resolution():
+    """Two DIFFERENT fields whose distinct schema strings resolve to one widget
+    must still merge into a flagged collision -- resolution must not hide it."""
+    claimants = {
+        "A[0]": {("fld_a", "field"): "A"},
+        "sub.A[0]": {("fld_b", "field"): "B"},
+    }
+    widgets = ["sub.A[0]"]
+    collapsed = ov._collapse_claimants(ov._resolve_claimants(claimants, widgets))
+    assert sorted(collapsed["sub.A[0]"]) == ["A", "B"]
+
+
+@needs_w7
+def test_resolution_leaves_a_fully_qualified_kit_unchanged(tmp_path):
+    """w7 already stores fully-qualified names, so resolution must be a no-op
+    there -- the guard that this fix helps i-90 without disturbing the others.
+
+    Output goes to tmp_path: form-kits/ is READ-ONLY (maintainer constraint --
+    i-90 in particular is the verified golden copy used for demos)."""
+    schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
+    result = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "review.pdf"))
+    assert result["unclaimed"] == 2      # the two ivh9 write-ins, as before
+    assert result["multiclaimed"] == 0

@@ -40,15 +40,28 @@ export const MOBILE_INITIAL_BREAKPOINT = 768;
 
 /**
  * The view mode a fresh mount starts in. A stored 'preview' choice is honored
- * only when the flag is on AND the viewport is desktop-width -- at mobile
- * width the initial mode is always Simplified, per the epic rubric.
+ * only at desktop width -- at mobile width the initial mode is always
+ * Simplified, per the epic rubric.
+ *
+ * With no stored choice the default is Simplified: the cutover (bd
+ * polyglot-pdf-v437) made the Preview UI always REACHABLE, but deliberately did
+ * NOT make it the landing view -- that remains a separate maintainer call.
+ *
+ * CALLER CONTRACT: this function RESOLVES a mode but does not PERSIST it.
+ * Whenever the resolved mode differs from what is stored, the caller must write
+ * the result back (storeViewMode) -- the guard is `mode !== stored`, NOT just
+ * the mobile case. That covers three situations: the mobile-width demotion of a
+ * stored 'preview' (otherwise state and storage disagree and the stale
+ * 'preview' resurrects at the next desktop-width mount); a junk stored value,
+ * which gets normalized; and a fresh mount with nothing stored, which writes
+ * 'simplified' (inert -- `stored ?? 'simplified'` makes "never chose" and
+ * "chose Simplified" indistinguishable). SchemaForm's viewMode initialiser
+ * implements exactly this; a second caller must too.
  */
 export function initialViewMode(
-  flagOn: boolean,
   stored: ViewMode | null,
   viewportWidth: number
 ): ViewMode {
-  if (!flagOn) return 'simplified';
   if (viewportWidth <= MOBILE_INITIAL_BREAKPOINT) return 'simplified';
   return stored ?? 'simplified';
 }

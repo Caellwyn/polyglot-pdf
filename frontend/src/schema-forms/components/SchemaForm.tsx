@@ -28,13 +28,12 @@ import { VoiceOverlayMobile } from "../../demo/VoiceOverlayMobile";
 import { createConnectionManager, type ConnectionManager } from "../../shared/connection";
 import { MIC_AUDIO_CONSTRAINTS } from "../../shared/audioConstraints";
 import { isTestHarnessEnabled } from "../../shared/config";
-import { isPreviewUiEnabled } from "../../pdf-view/featureFlag";
 import { getStoredViewMode, storeViewMode, initialViewMode, viewModeAfterResize, type ViewMode } from "../../pdf-view/viewMode";
 
 // Lazy chunk boundary: pdfjs-dist and everything else in pdf-view/ load only
-// when these components actually render -- which requires the preview flag ON
-// (plus a click / the Preview mode). Flag off (the default) fetches nothing
-// new (epic js7q gating).
+// when these components actually render -- i.e. once the user opens the
+// Preview view mode or the filled-PDF modal. A session that stays in
+// Simplified (the landing view) fetches none of it.
 const FilledPreviewModal = React.lazy(() => import("../../pdf-view/FilledPreviewModal"));
 const PreviewPane = React.lazy(() => import("../../pdf-view/PreviewPane"));
 
@@ -68,19 +67,29 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
   const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
   const [isPrintingPDF, setIsPrintingPDF] = useState(false);
 
-  // Preview-mode UI gate (epic js7q): resolved once per mount; every new UI
-  // surface of the preview epic renders only when this is true.
-  const [previewUiEnabled] = useState(() => isPreviewUiEnabled());
   const [showPDFPreview, setShowPDFPreview] = useState(false);
 
   // Dual view modes (bd vxwj): 'simplified' (the classic linear form) vs
   // 'preview' (the PDF surface). Fresh mounts default Simplified; a stored
-  // per-session 'preview' choice is honored only flag-on at desktop width
-  // (mobile always STARTS Simplified, epic rubric #5). Purely presentational
-  // -- never in the handshake.
-  const [viewMode, setViewMode] = useState<ViewMode>(() =>
-    initialViewMode(isPreviewUiEnabled(), getStoredViewMode(), window.innerWidth)
-  );
+  // per-session 'preview' choice is honored at desktop width (mobile always
+  // STARTS Simplified, epic rubric #5). Purely presentational -- never in the
+  // handshake.
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const mode = initialViewMode(getStoredViewMode(), window.innerWidth);
+    // A mobile-width mount DEMOTES a stored 'preview' choice (epic rubric #5).
+    // Persist that demotion, exactly as the resize path does below: otherwise
+    // state says Simplified while storage still says preview, and the stale
+    // value silently resurrects Preview the next time the same session is
+    // opened at desktop width.
+    //
+    // The guard also fires when NOTHING is stored, writing 'simplified' on a
+    // fresh mount. That is deliberate and inert: nothing distinguishes "never
+    // chose" from "chose Simplified" (getStoredViewMode's only readers are this
+    // line and initialViewMode's `stored ?? 'simplified'`), and it also
+    // normalizes a junk stored value.
+    if (mode !== getStoredViewMode()) storeViewMode(mode);
+    return mode;
+  });
   const handleViewModeChange = (mode: ViewMode) => {
     setViewMode(mode);
     storeViewMode(mode);
@@ -668,33 +677,31 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
 
   return (
     <>
-      {/* View-mode toggle (flag-gated, bd vxwj). The voice overlay + the
-          ConnectionManager live OUTSIDE the switched container below, so
-          toggling views never remounts them or disturbs the session. */}
-      {previewUiEnabled && (
-        <div className="schema-form__view-toggle" role="tablist" aria-label="Form view">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === 'simplified'}
-            className={`schema-form__view-toggle-button${viewMode === 'simplified' ? ' schema-form__view-toggle-button--active' : ''}`}
-            onClick={() => handleViewModeChange('simplified')}
-          >
-            Simplified
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === 'preview'}
-            className={`schema-form__view-toggle-button${viewMode === 'preview' ? ' schema-form__view-toggle-button--active' : ''}`}
-            onClick={() => handleViewModeChange('preview')}
-          >
-            Preview
-          </button>
-        </div>
-      )}
+      {/* View-mode toggle (bd vxwj). The voice overlay + the ConnectionManager
+          live OUTSIDE the switched container below, so toggling views never
+          remounts them or disturbs the session. */}
+      <div className="schema-form__view-toggle" role="tablist" aria-label="Form view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === 'simplified'}
+          className={`schema-form__view-toggle-button${viewMode === 'simplified' ? ' schema-form__view-toggle-button--active' : ''}`}
+          onClick={() => handleViewModeChange('simplified')}
+        >
+          Simplified
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === 'preview'}
+          className={`schema-form__view-toggle-button${viewMode === 'preview' ? ' schema-form__view-toggle-button--active' : ''}`}
+          onClick={() => handleViewModeChange('preview')}
+        >
+          Preview
+        </button>
+      </div>
 
-      {previewUiEnabled && viewMode === 'preview' ? (
+      {viewMode === 'preview' ? (
         <PdfViewErrorBoundary
           fallback={
             // Inline styles on purpose: pdf-view.css (which defines
@@ -838,17 +845,15 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
             >
               {isDownloadingPDF ? '⏳ Generating PDF...' : '📄 Download Filled PDF'}
             </button>
-            {previewUiEnabled && (
-              <button
-                type="button"
-                onClick={() => setShowPDFPreview(true)}
-                disabled={isDownloadingPDF || isPrintingPDF}
-                className="schema-form__download-button"
-                style={{ backgroundColor: '#6c757d' }}
-              >
-                Preview Filled PDF
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowPDFPreview(true)}
+              disabled={isDownloadingPDF || isPrintingPDF}
+              className="schema-form__download-button"
+              style={{ backgroundColor: '#6c757d' }}
+            >
+              Preview Filled PDF
+            </button>
           </div>
           <p className="schema-form__download-help">
             Print or download a PDF with all your current answers filled in. You can continue editing the form after printing/downloading.
@@ -856,9 +861,9 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         </div>
       )}
 
-      {/* True filled-PDF preview (flag-gated, epic js7q): the modal fills via
-          the same /api/fill-pdf call as download/print and renders the bytes. */}
-      {previewUiEnabled && showPDFPreview && pdfUrl && (
+      {/* True filled-PDF preview (epic js7q): the modal fills via the same
+          /api/fill-pdf call as download/print and renders the bytes. */}
+      {showPDFPreview && pdfUrl && (
         <PdfViewErrorBoundary
           fallback={<PdfPreviewFallback onClose={() => setShowPDFPreview(false)} />}
         >
