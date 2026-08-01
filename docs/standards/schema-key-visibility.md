@@ -65,6 +65,16 @@ On W-7 that is the 7 `agent_*` Acceptance-Agent fields. Pinned by
 `backend/tests/unit/test_52qm7_static_field_states.py` as characterization tests
 (they assert the CURRENT behavior and say what to flip when fixed).
 
+## Logging a rejected field id
+
+A key the model sent is **not** guaranteed to be a schema id -- on an arg swap it
+can carry the user's answer (Codex PR #264 P0). `validation_failures` therefore
+echoes a rejected key only when it resolves against the session's full id space
+(`FormFillingService._is_known_field_id`: schema + merged + manifest) and reduces
+anything else to `<unrecognized:N chars>`. The predicate must be session-wide,
+not the active validation pool -- a pool-scoped check would redact the real
+sibling id the logging exists to surface.
+
 ## Adding a key
 
 1. Decide the row above and add it.

@@ -85,14 +85,16 @@ def test_validation_failures_logs_the_rejected_field_id():
 
     import backend.services.validation_handler as vh
 
-    _, fields = _w7_fields()
+    schema, fields = _w7_fields()
+    known = {f["id"] for f in schema["fields"]}
     # Pool holds the active field only; the model names a SIBLING id -> unknown.
     pool = [f for f in fields if f.id == "reason"]
     handler = ValidationHandler(session_id="test-oaiv")
 
     with patch.object(vh._log, "warning") as warn:
         result = handler.validate_field_updates(
-            pool, {"application_type": "SENTINEL_VALUE"}, strict_ids=True
+            pool, {"application_type": "SENTINEL_VALUE"}, strict_ids=True,
+            is_known_field=lambda k: k in known,
         )
 
     assert result["unknown_fields"] == ["application_type"]
@@ -102,6 +104,61 @@ def test_validation_failures_logs_the_rejected_field_id():
     assert kwargs["unknown_field_ids"] == ["application_type"]
     # The VALUE must never appear anywhere on the line (no-PII policy).
     assert "SENTINEL_VALUE" not in repr(warn.call_args)
+
+
+@pytest.mark.skipif(not W7_SCHEMA.exists(), reason="W-7 kit not present")
+def test_a_rejected_key_that_is_not_a_schema_id_is_redacted():
+    """PII guard: the rejected key is RAW MODEL INPUT, not necessarily an id.
+
+    If the model swaps args, the user's ANSWER lands in the field_id slot -- the
+    documented failure mode behind the no-PII scrubs in form_filling_service and
+    callback_handler (Codex PR #264 P0). This log line must not reintroduce that
+    leak, so a key that is not a real schema id is reduced to a length-only
+    shape. Found by fresh-eyes review of the first cut of this logging, which
+    echoed the raw key.
+    """
+    from unittest.mock import patch
+
+    import backend.services.validation_handler as vh
+
+    schema, fields = _w7_fields()
+    known = {f["id"] for f in schema["fields"]}
+    pool = [f for f in fields if f.id == "reason"]
+    handler = ValidationHandler(session_id="test-oaiv")
+    leaked = "my SSN is 123-45-6789"
+
+    with patch.object(vh._log, "warning") as warn:
+        handler.validate_field_updates(
+            pool, {leaked: "x"}, strict_ids=True,
+            is_known_field=lambda k: k in known,
+        )
+
+    logged = warn.call_args[1]["unknown_field_ids"]
+    assert logged == [f"<unrecognized:{len(leaked)} chars>"]
+    assert "123-45-6789" not in repr(warn.call_args)
+
+
+@pytest.mark.skipif(not W7_SCHEMA.exists(), reason="W-7 kit not present")
+def test_without_a_known_field_predicate_nothing_is_echoed():
+    """Fail SAFE: a caller that passes no predicate leaks nothing.
+
+    The predicate is optional, so the default must be the conservative one --
+    otherwise a future call site gets the leak back by omission.
+    """
+    from unittest.mock import patch
+
+    import backend.services.validation_handler as vh
+
+    _, fields = _w7_fields()
+    pool = [f for f in fields if f.id == "reason"]
+    handler = ValidationHandler(session_id="test-oaiv")
+
+    with patch.object(vh._log, "warning") as warn:
+        handler.validate_field_updates(
+            pool, {"application_type": "x"}, strict_ids=True
+        )
+
+    assert warn.call_args[1]["unknown_field_ids"] == ["<unrecognized:16 chars>"]
 
 
 @pytest.mark.skipif(not W7_SCHEMA.exists(), reason="W-7 kit not present")

@@ -30,17 +30,20 @@ describe("W-7 completion denominator", () => {
   });
 
   it("GAP: schema.fields.length counts hidden fields the user cannot fill", () => {
-    const total = fields.length;
-    const visible = fields.filter(f => !f.hidden).length;
+    const total = fields.length; // what VoiceOverlay uses as the denominator
+    const visible = fields.filter(f => !f.hidden).length; // what it should use
+    const hidden = total - visible;
 
-    // What VoiceOverlay uses as the denominator today.
-    expect(total).toBe(53);
-    // What it should use.
-    expect(visible).toBe(46);
+    // Relative, not magic numbers: W-7 is hand-edited by the maintainer, so a
+    // hardcoded 53/46 would break on any unrelated field addition and read as a
+    // regression rather than "the fixture moved".
+    expect(hidden).toBeGreaterThan(0);
+    expect(visible).toBeLessThan(total);
 
-    // The consequence: progress caps below 100%.
-    const ceiling = Math.round((visible / total) * 100);
-    expect(ceiling).toBe(87);
+    // The consequence: progress can never reach 100% while hidden fields are
+    // counted, because nothing can ever fill them.
+    const ceiling = (visible / total) * 100;
+    expect(ceiling).toBeLessThan(100);
 
     // WHEN FIXED: the denominator should equal `visible`, making the ceiling 100.
     expect(total).not.toBe(visible); // gap closed -- flip this test

@@ -1983,7 +1983,7 @@
       "spoken_name": "date of entry into the United States",
       "type": "text",
       "pdf_field_name": "topmostSubform[0].Page1[0].f1_27[0]",
-      "max_length": 31,
+      "max_length": 8,
       "pdf_position": {
         "page": 1,
         "x": 511.2,

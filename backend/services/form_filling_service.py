@@ -1379,7 +1379,13 @@ class FormFillingService:
         validator = ValidationHandler(session_id=session_id)
         return validator.validate_field_updates(
             fields, updates,
-            strict_ids=getattr(self._settings, "USE_DTI", False))
+            strict_ids=getattr(self._settings, "USE_DTI", False),
+            # Lets the rejection log name a real SIBLING id (the oaiv diagnostic)
+            # while redacting anything else -- a rejected key is raw model input
+            # and can carry the user's answer on an arg swap (Codex PR #264 P0).
+            # Session-wide on purpose: `fields` here is the tiny active pool, so
+            # a pool-scoped check would redact the very case this surfaces.
+            is_known_field=self._is_known_field_id)
 
     def _coerce_dti_update_to_current_field(
         self, updates: Dict[str, Any], multi_field_call: bool = False

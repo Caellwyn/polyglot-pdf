@@ -100,6 +100,31 @@ for the bead's second criterion: a live wire capture of a per-turn SI. The
 numbers above come from the same renderers the session uses, but they are not a
 capture -- pair that with `.1`'s live re-run rather than spending separately.
 
+## The observability fix nearly became a PII leak
+
+Worth recording, because the first cut of this change shipped the exact bug the
+surrounding code already defends against. The initial version logged the rejected
+key verbatim, justified by "a field id is schema metadata, not PII."
+
+That justification is wrong in the general case. A rejected key is **raw model
+input**: on an arg swap the user's answer lands in the `field_id` slot -- which is
+precisely why `form_filling_service._coerce_dti_update_to_current_field` and
+`callback_handler` both refuse to log a raw `sent_id` (Codex PR #264 P0). The
+fresh-eyes reviewer caught it, and a direct probe confirmed it: a key of
+`"my SSN is 123-45-6789"` reached a production `.warning`.
+
+The fix keeps the diagnostic without the leak: a key is echoed only when it
+resolves against the session's full id space (`_is_known_field_id` -- schema +
+merged + manifest), and anything else becomes `<unrecognized:N chars>`. The
+predicate has to be session-wide; scoping it to the active validation pool would
+redact the real sibling id this logging exists to surface. Absent a predicate it
+fails safe and echoes nothing, so a future call site cannot reintroduce the leak
+by omission.
+
+Two lessons: an observability fix in a PHI-handling path is a data-flow change,
+not a logging tweak; and "this value is metadata" needs to hold for every input
+that can reach the sink, not just the one that motivated the change.
+
 ## Notes
 
 - The maintainer relaxed `required` on four W-7 fields and bumped one
