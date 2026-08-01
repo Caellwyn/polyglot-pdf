@@ -5,7 +5,7 @@ import {
 } from '../utils/fileSystemAccess';
 import {
   listKits, onboardPdf, readKitProgress, summarizeCatalogue, setKitLabel, setKitStatus,
-  verifySameFolder, writeInstructionsPdf,
+  verifySameFolderForExtractor, writeInstructionsPdf,
   type CatalogueEntry, type KitProgress, type KitStatus, type KitVersionInfo,
 } from '../utils/formKitDirectory';
 import {
@@ -314,7 +314,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       // than a wrong folder: telling that user to open a different folder or
       // edit FORM_KITS_ROOT sends them to change correct configuration.
       let hostAnswered = true;
-      const folder = await verifySameFolder(
+      const folder = await verifySameFolderForExtractor(
         extractionRoot, (nonce) => verifyExtractorFolder(nonce, () => { hostAnswered = false; }),
       );
       if (!folder.ok) {

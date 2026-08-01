@@ -191,7 +191,10 @@ describe('handleExtract -- request validation (no spawn)', () => {
 // silent overwrite of a DIFFERENT kit. These pin the nonce read that proves the
 // two are one directory -- the gate the browser refuses on.
 
-const HANDSHAKE_FILE = '.editor-store-check.json';
+// The EXTRACTOR channel's marker -- distinct from the backend's
+// .editor-store-check.json (bd polyglot-pdf-bagn). Coupled to the production
+// declarations by src/utils/markerNames.contract.test.ts.
+const HANDSHAKE_FILE = '.editor-extract-check.json';
 
 async function handshake(body: unknown): Promise<CapturedRes> {
   const req = mockReq({ body });
@@ -277,39 +280,9 @@ describe('extract handshake', () => {
   });
 });
 
-// --- the coupled marker filename -------------------------------------------- //
-//
-// HANDSHAKE_FILE is declared independently in THREE places: the browser writer
-// (src/utils/formKitDirectory.ts), this host reader (extractEndpoint.ts), and the
-// backend reader (backend/routes/editor_kit_routes.py). They must agree, and
-// nothing in the type system makes them: the Vite plugin sits outside the src/
-// tsconfig scope, so it cannot simply import the constant.
-//
-// Other tests DO fail on a rename, but only incidentally -- they hardcode the
-// literal themselves while exercising something else, so their failure names the
-// wrong culprit. This one states the invariant, so the failure says what actually
-// broke. It also covers the case the incidental tests do not: renaming the
-// BROWSER-side constant fails only this test. The stakes are silent degradation --
-// the endpoint treats an unreadable marker as "nothing observed", so a rename
-// turns the handshake into a permanent, unexplained refusal on a folder that
-// genuinely agrees.
-//
-// The backend's third declaration (backend/routes/editor_kit_routes.py) is out of
-// reach from a vitest run and is pinned by its own Python tests; this covers the
-// two TS sides.
-describe('handshake marker filename stays coupled', () => {
-  const readDeclared = (file: string): string | null => {
-    const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
-    const m = src.match(/HANDSHAKE_FILE\s*=\s*'([^']+)'/);
-    return m ? m[1] : null;
-  };
-
-  it('is the same literal in the host reader and the browser writer', () => {
-    const host = readDeclared('extractEndpoint.ts');
-    const browser = readDeclared('../src/utils/formKitDirectory.ts');
-    // Both must actually be found -- a null would make the equality vacuous.
-    expect(host).toBeTruthy();
-    expect(browser).toBeTruthy();
-    expect(host).toBe(browser);
-  });
-});
+// The marker-filename coupling (this host reader vs. the browser writer) is
+// pinned in src/utils/markerNames.contract.test.ts (bd polyglot-pdf-kesf),
+// which covers all THREE production declarations -- including the Python one --
+// rather than only the two TS sides. Deliberately not duplicated here: a second
+// copy keyed on the bare name `HANDSHAKE_FILE` would now match the BACKEND
+// channel's constant in formKitDirectory.ts and compare the wrong pair.

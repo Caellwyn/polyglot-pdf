@@ -35,10 +35,16 @@ const KIT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
  * The marker the browser drops in the picked folder for this host to read
- * (bd polyglot-pdf-ball). MUST match HANDSHAKE_FILE in
+ * (bd polyglot-pdf-ball). MUST match EXTRACTOR_HANDSHAKE_FILE in
  * src/utils/formKitDirectory.ts -- the browser writes it, this host reads it.
+ * Pinned by markerNames.contract.test.ts; do not edit one side alone.
+ *
+ * DISTINCT from the backend channel's `.editor-store-check.json` on purpose
+ * (bd polyglot-pdf-bagn): both handshakes run against the same picked folder and
+ * are not serialized, so a shared name let either channel's cleanup delete the
+ * other's in-flight marker and refuse a folder that genuinely agrees.
  */
-const HANDSHAKE_FILE = '.editor-store-check.json';
+const HANDSHAKE_FILE = '.editor-extract-check.json';
 
 // Monotonic per-process counter so each extraction gets a UNIQUE temp filename
 // (process.pid is constant for the Vite server, so it alone cannot disambiguate
