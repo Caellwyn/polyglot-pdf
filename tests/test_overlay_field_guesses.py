@@ -45,6 +45,37 @@ needs_i90 = pytest.mark.skipif(
 pytest.importorskip("fitz", reason="PyMuPDF required to render the overlay")
 
 
+def _unmodeled_widget_count(schema, pdf_path=None):
+    """How many of the PDF's widgets no field/option in `schema` claims.
+
+    The w7 coverage gap is not a constant: it was 2 while the two "Other"
+    write-ins (f1_04, f1_23) were deliberately unmodeled (bd ivh9), and is 0 now
+    that the hand-verified gold models both (bd polyglot-pdf-edzu). Deriving it
+    keeps these tests pinned to "the overlay agrees with the schema" rather than
+    to a snapshot of how complete the schema happened to be (bd
+    polyglot-pdf-lzyi).
+    """
+    import fitz  # already importorskip'd above
+
+    claimed = set()
+    for f in ov._iter_fields(schema):
+        for name in [f.get("pdf_field_name")] + [
+            o.get("pdf_field_name")
+            for o in (f.get("options") or []) if isinstance(o, dict)
+        ]:
+            if isinstance(name, str) and name:
+                claimed.add(name.split(".")[-1])
+
+    doc = fitz.open(str(pdf_path or _W7_PDF))
+    try:
+        leaves = {w.field_name.split(".")[-1]
+                  for page in doc for w in (page.widgets() or [])
+                  if w.field_name}
+    finally:
+        doc.close()
+    return len(leaves - claimed)
+
+
 # --------------------------------------------------------------------------- #
 # Which text gets drawn
 # --------------------------------------------------------------------------- #
@@ -223,10 +254,14 @@ def test_renders_every_widget_and_reports_counts(tmp_path):
     out = tmp_path / "review.pdf"
     result = ov.annotate(schema, str(_W7_PDF), str(out), "spoken")
     assert out.exists() and out.stat().st_size > 0
-    # The hand-corrected w7 gold deliberately leaves the two "Other" write-in
-    # widgets (f1_04, f1_23) unmodeled -- bd ivh9 pins that. They must show as
-    # a COVERAGE gap, visually distinct from a mislabelled box.
-    assert result["unclaimed"] == 2
+    # unclaimed == the widgets no field/option claims, and must match what the
+    # schema actually leaves unmodeled. This asserted a literal 2 while the two
+    # "Other" write-ins (f1_04, f1_23) were deliberately unmodeled (bd ivh9); the
+    # gold now models BOTH -- reason_h_details claims f1_04, and
+    # id_document_other_detail claims f1_23 -- which is exactly what bd
+    # polyglot-pdf-edzu asked for. So the count is 0 because a coverage gap
+    # CLOSED, not because resolution broke (bd polyglot-pdf-lzyi).
+    assert result["unclaimed"] == _unmodeled_widget_count(schema)
     assert result["drawn"] > 0
 
 
@@ -426,5 +461,9 @@ def test_resolution_leaves_a_fully_qualified_kit_unchanged(tmp_path):
     i-90 in particular is the verified golden copy used for demos)."""
     schema = json.loads(_W7_SCHEMA.read_text(encoding="utf-8"))
     result = ov.annotate(schema, str(_W7_PDF), str(tmp_path / "review.pdf"))
-    assert result["unclaimed"] == 2      # the two ivh9 write-ins, as before
+    # Derived, not a literal: what this test guards is that resolution is a
+    # NO-OP on an already-fully-qualified kit, so the overlay's coverage must
+    # equal the schema's own -- whatever that happens to be. (It was 2 unmodeled
+    # write-ins under bd ivh9; the gold now models both, bd polyglot-pdf-edzu.)
+    assert result["unclaimed"] == _unmodeled_widget_count(schema)
     assert result["multiclaimed"] == 0

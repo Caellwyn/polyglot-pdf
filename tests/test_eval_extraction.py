@@ -34,6 +34,25 @@ needs_w7 = pytest.mark.skipif(
 )
 
 
+def _gold_relationship_totals():
+    """Count show_if/require_if and logic keys straight from the SHIPPED w7 gold.
+
+    These totals are ground truth that MOVES whenever the hand-verified schema is
+    corrected -- they went 12+9=21 -> 19+16=35 across the gold landing (PR #519)
+    and the delegate-gate fix. Hardcoding them means every gold correction reds
+    the suite and tempts a blind literal-bump, so derive instead (bd
+    polyglot-pdf-lzyi). Mirrors eval_extraction's counting: one per FIELD
+    carrying the key, not per condition atom.
+    """
+    schema = json.loads((_W7_KIT / "schema.json").read_text(encoding="utf-8"))
+    fields = schema["fields"]
+    show_require = (sum(1 for f in fields if f.get("show_if"))
+                    + sum(1 for f in fields if f.get("require_if")))
+    logic = sum(1 for f in fields
+                if f.get("conditional_logic") or f.get("conditional_behavior"))
+    return show_require, logic
+
+
 # --------------------------------------------------------------------------- #
 # check_widget_coverage (the structural assertion, modeling-agnostic)
 # --------------------------------------------------------------------------- #
@@ -265,7 +284,14 @@ def test_gold_w7_scores_ok_with_structural_pass():
     assert row["verdict"] == "OK"
     assert row["lint_errors"] == 0
     assert row["structural"]["passed"] is True
-    assert row["structural"]["consolidated"] is False  # today's split modeling
+    assert row["structural"]["problems"] == []
+    # The eight reason boxes (c1_2..c1_9) are ONE consolidated `reason`
+    # checkbox_group in the hand-verified gold. This asserted False while they
+    # were modeled as eight standalone checkboxes; the gold (PR #519) moved w7 to
+    # the same consolidated shape the i-90 entry above calls the v2 target, so
+    # True is the CORRECT value, not a loosened one (bd polyglot-pdf-lzyi).
+    # coverage stays modeling-agnostic -- `passed` above is what guards a drop.
+    assert row["structural"]["consolidated"] is True
 
 
 # --------------------------------------------------------------------------- #
@@ -276,13 +302,23 @@ def test_gold_w7_scores_ok_with_structural_pass():
 def test_scored_draft_carries_relationship_summaries():
     """A scored (non-baseline) row must summarize the sprint-15 headline
     relationship metrics: sh/rq (show_if + require_if, combined) and logic
-    (conditional_logic + conditional_behavior). Totals come from the GOLD, so
-    they pin the w7 ground truth: 12 show_if + 9 require_if, 0 logic keys."""
+    (conditional_logic + conditional_behavior).
+
+    Totals come from the GOLD, so they move whenever the hand-verified schema is
+    corrected -- 21 (12+9) before PR #519, 35 (19+16) after it and the
+    delegate-gate fix. Derived from the shipped schema rather than hardcoded, so
+    a future correction does not red this test (bd polyglot-pdf-lzyi). What is
+    pinned is the CONTRACT: the tool's total equals the gold's own count, and
+    recovered never exceeds it.
+    """
+    expected_sr, expected_logic = _gold_relationship_totals()
+    assert expected_sr > 0, "gold carries no show_if/require_if -- check the kit"
+
     form = next(f for f in ev._FORMS if f["name"] == "w7")
     row = ev.evaluate_form(form, str(_BROKEN_DRAFT), extract=False, model="-")
-    assert row["rel_show_require"]["total"] == 21
-    assert 0 <= row["rel_show_require"]["recovered"] <= 21
-    assert row["rel_logic"]["total"] == 0
+    assert row["rel_show_require"]["total"] == expected_sr
+    assert 0 <= row["rel_show_require"]["recovered"] <= expected_sr
+    assert row["rel_logic"]["total"] == expected_logic == 0
     assert row["rel_logic"]["pct"] is None  # nothing to recover -> n/a, not 0%
 
 
