@@ -319,7 +319,12 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       );
       if (!folder.ok) {
         setError(
-          !hostAnswered && folder.reason !== 'unwritable'
+          // No `&& reason !== 'unwritable'` guard: verifySameFolder returns
+          // unwritable BEFORE it ever calls the asker, so hostAnswered is still
+          // true on that path and the two can never both be set. Spelling out a
+          // condition that cannot occur would imply an interaction that does not
+          // exist.
+          !hostAnswered
             ? `Cannot run extraction for "${kit.id}": the editor could not reach the `
               + 'extraction service to confirm which folder it uses. Check the dev server '
               + 'is still running, then try again.'
@@ -332,8 +337,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
             // route to a working state here is a writable host root.
             ? `Cannot run extraction for "${kit.id}": the folder you opened cannot be `
               + 'written to, so the editor cannot confirm it is the folder the extractor '
-              + 'uses. Make this folder writable, or open a writable copy of the folder '
-              + 'the dev server uses.'
+              + 'uses. Make this folder writable, or open the folder the dev server uses.'
             // Recommend OPENING the server's folder rather than repointing the
             // server at this one. Repointing takes TWO env vars -- the Vite host
             // (FORM_KITS_ROOT) and the backend (FORM_KITS_LOCAL_ROOT) resolve kit

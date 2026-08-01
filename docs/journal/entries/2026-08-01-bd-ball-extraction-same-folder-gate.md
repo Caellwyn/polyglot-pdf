@@ -93,7 +93,10 @@ survives the read; cross-origin -> 403; missing nonce -> 400.
 
 Then the bead's exact scenario: `w7` copied to a temp dir with its marker written
 **there**, the gate refuses, and the host's own `form-kits/w7/schema.json` is
-byte-identical afterwards (sha256 `93bc4083...` before and after) -- while an
+byte-identical afterwards (sha256 `93bc4083...` before and after -- that is the
+hash of the file ON DISK, which is what the extractor would have rewritten; the
+git blob hashes differently because of line-ending normalization, so do not
+expect `git show HEAD:...` to reproduce it) -- while an
 ungated POST for that same id demonstrably resolves to the host's copy, which is
 what makes the refusal load-bearing rather than decorative.
 
@@ -153,12 +156,30 @@ mismatch modal. Both docs now name `FORM_KITS_ROOT` **and**
 the server's folder (always correct) and defers the env-var route to the README,
 rather than half-specifying it in a toast.
 
-Three rounds, three instances of the same shape. The lesson is not about any one
-message: **when you add a guard, the remediation path is part of the deliverable,
-and it has to be verified like code.** Every recommendation here was ultimately
-checked by running it -- including the two-variable one, which was confirmed by
-pointing the real backend at a temp root and watching `get_form_kit_store().root`
-follow.
+And a FOURTH time, in the fix for the first one. The rewritten unwritable message
+said "open a writable **copy** of the folder the dev server uses" -- a copy of the
+host root is still not the host root, so it was the identical dead end in new
+words, directly contradicting the comment sitting above it that spells out why a
+copy cannot work.
+
+**The test I had written to prevent exactly this did not catch it**, and that is
+the part worth keeping. It asserted the *literal s2bf phrase* was absent
+(`/make a copy somewhere writable and open that/`), so a reworded copy-elsewhere
+sailed through untouched. It pinned a string, not a rule. It now bans the word
+`copy` from that branch outright, and re-introducing the regression fails it --
+verified, not assumed.
+
+Four rounds, four instances of the same shape. Two lessons, both general:
+
+1. **When you add a guard, the remediation path is part of the deliverable, and
+   it has to be verified like code.** Every recommendation here was ultimately
+   checked by running it -- including the two-variable one, confirmed by pointing
+   the real backend at a temp root and watching `get_form_kit_store().root`
+   follow.
+2. **Pin the defect, not the phrasing.** A negative assertion against one exact
+   sentence only blocks that sentence. If the rule is "never tell the user to open
+   a copy," the test has to say that -- otherwise the next rewrite walks straight
+   past it, which is precisely what happened here.
 
 ## One thing worth flagging for the next person
 

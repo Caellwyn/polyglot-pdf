@@ -132,6 +132,26 @@ describe('verifyExtractorFolder', () => {
     expect((await verifyExtractorFolder('n1')).sameFolder).toBe(false);
   });
 
+  it('reports 5xx and transport failure as UNREACHABLE, but 4xx as answered', async () => {
+    // Both refuse -- only the explanation differs. A 4xx means the host replied
+    // and rejected the request, so telling the user "check the dev server is
+    // running" would be wrong advice about a server that just answered.
+    const seen: string[] = [];
+    const probe = async (impl: () => Promise<Response>) => {
+      let reached = true;
+      mockFetch(impl);
+      const res = await verifyExtractorFolder('n1', () => { reached = false; });
+      expect(res.sameFolder).toBe(false); // every case still refuses
+      seen.push(reached ? 'answered' : 'unreachable');
+    };
+
+    await probe(async () => jsonResponse({ detail: 'missing nonce' }, false, 400));
+    await probe(async () => jsonResponse({ detail: 'boom' }, false, 500));
+    await probe(async () => { throw new Error('network down'); });
+
+    expect(seen).toEqual(['answered', 'unreachable', 'unreachable']);
+  });
+
   it('does NOT read a non-JSON response as agreement', async () => {
     mockFetch(async () => ({
       ok: true, status: 200, json: async () => { throw new Error('not json'); },

@@ -74,7 +74,15 @@ export async function verifyExtractorFolder(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nonce }),
     });
-    if (!res.ok) return unreachable();
+    // A 4xx means the host ANSWERED and rejected the request (a malformed body or
+    // a missing nonce) -- it is running, so "check the dev server" would be wrong
+    // advice. Unreachable is reserved for 5xx and transport failures. Either way
+    // the verdict refuses; only the explanation differs. Not reachable today
+    // (verifySameFolder always mints a valid nonce), but the mapping should be
+    // right BEFORE a request-shape change makes it reachable.
+    if (!res.ok) return res.status >= 400 && res.status < 500
+      ? { sameFolder: false }
+      : unreachable();
     const body = (await res.json()) as { sameFolder?: boolean; extractorRoot?: string };
     // A body we cannot read as a verdict is the host failing to answer, not the
     // host answering "different folder".

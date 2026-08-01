@@ -905,14 +905,21 @@ describe('FormCatalogue -- run extraction', () => {
     await waitFor(() => expect(screen.getByText('Run extraction')).toBeTruthy());
 
     fireEvent.click(screen.getByText('Run extraction'));
-    await waitFor(() => expect(screen.getByText(/cannot be written to/i)).toBeTruthy());
+    const msg = await screen.findByText(/cannot be written to/i);
     expect(posted).toBeNull();
-    // The advice must lead somewhere that works (bd polyglot-pdf-6pzs). The s2bf
-    // modal's "make a copy elsewhere and open that" is right for SAVING but is a
-    // dead end here: extraction always writes under the HOST's root, so a copy
-    // made anywhere else just fails the mismatch branch on the next click.
-    expect(screen.getByText(/folder the dev server uses/i)).toBeTruthy();
-    expect(screen.queryByText(/make a copy somewhere writable and open that/i)).toBeNull();
+    // The advice must lead somewhere that WORKS (bd polyglot-pdf-6pzs). The s2bf
+    // modal's "make a copy and open that" is right for SAVING but is a dead end
+    // here: extraction always writes under the HOST's root, so ANY copy is by
+    // construction not that root and the next click just fails the mismatch
+    // branch instead.
+    //
+    // Pin the DEFECT, not a phrase. The first version of this test asserted the
+    // literal s2bf wording was absent, which let a reworded copy-elsewhere
+    // ("open a writable COPY of the folder the dev server uses") sail straight
+    // through -- it caught nothing, and an Opus review found the regression the
+    // test was supposed to block. Banning the word is what actually holds.
+    expect(msg.textContent).toMatch(/open the folder the dev server uses/i);
+    expect(msg.textContent).not.toMatch(/copy/i);
   });
 
   it('treats an unreachable handshake as UNPROVEN, not as agreement', async () => {
