@@ -39,7 +39,11 @@
  * TYPE is hashed even though it is never SPOKEN (bd polyglot-pdf-stkz): the
  * test is "does changing it make the authored guidance WRONG?", not "is it read
  * aloud?" -- a text -> date change rewrites the expected answer SHAPE while
- * every spoken text stays identical. It never covers the field id (renames are
+ * every spoken text stays identical. The type is hashed NORMALIZED: every
+ * option-carrying field contributes one "choice" token, so the
+ * guidance-neutral kind flips (changeGroupKind's radio <-> checkbox_group,
+ * schema_repair's checkbox -> checkbox_group) cannot raise the gate -- only a
+ * SCALAR type change flags. It never covers the field id (renames are
  * retargeted wholesale by fieldRename, and an id is not spoken) or plumbing
  * like pdf_field_name. Changing those does not make guidance wrong, so hashing
  * them would manufacture false staleness.

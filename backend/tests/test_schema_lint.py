@@ -1053,6 +1053,44 @@ def test_type_change_flags_even_though_type_is_never_spoken():
     assert _stale(lint_schema(_identity_schema(f, baked))) == []
 
 
+def test_choice_group_kind_flips_do_NOT_flag():
+    """The type token is NORMALIZED (Opus clearing review on bd stkz): every
+    option-carrying field hashes the constant "choice", so the two
+    guidance-neutral machine paths that swap choice-group KINDS cannot
+    manufacture staleness:
+
+      - the editor's changeGroupKind flips radio <-> checkbox_group "sharing
+        option identity byte-for-byte ... nothing else in the schema changes"
+        (fieldGrouping.ts's own contract);
+      - schema_repair retypes the v1 checkbox-with-options idiom to
+        checkbox_group on a STORED draft via the one-click /repair route --
+        so hashing the raw kind let Repair-all amber a whole kit with no
+        author edit, exactly the machine-manufactured noise identity_payload's
+        docstring forbids (and bd polyglot-pdf-ug5n tracks for values).
+    """
+    from backend.services import guidance_contract as gc
+    opts = [{"label": "Yes", "value": "y"}, {"label": "No", "value": "n"}]
+    base = {"id": "a", "name": "N", "spoken_name": "n", "type": "radio",
+            "options": opts, "help": {"instructions": "x"}}
+    baked = gc.identity_sha1(base)
+    # the editor flip: radio -> checkbox_group, options byte-identical
+    flipped = dict(base, type="checkbox_group")
+    assert gc.identity_sha1(flipped) == baked
+    assert _stale(lint_schema(_identity_schema(flipped, baked))) == []
+    # the repair path: v1 checkbox-with-options idiom -> checkbox_group
+    v1_idiom = dict(base, type="checkbox")
+    assert gc.identity_sha1(v1_idiom) == baked
+    # ...while a SCALAR type change still flags (the motivating stkz case):
+    scalar = {"id": "a", "name": "N", "spoken_name": "n", "type": "text",
+              "help": {"instructions": "x"}}
+    assert gc.identity_sha1(dict(scalar, type="date")) \
+        != gc.identity_sha1(scalar)
+    # ...and a choice field LOSING its options changes the hash (the triples
+    # empty out AND the token reverts to the raw scalar type):
+    descoped = {k: v for k, v in base.items() if k != "options"}
+    assert gc.identity_sha1(descoped) != baked
+
+
 def test_type_is_hashed_without_disturbing_the_other_elements():
     """The type element is APPENDED to the positional payload, so the existing
     elements keep their indices and the pre-existing cases are untouched."""

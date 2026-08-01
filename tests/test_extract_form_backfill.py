@@ -1686,6 +1686,89 @@ def test_extract_gives_family_completed_options_a_position(tmp_path, monkeypatch
     xs = sorted(o["pdf_position"]["x"] for o in opts)
     assert xs == [100.0, 120.0, 140.0], f"options took the wrong rects: {xs}"
 
+    # THE STAMPED PROVENANCE BLOCK, pinned end-to-end (bd polyglot-pdf-2hxu;
+    # Opus clearing review). The renamed keys' WIRING was previously untested:
+    # stamping positions_derived from the FIRST pass, or hardcoding
+    # positions_unresolved to 0, both survived the full suite green -- and the
+    # 0-hardcode silently disables 2hxu's headline deliverable, the exact
+    # silent-success failure the bead exists to remove. Only this test can
+    # catch it, because only this test runs the real extract() and reads the
+    # schema it wrote. The counts must come from the LATE pass: pass 1 saw one
+    # option (the stub models only member [0]), the late pass sees all 3 --
+    # so option_positions_derived == 3 is what discriminates the two passes.
+    authoring = schema["_bakeoff"]["authoring"]
+    assert authoring["positions_derived"] == 1          # the one field
+    assert authoring["option_positions_derived"] == 3   # late pass, not pass 1
+    assert authoring["option_positions_unmatched"] == []
+    assert authoring["positions_unresolved"] == 0       # every widget resolved
+    # ...and the retired key is GONE from fresh extractions.
+    assert "positions_filled" not in authoring
+
+
+def test_stamped_provenance_discriminates_all_three_wirings(tmp_path, monkeypatch):
+    """Every renamed provenance key, pinned against the SPECIFIC mutation that
+    previously escaped (bd polyglot-pdf-2hxu; Opus clearing review measured all
+    three surviving a fully green suite):
+
+      - positions_derived stamped from the FIRST pass instead of the late one;
+      - option_positions_derived stamped from the first pass;
+      - positions_unresolved hardcoded to 0 (which silently disables 2hxu's
+        headline diagnostic while everything stays green).
+
+    The family fixture alone cannot discriminate the first and third: both
+    passes see the same one field, and 0 is the honest unresolved count. So
+    this fixture adds (a) a STANDALONE widget the stub does not model -- 3d
+    mints a field for it AFTER pass 1, so only the late pass counts it -- and
+    (b) a GHOST field claiming a widget that does not exist, so the honest
+    unresolved count is 1, not 0.
+    """
+    fitz = pytest.importorskip("fitz")
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    for i in range(3):                       # the minable family
+        w = fitz.Widget()
+        w.field_name = f"P2_checkbox3[{i}]"
+        w.field_type = fitz.PDF_WIDGET_TYPE_CHECKBOX
+        w.rect = fitz.Rect(100 + 20 * i, 200, 110 + 20 * i, 210)
+        page.add_widget(w)
+    w = fitz.Widget()                        # the standalone 3d will mint
+    w.field_name = "Standalone[0]"
+    w.field_type = fitz.PDF_WIDGET_TYPE_CHECKBOX
+    w.rect = fitz.Rect(300, 400, 310, 410)
+    page.add_widget(w)
+    pdf = tmp_path / "form.pdf"
+    doc.save(str(pdf))
+    doc.close()
+    out = str(tmp_path / "schema.json")
+
+    def _stub_run(pdf_path, dump_path, model, **kw):
+        return {
+            "form_metadata": {"title": "T", "form_number": "T-1",
+                              "version": "1", "language": "en"},
+            "fields": [
+                {"id": "grp", "name": "Group", "spoken_name": "group",
+                 "type": "checkbox_group",
+                 "options": [{"value": "a", "label": "A",
+                              "pdf_field_name": "P2_checkbox3[0]"}]},
+                # claims a widget that does not exist -> stays unresolved
+                {"id": "ghost", "name": "Ghost", "spoken_name": "ghost",
+                 "type": "text", "pdf_field_name": "Ghost[0]"},
+            ],
+        }
+
+    monkeypatch.setattr(ef.arm_llm_native, "run", _stub_run)
+    ef.extract(str(pdf), out, translate_options=False, enrich_guidance=False)
+
+    authoring = json.loads(
+        pathlib.Path(out).read_text(encoding="utf-8"))["_bakeoff"]["authoring"]
+    # LATE-pass counts: grp + the 3d-minted Standalone field = 2 resolved
+    # fields (pass 1 saw only grp -> 1, so a first-pass stamp fails here)...
+    assert authoring["positions_derived"] == 2
+    # ...and all 3 family options (pass 1 saw 1).
+    assert authoring["option_positions_derived"] == 3
+    # The ghost is the honest unresolved count -- a hardcoded 0 fails here.
+    assert authoring["positions_unresolved"] == 1
+
 
 def test_the_late_pass_does_NOT_re_shift_model_pages(tmp_path):
     """REGRESSION PIN for the 3d2 re-run (bd polyglot-pdf-u4r0, fresh-eyes).

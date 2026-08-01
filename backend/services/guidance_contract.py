@@ -433,6 +433,15 @@ def identity_payload(field: dict) -> str:
     reasons; type was the one input neither hashed nor documented as
     excluded, which is the gap this closes.
 
+    The type is hashed NORMALIZED, not raw: every option-carrying field
+    contributes the constant "choice", and only a scalar field contributes
+    its actual type. Choice-group KINDS (radio / checkbox_group / the v1
+    checkbox-with-options idiom) are interchangeable by guidance-neutral
+    machinery -- the editor's changeGroupKind flip and schema_repair's group
+    retype -- and hashing them raw let one-click Repair-all amber a whole
+    stored kit with no author edit. See the inline comment at the token for
+    the full rationale and the accepted single/multi tradeoff.
+
     The triples are SORTED, so a pure REORDER (whole options moving, each
     keeping its own texts and value) does not re-raise the gate -- the
     assistant still says the same words (maintainer decision 2026-07-29).
@@ -475,6 +484,27 @@ def identity_payload(field: dict) -> str:
     name = field.get("name")
     spoken = field.get("spoken_name")
     ftype = field.get("type")
+    # NORMALIZED type token. For an OPTION-CARRYING field the answer identity
+    # already lives in the option triples above, and the widget KIND is
+    # interchangeable by machinery whose own contracts declare it
+    # guidance-neutral: the editor's changeGroupKind flips radio <->
+    # checkbox_group "sharing option identity byte-for-byte ... nothing else
+    # in the schema changes" (fieldGrouping.ts), and schema_repair retypes the
+    # v1 checkbox-with-options idiom to checkbox_group on STORED drafts via
+    # the one-click /repair route. Hashing the raw kind made both of those
+    # no-spoken-word-changed actions raise the gate -- Repair-all could amber
+    # a whole kit with no author edit (Opus clearing review; the adjacent
+    # machine-noise concern is bd polyglot-pdf-ug5n). So every optioned field
+    # hashes the constant "choice", and only a SCALAR field hashes its raw
+    # type -- which is precisely the case the type hash exists for
+    # (text -> date rewrites the expected answer shape).
+    # ACCEPTED TRADEOFF: a deliberate radio -> checkbox_group flip (one
+    # answer -> several) no longer flags on its own. The contract already
+    # discourages guidance that restates selection mechanics, and any real
+    # single/multi rewrite in practice edits labels or options too, which
+    # still flags via the triples.
+    type_token = ("choice" if triples
+                  else (ftype if isinstance(ftype, str) else ""))
     return json.dumps(
         [name if isinstance(name, str) else "",
          spoken if isinstance(spoken, str) else "",
@@ -485,7 +515,7 @@ def identity_payload(field: dict) -> str:
          # identity_sha1 yet (all three committed kits: 0 of 44 provenance
          # records) -- the window the bead flagged as closing on the first
          # re-bake is still open.
-         ftype if isinstance(ftype, str) else ""],
+         type_token],
         ensure_ascii=False, separators=(",", ":"))
 
 

@@ -1384,10 +1384,14 @@ def extract(pdf_path: str, out_path: str, *, plain: bool = DEFAULT_PLAIN,
         # Named for WHICH PASS it is, not what it counts: 2hxu retired
         # "positions_filled" as a misleading repair-tally name, and a local
         # still carrying it invites a future edit to stamp provenance from the
-        # FIRST pass -- reintroducing the exact wiring bug
-        # test_provenance_counts_reflect_BOTH_position_passes exists to catch.
-        # Only model_pages_normalized is read from it; the provenance block
-        # stamps completion_positions (the post-completion pass).
+        # FIRST pass. That wiring is pinned END-TO-END by
+        # test_stamped_provenance_discriminates_all_three_wirings, which
+        # drives the real extract() and reads the written schema -- the
+        # helper-level tests cannot see the stamp (an earlier comment here
+        # named one of them as the guard, which mutation testing proved
+        # false; Opus clearing review). Only model_pages_normalized is read
+        # from this local; the provenance block stamps completion_positions
+        # (the post-completion pass).
         first_pass_positions = _backfill_positions(schema, dump_path)
         if first_pass_positions.get("model_pages_normalized"):
             print(f"  [positions] normalized "
