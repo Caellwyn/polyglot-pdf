@@ -65,7 +65,14 @@ compress like any other block. Flagged for the maintainer in the merge report.
 Deliberately NOT changed: the legacy `SYSTEM_INSTRUCTION` full-dump path still
 truncates >5-option lists to 3 (`build_form_context`) -- it belongs to the
 deprecated section-reset fallback with a deletion inventory, and expanding its
-per-section dump would balloon the per-turn SI cost of a dead-end mode.
+per-section dump would balloon the per-turn SI cost of a dead-end mode. A
+knock-on accepted with it (Opus fresh-eyes finding, low severity): the two
+initiating templates are shared by both modes, so in the double-flag rollback
+path (`USE_DTI=false` AND `CONTINUOUS_SESSION=false`) their new "read EVERY
+option aloud" directive can point at a >5-option list the legacy SI dump has
+truncated to 3. Reachable only by deliberately flipping both flags; fixing it
+means either scoping the template clause or un-truncating the legacy dump,
+both touching the dead-end mode this paragraph declines to grow.
 
 ## Lessons
 
