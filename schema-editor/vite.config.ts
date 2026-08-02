@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import fs from 'node:fs'
 import path from 'node:path'
 import { extractEndpoint } from './vite-plugins/extractEndpoint'
+import { deployKitEndpoint } from './vite-plugins/deployKitEndpoint'
 
 // Vite's dev server only serves files under server.fs.allow (default: the project
 // root). When this editor is run from a GIT WORKTREE, node_modules is typically a
@@ -28,7 +29,10 @@ function fsAllowList(): string[] {
 export default defineConfig({
   // extractEndpoint adds a dev-only POST /api/extract that runs the PDF->schema
   // extractor on the host (bd 7a9.17). apply:'serve' keeps it out of prod builds.
-  plugins: [react(), extractEndpoint()],
+  // deployKitEndpoint adds a dev-only POST /api/deploy-kit that uploads ONE
+  // complete kit to the GCS bucket (bd polyglot-pdf-ipzh) -- kit data only, never
+  // Cloud Run or Hosting. Same apply:'serve', so the hosted editor cannot publish.
+  plugins: [react(), extractEndpoint(), deployKitEndpoint()],
   server: {
     port: 3001,
     open: true,
