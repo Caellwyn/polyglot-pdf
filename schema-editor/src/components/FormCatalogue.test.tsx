@@ -1233,6 +1233,42 @@ describe('FormCatalogue -- run extraction', () => {
       expect(screen.queryByText('Deploy this form')).toBeNull();
     });
 
+    it('blocks a folder switch while a deploy is in flight', async () => {
+      // A deploy is the longest-running and most consequential card action; if
+      // the folder can change mid-upload, the result notice lands attributed to
+      // a different catalogue. Extraction already guards this (Codex r3); the
+      // deploy path must too.
+      const root = mockRoot([
+        mockKit('w7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'complete' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      let releaseDeploy: (r: Response) => void = () => {};
+      const held = new Promise<Response>((resolve) => { releaseDeploy = resolve; });
+      global.fetch = ((input: unknown, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (String(input).includes('/api/deploy-kit')) {
+          if (method === 'GET') {
+            return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'available', bucket: 'test-bucket' }) } as unknown as Response);
+          }
+          return held;
+        }
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) } as unknown as Response);
+      }) as unknown as typeof fetch;
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      fireEvent.click(await screen.findByText('Deploy this form'));
+
+      // While the upload is open, the folder controls must be disabled.
+      await waitFor(() => expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(true));
+
+      releaseDeploy({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'Deployed.' }) } as unknown as Response);
+      await waitFor(() => expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(false));
+      confirmSpy.mockRestore();
+    });
+
     it('surfaces the real failure instead of a silent no-op', async () => {
       const root = mockRoot([
         mockKit('w7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'complete' }) }),

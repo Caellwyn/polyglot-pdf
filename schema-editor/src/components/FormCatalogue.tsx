@@ -191,7 +191,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     // Refuse a folder switch while extraction is in flight: the running
     // extraction captured the current root and will refresh it on completion, so
     // switching now would have that stale refresh clobber the new folder (Codex r3).
-    if (extractingId !== null) {
+    if (extractingId !== null || deployingId !== null) {
       setError('Extraction is running -- wait for it to finish before changing folders.');
       return;
     }
@@ -219,7 +219,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     e.preventDefault();
     setDragOver(false);
     setNotice(null); // any drop attempt supersedes a prior "Added X" notice
-    if (extractingId !== null) {
+    if (extractingId !== null || deployingId !== null) {
       // A drop mid-extraction would run its own onboard/refresh against the same
       // folder the extraction captured -- and its finally must not be able to
       // clear the extraction guard (Codex r3). Refuse until extraction finishes.
@@ -507,11 +507,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       onDrop={handleDrop}
     >
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="btn btn-primary" onClick={handlePickFolder} disabled={busy || extractingId !== null}>
+        <button className="btn btn-primary" onClick={handlePickFolder} disabled={busy || extractingId !== null || deployingId !== null}>
           {root ? 'Change folder' : 'Open form-kits folder'}
         </button>
         {root && (
-          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy || extractingId !== null}>
+          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy || extractingId !== null || deployingId !== null}>
             Refresh
           </button>
         )}
@@ -522,7 +522,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         </span>
       </div>
 
-      {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
+      {error && (
+        // whitespace-pre-line: a deploy failure carries the script's output
+        // tail, whose newlines are the whole point (bd ipzh).
+        <div className="mt-2 text-sm text-red-600 whitespace-pre-line">{error}</div>
+      )}
       {notice && <div className="mt-2 text-sm text-green-700">{notice}</div>}
 
       {/* Aggregate dashboard overview (bd vl3o, D3): complete vs in-progress at a glance. */}
@@ -774,7 +778,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         type="file"
                         accept="application/pdf,.pdf"
                         className="hidden"
-                        disabled={busy || extractingId !== null}
+                        disabled={busy || extractingId !== null || deployingId !== null}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           // Validate it is actually a PDF before storing (Codex
@@ -818,7 +822,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                     <button
                       className="btn-sm btn-primary text-xs"
                       onClick={() => void handleRunExtraction(kit)}
-                      disabled={busy || extractingId !== null}
+                      disabled={busy || extractingId !== null || deployingId !== null}
                       title="Run the automated PDF -> schema extraction (uses a local model; can take a minute)"
                     >
                       {extractingId === kit.id ? 'Extracting...' : 'Run extraction'}

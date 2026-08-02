@@ -12,7 +12,9 @@
  * ASCII only.
  */
 import { describe, it, expect } from 'vitest';
-import { resolveKitDir, isSameOrigin } from './deployKitEndpoint';
+import fs from 'node:fs';
+import os from 'node:os';
+import { resolveKitDir, isSameOrigin, handleDeploy } from './deployKitEndpoint';
 
 const ROOT = 'C:/repo/form-kits';
 
@@ -65,5 +67,103 @@ describe('deployKitEndpoint: same-origin guard', () => {
   it('refuses a malformed Origin, and one with no Host to compare against', () => {
     expect(isSameOrigin(mk('not a url', 'localhost:3001'))).toBe(false);
     expect(isSameOrigin(mk('http://localhost:3001', undefined))).toBe(false);
+  });
+});
+
+// --- handleDeploy request validation (no spawn) ----------------------------- //
+//
+// Every guard below returns BEFORE the script is spawned, so these run without
+// publishing anything. The complete-only refusal in particular is the guard
+// specific to PUBLISHING -- a fresh-eyes round found it survived mutation
+// because nothing pinned it, so it is pinned here.
+
+
+function fakeReq(body: unknown): never {
+  const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body), 'utf8')];
+  return {
+    headers: { host: 'localhost:3001' },
+    async *[Symbol.asyncIterator]() { for (const c of chunks) yield c; },
+  } as never;
+}
+
+function fakeRes() {
+  const state = { status: 0, body: null as unknown, headersSent: false };
+  return {
+    res: {
+      get statusCode() { return state.status; },
+      set statusCode(v: number) { state.status = v; },
+      get headersSent() { return state.headersSent; },
+      setHeader() {},
+      end(payload: string) { state.headersSent = true; state.body = JSON.parse(payload); },
+    } as never,
+    state,
+  };
+}
+
+function tmpRoot(): string {
+  return fs.mkdtempSync(`${os.tmpdir()}/dk-`);
+}
+
+describe('handleDeploy: guards that run before any spawn', () => {
+  const opts = (formKitsRoot: string) => ({
+    formKitsRoot, repoRoot: formKitsRoot,
+    // Deliberately a path that does not exist: if a guard ever FAILS to return
+    // early, the script-missing 500 makes that loud instead of spawning.
+    script: `${formKitsRoot}/__no_such_script.sh`,
+    bucket: 'test-bucket',
+  });
+
+  it('refuses a kit that is not status:complete', async () => {
+    // The deploy script SKIPS a non-complete kit and exits 0, so without this
+    // refusal the button would report success for an upload that shipped
+    // nothing. This is the publish-specific guard.
+    const root = tmpRoot();
+    fs.mkdirSync(`${root}/w7`);
+    fs.writeFileSync(`${root}/w7/metadata.json`, JSON.stringify({ status: 'draft' }));
+    const { res, state } = fakeRes();
+    await handleDeploy(fakeReq({ kitId: 'w7' }), res, opts(root));
+    expect(state.status).toBe(409);
+    expect(String((state.body as { detail: string }).detail)).toMatch(/not complete/);
+  });
+
+  it('refuses a kit with no metadata.json at all', async () => {
+    const root = tmpRoot();
+    fs.mkdirSync(`${root}/w7`);
+    const { res, state } = fakeRes();
+    await handleDeploy(fakeReq({ kitId: 'w7' }), res, opts(root));
+    expect(state.status).toBe(409);
+  });
+
+  it('404s a kit id that does not exist under the root', async () => {
+    const root = tmpRoot();
+    const { res, state } = fakeRes();
+    await handleDeploy(fakeReq({ kitId: 'nope' }), res, opts(root));
+    expect(state.status).toBe(404);
+  });
+
+  it('400s a traversing kit id before touching the filesystem', async () => {
+    const root = tmpRoot();
+    const { res, state } = fakeRes();
+    await handleDeploy(fakeReq({ kitId: '../escape' }), res, opts(root));
+    expect(state.status).toBe(400);
+  });
+
+  it('400s a non-object body instead of 500ing on a property access', async () => {
+    const root = tmpRoot();
+    const { res, state } = fakeRes();
+    await handleDeploy(fakeReq(null), res, opts(root));
+    expect(state.status).toBe(400);
+  });
+
+  it('reaches the script only for a COMPLETE kit -- and reports it missing', async () => {
+    // Proves the guards above are what stopped the others: a complete kit gets
+    // past them all and fails at the (deliberately absent) script instead.
+    const root = tmpRoot();
+    fs.mkdirSync(`${root}/w7`);
+    fs.writeFileSync(`${root}/w7/metadata.json`, JSON.stringify({ status: 'complete' }));
+    const { res, state } = fakeRes();
+    await handleDeploy(fakeReq({ kitId: 'w7' }), res, opts(root));
+    expect(state.status).toBe(500);
+    expect(String((state.body as { detail: string }).detail)).toMatch(/script not found/);
   });
 });

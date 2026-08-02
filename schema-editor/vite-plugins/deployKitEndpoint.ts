@@ -128,12 +128,25 @@ export function readKitStatus(kitDir: string): string | null {
   }
 }
 
-async function handleDeploy(
+/**
+ * Exported for unit tests: every guard below returns BEFORE spawn, so the
+ * request-validation contracts are testable without ever publishing (the same
+ * split extractEndpoint uses for handleExtract). The complete-only refusal in
+ * particular is the guard specific to PUBLISHING, so it must be pinned.
+ */
+export async function handleDeploy(
   req: Connect.IncomingMessage,
   res: ServerResponse,
   opts: { formKitsRoot: string; repoRoot: string; script: string; bucket: string },
 ): Promise<void> {
-  const body = await readJsonBody(req) as { kitId?: unknown };
+  const parsed = await readJsonBody(req);
+  // A non-object body (JSON `null`, a bare string) must be a 400, not a 500
+  // from a property access on null.
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    sendJson(res, 400, { ok: false, detail: 'body must be a JSON object' });
+    return;
+  }
+  const body = parsed as { kitId?: unknown };
   const resolved = resolveKitDir(body.kitId, opts.formKitsRoot);
   if ('error' in resolved) {
     sendJson(res, 400, { ok: false, detail: resolved.error });
@@ -162,9 +175,18 @@ async function handleDeploy(
     return;
   }
 
+  // Pass the SAME root this handler just validated against. Without it the
+  // script falls back to the repo tree, so with FORM_KITS_ROOT pointed elsewhere
+  // (which EDITOR_GUIDE.md documents) the complete-check would pass on one copy
+  // while the upload shipped a different one -- the cross-root trap of bd ball /
+  // bd s2bf, on a channel that PUBLISHES.
   const child = spawn('bash', [opts.script, kitId], {
     cwd: opts.repoRoot,
-    env: { ...process.env, FORM_KITS_BUCKET: opts.bucket },
+    env: {
+      ...process.env,
+      FORM_KITS_BUCKET: opts.bucket,
+      FORM_KITS_ROOT: opts.formKitsRoot,
+    },
   });
   let out = '';
   const cap = (chunk: Buffer) => {
@@ -177,7 +199,14 @@ async function handleDeploy(
   child.stderr.on('data', cap);
 
   await new Promise<void>((resolve) => {
+    // A failed spawn fires BOTH 'error' and 'close' -- realistic here, since
+    // `bash` is absent outside Git Bash on Windows. Without an explicit flag the
+    // second sendJson throws ERR_HTTP_HEADERS_SENT inside the dev server and
+    // buries the real diagnostic (same mitigation as extractEndpoint).
+    let responded = false;
     child.on('error', (err) => {
+      if (responded) { resolve(); return; }
+      responded = true;
       sendJson(res, 500, {
         ok: false, bucket: opts.bucket,
         detail: `could not run the deploy script: ${err.message}`,
@@ -186,7 +215,8 @@ async function handleDeploy(
       resolve();
     });
     child.on('close', (code) => {
-      if (res.headersSent) { resolve(); return; }
+      if (responded || res.headersSent) { resolve(); return; }
+      responded = true;
       if (code === 0) {
         sendJson(res, 200, {
           ok: true, bucket: opts.bucket,
