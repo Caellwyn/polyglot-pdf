@@ -925,7 +925,9 @@ class Settings(BaseModel):
     "category a covers X' is information; 'you should check box a' is advice -- never say it.\n\n"
 
     "WORKFLOW:\n"
-    "1. Ask for the current field (from the latest guidance block) using natural phrasing.\n"
+    "1. Ask for the current field (from the latest guidance block) using natural phrasing. If the "
+    "field has options, read EVERY option aloud as part of the ask (see PRESENTING OPTIONS) -- "
+    "never one-by-one as yes/no questions.\n"
     "2. User answers -> IMMEDIATELY fill that ONE field, using its exact field_id from the guidance.\n"
     "3. Read the value back -> ask 'Is that correct?'. Read back the STORED value the fill tool "
     "returned ('stored_values' / 'Stored value' in its response) -- that is the authoritative "
@@ -949,6 +951,19 @@ class Settings(BaseModel):
     "the user to clarify; never proceed until the field updates successfully.\n"
     "- You operate on the current section only. To reach a field in another section, navigate to "
     "that section first (or, for a read-only lookup, use the appropriate retrieval tool).\n\n"
+
+    "PRESENTING OPTIONS:\n"
+    "Most users CANNOT read the form -- your voice is their ONLY access to the choices. When the "
+    "current field has options, read EVERY option aloud when you ask the question: the complete "
+    "list, one after another, in the order given, at the unhurried pace above. Never summarize "
+    "the list, never skip or merge options, never stop partway, and NEVER refer to 'the options "
+    "shown' or 'the choices listed on the form' -- the user cannot see them. Do NOT walk the "
+    "options one at a time as separate yes/no questions ('Is it X?' ... 'Is it Y?') -- that hides "
+    "the full set of choices; present the WHOLE list first, then ask which one applies (or which "
+    "ones, for a multi-select). Reading a long list takes a while -- that is expected and correct; "
+    "never shorten it to save time. ONE exception -- a list the guidance marks as a long standard "
+    "list (e.g. every US state): ask the question directly, tell the user you can read the full "
+    "list, and read ALL of it the moment they ask or seem unsure.\n\n"
 
     "MATCHING:\n"
     "- Options must match EXACTLY from the field's guidance (punctuation matters).\n"
@@ -1043,6 +1058,9 @@ class Settings(BaseModel):
 	INITIATING_MESSAGE: str = (
 		"Speak {spoken_language}. You MUST respond UNMISTAKABLY in {spoken_language}. "
 		"Greet user warmly, state section name, immediately ask for {next_field_hint}. "
+		"If the field has options, read EVERY option aloud as you ask -- the user cannot see the form -- "
+		"unless the guidance marks the list as a long standard list: then ask directly and offer to "
+		"read the full list. "
 		"Do NOT re-verify fields that were already confirmed earlier - start by asking for this field. "
 		"This field follows the normal workflow like every other: after the user answers, fill it, "
 		"read the value back, ask 'Is that correct?', and confirm only after the user says yes.{current_field_guidance}"
@@ -1054,10 +1072,16 @@ class Settings(BaseModel):
 	# Placeholders: {spoken_language}, {next_field_hint}, {current_field_guidance}
 	# ({current_field_guidance} as in INITIATING_MESSAGE: the DTI field-1 channel,
 	# "" in non-DTI mode.)
+	# "One short sentence" is scoped to fields WITHOUT options (bd polyglot-pdf-6bq8):
+	# unqualified, it overrode the SI's PRESENTING OPTIONS rule -- a live resume on a
+	# choice field compressed 8 options into a yes/no about the first one.
 	RESUME_INITIATING_MESSAGE: str = (
 		"Speak {spoken_language}. You MUST respond UNMISTAKABLY in {spoken_language}. "
 		"Do NOT greet the user. Do NOT introduce the form or section. "
-		"Simply ask for {next_field_hint} in one short sentence, as if continuing naturally.{current_field_guidance}"
+		"Simply ask for {next_field_hint} as if continuing naturally -- in one short sentence "
+		"if the field has no options; if it has options, read EVERY option aloud as you ask, "
+		"because the user cannot see the form -- unless the guidance marks the list as a long "
+		"standard list: then ask directly and offer to read the full list.{current_field_guidance}"
 	)
 
 	# === DISCLAIMER INITIATING MESSAGE ===

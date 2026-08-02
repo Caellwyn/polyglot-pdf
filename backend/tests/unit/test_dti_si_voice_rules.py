@@ -221,6 +221,176 @@ def test_articulation_text_is_identical_across_both_sis():
     assert _block(s.DTI_SYSTEM_INSTRUCTION) == _block(s.SYSTEM_INSTRUCTION)
 
 
+# --- Option recital rules (bd polyglot-pdf-6bq8) ------------------------------
+# The voice model summarized or skipped multiple-choice options ("you can pick
+# one of the options shown") on W-7 reason (8 options) and I-90 Part 2 Section A
+# (12 options). Users may not be able to read the form, so the recital IS their
+# access to the choices. The SI carries the behavioral rule; the per-field
+# injection carries the count + a compact imperative on exactly the turns that
+# have options.
+
+OPTIONS_FIELD = {
+    "id": "reason",
+    "name": "Reason",
+    "spoken_name": "reason for applying",
+    "type": "radio",
+    "options": [
+        {"value": "yes", "label": "Yes"},
+        {"value": "no", "label": "No"},
+        {"value": "maybe", "label": "Maybe"},
+    ],
+}
+
+
+def test_dti_si_carries_presenting_options_rule():
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "PRESENTING OPTIONS:" in si
+    assert "read EVERY option aloud" in si
+    # The user cannot see the form -- the model's voice is the only access.
+    assert "your voice is their ONLY access to the choices" in si
+    # The observed failure phrasing is banned by naming the sanctioned behavior
+    # AND the specific deflection.
+    assert "NEVER refer to 'the options shown'" in si
+
+
+def test_dti_si_forbids_partial_or_summarized_option_lists():
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "Never summarize the list" in si
+    assert "never skip or merge options" in si
+    assert "never stop partway" in si
+
+
+def test_dti_si_one_at_a_time_phrase_is_prohibition_only():
+    # The recital prescription must not share the prohibition's literal phrase:
+    # "read ... one option at a time" vs "do NOT walk the options one at a
+    # time" collided 270 chars apart (2nd Opus outer review, this PR). The only
+    # surviving "one at a time" must live inside the Do-NOT sentence.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert si.count("one at a time") == 1
+    i = si.index("one at a time")
+    assert "Do NOT walk the" in si[max(0, i - 60):i]
+
+
+def test_dti_si_forbids_one_by_one_yes_no_option_walk():
+    # Observed live (this bead's harness run): the model turned an 8-option
+    # checkbox_group into "Is it X?" one option per turn -- the user never
+    # hears the full set of choices. Banned by name, and the WORKFLOW ask step
+    # carries the recital so the numbered steps agree with PRESENTING OPTIONS.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "Do NOT walk the options one at a time as separate yes/no questions" in si
+    assert "present the WHOLE list first" in si
+    # The recital is wired into WORKFLOW step 1, not only the options block.
+    workflow = si[si.index("WORKFLOW:"):si.index("TOOL PROTOCOL:")]
+    assert "read EVERY option aloud" in workflow
+    assert "never one-by-one as yes/no questions" in workflow
+
+
+def test_dti_si_licenses_the_long_recital():
+    # A brevity-biased audio model shortens what feels too long unless told the
+    # length is intended.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "Reading a long list takes a while -- that is expected and correct" in si
+
+
+def test_initiating_templates_carry_option_recital():
+    # The initiating templates are the strongest per-turn directive the model
+    # sees at session start. The RESUME template's unqualified "in one short
+    # sentence" overrode the SI's recital rule live (a resume onto a choice
+    # field compressed 8 options into a yes/no about the first); both templates
+    # now scope brevity away from option fields.
+    s = _settings()
+    for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
+        tpl = getattr(s, name)
+        assert "read EVERY option aloud" in tpl, name
+    # The resume brevity rule survives, but only for option-less fields.
+    assert "in one short sentence if the field has no options" in s.RESUME_INITIATING_MESSAGE
+
+
+def test_dti_si_long_standard_list_carve_out():
+    # The 50-state selects must not force a 50-item recital; the carve-out is
+    # guidance-marked (the injection marks the list), offer-based, and read in
+    # full the moment the user asks or hesitates.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "long standard list" in si
+    assert "read ALL of it the moment they ask" in si
+
+
+def test_render_field_guidance_options_carry_count_and_recital_imperative():
+    text = render_field_guidance(OPTIONS_FIELD)
+    assert (
+        "Options (3 -- read ALL 3 aloud when asking; "
+        "the user cannot see them): [" in text
+    )
+    # All options still present, in order.
+    assert '"Yes" (use value: yes), "No" (use value: no), "Maybe" (use value: maybe)]' in text
+
+
+def test_render_field_guidance_long_list_marks_standard_list():
+    from backend.services.ai_context import LONG_OPTION_LIST_THRESHOLD
+
+    n = LONG_OPTION_LIST_THRESHOLD + 1
+    field = {
+        "id": "state",
+        "name": "State",
+        "spoken_name": "state",
+        "type": "select",
+        "options": [
+            {"value": f"s{i}", "label": f"State {i}"} for i in range(n)
+        ],
+    }
+    text = render_field_guidance(field)
+    assert f"Options ({n} total -- long standard list; ask directly and " in text
+    assert f"offer to read all {n} aloud): [" in text
+    # Every option still rides the injection -- the carve-out changes the ask,
+    # never the model's access to the full list.
+    for i in range(n):
+        assert f"s{i}" in text
+
+
+def test_render_field_guidance_threshold_boundary_is_exclusive():
+    # Exactly-THRESHOLD options must still get the read-ALL branch; a silent
+    # `>` -> `>=` flip would change every 20-option field with the suite green
+    # (2nd Opus outer review, this PR).
+    from backend.services.ai_context import LONG_OPTION_LIST_THRESHOLD as T
+
+    def field_with(n):
+        return {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "select",
+            "options": [{"value": f"v{i}", "label": f"L{i}"} for i in range(n)],
+        }
+
+    at = render_field_guidance(field_with(T))
+    assert f"Options ({T} -- read ALL {T} aloud when asking" in at
+    above = render_field_guidance(field_with(T + 1))
+    assert f"Options ({T + 1} total -- long standard list" in above
+
+
+def test_initiating_templates_scope_recital_by_long_list_carve_out():
+    # The templates' recital directive must carry the SAME carve-out as the SI:
+    # unqualified, a resume onto a 50-state select would demand a full recital
+    # against the guidance's long-list marker (2nd Opus outer review, this PR).
+    s = _settings()
+    for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
+        tpl = getattr(s, name)
+        assert "unless the guidance marks the list as a long" in tpl, name
+        assert "offer to read the full list" in tpl, name
+
+
+def test_render_field_guidance_substantive_lists_stay_below_threshold():
+    # The two observed real-world cases (W-7 reason: 8, I-90 Part 2 Section A:
+    # 12) must get the read-ALL imperative, not the long-list carve-out.
+    from backend.services.ai_context import LONG_OPTION_LIST_THRESHOLD
+
+    assert LONG_OPTION_LIST_THRESHOLD >= 12
+    # And a genuine state list must clear it.
+    assert LONG_OPTION_LIST_THRESHOLD < 50
+
+
+def test_render_field_guidance_no_options_render_unchanged():
+    # A field with no options must not grow any option prose.
+    assert "Options" not in render_field_guidance(SIMPLE_FIELD)
+
+
 # --- ASCII-only guard for every constant this change touched (scar #6) --------
 
 def test_touched_constants_are_ascii_only():
