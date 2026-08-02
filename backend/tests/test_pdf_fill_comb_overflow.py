@@ -311,3 +311,36 @@ def test_fit_comb_value_never_raises_on_a_dead_widget():
 
     out = ns["fit_comb_value"](_DeadWidget(), "03/14/1990")
     assert out == "03/14/1990", "a dead widget must not change or drop the value"
+
+
+def test_the_never_entered_us_phrase_prints_in_full():
+    """bd polyglot-pdf-tmun: the W-7 booklet tells an applicant who has never
+    entered the US to write that on line 6d, but the printed box is 64.8pt --
+    the booklet's own 31-char wording ('Never entered the United States') clips
+    to 'Never entered the' at any font size.
+
+    The kit therefore instructs the 16-char short form, which measures 64.0pt and
+    fits with 0.8pt to spare. This pins BOTH halves: the phrase the guidance names
+    must be the phrase that fits, so a future reword cannot silently reintroduce a
+    clipped value.
+    """
+    schema = _load_gold_schema()
+    field = next(f for f in schema["fields"] if f["id"] == "date_of_entry_us")
+    phrase = "Never entered US"
+
+    # The guidance must actually name this phrase -- otherwise the model is free
+    # to emit the booklet's longer wording, which does not fit.
+    help_obj = field.get("help") or {}
+    assert phrase in (help_obj.get("instructions") or ""), (
+        "instructions no longer pin the short phrase"
+    )
+    assert len(phrase) <= field["max_length"], (
+        f"max_length {field['max_length']} rejects the phrase the guidance names"
+    )
+
+    # The clip rect also picks up the form's own printed '/  /' date separators,
+    # so assert containment of the value rather than equality with it.
+    printed = _rendered_text(_fill({"date_of_entry_us": phrase}), "f1_27[0]")
+    assert phrase.replace(" ", "") in printed, (
+        f"printed {printed!r} -- the instructed phrase does not fit the box"
+    )
