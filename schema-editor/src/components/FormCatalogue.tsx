@@ -11,6 +11,13 @@ import {
 import {
   isExtractionAvailable, runExtraction, verifyExtractorFolder,
 } from '../utils/extractionClient';
+// Completion routes through the SAME editor endpoint the hosted catalogue uses
+// (bd polyglot-pdf-rh5v) so the publish gates and the translation drift sweep
+// run in local mode too -- one implementation, not two that disagree.
+import { setRemoteStatus } from '../utils/remoteKitStore';
+// Dev-only single-kit deploy (bd polyglot-pdf-ipzh): absent in a static/hosted
+// build, so the probe returns null there and the button never renders.
+import { deployKit, getDeployTarget } from '../utils/deployKitClient';
 
 interface FormCatalogueProps {
   /** Called when the human opens a kit for editing. */
@@ -34,6 +41,19 @@ interface FormCatalogueProps {
    * directory -- otherwise they rewrite a different copy than the one on screen.
    */
   onRootChange?: (dir: FsDirectoryHandle | null) => void;
+  /**
+   * True when the backend is reachable AND proven to resolve kit ids against
+   * the SAME folder the editor is showing (App's `serverActionsOk`).
+   *
+   * Mark-complete keys on this (bd polyglot-pdf-rh5v). Completion is a PUBLISH
+   * gate -- server-side it runs six checks and then the translation drift sweep,
+   * refusing to complete a kit whose translations are missing. Writing
+   * metadata.json directly here skips all of it, which is how a kit reached
+   * status:complete carrying a field with zero translations. When this is false
+   * we cannot reach those gates, so completion falls back to the direct write
+   * and says plainly that it was unchecked.
+   */
+  serverActionsOk?: boolean;
   /** The currently-open kit id (to highlight it in the list). */
   selectedKitId: string | null;
   /**
@@ -64,7 +84,7 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   onOpenKit, confirmFolderChange, clearOpenKit, selectedKitId, liveProgress,
-  onRootChange,
+  onRootChange, serverActionsOk = false,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
@@ -171,7 +191,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     // Refuse a folder switch while extraction is in flight: the running
     // extraction captured the current root and will refresh it on completion, so
     // switching now would have that stale refresh clobber the new folder (Codex r3).
-    if (extractingId !== null) {
+    if (extractingId !== null || deployingId !== null) {
       setError('Extraction is running -- wait for it to finish before changing folders.');
       return;
     }
@@ -199,7 +219,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     e.preventDefault();
     setDragOver(false);
     setNotice(null); // any drop attempt supersedes a prior "Added X" notice
-    if (extractingId !== null) {
+    if (extractingId !== null || deployingId !== null) {
       // A drop mid-extraction would run its own onboard/refresh against the same
       // folder the extraction captured -- and its finally must not be able to
       // clear the extraction guard (Codex r3). Refuse until extraction finishes.
@@ -239,15 +259,100 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setNotice(null);
     setBusy(true);
     setError(null);
+    // Completion is the PUBLISH gate, so it must go through the server whenever
+    // we can reach it (bd polyglot-pdf-rh5v). The backend runs six checks --
+    // PDF present, schema validates, extraction_info, v2 stamp, lint clean --
+    // and then the translation drift sweep, which re-bakes every MISSING
+    // translation and REFUSES completion until coverage is full. The local
+    // metadata.json write skips all of that; that is how a kit reached
+    // status:complete with a field carrying zero translations.
+    //
+    // Demotion to draft stays local: it is unconditional server-side too, and a
+    // kit must always be demotable even when the backend is down.
+    const viaServer = status === 'complete' && serverActionsOk;
     try {
-      await setKitStatus(kit, status);
+      if (viaServer) {
+        // The sweep makes one LLM call PER LANGUAGE with retry, so this is a
+        // tens-of-seconds action -- say so rather than leaving a dead button.
+        setNotice(`Checking "${kit.label}" and re-translating anything missing...`);
+        const result = await setRemoteStatus(kit.id, status);
+        setNotice(
+          result.retranslated > 0
+            ? `"${kit.label}" is complete. Re-translated ${result.retranslated} `
+              + `entr${result.retranslated === 1 ? 'y' : 'ies'}`
+              + `${result.translationModel ? ` (${result.translationModel})` : ''}.`
+            : `"${kit.label}" is complete. Every translation was already current.`,
+        );
+      } else {
+        await setKitStatus(kit, status);
+        if (status === 'complete') {
+          // Never let an UNCHECKED completion read like a verified one -- that
+          // silence is the whole bug. Name what was skipped.
+          setNotice(
+            `"${kit.label}" was marked complete WITHOUT the publish checks: the `
+            + 'backend is not reachable for this folder, so its schema was not '
+            + 'validated and missing translations were not re-baked. Start the '
+            + 'backend (scripts/run-schema-editor.sh) and mark it complete again '
+            + 'to verify it.',
+          );
+        }
+      }
       await refresh(root);
     } catch (err) {
+      // A refused completion is the gate WORKING. Surface the server's own
+      // detail (which gate failed, or "N of M translations complete") instead of
+      // a generic failure, and leave the kit as-is -- the server did not promote
+      // it, so the card must not either.
+      setNotice(null);
       setError(err instanceof Error ? err.message : 'Failed to update status');
     } finally {
       setBusy(false);
     }
-  }, [root, refresh]);
+  }, [root, refresh, serverActionsOk]);
+
+  // Single-kit deploy (bd polyglot-pdf-ipzh). `deployTarget` is null until the
+  // dev-only host endpoint answers, so the button never renders in a static or
+  // hosted build; the bucket it reports is NAMED in the confirm dialog so the
+  // human sees where this publishes before agreeing to it.
+  const [deployTarget, setDeployTarget] =
+    React.useState<{ bucket: string } | null>(null);
+  const [deployingId, setDeployingId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    void getDeployTarget().then((t) => { if (alive) setDeployTarget(t); });
+    return () => { alive = false; };
+  }, []);
+
+  const handleDeploy = React.useCallback(async (kit: CatalogueEntry) => {
+    if (!deployTarget || deployingId !== null) return;
+    // The confirm step is load-bearing, not decoration: a deploy is
+    // outward-facing and this button sits in a tool the maintainer already has
+    // open, so publishing must stay a deliberate act (bd ipzh).
+    const ok = window.confirm(
+      `Upload "${kit.label}" to ${deployTarget.bucket}?\n\n`
+      + "This publishes this form's schema and PDF and regenerates the form "
+      + 'manifest. It does NOT deploy the app itself.',
+    );
+    if (!ok) return;
+    setNotice(null);
+    setError(null);
+    setDeployingId(kit.id);
+    try {
+      const result = await deployKit(kit.id);
+      if (result.ok) {
+        setNotice(result.detail);
+      } else {
+        // Show the script's own tail: "gcloud not authenticated" and "bucket not
+        // found" are the likely failures and both are actionable, but only if
+        // the human can see them.
+        setError(result.output
+          ? `${result.detail}\n\n${result.output.trim().split('\n').slice(-8).join('\n')}`
+          : result.detail);
+      }
+    } finally {
+      setDeployingId(null);
+    }
+  }, [deployTarget, deployingId]);
 
   // Rename a kit's DISPLAY label (bd 15ic): a metadata.json-only write; the
   // kit's directory/id never changes.
@@ -402,11 +507,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       onDrop={handleDrop}
     >
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="btn btn-primary" onClick={handlePickFolder} disabled={busy || extractingId !== null}>
+        <button className="btn btn-primary" onClick={handlePickFolder} disabled={busy || extractingId !== null || deployingId !== null}>
           {root ? 'Change folder' : 'Open form-kits folder'}
         </button>
         {root && (
-          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy || extractingId !== null}>
+          <button className="btn btn-secondary" onClick={() => void refresh(root, true)} disabled={busy || extractingId !== null || deployingId !== null}>
             Refresh
           </button>
         )}
@@ -417,7 +522,11 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
         </span>
       </div>
 
-      {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
+      {error && (
+        // whitespace-pre-line: a deploy failure carries the script's output
+        // tail, whose newlines are the whole point (bd ipzh).
+        <div className="mt-2 text-sm text-red-600 whitespace-pre-line">{error}</div>
+      )}
       {notice && <div className="mt-2 text-sm text-green-700">{notice}</div>}
 
       {/* Aggregate dashboard overview (bd vl3o, D3): complete vs in-progress at a glance. */}
@@ -614,20 +723,37 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
               {kit.hasSchema && (
                 <div className="mt-1 flex items-center justify-end gap-2 px-1">
                   {kit.status === 'complete' ? (
-                    <button
-                      className="btn-sm btn-secondary text-xs"
-                      onClick={() => void handleSetStatus(kit, 'draft')}
-                      disabled={busy}
-                      title="Revert to draft (removes it from deploys)"
-                    >
-                      Revert to draft
-                    </button>
+                    <>
+                      {/* Deploy is offered ONLY on a complete kit, and only when
+                          the dev-only host endpoint answered (bd ipzh). A static
+                          or hosted build has no endpoint, so no button. */}
+                      {deployTarget && (
+                        <button
+                          className="btn-sm btn-secondary text-xs"
+                          onClick={() => void handleDeploy(kit)}
+                          disabled={busy || deployingId !== null}
+                          title={`Upload this form's schema and PDF to ${deployTarget.bucket} (kit data only -- not the app)`}
+                        >
+                          {deployingId === kit.id ? 'Deploying...' : 'Deploy this form'}
+                        </button>
+                      )}
+                      <button
+                        className="btn-sm btn-secondary text-xs"
+                        onClick={() => void handleSetStatus(kit, 'draft')}
+                        disabled={busy || deployingId !== null}
+                        title="Revert to draft (removes it from deploys)"
+                      >
+                        Revert to draft
+                      </button>
+                    </>
                   ) : (
                     <button
                       className="btn-sm btn-primary text-xs"
                       onClick={() => void handleSetStatus(kit, 'complete')}
-                      disabled={busy}
-                      title="Mark complete (makes it eligible to deploy)"
+                      disabled={busy || deployingId !== null}
+                      title={serverActionsOk
+                        ? 'Mark complete: runs the publish checks and re-translates anything missing'
+                        : 'Mark complete (UNCHECKED -- no backend reachable for this folder)'}
                     >
                       Mark complete
                     </button>
@@ -652,7 +778,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                         type="file"
                         accept="application/pdf,.pdf"
                         className="hidden"
-                        disabled={busy || extractingId !== null}
+                        disabled={busy || extractingId !== null || deployingId !== null}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           // Validate it is actually a PDF before storing (Codex
@@ -696,7 +822,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
                     <button
                       className="btn-sm btn-primary text-xs"
                       onClick={() => void handleRunExtraction(kit)}
-                      disabled={busy || extractingId !== null}
+                      disabled={busy || extractingId !== null || deployingId !== null}
                       title="Run the automated PDF -> schema extraction (uses a local model; can take a minute)"
                     >
                       {extractingId === kit.id ? 'Extracting...' : 'Run extraction'}

@@ -21,7 +21,15 @@ BUCKET_NAME="${FORM_KITS_BUCKET:-polyglot-pdf-form-kits}"
 PREFIX="${FORM_KITS_PREFIX:-form-kits}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-FORM_KITS_DIR="$REPO_ROOT/form-kits"
+# Honor FORM_KITS_ROOT (bd polyglot-pdf-ipzh). The editor's deploy button
+# validates the kit -- including the status:complete check -- against the root
+# the EDITOR is using, and EDITOR_GUIDE.md tells people to point that elsewhere
+# with FORM_KITS_ROOT. If this script kept hardcoding the repo tree, that gate
+# would check one copy while the upload shipped a different one (or skipped a
+# missing kit, still republished the manifest, and reported success for an
+# upload that shipped nothing) -- the cross-root trap of bd ball / bd s2bf.
+# Unset, the repo tree stays the default, so a plain CLI run is unchanged.
+FORM_KITS_DIR="${FORM_KITS_ROOT:-$REPO_ROOT/form-kits}"
 MANIFEST_FILE="index.json"
 
 # Colors for output

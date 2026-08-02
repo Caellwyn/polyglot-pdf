@@ -1030,4 +1030,265 @@ describe('FormCatalogue -- run extraction', () => {
     releasePost({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'done', schemaFile: 'schema.json' }) } as unknown as Response);
     await waitFor(() => expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(false));
   });
+
+  // --- Mark complete routes through the PUBLISH GATE (bd polyglot-pdf-rh5v) --- //
+  //
+  // Completion is the publish gate: server-side it runs six checks and then the
+  // translation drift sweep, refusing to complete a kit whose translations are
+  // missing. The local path used to write metadata.json directly and skip all of
+  // it, which is how a kit reached status:complete carrying a field with ZERO
+  // translations. These pin that it now calls the server whenever it can.
+
+  describe('mark complete: publish gate', () => {
+    function completeFetchMock(post: (body: unknown) => Response): typeof fetch {
+      const impl = async (input: unknown, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? 'GET').toUpperCase();
+        // Capability probes: no extractor, no deploy endpoint in these tests.
+        if (method === 'GET') {
+          return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+        }
+        if (url.includes('/status')) {
+          return post(init?.body ? JSON.parse(init.body as string) : {});
+        }
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      };
+      return impl as unknown as typeof fetch;
+    }
+
+    it('calls the backend instead of writing metadata.json when server actions are OK', async () => {
+      const root = mockRoot([
+        mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      const posted: unknown[] = [];
+      global.fetch = completeFetchMock((body) => {
+        posted.push(body);
+        return { ok: true, status: 200, json: async () => ({
+          status: 'complete', retranslated: 3, translationModel: 'claude-cli',
+        }) } as unknown as Response;
+      });
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('I-90');
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      // The server was asked -- this is the whole point of the bead.
+      await waitFor(() => expect(posted).toEqual([{ status: 'complete' }]));
+      // And the human is told the sweep actually did something.
+      await screen.findByText(/Re-translated 3 entries/);
+    });
+
+    it('does NOT promote the card when the server refuses, and shows why', async () => {
+      const root = mockRoot([
+        mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = completeFetchMock(() => ({
+        ok: false, status: 409,
+        json: async () => ({ detail: '16 of 17 translations complete' }),
+      } as unknown as Response));
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('I-90');
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      // The refusal is the gate WORKING; surface the server's own reason.
+      await screen.findByText(/16 of 17 translations complete/);
+      // The badge must stay draft -- the server did not promote it, so neither
+      // may the card. Showing 'complete' here is the original bug.
+      expect(screen.getByText('draft')).toBeTruthy();
+      const meta = JSON.parse(await (await root.children.get('i-90')!.children.get('metadata.json')!.getFile()).text());
+      expect(meta.status).toBe('draft');
+    });
+
+    it('falls back to a local write with NO backend, and says it was unchecked', async () => {
+      const root = mockRoot([
+        mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      let posted = false;
+      global.fetch = completeFetchMock(() => { posted = true; return { ok: true, status: 200, json: async () => ({}) } as unknown as Response; });
+
+      // serverActionsOk omitted -> false: no reachable/agreeing backend.
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('I-90');
+
+      fireEvent.click(screen.getByText('Mark complete'));
+      await waitFor(() => expect(screen.getByText('complete')).toBeTruthy());
+      expect(posted).toBe(false);
+      // It must never read as verified: name what was skipped.
+      await screen.findByText(/WITHOUT the publish checks/);
+    });
+
+    it('reverting to draft stays local even when the backend is reachable', async () => {
+      const root = mockRoot([
+        mockKit('i-90', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'I-90', status: 'complete' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      let posted = false;
+      global.fetch = completeFetchMock(() => { posted = true; return { ok: true, status: 200, json: async () => ({}) } as unknown as Response; });
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} serverActionsOk />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('I-90');
+
+      fireEvent.click(screen.getByText('Revert to draft'));
+      await waitFor(() => expect(screen.getByText('draft')).toBeTruthy());
+      // Demotion must work even when the backend is down, so it is deliberately
+      // NOT routed through the server.
+      expect(posted).toBe(false);
+    });
+  });
+
+  // --- Deploy this form (bd polyglot-pdf-ipzh) -------------------------------- //
+
+  describe('deploy this form', () => {
+    function deployFetchMock(opts: {
+      available?: boolean; post?: (body: unknown) => Response;
+    }): typeof fetch {
+      const impl = async (input: unknown, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (url.includes('/api/deploy-kit')) {
+          if (method === 'GET') {
+            return opts.available
+              ? ({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'available', bucket: 'test-bucket' }) } as unknown as Response)
+              : ({ ok: false, status: 404, json: async () => ({}) } as unknown as Response);
+          }
+          return opts.post?.(init?.body ? JSON.parse(init.body as string) : {})
+            ?? ({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'Deployed.' }) } as unknown as Response);
+        }
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      };
+      return impl as unknown as typeof fetch;
+    }
+
+    it('is offered on a COMPLETE kit and uploads only after the confirm', async () => {
+      const root = mockRoot([
+        mockKit('w7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'complete' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      const posted: unknown[] = [];
+      global.fetch = deployFetchMock({
+        available: true,
+        post: (body) => { posted.push(body); return { ok: true, status: 200, json: async () => ({ ok: true, detail: 'Deployed W-7 to test-bucket.' }) } as unknown as Response; },
+      });
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      const btn = await screen.findByText('Deploy this form');
+
+      // DECLINED -> nothing is uploaded. The confirm is the guard that keeps a
+      // publish deliberate, so this is the load-bearing half.
+      fireEvent.click(btn);
+      await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+      expect(posted).toEqual([]);
+      // The dialog must NAME the destination.
+      expect(String(confirmSpy.mock.calls[0][0])).toContain('test-bucket');
+
+      // ACCEPTED -> it uploads that kit.
+      confirmSpy.mockReturnValue(true);
+      fireEvent.click(screen.getByText('Deploy this form'));
+      await waitFor(() => expect(posted).toEqual([{ kitId: 'w7' }]));
+      await screen.findByText(/Deployed W-7 to test-bucket/);
+      confirmSpy.mockRestore();
+    });
+
+    it('is NOT offered on a draft kit', async () => {
+      const root = mockRoot([
+        mockKit('w7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'draft' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = deployFetchMock({ available: true });
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('W-7');
+      expect(screen.queryByText('Deploy this form')).toBeNull();
+    });
+
+    it('is NOT offered when the host endpoint is absent (static/hosted build)', async () => {
+      const root = mockRoot([
+        mockKit('w7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'complete' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = deployFetchMock({ available: false });
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      await screen.findByText('W-7');
+      // No endpoint -> no button, so a hosted build cannot publish.
+      expect(screen.queryByText('Deploy this form')).toBeNull();
+    });
+
+    it('blocks a folder switch while a deploy is in flight', async () => {
+      // A deploy is the longest-running and most consequential card action; if
+      // the folder can change mid-upload, the result notice lands attributed to
+      // a different catalogue. Extraction already guards this (Codex r3); the
+      // deploy path must too.
+      const root = mockRoot([
+        mockKit('w7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'complete' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      let releaseDeploy: (r: Response) => void = () => {};
+      const held = new Promise<Response>((resolve) => { releaseDeploy = resolve; });
+      global.fetch = ((input: unknown, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase();
+        if (String(input).includes('/api/deploy-kit')) {
+          if (method === 'GET') {
+            return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'available', bucket: 'test-bucket' }) } as unknown as Response);
+          }
+          return held;
+        }
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) } as unknown as Response);
+      }) as unknown as typeof fetch;
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      fireEvent.click(await screen.findByText('Deploy this form'));
+
+      // While the upload is open, the folder controls must be disabled.
+      await waitFor(() => expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(true));
+
+      releaseDeploy({ ok: true, status: 200, json: async () => ({ ok: true, detail: 'Deployed.' }) } as unknown as Response);
+      await waitFor(() => expect((screen.getByText('Change folder') as HTMLButtonElement).disabled).toBe(false));
+      confirmSpy.mockRestore();
+    });
+
+    it('surfaces the real failure instead of a silent no-op', async () => {
+      const root = mockRoot([
+        mockKit('w7', { 'schema.json': SCHEMA, 'metadata.json': JSON.stringify({ label: 'W-7', status: 'complete' }) }),
+      ]);
+      (window as unknown as Record<string, unknown>).showDirectoryPicker = vi.fn(async () => root);
+      global.fetch = deployFetchMock({
+        available: true,
+        post: () => ({ ok: false, status: 500, json: async () => ({
+          ok: false, detail: 'deploy failed (exit 1) -- see the output below.',
+          output: 'ERROR: (gcloud) You do not currently have an active account selected.',
+        }) } as unknown as Response),
+      });
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      render(<FormCatalogue onOpenKit={vi.fn()} selectedKitId={null} />);
+      fireEvent.click(screen.getByText('Open form-kits folder'));
+      await expandCards();
+      fireEvent.click(await screen.findByText('Deploy this form'));
+      await screen.findByText(/do not currently have an active account/);
+      confirmSpy.mockRestore();
+    });
+  });
 });

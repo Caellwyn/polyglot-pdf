@@ -1167,6 +1167,9 @@ export const App: React.FC = () => {
             confirmFolderChange={confirmFolderChange}
             clearOpenKit={clearOpenKit}
             onRootChange={handleRootChange}
+            // Lets Mark-complete run the server's publish gates + translation
+            // drift sweep instead of writing metadata.json blind (bd rh5v).
+            serverActionsOk={serverActionsOk}
             selectedKitId={selectedKitId}
             liveProgress={
               // Keep the open kit's catalogue bar in sync with in-editor edits:
