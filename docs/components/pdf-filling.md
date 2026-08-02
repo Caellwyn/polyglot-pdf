@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-07-14. See [the v96b journal entry](../journal/entries/2026-07-05-bd-v96b-store-with-issues.md) for the kit JSON-artifact surface; [the h76m.17 entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for runtime group consumers; [the eb4z entry](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the field_mappings []-alias exact-wins fix.*
+*Last updated: 2026-08-01. See [the v96b journal entry](../journal/entries/2026-07-05-bd-v96b-store-with-issues.md) for the kit JSON-artifact surface; [the h76m.17 entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for runtime group consumers; [the eb4z entry](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the field_mappings []-alias exact-wins fix.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -63,6 +63,39 @@ gap, but never shadows a distinct real field that happens to lack its own
   the defensive layer for sessions whose stored values predate that fix.
 
 ### The widget gotchas (scar tissue)
+
+- **COMB widgets truncate on RENDER, not on read-back.** A text widget with the
+  Comb flag (`field_flags & 1<<24`) splits its box into exactly `MaxLen` cells and
+  prints ONE glyph per cell -- there is no cell `MaxLen+1`. PyMuPDF stores and
+  reads back a longer value perfectly, so the AcroForm VALUE round-trips while the
+  **rendered page** silently shows only the first `MaxLen` characters. Three W-7
+  fields are comb-8, so `03/14/1990` printed as `03/14/19` -- a wrong date of birth
+  on a filed ITIN application that no value-level check, lint, or test could see
+  (bd `polyglot-pdf-br7t`). `fit_comb_value` clears the Comb flag when the value
+  is longer than the cells, so it renders in full as ordinary text.
+  **It never rewrites the value** -- appearance only. That restraint is the whole
+  design: an earlier cut also stripped formatting punctuation so an identifier like
+  `123-45-6789` would still fit its comb-9 box, and three review rounds each found
+  another input where stripping REORDERED meaning instead of reformatting it
+  (`1990-03-14` -> `19900314`, `14.03.1990` -> `14031990`), each of which then fit
+  comb-8 and printed a plausible-looking WRONG date in a `month / day / year` box.
+  Every guard added just attracted a new separator, so the strip is gone and the
+  class is unreachable by construction. The cost is cosmetic but REAL, not rare:
+  nothing gates the download path (`handleDownloadPDF` calls `fillPDF` with no
+  validation) and a `type: "date"` field cannot be length-gated at all
+  (`validateField` early-returns to `validateDateValue`, which never reads
+  `max_length`), so the W-7 dates render un-combed on **every** UI submission, and
+  a separator-bearing SSN on i-90/f1040 renders as ordinary text. That is the
+  deliberate trade: visibly-odd beats a reordered date that looks correct and gets
+  filed. Restoring the cell look belongs in INPUT normalization, where the field's
+  semantic type is known -- never a rewrite in the filler (bd
+  `polyglot-pdf-2ho7`, closed won't-do for exactly this reason).
+  **Verify any change here by RENDERING** -- `page.get_text("text",
+  clip=widget.rect)` -- never by reading `widget.field_value` back, which is
+  exactly the check this class of bug defeats. Note `widget.text_maxlen = 0` does
+  NOT persist through save (bd `polyglot-pdf-9oae`); clearing the flag is what
+  works. Relaxing also does not make an arbitrarily long value fit -- it still
+  clips at the box WIDTH, which is currently silent (bd `polyglot-pdf-8i43`).
 
 - **Same-name kids: re-fetch by xref, not name.** `fill_widget` re-fetches a
   fresh widget from the page to dodge PyMuPDF weakrefs; radio kids of a

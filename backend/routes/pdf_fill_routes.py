@@ -144,6 +144,69 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			_log.debug("button_on_state_default", widget_name=widget.field_name, default="Yes")
 			return "Yes"
 
+		# AcroForm text-field flag bit 25 (1-based in the spec) = Comb.
+		_COMB_FLAG = 1 << 24
+
+		def fit_comb_value(widget, value: str) -> str:
+			"""Clear the Comb flag when the value is longer than the widget's cells.
+
+			A Comb text field splits its box into exactly MaxLen cells and prints ONE
+			glyph per cell -- there is no cell MaxLen+1. PyMuPDF stores and reads back
+			the full string regardless, so an over-long value round-trips perfectly in
+			the AcroForm while the RENDERED page silently shows only the first MaxLen
+			characters (bd polyglot-pdf-br7t).
+
+			On W-7 that truncated every 4-digit year: date_of_birth is comb-8, so
+			'03/14/1990' printed as '03/14/19' -- a wrong date of birth on a filed
+			ITIN application, invisible to every value-level check.
+
+			NEVER REWRITES THE VALUE. An earlier cut of this fix also stripped
+			formatting punctuation so a value like '123-45-6789' would still fit its
+			comb-9 SSN box, which preserved the intended one-digit-per-cell look. Three
+			review rounds each found another input where that strip REORDERED meaning
+			instead of reformatting it -- '1990-03-14' -> '19900314', '14.03.1990' ->
+			'14031990' -- each of which then FIT comb-8 and printed a plausible-looking
+			WRONG date (month=19, month=14) in a box captioned 'month / day / year'.
+			Every guard added attracted a new separator, because "is this string's
+			meaning purely digit ORDER?" is not decidable from the string. So the strip
+			is gone: this function now only ever changes APPEARANCE, never the
+			characters written, which makes the whole class unreachable by construction
+			instead of by enumeration. (A value that then overflows the box WIDTH still
+			clips -- bd polyglot-pdf-8i43 -- but a clipped string is visibly incomplete,
+			unlike a reordered date that looks correct and gets filed.)
+
+			The accepted cost is cosmetic and REACHABLE, not hypothetical: nothing gates
+			the download path (SchemaForm.handleDownloadPDF calls fillPDF with no
+			validation), and the two type="date" fields cannot be length-gated at all
+			(validateField early-returns to validateDateValue, which never reads
+			max_length), so a W-7 date of birth renders un-combed on every UI
+			submission. That is the deliberate trade: a mis-rendered SSN or a date
+			printed as plain text is visibly odd, whereas a reordered date of birth
+			looks right and is filed with the IRS. Restoring the one-digit-per-cell
+			look belongs in INPUT normalization, where the field's semantic type is
+			known -- never in a rewrite here (bd polyglot-pdf-2ho7, closed won't-do).
+			"""
+			try:
+				maxlen = widget.text_maxlen or 0
+				if not (widget.field_flags & _COMB_FLAG) or not maxlen:
+					return value
+				if len(value) <= maxlen:
+					return value
+				widget.field_flags = widget.field_flags & ~_COMB_FLAG
+				_log.info(
+					"comb_relaxed_for_overflow",  # never log the value itself -- bd hjo
+					widget_name=widget.field_name, maxlen=maxlen, value_length=len(value),
+				)
+				return value
+			except Exception as e:
+				# Never fail a fill over an appearance tweak -- worst case the value
+				# renders truncated, which is the pre-fix behavior. Deliberately logs
+				# NO widget attribute: reading widget.field_name here could itself
+				# raise on the stale weakref that got us into this handler, turning a
+				# cosmetic degradation into a failed fill (bd polyglot-pdf-l53i).
+				_log.warning("comb_fit_failed", error=str(e))
+				return value
+
 		def fill_widget(widget, page, value, field_type: Optional[str] = None) -> None:
 			"""Apply a value to a widget using its page reference to avoid weak reference issues.
 
@@ -193,9 +256,15 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			else:
 				# Text field
 				try:
-					fresh_widget.field_value = str(value)
+					text_value = str(value)
+					# Must precede the assignment: a comb widget prints only MaxLen
+					# glyphs, so an over-long value would render truncated even though
+					# it stores fine (bd polyglot-pdf-br7t). Returns the value
+					# UNCHANGED -- it edits the widget's flags, never the characters.
+					text_value = fit_comb_value(fresh_widget, text_value)
+					fresh_widget.field_value = text_value
 					fresh_widget.update()
-					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(str(value)))
+					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(text_value))
 				except Exception as e:
 					_log.error("text_field_fill_failed", widget_name=fresh_widget.field_name, error=str(e))
 					raise
@@ -591,6 +660,9 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 					fill_widget(widget, page, value, field_type=field_type)
 					filled_count += 1
+					# Length only -- never the value itself (bd hjo). Equal to the inner
+					# text_field_filled_success length by construction: the filler does
+					# not rewrite text values.
 					_log.debug("text_field_filled", kit=request.kit_id, field_id=field_id, pdf_field=widget.field_name, value_length=len(str(value)))
 				except Exception as exc:
 					_log.error(
