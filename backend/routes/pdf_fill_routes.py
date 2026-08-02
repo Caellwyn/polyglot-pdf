@@ -200,9 +200,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				return value
 			except Exception as e:
 				# Never fail a fill over an appearance tweak -- worst case the value
-				# renders truncated, which is the pre-fix behavior. Uses the name
-				# captured before the try, so the handler cannot raise on a stale
-				# widget ref (bd polyglot-pdf-l53i).
+				# renders truncated, which is the pre-fix behavior. Deliberately logs
+				# NO widget attribute: reading widget.field_name here could itself
+				# raise on the stale weakref that got us into this handler, turning a
+				# cosmetic degradation into a failed fill (bd polyglot-pdf-l53i).
 				_log.warning("comb_fit_failed", error=str(e))
 				return value
 

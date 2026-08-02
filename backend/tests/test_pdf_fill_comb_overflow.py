@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import textwrap
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -270,3 +271,43 @@ def test_a_number_with_its_letter_prefix_relaxes_rather_than_truncating():
     printed = _rendered_text(filled, "P1_Line1_AlienNumber[0]")
     assert printed.endswith("A123456789"), printed
 
+
+
+def test_fit_comb_value_never_raises_on_a_dead_widget():
+    """The appearance tweak must never fail a fill (bd polyglot-pdf-l53i).
+
+    PyMuPDF widget refs are weak and go stale, so every attribute read here can
+    raise -- including inside the except handler. The handler therefore logs no
+    widget attribute at all; restoring a `widget_name=widget.field_name` kwarg to
+    it would make this test fail, which is the point of the test.
+
+    Reaches into the route to get the nested helper, since fit_comb_value is
+    defined inside fill_pdf (matching the file's other nested helpers).
+    """
+    class _DeadWidget:
+        @property
+        def text_maxlen(self):
+            raise RuntimeError("weakly-referenced object no longer exists")
+
+        @property
+        def field_flags(self):
+            raise RuntimeError("weakly-referenced object no longer exists")
+
+        @property
+        def field_name(self):
+            raise RuntimeError("weakly-referenced object no longer exists")
+
+    import inspect
+    import backend.routes.pdf_fill_routes as mod
+
+    src = inspect.getsource(mod.fill_pdf)
+    assert "def fit_comb_value" in src, "helper renamed -- update this test"
+
+    # Rebuild just the helper with the module's collaborators in scope.
+    ns = {"_log": mod._log, "re": mod.re, "_COMB_FLAG": 1 << 24}
+    body = src[src.index("\t\tdef fit_comb_value"):]
+    end = body.index("\n\t\tdef ", 1)
+    exec(textwrap.dedent(body[:end]), ns)
+
+    out = ns["fit_comb_value"](_DeadWidget(), "03/14/1990")
+    assert out == "03/14/1990", "a dead widget must not change or drop the value"
