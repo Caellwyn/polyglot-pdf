@@ -53,6 +53,15 @@ the resume-initiating path (the exact scenario the maintainer reported).
 **Review outcome:** recorded in the merge ping; fresh-eyes + Opus outer review
 ran pre-PR per the standard flow.
 
+**Cost impact (measured):** the DTI SI grows 14,086 -> 15,221 chars (~8%), and
+each option-bearing field's injected guidance grows by ~62 chars. Because the
+per-turn SI is the 2.5 cost lever (text-in is 95-98% of session cost,
+docs/standards/logging-and-cost.md), this is a recurring per-turn increase of
+up to roughly the same ~8% on text-in. Accepted deliberately: the recital is a
+maintainer-requested correctness requirement (non-readers have no other access
+to the options), and the growth is prose the SI-reduction epic can later
+compress like any other block. Flagged for the maintainer in the merge report.
+
 Deliberately NOT changed: the legacy `SYSTEM_INSTRUCTION` full-dump path still
 truncates >5-option lists to 3 (`build_form_context`) -- it belongs to the
 deprecated section-reset fallback with a deletion inventory, and expanding its
