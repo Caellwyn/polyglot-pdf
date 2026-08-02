@@ -5,6 +5,14 @@ import json
 from backend.config import get_settings
 from backend.services.manifest_service import get_field_guidance
 
+# Above this many options, the guidance marks the list as a "long standard
+# list" (e.g. a 50-state select) and the DTI SI's PRESENTING OPTIONS rule has
+# the model ask directly + offer the full read-out instead of an unconditional
+# recital (bd polyglot-pdf-6bq8). Chosen so every substantive choice list in
+# the current kits (W-7 reason: 8; I-90 Part 2 reason: 12) is read in full,
+# while the 50-state selects are not force-recited.
+LONG_OPTION_LIST_THRESHOLD = 20
+
 
 def render_field_guidance(
     field: Optional[Dict[str, Any]], fill_language: Optional[str] = None,
@@ -80,7 +88,23 @@ def render_field_guidance(
                     opt_strs.append(opt_value)
             else:
                 opt_strs.append(str(opt))
-        parts.append(f"Options: [{', '.join(opt_strs)}]")
+        n = len(opt_strs)
+        # The user cannot read the form, so the model's recital is their only
+        # access to the choices (bd polyglot-pdf-6bq8). The count + imperative
+        # ride the injection so the directive is in the LATEST guidance block on
+        # exactly the turns that need it; the full behavioral rule (and the
+        # long-list carve-out this marker triggers) is the DTI SI's PRESENTING
+        # OPTIONS block.
+        if n > LONG_OPTION_LIST_THRESHOLD:
+            parts.append(
+                f"Options ({n} total -- long standard list; ask directly and "
+                f"offer to read all {n} aloud): [{', '.join(opt_strs)}]"
+            )
+        else:
+            parts.append(
+                f"Options ({n} -- read ALL {n} aloud when asking; the user "
+                f"cannot see them): [{', '.join(opt_strs)}]"
+            )
 
     validation = guidance.get("validation")
     if isinstance(validation, dict):
