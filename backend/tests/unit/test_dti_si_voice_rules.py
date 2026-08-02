@@ -260,6 +260,17 @@ def test_dti_si_forbids_partial_or_summarized_option_lists():
     assert "never stop partway" in si
 
 
+def test_dti_si_one_at_a_time_phrase_is_prohibition_only():
+    # The recital prescription must not share the prohibition's literal phrase:
+    # "read ... one option at a time" vs "do NOT walk the options one at a
+    # time" collided 270 chars apart (2nd Opus outer review, this PR). The only
+    # surviving "one at a time" must live inside the Do-NOT sentence.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert si.count("one at a time") == 1
+    i = si.index("one at a time")
+    assert "Do NOT walk the" in si[max(0, i - 60):i]
+
+
 def test_dti_si_forbids_one_by_one_yes_no_option_walk():
     # Observed live (this bead's harness run): the model turned an 8-option
     # checkbox_group into "Is it X?" one option per turn -- the user never
