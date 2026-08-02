@@ -60,8 +60,13 @@ unconditional, so a resume onto a 50-state select would have demanded a full
 recital against the guidance's marker); (2) an exact-threshold boundary test
 (a silent `>` -> `>=` flip was invisible to the suite); (3) this standard's
 per-field-guidance bullet now describes the Options segment, not just the
-header. Both outer passes then re-cleared the final diff. Reviewer-filed beads
-deduped: polyglot-pdf-29qb and polyglot-pdf-a26z closed as duplicates of
+header. A further round found the recital prescription and the one-at-a-time
+prohibition sharing a literal phrase 270 chars apart -- rephrased to "one
+after another" with a count pin. Round 3: both independent Opus passes
+NO-GAPS on the identical final diff (primary filed polyglot-pdf-c2jy,
+print-form cross-reference labels recited; second filed polyglot-pdf-41fi,
+binary yes/no fields told to recite "Select No, Select Yes"). Reviewer-filed
+beads deduped: polyglot-pdf-29qb and polyglot-pdf-a26z closed as duplicates of
 polyglot-pdf-e5a7 (numeric enumerations force-recited); polyglot-pdf-0rm1
 (untranslated English option labels in the spoken hint) kept open.
 
