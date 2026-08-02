@@ -37,7 +37,18 @@ All options still ride the injection in every branch; only the ask style
 changes.
 
 This resolves bd polyglot-pdf-e5a7 (numeric-range selects force-recited),
-closed with this PR.
+closed with this PR. A kit-backed test pins the REAL I-90 height field ids to
+the ask-directly branch (outer-review gap: a synthetic-only pin would stay
+green if the kit re-typed them).
+
+**Review outcome (pre-PR, all Claude-based):** fresh-eyes Sonnet NO-GAPS +
+Opus clearing NO-GAPS. Opus outer review: primary pass found the missing
+kit-backed e5a7 test (fixed inline) and filed polyglot-pdf-cqx6 (the
+unknown-type fallback now lands on the ask-directly side -- latent, no shipped
+kit hits it); after the fix, two independent Opus passes both returned
+NO-GAPS on the identical final diff. Two residual true nits (a contiguous
+test-assert strengthening and a latent enum-coercion hardening) deferred to
+one chore bead per the deferred-nit convention.
 
 **Live verification (local voice harness, Vertex 2.5 native-audio):** the
 I-90 mailing-state select (50 options), reached via the resume path, asked
