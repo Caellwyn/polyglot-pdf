@@ -2,7 +2,7 @@
 
 **Tracks:** backend/routes/pdf_fill_routes.py backend/services/form_kits.py frontend/src/schema-forms/utils/pdfFiller.ts
 
-*Last updated: 2026-07-14. See [the v96b journal entry](../journal/entries/2026-07-05-bd-v96b-store-with-issues.md) for the kit JSON-artifact surface; [the h76m.17 entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for runtime group consumers; [the eb4z entry](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the field_mappings []-alias exact-wins fix.*
+*Last updated: 2026-08-01. See [the v96b journal entry](../journal/entries/2026-07-05-bd-v96b-store-with-issues.md) for the kit JSON-artifact surface; [the h76m.17 entry](../journal/entries/2026-07-05-bd-h76m.17-runtime-group-consumers.md) for runtime group consumers; [the eb4z entry](../journal/entries/2026-07-14-bd-eb4z-7sdc-alias-symmetry.md) for the field_mappings []-alias exact-wins fix.*
 
 How filled answers become a downloadable/printable PDF. The flow is **stateless**:
 the client sends field values + schema, the backend fills a fresh copy of the
@@ -71,16 +71,17 @@ gap, but never shadows a distinct real field that happens to lack its own
   **rendered page** silently shows only the first `MaxLen` characters. Three W-7
   fields are comb-8, so `03/14/1990` printed as `03/14/19` -- a wrong date of birth
   on a filed ITIN application that no value-level check, lint, or test could see
-  (bd `polyglot-pdf-br7t`). `fit_comb_value` handles it in two steps: strip
-  formatting punctuation when the value is an IDENTIFIER that then fits (an
-  i-90/f1040 SSN typed `123-45-6789` keeps its intended one-digit-per-cell look),
-  otherwise clear the Comb flag so the value renders in full as ordinary text.
-  **Stripping is safe only when digit ORDER carries all the meaning** -- true of an
-  SSN, false of a date, where the separators mark field boundaries. So the strip is
-  gated three ways (schema `type: "date"`, any `/`, and an ISO `yyyy-mm-dd` shape):
-  `<input type="date">` always emits ISO, and `1990-03-14` would strip to
-  `19900314`, which FITS comb-8 and prints in a `month / day / year` box as
-  month=19 day=90 -- a plausible-looking wrong date, worse than the truncation.
+  (bd `polyglot-pdf-br7t`). `fit_comb_value` clears the Comb flag when the value
+  is longer than the cells, so it renders in full as ordinary text.
+  **It never rewrites the value** -- appearance only. That restraint is the whole
+  design: an earlier cut also stripped formatting punctuation so an identifier like
+  `123-45-6789` would still fit its comb-9 box, and three review rounds each found
+  another input where stripping REORDERED meaning instead of reformatting it
+  (`1990-03-14` -> `19900314`, `14.03.1990` -> `14031990`), each of which then fit
+  comb-8 and printed a plausible-looking WRONG date in a `month / day / year` box.
+  Every guard added just attracted a new separator, so the strip is gone and the
+  class is unreachable by construction. The cost is cosmetic: a separator-bearing
+  identifier loses its one-digit-per-cell look.
   **Verify any change here by RENDERING** -- `page.get_text("text",
   clip=widget.rect)` -- never by reading `widget.field_value` back, which is
   exactly the check this class of bug defeats. Note `widget.text_maxlen = 0` does

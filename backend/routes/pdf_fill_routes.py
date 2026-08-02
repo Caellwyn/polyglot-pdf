@@ -147,9 +147,8 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 		# AcroForm text-field flag bit 25 (1-based in the spec) = Comb.
 		_COMB_FLAG = 1 << 24
 
-		def fit_comb_value(widget, value: str, is_date: bool = False) -> str:
-			"""Make an over-long value PRINT on a Comb widget, preferring to keep the
-			comb.
+		def fit_comb_value(widget, value: str) -> str:
+			"""Clear the Comb flag when the value is longer than the widget's cells.
 
 			A Comb text field splits its box into exactly MaxLen cells and prints ONE
 			glyph per cell -- there is no cell MaxLen+1. PyMuPDF stores and reads back
@@ -161,27 +160,23 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			'03/14/1990' printed as '03/14/19' -- a wrong date of birth on a filed
 			ITIN application, invisible to every value-level check.
 
-			Two-step, because comb boxes come in two flavours across the shipped kits:
+			NEVER REWRITES THE VALUE. An earlier cut of this fix also stripped
+			formatting punctuation so a value like '123-45-6789' would still fit its
+			comb-9 SSN box, which preserved the intended one-digit-per-cell look. Three
+			review rounds each found another input where that strip REORDERED meaning
+			instead of reformatting it -- '1990-03-14' -> '19900314', '14.03.1990' ->
+			'14031990' -- each of which then FIT comb-8 and printed a plausible-looking
+			WRONG date (month=19, month=14) in a box captioned 'month / day / year'.
+			Every guard added attracted a new separator. So the strip is gone: this
+			function now only ever changes APPEARANCE, never the characters written,
+			which makes the whole class of corruption unreachable by construction.
+			(A value that then overflows the box WIDTH still clips -- bd
+			polyglot-pdf-2ho7 -- but clipping is visible, unlike a reordered date.)
 
-			1. STRIP SEPARATORS -- IDENTIFIERS ONLY. Safe only when the value's digit
-			   ORDER carries all of its meaning and the printed cells already supply
-			   the visual grouping: a user typing '123-45-6789' into a comb-9 SSN
-			   overflows only because of punctuation, so dropping it makes the value
-			   fit and KEEPS the one-digit-per-cell rendering the form intends.
-			   NEVER for a date. A date's separators mark field boundaries, so
-			   stripping REORDERS its meaning rather than reformatting it: the ISO
-			   '1990-03-14' that <input type="date"> always emits would strip to
-			   '19900314', which FITS comb-8 and therefore prints, in a box captioned
-			   'month / day / year', as month=19 day=90 year=0314. That is a
-			   plausible-looking wrong date of birth -- strictly worse than the
-			   truncation this function exists to fix, because it does not look broken.
-			   Anything not confidently an identifier falls through to step 2, which
-			   is always safe (it only changes appearance, never the value).
-			2. RELAX. Otherwise the value is genuinely longer than the box models
-			   (any real date in 8 cells), so clear the Comb flag and let it render as
-			   ordinary text -- readable in full beats silently losing characters.
-
-			Returns the string to write (possibly separator-stripped).
+			The tradeoff is only cosmetic: an identifier typed with separators now
+			renders as ordinary text instead of one digit per cell. The client already
+			rejects those (max_length), so this is the unreachable-benefit side of the
+			trade, while the corruption it cost was reachable.
 			"""
 			try:
 				maxlen = widget.text_maxlen or 0
@@ -189,30 +184,6 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					return value
 				if len(value) <= maxlen:
 					return value
-
-				# Step 1 -- identifiers only. Guarded three ways, because each alone
-				# leaks a date into the strip path:
-				#   is_date            -- the schema-declared dates;
-				#   no '/'             -- a slash-separated date;
-				#   no ISO yyyy-mm-dd  -- a DASH-separated date, which matters because
-				#                         w7's date_of_entry_us is declared type=text
-				#                         (so is_date is False) while <input type=date>
-				#                         and the voice path both emit ISO. Stripping
-				#                         '2019-03-14' yields '20190314', which FITS
-				#                         comb-8 and prints as month=20 day=19 year=0314.
-				# A dashed SSN ('123-45-6789') still strips: it is not ISO-shaped.
-				looks_iso = bool(re.match(r"^\d{4}-\d{1,2}-\d{1,2}$", value.strip()))
-				if not is_date and "/" not in value and not looks_iso:
-					stripped = re.sub(r"[\s\-().]", "", value)
-					if stripped.isdigit() and len(stripped) <= maxlen:
-						_log.info(
-							"comb_separators_stripped",  # never log the value -- bd hjo
-							widget_name=widget.field_name, maxlen=maxlen,
-							before=len(value), after=len(stripped),
-						)
-						return stripped
-
-				# Step 2 -- genuinely too long for the cells.
 				widget.field_flags = widget.field_flags & ~_COMB_FLAG
 				_log.info(
 					"comb_relaxed_for_overflow",  # never log the value itself -- bd hjo
@@ -221,8 +192,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				return value
 			except Exception as e:
 				# Never fail a fill over an appearance tweak -- worst case the value
-				# renders truncated, which is the pre-fix behavior.
-				_log.warning("comb_fit_failed", widget_name=widget.field_name, error=str(e))
+				# renders truncated, which is the pre-fix behavior. Uses the name
+				# captured before the try, so the handler cannot raise on a stale
+				# widget ref (bd polyglot-pdf-l53i).
+				_log.warning("comb_fit_failed", error=str(e))
 				return value
 
 		def fill_widget(widget, page, value, field_type: Optional[str] = None) -> None:
@@ -279,8 +252,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					# glyphs, so an over-long value would render truncated even though
 					# it stores fine (bd polyglot-pdf-br7t). May also rewrite the value
 					# (separator strip) to keep the comb rendering where it fits.
-					text_value = fit_comb_value(
-						fresh_widget, text_value, is_date=(field_type == "date"))
+					text_value = fit_comb_value(fresh_widget, text_value)
 					fresh_widget.field_value = text_value
 					fresh_widget.update()
 					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(text_value))

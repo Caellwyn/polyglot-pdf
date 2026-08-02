@@ -177,11 +177,14 @@ def test_all_three_comb8_date_fields_print_a_full_4_digit_year(field_id, suffix)
 
 
 # --------------------------------------------------------------------------- #
-# Separator stripping keeps the comb on the OTHER kits' identifier boxes.
-# The first cut of this fix relaxed any overflowing comb, which silently
-# un-combed i-90 / f1040 SSN and A-Number boxes as soon as a user typed the
-# punctuation those formats invite ('123-45-6789'). Stripping first keeps the
-# one-digit-per-cell rendering the form intends (fresh-eyes review of br7t).
+# THE VALUE IS NEVER REWRITTEN.
+#
+# An earlier cut of this fix also stripped formatting punctuation so an
+# identifier like '123-45-6789' would still fit its comb-9 box. Three review
+# rounds each found another input where that strip REORDERED meaning instead of
+# reformatting it, and each rewritten value then FIT the cells and printed a
+# plausible-looking wrong value. These pin the property that makes the whole
+# class unreachable: fit_comb_value changes appearance only.
 # --------------------------------------------------------------------------- #
 
 _I90_KIT = Path(__file__).resolve().parents[2] / "form-kits" / "i-90"
@@ -198,61 +201,69 @@ def _fill_kit(kit_id: str, kit_root: Path, field_values: dict) -> bytes:
     return resp.body
 
 
-@pytest.mark.skipif(not (_I90_KIT / "form.pdf").exists(), reason="i-90 kit absent")
-def test_dashed_ssn_strips_and_keeps_the_i90_comb():
-    """'123-45-6789' overflows comb-9 only because of punctuation.
+def _stored_value(pdf_bytes: bytes, suffix: str) -> str:
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        widget, _ = _widget_by_suffix(doc, suffix)
+        assert widget is not None, f"widget {suffix} not found"
+        return widget.field_value or ""
+    finally:
+        doc.close()
 
-    Stripping makes it fit, so the box keeps its intended one-digit-per-cell
-    look; relaxing instead would visibly change a form that was rendering fine.
+
+@pytest.mark.parametrize("value", [
+    "1990-03-14",   # ISO -- what <input type="date"> always emits
+    "1990.03.14",   # dotted, year-first
+    "14.03.1990",   # dotted, DD.MM.YYYY -- the everyday European/LatAm form
+    "03 14 1990",   # space-separated
+    "03-14-1990",   # US order with dashes
+    "03/14/1990",   # slash-separated
+], ids=["iso", "dotted_ymd", "dotted_dmy", "spaced", "dashed_mdy", "slashed"])
+@pytest.mark.parametrize("field_id,suffix", [
+    (_DOB_FIELD, _DOB_SUFFIX),
+    ("date_of_entry_us", "f1_27[0]"),
+], ids=["date_typed", "text_typed"])
+def test_no_date_format_is_ever_rewritten(field_id, suffix, value):
+    """Whatever separator a user (or the model) uses, the digits must not move.
+
+    Every one of these strips to 8 digits, which FITS comb-8 -- so under the old
+    strip step each printed as a different, plausible-looking date ('14.03.1990'
+    -> '14031990' = month 14). Covers both a schema-declared date and the
+    text-typed one, since a type-based guard alone missed the latter.
+    """
+    filled = _fill({field_id: value})
+    assert _stored_value(filled, suffix) == value, "the written value was rewritten"
+    printed = _rendered_text(filled, suffix)
+    assert value.replace(" ", "") in printed, (
+        f"{field_id} printed {printed!r} for input {value!r}"
+    )
+
+
+@pytest.mark.skipif(not (_I90_KIT / "form.pdf").exists(), reason="i-90 kit absent")
+def test_dashed_ssn_is_not_rewritten_and_still_prints_in_full():
+    """A separator-bearing identifier relaxes rather than being reformatted.
+
+    Losing the one-digit-per-cell look is a cosmetic cost, deliberately accepted:
+    rewriting the value is what let three rounds of date corruption through, and
+    the client's own max_length already rejects this input before it can reach
+    the route.
     """
     filled = _fill_kit("i-90", _I90_KIT, {"p1_line16_ssn": "123-45-6789"})
-    printed = _rendered_text(filled, "P1_Line16_SSN[0]")
-    assert "123456789" in printed, printed
-    assert _comb_flag(filled, "P1_Line16_SSN[0]") is True, (
-        "a dashed SSN un-combed the box instead of being stripped to fit"
-    )
+    assert _stored_value(filled, "P1_Line16_SSN[0]") == "123-45-6789"
+    assert "123-45-6789" in _rendered_text(filled, "P1_Line16_SSN[0]")
 
 
 @pytest.mark.skipif(not (_F1040_KIT / "form.pdf").exists(), reason="f1040 kit absent")
-def test_dashed_ssn_strips_and_keeps_the_f1040_comb():
+def test_f1040_dashed_ssn_is_not_rewritten():
     filled = _fill_kit("f1040", _F1040_KIT, {"fld_your_ssn": "123-45-6789"})
-    printed = _rendered_text(filled, "f1_16[0]")
-    assert "123456789" in printed, printed
-    assert _comb_flag(filled, "f1_16[0]") is True
-
-
-@pytest.mark.parametrize("field_id,suffix", [
-    (_DOB_FIELD, _DOB_SUFFIX),                          # schema type: date
-    ("id_document_expiration_date", "f1_26[0]"),        # schema type: date
-    ("date_of_entry_us", "f1_27[0]"),                   # schema type: TEXT
-], ids=["date_of_birth", "id_doc_expiration", "date_of_entry_text_typed"])
-def test_an_iso_date_is_never_separator_stripped(field_id, suffix):
-    """The shape the UI actually produces must not be silently reordered.
-
-    `<input type="date">` ALWAYS emits YYYY-MM-DD, and the voice path is told the
-    same ('yyyy-MM-dd', backend/config.py). Stripping the dashes from '1990-03-14'
-    yields '19900314' -- 8 chars, which FITS comb-8, so it would print inside a box
-    captioned 'month / day / year' as month=19 day=90 year=0314: a
-    plausible-looking WRONG date of birth, strictly worse than the truncation this
-    module exists to prevent. Caught by the fresh-eyes review of bd
-    polyglot-pdf-br7t.
-
-    date_of_entry_us is included because it is declared type=TEXT, so the
-    schema-type guard alone does not cover it -- the ISO-shape guard does.
-    """
-    printed = _rendered_text(_fill({field_id: "1990-03-14"}), suffix)
-    assert "19900314" not in printed, (
-        f"{field_id} printed {printed!r} -- an ISO date was separator-stripped "
-        f"into a different date"
-    )
-    assert "1990-03-14" in printed, printed
+    assert _stored_value(filled, "f1_16[0]") == "123-45-6789"
+    assert "123-45-6789" in _rendered_text(filled, "f1_16[0]")
 
 
 @pytest.mark.skipif(not (_I90_KIT / "form.pdf").exists(), reason="i-90 kit absent")
 def test_a_number_with_its_letter_prefix_relaxes_rather_than_truncating():
-    """'A123456789' is 10 chars in 9 cells and the 'A' is MEANINGFUL, so it
-    cannot be stripped -- relaxing is correct here, and beats printing
-    'A12345678'."""
+    """'A123456789' is 10 chars in 9 cells, so it relaxes -- and prints in full
+    rather than losing its last digit to 'A12345678'."""
     filled = _fill_kit("i-90", _I90_KIT, {"p1_line1_aliennumber": "A123456789"})
     printed = _rendered_text(filled, "P1_Line1_AlienNumber[0]")
     assert printed.endswith("A123456789"), printed
