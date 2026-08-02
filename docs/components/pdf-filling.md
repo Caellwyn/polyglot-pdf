@@ -72,15 +72,21 @@ gap, but never shadows a distinct real field that happens to lack its own
   fields are comb-8, so `03/14/1990` printed as `03/14/19` -- a wrong date of birth
   on a filed ITIN application that no value-level check, lint, or test could see
   (bd `polyglot-pdf-br7t`). `fit_comb_value` handles it in two steps: strip
-  formatting punctuation when the value is digits+separators and that makes it fit
-  (an i-90/f1040 SSN typed `123-45-6789` keeps its intended one-digit-per-cell
-  look), otherwise clear the Comb flag so the value renders in full as ordinary
-  text. **Verify any change here by RENDERING** -- `page.get_text("text",
+  formatting punctuation when the value is an IDENTIFIER that then fits (an
+  i-90/f1040 SSN typed `123-45-6789` keeps its intended one-digit-per-cell look),
+  otherwise clear the Comb flag so the value renders in full as ordinary text.
+  **Stripping is safe only when digit ORDER carries all the meaning** -- true of an
+  SSN, false of a date, where the separators mark field boundaries. So the strip is
+  gated three ways (schema `type: "date"`, any `/`, and an ISO `yyyy-mm-dd` shape):
+  `<input type="date">` always emits ISO, and `1990-03-14` would strip to
+  `19900314`, which FITS comb-8 and prints in a `month / day / year` box as
+  month=19 day=90 -- a plausible-looking wrong date, worse than the truncation.
+  **Verify any change here by RENDERING** -- `page.get_text("text",
   clip=widget.rect)` -- never by reading `widget.field_value` back, which is
   exactly the check this class of bug defeats. Note `widget.text_maxlen = 0` does
   NOT persist through save (bd `polyglot-pdf-9oae`); clearing the flag is what
   works. Relaxing also does not make an arbitrarily long value fit -- it still
-  clips at the box WIDTH (bd `polyglot-pdf-tmun`).
+  clips at the box WIDTH, which is currently silent (bd `polyglot-pdf-2ho7`).
 
 - **Same-name kids: re-fetch by xref, not name.** `fill_widget` re-fetches a
   fresh widget from the page to dodge PyMuPDF weakrefs; radio kids of a

@@ -221,6 +221,33 @@ def test_dashed_ssn_strips_and_keeps_the_f1040_comb():
     assert _comb_flag(filled, "f1_16[0]") is True
 
 
+@pytest.mark.parametrize("field_id,suffix", [
+    (_DOB_FIELD, _DOB_SUFFIX),                          # schema type: date
+    ("id_document_expiration_date", "f1_26[0]"),        # schema type: date
+    ("date_of_entry_us", "f1_27[0]"),                   # schema type: TEXT
+], ids=["date_of_birth", "id_doc_expiration", "date_of_entry_text_typed"])
+def test_an_iso_date_is_never_separator_stripped(field_id, suffix):
+    """The shape the UI actually produces must not be silently reordered.
+
+    `<input type="date">` ALWAYS emits YYYY-MM-DD, and the voice path is told the
+    same ('yyyy-MM-dd', backend/config.py). Stripping the dashes from '1990-03-14'
+    yields '19900314' -- 8 chars, which FITS comb-8, so it would print inside a box
+    captioned 'month / day / year' as month=19 day=90 year=0314: a
+    plausible-looking WRONG date of birth, strictly worse than the truncation this
+    module exists to prevent. Caught by the fresh-eyes review of bd
+    polyglot-pdf-br7t.
+
+    date_of_entry_us is included because it is declared type=TEXT, so the
+    schema-type guard alone does not cover it -- the ISO-shape guard does.
+    """
+    printed = _rendered_text(_fill({field_id: "1990-03-14"}), suffix)
+    assert "19900314" not in printed, (
+        f"{field_id} printed {printed!r} -- an ISO date was separator-stripped "
+        f"into a different date"
+    )
+    assert "1990-03-14" in printed, printed
+
+
 @pytest.mark.skipif(not (_I90_KIT / "form.pdf").exists(), reason="i-90 kit absent")
 def test_a_number_with_its_letter_prefix_relaxes_rather_than_truncating():
     """'A123456789' is 10 chars in 9 cells and the 'A' is MEANINGFUL, so it

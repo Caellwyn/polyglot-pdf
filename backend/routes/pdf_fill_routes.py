@@ -147,7 +147,7 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 		# AcroForm text-field flag bit 25 (1-based in the spec) = Comb.
 		_COMB_FLAG = 1 << 24
 
-		def fit_comb_value(widget, value: str) -> str:
+		def fit_comb_value(widget, value: str, is_date: bool = False) -> str:
 			"""Make an over-long value PRINT on a Comb widget, preferring to keep the
 			comb.
 
@@ -163,16 +163,23 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 			Two-step, because comb boxes come in two flavours across the shipped kits:
 
-			1. STRIP SEPARATORS. Every comb widget outside W-7's three dates is an
-			   all-digit identifier (i-90 SSN/A-Number comb-9, f1040 SSN/routing/PIN
-			   comb-5..17) whose printed cells already supply the visual grouping. A
-			   user typing '123-45-6789' into a comb-9 SSN overflows only because of
-			   punctuation, so dropping the separators makes it fit and KEEPS the
-			   one-digit-per-cell rendering the form intends.
-			2. RELAX. If it still does not fit, the value is genuinely longer than the
-			   box models (W-7's '03/14/1990' in 8 cells), so clear the Comb flag and
-			   let it render as ordinary text -- readable in full beats silently losing
-			   the last characters.
+			1. STRIP SEPARATORS -- IDENTIFIERS ONLY. Safe only when the value's digit
+			   ORDER carries all of its meaning and the printed cells already supply
+			   the visual grouping: a user typing '123-45-6789' into a comb-9 SSN
+			   overflows only because of punctuation, so dropping it makes the value
+			   fit and KEEPS the one-digit-per-cell rendering the form intends.
+			   NEVER for a date. A date's separators mark field boundaries, so
+			   stripping REORDERS its meaning rather than reformatting it: the ISO
+			   '1990-03-14' that <input type="date"> always emits would strip to
+			   '19900314', which FITS comb-8 and therefore prints, in a box captioned
+			   'month / day / year', as month=19 day=90 year=0314. That is a
+			   plausible-looking wrong date of birth -- strictly worse than the
+			   truncation this function exists to fix, because it does not look broken.
+			   Anything not confidently an identifier falls through to step 2, which
+			   is always safe (it only changes appearance, never the value).
+			2. RELAX. Otherwise the value is genuinely longer than the box models
+			   (any real date in 8 cells), so clear the Comb flag and let it render as
+			   ordinary text -- readable in full beats silently losing characters.
 
 			Returns the string to write (possibly separator-stripped).
 			"""
@@ -183,17 +190,27 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 				if len(value) <= maxlen:
 					return value
 
-				# Step 1 -- only for a value that is digits + separators; never strip
-				# from free text (a date's slashes are meaningful, and '03141990'
-				# would be unreadable).
-				stripped = re.sub(r"[\s\-().]", "", value)
-				if stripped.isdigit() and len(stripped) <= maxlen:
-					_log.info(
-						"comb_separators_stripped",  # never log the value -- bd hjo
-						widget_name=widget.field_name, maxlen=maxlen,
-						before=len(value), after=len(stripped),
-					)
-					return stripped
+				# Step 1 -- identifiers only. Guarded three ways, because each alone
+				# leaks a date into the strip path:
+				#   is_date            -- the schema-declared dates;
+				#   no '/'             -- a slash-separated date;
+				#   no ISO yyyy-mm-dd  -- a DASH-separated date, which matters because
+				#                         w7's date_of_entry_us is declared type=text
+				#                         (so is_date is False) while <input type=date>
+				#                         and the voice path both emit ISO. Stripping
+				#                         '2019-03-14' yields '20190314', which FITS
+				#                         comb-8 and prints as month=20 day=19 year=0314.
+				# A dashed SSN ('123-45-6789') still strips: it is not ISO-shaped.
+				looks_iso = bool(re.match(r"^\d{4}-\d{1,2}-\d{1,2}$", value.strip()))
+				if not is_date and "/" not in value and not looks_iso:
+					stripped = re.sub(r"[\s\-().]", "", value)
+					if stripped.isdigit() and len(stripped) <= maxlen:
+						_log.info(
+							"comb_separators_stripped",  # never log the value -- bd hjo
+							widget_name=widget.field_name, maxlen=maxlen,
+							before=len(value), after=len(stripped),
+						)
+						return stripped
 
 				# Step 2 -- genuinely too long for the cells.
 				widget.field_flags = widget.field_flags & ~_COMB_FLAG
@@ -262,7 +279,8 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					# glyphs, so an over-long value would render truncated even though
 					# it stores fine (bd polyglot-pdf-br7t). May also rewrite the value
 					# (separator strip) to keep the comb rendering where it fits.
-					text_value = fit_comb_value(fresh_widget, text_value)
+					text_value = fit_comb_value(
+						fresh_widget, text_value, is_date=(field_type == "date"))
 					fresh_widget.field_value = text_value
 					fresh_widget.update()
 					_log.debug("text_field_filled_success", widget_name=fresh_widget.field_name, value_length=len(text_value))
@@ -661,7 +679,12 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 					fill_widget(widget, page, value, field_type=field_type)
 					filled_count += 1
-					_log.debug("text_field_filled", kit=request.kit_id, field_id=field_id, pdf_field=widget.field_name, value_length=len(str(value)))
+					# submitted_length, not the written length: fit_comb_value may have
+					# stripped separators, and the inner text_field_filled_success logs
+					# the post-strip length. Naming them differently keeps the two
+					# numbers from reading as a contradiction (length is the only
+					# PII-safe observability on this path -- bd hjo).
+					_log.debug("text_field_filled", kit=request.kit_id, field_id=field_id, pdf_field=widget.field_name, submitted_length=len(str(value)))
 				except Exception as exc:
 					_log.error(
 						"field_fill_error",
