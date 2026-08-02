@@ -212,7 +212,7 @@ def _stored_value(pdf_bytes: bytes, suffix: str) -> str:
 
 
 @pytest.mark.parametrize("value", [
-    "1990-03-14",   # ISO -- what <input type="date"> always emits
+    "1990-03-14",   # ISO -- what <input type="date"> emits for the date-typed fields
     "1990.03.14",   # dotted, year-first
     "14.03.1990",   # dotted, DD.MM.YYYY -- the everyday European/LatAm form
     "03 14 1990",   # space-separated
@@ -243,10 +243,12 @@ def test_no_date_format_is_ever_rewritten(field_id, suffix, value):
 def test_dashed_ssn_is_not_rewritten_and_still_prints_in_full():
     """A separator-bearing identifier relaxes rather than being reformatted.
 
-    Losing the one-digit-per-cell look is a cosmetic cost, deliberately accepted:
-    rewriting the value is what let three rounds of date corruption through, and
-    the client's own max_length already rejects this input before it can reach
-    the route.
+    Losing the one-digit-per-cell look is a cosmetic cost, deliberately accepted
+    because rewriting the value is what let three rounds of date corruption
+    through. This IS reachable in production -- handleDownloadPDF calls fillPDF
+    with no validation -- so the cost is real, not hypothetical; it is simply the
+    cheaper failure. Restoring the cell look belongs in input normalization (a
+    real 'ssn' digit preset), not in the filler.
     """
     filled = _fill_kit("i-90", _I90_KIT, {"p1_line16_ssn": "123-45-6789"})
     assert _stored_value(filled, "P1_Line16_SSN[0]") == "123-45-6789"

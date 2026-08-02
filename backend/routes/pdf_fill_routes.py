@@ -167,16 +167,24 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 			instead of reformatting it -- '1990-03-14' -> '19900314', '14.03.1990' ->
 			'14031990' -- each of which then FIT comb-8 and printed a plausible-looking
 			WRONG date (month=19, month=14) in a box captioned 'month / day / year'.
-			Every guard added attracted a new separator. So the strip is gone: this
-			function now only ever changes APPEARANCE, never the characters written,
-			which makes the whole class of corruption unreachable by construction.
-			(A value that then overflows the box WIDTH still clips -- bd
-			polyglot-pdf-2ho7 -- but clipping is visible, unlike a reordered date.)
+			Every guard added attracted a new separator, because "is this string's
+			meaning purely digit ORDER?" is not decidable from the string. So the strip
+			is gone: this function now only ever changes APPEARANCE, never the
+			characters written, which makes the whole class unreachable by construction
+			instead of by enumeration. (A value that then overflows the box WIDTH still
+			clips -- bd polyglot-pdf-8i43 -- but a clipped string is visibly incomplete,
+			unlike a reordered date that looks correct and gets filed.)
 
-			The tradeoff is only cosmetic: an identifier typed with separators now
-			renders as ordinary text instead of one digit per cell. The client already
-			rejects those (max_length), so this is the unreachable-benefit side of the
-			trade, while the corruption it cost was reachable.
+			The accepted cost is cosmetic and REACHABLE, not hypothetical: nothing gates
+			the download path (SchemaForm.handleDownloadPDF calls fillPDF with no
+			validation), and the two type="date" fields cannot be length-gated at all
+			(validateField early-returns to validateDateValue, which never reads
+			max_length), so a W-7 date of birth renders un-combed on every UI
+			submission. That is the deliberate trade: a mis-rendered SSN or a date
+			printed as plain text is visibly odd, whereas a reordered date of birth
+			looks right and is filed with the IRS. Restoring the one-digit-per-cell
+			look belongs in INPUT normalization, where the field's semantic type is
+			known -- never in a rewrite here (bd polyglot-pdf-2ho7, closed won't-do).
 			"""
 			try:
 				maxlen = widget.text_maxlen or 0
@@ -250,8 +258,8 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 					text_value = str(value)
 					# Must precede the assignment: a comb widget prints only MaxLen
 					# glyphs, so an over-long value would render truncated even though
-					# it stores fine (bd polyglot-pdf-br7t). May also rewrite the value
-					# (separator strip) to keep the comb rendering where it fits.
+					# it stores fine (bd polyglot-pdf-br7t). Returns the value
+					# UNCHANGED -- it edits the widget's flags, never the characters.
 					text_value = fit_comb_value(fresh_widget, text_value)
 					fresh_widget.field_value = text_value
 					fresh_widget.update()
@@ -651,12 +659,10 @@ async def fill_pdf(request: PDFFillRequest) -> Response:
 
 					fill_widget(widget, page, value, field_type=field_type)
 					filled_count += 1
-					# submitted_length, not the written length: fit_comb_value may have
-					# stripped separators, and the inner text_field_filled_success logs
-					# the post-strip length. Naming them differently keeps the two
-					# numbers from reading as a contradiction (length is the only
-					# PII-safe observability on this path -- bd hjo).
-					_log.debug("text_field_filled", kit=request.kit_id, field_id=field_id, pdf_field=widget.field_name, submitted_length=len(str(value)))
+					# Length only -- never the value itself (bd hjo). Equal to the inner
+					# text_field_filled_success length by construction: the filler does
+					# not rewrite text values.
+					_log.debug("text_field_filled", kit=request.kit_id, field_id=field_id, pdf_field=widget.field_name, value_length=len(str(value)))
 				except Exception as exc:
 					_log.error(
 						"field_fill_error",

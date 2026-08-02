@@ -80,14 +80,22 @@ gap, but never shadows a distinct real field that happens to lack its own
   (`1990-03-14` -> `19900314`, `14.03.1990` -> `14031990`), each of which then fit
   comb-8 and printed a plausible-looking WRONG date in a `month / day / year` box.
   Every guard added just attracted a new separator, so the strip is gone and the
-  class is unreachable by construction. The cost is cosmetic: a separator-bearing
-  identifier loses its one-digit-per-cell look.
+  class is unreachable by construction. The cost is cosmetic but REAL, not rare:
+  nothing gates the download path (`handleDownloadPDF` calls `fillPDF` with no
+  validation) and a `type: "date"` field cannot be length-gated at all
+  (`validateField` early-returns to `validateDateValue`, which never reads
+  `max_length`), so the W-7 dates render un-combed on **every** UI submission, and
+  a separator-bearing SSN on i-90/f1040 renders as ordinary text. That is the
+  deliberate trade: visibly-odd beats a reordered date that looks correct and gets
+  filed. Restoring the cell look belongs in INPUT normalization, where the field's
+  semantic type is known -- never a rewrite in the filler (bd
+  `polyglot-pdf-2ho7`, closed won't-do for exactly this reason).
   **Verify any change here by RENDERING** -- `page.get_text("text",
   clip=widget.rect)` -- never by reading `widget.field_value` back, which is
   exactly the check this class of bug defeats. Note `widget.text_maxlen = 0` does
   NOT persist through save (bd `polyglot-pdf-9oae`); clearing the flag is what
   works. Relaxing also does not make an arbitrarily long value fit -- it still
-  clips at the box WIDTH, which is currently silent (bd `polyglot-pdf-2ho7`).
+  clips at the box WIDTH, which is currently silent (bd `polyglot-pdf-8i43`).
 
 - **Same-name kids: re-fetch by xref, not name.** `fill_widget` re-fetches a
   fresh widget from the page to dodge PyMuPDF weakrefs; radio kids of a
