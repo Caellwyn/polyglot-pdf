@@ -368,6 +368,25 @@ def test_render_field_guidance_long_radio_group_marks_long_standard_list():
         assert f"s{i}" in text
 
 
+def test_i90_height_selects_are_never_force_recited():
+    # bd polyglot-pdf-e5a7 (closed by this PR): the REAL shipped I-90 height
+    # fields are selects and must never carry the read-ALL imperative -- a
+    # synthetic-only pin would stay green if someone re-typed them to radio in
+    # the kit, silently restoring the "zero, one, two, ... eleven" recital.
+    import json
+    from pathlib import Path
+
+    kit = Path(__file__).resolve().parents[3] / "form-kits" / "i-90" / "schema.json"
+    schema = json.loads(kit.read_text(encoding="utf-8"))
+    fields = {f["id"]: f for f in schema["fields"]}
+    for fid in ("p3_line8_heightfeet", "p3_line8_heightinches"):
+        f = fields[fid]
+        assert f["type"] == "select", fid
+        text = render_field_guidance(f)
+        assert "read ALL" not in text, fid
+        assert "standard list; ask directly" in text, fid
+
+
 def test_render_field_guidance_checkbox_group_gets_recital():
     field = {
         "id": "reason", "name": "Reason", "spoken_name": "reason",
