@@ -404,13 +404,33 @@ across the PDF, list, and editor. Clear the box to restore the full list.
 ### Mark a Form Complete (deploy gating)
 
 A kit is **draft** until you promote it. On each catalogue card:
-- **Mark complete** -- sets `metadata.json` status to `complete`. Only complete
-  kits are uploaded by the deploy scripts (the draft-leak gate); a draft stays
-  local and git-backed.
-- **Revert to draft** -- the inverse, on a complete kit.
+- **Mark complete** -- the PUBLISH GATE, not just a flag. With the backend
+  running (which `scripts/run-schema-editor.sh` starts for you), the server
+  checks the kit before promoting it: the PDF is present, the schema validates,
+  it carries extraction info and the v2 stamp, and lint is error-free. It then
+  runs the **translation drift sweep** -- editing an English string in the editor
+  DROPS its baked translations, so the sweep re-translates everything missing and
+  **refuses to complete the kit until every supported language is covered**
+  ("16 of 17 translations complete"). Press it again to retry just the gaps.
+  Expect tens of seconds: one model call per language. Only then does
+  `metadata.json` flip to `complete`, and only complete kits are uploaded by the
+  deploy scripts (the draft-leak gate).
+- **Deploy this form** -- appears on a complete kit when you are running locally
+  with the dev server. Uploads THAT kit's schema and PDF to the form-kits bucket
+  and regenerates the manifest, after a confirmation naming the kit and bucket.
+  It publishes form DATA only -- it does not deploy the app (no Cloud Run, no
+  Hosting); that stays `deploy-demo.sh`.
+- **Revert to draft** -- the inverse, on a complete kit. Always available, even
+  with no backend: you must be able to un-publish something.
 
 Promote a form only after its review % is where you want it -- once complete, the
 next deploy ships it to the voice app.
+
+> **Running without a backend?** Mark complete still works, but it writes the
+> status **unchecked** -- no schema validation, no lint, and no re-translation --
+> and says so on the card. A kit promoted that way can reach the voice app with
+> fields that speak English to every non-English user. Start the backend and mark
+> it complete again to actually verify it.
 
 ### Navigate Large Forms
 
