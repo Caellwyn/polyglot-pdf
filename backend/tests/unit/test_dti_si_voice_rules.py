@@ -306,12 +306,14 @@ def test_initiating_templates_carry_option_recital():
     assert "in one short sentence if the field has no options" in s.RESUME_INITIATING_MESSAGE
 
 
-def test_dti_si_long_standard_list_carve_out():
-    # The 50-state selects must not force a 50-item recital; the carve-out is
-    # guidance-marked (the injection marks the list), offer-based, and read in
-    # full the moment the user asks or hesitates.
+def test_dti_si_standard_list_carve_out():
+    # Selects (e.g. the 50-state lists) must not force a recital; the carve-out
+    # is guidance-marked (the injection marks the list), offer-based, and read
+    # in full the moment the user asks or hesitates. "standard list" covers
+    # both markers the render emits ("standard list" for selects, "long
+    # standard list" for oversized radio/checkbox groups).
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "long standard list" in si
+    assert "marks as a standard list" in si
     assert "read ALL of it the moment they ask" in si
 
 
@@ -325,26 +327,55 @@ def test_render_field_guidance_options_carry_count_and_recital_imperative():
     assert '"Yes" (use value: yes), "No" (use value: no), "Maybe" (use value: maybe)]' in text
 
 
-def test_render_field_guidance_long_list_marks_standard_list():
+def test_render_field_guidance_select_always_asks_directly():
+    # Type scoping (bd polyglot-pdf-s503, maintainer directive): a select/
+    # dropdown NEVER gets the read-ALL imperative, whatever its count -- the
+    # 50-state lists and the height feet/inches numeric selects all ask
+    # directly with an offer to read.
+    for n in (7, 12, 50):
+        field = {
+            "id": "state", "name": "State", "spoken_name": "state",
+            "type": "select",
+            "options": [{"value": f"s{i}", "label": f"S{i}"} for i in range(n)],
+        }
+        text = render_field_guidance(field)
+        assert f"Options ({n} -- standard list; ask directly and offer to " in text
+        assert f"read all {n} aloud): [" in text
+        assert "read ALL" not in text
+        # Every option still rides the injection -- the marker changes the
+        # ask, never the model's access to the full list.
+        for i in range(n):
+            assert f"s{i}" in text
+
+
+def test_render_field_guidance_long_radio_group_marks_long_standard_list():
     from backend.services.ai_context import LONG_OPTION_LIST_THRESHOLD
 
     n = LONG_OPTION_LIST_THRESHOLD + 1
     field = {
-        "id": "state",
-        "name": "State",
-        "spoken_name": "state",
-        "type": "select",
+        "id": "big_group",
+        "name": "Big group",
+        "spoken_name": "big group",
+        "type": "radio",
         "options": [
-            {"value": f"s{i}", "label": f"State {i}"} for i in range(n)
+            {"value": f"s{i}", "label": f"Choice {i}"} for i in range(n)
         ],
     }
     text = render_field_guidance(field)
     assert f"Options ({n} total -- long standard list; ask directly and " in text
     assert f"offer to read all {n} aloud): [" in text
-    # Every option still rides the injection -- the carve-out changes the ask,
-    # never the model's access to the full list.
     for i in range(n):
         assert f"s{i}" in text
+
+
+def test_render_field_guidance_checkbox_group_gets_recital():
+    field = {
+        "id": "reason", "name": "Reason", "spoken_name": "reason",
+        "type": "checkbox_group",
+        "options": [{"value": f"v{i}", "label": f"R{i}"} for i in range(8)],
+    }
+    text = render_field_guidance(field)
+    assert "Options (8 -- read ALL 8 aloud when asking; " in text
 
 
 def test_render_field_guidance_threshold_boundary_is_exclusive():
@@ -354,8 +385,10 @@ def test_render_field_guidance_threshold_boundary_is_exclusive():
     from backend.services.ai_context import LONG_OPTION_LIST_THRESHOLD as T
 
     def field_with(n):
+        # radio: the boundary only exists for recital-eligible types (a select
+        # takes the ask-directly branch at every count, bd polyglot-pdf-s503).
         return {
-            "id": "f", "name": "F", "spoken_name": "f", "type": "select",
+            "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
             "options": [{"value": f"v{i}", "label": f"L{i}"} for i in range(n)],
         }
 
@@ -372,7 +405,8 @@ def test_initiating_templates_scope_recital_by_long_list_carve_out():
     s = _settings()
     for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
         tpl = getattr(s, name)
-        assert "unless the guidance marks the list as a long" in tpl, name
+        assert "unless the guidance marks the list as a" in tpl, name
+        assert "standard list" in tpl, name
         assert "offer to read the full list" in tpl, name
 
 
