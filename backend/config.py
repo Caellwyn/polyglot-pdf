@@ -1058,7 +1058,9 @@ class Settings(BaseModel):
 	INITIATING_MESSAGE: str = (
 		"Speak {spoken_language}. You MUST respond UNMISTAKABLY in {spoken_language}. "
 		"Greet user warmly, state section name, immediately ask for {next_field_hint}. "
-		"If the field has options, read EVERY option aloud as you ask -- the user cannot see the form. "
+		"If the field has options, read EVERY option aloud as you ask -- the user cannot see the form -- "
+		"unless the guidance marks the list as a long standard list: then ask directly and offer to "
+		"read the full list. "
 		"Do NOT re-verify fields that were already confirmed earlier - start by asking for this field. "
 		"This field follows the normal workflow like every other: after the user answers, fill it, "
 		"read the value back, ask 'Is that correct?', and confirm only after the user says yes.{current_field_guidance}"
@@ -1078,7 +1080,8 @@ class Settings(BaseModel):
 		"Do NOT greet the user. Do NOT introduce the form or section. "
 		"Simply ask for {next_field_hint} as if continuing naturally -- in one short sentence "
 		"if the field has no options; if it has options, read EVERY option aloud as you ask, "
-		"because the user cannot see the form.{current_field_guidance}"
+		"because the user cannot see the form -- unless the guidance marks the list as a long "
+		"standard list: then ask directly and offer to read the full list.{current_field_guidance}"
 	)
 
 	# === DISCLAIMER INITIATING MESSAGE ===

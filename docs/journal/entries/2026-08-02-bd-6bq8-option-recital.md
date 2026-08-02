@@ -50,8 +50,20 @@ question 2 now recites all 8 reasons (a-h) in one ask via the confirm-path
 injection; I-90 Part 2 Section A recites all 12 options verbatim, in order, on
 the resume-initiating path (the exact scenario the maintainer reported).
 
-**Review outcome:** recorded in the merge ping; fresh-eyes + Opus outer review
-ran pre-PR per the standard flow.
+**Review outcome (pre-PR, all Claude-based):** fresh-eyes ran 2 rounds (Sonnet:
+0 rubric gaps + 2 non-blocking findings, both adopted -- the SI cost note above
+and follow-up bead polyglot-pdf-bxra; Opus clearing round: NO-GAPS, filed
+polyglot-pdf-e5a7). Opus outer review: primary pass NO-GAPS; the second
+independent pass found 3 gaps, all adopted inline -- (1) both initiating
+templates' recital directive gained the long-standard-list carve-out (it was
+unconditional, so a resume onto a 50-state select would have demanded a full
+recital against the guidance's marker); (2) an exact-threshold boundary test
+(a silent `>` -> `>=` flip was invisible to the suite); (3) this standard's
+per-field-guidance bullet now describes the Options segment, not just the
+header. Both outer passes then re-cleared the final diff. Reviewer-filed beads
+deduped: polyglot-pdf-29qb and polyglot-pdf-a26z closed as duplicates of
+polyglot-pdf-e5a7 (numeric enumerations force-recited); polyglot-pdf-0rm1
+(untranslated English option labels in the spoken hint) kept open.
 
 **Cost impact (measured):** the DTI SI grows 14,086 -> 15,221 chars (~8%), and
 each option-bearing field's injected guidance grows by ~62 chars. Because the

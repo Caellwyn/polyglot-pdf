@@ -336,6 +336,35 @@ def test_render_field_guidance_long_list_marks_standard_list():
         assert f"s{i}" in text
 
 
+def test_render_field_guidance_threshold_boundary_is_exclusive():
+    # Exactly-THRESHOLD options must still get the read-ALL branch; a silent
+    # `>` -> `>=` flip would change every 20-option field with the suite green
+    # (2nd Opus outer review, this PR).
+    from backend.services.ai_context import LONG_OPTION_LIST_THRESHOLD as T
+
+    def field_with(n):
+        return {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "select",
+            "options": [{"value": f"v{i}", "label": f"L{i}"} for i in range(n)],
+        }
+
+    at = render_field_guidance(field_with(T))
+    assert f"Options ({T} -- read ALL {T} aloud when asking" in at
+    above = render_field_guidance(field_with(T + 1))
+    assert f"Options ({T + 1} total -- long standard list" in above
+
+
+def test_initiating_templates_scope_recital_by_long_list_carve_out():
+    # The templates' recital directive must carry the SAME carve-out as the SI:
+    # unqualified, a resume onto a 50-state select would demand a full recital
+    # against the guidance's long-list marker (2nd Opus outer review, this PR).
+    s = _settings()
+    for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
+        tpl = getattr(s, name)
+        assert "unless the guidance marks the list as a long" in tpl, name
+        assert "offer to read the full list" in tpl, name
+
+
 def test_render_field_guidance_substantive_lists_stay_below_threshold():
     # The two observed real-world cases (W-7 reason: 8, I-90 Part 2 Section A:
     # 12) must get the read-ALL imperative, not the long-list carve-out.

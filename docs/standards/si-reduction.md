@@ -45,6 +45,14 @@ everything form-specific OFF the SI and onto the per-turn injection:
 
 - **Per-field guidance** -- `render_field_guidance` (`ai_context.py`) renders one
   field's guidance (from `manifest_service.get_field_guidance`, incl. `fill_language`).
+  When the field has options, the `Options` segment carries the option COUNT and a
+  per-turn recital imperative (bd polyglot-pdf-6bq8): at or below
+  `ai_context.LONG_OPTION_LIST_THRESHOLD` (20) it renders
+  `Options (N -- read ALL N aloud when asking; the user cannot see them): [...]`;
+  above it, `Options (N total -- long standard list; ask directly and offer to read
+  all N aloud): [...]` -- the marker the DTI SI's `PRESENTING OPTIONS` block and both
+  initiating templates key their carve-out on. All options always ride the injection
+  either way; only the ask style changes.
   Option labels render pre-translated into the session language when the runtime
   option-translation overrides are available (bd polyglot-pdf-ow1e:
   `option_label_overrides` substitutes the label and omits `spoken_label` on
