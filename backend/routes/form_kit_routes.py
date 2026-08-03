@@ -12,11 +12,12 @@ storage PATHS, but no host route backs them -- bd polyglot-pdf-sbfk).
 import asyncio
 import re
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import structlog
 
+from backend.services.auth import require_auth
 from backend.services.form_kits import (
     FormKitNotFound,
     FormKitStoreError,
@@ -133,12 +134,13 @@ class FormKitManifestResponse(BaseModel):
 
 
 @router.get("/form-kits", response_model=FormKitManifestResponse)
-async def list_form_kits() -> FormKitManifestResponse:
+async def list_form_kits(_user: dict = Depends(require_auth)) -> FormKitManifestResponse:
     """
     List available form kits.
 
     Returns metadata only - schemas are not exposed directly.
     Frontend uses this to populate form selector in onboarding modal.
+    Auth-gated (bd polyglot-pdf-z2is); VFF_DISABLE_AUTH bypasses for local dev.
     """
     store = get_form_kit_store()
     _log.info("form_kits_list_request")
@@ -190,7 +192,7 @@ async def list_form_kits() -> FormKitManifestResponse:
 
 
 @router.get("/form-kits/{kit_id}/schema")
-async def get_form_kit_schema(kit_id: str) -> JSONResponse:
+async def get_form_kit_schema(kit_id: str, _user: dict = Depends(require_auth)) -> JSONResponse:
     """Return a single kit's schema JSON, streamed from the store.
 
     Works in both local and gcs mode. `Cache-Control: no-store` so a re-pull
@@ -198,6 +200,7 @@ async def get_form_kit_schema(kit_id: str) -> JSONResponse:
     The schema filename is resolved from the manifest (custom filenames per
     bd polyglot-pdf-snpi are honored), falling back to the conventional
     `schema.json`.
+    Auth-gated (bd polyglot-pdf-z2is); VFF_DISABLE_AUTH bypasses for local dev.
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()
@@ -220,6 +223,14 @@ async def get_form_kit_pdf(kit_id: str) -> Response:
 
     Works in both local and gcs mode. The PDF filename is resolved from the
     manifest (custom filenames are honored), falling back to `form.pdf`.
+
+    DELIBERATELY unauthenticated (bd polyglot-pdf-z2is): the blank template is
+    a public government form, the same bytes ship in the frontend's static
+    bundle (frontend/public/form-kits, served by Hosting with no auth), and
+    the viewer loads this URL via pdfjs `getDocument(url)` which sends no
+    Authorization header. Gating this route would break that viewer path while
+    protecting nothing that is not already public. Revisit when kits become
+    firm-scoped (private kits must gate BOTH this route and the static bundle).
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()

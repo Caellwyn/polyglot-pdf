@@ -2,7 +2,10 @@
 
 **Tracks:** frontend/src/firebase/config.ts frontend/src/contexts/AuthContext.tsx frontend/src/components/auth/Login.tsx frontend/src/components/layout/ProtectedRoute.tsx backend/services/auth.py backend/routes/websocket_routes.py firestore.rules firebase.json
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: verified accurate against current code -- the `websocket_routes.py` dev-only `/ws/echo` and `/ws/audio` debug sockets added since, and the `firebase.json` hosted-editor Hosting target, are both unrelated to the `/ws/fill` auth gate this doc describes). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: added the `require_auth` HTTP
+dependency gating `/api/fill-pdf` + `/api/form-kits{,/{kit_id}/schema}`; the
+kit-PDF GET stays deliberately public). Prior: 2026-07-05 (bd polyglot-pdf-mpoe
+staleness sweep). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
 
 Identity is **Firebase Authentication** (Google + email/password) on the client;
 user profiles live in **Firestore**. The Python backend stays stateless — it only
@@ -115,10 +118,27 @@ The WebSocket handshake (`backend/routes/websocket_routes.py`):
 > return a stub `{uid: "dev_user", ...}` (logged `auth_bypassed_via_env`). Local dev
 > only — never set in prod. See [config-deployment.md](config-deployment.md).
 
+**HTTP routes (bd polyglot-pdf-z2is).** `require_auth` (also in
+`backend/services/auth.py`) is the HTTP counterpart of the WS gate: a FastAPI
+dependency reading `Authorization: Bearer <idToken>` and delegating to
+`verify_token` (so the same dev bypass applies). It gates `POST /api/fill-pdf`
+(the body carries user-entered field values) and the kit-catalogue reads
+`GET /api/form-kits` + `GET /api/form-kits/{kit_id}/schema`. The frontend
+threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
+`getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
+surfaces as an error instead of silently falling back to the static bundle).
+`GET /api/form-kits/{kit_id}/pdf` is **deliberately ungated** — the blank
+template is a public government form, the same bytes ship in the static Hosting
+bundle, and the pdfjs viewer loads the URL with no headers; the non-gate is
+pinned by test so a blanket-auth sweep can't silently break the viewer.
+
 ## Testing
 
 The WS auth gate is covered indirectly: the integration tests patch
 `backend.routes.websocket_routes.verify_token`
 (`backend/tests/integration/test_websocket_ephemeral.py`) so the handshake tests run
-without a live token. There are **no frontend tests** for `AuthContext` / `Login` /
-`ProtectedRoute` yet. See [../standards/testing.md](../standards/testing.md).
+without a live token. The HTTP gate is covered directly:
+`backend/tests/unit/test_http_route_auth.py` pins the 401s on
+fill-pdf/form-kits/schema, the deliberate NON-gate on the kit-PDF GET, and the
+`VFF_DISABLE_AUTH` bypass. There are **no frontend tests** for `AuthContext` /
+`Login` / `ProtectedRoute` yet. See [../standards/testing.md](../standards/testing.md).

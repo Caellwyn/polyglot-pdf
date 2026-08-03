@@ -13,12 +13,21 @@ from .routes import disclaimer_routes
 from .routes import form_kit_routes
 from .routes import editor_kit_routes
 from .routes import dev_console_routes
+from .utils.confirmation_logger import flush_confirmation_sink
 from .utils.logging import configure_logging
 
 
 configure_logging()
 
 app = FastAPI(title="Web Form Voice Filler API", version="0.1.0")
+
+
+# Drain any queued Firestore confirmation writes before the Cloud Run instance
+# dies (bd polyglot-pdf-z2is). The writer's threads are non-daemon so
+# interpreter exit would join them anyway; this makes the drain explicit within
+# uvicorn's graceful-shutdown window. (add_event_handler, not the deprecated
+# @app.on_event decorator.)
+app.add_event_handler("shutdown", flush_confirmation_sink)
 
 app.add_middleware(
     CORSMiddleware,

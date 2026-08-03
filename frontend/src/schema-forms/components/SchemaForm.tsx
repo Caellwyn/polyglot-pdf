@@ -620,7 +620,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
         sample: Object.entries(unwrappedFieldValues).slice(0, 3),
       });
 
-      const filledPDFBytes = await fillPDF(kitId, pdfUrl, unwrappedFieldValues, state.schema);
+      const filledPDFBytes = await fillPDF(
+        kitId, pdfUrl, unwrappedFieldValues, state.schema,
+        async () => (user ? await user.getIdToken() : undefined),
+      );
 
       // Generate filename from form metadata
       const formNumber = state.schema.form_metadata.form_number || 'form';
@@ -653,7 +656,10 @@ export function SchemaForm({ schema, kitId, pdfUrl, onSubmit, onSectionChange, i
 
       console.log('[SchemaForm] Preparing PDF for printing with unwrapped values');
 
-      const filledPDFBytes = await fillPDF(kitId, pdfUrl, unwrappedFieldValues, state.schema);
+      const filledPDFBytes = await fillPDF(
+        kitId, pdfUrl, unwrappedFieldValues, state.schema,
+        async () => (user ? await user.getIdToken() : undefined),
+      );
 
       // Open print dialog
       printPDF(filledPDFBytes);

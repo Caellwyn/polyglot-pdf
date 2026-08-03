@@ -7,7 +7,7 @@ Creates audit trail for legal protection and compliance tracking.
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 import structlog
 
@@ -28,7 +28,6 @@ class DisclaimerAcceptanceRequest(BaseModel):
 @router.post("/disclaimer-acceptance")
 async def log_disclaimer_acceptance(
 	data: DisclaimerAcceptanceRequest,
-	request: Request
 ) -> dict:
 	"""
 	Log user's acceptance of disclaimer modal.
@@ -37,14 +36,17 @@ async def log_disclaimer_acceptance(
 	- Timestamp of acceptance
 	- Selected language
 	- Form session ID
-	- User agent and IP address
+	- User agent (device class -- deliberate low-sensitivity retention)
+
+	The client IP is deliberately NOT logged (bd polyglot-pdf-z2is): an IP is
+	PII under GDPR/CCPA, and the acceptance evidence that matters is the
+	form_session_id + timestamp + language + disclaimer flow itself. Re-add
+	only as a deliberate decision once counsel answers what retention is
+	legally required (bd polyglot-pdf-pol2).
 
 	Returns:
 		{"status": "logged", "timestamp": <iso_string>}
 	"""
-	# Get client IP address
-	client_ip = request.client.host if request.client else "unknown"
-
 	# Convert timestamp to ISO format for readability
 	iso_timestamp = datetime.fromtimestamp(data.timestamp / 1000).isoformat()
 
@@ -56,7 +58,6 @@ async def log_disclaimer_acceptance(
 		timestamp_unix_ms=data.timestamp,
 		timestamp_iso=iso_timestamp,
 		user_agent=data.user_agent,
-		client_ip=client_ip,
 	)
 
 	return {

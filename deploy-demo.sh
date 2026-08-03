@@ -76,9 +76,12 @@ if [ "$DEPLOY_GCP" = true ]; then
     # them identically and the audio/VAD tuning carries over (bd polyglot-pdf-a079).
     #
     # 3.1 is not available on Vertex as of 2026-06; running it still requires the
-    # AI Studio path (VERTEXAI=false, USE_PREMIUM_MODEL=true). GEMINI_API_KEY
-    # (still injected via Secret Manager) is unused on this Vertex path. See
-    # docs/standards/ai-models.md.
+    # AI Studio path (VERTEXAI=false, USE_PREMIUM_MODEL=true) -- and, on any
+    # DEPLOYED service, the explicit acknowledgment flag ALLOW_AI_STUDIO=true
+    # (bd polyglot-pdf-z2is: config.py fails startup on VERTEXAI=false under
+    # Cloud Run without it, so a stray flip can't silently move client audio to
+    # AI Studio's consumer terms). GEMINI_API_KEY (still injected via Secret
+    # Manager) is unused on this Vertex path. See docs/standards/ai-models.md.
     # BACKEND_SERVICE_ACCOUNT pins the Cloud Run runtime identity (the custom SA
     # that holds roles/aiplatform.user for the Vertex path) IN the deploy itself,
     # so the new revision is created+routed under the right SA from the start --

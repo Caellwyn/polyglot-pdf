@@ -238,7 +238,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # Default empty -> prod keeps the Vertex defaults baked into config.py.
     # GEMINI_API_KEY is injected separately via Secret Manager (--set-secrets),
     # NOT here -- never put the key in plaintext env vars.
-    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
+    # CONFIRMATION_FIRESTORE_ENABLED (bd polyglot-pdf-z2is): mirror the
+    # liability confirmation trail to Firestore. Cloud Run's filesystem is
+    # ephemeral tmpfs, so the file-only trail did NOT survive deployment --
+    # every deployed env needs the durable sink. Metadata only, never values.
+    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
     # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the

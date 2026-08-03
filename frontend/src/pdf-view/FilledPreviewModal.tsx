@@ -15,6 +15,7 @@ import type { PDFPageProxy } from 'pdfjs-dist';
 import type { FormSchema } from '../schema-forms/types/schema';
 import { fillPDF } from '../schema-forms/utils/pdfFiller';
 import { unwrapFieldValue } from '../schema-forms/utils/fieldValue';
+import { useAuth } from '../contexts/AuthContext';
 import { usePDFDocument } from './usePDFDocument';
 import { PDFPage } from './PDFPage';
 import './pdf-view.css';
@@ -39,6 +40,7 @@ export default function FilledPreviewModal({
   fieldValues,
   onClose,
 }: FilledPreviewModalProps) {
+  const { user } = useAuth();
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [fillError, setFillError] = useState<string | null>(null);
   const [scale, setScale] = useState(1.0);
@@ -57,7 +59,8 @@ export default function FilledPreviewModal({
       unwrapped[fieldId] = unwrapFieldValue(value);
     }
 
-    fillPDF(kitId, pdfUrl, unwrapped, schema)
+    fillPDF(kitId, pdfUrl, unwrapped, schema,
+      async () => (user ? await user.getIdToken() : undefined))
       .then((bytes) => {
         if (cancelled) return;
         // Re-wrap so the Uint8Array is a plain-ArrayBuffer BlobPart (see the
