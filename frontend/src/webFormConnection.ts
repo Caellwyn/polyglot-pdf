@@ -833,6 +833,10 @@ export class WebFormConnection {
     // (Codex/fresh-eyes PR #137). Release the guard + disarm the watchdog here so
     // a stall AFTER the handshake but BEFORE session_ready is still caught by the
     // watchdog, and a second switch can't start during the switching window.
+    // Captured BEFORE the release: the field-1 opener diagnostic below needs to
+    // know this session_ready terminated a section switch (the post-I-Agree
+    // switchToFirstSection path is exactly such a switch; bd polyglot-pdf-xp4q).
+    const wasSectionSwitch = this.switchInFlight;
     if (this.switchInFlight) {
       this.completeSectionSwitch();
     }
@@ -847,18 +851,49 @@ export class WebFormConnection {
 
     this.setStatus("connected", "handleSessionReady");
 
-    // Check if this is a reconnect (disclaimer already accepted)
-    if (this.state.disclaimerAccepted && this.state.selectedLanguage) {
-      // Auto-send language message to trigger initiating prompt (skip disclaimer)
-      const nextFieldHint = this.computeNextFieldHintString();
-      if (nextFieldHint) {
-        this.send({
-          type: 'change_spoken_language',
-          spoken_language: this.state.selectedLanguage,
-          next_field_hint: nextFieldHint
-        });
-        console.log('[WebFormConnection] [OK] Auto-sent language message for reconnect:', this.state.selectedLanguage);
-      }
+    // Field-1 opener: on a reconnect (disclaimer already accepted) auto-send
+    // the language message that triggers the initiating prompt, whose payload
+    // carries the CURRENT field's guidance (bd polyglot-pdf-j748). This gate
+    // used to skip SILENTLY -- and on the deployed demo it skipped in 3/3
+    // observed real-auth sessions, leaving the model with no field_id to copy
+    // on the first turn, so it invents one (bd polyglot-pdf-xp4q). Behavior is
+    // unchanged here; the change is that a skip in the window where the opener
+    // is EXPECTED now names its failing condition, in the console AND -- via
+    // `client_diagnostic` -- in the backend's production logs.
+    const openerDisclaimerAccepted = !!this.state.disclaimerAccepted;
+    const openerHasLanguage = !!this.state.selectedLanguage;
+    // Preserve the original laziness: the hint is only computed once the two
+    // state gates pass, exactly as before.
+    const openerNextFieldHint =
+      openerDisclaimerAccepted && openerHasLanguage
+        ? this.computeNextFieldHintString()
+        : "";
+    if (openerDisclaimerAccepted && openerHasLanguage && openerNextFieldHint) {
+      this.send({
+        type: 'change_spoken_language',
+        spoken_language: this.state.selectedLanguage,
+        next_field_hint: openerNextFieldHint
+      });
+      console.log('[WebFormConnection] [OK] Auto-sent language message for reconnect:', this.state.selectedLanguage);
+    } else if (wasSectionSwitch || openerDisclaimerAccepted) {
+      // The opener was EXPECTED here -- a section-switch handshake (which is
+      // what the post-I-Agree switchToFirstSection produces) or an accepted-
+      // disclaimer reconnect -- and did not fire. The very first connect of a
+      // session (no switch, disclaimer not yet accepted) is the one legitimate
+      // silent skip and stays quiet, so this diagnostic is signal, not noise.
+      // Booleans only -- no field data, no values (no-PII policy).
+      const skipDiagnostic = {
+        was_section_switch: wasSectionSwitch,
+        disclaimer_accepted: openerDisclaimerAccepted,
+        has_selected_language: openerHasLanguage,
+        has_next_field_hint: !!openerNextFieldHint,
+      };
+      console.warn('[WebFormConnection] field-1 opener SKIPPED (bd polyglot-pdf-xp4q)', skipDiagnostic);
+      this.send({
+        type: 'client_diagnostic',
+        event: 'field1_opener_skipped',
+        ...skipDiagnostic,
+      });
     }
 
     if (this.callbacks.onSessionReady) {
