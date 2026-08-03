@@ -106,7 +106,7 @@ describe('field-1 opener diagnostic (bd polyglot-pdf-xp4q)', () => {
     expect(ofType(ws, 'client_diagnostic')).toHaveLength(0)
   })
 
-  it('emits ONE diagnostic naming the gates on a post-switch session_ready with un-accepted state (the live signature)', async () => {
+  it('emits ONE diagnostic on a post-switch skip, and a stale in-memory flag DIVERGES from storage (the staleness signature)', async () => {
     await connected()
     // Production path: a section switch is in flight when session_ready lands
     // (this is what the post-I-Agree switchToFirstSection produces). NOTE:
@@ -114,6 +114,17 @@ describe('field-1 opener diagnostic (bd polyglot-pdf-xp4q)', () => {
     // delivered on the NEW socket -- exactly like the real reconnect.
     await (conn as any).startSection('only')
     const ws = lastWs()
+    // Manufacture the STALENESS hypothesis directly: storage says accepted,
+    // the in-memory copy the gate reads does not. (The real I-Agree flow
+    // persists accepted=true BEFORE switching, so a real capture with
+    // disclaimer_accepted=false + storage_disclaimer_accepted=true is exactly
+    // this bug; a real capture with both false means the accept never landed.)
+    const persisted = JSON.parse(sessionStorage.getItem('schema_form_state')!)
+    persisted.disclaimerAccepted = true
+    sessionStorage.setItem('schema_form_state', JSON.stringify(persisted))
+    // PROBE: verify the write landed where the diagnostic will read it.
+    const { SchemaFormStateManager } = await import('./schema-forms/state/schemaFormState')
+    expect(SchemaFormStateManager.load()?.disclaimerAccepted).toBe(true)
     const state = (conn as any).state
     state.disclaimerAccepted = false
     ws.send.mockClear()
@@ -128,6 +139,8 @@ describe('field-1 opener diagnostic (bd polyglot-pdf-xp4q)', () => {
       event: 'field1_opener_skipped',
       was_section_switch: true,
       disclaimer_accepted: false,
+      // The divergence that names the staleness bug in one glance:
+      storage_disclaimer_accepted: true,
       // A form with unconfirmed fields: NOT the benign completed shape.
       is_form_complete: false,
     })
@@ -136,6 +149,21 @@ describe('field-1 opener diagnostic (bd polyglot-pdf-xp4q)', () => {
       expect.stringContaining('field-1 opener SKIPPED'),
       expect.objectContaining({ was_section_switch: true })
     )
+  })
+
+  it('tolerates the old backend\'s unknown_control reply without failing the session (deploy skew)', async () => {
+    const ws = await connected()
+    // Drive a switch so the skew lands in the worst window: an in-flight
+    // switch, where handleServerError would otherwise failSectionSwitch.
+    await (conn as any).startSection('only')
+    const ws2 = lastWs()
+
+    // The OLD backend answers our client_diagnostic with this benign ack.
+    ws2.onmessage?.({ data: JSON.stringify({ type: 'error', code: 'unknown_control' }) })
+    await flush()
+
+    // The session must NOT be driven into the error state by it.
+    expect((conn as any).status).not.toBe('error')
   })
 
   it('emits a diagnostic with has_next_field_hint=false when accepted but nothing is askable', async () => {

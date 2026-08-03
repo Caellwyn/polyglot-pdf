@@ -36,15 +36,20 @@ def test_client_diagnostic_logs_whitelisted_fields_only(mock_verify_token):
     reach the log as coerced booleans + a capped token -- and nothing else."""
     poisoned = {
         "type": "client_diagnostic",
-        "event": "field1_opener_skipped" + "X" * 200,  # oversized -> capped
+        # The ONE field that can carry data: a structured value would render its
+        # CONTENT via str() under any length cap (Opus finding) -- must become
+        # the literal "invalid", never the payload.
+        "event": {"ssn": "123-45-6789", "addr": "1 Main St"},
         "was_section_switch": "yes-ish",               # truthy non-bool -> True
         "disclaimer_accepted": 0,                      # falsy non-bool -> False
         "has_selected_language": True,
         "has_next_field_hint": None,                   # -> False
         "is_form_complete": "truthy-string",           # -> True
-        # A swapped-args style leak attempt: MUST NOT reach the log line.
-        "ssn": "123-45-6789",
-        "free_text": "my address is 1 Main St",
+        "storage_disclaimer_accepted": 1,              # -> True
+        "continuous_session": "",                      # -> False
+        # Extra top-level keys: the exact-whitelist assertion below is what
+        # keeps these off the line.
+        "free_text": "my phone is 555-0100",
     }
 
     with client.websocket_connect("/ws/fill?token=t") as ws:
@@ -64,20 +69,45 @@ def test_client_diagnostic_logs_whitelisted_fields_only(mock_verify_token):
     diag_calls = [c for c in warn.call_args_list if c.args and c.args[0] == "client_diagnostic"]
     assert len(diag_calls) == 1
     kwargs = diag_calls[0].kwargs
-    assert kwargs["diagnostic_event"].startswith("field1_opener_skipped")
-    assert len(kwargs["diagnostic_event"]) == 64  # capped
+    # Non-allowlisted event (here: a dict) -> the literal token "invalid".
+    assert kwargs["diagnostic_event"] == "invalid"
     assert kwargs["was_section_switch"] is True
     assert kwargs["disclaimer_accepted"] is False
     assert kwargs["has_selected_language"] is True
     assert kwargs["has_next_field_hint"] is False
     assert kwargs["is_form_complete"] is True
-    # The leak attempt must not appear anywhere on the line.
+    assert kwargs["storage_disclaimer_accepted"] is True
+    assert kwargs["continuous_session"] is False
+    # The leak attempts must not appear anywhere on the line -- including the
+    # dict smuggled through `event`.
     assert "123-45-6789" not in repr(diag_calls[0])
     assert "1 Main St" not in repr(diag_calls[0])
+    assert "555-0100" not in repr(diag_calls[0])
     # Exactly the whitelisted keys + session_id -- a new field must be a
     # deliberate, reviewed addition, not payload passthrough.
     assert set(kwargs.keys()) == {
         "diagnostic_event", "was_section_switch", "disclaimer_accepted",
         "has_selected_language", "has_next_field_hint", "is_form_complete",
+        "storage_disclaimer_accepted", "continuous_session",
         "session_id",
     }
+
+
+@patch("backend.routes.websocket_routes.verify_token", return_value={"uid": "test_user"})
+def test_client_diagnostic_valid_tokens_pass_through(mock_verify_token):
+    """The allowlist must not eat the two real tokens (else the diagnostic
+    reads as 'invalid' in production and the capture is wasted)."""
+    with client.websocket_connect("/ws/fill?token=t") as ws:
+        ws.send_json(HANDSHAKE)
+        assert ws.receive_json()["type"] == "session_ready"
+
+        with patch.object(ws_routes._log, "warning") as warn:
+            for token in ("field1_opener_skipped", "section_switch_watchdog_timeout"):
+                ws.send_json({"type": "client_diagnostic", "event": token})
+            # Sync point: provoke the next reply so both sends are processed.
+            ws.send_json({"type": "zzz_not_a_type"})
+            ws.receive_json()
+
+    events = [c.kwargs["diagnostic_event"] for c in warn.call_args_list
+              if c.args and c.args[0] == "client_diagnostic"]
+    assert events == ["field1_opener_skipped", "section_switch_watchdog_timeout"]

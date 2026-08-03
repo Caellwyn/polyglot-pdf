@@ -906,9 +906,17 @@ async def _handle_fill_session(
 					# coerced keys may reach the log line (no-PII policy; same rule
 					# as the unknown-field-id redaction in validation_handler.py).
 					# No ack: the client fires and forgets.
+					# STRICT token allowlist for the one non-boolean field: str() on a
+					# dict/list would render its CONTENT verbatim (an {"event":
+					# {"ssn": ...}} payload fits under any length cap), so only known
+					# literal tokens pass; everything else logs as "invalid" (Opus
+					# outer review finding).
+					_diag_event = obj.get("event")
+					if _diag_event not in ("field1_opener_skipped", "section_switch_watchdog_timeout"):
+						_diag_event = "invalid"
 					_log.warning(
 						"client_diagnostic",
-						diagnostic_event=str(obj.get("event", ""))[:64],
+						diagnostic_event=_diag_event,
 						was_section_switch=bool(obj.get("was_section_switch")),
 						disclaimer_accepted=bool(obj.get("disclaimer_accepted")),
 						has_selected_language=bool(obj.get("has_selected_language")),
@@ -916,6 +924,12 @@ async def _handle_fill_session(
 						# Disambiguates the benign completed-form reconnect (hint
 						# correctly empty) from a genuinely broken opener.
 						is_form_complete=bool(obj.get("is_form_complete")),
+						# In-memory vs persisted disclaimer flag: a divergence
+						# names the state-staleness hypothesis in one glance.
+						storage_disclaimer_accepted=bool(obj.get("storage_disclaimer_accepted")),
+						# Which scoping applies to has_next_field_hint (section
+						# vs whole-form) -- mode context for reading the line.
+						continuous_session=bool(obj.get("continuous_session")),
 						session_id=session_id,
 					)
 					continue

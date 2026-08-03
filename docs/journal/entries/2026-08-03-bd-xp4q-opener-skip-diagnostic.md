@@ -55,10 +55,16 @@ unidentified if it worked, and muddy the diagnosis if it did not).
    tests (88) pass with the new type wired through all three sync points
    (backend arm, FE send site, doc table).
 
-Deploy-skew note: a new frontend talking to an old backend hits the existing
-`unknown_control_message_type` fallthrough, which already logs the type name at
-warning level and replies a benign error the client tolerates -- so the
-diagnostic degrades gracefully instead of breaking anything.
+Deploy-skew: my first claim here -- "the old backend's unknown_control reply is
+benign, the client tolerates it" -- was WRONG, and both independent Opus outer
+reviewers refuted it with the same end-to-end trace: `handleServerError` treated
+EVERY error reply as session-fatal (fail the in-flight switch, or fire onError
+-> the overlay swaps to a dead Reconnect button), so on a frontend-first rollout
+the diagnostic would have broken the exact flow it observes. Fixed by an
+explicit early-out: `unknown_control` is the backend saying "I don't recognize
+that message type", which is never session-fatal by definition; the client now
+warns and continues. Pinned by a test that delivers the old backend's reply in
+the worst window (mid-switch) and asserts the session survives.
 
 ## Verification
 
@@ -78,6 +84,33 @@ diagnostic degrades gracefully instead of breaking anything.
 - Live smoke on the real local stack: healthy clean flow post-change -- opener
   fired (2,312-char initiating message; grown from the overnight recital PRs)
   and ZERO diagnostics. No false positives end-to-end.
+
+## What the outer reviews added
+
+Beyond the skew fix, the two independent Opus passes reshaped the payload from
+five booleans to seven plus a hardened event field:
+
+- `is_form_complete` (Sonnet round): a completed form's reconnect has a
+  correctly-empty hint -- without this flag it is byte-identical in the log to a
+  broken opener.
+- `storage_disclaimer_accepted`: the persisted flag alongside the in-memory one
+  the gate read -- a divergence names the state-staleness hypothesis in one
+  glance. Landing this exposed a subtlety worth recording: `handleSessionReady`
+  itself PERSISTS `this.state` via its entry mutators (setSessionId/setJitMode/
+  setContinuousSession), so a storage read at the diagnostic site can only echo
+  the in-memory value back -- the capture must happen at handler ENTRY, before
+  the handler's own writes. The divergence test failed against a same-site read
+  and proved the point.
+- `continuous_session`: `has_next_field_hint` is section-scoped in the
+  deprecated non-continuous mode, so "no hint" at a section boundary is benign
+  there; this flag says which reading applies.
+- `event` is now a STRICT token allowlist backend-side (`field1_opener_skipped`,
+  `section_switch_watchdog_timeout`, else the literal `invalid`): `str()` on a
+  structured value would have rendered its CONTENT verbatim under any length
+  cap -- the one hole in the whitelist, found by attacking it.
+- A second emit site: the section-switch watchdog. A switch that never reaches
+  `session_ready` produces zero opener diagnostics, which would read as "no
+  bug"; the `section_switch_watchdog_timeout` token names that outcome.
 
 ## Next
 

@@ -791,6 +791,14 @@ export class WebFormConnection {
   private handleSessionReady(message: any): void {
     const { session_id, ephemeral, jit_mode_enabled, dti_mode_enabled, native_vad, continuous_session_enabled } = message;
 
+    // Captured at ENTRY, before any of this handler's own state writes: the
+    // setSessionId/setJitMode/setContinuousSession mutators below PERSIST
+    // this.state, so a later storage read would only echo the in-memory value
+    // back -- the in-memory-vs-persisted divergence the opener diagnostic
+    // exists to surface (the state-staleness hypothesis, bd polyglot-pdf-xp4q)
+    // is only observable here.
+    const storageDisclaimerAtEntry = !!SchemaFormStateManager.load()?.disclaimerAccepted;
+
     // Update state with session ID
     this.state = SchemaFormStateManager.setSessionId(this.state, session_id);
 
@@ -893,6 +901,20 @@ export class WebFormConnection {
         has_selected_language: openerHasLanguage,
         has_next_field_hint: !!openerNextFieldHint,
         is_form_complete: isFormComplete(this.state),
+        // The leading live-bug hypothesis is that this.state is STALE here.
+        // Reporting the persisted value ALONGSIDE the in-memory one makes
+        // staleness a single-glance read: a false/true divergence names it
+        // outright (Opus outer review finding, bd polyglot-pdf-xp4q). Uses the
+        // handler-ENTRY capture -- this handler's own mutators persist
+        // this.state before this line runs, so a fresh load() here could only
+        // ever echo the in-memory value (found when the divergence test failed
+        // against a same-site read).
+        storage_disclaimer_accepted: storageDisclaimerAtEntry,
+        // has_next_field_hint's meaning is mode-conditional: in non-continuous
+        // (deprecated) mode the hint is SECTION-scoped, so "no hint" at a
+        // section boundary is benign even when the form is incomplete. This
+        // flag says which reading applies.
+        continuous_session: !!this.continuousSessionEnabled,
       };
       console.warn('[WebFormConnection] field-1 opener SKIPPED (bd polyglot-pdf-xp4q)', skipDiagnostic);
       this.send({
@@ -2862,6 +2884,18 @@ export class WebFormConnection {
    * Handle server error messages
    */
   private handleServerError(message: any): void {
+    // `unknown_control` is the backend's "I don't recognize that message type"
+    // ack -- by definition non-fatal (the sender's message was one-way or the
+    // sender handles the missing reply). It must NEVER end the session or fail
+    // a switch: during deploy skew a NEW frontend's `client_diagnostic` lands
+    // on an OLD backend exactly in the post-I-Agree switch window, and before
+    // this early-out that benign ack drove the UI into a dead Reconnect state
+    // -- a diagnostic causing an outage in the flow it observes (Opus outer
+    // review finding, bd polyglot-pdf-xp4q).
+    if (message.code === 'unknown_control') {
+      console.warn('[WebFormConnection] Backend does not recognize a message type we sent (deploy skew?) -- ignoring', message);
+      return;
+    }
     console.error('[WebFormConnection] Server error received:', {
       code: message.code,
       reason: message.reason,
@@ -3663,6 +3697,26 @@ export class WebFormConnection {
       // section_switched would have disarmed us).
       if (this.switchInFlight) {
         console.error('[WebFormConnection] Section switch timed out -- surfacing error');
+        // Observability (bd polyglot-pdf-xp4q): a switch that never reaches
+        // session_ready produces ZERO opener diagnostics -- which would read as
+        // "opener worked" in the logs. Name this outcome too, so an absent
+        // field1_opener_skipped line plus THIS line means "failed before the
+        // gate", not "no bug". Fire-and-forget: if the socket is dead the send
+        // silently goes nowhere, and the server-side handshake-without-
+        // session_ready is itself the readable evidence in that case.
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.send({
+            type: 'client_diagnostic',
+            event: 'section_switch_watchdog_timeout',
+            was_section_switch: true,
+            disclaimer_accepted: !!this.state.disclaimerAccepted,
+            has_selected_language: !!this.state.selectedLanguage,
+            has_next_field_hint: false,
+            is_form_complete: false,
+            storage_disclaimer_accepted: !!SchemaFormStateManager.load()?.disclaimerAccepted,
+            continuous_session: !!this.continuousSessionEnabled,
+          });
+        }
         this.failSectionSwitch('Section switch timed out');
       }
     }, WebFormConnection.SECTION_SWITCH_TIMEOUT_MS);
