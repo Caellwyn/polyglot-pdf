@@ -281,10 +281,15 @@ def test_dti_si_forbids_one_by_one_yes_no_option_walk():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "Do NOT walk the options one at a time as separate yes/no questions" in si
     assert "present the WHOLE list first" in si
-    # The recital is wired into WORKFLOW step 1, not only the options block.
+    # The recital is wired into WORKFLOW step 1, not only the options block --
+    # and step 1 must carry the SAME carve-outs as PRESENTING OPTIONS: an
+    # unqualified step-1 imperative contradicted the two-option rule on every
+    # confirm-path turn (Opus fresh-eyes, prompt-tuning PR).
     workflow = si[si.index("WORKFLOW:"):si.index("TOOL PROTOCOL:")]
     assert "read EVERY option aloud" in workflow
     assert "never one-by-one as yes/no questions" in workflow
+    assert "ONE natural question for a TWO-option field" in workflow
+    assert "ask directly for a standard list" in workflow
 
 
 def test_dti_si_licenses_the_long_recital():
@@ -425,7 +430,11 @@ def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
         field["type"] = ftype
     text = render_field_guidance(field)
     if expects_recital:
-        assert "read ALL 2 aloud when asking" in text, ftype
+        # A 2-option recital-side field gets the natural-question marker
+        # (bd polyglot-pdf-41fi), still on the recital side of the gate --
+        # never the select-style ask-directly marker.
+        assert "ask ONE natural question that makes both choices clear" in text, ftype
+        assert "standard list; ask directly" not in text, ftype
     else:
         assert "standard list; ask directly" in text, ftype
         assert "read ALL" not in text, ftype
@@ -443,9 +452,10 @@ def test_option_type_gate_unwraps_field_type_enum():
         "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
     }
     text = render_field_guidance(field)
-    assert "read ALL 2 aloud when asking" in text
+    # 2 options -> the natural-question marker (bd 41fi), on the recital side.
+    assert "ask ONE natural question that makes both choices clear" in text
     # The unwrap covers the model-visible Type: line too, not just the gate
-    # (Opus outer review on this PR: the half-fixed render printed
+    # (Opus outer review on the cqx6 PR: the half-fixed render printed
     # 'Type: FieldType.RADIO').
     assert "Type: radio" in text
     assert "FieldType" not in text
@@ -504,6 +514,89 @@ def test_render_field_guidance_substantive_lists_stay_below_threshold():
 def test_render_field_guidance_no_options_render_unchanged():
     # A field with no options must not grow any option prose.
     assert "Options" not in render_field_guidance(SIMPLE_FIELD)
+
+
+# --- Prompt-tuning bundle (bd polyglot-pdf-41fi + c2jy) -----------------------
+# 41fi: a two-option field IS one natural question -- the recital rule forced
+# "Select No, Select Yes -- which one applies?" on yes/no fields. c2jy: labels
+# quoting the printed form's own navigation ("(Proceed to Item Numbers 5.a. -
+# 5.c.)", "Skip line 6f") were recited verbatim to users who cannot act on
+# them. Mechanism for both: SI prose + (for 41fi) the n==2 render marker.
+
+def _load_kit_field(kit, field_id):
+    import json
+    from pathlib import Path
+
+    p = Path(__file__).resolve().parents[3] / "form-kits" / kit / "schema.json"
+    schema = json.loads(p.read_text(encoding="utf-8"))
+    return next(f for f in schema["fields"] if f["id"] == field_id)
+
+
+def test_real_yes_no_fields_get_the_natural_question_marker():
+    # bd 41fi criterion 1: the two named shipped fields render the two-option
+    # marker, not the list recital.
+    for kit, fid in (("i-90", "p3_checkbox4[1]"), ("f1040", "fld_digital_assets")):
+        f = _load_kit_field(kit, fid)
+        assert len(f["options"]) == 2, fid
+        text = render_field_guidance(f)
+        assert "ask ONE natural question that makes both choices clear" in text, fid
+        assert "read ALL" not in text, fid
+
+
+def test_real_multi_option_lists_keep_the_unconditional_recital():
+    # bd 41fi + c2jy criterion 2: the two fields the original bug was about
+    # still get the read-ALL imperative, kit-backed so a schema re-type or a
+    # marker regression cannot slip through on synthetic fields alone.
+    for kit, fid, n in (("w7", "reason", 8), ("i-90", "p2_checkbox2[5]", 12)):
+        f = _load_kit_field(kit, fid)
+        text = render_field_guidance(f)
+        assert f"Options ({n} -- read ALL {n} aloud when asking; " in text, fid
+
+
+def test_dti_si_two_option_rule():
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "TWO-option fields are different" in si
+    assert "ONE natural question that makes both choices clear IS the complete ask" in si
+    assert "Do not recite the two labels as a list" in si
+    # Both phrasings are named so the rule travels beyond yes/no pairs.
+    assert "plain yes/no question when the options amount to yes and no" in si
+
+
+def test_dti_si_speaks_substance_not_print_navigation():
+    # bd c2jy criterion 1 (SI-prose mechanism): the recital conveys each
+    # option's substance and omits printed-form navigation/cross-references
+    # and screen wording.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "SPEAK THE SUBSTANCE of each option" in si
+    assert "NEVER read aloud a label's printed-form NAVIGATION" in si
+    assert "'(Proceed to Item 5.a)'" in si
+    assert "'Skip line 6f'" in si
+    assert "screen wording like 'Select Yes'" in si
+    # The boundary runs between NAVIGATION (omit) and a cross-reference that
+    # carries a REAL requirement (keep): W-7 reason option a's "you must also
+    # check and complete box h" is a genuine multi-select obligation, not
+    # cruft (fresh-eyes finding, this PR).
+    assert "a REAL requirement or consequence of choosing that option" in si
+    assert "is SUBSTANCE -- keep its meaning" in si
+    # It is framed as the exception to the as-written rule, and MATCHING's
+    # as-written line carries the coupling so the two rules cannot read as
+    # contradicting each other.
+    assert "the ONE exception to saying a label as written" in si
+    assert "minus any printed-form navigation" in si
+
+
+def test_initiating_templates_carry_two_option_carve_out():
+    # Same lesson as the standard-list carve-out (bd s503): an unqualified
+    # "read EVERY option aloud" in the templates would override the SI's
+    # two-option rule on the initiating/resume paths.
+    # CONTIGUOUS clause, same durability rule as the standard-list pin above
+    # (bd 285t): split substrings stay green if the parenthetical detaches
+    # from its condition.
+    s = _settings()
+    for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
+        tpl = getattr(s, name)
+        assert ("the field has only TWO options (then ask ONE natural "
+                "question that makes both choices clear)") in tpl, name
 
 
 # --- ASCII-only guard for every constant this change touched (scar #6) --------

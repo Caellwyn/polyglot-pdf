@@ -20,10 +20,13 @@ state for assertions.
   the real `SchemaFormStateManager` write path, for the multi-section scenario).
 - **Fixtures** (`frontend/public/test-fixtures/`): committed 16 kHz mono PCM16
   WAVs -- `digits_1234567.wav` ("one two three four five six seven"),
-  `confirm_yes.wav` ("yes that's correct"), and `digits_12345.wav` ("one two three
-  four five", the 5-digit section-2 ZIP). Vite serves them at
-  `http://localhost:5173/test-fixtures/<name>.wav`. Regenerate with
-  `gen_fixtures.py` (one-time; output is committed).
+  `confirm_yes.wav` ("yes that's correct"), `digits_12345.wav` ("one two three
+  four five", the 5-digit section-2 ZIP), `read_all_options.wav` ("Can you
+  please read me the whole list of options?", the bd polyglot-pdf-bxra
+  long-standard-list read-out request), plus the secretary/wsao fixtures --
+  `gen_fixtures.py`'s UTTERANCES list is the authoritative inventory. Vite
+  serves them at `http://localhost:5173/test-fixtures/<name>.wav`. Regenerate
+  with `gen_fixtures.py` (one-time; output is committed).
 - **Harness** (`tests/e2e/voice-harness/harness.js`): browser module installed as
   `window.__VFF_HARNESS` via `preview_eval`. Provides `loadFixture`,
   `injectUtterance`, `waitForGeminiQuestion`, `readField`, `lastNextField`,
