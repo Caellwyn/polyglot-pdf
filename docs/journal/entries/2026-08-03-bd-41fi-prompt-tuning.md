@@ -59,7 +59,20 @@ the full read-out on request).
 the two new rules; same accounting as the 6bq8 entry (per-turn text-in is
 the cost lever), flagged in the merge report.
 
-**Review outcome:** recorded in the merge ping after the pre-PR loops.
+**Review outcome (pre-PR, all Claude-based):** fresh-eyes ran 3 rounds --
+Sonnet found the SI's cruft example ("you must also check box h") was real
+compliance substance on W-7 reason option a (fixed: the rule now draws the
+substance-vs-navigation boundary explicitly); Opus round 1 found WORKFLOW
+step 1's unqualified imperative contradicting the new two-option rule on
+every confirm-path turn (fixed: step 1 carries the same carve-outs) and two
+doc/test-durability drifts (fixed: SI size 16,513; the marker-coupling
+sentence rewritten for three non-recital markers; the contiguous two-option
+template pin); Opus round 2 (round 3 overall) cleared NO-GAPS, filing
+polyglot-pdf-9tuu (latent 2-option checkbox_group multi-select edge; none
+shipped). The Opus outer review then cleared with TWO independent NO-GAPS
+passes on the identical final diff; the primary independently re-derived
+both known follow-ups (polyglot-pdf-575i, 9tuu) and confirmed their bodies
+accurate rather than re-filing.
 
 ## Lessons
 
