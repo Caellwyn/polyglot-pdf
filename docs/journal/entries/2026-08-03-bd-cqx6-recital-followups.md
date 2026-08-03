@@ -53,6 +53,20 @@ of the initiating message showed no English option labels on that surface
 the translated guidance block). The confirm-response hint surface is covered
 by the vitest pins -- it is produced by the same single `formatNextFieldHint`.
 
+**Review outcome (pre-PR, all Claude-based):** fresh-eyes Sonnet NO-GAPS
+(2 doc nits, fixed inline) + Opus clearing NO-GAPS (filed polyglot-pdf-thun:
+the frontend label resolver is stricter than the backend's tolerant one --
+latent, all kits baked under the matching key convention). Opus outer review
+round 1 found the enum unwrap was a HALF-fix (the model-visible Type: line
+still printed 'Type: FieldType.RADIO' -- fixed inline, bead polyglot-pdf-ilh8
+closed with this PR) and that the None parametrize row didn't test an
+explicit null (fixed); it filed polyglot-pdf-pjws (stale language on the
+unsupported mid-session language-change flow -- pre-existing: the hint was
+ALWAYS English before this change). Round 2: two independent Opus passes both
+NO-GAPS on the identical final diff (the second filed polyglot-pdf-5419:
+bare-string option arrays render 'undefined' in the hint -- pre-existing,
+zero shipped kits affected).
+
 ## Lessons
 
 - **Name the exception side of a gate, not the default side.** "Recite only
