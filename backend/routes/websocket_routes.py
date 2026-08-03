@@ -897,9 +897,45 @@ async def _handle_fill_session(
 					_spawn_drain(safe_conflicts)
 					await websocket.send_json({"type": "drain_findings_ack"})
 					continue
+				elif mtype == "client_diagnostic":
+					# One-way, PII-free client-side diagnostics (bd polyglot-pdf-xp4q:
+					# the field-1 opener skipped silently in every observed real-auth
+					# live session, and nothing server-side could say WHICH of the
+					# client's gate conditions failed). WHITELIST the fields -- the
+					# payload is raw client input, so nothing outside these named,
+					# coerced keys may reach the log line (no-PII policy; same rule
+					# as the unknown-field-id redaction in validation_handler.py).
+					# No ack: the client fires and forgets.
+					# STRICT token allowlist for the one non-boolean field: str() on a
+					# dict/list would render its CONTENT verbatim (an {"event":
+					# {"ssn": ...}} payload fits under any length cap), so only known
+					# literal tokens pass; everything else logs as "invalid" (Opus
+					# outer review finding).
+					_diag_event = obj.get("event")
+					if _diag_event not in ("field1_opener_skipped", "section_switch_watchdog_timeout"):
+						_diag_event = "invalid"
+					_log.warning(
+						"client_diagnostic",
+						diagnostic_event=_diag_event,
+						was_section_switch=bool(obj.get("was_section_switch")),
+						disclaimer_accepted=bool(obj.get("disclaimer_accepted")),
+						has_selected_language=bool(obj.get("has_selected_language")),
+						has_next_field_hint=bool(obj.get("has_next_field_hint")),
+						# Disambiguates the benign completed-form reconnect (hint
+						# correctly empty) from a genuinely broken opener.
+						is_form_complete=bool(obj.get("is_form_complete")),
+						# In-memory vs persisted disclaimer flag: a divergence
+						# names the state-staleness hypothesis in one glance.
+						storage_disclaimer_accepted=bool(obj.get("storage_disclaimer_accepted")),
+						# Which scoping applies to has_next_field_hint (section
+						# vs whole-form) -- mode context for reading the line.
+						continuous_session=bool(obj.get("continuous_session")),
+						session_id=session_id,
+					)
+					continue
 				else:
 					# Log unknown message type for debugging
-					_log.warning("unknown_control_message_type", 
+					_log.warning("unknown_control_message_type",
 					           message_type=mtype,
 					           session_id=session_id,
 					           available_keys=list(obj.keys()) if isinstance(obj, dict) else None)
