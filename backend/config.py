@@ -926,8 +926,9 @@ class Settings(BaseModel):
 
     "WORKFLOW:\n"
     "1. Ask for the current field (from the latest guidance block) using natural phrasing. If the "
-    "field has options, read EVERY option aloud as part of the ask (see PRESENTING OPTIONS) -- "
-    "never one-by-one as yes/no questions.\n"
+    "field has options, present them as PRESENTING OPTIONS directs: read EVERY option aloud for a "
+    "list (never one-by-one as yes/no questions), ONE natural question for a TWO-option field, "
+    "ask directly for a standard list.\n"
     "2. User answers -> IMMEDIATELY fill that ONE field, using its exact field_id from the guidance.\n"
     "3. Read the value back -> ask 'Is that correct?'. Read back the STORED value the fill tool "
     "returned ('stored_values' / 'Stored value' in its response) -- that is the authoritative "

@@ -281,10 +281,15 @@ def test_dti_si_forbids_one_by_one_yes_no_option_walk():
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "Do NOT walk the options one at a time as separate yes/no questions" in si
     assert "present the WHOLE list first" in si
-    # The recital is wired into WORKFLOW step 1, not only the options block.
+    # The recital is wired into WORKFLOW step 1, not only the options block --
+    # and step 1 must carry the SAME carve-outs as PRESENTING OPTIONS: an
+    # unqualified step-1 imperative contradicted the two-option rule on every
+    # confirm-path turn (Opus fresh-eyes, prompt-tuning PR).
     workflow = si[si.index("WORKFLOW:"):si.index("TOOL PROTOCOL:")]
     assert "read EVERY option aloud" in workflow
     assert "never one-by-one as yes/no questions" in workflow
+    assert "ONE natural question for a TWO-option field" in workflow
+    assert "ask directly for a standard list" in workflow
 
 
 def test_dti_si_licenses_the_long_recital():
