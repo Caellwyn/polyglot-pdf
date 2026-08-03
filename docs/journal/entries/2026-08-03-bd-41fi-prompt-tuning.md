@@ -55,7 +55,7 @@ the full read-out on request).
   all 50 states present, zero missing, verified programmatically against the
   transcript. (bxra's full criterion.)
 
-**Cost note:** the DTI SI grows 15,266 -> 16,424 chars (~8%), the price of
+**Cost note:** the DTI SI grows 15,266 -> 16,513 chars (~8%), the price of
 the two new rules; same accounting as the 6bq8 entry (per-turn text-in is
 the cost lever), flagged in the merge report.
 

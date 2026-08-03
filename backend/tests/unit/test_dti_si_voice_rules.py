@@ -589,11 +589,14 @@ def test_initiating_templates_carry_two_option_carve_out():
     # Same lesson as the standard-list carve-out (bd s503): an unqualified
     # "read EVERY option aloud" in the templates would override the SI's
     # two-option rule on the initiating/resume paths.
+    # CONTIGUOUS clause, same durability rule as the standard-list pin above
+    # (bd 285t): split substrings stay green if the parenthetical detaches
+    # from its condition.
     s = _settings()
     for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
         tpl = getattr(s, name)
-        assert "only TWO options" in tpl, name
-        assert "ONE natural question that makes both choices clear" in tpl, name
+        assert ("the field has only TWO options (then ask ONE natural "
+                "question that makes both choices clear)") in tpl, name
 
 
 # --- ASCII-only guard for every constant this change touched (scar #6) --------
