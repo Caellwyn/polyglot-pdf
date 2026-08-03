@@ -404,6 +404,9 @@ export function isFormComplete(state: SchemaFormState): boolean {
  * 
  * @param field - The next field to fill
  * @param order - The field's order/index in the form (1-based)
+ * @param language - Session language NAME (e.g. 'Spanish', not a code):
+ *   option labels resolve through the kit-baked label_translations for it
+ *   (bd polyglot-pdf-0rm1); omitted/English/unknown falls back to English.
  * @returns Formatted string for AI context
  * 
  * @example

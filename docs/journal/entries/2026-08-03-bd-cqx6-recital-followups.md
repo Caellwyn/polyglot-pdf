@@ -35,7 +35,8 @@ the next beads.
   `label_translations` (lowercase-name keys, per-option English fallback);
   all seven call sites pass it. The quoted field NAME and `field_id` stay
   English by contract -- the backend's `_translate_hint` matches on the quoted
-  English name (bd tupu.2). Nine vitest cases pin the behavior.
+  English name (bd tupu.2). Four new vitest cases pin the behavior (the file's
+  other five cases are the pre-existing bo4m fine-print pins).
 - **285t nits.** (1) The render unwraps a `(str, Enum)` `FieldType` member
   before classifying -- `str(FieldType.RADIO)` is `'FieldType.RADIO'`, which
   would have silently diverted an enum-typed radio to ask-directly (latent:
