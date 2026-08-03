@@ -194,6 +194,48 @@ describe('field-1 opener diagnostic (bd polyglot-pdf-xp4q)', () => {
     })
   })
 
+  it('watchdog timeout emits section_switch_watchdog_timeout with COMPUTED fields (completed form reads true)', async () => {
+    // Shrink the watchdog window for the test; restore after. The static is
+    // TS-readonly only -- runtime-writable, and restoring keeps other tests
+    // honest.
+    const orig = (WebFormConnection as any).SECTION_SWITCH_TIMEOUT_MS
+    // Longer than startSection's internal ~100ms teardown wait (else the
+    // watchdog fires before the NEW socket exists and the OPEN guard correctly
+    // suppresses the emit -- verified by trying 40ms), still short enough for a
+    // fast test.
+    ;(WebFormConnection as any).SECTION_SWITCH_TIMEOUT_MS = 400
+    try {
+      await connected()
+      // A COMPLETED form: the exact case where a hardcoded is_form_complete
+      // would assert the opposite of the truth (Opus round-2 finding). This
+      // assertion fails against the hardcoded version -- mutation cover.
+      // Seeded through STORAGE, not the in-memory object: startSection reloads
+      // this.state from storage, so in-memory seeding would be discarded.
+      const seeded = JSON.parse(sessionStorage.getItem('schema_form_state')!)
+      seeded.fieldValues = {
+        f_a: { value: 'x', confirmed: true },
+        f_b: { value: 'y', confirmed: true },
+      }
+      sessionStorage.setItem('schema_form_state', JSON.stringify(seeded))
+      await (conn as any).startSection('only')
+      const ws = lastWs()
+      ws.send.mockClear()
+      // Do NOT deliver session_ready -- let the watchdog fire.
+      await new Promise(r => setTimeout(r, 700))
+
+      const diags = ofType(ws, 'client_diagnostic')
+      expect(diags).toHaveLength(1)
+      expect(diags[0]).toMatchObject({
+        event: 'section_switch_watchdog_timeout',
+        was_section_switch: true,
+        is_form_complete: true,
+        has_next_field_hint: false,
+      })
+    } finally {
+      ;(WebFormConnection as any).SECTION_SWITCH_TIMEOUT_MS = orig
+    }
+  })
+
   it('stays SILENT on the first connect (no switch, disclaimer not yet accepted) -- the noise guard', async () => {
     const ws = await connected()
 

@@ -3705,14 +3705,23 @@ export class WebFormConnection {
         // silently goes nowhere, and the server-side handshake-without-
         // session_ready is itself the readable evidence in that case.
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          // Every field is COMPUTED, none hardcoded: a hardcoded
+          // is_form_complete=false would assert the opposite of the truth when
+          // a switch times out on a completed form -- inverting the very signal
+          // that flag exists to carry (Opus outer review finding, round 2).
+          // has_next_field_hint uses the side-effect-free computeNextField
+          // directly, NOT computeNextFieldHintString -- the latter fires the
+          // onNextField UI callback, which a timeout path must not do.
+          const wdFormComplete = isFormComplete(this.state);
           this.send({
             type: 'client_diagnostic',
             event: 'section_switch_watchdog_timeout',
             was_section_switch: true,
             disclaimer_accepted: !!this.state.disclaimerAccepted,
             has_selected_language: !!this.state.selectedLanguage,
-            has_next_field_hint: false,
-            is_form_complete: false,
+            has_next_field_hint:
+              !wdFormComplete && !!computeNextField(this.state, { skipConfirmed: true }),
+            is_form_complete: wdFormComplete,
             storage_disclaimer_accepted: !!SchemaFormStateManager.load()?.disclaimerAccepted,
             continuous_session: !!this.continuousSessionEnabled,
           });
