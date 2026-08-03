@@ -35,7 +35,10 @@ the full read-out on request).
   two rules cannot read as contradicting.
 - **bxra -- verified live and its fixture committed.**
   `read_all_options.wav` added via `gen_fixtures.py` (the canonical
-  generator) so the long-list read-out scenario stays reproducible offline.
+  generator). The audio is committed for future harness runs; it is NOT yet
+  wired into a named harness scenario in `harness.js` -- the bead's criterion
+  asked for the live verification, which this closeout performed by driving
+  the fixture manually.
 
 **Live verification (I-90, real Gemini, resume path per case):**
 - `p1_checkbox4` (3 options with "(Proceed to Item Numbers 5.a. - 5.c.)"
@@ -52,7 +55,7 @@ the full read-out on request).
   all 50 states present, zero missing, verified programmatically against the
   transcript. (bxra's full criterion.)
 
-**Cost note:** the DTI SI grows 15,266 -> 16,208 chars (~6%), the price of
+**Cost note:** the DTI SI grows 15,266 -> 16,424 chars (~8%), the price of
 the two new rules; same accounting as the 6bq8 entry (per-turn text-in is
 the cost lever), flagged in the merge report.
 

@@ -563,10 +563,16 @@ def test_dti_si_speaks_substance_not_print_navigation():
     # and screen wording.
     si = _settings().DTI_SYSTEM_INSTRUCTION
     assert "SPEAK THE SUBSTANCE of each option" in si
-    assert "NEVER read aloud a label's printed-form navigation" in si
+    assert "NEVER read aloud a label's printed-form NAVIGATION" in si
     assert "'(Proceed to Item 5.a)'" in si
     assert "'Skip line 6f'" in si
     assert "screen wording like 'Select Yes'" in si
+    # The boundary runs between NAVIGATION (omit) and a cross-reference that
+    # carries a REAL requirement (keep): W-7 reason option a's "you must also
+    # check and complete box h" is a genuine multi-select obligation, not
+    # cruft (fresh-eyes finding, this PR).
+    assert "a REAL requirement or consequence of choosing that option" in si
+    assert "is SUBSTANCE -- keep its meaning" in si
     # It is framed as the exception to the as-written rule, and MATCHING's
     # as-written line carries the coupling so the two rules cannot read as
     # contradicting each other.
