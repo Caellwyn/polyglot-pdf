@@ -654,7 +654,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 			if (connectionManager && isConnected) {
 				try {
 					const nextField = computeNextField(state)
-					const nextFieldHint = nextField ? formatNextFieldHint(nextField) : 'all fields are complete'
+					const nextFieldHint = nextField ? formatNextFieldHint(nextField, undefined, newLanguage) : 'all fields are complete'
 					connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
 				} catch (err) {
 					console.error('[VoiceOverlayMobile] Failed to change spoken language:', err)

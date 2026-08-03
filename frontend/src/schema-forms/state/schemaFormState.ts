@@ -967,7 +967,8 @@ export class SchemaFormStateManager {
     // {next_field_hint} is the real next field on first connect, not the generic
     // "the first unfilled field" fallback (gap D, hint half).
     const initialFieldHint = nextField
-      ? formatNextFieldHint(nextField, getFieldOrder(state, nextField.id) || undefined)
+      ? formatNextFieldHint(nextField, getFieldOrder(state, nextField.id) || undefined,
+          state.selectedLanguage)
       : null;
 
     return {

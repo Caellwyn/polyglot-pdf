@@ -1307,7 +1307,8 @@ export class WebFormConnection {
     }
 
     const hint = nextField
-      ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined)
+      ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined,
+          this.state.selectedLanguage)
       : null;
 
     // Store last field hint for recovery prompts
@@ -1364,7 +1365,8 @@ export class WebFormConnection {
     const fieldOrder = getFieldOrder(this.state, nextField.id);
 
     // Format hint for Gemini
-    const hint = formatNextFieldHint(nextField, fieldOrder || undefined);
+    const hint = formatNextFieldHint(nextField, fieldOrder || undefined,
+        this.state.selectedLanguage);
 
     return hint;
   }
@@ -2113,7 +2115,8 @@ export class WebFormConnection {
     // which would skip a confirmed target the model is navigating back to
     // correct. Keep the recovery-prompt hint current, same as the other
     // next-field producers.
-    const hint = formatNextFieldHint(field, getFieldOrder(this.state, fieldId) || undefined);
+    const hint = formatNextFieldHint(field, getFieldOrder(this.state, fieldId) || undefined,
+        this.state.selectedLanguage);
     sessionStorage.setItem('vff_last_field_hint', hint);
     // Read via the `[]`-alias fallback (bd 5k52 class): a checkbox-group's
     // entry may sit under the bracket variant; a bare read would misreport a
@@ -3302,7 +3305,8 @@ export class WebFormConnection {
       this.callbacks.onNextField(nextField ? nextField.id : null);
     }
     const nextFieldHint = nextField
-      ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined)
+      ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined,
+          this.state.selectedLanguage)
       : null;
 
     // Keep the recovery-prompt hint current (same side effect as
