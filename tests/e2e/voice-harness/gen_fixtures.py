@@ -47,6 +47,11 @@ UTTERANCES = [
     # current values. Phrasing matches the tool description's example shape.
     ("secretary_query_alien.wav",
      "what alien registration number did I give earlier?"),
+    # Long-standard-list read-out request (bd polyglot-pdf-bxra): on an
+    # ask-directly field (e.g. the I-90 50-state selects) this must trigger
+    # the COMPLETE option recital.
+    ("read_all_options.wav",
+     "Can you please read me the whole list of options?"),
     # wsao.2 measurement-gate utterances (sprint-16 step 2): the w7
     # reason-for-applying A/B. A deep requirements question answerable ONLY
     # from the booklet's reason section (Exceptions 1-2: no tax return needed

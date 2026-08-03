@@ -124,6 +124,16 @@ def render_field_guidance(
                 f"Options ({n} total -- long standard list; ask directly and "
                 f"offer to read all {n} aloud): [{', '.join(opt_strs)}]"
             )
+        elif n == 2:
+            # A two-option field IS one natural question (bd polyglot-pdf-41fi):
+            # forcing the list recital produced "Select No, Select Yes -- which
+            # one applies?" on yes/no fields. The SI's two-option rule carries
+            # the phrasing detail (yes/no vs either/or).
+            parts.append(
+                f"Options (2 -- ask ONE natural question that makes both "
+                f"choices clear; do not recite the labels as a list): "
+                f"[{', '.join(opt_strs)}]"
+            )
         else:
             parts.append(
                 f"Options ({n} -- read ALL {n} aloud when asking; the user "
