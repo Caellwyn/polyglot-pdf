@@ -41,6 +41,7 @@ def test_client_diagnostic_logs_whitelisted_fields_only(mock_verify_token):
         "disclaimer_accepted": 0,                      # falsy non-bool -> False
         "has_selected_language": True,
         "has_next_field_hint": None,                   # -> False
+        "is_form_complete": "truthy-string",           # -> True
         # A swapped-args style leak attempt: MUST NOT reach the log line.
         "ssn": "123-45-6789",
         "free_text": "my address is 1 Main St",
@@ -69,6 +70,7 @@ def test_client_diagnostic_logs_whitelisted_fields_only(mock_verify_token):
     assert kwargs["disclaimer_accepted"] is False
     assert kwargs["has_selected_language"] is True
     assert kwargs["has_next_field_hint"] is False
+    assert kwargs["is_form_complete"] is True
     # The leak attempt must not appear anywhere on the line.
     assert "123-45-6789" not in repr(diag_calls[0])
     assert "1 Main St" not in repr(diag_calls[0])
@@ -76,5 +78,6 @@ def test_client_diagnostic_logs_whitelisted_fields_only(mock_verify_token):
     # deliberate, reviewed addition, not payload passthrough.
     assert set(kwargs.keys()) == {
         "diagnostic_event", "was_section_switch", "disclaimer_accepted",
-        "has_selected_language", "has_next_field_hint", "session_id",
+        "has_selected_language", "has_next_field_hint", "is_form_complete",
+        "session_id",
     }

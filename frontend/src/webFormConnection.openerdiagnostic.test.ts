@@ -128,6 +128,8 @@ describe('field-1 opener diagnostic (bd polyglot-pdf-xp4q)', () => {
       event: 'field1_opener_skipped',
       was_section_switch: true,
       disclaimer_accepted: false,
+      // A form with unconfirmed fields: NOT the benign completed shape.
+      is_form_complete: false,
     })
     // The console names it too, for a devtools-open session.
     expect(warnSpy).toHaveBeenCalledWith(
@@ -157,6 +159,10 @@ describe('field-1 opener diagnostic (bd polyglot-pdf-xp4q)', () => {
       disclaimer_accepted: true,
       has_selected_language: true,
       has_next_field_hint: false,
+      // Every field is confirmed, so this is the BENIGN completed-form shape --
+      // the flag that separates it from a genuinely broken opener in the logs
+      // (fresh-eyes finding: without it the two are byte-identical).
+      is_form_complete: true,
     })
   })
 

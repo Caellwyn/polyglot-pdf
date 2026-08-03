@@ -876,17 +876,23 @@ export class WebFormConnection {
       });
       console.log('[WebFormConnection] [OK] Auto-sent language message for reconnect:', this.state.selectedLanguage);
     } else if (wasSectionSwitch || openerDisclaimerAccepted) {
-      // The opener was EXPECTED here -- a section-switch handshake (which is
-      // what the post-I-Agree switchToFirstSection produces) or an accepted-
-      // disclaimer reconnect -- and did not fire. The very first connect of a
-      // session (no switch, disclaimer not yet accepted) is the one legitimate
-      // silent skip and stays quiet, so this diagnostic is signal, not noise.
-      // Booleans only -- no field data, no values (no-PII policy).
+      // The opener was EXPECTED here -- a section-switch handshake (the
+      // post-I-Agree switchToFirstSection is the primary producer; the
+      // deprecated completeSection reset path also routes through startSection)
+      // or an accepted-disclaimer reconnect -- and did not fire. The very first
+      // connect of a session (no switch, disclaimer not yet accepted) is the
+      // one legitimate silent skip and stays quiet, so this diagnostic is
+      // signal, not noise. is_form_complete disambiguates the benign
+      // completed-form reconnect (nothing left to ask -> hint correctly empty)
+      // from a genuinely broken opener -- the two are otherwise byte-identical
+      // in the log (fresh-eyes finding, this change). Booleans only -- no
+      // field data, no values (no-PII policy).
       const skipDiagnostic = {
         was_section_switch: wasSectionSwitch,
         disclaimer_accepted: openerDisclaimerAccepted,
         has_selected_language: openerHasLanguage,
         has_next_field_hint: !!openerNextFieldHint,
+        is_form_complete: isFormComplete(this.state),
       };
       console.warn('[WebFormConnection] field-1 opener SKIPPED (bd polyglot-pdf-xp4q)', skipDiagnostic);
       this.send({

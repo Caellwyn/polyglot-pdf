@@ -913,6 +913,9 @@ async def _handle_fill_session(
 						disclaimer_accepted=bool(obj.get("disclaimer_accepted")),
 						has_selected_language=bool(obj.get("has_selected_language")),
 						has_next_field_hint=bool(obj.get("has_next_field_hint")),
+						# Disambiguates the benign completed-form reconnect (hint
+						# correctly empty) from a genuinely broken opener.
+						is_form_complete=bool(obj.get("is_form_complete")),
 						session_id=session_id,
 					)
 					continue
