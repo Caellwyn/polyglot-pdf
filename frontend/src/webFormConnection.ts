@@ -835,7 +835,7 @@ export class WebFormConnection {
     // watchdog, and a second switch can't start during the switching window.
     // Captured BEFORE the release: the field-1 opener diagnostic below needs to
     // know this session_ready terminated a section switch (the post-I-Agree
-    // switchToFirstSection path is exactly such a switch; bd polyglot-pdf-xp4q).
+    // switchToFirstSection path is the primary such switch; bd polyglot-pdf-xp4q).
     const wasSectionSwitch = this.switchInFlight;
     if (this.switchInFlight) {
       this.completeSectionSwitch();
