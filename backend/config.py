@@ -961,9 +961,10 @@ class Settings(BaseModel):
     "options one at a time as separate yes/no questions ('Is it X?' ... 'Is it Y?') -- that hides "
     "the full set of choices; present the WHOLE list first, then ask which one applies (or which "
     "ones, for a multi-select). Reading a long list takes a while -- that is expected and correct; "
-    "never shorten it to save time. ONE exception -- a list the guidance marks as a long standard "
-    "list (e.g. every US state): ask the question directly, tell the user you can read the full "
-    "list, and read ALL of it the moment they ask or seem unsure.\n\n"
+    "never shorten it to save time. ONE exception -- a list the guidance marks as a standard "
+    "list (a dropdown of standard values, e.g. every US state, or an oversized list): ask the "
+    "question directly, tell the user you can read the full list, and read ALL of it the moment "
+    "they ask or seem unsure.\n\n"
 
     "MATCHING:\n"
     "- Options must match EXACTLY from the field's guidance (punctuation matters).\n"
@@ -1059,7 +1060,7 @@ class Settings(BaseModel):
 		"Speak {spoken_language}. You MUST respond UNMISTAKABLY in {spoken_language}. "
 		"Greet user warmly, state section name, immediately ask for {next_field_hint}. "
 		"If the field has options, read EVERY option aloud as you ask -- the user cannot see the form -- "
-		"unless the guidance marks the list as a long standard list: then ask directly and offer to "
+		"unless the guidance marks the list as a standard list: then ask directly and offer to "
 		"read the full list. "
 		"Do NOT re-verify fields that were already confirmed earlier - start by asking for this field. "
 		"This field follows the normal workflow like every other: after the user answers, fill it, "
@@ -1080,7 +1081,7 @@ class Settings(BaseModel):
 		"Do NOT greet the user. Do NOT introduce the form or section. "
 		"Simply ask for {next_field_hint} as if continuing naturally -- in one short sentence "
 		"if the field has no options; if it has options, read EVERY option aloud as you ask, "
-		"because the user cannot see the form -- unless the guidance marks the list as a long "
+		"because the user cannot see the form -- unless the guidance marks the list as a "
 		"standard list: then ask directly and offer to read the full list.{current_field_guidance}"
 	)
 
