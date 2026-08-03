@@ -400,7 +400,8 @@ def test_render_field_guidance_checkbox_group_gets_recital():
 
 
 @pytest.mark.parametrize("ftype,expects_recital", [
-    (None, True),
+    ("ABSENT", True),   # key omitted entirely (guidance defaults it to text)
+    (None, True),       # key present with an explicit null (LLM-invented shape)
     ("", True),
     ("text", True),
     ("number", True),
@@ -410,14 +411,17 @@ def test_render_field_guidance_checkbox_group_gets_recital():
 ])
 def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
     # bd polyglot-pdf-cqx6: the gate names the ask-directly side (select), so
-    # an option-bearing field with an unrecognized or ABSENT type degrades
-    # toward reading the choices aloud (the accessibility-safe direction),
-    # never silently away from it.
+    # an option-bearing field with an unrecognized, null, or ABSENT type
+    # degrades toward reading the choices aloud (the accessibility-safe
+    # direction), never silently away from it. The explicit-None row is
+    # distinct from the absent row: absent is defaulted upstream by
+    # get_field_guidance, while a present-but-null type reaches the render's
+    # own `or ""` guard (Opus outer review on this PR).
     field = {
         "id": "f", "name": "F", "spoken_name": "f",
         "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
     }
-    if ftype is not None:
+    if ftype != "ABSENT":
         field["type"] = ftype
     text = render_field_guidance(field)
     if expects_recital:
@@ -440,10 +444,17 @@ def test_option_type_gate_unwraps_field_type_enum():
     }
     text = render_field_guidance(field)
     assert "read ALL 2 aloud when asking" in text
+    # The unwrap covers the model-visible Type: line too, not just the gate
+    # (Opus outer review on this PR: the half-fixed render printed
+    # 'Type: FieldType.RADIO').
+    assert "Type: radio" in text
+    assert "FieldType" not in text
 
     field["type"] = FieldType.SELECT
     text = render_field_guidance(field)
     assert "standard list; ask directly" in text
+    assert "Type: select" in text
+    assert "FieldType" not in text
 
 
 def test_render_field_guidance_threshold_boundary_is_exclusive():

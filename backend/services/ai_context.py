@@ -71,10 +71,16 @@ def render_field_guidance(
     if not guidance:
         return "No fields available"
 
+    # Unwrap a (str, Enum) FieldType member ONCE, for BOTH the model-visible
+    # Type: line and the options gate below -- str(FieldType.RADIO) is
+    # 'FieldType.RADIO', not 'radio' (bd polyglot-pdf-285t; the Type: line was
+    # the missed half, Opus outer review on this PR).
+    _t = guidance.get("type")
+    _type_value = getattr(_t, "value", _t)
     parts = [
         f"ID: {guidance['field_id']}",
         f"Spoken: {guidance['spoken_name']}",
-        f"Type: {guidance.get('type', 'text')}",
+        f"Type: {_type_value if _type_value is not None else 'text'}",
     ]
     if guidance.get("required"):
         parts.append("Required: true")
@@ -107,10 +113,7 @@ def render_field_guidance(
         # PRESENTING OPTIONS block. Recital is TYPE-scoped (bd polyglot-pdf-s503
         # + cqx6): a select always asks directly; every OTHER option-bearing
         # type (incl. an unrecognized or absent one) falls to the recital side.
-        # getattr unwraps a (str, Enum) FieldType member, whose str() is
-        # 'FieldType.RADIO', not 'radio' (bd polyglot-pdf-285t).
-        _t = guidance.get("type")
-        ftype = str(getattr(_t, "value", _t) or "").lower()
+        ftype = str(_type_value or "").lower()
         if ftype in ASK_DIRECTLY_OPTION_TYPES:
             parts.append(
                 f"Options ({n} -- standard list; ask directly and offer to "
