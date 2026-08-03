@@ -5,11 +5,15 @@ import json
 from backend.config import get_settings
 from backend.services.manifest_service import get_field_guidance
 
-# The forced recital applies to CHECKBOX/RADIO groups only (maintainer
-# directive 2026-08-02, bd polyglot-pdf-s503): a select/dropdown -- e.g. the
-# 50-state lists, height feet/inches -- always renders the ask-directly marker
-# instead, regardless of count.
-RECITAL_OPTION_TYPES = {"radio", "checkbox", "checkbox_group"}
+# A select/dropdown -- e.g. the 50-state lists, height feet/inches -- always
+# renders the ask-directly marker instead of the forced recital, regardless of
+# count (maintainer directive 2026-08-02, bd polyglot-pdf-s503). The gate names
+# the ASK-DIRECTLY side, not the recital side (bd polyglot-pdf-cqx6): an
+# option-bearing field with an unrecognized/absent type (nothing forbids
+# options on a text field, and LLM extraction has invented odd types) must
+# degrade TOWARD reciting the choices aloud -- the accessibility-safe
+# direction -- never silently away from it.
+ASK_DIRECTLY_OPTION_TYPES = {"select"}
 
 # Above this many options, even a radio/checkbox group's guidance switches to
 # the "long standard list" marker and the DTI SI's PRESENTING OPTIONS rule has
@@ -100,10 +104,14 @@ def render_field_guidance(
         # ride the injection so the directive is in the LATEST guidance block on
         # exactly the turns that need it; the full behavioral rule (and the
         # standard-list carve-out these markers trigger) is the DTI SI's
-        # PRESENTING OPTIONS block. Recital is TYPE-scoped to checkbox/radio
-        # groups (bd polyglot-pdf-s503): a select always asks directly.
-        ftype = str(guidance.get("type") or "").lower()
-        if ftype not in RECITAL_OPTION_TYPES:
+        # PRESENTING OPTIONS block. Recital is TYPE-scoped (bd polyglot-pdf-s503
+        # + cqx6): a select always asks directly; every OTHER option-bearing
+        # type (incl. an unrecognized or absent one) falls to the recital side.
+        # getattr unwraps a (str, Enum) FieldType member, whose str() is
+        # 'FieldType.RADIO', not 'radio' (bd polyglot-pdf-285t).
+        _t = guidance.get("type")
+        ftype = str(getattr(_t, "value", _t) or "").lower()
+        if ftype in ASK_DIRECTLY_OPTION_TYPES:
             parts.append(
                 f"Options ({n} -- standard list; ask directly and offer to "
                 f"read all {n} aloud): [{', '.join(opt_strs)}]"

@@ -19,6 +19,8 @@ the style of test_recovery_prompt.py.
 """
 import re
 
+import pytest
+
 from backend.config import Settings
 from backend.services.ai_context import render_field_guidance
 
@@ -397,6 +399,53 @@ def test_render_field_guidance_checkbox_group_gets_recital():
     assert "Options (8 -- read ALL 8 aloud when asking; " in text
 
 
+@pytest.mark.parametrize("ftype,expects_recital", [
+    (None, True),
+    ("", True),
+    ("text", True),
+    ("number", True),
+    ("radio", True),
+    ("checkbox_group", True),
+    ("select", False),
+])
+def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
+    # bd polyglot-pdf-cqx6: the gate names the ask-directly side (select), so
+    # an option-bearing field with an unrecognized or ABSENT type degrades
+    # toward reading the choices aloud (the accessibility-safe direction),
+    # never silently away from it.
+    field = {
+        "id": "f", "name": "F", "spoken_name": "f",
+        "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
+    }
+    if ftype is not None:
+        field["type"] = ftype
+    text = render_field_guidance(field)
+    if expects_recital:
+        assert "read ALL 2 aloud when asking" in text, ftype
+    else:
+        assert "standard list; ask directly" in text, ftype
+        assert "read ALL" not in text, ftype
+
+
+def test_option_type_gate_unwraps_field_type_enum():
+    # bd polyglot-pdf-285t: str(FieldType.RADIO) on a plain (str, Enum) is
+    # 'FieldType.RADIO', which would silently divert a radio to ask-directly;
+    # the render unwraps .value first. All production callers pass raw JSON
+    # dicts today, so this pins the latent path.
+    from backend.models.form_models import FieldType
+
+    field = {
+        "id": "r", "name": "R", "spoken_name": "r", "type": FieldType.RADIO,
+        "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(field)
+    assert "read ALL 2 aloud when asking" in text
+
+    field["type"] = FieldType.SELECT
+    text = render_field_guidance(field)
+    assert "standard list; ask directly" in text
+
+
 def test_render_field_guidance_threshold_boundary_is_exclusive():
     # Exactly-THRESHOLD options must still get the read-ALL branch; a silent
     # `>` -> `>=` flip would change every 20-option field with the suite green
@@ -417,15 +466,17 @@ def test_render_field_guidance_threshold_boundary_is_exclusive():
     assert f"Options ({T + 1} total -- long standard list" in above
 
 
-def test_initiating_templates_scope_recital_by_long_list_carve_out():
+def test_initiating_templates_scope_recital_by_standard_list_carve_out():
     # The templates' recital directive must carry the SAME carve-out as the SI:
     # unqualified, a resume onto a 50-state select would demand a full recital
-    # against the guidance's long-list marker (2nd Opus outer review, this PR).
+    # against the guidance's ask-directly marker (2nd Opus outer review on the
+    # 6bq8 PR). The CONTIGUOUS phrase is asserted (bd polyglot-pdf-285t): two
+    # split substrings stayed green if the carve-out clause dangled while
+    # "standard list" survived elsewhere in the template.
     s = _settings()
     for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
         tpl = getattr(s, name)
-        assert "unless the guidance marks the list as a" in tpl, name
-        assert "standard list" in tpl, name
+        assert "marks the list as a standard list" in tpl, name
         assert "offer to read the full list" in tpl, name
 
 

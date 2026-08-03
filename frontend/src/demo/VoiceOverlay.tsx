@@ -1154,7 +1154,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 				try {
 					const nextField = computeNextField(state)
 					const nextFieldHint = nextField
-						? formatNextFieldHint(nextField)
+						? formatNextFieldHint(nextField, undefined, newLanguage)
 						: 'all fields are complete'
 					connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
 				} catch (err) {

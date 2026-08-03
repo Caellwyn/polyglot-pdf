@@ -419,7 +419,8 @@ export function isFormComplete(state: SchemaFormState): boolean {
  */
 export function formatNextFieldHint(
   field: FormField,
-  order?: number
+  order?: number,
+  language?: string | null
 ): string {
   const orderPrefix = order ? `#${order}` : '';
   // Required-ness lives under validation on the canonical FormField (the old
@@ -427,8 +428,17 @@ export function formatNextFieldHint(
   const requiredSuffix = field.validation?.required ? ', required' : '';
   // options are FieldOption objects ({value,label}), not bare strings -- list
   // their labels so the hint reads as option text, not "[object Object]".
+  // Labels resolve through the kit-baked label_translations for the session
+  // language (bd polyglot-pdf-0rm1): the guidance block already spoke the
+  // session language while this hint carried raw English labels, so the model
+  // held the same options in two languages with a read-EVERY-option directive
+  // beside both. Keys are lowercase English language names (same convention
+  // as the guidance path); a miss falls back to the English label.
+  const langKey = language ? language.trim().toLowerCase() : '';
+  const optionLabel = (o: { label: string; label_translations?: Record<string, string> }): string =>
+    (langKey && langKey !== 'english' && o.label_translations?.[langKey]) || o.label;
   const optionsSuffix = field.options && field.options.length > 0
-    ? `, options: [${field.options.map(o => o.label).join(', ')}]`
+    ? `, options: [${field.options.map(optionLabel).join(', ')}]`
     : '';
 
   // Field fine-print (help.instructions) rides the hint so the qualifying

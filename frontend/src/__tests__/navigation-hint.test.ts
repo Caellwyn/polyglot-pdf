@@ -96,3 +96,39 @@ describe('formatNextFieldHint', () => {
     expect(hint).toMatch(/\)\. Context to briefly convey when asking: /)
   })
 })
+
+describe('formatNextFieldHint option-label translation (bd polyglot-pdf-0rm1)', () => {
+  const optionsField = () => baseField({
+    options: [
+      { value: 'yes', label: 'Yes', label_translations: { spanish: 'Si', ukrainian: 'Tak' } },
+      { value: 'no', label: 'No', label_translations: { spanish: 'No' } },
+    ]
+  } as Partial<FormField>)
+
+  it('resolves option labels through label_translations for the session language', () => {
+    const hint = formatNextFieldHint(optionsField(), 2, 'Spanish')
+    expect(hint).toContain('options: [Si, No]')
+  })
+
+  it('falls back to the English label on a per-option translation miss', () => {
+    // 'no' has no ukrainian entry -- only that option falls back.
+    const hint = formatNextFieldHint(optionsField(), 2, 'Ukrainian')
+    expect(hint).toContain('options: [Tak, No]')
+  })
+
+  it('renders English labels for English, absent, and unknown languages', () => {
+    for (const lang of ['English', undefined, null, 'Klingon']) {
+      const hint = formatNextFieldHint(optionsField(), 2, lang as string | null | undefined)
+      expect(hint).toContain('options: [Yes, No]')
+    }
+  })
+
+  it('leaves the quoted field name and field_id in English regardless of language', () => {
+    // The backend's hint translation substitutes the NAME (bd tupu.2); the
+    // frontend must not pre-translate it, or the backend's quoted-name match
+    // would miss.
+    const hint = formatNextFieldHint(optionsField(), 2, 'Spanish')
+    expect(hint).toContain("'Has Your Name Legally Changed?'")
+    expect(hint).toContain("field_id: 'p1_checkbox4'")
+  })
+})
