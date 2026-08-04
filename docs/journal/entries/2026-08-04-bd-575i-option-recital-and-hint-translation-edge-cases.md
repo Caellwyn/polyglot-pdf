@@ -319,8 +319,8 @@ The final confirming review scored bd 9tuu criterion 1 as FAILING, correctly.
 `multi_select` but not plain `checkbox` -- and `type: "checkbox"` WITH options is
 the legacy v1 group idiom, a genuine multi-select. Three places in the codebase
 say so independently: `schema_repair._membership_trigger` treats it as selecting
-from a SET, and the repair pass retypes a checkbox with >= 2 options to
-`checkbox_group`, `validation.ts`'s `isCheckboxGroupField` counts
+from a SET, its `_normalize_checkbox_shapes` retypes a checkbox with >= 2
+options to `checkbox_group`, `validation.ts`'s `isCheckboxGroupField` counts
 it, and `FieldRenderer` routes it to the same `CheckboxField` that branches on
 `!field.options` to render the check-as-many-as-you-like group UI. So a 2-option
 one got the exclusive-choice ask over a UI where both boxes are checkable --
@@ -335,6 +335,27 @@ same latency bar 9tuu itself was filed at.
 I had read that criterion's "or any type whose semantics allow selecting more
 than one" and then enumerated types by NAME rather than by semantics, which is
 how the one type whose multi-ness depends on another field slipped through.
+
+**A commit message that claimed a fix the commit did not contain.** The
+citation-correction commit said it had fixed the `ai_context.py` comment, and it
+had not -- that file was not even in the commit. I had made the edit, then
+reverted it myself: a later mutation test restored the file from a backup taken
+BEFORE the edit (`cp /tmp/aiC.bak ...`), silently undoing it, and I wrote the
+commit message from what I remembered doing rather than from the staged diff.
+The final review caught it, and correctly called it worse than the original
+inaccuracy, because the audit trail now claimed the problem was handled.
+
+Two mechanical lessons. First: a mutation-test restore is only safe if the
+backup was taken AFTER every real edit to that file -- otherwise the "restore"
+is a revert. Take the backup immediately before the mutation, not once per
+session. Second: write the commit message from `git diff --cached`, not from
+memory; `git show --stat` on the result would have shown three files where the
+message described four.
+
+The same review also caught that the replacement symbol I reached for
+(`_unwrap_single_option_groups`) does not exist either. The real retype function
+is `_normalize_checkbox_shapes`. Every symbol now cited in the code, the tests,
+and this entry has been grepped against the source.
 
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on

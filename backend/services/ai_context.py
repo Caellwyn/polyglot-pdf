@@ -34,12 +34,14 @@ LONG_OPTION_LIST_THRESHOLD = 20
 #
 # "checkbox" is in the set, but ONLY reaches this gate when it carries options
 # -- which is exactly the legacy v1 group idiom, a genuine multi-select. Three
-# independent places agree: schema_repair.py:100 defines it as the v1 group
-# modeling ("type checkbox WITH 2+ options") and retypes it, validation.ts's
-# isCheckboxGroupField treats it as a group, and FieldRenderer routes it to the
-# same CheckboxField that branches on `!field.options` to render the
-# check-as-many-as-you-like group UI. A v2 standalone checkbox has NO options
-# and so never reaches the options branch at all -- its value is a boolean.
+# independent places agree: schema_repair._membership_trigger treats it as
+# selecting FROM A SET ("v1 group modeling: type checkbox with options"), its
+# _normalize_checkbox_shapes RETYPES a checkbox with >= 2 options to
+# checkbox_group, validation.ts's isCheckboxGroupField treats it as a group, and
+# FieldRenderer routes it to the same CheckboxField that branches on
+# `!field.options` to render the check-as-many-as-you-like group UI.
+# A v2 standalone checkbox has NO options and so never reaches the options
+# branch at all -- its value is a boolean.
 # Without this, a kit that skipped repair (hand-authored, editor-drafted, or a
 # pre-repair draft) with two such options got the exclusive-choice ask over a UI
 # where both boxes are checkable (2nd Opus outer review, final round).
