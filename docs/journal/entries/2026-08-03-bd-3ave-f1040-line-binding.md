@@ -103,6 +103,22 @@ Mutation-verified against the shipped kit: the oracle test names all 20
 misbindings, the round-trip names exactly `fld_1a`..`fld_1d` as never reaching
 the PDF.
 
+**Review outcome (pre-PR, all Claude-based).** Fresh-eyes: Sonnet caught the
+stale `pdf_position` siblings (fixed in-PR, plus a new cross-kit guard); Opus
+then caught that the guard was VACUOUS on i-90 (exact-name match vs i-90's leaf
+names -> 0 of 132 fields checked, green with every position corrupted), the
+leaked event loop, and the four uncovered write-ins. The Opus outer review ran
+four rounds and found, in order: (1) FOUR TESTS IN `tests/` ASSERTING THE
+CORRUPTION STILL EXISTS -- the PR would have merged CI-RED, because CI runs
+`pytest backend/tests tests` and I had verified only `backend/tests`; (2) six
+widths rounded 71.25 -> 71.2, and the archived specimen being overwritable by a
+future `migrate --archive`; (3) two docstrings contradicting their code; (4) a
+stale "still has 12" narrative beside the new 8. All fixed inline; the final
+diff cleared TWO independent Opus passes. One out-of-scope test-hygiene bead
+filed (polyglot-pdf-35z0): a sibling gutter test is vacuous under BOTH schemas,
+which I mutation-verified is pre-existing rather than caused here.
+
+
 ## Lessons
 
 - **An unchanged metric can hide a real change.** Mid-fix, `dump-widget-unclaimed`
