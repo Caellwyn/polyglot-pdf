@@ -3631,7 +3631,14 @@
       "spoken_name": "Line 1a W-2 wages",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_31[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 450.0,
+        "width": 72.0,
+        "height": 12.0
+      },
       "validation": {
         "required": false
       },
@@ -3661,7 +3668,14 @@
       "spoken_name": "Line 1b household employee wages",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_32[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_48[0]",
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 462.0,
+        "width": 72.0,
+        "height": 12.0
+      },
       "validation": {
         "required": false
       },
@@ -3691,7 +3705,14 @@
       "spoken_name": "Line 1c tip income",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_33[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_49[0]",
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 474.0,
+        "width": 72.0,
+        "height": 12.0
+      },
       "validation": {
         "required": false
       },
@@ -3721,7 +3742,14 @@
       "spoken_name": "Line 1d Medicaid waiver payments",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_34[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_50[0]",
+      "pdf_position": {
+        "page": 1,
+        "x": 504.0,
+        "y": 486.0,
+        "width": 72.0,
+        "height": 12.0
+      },
       "validation": {
         "required": false
       },
@@ -3751,14 +3779,14 @@
       "spoken_name": "Line 1e dependent care benefits",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_47[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_51[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 450.0,
+        "y": 498.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -3788,14 +3816,14 @@
       "spoken_name": "Line 1f adoption benefits",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_48[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_52[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 462.0,
+        "y": 510.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -3825,14 +3853,14 @@
       "spoken_name": "Line 1g Form 8919 wages",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_49[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_53[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 474.0,
+        "y": 522.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -3862,16 +3890,16 @@
       "spoken_name": "Line 1h other earned income type",
       "type": "text",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_50[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_54[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 504.0,
-        "y": 486.0,
-        "width": 72.0,
-        "height": 12.0
+        "x": 344.2,
+        "y": 534.0,
+        "width": 131.0,
+        "height": 11.0
       },
       "spoken_name_translations": {
         "spanish": "L\u00ednea 1h, tipo de otro ingreso del trabajo",
@@ -3899,14 +3927,14 @@
       "spoken_name": "Line 1h other earned income amount",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_51[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_55[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 498.0,
+        "y": 534.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -3936,15 +3964,15 @@
       "spoken_name": "Line 1i nontaxable combat pay",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_52[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_56[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 504.0,
-        "y": 510.0,
-        "width": 72.0,
+        "x": 410.4,
+        "y": 546.0,
+        "width": 71.25,
         "height": 12.0
       },
       "spoken_name_translations": {
@@ -3973,14 +4001,14 @@
       "spoken_name": "Line 1z total",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_53[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_57[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 522.0,
+        "y": 558.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -4010,16 +4038,16 @@
       "spoken_name": "Line 2a tax-exempt interest",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_54[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_58[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 344.2,
-        "y": 534.0,
-        "width": 131.0,
-        "height": 11.0
+        "x": 252.0,
+        "y": 570.0,
+        "width": 71.25,
+        "height": 12.0
       },
       "spoken_name_translations": {
         "spanish": "L\u00ednea 2a, intereses exentos de impuestos",
@@ -4047,14 +4075,14 @@
       "spoken_name": "Line 2b taxable interest",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_55[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_59[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 534.0,
+        "y": 570.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -4084,14 +4112,14 @@
       "spoken_name": "Line 3a qualified dividends",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_56[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_60[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 410.4,
-        "y": 546.0,
+        "x": 252.0,
+        "y": 582.0,
         "width": 71.25,
         "height": 12.0
       },
@@ -4121,14 +4149,14 @@
       "spoken_name": "Line 3b ordinary dividends",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_57[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_61[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 558.0,
+        "y": 582.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -4259,14 +4287,14 @@
       "spoken_name": "Line 4a IRA distributions",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_58[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_62[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 252.0,
-        "y": 570.0,
+        "y": 606.0,
         "width": 71.25,
         "height": 12.0
       },
@@ -4296,14 +4324,14 @@
       "spoken_name": "Line 4b IRA taxable amount",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_59[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_63[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 570.0,
+        "y": 606.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -4465,15 +4493,15 @@
       "spoken_name": "Line 4c other amount",
       "type": "text",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_60[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_64[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 252.0,
-        "y": 582.0,
-        "width": 71.25,
+        "x": 439.2,
+        "y": 618.0,
+        "width": 36.0,
         "height": 12.0
       },
       "show_if": {
@@ -4507,15 +4535,15 @@
       "spoken_name": "Line 5a pensions and annuities",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_61[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_65[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 504.0,
-        "y": 582.0,
-        "width": 72.0,
+        "x": 252.0,
+        "y": 630.0,
+        "width": 71.25,
         "height": 12.0
       },
       "spoken_name_translations": {
@@ -4544,15 +4572,15 @@
       "spoken_name": "Line 5b pensions taxable amount",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_62[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_66[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 252.0,
-        "y": 606.0,
-        "width": 71.25,
+        "x": 504.0,
+        "y": 630.0,
+        "width": 72.0,
         "height": 12.0
       },
       "spoken_name_translations": {
@@ -4713,15 +4741,15 @@
       "spoken_name": "Line 5c other amount",
       "type": "text",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_63[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_67[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 504.0,
-        "y": 606.0,
-        "width": 72.0,
+        "x": 439.2,
+        "y": 642.0,
+        "width": 36.0,
         "height": 12.0
       },
       "show_if": {
@@ -4755,15 +4783,15 @@
       "spoken_name": "Line 6a social security benefits",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_64[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_68[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 439.2,
-        "y": 618.0,
-        "width": 36.0,
+        "x": 252.0,
+        "y": 654.0,
+        "width": 71.25,
         "height": 12.0
       },
       "spoken_name_translations": {
@@ -4792,15 +4820,15 @@
       "spoken_name": "Line 6b social security taxable amount",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_65[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_69[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 252.0,
-        "y": 630.0,
-        "width": 71.25,
+        "x": 504.0,
+        "y": 654.0,
+        "width": 72.0,
         "height": 12.0
       },
       "spoken_name_translations": {
@@ -4903,14 +4931,14 @@
       "spoken_name": "Line 7a capital gain or loss",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_66[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_70[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 630.0,
+        "y": 690.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -5041,15 +5069,15 @@
       "spoken_name": "Line 8 additional income",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_67[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_72[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 439.2,
-        "y": 642.0,
-        "width": 36.0,
+        "x": 504.0,
+        "y": 714.0,
+        "width": 72.0,
         "height": 12.0
       },
       "spoken_name_translations": {
@@ -5078,15 +5106,15 @@
       "spoken_name": "Line 9 total income",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_68[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_73[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
-        "x": 252.0,
-        "y": 654.0,
-        "width": 71.25,
+        "x": 504.0,
+        "y": 726.0,
+        "width": 72.0,
         "height": 12.0
       },
       "spoken_name_translations": {
@@ -5115,14 +5143,14 @@
       "spoken_name": "Line 10 adjustments to income",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_69[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_74[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 654.0,
+        "y": 738.0,
         "width": 72.0,
         "height": 12.0
       },
@@ -5152,14 +5180,14 @@
       "spoken_name": "Line 11a adjusted gross income",
       "type": "number",
       "section_id": "sec_income_p1",
-      "pdf_field_name": "topmostSubform[0].Page1[0].f1_70[0]",
+      "pdf_field_name": "topmostSubform[0].Page1[0].f1_75[0]",
       "validation": {
         "required": false
       },
       "pdf_position": {
         "page": 1,
         "x": 504.0,
-        "y": 690.0,
+        "y": 750.0,
         "width": 72.0,
         "height": 12.0
       },

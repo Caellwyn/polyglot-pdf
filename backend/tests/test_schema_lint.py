@@ -613,7 +613,8 @@ def _dump_kit(kit):
 # exists but can't be filled through the app":
 #   - dump-widget-unclaimed: a real fillable PDF widget with NO schema field
 #     (extraction dropped it) -- i-90's 4 were FIXED by bd 0nxh (now 0); f1040
-#     still has 12; w7 has 2 (the box-h "Other" reason text line
+#     went 12 -> 8 (bd polyglot-pdf-3ave + lha9; see the per-kit note below);
+#     w7 has 2 (the box-h "Other" reason text line
 #     f1_04 and the 6d "Other" ID-document text line f1_23 -- both surfaced as
 #     genuinely unmodeled once bd polyglot-pdf-ivh9 corrected the field-to-widget
 #     off-by-one that had been mis-parking treaty_country / id_number on them;
@@ -635,7 +636,18 @@ _UNFILLABLE_BASELINE = {
     # caption-line continuation of the "d or e" name+SSN prompt -- should be
     # modeled rather than ignored is tracked in bd polyglot-pdf-va4d.
     "w7": {"dump-widget-unclaimed": 1, "readonly-conditional-no-unlock": 0},
-    "f1040": {"dump-widget-unclaimed": 12, "readonly-conditional-no-unlock": 0},
+    # f1040 went 12 -> 8 (bd polyglot-pdf-3ave + lha9, shipped together). 3ave
+    # rebound the page-1 amount column to the widgets on its own printed lines,
+    # which CLAIMED the displaced tail f1_72/73/74/75 (the real Lines 8/9/10/11a
+    # boxes) while freeing f1_47/48/49/50 (the real Lines 1a-1d boxes) -- a swap,
+    # not progress, so the count sat at 12 mid-fix. lha9 then bound fld_1a..fld_1d
+    # to those four freed widgets (they had claimed the NON-EXISTENT f1_31..f1_34),
+    # which is the real -4 and also cleared f1040's 4 field-claim-unresolvable
+    # ERRORs. The remaining 8 are genuinely unmodeled: f1_07..f1_10
+    # (combat-zone/deceased), f1_25..f1_27 (address continuation), and f1_71
+    # (the Line 7b "Check if: Schedule D not required" write-in, verified
+    # against the PDF's printed row text).
+    "f1040": {"dump-widget-unclaimed": 8, "readonly-conditional-no-unlock": 0},
 }
 
 
