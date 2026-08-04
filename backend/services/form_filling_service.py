@@ -49,7 +49,8 @@ class FormFillingService:
         # W6 (bd polyglot-pdf-gbus): the gemini-2.5-pro whole-form validator for the
         # end-of-form pro pass. None unless FORM_COMPLETE_PRO_VALIDATOR is on (the
         # dependency wires it only when the flag is set), so handle_form_complete_pro
-        # no-ops when the pro pass is disabled -- the default.
+        # no-ops when the pro pass is disabled. The flag DEFAULTS ON since
+        # 2026-08-03, so this is normally wired.
         self._text_ai_pro = text_ai_pro
         self._websocket = None
         self._session_id = None

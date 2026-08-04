@@ -188,12 +188,20 @@ class Settings(BaseModel):
 	# form_complete -- the SOLE end-of-form report, catching cross-page (far-pair)
 	# contradictions the ~20-field lite windows cannot see. W5 (bd polyglot-pdf-g0w1)
 	# measured pro far-pair recall = 1.000 (GO) with thinking bounded to 512.
-	# DEFAULT-OFF: pro is a new operational-cost dependency (~$0.0093/call) and its
-	# uncorrected whole-form PRECISION is 0.750 (it over-flags the Part 5/6
-	# preparer-interpreter certification block). The anti-over-flag prompt ships in
-	# WHOLE_FORM_PRO_SI; flip this on by env (no redeploy, mirrors EXTRACTOR_MODEL
-	# doctrine) only AFTER the precision re-measure confirms the prompt lifts it.
-	FORM_COMPLETE_PRO_VALIDATOR: bool = os.getenv("FORM_COMPLETE_PRO_VALIDATOR", "false").lower() == "true"
+	# DEFAULT-ON (maintainer directive 2026-08-03): the end-of-form report is part of
+	# the product, and its per-form cost is a number we WANT in the accounting rather
+	# than an unmeasured absence. Cost is bounded by design: the client's
+	# maybeEmitFormComplete dirty-snapshot guard emits only when a COMPLETE form's
+	# values actually changed, so a form costs ~1 call plus one per post-completion
+	# edit (~$0.0093/call, thinking bounded to 512).
+	# KNOWN LIMITATION, accepted knowingly: uncorrected whole-form PRECISION measured
+	# 0.750 -- it over-flags the Part 5/6 preparer-interpreter certification block.
+	# The anti-over-flag block ships in WHOLE_FORM_PRO_SI but has NOT been re-measured
+	# since; expect some false-positive conflicts until bd polyglot-pdf-89mt re-runs
+	# the numbers. Findings are REPORT-ONLY and the pass is fail-open at every layer,
+	# so an over-flag surfaces a spurious question, never a block. Set
+	# FORM_COMPLETE_PRO_VALIDATOR=false to disable without a redeploy.
+	FORM_COMPLETE_PRO_VALIDATOR: bool = os.getenv("FORM_COMPLETE_PRO_VALIDATOR", "true").lower() == "true"
 	# The pro model + its bounded thinking budget (W5 config; env-swappable like
 	# EXTRACTOR_MODEL). thinking_budget must be > 0 for 2.5-pro (it cannot be turned
 	# off); 512 is the W5-measured bound (in-band cost, p50 ~6s).
@@ -306,6 +314,31 @@ class Settings(BaseModel):
 	TRANSCRIPTION_LANGUAGE_HINT_ENABLED: bool = (
 		os.getenv("TRANSCRIPTION_LANGUAGE_HINT_ENABLED", "true").lower() == "true"
 	)
+	# Prebuilt voice for the Live session's audio output
+	# (speech_config.voice_config.prebuilt_voice_config.voice_name).
+	# Native-audio Live models accept ANY of the 30 TTS prebuilt voices
+	# (ai.google.dev/gemini-api/docs/live-guide: "Native audio output models
+	# support any of the voices available for our Text-to-Speech (TTS) models").
+	# Google's default when UNSET is "Puck" (Upbeat) -- wrong register for a
+	# stressful legal intake, and the SI's slow/deliberate PACE + ARTICULATION
+	# prose does not reliably override delivery on native audio (the Live docs
+	# document NO pace/prosody/style parameter, so voice choice is the only real
+	# lever). "Iapetus" (Clear) is the maintainer's pick (2026-08-03) for
+	# non-native speakers concentrating on each word. Other calm candidates if
+	# this needs tuning: Schedar (Even), Vindemiatrix (Gentle), Achernar (Soft),
+	# Algieba (Smooth).
+	# VERIFY BEFORE DEPLOY -- an unaccepted voice name is a HARD failure, not a
+	# degrade: the SDK types voice_name as a bare Optional[str] with NO enum, and
+	# Vertex closes the session with `1007 Invalid voice name` at connect, so a
+	# bad value breaks EVERY session. A 2026-07-30 probe (bd polyglot-pdf-e1x9)
+	# endpoint-verified 11 prebuilt voices ACCEPTED on
+	# gemini-live-2.5-flash-native-audio with `NotARealVoiceXYZ` correctly
+	# rejected -- but the probe did not record its 11 names, so "Iapetus" is
+	# documented-valid (it is one of Google's 30 TTS voices, and native-audio
+	# accepts the TTS set) yet NOT endpoint-verified on this tier. First deploy
+	# must confirm the session connects; set LIVE_VOICE_NAME="" to fall back to
+	# the API default if it 1007s.
+	LIVE_VOICE_NAME: str = os.getenv("LIVE_VOICE_NAME", "Iapetus")
 
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
 	# the secretary (lite text model) translates the form's option labels into
@@ -700,10 +733,11 @@ class Settings(BaseModel):
 	EDITOR_GUIDANCE_MODEL: str = os.getenv("EDITOR_GUIDANCE_MODEL", "")
 	# Translation quality gate (epic polyglot-pdf-sekc, V3): the verify/rectify
 	# loop that runs inside bake_label_translations on freshly baked strings.
-	# DEFAULT-ON, opt-out (maintainer decision 2026-07-23) -- this does NOT
-	# contradict the wire-pro-passes-dark pattern (FORM_COMPLETE_PRO_VALIDATOR
-	# default-false): that guards RUNTIME per-session cost; this gate runs at
-	# AUTHORING time only (a deliberate per-bake spend of ~cents). Fail-open:
+	# DEFAULT-ON, opt-out (maintainer decision 2026-07-23). The distinction it
+	# once drew against the pro pass no longer applies (FORM_COMPLETE_PRO_VALIDATOR
+	# also defaults on since 2026-08-03), but the cost SHAPES still differ: the pro
+	# pass is a RUNTIME per-session spend, while this gate runs at AUTHORING time
+	# only (a deliberate per-bake spend of ~cents). Fail-open:
 	# a verify outage leaves the baked kit byte-untouched.
 	TRANSLATION_VERIFY_ENABLED: bool = (
 		os.getenv("TRANSLATION_VERIFY_ENABLED", "true").lower() == "true"

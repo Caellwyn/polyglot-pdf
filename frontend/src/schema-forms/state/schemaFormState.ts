@@ -676,19 +676,64 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Get form completion progress (percentage)
+   * Get form completion progress (percentage).
+   *
+   * Counts ONLY the fields the user can actually act on right now (bd
+   * polyglot-pdf-52qm.7). Visibility is `shouldShowField` ALONE -- deliberately
+   * NOT `!f.hidden && shouldShowField(...)`. shouldShowField already returns
+   * `!field.hidden` for the no-show_if case, so ANDing an extra `!f.hidden`
+   * diverges from what actually renders: a field with `hidden: true` AND a
+   * SATISFIED `show_if` is rendered by FieldRenderer and is required by
+   * isSectionValid, so excluding it here would drop an answerable field from
+   * BOTH halves of the ratio -- the very "bar never reads complete" bug this
+   * function was fixed for. isSectionValid documents the same trap (a prior
+   * fresh-eyes finding); this now matches it.
+   *
+   * `ignored` fields need no filter -- ignoring quarantines the field out of
+   * `schema.fields` entirely (schema-editor/src/utils/ignoreField.ts), so they
+   * are already absent here.
+   *
+   * Both halves matter. The denominator used to be `schema.fields.length`, so
+   * the 7 statically hidden fields on the shipped W-7 could never be filled and
+   * progress capped around 87% -- the form never read complete. The NUMERATOR
+   * was independently wrong: it counted keys of `fieldValues`, so a stale value
+   * for a field that has since been hidden (or whose show_if flipped off) kept
+   * counting, and could even push progress past 100%. Both now walk the SAME
+   * visible-field list, which is what makes the ratio meaningful.
+   *
+   * The denominator is intentionally DYNAMIC: revealing a conditional field
+   * grows it, so progress can move backwards when the user's answer opens a new
+   * branch. That is honest -- there really is more work to do.
+   *
+   * A SKIPPED field counts as DONE, consistent with isSectionValid and
+   * computeReadyWindows' SETTLED definition. An empty array counts as NOT done,
+   * matching isSectionValid's emptiness test.
    */
   static getProgress(state: SchemaFormState): number {
-    const totalFields = state.schema.fields.length;
-    const filledFields = Object.keys(state.fieldValues).filter(
-      (fieldId) => {
-        const fieldValue = state.fieldValues[fieldId];
-        const actualValue = fieldValue?.value;
-        return actualValue !== null && actualValue !== undefined && actualValue !== "";
-      }
-    ).length;
+    const visibleFields = state.schema.fields.filter((f) =>
+      shouldShowField(f, state.fieldValues, state.schema.fields)
+    );
+    if (visibleFields.length === 0) return 0;
 
-    return totalFields > 0 ? (filledFields / totalFields) * 100 : 0;
+    // A SKIPPED field counts as done, matching isSectionValid (which accepts a
+    // skipped required field) and computeReadyWindows' SETTLED definition
+    // (confirmed / skipped / not shown). Without this, a user who legitimately
+    // skips a field -- deferring to a translator, or genuinely having no answer
+    // -- completes the section while the bar sticks below 100%, which is the
+    // same "never reads complete" complaint the hidden-field filter fixed.
+    const doneFields = visibleFields.filter((f) => {
+      const fieldValue = state.fieldValues[f.id];
+      if (fieldValue?.skipped) return true;
+      const actualValue = fieldValue?.value;
+      return (
+        actualValue !== null &&
+        actualValue !== undefined &&
+        actualValue !== "" &&
+        !(Array.isArray(actualValue) && actualValue.length === 0)
+      );
+    }).length;
+
+    return (doneFields / visibleFields.length) * 100;
   }
 
   /**

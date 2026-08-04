@@ -2092,11 +2092,13 @@ async def run(args) -> int:
         # SECOND text model -- gemini-2.5-pro, bounded thinking, EMPTY fallback
         # chain -- mirroring backend/dependencies.py get_text_ai_pro exactly
         # (same model/thinking-budget knobs off Settings, same "fail-open, never
-        # downgrade to lite" contract). Opt-in like use_text_ai's --text-ai:
-        # FORM_COMPLETE_PRO_VALIDATOR defaults OFF in production (a real
-        # operational-cost dependency), so a default harness run must not
-        # silently start paying for it. Only meaningful once use_text_ai is on
-        # (the pro pass rides the same drain/enqueue client machinery).
+        # downgrade to lite" contract). Opt-in like use_text_ai's --text-ai.
+        # NOTE: FORM_COMPLETE_PRO_VALIDATOR now defaults ON in production
+        # (maintainer directive 2026-08-03), so a run WITHOUT --pro-pass
+        # UNDERSTATES the real per-form cost -- pass it for a production-faithful
+        # accounting. The flag stays opt-in here so a cheap exploratory sweep can
+        # still skip the spend deliberately. Only meaningful once use_text_ai is
+        # on (the pro pass rides the same drain/enqueue client machinery).
         use_pro_pass = bool(getattr(args, "pro_pass", False)) and use_text_ai
         text_ai_pro = None
         if use_pro_pass:
@@ -2994,11 +2996,12 @@ def main() -> int:
                          "validator pass (bd polyglot-pdf-gbus), mirroring "
                          "backend/dependencies.py get_text_ai_pro (same model/"
                          "thinking-budget Settings knobs, empty fallback chain). "
-                         "Opt-in: FORM_COMPLETE_PRO_VALIDATOR defaults OFF in "
-                         "production (a real operational-cost dependency), so a "
-                         "default harness run must not silently pay for it. "
-                         "Only takes effect when the text sidecar is wired "
-                         "(--text-ai / --schema i90-full).")
+                         "PASS THIS for a production-faithful cost run: "
+                         "FORM_COMPLETE_PRO_VALIDATOR now defaults ON in "
+                         "production, so omitting it UNDERSTATES per-form cost. "
+                         "Left opt-in so a cheap exploratory sweep can skip the "
+                         "spend deliberately. Only takes effect when the text "
+                         "sidecar is wired (--text-ai / --schema i90-full).")
     ap.add_argument("--trigger", type=int, default=12_000,
                     help="sliding-window trigger_tokens; size it ABOVE the "
                          "unevictable SI+tools base (~8.2k on the full-form "
