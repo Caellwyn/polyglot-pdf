@@ -75,7 +75,7 @@ where we prove it first.
 - ✅ Gemini Live API voice integration (native audio-to-audio); default 2.5
   native-audio (backend-aware id: `gemini-live-2.5-flash-native-audio` on Vertex,
   `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio), with
-  `gemini-3.1-flash-live-preview` selectable via `USE_PREMIUM_MODEL` (AI Studio only)
+  `gemini-3.1-flash-live-preview` selectable via `USE_PREMIUM_MODEL` (AI Studio only, so **local dev only** until it is GA on Vertex)
 - ✅ Schema-driven form filling; continuous single-session flow is the default
   (`CONTINUOUS_SESSION` + `USE_DTI`), with the legacy per-section reset flow kept
   as an env-flippable fallback
@@ -130,7 +130,9 @@ export GOOGLE_CLOUD_PROJECT=your_gcp_project
 
 To use the **Gemini Developer API (AI Studio)** instead — e.g. to run the premium
 `gemini-3.1-flash-live-preview` model, which is not yet on Vertex — set
-`VERTEXAI=false` and provide an API key:
+`VERTEXAI=false` and provide an API key. This is a **local-development-only**
+path: a deployed service refuses to start on it (see
+[Deployment](#backend-google-cloud-run)).
 
 ```bash
 export VERTEXAI=false
@@ -477,9 +479,13 @@ the script and must be configured separately (via
 - `FORM_KITS_MODE=gcs`
 - `FORM_KITS_GCS_BUCKET=<project-id>-form-kits`
 
-Only if you deliberately run the AI Studio backend instead of Vertex
-(`VERTEXAI=false`, e.g. for the premium 3.1 model) do you also need
-`GEMINI_API_KEY` set on the service.
+**Vertex is the only production path.** A deployed service (Cloud Run sets
+`K_SERVICE`) **refuses to start** with `VERTEXAI=false`, and there is no
+override flag: only Vertex's privacy agreement keeps client data out of
+Google's model training. `GEMINI_API_KEY` is therefore not needed on the
+service. The AI Studio path is for **local development only** (e.g. trying a
+model that is not yet on Vertex); such a model ships only once it is GA for
+Vertex customers. See [docs/standards/ai-models.md](docs/standards/ai-models.md).
 
 ### Auth Setup (Firebase Console)
 
@@ -494,7 +500,7 @@ See `firestore.rules` (wired into `firebase.json`) — users can only read/write
 
 ### Deployment Checklist
 
-- [ ] `GOOGLE_CLOUD_PROJECT` set in Cloud Run (done by `deploy-new.sh`); for the AI Studio path (`VERTEXAI=false`) set `GEMINI_API_KEY` instead
+- [ ] `GOOGLE_CLOUD_PROJECT` set in Cloud Run (done by `deploy-new.sh`). Leave `VERTEXAI` at its `true` default — a deployed service refuses to start on the AI Studio path (Vertex-only production, bd `polyglot-pdf-5e6a`)
 - [ ] `FORM_KITS_MODE` and `FORM_KITS_GCS_BUCKET` set in Cloud Run
 - [ ] Firebase Auth sign-in methods enabled (Google + Email/Password)
 - [ ] Firestore security rules deployed (shipped automatically by `deploy-demo.sh` / `deploy-production.sh`; standalone: `firebase deploy --only firestore:rules`) — a project on default-deny breaks email signup + profile sync

@@ -113,13 +113,21 @@ def test_form_number_only_handshake_still_yields_real_form_id(ws_client):
 
 
 def test_form_id_survives_reconnect_and_section_switch(ws_client):
-    """One form-session spanning SEVERAL Gemini sessions keeps the real id.
+    """EVERY connect in a form-session derives the real id, not just the first.
 
     The production run that surfaced this bug reconnected mid-form (Gemini's
     ~10-minute session cap), so one form_session_id spanned three Gemini
     sessions -- each re-handshaking and re-deriving form_id. A fix that only
-    worked on the FIRST connect would still poison most of the trail. Three real
-    round-trips: cold connect, resume, then a section-switch-shaped resume.
+    worked on the FIRST connect would still poison most of the trail.
+
+    SCOPE, stated precisely: the backend is stateless by design (CLAUDE.md scar
+    #4), and `form_session_id` is only ever threaded (log binding, start_session,
+    CallbackHandler, token-log context) -- nothing keys, caches, or branches on
+    it, and `resume`/`section_id` only pick a greeting template and a log field.
+    So these three round-trips are three INDEPENDENT sessions carrying the same
+    string: the test pins PER-CONNECT derivation, which is the real risk here,
+    NOT cross-connect state (of which the backend has none to break). If
+    reconnect logic ever gains server-side state, this test does not cover it.
     """
     fss = "fss_reconnect_test"
     handshakes = [

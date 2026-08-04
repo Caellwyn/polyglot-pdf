@@ -123,6 +123,35 @@ behavior is correct -- it is a weak substitute for exercising the real code
 path, and claiming verification on the strength of one convenient mutation is
 how a vacuous test ships wearing a verified label.
 
+**Fresh-eyes round 3 (Opus): GAPS-FOUND (3), all adopted.** The round
+independently re-ran both mutations against the rewritten module and confirmed
+it is now non-vacuous (full revert -> 3 of 4 fail; subtle `or` removal -> 1
+fails), and verified the spy reads the real `CallbackHandler._form_id` with
+exact-list-equality so a `None` from a renamed attribute cannot pass silently.
+1. ADOPTED (5e6a criterion 2 FAIL): `README.md` -- the repo's most-read doc --
+   still INSTRUCTED a deployed AI Studio flip in two places, including the
+   Deployment Checklist ("for the AI Studio path (`VERTEXAI=false`) set
+   `GEMINI_API_KEY` instead"). A maintainer following that checklist would get a
+   container that crash-loops with no README-visible explanation. Rounds 1-2
+   swept the deploy script and the tier-2 docs; nobody swept the README. Fixed
+   in three spots (deploy section, checklist, feature-list qualifier).
+2. ADOPTED (honest scoping): the reviewer traced `form_session_id` through the
+   whole backend and found it is only ever THREADED -- nothing keys, caches, or
+   branches on it -- so the reconnect test's three round-trips are three
+   independent sessions carrying the same string. It scored the criterion PASS
+   (the backend is stateless by design, so there is no cross-connect state a
+   reconnect could break, and per-connect derivation was the real risk) but
+   flagged the docstring as over-claiming. Docstring rewritten to state exactly
+   what is and is not covered.
+3. ADOPTED: this entry's own "Files touched" line still described the
+   SUPERSEDED 7-test helper design, contradicting the rewrite narrated two
+   paragraphs above it.
+
+Reviewer also filed `polyglot-pdf-knmp` (out-of-scope): `VFF_DISABLE_AUTH` has
+no `K_SERVICE` fail-closed guard, so unlike `VERTEXAI` a stray env var could
+disable auth on a deployed service. Correct to file rather than fix here --
+it is a distinct hardening, not part of these three beads.
+
 ## Lessons
 
 - **A durable sink makes every latent metadata defect permanent.** `form_id`
@@ -174,6 +203,7 @@ rewritten.
 - docs/standards/ai-models.md, docs/components/config-deployment.md -- Vertex-only rule
 - docs/standards/ws-protocol.md -- documents the new form_number handshake key
 - docs/technical_guide.md -- Vertex-only rule (fresh-eyes: stale ALLOW_AI_STUDIO row)
-- backend/tests/unit/test_jit_handshake_form_id.py -- new (7 tests: source-parity guard + reconnect)
+- backend/tests/unit/test_jit_handshake_form_id.py -- new (4 ROUTE-LEVEL tests over a TestClient websocket; the earlier 7-test helper-based cut, including its inspect.getsource parity guard, was proven vacuous in review round 2 and removed)
+- README.md -- Vertex-only rule in the deploy section + checklist (review round 3)
 - backend/tests/unit/test_vertexai_guard.py -- rewritten for the no-override policy
 - frontend/src/schema-forms/state/schemaFormState.test.ts -- 2 new form_number handshake tests
