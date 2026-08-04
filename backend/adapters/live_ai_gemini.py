@@ -1687,8 +1687,15 @@ class LiveAIGemini(ILiveAI):
         # Reuses the SAME per-session bias codes as the block above (seeded
         # from the handshake spoken language); never set for an unmapped
         # language. Kill-switch mirrors the y25o hint flag pattern.
+        # MERGE, never assign -- symmetric with the voice block below. A plain
+        # assignment here would drop a voice_config that had already been set,
+        # so neither block may care which one runs first.
         if lang_codes and getattr(settings, "SPEECH_LANGUAGE_CODE_ENABLED", False):
-            config['speech_config'] = {'language_code': list(lang_codes)[0]}
+            speech_cfg = config.get('speech_config')
+            if not isinstance(speech_cfg, dict):
+                speech_cfg = {}
+            speech_cfg['language_code'] = list(lang_codes)[0]
+            config['speech_config'] = speech_cfg
             self._log.info("[lang] speech_config.language_code applied",
                           language_code=list(lang_codes)[0])
 

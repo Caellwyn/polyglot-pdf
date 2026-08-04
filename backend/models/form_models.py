@@ -212,6 +212,15 @@ class ValidationRules(BaseModel):
         description="Date-specific validation (e.g., birth date must be in past)"
     )
 
+    # Human-readable input hint, e.g. "MM/DD/YYYY". The i-90 kit's date fields
+    # carry their layout here as well as in help.format_hint, and
+    # field_validator._resolve_date_format reads it as the last-resort layout
+    # source. It MUST be declared on this model: an undeclared key is silently
+    # dropped at FormField construction, so a field whose ONLY layout source is
+    # validation.hint would fall back to the ISO default and reject a correct
+    # "10/25/1984" (bd polyglot-pdf-3t3l, Opus fresh-eyes round 1).
+    hint: Optional[str] = Field(None, description='Input-format hint, e.g. "MM/DD/YYYY"')
+
     # Format presets (common validation patterns). Digit-only presets (a_number,
     # uscis_account) drive normalize_value() to strip punctuation before length/
     # pattern checks, so speech-to-text formatting (commas, "$") does not fail an

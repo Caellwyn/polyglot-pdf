@@ -180,16 +180,46 @@ def test_speech_config_absent_without_codes_or_with_kill_switch_off():
     assert "speech_config" not in cfg
 
 
-def test_voice_config_merges_with_language_code_in_either_order():
-    """LIVE_VOICE_NAME rides speech_config alongside language_code. The voice
-    block MERGES into whatever the language block left behind -- a bare
-    assignment on either side would silently drop the other."""
+def test_voice_config_merges_with_language_code():
+    """LIVE_VOICE_NAME rides speech_config alongside language_code -- the real
+    call order (language block, then voice block) keeps BOTH keys."""
     adapter = _adapter_with(["ru-RU"], transcripts=True, liveness=False)
     cfg = adapter._build_live_config(_settings_with_speech_flag(True, "Iapetus"))
     assert cfg["speech_config"] == {
         "language_code": "ru-RU",
         "voice_config": {"prebuilt_voice_config": {"voice_name": "Iapetus"}},
     }
+
+
+def test_each_speech_config_block_merges_rather_than_assigns():
+    """BOTH halves must be order-independent, not just the one that happens to
+    run second today (Opus fresh-eyes round 1). The production call order only
+    exercises language-then-voice, so a plain assignment in the LANGUAGE block
+    would be invisible here until someone reorders the blocks -- and would then
+    silently drop the configured voice with no error and no log.
+
+    Assert the property directly: seed speech_config with a foreign key and
+    confirm each block PRESERVES it instead of clobbering it."""
+    # Language block must preserve a pre-existing voice_config.
+    adapter = _adapter_with(["ru-RU"], transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(True, ""))
+    assert cfg.get("speech_config", {}).get("language_code") == "ru-RU"
+
+    # Voice block must preserve a pre-existing language_code (already covered by
+    # the merge test above, which runs language first).
+    adapter = _adapter_with(None, transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(True, "Iapetus"))
+    assert cfg["speech_config"]["voice_config"]["prebuilt_voice_config"][
+        "voice_name"] == "Iapetus"
+
+    # The real guard: neither block may use a bare assignment. Verified by
+    # source inspection -- both read config.get('speech_config') first.
+    import inspect
+    from backend.adapters import live_ai_gemini
+    src = inspect.getsource(live_ai_gemini.LiveAIGemini._build_live_config)
+    assert src.count("config['speech_config'] = {") == 0, (
+        "a speech_config block uses a bare dict assignment -- it will silently "
+        "drop whatever the other block set")
 
 
 def test_voice_config_set_even_when_language_bias_is_off():

@@ -733,10 +733,11 @@ class Settings(BaseModel):
 	EDITOR_GUIDANCE_MODEL: str = os.getenv("EDITOR_GUIDANCE_MODEL", "")
 	# Translation quality gate (epic polyglot-pdf-sekc, V3): the verify/rectify
 	# loop that runs inside bake_label_translations on freshly baked strings.
-	# DEFAULT-ON, opt-out (maintainer decision 2026-07-23) -- this does NOT
-	# contradict the wire-pro-passes-dark pattern (FORM_COMPLETE_PRO_VALIDATOR
-	# default-false): that guards RUNTIME per-session cost; this gate runs at
-	# AUTHORING time only (a deliberate per-bake spend of ~cents). Fail-open:
+	# DEFAULT-ON, opt-out (maintainer decision 2026-07-23). The distinction it
+	# once drew against the pro pass no longer applies (FORM_COMPLETE_PRO_VALIDATOR
+	# also defaults on since 2026-08-03), but the cost SHAPES still differ: the pro
+	# pass is a RUNTIME per-session spend, while this gate runs at AUTHORING time
+	# only (a deliberate per-bake spend of ~cents). Fail-open:
 	# a verify outage leaves the baked kit byte-untouched.
 	TRANSLATION_VERIFY_ENABLED: bool = (
 		os.getenv("TRANSLATION_VERIFY_ENABLED", "true").lower() == "true"

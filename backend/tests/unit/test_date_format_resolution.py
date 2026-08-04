@@ -131,6 +131,31 @@ def test_prose_hint_prefers_the_earliest_named_layout(hint, expected_label):
     assert _resolve_date_format({"format": hint})[1] == expected_label
 
 
+def test_validation_hint_survives_the_real_pydantic_model():
+    """validation.hint is one of the three declared layout sources, but it only
+    works if ValidationRules DECLARES the field -- Pydantic silently drops an
+    undeclared key at construction, so the hint would never reach the validator
+    and the field would fall back to ISO (Opus fresh-eyes round 1).
+
+    Drives the REAL model + the REAL handler, not a hand-built dict, because a
+    dict-only test passes even when the model drops the key."""
+    from backend.models.form_models import FieldType, FormField, ValidationRules
+    from backend.services.validation_handler import ValidationHandler
+
+    assert "hint" in ValidationRules.model_fields, (
+        "ValidationRules dropped `hint` -- validation.hint layout resolution is dead")
+
+    field = FormField(
+        id="dob", type=FieldType.DATE, name="Date of birth",
+        spoken_name="date of birth", section_id="s1",
+        validation=ValidationRules(hint="MM/DD/YYYY"),
+    )
+    result = ValidationHandler(session_id="t").validate_field_updates(
+        [field], {"dob": "10/25/1984"})
+    assert result["validation_errors"] == []
+    assert result["applied_fields"] == ["dob"]
+
+
 def test_unrecognizable_prose_falls_back_to_iso():
     """A spelled-out hint with no layout token must not guess."""
     assert _resolve_date_format({"format": "month/day/year"})[1] == "YYYY-MM-DD"

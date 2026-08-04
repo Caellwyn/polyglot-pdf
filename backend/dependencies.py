@@ -38,9 +38,10 @@ def get_text_ai(settings: Settings = Depends(get_settings)) -> ITextAI:
 
 def get_text_ai_pro(settings: Settings = Depends(get_settings)) -> ITextAI | None:
     """W6 (bd polyglot-pdf-gbus): the gemini-2.5-pro whole-form validator for the
-    end-of-form pro pass. Returns None unless FORM_COMPLETE_PRO_VALIDATOR is on, so
-    the service's handle_form_complete_pro no-ops by default (the pro pass is a new
-    operational-cost dependency, wired dark until the precision re-measure passes).
+    end-of-form pro pass. Returns None unless FORM_COMPLETE_PRO_VALIDATOR is on, in
+    which case the service's handle_form_complete_pro no-ops clean. The flag now
+    DEFAULTS ON (maintainer directive 2026-08-03), so this normally returns a wired
+    client; set FORM_COMPLETE_PRO_VALIDATOR=false to go back to the dark path.
 
     Constructed with a BOUNDED thinking budget (W5 config) and an EMPTY fallback
     chain -- falling back to the lite tier would silently defeat the far-pair recall

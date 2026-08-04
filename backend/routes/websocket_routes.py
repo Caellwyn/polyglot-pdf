@@ -834,8 +834,8 @@ async def _handle_fill_session(
 					# window pass. Ack immediately + run the pro pass in the background; it
 					# pushes the REPORT-ONLY `validation_result` envelope (W3 shape) so the
 					# conflicts ride the existing enqueue -> drain_findings -> steer path.
-					# The pro pass no-ops (clean) when FORM_COMPLETE_PRO_VALIDATOR is off (the
-					# default), so this is a safe fallback. COST: the client's
+					# The pro pass no-ops (clean) when FORM_COMPLETE_PRO_VALIDATOR is off, so
+					# this is a safe fallback; the flag DEFAULTS ON since 2026-08-03. COST: the client's
 					# maybeEmitFormComplete dirty-snapshot guard only re-emits on a real value
 					# change, so a static complete form never re-fires the pro spend.
 					proactive_fields = obj.get("fields", [])
