@@ -68,9 +68,10 @@ from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
 _log = structlog.get_logger(__name__)
 
 # The taxonomy rule id every mechanical STRING finding carries (the plan's
-# flag taxonomy); the per-check id rides the finding's `check` field --
-# structural, never shown as prose (bd xfdb removed the old message
-# prefixes).
+# flag taxonomy). The per-check id exists on MechanicalFailure
+# internally but is NOT carried onto findings today -- bd xfdb removed
+# the old message prefixes that used to leak it as prose, and a proper
+# structural home on the finding is tracked as bd polyglot-pdf-21sw.
 RULE_MECHANICAL = "translation-mechanical"
 # Kit-level coverage findings (bd polyglot-pdf-x41u) carry their own rule so
 # the editor can label the class distinctly (a gap is not a bad string).

@@ -945,12 +945,17 @@ def lint_schema(
             out.append(LintFinding(
                 SEVERITY_ERROR, "to-review-pending",
                 f"sections[{i}] (id={sid})",
-                f"the holding section {sid!r} still lists {len(stale)} field "
-                f"id(s) ({', '.join(stale[:5])}{', ...' if len(stale) > 5 else ''}) "
-                f"that no field points back to (already filed elsewhere, "
-                f"missing a section entirely, or naming no field) -- re-file "
-                f"any real field that still lacks a section, then delete "
-                f"the leftover ids",
+                # Remedy FIRST, interpolated ids LAST: the publish gate
+                # renders each finding [:400], and the id list is the only
+                # unbounded input -- a trailing remedy was truncated off
+                # with realistic 30-char ids (Opus outer review, measured).
+                f"re-file any real field that still lacks a section, then "
+                f"delete the leftover ids -- the holding section {sid!r} "
+                f"lists {len(stale)} id(s) no field points back to "
+                f"(already filed elsewhere, missing a section, or naming "
+                f"no field): "
+                f"{', '.join(x[:40] for x in stale[:5])}"
+                f"{', ...' if len(stale) > 5 else ''}",
             ))
 
     _check_guidance(fields, schema, out)

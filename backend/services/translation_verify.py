@@ -416,24 +416,31 @@ def _finalize(items: List[_Item],
                             else "a problem was found")),
             ))
     for item in items:
-        if item.unresolved or (item.flagged_values and item.resolved is None):
+        # EXACTLY the unresolved-flag branch's condition (which sits under
+        # an elif resolved-is-None): the log and the reviewer flag must
+        # name the same item set or a future loop edit desynchronizes
+        # them (Opus outer review, latent).
+        if item.resolved is None and (item.unresolved or item.flagged_values):
             # The reviewer-facing flag deliberately drops the retry trace
             # (bd xfdb de-jargoning); keep it HERE so a repeatedly-failing
             # translation stays diagnosable without a re-run (Opus outer
             # review pass 2).
             # Kit-authoring text only (labels/spoken names + judge prose),
             # never end-user data, so it is safe under the PII policy.
-            # Bounded to 1200 chars AND ascii-escaped BEFORE logging: the
-            # root log filter (backend/utils/logging.py) silently DROPS
-            # sub-ERROR records whose rendered JSON exceeds 2000 chars,
-            # and ensure_ascii inflates raw glyphs ~6x -- an unbounded or
-            # glyph-carrying trace would vanish in exactly the pathological
-            # case this line exists to diagnose (Opus outer review).
+            # ESCAPE FIRST, THEN bound to 1200: the root log filter
+            # (backend/utils/logging.py) silently DROPS sub-ERROR records
+            # whose rendered JSON exceeds 2000 chars, and ascii-escaping
+            # inflates raw glyphs ~6x -- slicing before escaping (the first
+            # attempt) still busted the filter for the non-Latin traces
+            # this line exists to diagnose. Post-escape 1200 chars render
+            # to ~1400 of JSON, always under the cap (Opus outer review,
+            # measured both orders).
             _log.info(
                 "translation_verify_unresolved_trace",
                 kind=item.kind, source=item.source,
-                trace=" | ".join(item.trace)[:1200]
-                    .encode("ascii", "backslashreplace").decode("ascii"),
+                trace=" | ".join(item.trace)
+                    .encode("ascii", "backslashreplace")
+                    .decode("ascii")[:1200],
             )
     _log.info(
         "translation_verify_complete",
