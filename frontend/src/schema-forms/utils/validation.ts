@@ -675,6 +675,21 @@ function evaluateConditionGroup(
  * unknown operator fall back to the field's static hidden state (fail-open,
  * unchanged from the pre-composite behavior).
  *
+ * THIS IS THE ONE AND ONLY VISIBILITY PREDICATE -- call it ALONE.
+ * Never write `field.hidden || !shouldShowField(...)` or
+ * `!field.hidden && shouldShowField(...)`. It ALREADY returns `!field.hidden`
+ * for the no-show_if case, so an extra `hidden` term changes behaviour for
+ * exactly one shape -- `hidden: true` WITH a SATISFIED `show_if` -- and changes
+ * it WRONGLY: such a field is rendered by FieldRenderer (which calls this alone)
+ * and is required by isSectionValid, so gating it out makes it invisible to
+ * whatever is asking while it sits answerable on screen.
+ *
+ * That divergence shipped in SEVEN places at once (bd polyglot-pdf-ubam): the form
+ * could report itself complete with a visibly empty required field, and the
+ * voice path refused to navigate to that field at all -- a required question the
+ * user could not answer by voice. If you find yourself adding a `hidden` check
+ * next to this call, the answer is no.
+ *
  * @param field - The field to check
  * @param fieldValues - Current form values (may contain FieldValue wrappers)
  * @returns true if field should be shown

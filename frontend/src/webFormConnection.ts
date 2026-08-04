@@ -978,9 +978,13 @@ export class WebFormConnection {
         // not write to it, and the gate previously checked only hidden +
         // show_if visibility, so a visible read_only field slipped through to
         // the apply path instead of being reported back to the model.
+        // shouldShowField ALONE (bd polyglot-pdf-ubam): it already folds in
+        // `hidden` for the no-show_if case, and an extra `!field.hidden &&`
+        // wrongly locked a `hidden: true` field whose show_if is SATISFIED --
+        // a field that renders and is required, reported back to the model as
+        // unavailable so it could never be filled by voice.
         const readOnly = isFieldReadOnly(field, this.state.fieldValues);
         const isAvailable =
-          !field.hidden &&
           shouldShowField(field, this.state.fieldValues, this.state.schema.fields) &&
           !readOnly;
 
@@ -2194,7 +2198,11 @@ export class WebFormConnection {
 
     // A conditionally-hidden field is not askable -- navigating to it would
     // strand the conversation on a question the form does not show.
-    if (field.hidden || !shouldShowField(field, this.state.fieldValues, this.state.schema.fields)) {
+    // shouldShowField ALONE (bd polyglot-pdf-ubam): the former `field.hidden ||`
+    // refused navigation to a `hidden: true` field whose show_if is SATISFIED,
+    // which the form DOES show -- so the model was told 'hidden' about a
+    // question sitting visible and required on screen.
+    if (!shouldShowField(field, this.state.fieldValues, this.state.schema.fields)) {
       this.sendSwitchFieldResponse(request_id, false, { reason: 'hidden', field_id: fieldId });
       return;
     }
