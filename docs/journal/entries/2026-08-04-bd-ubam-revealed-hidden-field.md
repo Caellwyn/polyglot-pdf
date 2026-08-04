@@ -77,6 +77,21 @@ without the fix is worse than no test**, because it converts "untested" into
 "falsely confirmed." Mutation-testing each new assertion is the only reliable
 way to tell the difference, and it takes seconds.
 
+**And the same review caught the lesson only half-applied.** The first cut of
+this fix mutation-tested the five *pure-function* sites but left the two
+**WebSocket** sites -- `handleFieldUpdate`'s availability gate and the
+`switch_field` handler -- with no assertion at all. Reverting either left the
+whole 1236-test suite green. Those two are precisely the "unreachable by voice"
+half of the bug, so the untested sites were the ones that mattered most to the
+product.
+
+The gap had a structural cause worth naming: the pure functions are trivially
+callable, so they attract tests, while the WS gates need a mock socket and a
+driven message. **Ease of testing had quietly decided what got tested.**
+`webFormConnection.revealedhidden.test.ts` now drives both through the real
+message path (not by calling private methods, so it survives a refactor), and
+both mutations are caught.
+
 ## Lessons
 
 1. **A term that is a no-op for every case but one is the most durable kind of

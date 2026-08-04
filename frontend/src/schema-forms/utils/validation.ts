@@ -684,7 +684,7 @@ function evaluateConditionGroup(
  * and is required by isSectionValid, so gating it out makes it invisible to
  * whatever is asking while it sits answerable on screen.
  *
- * That divergence shipped in SIX places at once (bd polyglot-pdf-ubam): the form
+ * That divergence shipped in SEVEN places at once (bd polyglot-pdf-ubam): the form
  * could report itself complete with a visibly empty required field, and the
  * voice path refused to navigate to that field at all -- a required question the
  * user could not answer by voice. If you find yourself adding a `hidden` check
