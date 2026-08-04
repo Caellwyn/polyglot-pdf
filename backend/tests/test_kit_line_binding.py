@@ -103,7 +103,9 @@ def test_f1040_income_lines_fill_onto_their_own_printed_rows():
     values = {f"fld_{ln}": str(1000 + i) for i, ln in enumerate(lines)}
     by_sentinel = {v: k for k, v in values.items()}
 
-    resp = asyncio.new_event_loop().run_until_complete(
+    # asyncio.run (not new_event_loop) -- matches every sibling fill test and
+    # closes the loop instead of leaking a selector handle per run.
+    resp = asyncio.run(
         fill_pdf(PDFFillRequest(kit_id="f1040", pdf_filename="form.pdf",
                                 field_values=values, form_schema=schema))
     )
@@ -126,8 +128,89 @@ def test_f1040_income_lines_fill_onto_their_own_printed_rows():
                  if got != f.removeprefix("fld_")}
     assert not misplaced, (
         "filled values printed on the WRONG tax line: "
-        + "; ".join(f"{f} printed on line {got}" for f, got in sorted(misplaced.items()))
+        + "; ".join(
+            f"{f} printed on line {got}" if got is not None
+            # None = the value landed on a row with no readable marker, i.e. a
+            # write-in/checkbox row -- NOT simply "line None" (Opus fresh-eyes).
+            else f"{f} landed on an unmarked row (a write-in/checkbox box)"
+            for f, got in sorted(misplaced.items())
+        )
     )
+
+
+def test_f1040_write_in_boxes_bind_by_geometry_not_by_row():
+    """The write-ins the row oracle CANNOT settle (bd 3ave).
+
+    Four page-1 fields share a printed line with an amount box, so
+    `marker_for_widget` returns the same marker for both and cannot tell them
+    apart -- three of the oracle's own suggestions were wrong here, and taking
+    them literally would have collided `fld_1h_type` onto `fld_1h`'s widget.
+    Geometry is what distinguishes them: the amount column is x=504-576, and
+    each write-in sits in its own narrower band. Nothing else in this file
+    covers these fields, so without this test a future edit could re-collide
+    them with every other test still green.
+    """
+    import json
+
+    import fitz
+
+    kit_dir = _REPO / "form-kits" / "f1040"
+    if not (kit_dir / "form.pdf").exists():
+        pytest.skip("f1040 kit not present")
+    schema = json.loads((kit_dir / "schema.json").read_text(encoding="utf-8"))
+    by_id = {f["id"]: f for f in schema["fields"]}
+
+    # field id -> (expected widget leaf, expected x0, expected y0)
+    expected = {
+        "fld_1h_type": ("f1_54[0]", 344, 534),    # "Other earned income" type
+        "fld_1i": ("f1_56[0]", 410, 546),         # combat-pay election
+        "fld_4c_other": ("f1_64[0]", 439, 618),   # 4c "Check if" write-in
+        "fld_5c_other": ("f1_67[0]", 439, 642),   # 5c "Check if" write-in
+        "fld_1h": ("f1_55[0]", 504, 534),         # the AMOUNT box on 1h
+    }
+    rects = {}
+    with fitz.open(kit_dir / "form.pdf") as doc:
+        for pno, page in enumerate(doc):
+            for w in page.widgets():
+                if isinstance(w.field_name, str):
+                    rects.setdefault(w.field_name, (pno + 1, w.rect))
+
+    for fid, (leaf, x0, y0) in expected.items():
+        claim = by_id[fid]["pdf_field_name"]
+        assert claim.endswith(leaf), f"{fid} claims {claim}, expected ...{leaf}"
+        _, rect = rects[claim]
+        assert abs(rect.x0 - x0) <= 2 and abs(rect.y0 - y0) <= 2, (
+            f"{fid} -> {leaf} is at ({round(rect.x0)},{round(rect.y0)}), "
+            f"expected ~({x0},{y0}) -- the kit or the PDF moved"
+        )
+
+    claims = [by_id[f]["pdf_field_name"] for f in expected]
+    assert len(set(claims)) == len(claims), (
+        "two of the write-in/amount fields collided onto one widget: "
+        f"{sorted(claims)}"
+    )
+
+
+# Per-kit floor for the pdf_position guard below, mirroring _MIN_VERIFIED.
+# WITHOUT this the guard can go silently vacuous: i-90 stores LEAF widget names
+# (`P1_Line1_AlienNumber[0]`) while its PDF uses fully-qualified ones
+# (`form1[0].#subform[0].P1_Line1_AlienNumber[0]`), so an exact-match-only
+# lookup skipped all 132 of its fields and passed green even with every
+# position corrupted (Opus fresh-eyes on this PR).
+_MIN_POSITIONS_CHECKED = {"f1040": 167, "i-90": 114, "w7": 47}
+
+
+def _resolve_widget(claim: str, rects: dict, by_suffix: dict):
+    """Same resolution production uses (pdf_fill_routes find_widget): exact
+    match first, then a DOT-BOUNDARY suffix match. Not a bare
+    `claim.split('.')[-1]` -- f1040 has genuine leaf collisions
+    (`Checkbox_ReadOrder[0].c1_8[0]` vs a separate bare `c1_8[0]`), so an
+    ambiguous suffix must resolve to nothing rather than to the wrong widget.
+    """
+    if claim in rects:
+        return rects[claim]
+    hits = by_suffix.get(claim)
+    return hits[0] if hits and len(hits) == 1 else None
 
 
 @pytest.mark.parametrize("kit", ["f1040", "i-90", "w7"])
@@ -153,30 +236,46 @@ def test_stored_pdf_position_agrees_with_the_claimed_widget(kit):
     schema = json.loads((kit_dir / "schema.json").read_text(encoding="utf-8"))
 
     rects: dict[str, tuple[int, object]] = {}
+    by_suffix: dict[str, list] = {}
     with fitz.open(kit_dir / "form.pdf") as doc:
         for pno, page in enumerate(doc):
             for w in page.widgets():
                 if isinstance(w.field_name, str):
                     rects.setdefault(w.field_name, (pno + 1, w.rect))
+    for full, hit in rects.items():
+        leaf = full.rsplit(".", 1)[-1]
+        by_suffix.setdefault(leaf, []).append(hit)
 
-    drift = []
+    drift, checked = [], 0
     for f in schema.get("fields", []):
         claim, pos = f.get("pdf_field_name"), f.get("pdf_position")
-        if not isinstance(claim, str) or claim not in rects or not pos:
-            continue  # unresolvable claims / position-less fields: other gates
-        page, rect = rects[claim]
+        if not isinstance(claim, str) or not pos:
+            continue  # position-less fields: not this gate's business
+        hit = _resolve_widget(claim, rects, by_suffix)
+        if hit is None:
+            continue  # unresolvable / ambiguous claims: other gates own those
+        page, rect = hit
+        checked += 1
         if (pos.get("page") != page
                 or abs(pos.get("x", 0) - rect.x0) > 2
                 or abs(pos.get("y", 0) - rect.y0) > 2):
             drift.append(
                 f"{f.get('id')}: stored ({pos.get('x')},{pos.get('y')}) p{pos.get('page')} "
-                f"but {claim.split('.')[-1]} is at ({round(rect.x0)},{round(rect.y0)}) p{page}"
+                f"but {claim.rsplit('.', 1)[-1]} is at ({round(rect.x0)},{round(rect.y0)}) p{page}"
             )
 
     assert not drift, (
         f"{kit}: {len(drift)} field(s) whose pdf_position does not describe the "
         f"widget they claim -- the preview overlay will highlight the wrong box. "
         + "; ".join(drift[:6])
+    )
+    # Anti-vacuity floor (see _MIN_POSITIONS_CHECKED): a name-scheme or parser
+    # change that stops resolving claims must FAIL here, not silently reduce
+    # this test to asserting nothing.
+    assert checked >= _MIN_POSITIONS_CHECKED[kit], (
+        f"{kit}: the position guard verified only {checked} field(s), below the "
+        f"floor of {_MIN_POSITIONS_CHECKED[kit]} -- claims stopped resolving to "
+        f"widgets, so the drift assertion above is checking less than it should."
     )
 
 

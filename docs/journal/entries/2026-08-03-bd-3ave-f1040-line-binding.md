@@ -80,12 +80,20 @@ reviewer filed this as out-of-scope bead `polyglot-pdf-7yhy`; it was fixed
 here instead and that bead closed, because this diff is what desynchronized
 the pair and the correct values came from the same source of truth already in
 hand. A new cross-kit guard
-(`test_stored_pdf_position_agrees_with_the_claimed_widget`, running on f1040 /
-i-90 / w7) makes the desync impossible to reintroduce silently.
+(`test_stored_pdf_position_agrees_with_the_claimed_widget`) makes the desync
+impossible to reintroduce silently -- but only after a SECOND review round
+caught it passing VACUOUSLY on i-90: the lookup matched widget names exactly,
+while i-90 stores LEAF names (`P1_Line1_AlienNumber[0]`) against a PDF that
+uses fully-qualified ones, so all 132 of its fields were skipped and the test
+stayed green with every position corrupted. It now resolves names the way
+production's `find_widget` does (exact, then a dot-boundary suffix that must be
+UNAMBIGUOUS -- f1040 has genuine leaf collisions), and carries a per-kit floor
+of fields-checked so it can never silently fall back to asserting nothing.
+Coverage went 0 -> 114 fields on i-90, re-mutation-verified.
 
 **Verified:** oracle 20 mismatches -> 0 (56 fields verifiable, up from 52);
 lint ERRORs 4 -> 0; `dump-widget-unclaimed` 12 -> 8; production fill round-trip
-24/24 present, 0 errors, 0 misplaced. Full backend suite 1473 passed.
+24/24 present, 0 errors, 0 misplaced. Full backend suite 1474 passed.
 Mutation-verified against the shipped kit: the oracle test names all 20
 misbindings, the round-trip names exactly `fld_1a`..`fld_1d` as never reaching
 the PDF.
