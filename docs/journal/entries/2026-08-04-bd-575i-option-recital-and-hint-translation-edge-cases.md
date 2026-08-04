@@ -281,6 +281,31 @@ reviewer named. It was an existing pin from an earlier bead
 running the FULL suite rather than the touched files, even when the change looks
 local.
 
+**Both final reviewers cleared all twelve criteria -- and both told me my own
+comment was wrong.** The merge I added to protect the skip guard came with a
+comment claiming "production writes all self-persist, so the maps normally
+agree" and that the merge "keeps the failure direction safe." Both claims are
+false. `SchemaForm.tsx`'s `handleFieldChange` is a real production writer: it
+persists through `SchemaFormStateManager` and never touches
+`WebFormConnection.state`, so the maps genuinely diverge, and in-memory-winning
+masks the user's on-screen edit -- a skip can still blank an answer the user just
+typed.
+
+That direction is pre-existing on dev (both reviewers checked; the handler read
+`this.state` unconditionally before), so the merge does not regress it -- but a
+comment asserting a safety property the code lacks is worse than no comment,
+because it tells the next reader the problem is handled. Both comments now say
+what the merge actually is: CONSERVATIVE, preserving dev's behavior where the two
+maps disagree so that a language fix does not silently change which field VALUE
+wins. The real write-ownership fix is filed (bd polyglot-pdf-uw3w, with the
+`[]`-alias resurrection it enables as bd polyglot-pdf-3irc) rather than smuggled
+into this PR.
+
+The merge direction is now pinned too. A reviewer noted that both a plain replace
+and a persisted-wins merge left the suite green, so a deliberate choice with a
+real tradeoff was indistinguishable from an accident. It now has a test, and the
+mutation to a plain replace turns two tests red.
+
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on
 clean dev with the branch stashed: 1198 passed / 1 failed). The failing count
@@ -319,6 +344,17 @@ rounds of review; the structural answer needed none and was shorter. The tell I
 missed: I was inverting a map whose forward direction was lossy (many English
 labels can share a translation) -- a lossy function has no inverse, so any
 "reverse lookup" over one is necessarily a guess.
+
+**A comment that overstates a safety property is worse than no comment.** I wrote
+"production writes all self-persist, so the maps normally agree" as justification
+for a merge direction. It was not true -- one production writer does not sync --
+and the sentence would have told the next reader the divergence was handled when
+it is not. When a comment defends a choice, the defense is a factual claim and
+has to be checked like one: I asserted a property of every writer in the codebase
+without enumerating them. Two reviewers did enumerate them, and both came back
+with the same counter-example. The fix was not to delete the comment but to make
+it accurate about what the code does and does not guarantee, and to file the real
+problem rather than let the comment imply it away.
 
 **Redundant guards cannot be tested -- so remove the redundancy, do not pin
 both halves.** This PR shipped THREE vacuous cases across three review rounds,

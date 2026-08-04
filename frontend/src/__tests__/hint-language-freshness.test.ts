@@ -151,6 +151,44 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
     expect(after?.selectedLanguage).toBe('Ukrainian')
   })
 
+  it('the confirm/skip refresh MERGES fieldValues rather than replacing them', () => {
+    // The refresh must not drop an entry that exists only in memory. Both
+    // handlers gate on the field holding a usable value, so a plain replace
+    // makes the skip handler's data-loss guard miss a filled field (it then
+    // BLANKS a real answer) and makes a legitimate confirm fail as 'no_value'.
+    //
+    // Pinned because the direction is a DELIBERATE choice with a real tradeoff
+    // (see the handler comments and bd polyglot-pdf-uw3w): unpinned, both a
+    // plain replace and a persisted-wins merge leave the suite green, so a
+    // future reader cannot tell the direction was chosen rather than stumbled
+    // into. This asserts only the in-memory-survives half -- the half the
+    // handlers actually depend on.
+    const conn = new WebFormConnection(SCHEMA)
+    const started = SchemaFormStateManager.acceptDisclaimer(
+      (conn as any).state, 'Spanish'
+    )
+    // Storage holds the language change but NO field values.
+    SchemaFormStateManager.save(started)
+    SchemaFormStateManager.setSelectedLanguage(started, 'Ukrainian')
+
+    // In memory only -- as if a writer had not yet synced.
+    ;(conn as any).state = {
+      ...started,
+      fieldValues: { p1_sex: { value: 'male', confirmed: false } },
+    }
+
+    ;(conn as any).send = () => {}
+    ;(conn as any).handleConfirmFieldRequest({
+      field_id: 'p1_sex', confirmation_method: 'verbal', request_id: 'm1',
+    })
+
+    const after = SchemaFormStateManager.load()
+    // The in-memory value survived the refresh, so the confirm could take...
+    expect(after?.fieldValues.p1_sex?.confirmed).toBe(true)
+    // ...and the persisted language change still won.
+    expect(after?.selectedLanguage).toBe('Ukrainian')
+  })
+
   it('falls back to the in-memory language when nothing is persisted', () => {
     // The accessor must not turn an empty sessionStorage into a null language:
     // that would silently drop translation on the pre-persist opener turn.

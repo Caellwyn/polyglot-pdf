@@ -1706,13 +1706,23 @@ export class WebFormConnection {
     // language straight to storage, and the next confirm wrote the old one back
     // over it, silently undoing the switch.
     //
-    // fieldValues are MERGED with in-memory winning, for the same reason as the
-    // skip handler: everything below is gated on the field having a usable
-    // VALUE, so a plain overwrite could hide an entry present only in memory and
-    // turn a legitimate confirm into a spurious 'no_value' refusal (which the
-    // loop-breaker then escalates into a re-prompt). Production writes all
-    // self-persist, so the maps normally agree; the merge keeps the failure
-    // direction safe when they do not.
+    // fieldValues are MERGED with in-memory winning, NOT replaced. The rest of
+    // this handler is gated on the field holding a usable VALUE, and a plain
+    // overwrite could drop an entry that exists only in memory, turning a
+    // legitimate confirm into a spurious 'no_value' refusal that the
+    // loop-breaker escalates into a re-prompt.
+    //
+    // This merge is deliberately CONSERVATIVE, not correct-in-general: where the
+    // two maps disagree it preserves dev's existing behavior (this handler read
+    // `this.state` unconditionally before), so the pjws language fix does not
+    // also change which field VALUE wins. It does NOT make the divergence safe.
+    // SchemaForm.tsx's handleFieldChange is a real production writer that
+    // persists through SchemaFormStateManager without touching this object, so
+    // an on-screen edit can lose to a stale in-memory entry here -- pre-existing
+    // on dev, out of scope for these beads, and filed as bd polyglot-pdf-uw3w
+    // (with the `[]`-alias resurrection it enables as bd polyglot-pdf-3irc).
+    // Fixing the write-ownership properly is that bead's job, not a side effect
+    // of a language fix.
     const persistedAtEntry = SchemaFormStateManager.load();
     if (persistedAtEntry) {
       this.state = {
@@ -2025,12 +2035,17 @@ export class WebFormConnection {
     // independently.
     //
     // fieldValues are MERGED, not replaced, and in-memory wins. Everything below
-    // is gated on a DATA-LOSS guard (markFieldSkipped BLANKS the value), so this
-    // refresh must never be able to hide a value the guard would have seen: a
-    // plain overwrite would let a skip through on an entry present only in
-    // memory and destroy a real answer. Production writes all self-persist, so
-    // the two maps normally agree -- the merge is what keeps the failure
-    // direction safe when they do not.
+    // is gated on a DATA-LOSS guard (markFieldSkipped BLANKS the value), and a
+    // plain overwrite would drop an entry that exists only in memory, letting a
+    // skip through on a field the guard would have refused (pinned by
+    // webFormConnection.skipfield.test.ts, which caught exactly that).
+    //
+    // Same caveat as the confirm handler above: this is CONSERVATIVE, preserving
+    // dev's behavior where the maps disagree, not a fix for the divergence. The
+    // opposite direction has its own failure -- an on-screen edit persisted by
+    // SchemaForm.tsx can lose to a stale in-memory entry, so a skip can still
+    // blank a real answer. Pre-existing on dev and out of scope here; filed as
+    // bd polyglot-pdf-uw3w / polyglot-pdf-3irc.
     const persistedAtEntry = SchemaFormStateManager.load();
     if (persistedAtEntry) {
       this.state = {
