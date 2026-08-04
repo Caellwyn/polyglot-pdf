@@ -607,6 +607,69 @@ def test_two_option_word_threshold_boundary_is_inclusive():
     assert f"read ALL 2 aloud" in render_field_guidance(pair(W + 1))
 
 
+@pytest.mark.parametrize("kit,fid,expect_natural", [
+    # The two fields the threshold was calibrated to separate. Both must land
+    # on the SAME side in EVERY baked language.
+    ("i-90", "p7_checkbox7", False),
+    ("w7", "previously_received_itin_or_irsn", True),
+])
+def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_natural):
+    # The gate must describe the FIELD, not the session. It briefly did not:
+    # manifest_service._apply_label_overrides substitutes the session-language
+    # label into opt["label"] BEFORE the render measures it, and word count is
+    # not translation-invariant -- so an English-calibrated threshold applied to
+    # translated text flipped both of these fields on SHIPPED kits (Opus outer
+    # review, this PR): i-90 'p7_checkbox7' dropped under the threshold in
+    # Chinese and Korean (re-introducing the bd 575i substance drop) and w7
+    # 'previously_received_itin_or_irsn' rose over it in 8 of 17 languages
+    # (re-introducing the bd 41fi recital). The render now reverse-maps the
+    # override to recover the English label.
+    #
+    # Parametrized over EVERY language the kit actually bakes, not a sample:
+    # the two failures above hit disjoint language sets, so any fixed sample
+    # would have missed one of them.
+    f = _load_kit_field(kit, fid)
+    languages = sorted({
+        lang
+        for opt in f["options"]
+        for lang in (opt.get("label_translations") or {})
+    })
+    assert len(languages) >= 15, f"{fid} is no longer a fully-baked fixture"
+
+    marker = "ask ONE natural question that makes both choices clear"
+    # English (no overrides) is the reference the threshold was calibrated on.
+    assert (marker in render_field_guidance(f)) is expect_natural, f"{fid} english"
+
+    for lang in languages:
+        overrides = {
+            opt["label"]: (opt.get("label_translations") or {})[lang]
+            for opt in f["options"]
+            if (opt.get("label_translations") or {}).get(lang)
+        }
+        text = render_field_guidance(f, option_label_overrides=overrides)
+        assert (marker in text) is expect_natural, f"{fid} flipped in {lang}"
+        # The translated labels still ride the injection -- the fix changes
+        # only what the LENGTH rule measures, never what the model receives.
+        for translated in overrides.values():
+            assert translated in text, f"{fid} lost its {lang} label"
+
+
+@pytest.mark.parametrize("bad_label", [1, None, 3.5, True])
+def test_render_survives_a_non_string_option_label(bad_label):
+    # schema_lint does not assert that a label is a string, _sanitize_options
+    # copies it verbatim, and every render call site is unguarded -- so a
+    # number/None label from an LLM-extracted or editor-drafted kit reached
+    # `label.split()` and crashed the render mid-form (Opus outer review, this
+    # PR; origin/dev rendered these fine because it measured no lengths).
+    field = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+        "options": [{"value": "a", "label": bad_label},
+                    {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(field)
+    assert "Options (2" in text
+
+
 def test_two_option_multi_select_is_not_forced_into_an_exclusive_choice():
     # bd polyglot-pdf-9tuu criterion 1: the marker (and the SI rule it triggers)
     # describes an EXCLUSIVE choice -- "a plain yes/no question ... an either/or

@@ -151,9 +151,10 @@ export type FillLanguage = typeof SUPPORTED_FILL_LANGUAGES[number];
  * Spoken-language NAME (lowercase) -> BCP-47 code.
  *
  * MIRRORS backend/utils/language_codes.py SPOKEN_LANGUAGE_BCP47 -- keep the two
- * in sync; every entry in SPOKEN_LANGUAGES above must appear here (pinned by
- * languages.test.ts). Regional variants match the backend's choices for this
- * app's user base (US immigration intake): es-US over es-ES, pt-BR over pt-PT.
+ * in sync; every entry in SPOKEN_LANGUAGES above must appear here. Both the
+ * backend mirror and that coverage are pinned in languages.test.ts. Regional
+ * variants match the backend's choices for this app's user base (US
+ * immigration intake): es-US over es-ES, pt-BR over pt-PT.
  *
  * Used to read hand-authored kits whose option `label_translations` are keyed
  * by CODE rather than by the canonical lowercase name (bd polyglot-pdf-thun).

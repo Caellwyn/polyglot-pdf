@@ -38,7 +38,7 @@ choice between two *short* labels. Neither half held universally:
   `TWO_OPTION_MAX_LABEL_WORDS` (20) the pair recites in full.
 
 The threshold is set from the corpus, not from taste. Across every 2-option field
-in the three shipped kits the longest label of each pair runs 1,1,1,1,2,2,3,3,4,5,6
+in the three shipped kits the longest label of each pair runs 1,1,1,1,1,2,2,2,3,3,4,5,6
 words for the plainly-either/or fields, then **17** for w7
 `previously_received_itin_or_irsn`, then **27** for the i-90 declaration. The w7
 case is a genuine yes/no ("Have you previously received an ITIN?") padded with the
@@ -117,6 +117,27 @@ uniqueness as the only thing rejecting it). Baseline: silent. Mutation: the corr
 binding is falsely reported as "line 1". Asserting a positive outcome under the
 mutation is what makes it bite where the old absence-of-line-3 assertion could not.
 
+**Caught in outer review -- the threshold was language-dependent.** The Opus
+outer review found that the 20-word gate was measuring the TRANSLATED label:
+`manifest_service._apply_label_overrides` substitutes the session-language string
+into `opt["label"]` before `render_field_guidance` reads it, and word count is not
+translation-invariant. Measured across all 18 baked languages, that flipped BOTH
+calibration fields on shipped kits -- i-90 `p7_checkbox7` fell under the threshold
+in Chinese and Korean (re-introducing the exact substance drop 575i exists to fix)
+and w7 `previously_received_itin_or_irsn` rose over it in 8 languages
+(re-introducing the bd 41fi recital). So the change was, in two languages, a
+regression of its own bead. Verified independently before acting.
+
+Fixed by reverse-mapping the override (it is keyed BY the English label, so no
+signature change was needed) and measuring English. Pinned by a test parametrized
+over EVERY language each kit bakes -- not a sample, since the two failures hit
+disjoint language sets and any fixed sample would have missed one. Two smaller
+findings from the same review: `label.split()` crashed the render on a non-string
+option label (a regression against `origin/dev`, which measured no lengths), now
+coerced and pinned; and the new `SPOKEN_LANGUAGE_BCP47` docstring claimed a guard
+in `languages.test.ts` that did not exist, so the guard was written rather than the
+claim deleted.
+
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on
 clean dev with the branch stashed: 1198 passed / 1 failed). The failing count
@@ -143,6 +164,24 @@ direction: 35z0's assertion was vacuous because the data went empty underneath i
 mine were vacuous because a redundant code path held them up. **Redundancy is a
 virtue in the product and a defect in the pins.** Worth doing on any change where
 two mechanisms both plausibly satisfy the same assertion.
+
+**A threshold calibrated on one representation must be APPLIED to that
+representation.** The 20-word cutoff was measured on English labels and then
+applied to whatever string happened to be in `opt["label"]` at render time --
+which, in a translated session, is not English. The gate was meant to describe the
+FIELD (are these labels too long to fold into one question?) but silently became a
+property of the SESSION. The tell was available and I did not look for it: the
+render takes an `option_label_overrides` parameter, so "what is in this string by
+the time I measure it?" was answerable from the signature. Any comparison against
+a tuned constant should state which representation it assumes and enforce it,
+because the calibration and the application can drift apart without either side
+looking wrong.
+
+Corollary for tests: when a value varies over a dimension (here, 18 languages),
+parametrize over the WHOLE dimension rather than a sample. The two failures here
+hit disjoint language sets -- Chinese/Korean vs 8 European/South-Asian languages --
+so any plausible 2-3 language sample would have caught one and missed the other,
+and a one-language spot check would have caught neither.
 
 **Prefer a positive assertion under mutation to an absence assertion.** `assert not
 any(bad)` is one data change away from vacuous. `assert this specific correct thing

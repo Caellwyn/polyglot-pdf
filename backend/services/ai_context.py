@@ -42,12 +42,19 @@ MULTI_SELECT_OPTION_TYPES = {"checkbox_group", "multiselect", "multi_select"}
 #
 # 20 sits in the gap this corpus actually shows. Measured over every 2-option
 # field in the three shipped kits, the longest label of each pair runs
-# 1,1,1,1,2,2,3,3,4,5,6 words for the plainly-either/or fields, then 17 for W-7
+# 1,1,1,1,1,2,2,2,3,3,4,5,6 words for the plainly-either/or fields, then 17 for W-7
 # 'previously_received_itin_or_irsn' -- a genuine yes/no whose labels are padded
 # with the printed-form navigation the SI already tells the model not to speak
 # ("Yes. Complete line 6f. ...") -- and then 27 for the I-90 declaration. The
 # threshold must sit above the W-7 case (it IS one natural question) and below
 # the I-90 one; 20 is the midpoint of that gap.
+#
+# Those counts are ENGLISH, and the render measures the English label even in a
+# translated session (see the reverse lookup in render_field_guidance). Word
+# count is not translation-invariant, so a threshold calibrated on English MUST
+# be applied to English or the branch becomes language-dependent -- which it
+# briefly was, flipping BOTH of the fields above on shipped kits (Opus outer
+# review, this PR).
 TWO_OPTION_MAX_LABEL_WORDS = 20
 
 
@@ -119,10 +126,30 @@ def render_field_guidance(
     options = guidance.get("options")
     if options:
         opt_strs = []
-        # The SPOKEN text of each option, undecorated -- opt_strs carries the
-        # '"label" (use value: v)' wrapper, which is machine plumbing the model
-        # never says aloud, so a length rule must not measure it.
-        spoken_labels = []
+        # The label the LENGTH rule measures, undecorated and always ENGLISH.
+        #
+        # Two things would corrupt this measurement if taken naively:
+        #  - opt_strs carries the '"label" (use value: v)' wrapper, which is
+        #    machine plumbing the model never says aloud;
+        #  - by the time options reach here they may already be TRANSLATED
+        #    (manifest_service._apply_label_overrides substitutes the session
+        #    language into opt['label']). Word count is not translation-
+        #    invariant, so measuring the translated text made the two-option
+        #    branch language-dependent: measured live, I-90 'p7_checkbox7' fell
+        #    back UNDER the threshold in Chinese and Korean (re-introducing the
+        #    exact substance drop bd polyglot-pdf-575i fixed) while W-7
+        #    'previously_received_itin_or_irsn' rose OVER it in 8 of 17 baked
+        #    languages (re-introducing the bd 41fi recital). The gate must
+        #    describe the FIELD, not the session, so it measures English.
+        # The override map is keyed BY the English label (ow1e), so a reverse
+        # lookup recovers it; no override / no match -> the label is already
+        # English.
+        english_by_translation = {}
+        if option_label_overrides:
+            for english, translated in option_label_overrides.items():
+                if isinstance(translated, str) and isinstance(english, str):
+                    english_by_translation.setdefault(translated, english)
+        measured_labels = []
         for opt in options:
             if isinstance(opt, dict):
                 opt_value = opt.get("value", "")
@@ -133,10 +160,16 @@ def render_field_guidance(
                     opt_strs.append(opt_label)
                 else:
                     opt_strs.append(opt_value)
-                spoken_labels.append(opt_label or opt_value or "")
+                spoken = opt_label or opt_value or ""
             else:
                 opt_strs.append(str(opt))
-                spoken_labels.append(str(opt))
+                spoken = str(opt)
+            # str() so a malformed kit (an LLM-extracted/editor-drafted label
+            # that is a number or None) cannot crash the render on .split();
+            # schema_lint does not assert the label is a string, and every
+            # render call site is unguarded.
+            spoken = spoken if isinstance(spoken, str) else str(spoken)
+            measured_labels.append(english_by_translation.get(spoken, spoken))
         n = len(opt_strs)
         # The user cannot read the form, so the model's recital is their only
         # access to the choices (bd polyglot-pdf-6bq8). The count + imperative
@@ -159,7 +192,7 @@ def render_field_guidance(
             )
         elif n == 2 and ftype not in MULTI_SELECT_OPTION_TYPES and all(
             len(label.split()) <= TWO_OPTION_MAX_LABEL_WORDS
-            for label in spoken_labels
+            for label in measured_labels
         ):
             # A two-option field IS one natural question (bd polyglot-pdf-41fi):
             # forcing the list recital produced "Select No, Select Yes -- which
