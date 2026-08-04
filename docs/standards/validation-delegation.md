@@ -189,10 +189,15 @@ contradiction the user already saw + adjudicated mid-form is NOT re-reported; (2
 carries an anti-over-flag prompt (`WHOLE_FORM_PRO_SI`) for the Part 5/6
 preparer-interpreter certification block + bracketed-repeat fields -- the W5 precision
 condition (uncorrected whole-form precision was 0.750). Gated by
-`FORM_COMPLETE_PRO_VALIDATOR` (**default-off**: a new operational-cost dependency,
-flipped on by env once the precision re-measure confirms the prompt; when off,
-`handle_form_complete_pro` no-ops clean and `form_complete` reports nothing). The lite
-window pass (`validate_windows`) + section_complete are unchanged.
+`FORM_COMPLETE_PRO_VALIDATOR` (**default-on**, maintainer directive 2026-08-03: the
+end-of-form report is part of the product and its per-form cost is wanted in the
+accounting; set the env var to `false` to disable without a redeploy, in which case
+`handle_form_complete_pro` no-ops clean and `form_complete` reports nothing). Cost is
+bounded by the client's dirty-snapshot guard (see contract 4): ~1 pro call per form
+plus one per post-completion edit. The precision re-measure the W5 condition called for
+has NOT run -- expect some Part 5/6 false positives until bd polyglot-pdf-89mt; they
+surface as report-only questions, never blocks. The lite window pass
+(`validate_windows`) + section_complete are unchanged.
 
 ---
 

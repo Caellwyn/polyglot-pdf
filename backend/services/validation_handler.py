@@ -221,6 +221,21 @@ class ValidationHandler:
                 "type": field_obj.type,
             }
 
+            # Date LAYOUT sources. _validate_date resolves the expected layout
+            # from `format` -> `help.format_hint` -> `validation.hint`; none of
+            # them were passed through here, so every date field fell back to the
+            # hardcoded ISO default and a correct "10/25/1984" was rejected as
+            # "expected YYYY-MM-DD". No shipped kit sets flat `format` on a date
+            # -- help.format_hint (the editor's "Format Hint" box) is the one that
+            # is actually populated, so it MUST be forwarded.
+            if getattr(field_obj, "format", None) is not None:
+                field_dict["format"] = field_obj.format
+            help_obj = getattr(field_obj, "help", None)
+            if help_obj is not None:
+                format_hint = getattr(help_obj, "format_hint", None)
+                if format_hint:
+                    field_dict["help"] = {"format_hint": format_hint}
+
             # Extract validation constraints from nested validation object
             if field_obj.validation:
                 validation = field_obj.validation
@@ -247,6 +262,12 @@ class ValidationHandler:
                 # normalization never runs (bd 0zr / jnjj.40).
                 if validation.format_preset is not None:
                     field_dict['format_preset'] = validation.format_preset
+                # validation.hint is the i-90 kits' date-layout carrier
+                # ("MM/DD/YYYY") and _validate_date's last-resort format source.
+                # getattr-guard: `hint` is not on every ValidationRules revision.
+                validation_hint = getattr(validation, "hint", None)
+                if validation_hint:
+                    field_dict['hint'] = validation_hint
 
             # Add options if field has them (for select/radio/checkbox)
             if hasattr(field_obj, 'options') and field_obj.options:

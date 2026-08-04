@@ -1692,6 +1692,26 @@ class LiveAIGemini(ILiveAI):
             self._log.info("[lang] speech_config.language_code applied",
                           language_code=list(lang_codes)[0])
 
+        # Prebuilt voice (bd polyglot-pdf-rvac follow-up, maintainer 2026-08-03).
+        # Google's default voice when unset is "Puck" (Upbeat) -- the wrong
+        # register for a stressful legal intake, and the SI's PACE/ARTICULATION
+        # prose does NOT reliably control delivery on native audio (the Live docs
+        # document no pace/prosody parameter), so the voice IS the lever.
+        # MERGE, never assign: the language_code block above may already own
+        # config['speech_config'], and a bare assignment here would silently drop
+        # it (and vice versa -- this block must not care which ran first).
+        voice_name = (getattr(settings, "LIVE_VOICE_NAME", "") or "").strip()
+        if voice_name:
+            speech_cfg = config.get('speech_config')
+            if not isinstance(speech_cfg, dict):
+                speech_cfg = {}
+            speech_cfg['voice_config'] = {
+                'prebuilt_voice_config': {'voice_name': voice_name}
+            }
+            config['speech_config'] = speech_cfg
+            self._log.info("[voice] speech_config.voice_config applied",
+                          voice_name=voice_name)
+
         # Context-window compression (epic polyglot-pdf-l3a, bead -45o). A server-side
         # sliding window bounds the live context so per-turn re-billing stops compounding
         # (quadratic -> linear cumulative cost) and audio sessions can run past the 15-min

@@ -153,9 +153,13 @@ def test_no_codes_leaves_plain_blocks():
 
 # --- 4. speech_config.language_code (bd polyglot-pdf-m1lg) ---------------------
 
-def _settings_with_speech_flag(enabled: bool) -> Settings:
+def _settings_with_speech_flag(enabled: bool, voice: str = "") -> Settings:
+    """Settings for the language-bias assertions. `voice` defaults to EMPTY so
+    these tests isolate the language_code half of speech_config; the voice half
+    is pinned separately below."""
     s = Settings()
     s.SPEECH_LANGUAGE_CODE_ENABLED = enabled
+    s.LIVE_VOICE_NAME = voice
     return s
 
 
@@ -173,4 +177,40 @@ def test_speech_config_absent_without_codes_or_with_kill_switch_off():
     # Kill-switch off: never set even with codes.
     adapter = _adapter_with(["es-US"], transcripts=True, liveness=False)
     cfg = adapter._build_live_config(_settings_with_speech_flag(False))
+    assert "speech_config" not in cfg
+
+
+def test_voice_config_merges_with_language_code_in_either_order():
+    """LIVE_VOICE_NAME rides speech_config alongside language_code. The voice
+    block MERGES into whatever the language block left behind -- a bare
+    assignment on either side would silently drop the other."""
+    adapter = _adapter_with(["ru-RU"], transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(True, "Iapetus"))
+    assert cfg["speech_config"] == {
+        "language_code": "ru-RU",
+        "voice_config": {"prebuilt_voice_config": {"voice_name": "Iapetus"}},
+    }
+
+
+def test_voice_config_set_even_when_language_bias_is_off():
+    """The voice is independent of the language kill-switch: turning
+    SPEECH_LANGUAGE_CODE_ENABLED off must not also drop the voice."""
+    adapter = _adapter_with(["es-US"], transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(False, "Iapetus"))
+    assert cfg["speech_config"] == {
+        "voice_config": {"prebuilt_voice_config": {"voice_name": "Iapetus"}}
+    }
+    # ...and with no bias codes at all (unmapped language).
+    adapter = _adapter_with(None, transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(True, "Iapetus"))
+    assert cfg["speech_config"] == {
+        "voice_config": {"prebuilt_voice_config": {"voice_name": "Iapetus"}}
+    }
+
+
+def test_empty_voice_name_leaves_speech_config_untouched():
+    """Empty LIVE_VOICE_NAME falls back to the API default voice -- it must not
+    write an empty voice_config (which the endpoint would reject)."""
+    adapter = _adapter_with(None, transcripts=True, liveness=False)
+    cfg = adapter._build_live_config(_settings_with_speech_flag(True, ""))
     assert "speech_config" not in cfg

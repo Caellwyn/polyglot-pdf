@@ -212,93 +212,159 @@ def _validate_number(field: Dict[str, Any], value: Any, field_id: str, field_nam
     return errors
 
 
+# Date layouts this validator understands, as (strptime directive, human label).
+# Keyed by a NORMALIZED format spec (lowercased, whitespace-stripped) so a kit
+# may declare "MM/DD/YYYY", "mm/dd/yyyy", or the DateFormat enum's value and all
+# resolve to the same layout. Mirrors backend/models/form_models.py DateFormat.
+_DATE_LAYOUTS: Dict[str, tuple] = {
+    "mm/dd/yyyy": ("%m/%d/%Y", "MM/DD/YYYY"),
+    "dd/mm/yyyy": ("%d/%m/%Y", "DD/MM/YYYY"),
+    "yyyy-mm-dd": ("%Y-%m-%d", "YYYY-MM-DD"),
+    "mm-dd-yyyy": ("%m-%d-%Y", "MM-DD-YYYY"),
+    "mo/yr": ("%m/%Y", "MM/YYYY"),
+    "mm/yyyy": ("%m/%Y", "MM/YYYY"),
+    "yyyy": ("%Y", "YYYY"),
+}
+
+# The layout assumed when a field declares no format at all. ISO stays the
+# default for format-less fields so existing callers/tests are unaffected.
+_DEFAULT_DATE_SPEC = "yyyy-mm-dd"
+
+
+def _resolve_date_format(field: Dict[str, Any]) -> tuple:
+    """Resolve the (strptime_directive, human_label) a date field expects.
+
+    Reads the format spec from every place a kit may declare it, in priority
+    order: the flat `format` key (DateFormat enum value), then the CANONICAL
+    nested `help.format_hint` -- the property the schema editor's "Format Hint"
+    box writes and the ONLY one the shipped kits populate for dates -- then
+    `validation.hint`.
+
+    Why this matters (bd polyglot-pdf-52qm era): this used to read ONLY the flat
+    `format` key and hardcode a YYYY-MM-DD fallback. No shipped kit sets `format`
+    on a date field (i-90 / w7 both carry help.format_hint = "MM/DD/YYYY"), and
+    validation_handler did not pass `format` through either, so EVERY date field
+    fell back to ISO -- and a correctly-filled "10/25/1984" was rejected as
+    "Invalid format (expected YYYY-MM-DD)". The voice model, which IS told
+    MM/DD/YYYY via the same help.format_hint, then adapted to the error text and
+    started asking users for year-first dates.
+
+    A hint may be prose ('MM/DD/YYYY or "Never Entered US"'); match the first
+    recognized layout token inside it rather than requiring an exact string.
+    Returns the ISO default when nothing recognizable is declared.
+    """
+    help_block = field.get("help")
+    hint_sources = [field.get("format")]
+    if isinstance(help_block, dict):
+        hint_sources.append(help_block.get("format_hint"))
+    elif help_block is not None:
+        hint_sources.append(getattr(help_block, "format_hint", None))
+    hint_sources.append(_resolve_constraint(field, "hint", "hint"))
+
+    for raw in hint_sources:
+        if raw is None:
+            continue
+        # Unwrap a (str, Enum) member (DateFormat.MM_DD_YYYY -> "mm/dd/yyyy").
+        spec = str(getattr(raw, "value", raw)).strip().lower()
+        if not spec:
+            continue
+        if spec in _DATE_LAYOUTS:
+            return _DATE_LAYOUTS[spec]
+        # Prose hint: find the first layout token mentioned anywhere in it.
+        # Longest-first so "mm/dd/yyyy" wins over a bare "yyyy" substring.
+        for token in sorted(_DATE_LAYOUTS, key=len, reverse=True):
+            if token in spec:
+                return _DATE_LAYOUTS[token]
+
+    return _DATE_LAYOUTS[_DEFAULT_DATE_SPEC]
+
+
 def _validate_date(field: Dict[str, Any], value: Any, field_id: str, field_name: str) -> List[ValidationError]:
-    """Validate date field against format, min/max, and date_constraint
+    """Validate date field against its DECLARED format, min/max, and date_constraint
 
     Returns list of all validation errors (can be multiple)
     """
-    value_str = str(value)
+    value_str = str(value).strip()
     errors = []
 
-    # Check format (expect YYYY-MM-DD)
-    format_pattern = field.get("format", "YYYY-MM-DD")
-    if format_pattern == "YYYY-MM-DD":
-        if not re.match(r'^\d{4}-\d{2}-\d{2}$', value_str):
+    directive, label = _resolve_date_format(field)
+
+    # Parse against the field's OWN declared layout. strptime is the single
+    # gate -- it rejects both a wrong layout and an impossible date (13/45/2020),
+    # so a separate regex pre-check would only duplicate it (and previously
+    # hardcoded ISO). Constraint checks below are deliberately OUTSIDE any
+    # format branch: they used to be nested under `if format == "YYYY-MM-DD"`,
+    # so a non-ISO field silently skipped date_constraint/min/max entirely.
+    try:
+        date_obj = datetime.strptime(value_str, directive)
+    except ValueError:
+        errors.append(ValidationError(
+            field_id, field_name, value, "format",
+            f"Invalid date (expected {label})",
+            constraint_value=label
+        ))
+        return errors  # If the date will not parse, no other constraint is checkable
+
+    # Check date_constraint (past_only, future_only, within_5_years)
+    today = datetime.now()
+    date_constraint = _resolve_constraint(field, "date_constraint", "date_constraint")
+
+    if date_constraint == "past_only":
+        if date_obj > today:
             errors.append(ValidationError(
-                field_id, field_name, value, "format",
-                f"Invalid format (expected YYYY-MM-DD)",
-                constraint_value=format_pattern
+                field_id, field_name, value, "date_constraint",
+                f"Date must be in the past",
+                constraint_value="past_only"
             ))
-            return errors  # If format is invalid, can't check other constraints
-
-        # Try to parse the date
-        try:
-            date_obj = datetime.strptime(value_str, "%Y-%m-%d")
-        except ValueError:
+    elif date_constraint == "future_only":
+        if date_obj < today:
             errors.append(ValidationError(
-                field_id, field_name, value, "format",
-                f"Invalid date",
-                constraint_value=format_pattern
+                field_id, field_name, value, "date_constraint",
+                f"Date must be in the future",
+                constraint_value="future_only"
             ))
-            return errors  # If date is invalid, can't check other constraints
+    elif date_constraint == "within_5_years":
+        # Check if date is within 5 years of today (past or future)
+        from datetime import timedelta
+        five_years_ago = today - timedelta(days=365*5)
+        five_years_from_now = today + timedelta(days=365*5)
+        if date_obj < five_years_ago or date_obj > five_years_from_now:
+            errors.append(ValidationError(
+                field_id, field_name, value, "date_constraint",
+                f"Date must be within 5 years of today",
+                constraint_value="within_5_years"
+            ))
 
-        # Check date_constraint (past_only, future_only, within_5_years)
-        today = datetime.now()
-        date_constraint = _resolve_constraint(field, "date_constraint", "date_constraint")
-
-        if date_constraint == "past_only":
-            if date_obj > today:
-                errors.append(ValidationError(
-                    field_id, field_name, value, "date_constraint",
-                    f"Date must be in the past",
-                    constraint_value="past_only"
-                ))
-        elif date_constraint == "future_only":
-            if date_obj < today:
-                errors.append(ValidationError(
-                    field_id, field_name, value, "date_constraint",
-                    f"Date must be in the future",
-                    constraint_value="future_only"
-                ))
-        elif date_constraint == "within_5_years":
-            # Check if date is within 5 years of today (past or future)
-            from datetime import timedelta
-            five_years_ago = today - timedelta(days=365*5)
-            five_years_from_now = today + timedelta(days=365*5)
-            if date_obj < five_years_ago or date_obj > five_years_from_now:
-                errors.append(ValidationError(
-                    field_id, field_name, value, "date_constraint",
-                    f"Date must be within 5 years of today",
-                    constraint_value="within_5_years"
-                ))
-
-        # Check min constraint (minimum date)
-        min_constraint = _resolve_constraint(field, "min", "min")
-        if min_constraint is not None:
+    # Check min/max constraints. A bound may be authored in the field's own
+    # layout OR in ISO; try both before giving up (an unparseable bound is
+    # skipped, not reported as a user error -- it is an authoring mistake).
+    def _parse_bound(raw: Any):
+        for fmt in (directive, "%Y-%m-%d"):
             try:
-                min_date = datetime.strptime(str(min_constraint), "%Y-%m-%d")
-                if date_obj < min_date:
-                    errors.append(ValidationError(
-                        field_id, field_name, value, "min",
-                        f"Date cannot be before {min_constraint}",
-                        constraint_value=min_constraint
-                    ))
+                return datetime.strptime(str(raw).strip(), fmt)
             except ValueError:
-                pass  # Invalid min constraint, skip
+                continue
+        return None
 
-        # Check max constraint (maximum date)
-        max_constraint = _resolve_constraint(field, "max", "max")
-        if max_constraint is not None:
-            try:
-                max_date = datetime.strptime(str(max_constraint), "%Y-%m-%d")
-                if date_obj > max_date:
-                    errors.append(ValidationError(
-                        field_id, field_name, value, "max",
-                        f"Date cannot be after {max_constraint}",
-                        constraint_value=max_constraint
-                    ))
-            except ValueError:
-                pass  # Invalid max constraint, skip
+    min_constraint = _resolve_constraint(field, "min", "min")
+    if min_constraint is not None:
+        min_date = _parse_bound(min_constraint)
+        if min_date is not None and date_obj < min_date:
+            errors.append(ValidationError(
+                field_id, field_name, value, "min",
+                f"Date cannot be before {min_constraint}",
+                constraint_value=min_constraint
+            ))
+
+    max_constraint = _resolve_constraint(field, "max", "max")
+    if max_constraint is not None:
+        max_date = _parse_bound(max_constraint)
+        if max_date is not None and date_obj > max_date:
+            errors.append(ValidationError(
+                field_id, field_name, value, "max",
+                f"Date cannot be after {max_constraint}",
+                constraint_value=max_constraint
+            ))
 
     return errors
 
