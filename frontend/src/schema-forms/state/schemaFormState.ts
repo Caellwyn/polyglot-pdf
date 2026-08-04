@@ -676,19 +676,38 @@ export class SchemaFormStateManager {
   }
 
   /**
-   * Get form completion progress (percentage)
+   * Get form completion progress (percentage).
+   *
+   * Counts ONLY the fields the user can actually act on right now (bd
+   * polyglot-pdf-52qm.7): not `hidden`, and either unconditional or with a
+   * SATISFIED `show_if`. `ignored` fields need no filter -- ignoring quarantines
+   * the field out of `schema.fields` entirely (schema-editor/src/utils/
+   * ignoreField.ts), so they are already absent here.
+   *
+   * Both halves matter. The denominator used to be `schema.fields.length`, so
+   * the 7 statically hidden fields on the shipped W-7 could never be filled and
+   * progress capped around 87% -- the form never read complete. The NUMERATOR
+   * was independently wrong: it counted keys of `fieldValues`, so a stale value
+   * for a field that has since been hidden (or whose show_if flipped off) kept
+   * counting, and could even push progress past 100%. Both now walk the SAME
+   * visible-field list, which is what makes the ratio meaningful.
+   *
+   * The denominator is intentionally DYNAMIC: revealing a conditional field
+   * grows it, so progress can move backwards when the user's answer opens a new
+   * branch. That is honest -- there really is more work to do.
    */
   static getProgress(state: SchemaFormState): number {
-    const totalFields = state.schema.fields.length;
-    const filledFields = Object.keys(state.fieldValues).filter(
-      (fieldId) => {
-        const fieldValue = state.fieldValues[fieldId];
-        const actualValue = fieldValue?.value;
-        return actualValue !== null && actualValue !== undefined && actualValue !== "";
-      }
-    ).length;
+    const visibleFields = state.schema.fields.filter(
+      (f) => !f.hidden && shouldShowField(f, state.fieldValues, state.schema.fields)
+    );
+    if (visibleFields.length === 0) return 0;
 
-    return totalFields > 0 ? (filledFields / totalFields) * 100 : 0;
+    const filledFields = visibleFields.filter((f) => {
+      const actualValue = state.fieldValues[f.id]?.value;
+      return actualValue !== null && actualValue !== undefined && actualValue !== "";
+    }).length;
+
+    return (filledFields / visibleFields.length) * 100;
   }
 
   /**

@@ -1691,11 +1691,7 @@ class LiveAIGemini(ILiveAI):
         # assignment here would drop a voice_config that had already been set,
         # so neither block may care which one runs first.
         if lang_codes and getattr(settings, "SPEECH_LANGUAGE_CODE_ENABLED", False):
-            speech_cfg = config.get('speech_config')
-            if not isinstance(speech_cfg, dict):
-                speech_cfg = {}
-            speech_cfg['language_code'] = list(lang_codes)[0]
-            config['speech_config'] = speech_cfg
+            config["speech_config"] = {"language_code": list(lang_codes)[0]}
             self._log.info("[lang] speech_config.language_code applied",
                           language_code=list(lang_codes)[0])
 
