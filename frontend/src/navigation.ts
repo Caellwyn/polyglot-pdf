@@ -85,7 +85,10 @@ function resolveLivePin(state: SchemaFormState): FormField | null {
   const pinned = state.schema.fields.find(f => f.id === state.pinnedFieldId);
   if (
     pinned &&
-    !pinned.hidden &&
+    // shouldShowField ALONE (bd polyglot-pdf-ubam): an extra `!pinned.hidden`
+    // would treat a pin on a `hidden: true` field with a SATISFIED show_if as
+    // STALE and silently drop it -- stranding the very jump the user asked for
+    // on a field the form is showing.
     shouldShowField(pinned, state.fieldValues, state.schema.fields) &&
     // `[]`-alias-aware confirmed read (bd 5k52 class): a checkbox-group's
     // entry may sit under the bracket key variant; a bare read would treat a
@@ -189,8 +192,11 @@ export function computeNextField(
   // PRIORITY 1: Find first filled but UNCONFIRMED field
   // This ensures Gemini must confirm fields before moving on
   for (const field of fieldsToCheck) {
-    // Skip locked/hidden fields (Nov 22, 2025 - dependency checking)
-    if (field.hidden || !shouldShowField(field, state.fieldValues, state.schema.fields)) {
+    // Skip fields the form does not currently show. shouldShowField ALONE --
+    // an extra `field.hidden ||` would skip a `hidden: true` field whose
+    // show_if is SATISFIED, which renders and is required, leaving it
+    // permanently unreachable by voice (bd polyglot-pdf-ubam).
+    if (!shouldShowField(field, state.fieldValues, state.schema.fields)) {
       continue;
     }
 
@@ -230,8 +236,8 @@ export function computeNextField(
 
   // PRIORITY 2: Find first EMPTY field (skipping confirmed fields)
   for (const field of fieldsToCheck) {
-    // Skip locked/hidden fields (Nov 22, 2025 - dependency checking)
-    if (field.hidden || !shouldShowField(field, state.fieldValues, state.schema.fields)) {
+    // shouldShowField ALONE -- see the PRIORITY 1 loop above (bd ubam).
+    if (!shouldShowField(field, state.fieldValues, state.schema.fields)) {
       continue;
     }
 
@@ -293,12 +299,23 @@ export function getFormProgress(state: SchemaFormState): ProgressMetrics {
     };
   }
 
-  const total = state.schema.fields.length;
+  // Count only fields the form currently SHOWS -- shouldShowField alone, the
+  // same predicate FieldRenderer / isSectionValid / isFormComplete /
+  // SchemaFormStateManager.getProgress use (bd polyglot-pdf-ubam, jtbg). An
+  // unfiltered `schema.fields.length` denominator counts hidden and
+  // unmet-show_if fields that can never be confirmed, so the percentage could
+  // never reach 100. NOTE: this function has no production caller today (only
+  // navigation-confirmation.test.ts); it is kept aligned rather than left as a
+  // third, divergent progress formula for someone to pick up later.
+  const visibleFields = state.schema.fields.filter((field) =>
+    shouldShowField(field, state.fieldValues, state.schema.fields)
+  );
+  const total = visibleFields.length;
   let confirmed = 0;
   let required = 0;
   let requiredConfirmed = 0;
 
-  for (const field of state.schema.fields) {
+  for (const field of visibleFields) {
     // `[]`-alias-aware read (bd polyglot-pdf-ipw7) -- a confirmed group under
     // the bracket variant must count as confirmed, or progress under-reports.
     const currentValue = readFieldEntryWithAlias(state.fieldValues, field.id);
@@ -378,12 +395,19 @@ export function isFormComplete(state: SchemaFormState): boolean {
     return false;
   }
 
-  // Every currently-shown field must be confirmed. Hidden fields (field.hidden
-  // or an unmet show_if) are skipped -- they cannot be answered. A skipped/NA'd
-  // field reads as confirmed (markFieldSkipped sets confirmed=true), so this one
-  // loop covers answered, NA'd, and skipped-for-review fields alike.
+  // Every currently-shown field must be confirmed. Fields the form does not
+  // show are skipped -- they cannot be answered. A skipped/NA'd field reads as
+  // confirmed (markFieldSkipped sets confirmed=true), so this one loop covers
+  // answered, NA'd, and skipped-for-review fields alike.
+  //
+  // shouldShowField ALONE. The former `field.hidden ||` term let a `hidden:true`
+  // field with a SATISFIED show_if -- which renders and is required -- be
+  // skipped here, so the form reported itself COMPLETE with a visibly empty
+  // required field on screen. That is doubly costly now: completion fires the
+  // default-ON end-of-form pro validator (~$0.0093), so it also spent money
+  // validating an incomplete form (bd polyglot-pdf-ubam).
   for (const field of state.schema.fields) {
-    if (field.hidden || !shouldShowField(field, state.fieldValues, state.schema.fields)) {
+    if (!shouldShowField(field, state.fieldValues, state.schema.fields)) {
       continue;
     }
     // `[]`-alias-aware read (bd polyglot-pdf-ipw7): a group confirmed under the

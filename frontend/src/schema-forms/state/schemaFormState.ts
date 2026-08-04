@@ -1334,8 +1334,12 @@ export class SchemaFormStateManager {
       .toLowerCase()
       .split(/[^a-z0-9]+/)
       .filter(w => w.length > 2);
-    const navigable = state.schema.fields.filter(
-      f => !f.hidden && shouldShowField(f, state.fieldValues, state.schema.fields)
+    // shouldShowField ALONE (bd polyglot-pdf-ubam): an extra `!f.hidden &&`
+    // dropped a `hidden: true` field whose show_if is SATISFIED out of the
+    // navigable set, so a field the form actually shows could not even be
+    // SUGGESTED as a navigation target.
+    const navigable = state.schema.fields.filter(f =>
+      shouldShowField(f, state.fieldValues, state.schema.fields)
     );
     const scored = navigable.map((f, idx) => {
       const hay = [f.spoken_name, f.name, ...(f.spoken_aliases || [])]
