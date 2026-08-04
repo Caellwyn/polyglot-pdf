@@ -256,10 +256,16 @@ async def test_flip_flop_detector_fires_on_rejection_recurrence():
         },
         rectify_rules={"Unico": "Unico2", "Unico2": "Unico"})
     lite = make_lite()
-    result = await _run(fresh, pro, lite)
+    # max_attempts=3 makes the detector OBSERVABLE (Opus outer review,
+    # mutation-proven): at the default bound of 2 the loop exits at the
+    # same point with or without the detector, which is how the old
+    # message-text pin was the only thing catching a disabled detector.
+    # With a third attempt available, only the flip-flop stop keeps the
+    # rectify count at 2 -- disabling it lets attempt 3 run (count 3).
+    result = await _run(fresh, pro, lite, max_attempts=3)
     # Attempt 1: Unico -> Unico2 (flagged, new value -> continue).
     # Attempt 2: Unico2 -> Unico (already-flagged value, judge flags it
-    # again -> flip-flop stop, UNRESOLVED).
+    # again -> flip-flop stop, UNRESOLVED -- no attempt 3).
     assert pro.rectify_translations.await_count == 2
     assert result.final["option-label"]["Single"] == "Unico"
     assert [f.taxonomy for f in result.flags] == [FLAG_UNRESOLVED]

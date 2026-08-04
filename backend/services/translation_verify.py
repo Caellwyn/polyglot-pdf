@@ -421,10 +421,13 @@ def _finalize(items: List[_Item],
             # (bd xfdb de-jargoning); keep it HERE so a repeatedly-failing
             # translation stays diagnosable without a re-run (Opus outer
             # review pass 2).
+            # Kit-authoring text only (labels/spoken names + judge prose),
+            # never end-user data, so it is safe under the PII policy;
+            # bounded so a pathological trace cannot flood the log.
             _log.info(
                 "translation_verify_unresolved_trace",
                 kind=item.kind, source=item.source,
-                trace=" | ".join(item.trace),
+                trace=" | ".join(item.trace)[:2000],
             )
     _log.info(
         "translation_verify_complete",

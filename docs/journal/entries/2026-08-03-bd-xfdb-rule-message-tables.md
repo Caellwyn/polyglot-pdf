@@ -73,7 +73,7 @@ Two mandatory specifics from the bead:
 |---|---|
 | unknown-operator | plain "not a recognized comparison type" + allowed list |
 | value-arity | names what shape is actually needed per arity (none/list/scalar) |
-| condition-malformed (multiple sites) | "rebuild it in the condition builder" instead of type-name jargon |
+| condition-malformed (multiple sites) | "rebuild it under the Conditional Logic section" instead of type-name jargon |
 | composite-depth (x2 sites) | "pick one shape" / "flatten it" |
 | ref-unresolved-field | "does not exist in this form -- pick a real field or delete the rule" |
 | operator-trigger (x2 sites) | names the field type plainly, gives the fix |

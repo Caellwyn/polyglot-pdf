@@ -840,9 +840,10 @@ def lint_schema(
                 and (f.get("show_if") or f.get("require_if"))):
             out.append(LintFinding(
                 SEVERITY_WARNING, "readonly-conditional-no-unlock", field_path,
-                "this field is locked and only appears under a condition, "
-                "but nothing unlocks it -- once it appears, no one can ever "
-                "fill it in; set its unlock method to flip_readonly_bit",
+                "this field is locked, and a condition makes it appear or "
+                "become required, but nothing unlocks it -- when that "
+                "happens, no one can ever fill it in; set its unlock method "
+                "to flip_readonly_bit",
             ))
         # An unlock_method WITHOUT pdf_field_flag_change is invisible-broken
         # (bd polyglot-pdf-xbfm fresh-eyes): the editor UI and the check above
@@ -1085,8 +1086,9 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
                 f"limit -- nothing gets cut off, but the assistant may read "
                 f"all of it out loud every time it asks this question, and "
                 f"it adds cost on every turn; shorten it to a quick spoken "
-                f"hint and move the extra depth into Details, which is "
-                f"never spoken aloud",
+                f"hint and move the extra depth into Details -- the assistant "
+                f"answers questions from Details but never reads it out in "
+                f"full",
             ))
 
         if instr.strip():

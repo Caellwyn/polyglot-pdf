@@ -305,7 +305,11 @@ def _check_digits(source: str, translation: str) -> List[MechanicalFailure]:
         if ch.isdecimal() and not ("0" <= ch <= "9")
     })
     if native:
-        escaped = ", ".join("U+%04X" % ord(ch) for ch in native)
+        # Show the glyph itself beside the codepoint: a reviewer cannot
+        # find a character named only "U+0660" (Opus outer review). The
+        # source stays ASCII -- the glyph is runtime data.
+        escaped = ", ".join(
+            "'%s' (U+%04X)" % (ch, ord(ch)) for ch in native)
         failures.append(MechanicalFailure(
             CHECK_NON_ASCII_DIGITS,
             "this translation uses non-standard digit characters (%s) -- "
@@ -461,7 +465,8 @@ def _check_wrong_language(
     for ch in set(translation):
         claimed = markers.get(ch)
         if claimed:
-            hits.setdefault(claimed, []).append("U+%04X" % ord(ch))
+            hits.setdefault(claimed, []).append(
+                "'%s' (U+%04X)" % (ch, ord(ch)))
     if not hits:
         return []
     detail = "; ".join(

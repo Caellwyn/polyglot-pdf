@@ -1508,9 +1508,12 @@ async def set_editor_kit_status(
             # clause to the END; the old 200-char cap systematically cut
             # exactly that clause at the one gate where the reviewer is
             # actively blocked (Opus outer review).
+            # 3200 = 8 findings x 400: the outer cap must never be the
+            # binding constraint, or long findings lose their trailing
+            # remedy clause again (Opus outer review, final round).
             shown = "; ".join(
                 f"[{f.rule}] {f.path}: {f.message}"[:400] for f in lint_errors[:8]
-            )[:2000]
+            )[:3200]
             more = len(lint_errors) - 8
             if more > 0:
                 shown += f"; ... and {more} more"
