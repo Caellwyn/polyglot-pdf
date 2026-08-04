@@ -72,7 +72,7 @@ describe('ValidationPanel load-time lint display', () => {
     );
     expect(screen.getByText('1 error')).toBeInTheDocument();
     // The human rule label and the field id both render.
-    expect(screen.getByText('Unknown operator')).toBeInTheDocument();
+    expect(screen.getByText('Unrecognized comparison')).toBeInTheDocument();
     expect(screen.getByText('dep')).toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe('ValidationPanel load-time lint display', () => {
     );
     expect(screen.getByText('1 warning')).toBeInTheDocument();
     expect(
-      screen.getByText('Translation drift (needs human review)'),
+      screen.getByText('Translation needs human review'),
     ).toBeInTheDocument();
     const row = await screen.findByRole('button', { name: /kept the original/ });
     fireEvent.click(row);

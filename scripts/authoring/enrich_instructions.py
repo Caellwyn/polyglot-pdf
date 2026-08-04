@@ -632,11 +632,12 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
         flags.append({
             "severity": "WARNING", "rule": "instructions-enrich-unavailable",
             "path": "$.fields",
-            "message": "guidance judge unavailable ("
+            "message": "the automatic quality check could not run ("
                        + type(exc).__name__
-                       + "); NO authored guidance was written -- "
-                       "deterministic baseline kept for every field "
-                       "(KEEP rule)"})
+                       + "), so no guidance text was written for this "
+                       "form at all -- every field kept its plain "
+                       "fallback text; re-run guidance authoring for "
+                       "this kit"})
         return flags
 
     rectified: set = set()
@@ -683,10 +684,11 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
                     "severity": "WARNING",
                     "rule": "instructions-ungrounded-dropped",
                     "path": "fields (id=" + fid + ").help",
-                    "message": "the rectifier emptied this field's guidance "
-                               "(sources support nothing) -- proposed text "
-                               "DROPPED, deterministic baseline kept "
-                               "(KEEP rule)"})
+                    "message": "no guidance could be written for this "
+                               "field that the official sources actually "
+                               "support -- it was left with its plain "
+                               "fallback text instead; write guidance "
+                               "for it by hand"})
         verdicts = judge_proposals(schema, proposals, booklet, form_name,
                                    judge_model)
 
@@ -706,9 +708,10 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
                 "severity": "WARNING",
                 "rule": "instructions-ungrounded-dropped",
                 "path": "fields (id=" + fid + ").help",
-                "message": "the judge omitted this field from its response "
-                           "-- treated as UNVERIFIED: proposed text DROPPED, "
-                           "deterministic baseline kept (KEEP rule)"})
+                "message": "this field's proposed guidance was never "
+                           "quality-checked, so it was treated as unverified "
+                           "and left with its plain fallback text instead "
+                           "-- write guidance for it by hand"})
 
     for fid, v in verdicts.items():
         safety_fail = (not v.get("grounded")) or v.get("advice") \
@@ -718,8 +721,10 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
                 flags.append({
                     "severity": "WARNING", "rule": "instructions-rectified",
                     "path": "fields (id=" + fid + ").help",
-                    "message": "guidance was revised by the verify loop and "
-                               "passed on re-judge -- review the revision"})
+                    "message": "this field's guidance was automatically "
+                               "corrected and passed the quality check on "
+                               "re-review -- check the correction reads "
+                               "right"})
             if (v.get("_has_instructions")
                     and not v.get("useful_beyond_label")
                     and fid not in rectified):
@@ -735,9 +740,10 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
                     "severity": "WARNING",
                     "rule": "instructions-rectified",
                     "path": "fields (id=" + fid + ").help",
-                    "message": "judge scored these instructions as adding "
-                               "little beyond the label -- kept (grounded + "
-                               "no advice), review for substance"})
+                    "message": "these instructions passed the quality check "
+                               "but add little beyond what the field's own "
+                               "name already says -- kept for now, but "
+                               "worth rewriting to add real substance"})
         else:
             proposals["fields"][fid] = {}
             reasons = ((v.get("unsupported_claims") or [])[:2]
@@ -748,11 +754,15 @@ def verify_and_rectify(schema: dict, proposals: dict, booklet: str,
                 "severity": "WARNING",
                 "rule": "instructions-ungrounded-dropped",
                 "path": "fields (id=" + fid + ").help",
-                "message": "authored guidance FAILED A SAFETY CHECK "
-                           "(grounding/advice/omission) after "
+                "message": "the proposed guidance for this field failed a "
+                           "safety check (it made a claim the official "
+                           "source does not support, gave advice, or left "
+                           "something important out) after "
                            + str(RECTIFY_MAX_ROUNDS)
-                           + " rectify rounds -- proposed text DROPPED, "
-                           "deterministic baseline kept (KEEP rule): "
+                           + " correction attempts, so it was dropped and "
+                           "the field was left with its plain fallback "
+                           "text -- write guidance for it by hand. "
+                           "Reasons: "
                            + "; ".join(str(r) for r in reasons)})
     return flags
 

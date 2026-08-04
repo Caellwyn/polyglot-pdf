@@ -147,10 +147,16 @@ async def test_mechanical_failure_skips_judge_on_the_way_in():
     reentry_items = pro.judge_translations.await_args_list[0].args[0]
     assert [i["translation"] for i in reentry_items] == ["Numero de USCIS"]
     rectify_items = pro.rectify_translations.await_args_list[0].args[0]
-    assert "dnt-violated" in rectify_items[0]["problem"]
+    assert "supposed to stay in English" in rectify_items[0]["problem"]
     assert result.final["field-name"]["USCIS number"] == "Numero de USCIS"
     assert [f.taxonomy for f in result.flags] == [FLAG_MECHANICAL]
-    assert "rectified clean" in result.flags[0].message
+    # Sanctioned reviewer phrase (bd xfdb): the rectified message asks
+    # the human to read and confirm the new wording. The stage prefix is
+    # stripped (_plain_reason) -- pinned so the strip cannot silently
+    # regress (Opus round 2 mutation check).
+    assert "read the new wording" in result.flags[0].message
+    assert "lint:" not in result.flags[0].message
+    assert "judge:" not in result.flags[0].message
 
 
 @pytest.mark.asyncio
@@ -173,8 +179,16 @@ async def test_mechanical_origin_unresolved_keeps_latest_lint_clean_rectify():
     assert pro.rectify_translations.await_count == 2  # the bound
     assert result.final["field-name"]["USCIS number"] == "Numero de USCIS v2"
     assert [f.taxonomy for f in result.flags] == [FLAG_UNRESOLVED]
-    assert "mechanical-origin" in result.flags[0].message
-    assert "lint-clean rectify" in result.flags[0].message
+    # The KEEP rule (mechanical-origin -> latest lint-clean rectify) is
+    # pinned through the SANCTIONED reviewer phrase, not internal jargon
+    # (bd xfdb): the message names which value the form now uses.
+    assert "the best automatic correction" in result.flags[0].message
+    assert "fix it by hand" in result.flags[0].message
+    # Pin the _plain_reason strip itself (Opus round 2 mutation check:
+    # without this, disabling the strip regresses silently): no stage
+    # prefix may leak into the reviewer-facing message.
+    assert "lint:" not in result.flags[0].message
+    assert "judge:" not in result.flags[0].message
 
 
 # --- judge path -------------------------------------------------------------
@@ -215,8 +229,10 @@ async def test_judge_origin_unresolved_keeps_original_at_loop_bound():
     assert pro.rectify_translations.await_count == 2  # loop bound pin
     assert result.final["option-label"]["Single"] == "Unico"  # ORIGINAL
     assert [f.taxonomy for f in result.flags] == [FLAG_UNRESOLVED]
-    assert "judge-origin" in result.flags[0].message
-    assert "kept original" in result.flags[0].message
+    # KEEP rule (judge-origin -> ORIGINAL), pinned via the sanctioned
+    # phrase (bd xfdb).
+    assert "the original text" in result.flags[0].message
+    assert "fix it by hand" in result.flags[0].message
 
 
 @pytest.mark.asyncio
@@ -240,14 +256,25 @@ async def test_flip_flop_detector_fires_on_rejection_recurrence():
         },
         rectify_rules={"Unico": "Unico2", "Unico2": "Unico"})
     lite = make_lite()
-    result = await _run(fresh, pro, lite)
+    # max_attempts=3 makes the detector OBSERVABLE (Opus outer review,
+    # mutation-proven): at the default bound of 2 the loop exits at the
+    # same point with or without the detector, which is how the old
+    # message-text pin was the only thing catching a disabled detector.
+    # With a third attempt available, only the flip-flop stop keeps the
+    # rectify count at 2 -- disabling it lets attempt 3 run (count 3).
+    result = await _run(fresh, pro, lite, max_attempts=3)
     # Attempt 1: Unico -> Unico2 (flagged, new value -> continue).
     # Attempt 2: Unico2 -> Unico (already-flagged value, judge flags it
-    # again -> flip-flop stop, UNRESOLVED).
+    # again -> flip-flop stop, UNRESOLVED -- no attempt 3).
     assert pro.rectify_translations.await_count == 2
     assert result.final["option-label"]["Single"] == "Unico"
     assert [f.taxonomy for f in result.flags] == [FLAG_UNRESOLVED]
-    assert "flip-flop" in result.flags[0].message
+    # The flip-flop detector's OUTCOME is what matters to a reviewer:
+    # unresolved + the original kept. The detector's firing is already
+    # pinned by the await_count/flow above; the message itself now uses
+    # the sanctioned plain phrases (bd xfdb), not pipeline jargon.
+    assert "fix it by hand" in result.flags[0].message
+    assert "the original text" in result.flags[0].message
 
 
 @pytest.mark.asyncio

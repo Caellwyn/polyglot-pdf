@@ -379,23 +379,29 @@ async def bake_label_translations(
                     verify_flags.append((name, VerifyFlag(
                         taxonomy=FLAG_AMBIGUOUS, kind="option-label",
                         source=source,
-                        message="translator self-flagged the source as "
-                                "under-determined; enrich context/glossary "
-                                "rather than editing the string")))
+                        message="the automatic translator could not tell "
+                                "what this English text means without more "
+                                "context, so its translation may be wrong "
+                                "-- add context or a glossary entry for it "
+                                "rather than hand-editing the translation")))
                 if source in set(names_missing):
                     verify_flags.append((name, VerifyFlag(
                         taxonomy=FLAG_AMBIGUOUS, kind="field-name",
                         source=source,
-                        message="translator self-flagged the source as "
-                                "under-determined; enrich context/glossary "
-                                "rather than editing the string")))
+                        message="the automatic translator could not tell "
+                                "what this English text means without more "
+                                "context, so its translation may be wrong "
+                                "-- add context or a glossary entry for it "
+                                "rather than hand-editing the translation")))
                 if source in set(sections_missing):
                     verify_flags.append((name, VerifyFlag(
                         taxonomy=FLAG_AMBIGUOUS, kind="section-title",
                         source=source,
-                        message="translator self-flagged the source as "
-                                "under-determined; enrich context/glossary "
-                                "rather than editing the string")))
+                        message="the automatic translator could not tell "
+                                "what this English text means without more "
+                                "context, so its translation may be wrong "
+                                "-- add context or a glossary entry for it "
+                                "rather than hand-editing the translation")))
             if translated is None:
                 entry["failed"] = True
                 report["failed_languages"].append(name)

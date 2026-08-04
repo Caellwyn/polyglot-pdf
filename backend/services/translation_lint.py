@@ -68,13 +68,16 @@ from backend.utils.language_codes import SPOKEN_LANGUAGE_BCP47
 _log = structlog.get_logger(__name__)
 
 # The taxonomy rule id every mechanical STRING finding carries (the plan's
-# flag taxonomy); the per-check id leads the message text instead.
+# flag taxonomy). The per-check id exists on MechanicalFailure
+# internally but is NOT carried onto findings today -- bd xfdb removed
+# the old message prefixes that used to leak it as prose, and a proper
+# structural home on the finding is tracked as bd polyglot-pdf-21sw.
 RULE_MECHANICAL = "translation-mechanical"
 # Kit-level coverage findings (bd polyglot-pdf-x41u) carry their own rule so
 # the editor can label the class distinctly (a gap is not a bad string).
 RULE_COVERAGE = "translation-coverage"
 
-# Per-check ids (message prefixes + spike/report grouping).
+# Per-check ids (the structural `check` field + spike/report grouping).
 CHECK_EMPTY = "empty"
 CHECK_NON_ASCII_DIGITS = "non-ascii-digits"
 CHECK_DIGIT_RUN = "digit-run-missing"
@@ -256,7 +259,11 @@ def lint_translation(
     """
     failures: List[MechanicalFailure] = []
     if not isinstance(translation, str) or not translation.strip():
-        return [MechanicalFailure(CHECK_EMPTY, "empty: translation is empty")]
+        return [MechanicalFailure(
+            CHECK_EMPTY,
+            "this translation is empty -- the English text will be shown "
+            "or spoken instead until it is filled in",
+        )]
     source = source if isinstance(source, str) else str(source)
 
     glossary = glossary if isinstance(glossary, dict) else {}
@@ -274,7 +281,7 @@ def lint_translation(
         _check_dnt(source, translation, dnt_terms, form_number_re))
     failures.extend(
         _check_script(source, translation, lang_entry, dnt_terms,
-                      form_number_re, mask_re))
+                      form_number_re, mask_re, language_name))
     failures.extend(_check_wrong_language(source, translation, language_name))
     failures.extend(_check_pins(source, translation, lang_entry))
     return failures
@@ -299,18 +306,25 @@ def _check_digits(source: str, translation: str) -> List[MechanicalFailure]:
         if ch.isdecimal() and not ("0" <= ch <= "9")
     })
     if native:
-        escaped = ", ".join("U+%04X" % ord(ch) for ch in native)
+        # Show the glyph itself beside the codepoint: a reviewer cannot
+        # find a character named only "U+0660" (Opus outer review). The
+        # SOURCE stays ASCII (the glyph is runtime data), which means the
+        # message is NO LONGER ascii-by-construction: any consumer that
+        # prints it must go through _ascii() or equivalent (cp1252 scar,
+        # CLAUDE.md #6) -- both current console sinks already do.
+        rendered = ", ".join(
+            "'%s' (U+%04X)" % (ch, ord(ch)) for ch in native)
         failures.append(MechanicalFailure(
             CHECK_NON_ASCII_DIGITS,
-            "non-ascii-digits: translation uses native digit(s) %s -- the "
-            "glossary digits policy pins ASCII 0-9" % escaped,
+            "this translation uses non-standard digit characters (%s) -- "
+            "numbers must always use plain 0-9, replace them" % rendered,
         ))
     for run in sorted(set(re.findall(r"[0-9]+", source))):
         if run not in translation:
             failures.append(MechanicalFailure(
                 CHECK_DIGIT_RUN,
-                "digit-run-missing: source digit run '%s' does not appear "
-                "in the translation" % run,
+                "the number '%s' from the source text is missing from the "
+                "translation -- add it back exactly as written" % run,
             ))
     return failures
 
@@ -327,8 +341,9 @@ def _check_masks(
         if mask not in translation:
             failures.append(MechanicalFailure(
                 CHECK_MASK,
-                "mask-broken: format mask '%s' from the source is not "
-                "byte-identical in the translation" % mask,
+                "the format pattern '%s' from the source text (for example "
+                "a date format) is missing or altered in the translation -- "
+                "copy it exactly, unchanged" % mask,
             ))
     return failures
 
@@ -361,9 +376,10 @@ def _check_dnt(
         if token not in translation:
             failures.append(MechanicalFailure(
                 CHECK_DNT,
-                "dnt-violated: '%s' must stay untranslated and byte-"
-                "identical, but is missing/altered in the translation"
-                % token,
+                "'%s' is supposed to stay in English (it is a form number, "
+                "agency name, or other fixed term) but is missing or "
+                "altered in the translation -- put it back exactly as "
+                "written" % token,
             ))
     return failures
 
@@ -384,6 +400,7 @@ def _check_script(
     dnt_terms: List[str],
     form_number_re: Optional[re.Pattern],
     mask_re: Optional[re.Pattern],
+    language_name: str = "",
 ) -> List[MechanicalFailure]:
     """Expected script PRESENT after stripping DNT terms, form numbers,
     format masks and digits. NEVER 'no Latin present' -- Latin runs like
@@ -423,13 +440,17 @@ def _check_script(
     if not counts:
         return []  # nothing left to check (string was all DNT/masks/digits)
     if counts.get(expected, 0) == 0:
-        summary = ", ".join(
-            "%s=%d" % (script, counts[script]) for script in sorted(counts))
+        # Lead with the LANGUAGE, not the internal script-registry id
+        # ("han-alphabet" is jargon AND wrong -- Han is not an alphabet;
+        # Opus outer review). The dominant found script is named plainly.
+        found_script = max(counts, key=counts.get)
+        lang = language_name or expected
         return [MechanicalFailure(
             CHECK_SCRIPT,
-            "wrong-script: expected %s script is entirely absent after "
-            "stripping DNT/masks/digits; letter counts {%s}"
-            % (expected, summary),
+            "this translation has no %s characters at all -- it looks "
+            "like it was never actually translated (the letters it does "
+            "use are mostly %s); replace it with a real %s translation"
+            % (lang, found_script, lang),
         )]
     return []
 
@@ -451,7 +472,10 @@ def _check_wrong_language(
     for ch in set(translation):
         claimed = markers.get(ch)
         if claimed:
-            hits.setdefault(claimed, []).append("U+%04X" % ord(ch))
+            # Glyph beside codepoint; message no longer ascii-by-
+            # construction -- print sites must _ascii() (see _check_digits).
+            hits.setdefault(claimed, []).append(
+                "'%s' (U+%04X)" % (ch, ord(ch)))
     if not hits:
         return []
     detail = "; ".join(
@@ -459,9 +483,11 @@ def _check_wrong_language(
         for claimed, chars in sorted(hits.items()))
     return [MechanicalFailure(
         CHECK_WRONG_LANGUAGE,
-        "wrong-language-marker: translation for %s contains %s -- likely a "
-        "same-script wrong-language string, which would anchor the voice "
-        "model to the WRONG language" % (language_name, detail),
+        "this %s translation contains characters that only appear in a "
+        "different language (%s) -- it may have been translated into the "
+        "wrong language; a session in %s could end up hearing the wrong "
+        "language spoken back, so check and fix it"
+        % (language_name, detail, language_name),
     )]
 
 
@@ -493,8 +519,9 @@ def _check_pins(
                 and target.lower() not in translation_lower:
             failures.append(MechanicalFailure(
                 CHECK_PIN,
-                "pin-missed: source contains '%s', whose official rendering "
-                "'%s' is absent from the translation" % (en_term, target),
+                "the source text says '%s', which has an official required "
+                "translation ('%s') that is missing from this translation "
+                "-- use the official wording" % (en_term, target),
             ))
     return failures
 
@@ -664,11 +691,11 @@ def coverage_findings(
             severity=SEVERITY_WARNING,
             rule=RULE_COVERAGE,
             path="coverage.%s" % lang,
-            message="translation-coverage: %s covers %d/%d strings -- %d "
-                    "missing (each falls back to the ENGLISH label in a %s "
-                    "session; re-run the bake to fill the gap). First "
-                    "missing: %s" % (lang, n, total, total - n, lang,
-                                     examples),
+            message="%s covers %d/%d strings -- the other %d have no "
+                    "translation, so a %s session will hear the ENGLISH "
+                    "text instead in those spots; re-run the translation "
+                    "pass to fill the gap. First missing: %s"
+                    % (lang, n, total, total - n, lang, examples),
         ))
     return findings
 
@@ -727,7 +754,9 @@ def lint_kits(
                 severity=SEVERITY_WARNING,
                 rule=RULE_MECHANICAL,
                 path="schema.json",
-                message="unreadable schema (%s) -- kit skipped"
+                message="this kit's schema.json could not be read (%s) -- "
+                        "it was skipped and needs to be fixed or "
+                        "re-extracted"
                         % type(exc).__name__,
             )]
             continue

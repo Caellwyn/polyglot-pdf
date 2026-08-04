@@ -101,7 +101,7 @@ def test_lint_missing_instructions_aggregates_and_respects_exclusions():
     # the askable/uncovered field 'a' (b read_only + c signature excluded, d
     # covered).
     assert len(hits) == 1
-    assert "1 of 2 askable" in hits[0].message and "a" in hits[0].message
+    assert "1 of 2 fields" in hits[0].message and "a" in hits[0].message
 
 
 def test_lint_too_long_restatement_and_screen_ref():

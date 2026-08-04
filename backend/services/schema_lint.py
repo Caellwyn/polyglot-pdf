@@ -79,13 +79,15 @@ Rules (stable ids; one finding per violation site):
                                 otherwise emit one warning per field). bd
                                 wsao.3
 - help-instructions-too-long WARNING instructions exceed the hard bound
-                                (guidance_contract.INSTRUCTIONS_HARD_CHARS) --
-                                they ride the SPOKEN ask-hint
+                                (guidance_contract.INSTRUCTIONS_HARD_CHARS).
+                                Lint-only: nothing truncates -- the full text
+                                rides into the model context on every ask and
+                                can be spoken aloud whole
 - help-instructions-label-restatement WARNING instructions add nothing beyond
                                 the field's own name/option labels
-- help-instructions-screen-ref WARNING instructions carry on-screen deixis or
-                                a "see page/instructions" cross-reference --
-                                meaningless in a spoken channel
+- help-instructions-screen-ref WARNING instructions point at things only a
+                                reader can see ("see page 7", "the box
+                                below") -- meaningless in a spoken channel
 - help-details-not-contained WARNING a help.details paragraph is NOT a
                                 verbatim (normalized) excerpt of
                                 metadata.booklet_text -- the zero-trust
@@ -202,6 +204,22 @@ class LintFinding:
         }
 
 
+def _quoted(value: Any, limit: int = 80) -> str:
+    """repr() a user-controlled string bounded with an EXPLICIT ellipsis.
+
+    Interpolated option values / claims are the only unbounded inputs in
+    ERROR messages, and the publish gate renders each finding [:400] --
+    an over-long value used to push the trailing remedy clause off the
+    visible segment (Opus outer review). The marker makes the truncation
+    honest; ids in the to-review message are deliberately NOT truncated
+    (a mangled id defeats its own remedy) -- only quoted VALUES are.
+    """
+    text = str(value)
+    if len(text) <= limit:
+        return repr(text)
+    return repr(text[:limit]) + "..."
+
+
 def has_errors(findings: List[LintFinding]) -> bool:
     return any(f.severity == SEVERITY_ERROR for f in findings)
 
@@ -230,7 +248,8 @@ def _walk_condition(
     if not isinstance(cond, dict):
         out.append(LintFinding(
             SEVERITY_ERROR, "condition-malformed", path,
-            f"condition must be an object, found {type(cond).__name__}",
+            f"this condition is a {type(cond).__name__}, not a set of "
+            "rules -- rebuild it under the field's Conditional Logic section",
         ))
         return []
 
@@ -240,8 +259,8 @@ def _walk_condition(
     if buckets and has_atom_keys:
         out.append(LintFinding(
             SEVERITY_ERROR, "composite-depth", path,
-            "condition mixes atomic keys (field/operator) with composite "
-            f"buckets ({', '.join(sorted(buckets))}) -- use ONE shape",
+            "this condition mixes a single rule with a group of rules "
+            f"({', '.join(sorted(buckets))}) -- pick one shape, not both",
         ))
         return []
 
@@ -255,7 +274,8 @@ def _walk_condition(
         if not isinstance(members, list):
             out.append(LintFinding(
                 SEVERITY_ERROR, "condition-malformed", f"{path}.{bucket}",
-                "bucket must be a list of atomic conditions",
+                "this group must be a list of rules -- rebuild it under the "
+                "field's Conditional Logic section",
             ))
             continue
         for i, member in enumerate(members):
@@ -263,14 +283,17 @@ def _walk_condition(
             if not isinstance(member, dict):
                 out.append(LintFinding(
                     SEVERITY_ERROR, "condition-malformed", member_path,
-                    f"bucket member must be an object, found {type(member).__name__}",
+                    f"this rule is a {type(member).__name__}, not a single "
+                    "field/operator rule -- rebuild it under the field's "
+                    "Conditional Logic section",
                 ))
                 continue
             if vocab.CONDITION_GROUP_BUCKETS & member.keys():
                 out.append(LintFinding(
                     SEVERITY_ERROR, "composite-depth", member_path,
-                    "bucket members must be atomic {field, operator, value} "
-                    "conditions -- nesting is not allowed (depth <= 1)",
+                    "a rule inside a group cannot itself contain another "
+                    "group -- only one level of grouping is allowed; "
+                    "flatten it",
                 ))
                 continue
             atoms.append((member_path, member))
@@ -280,8 +303,8 @@ def _walk_condition(
         # path must report it too (Codex PR #302).
         out.append(LintFinding(
             SEVERITY_ERROR, "condition-malformed", path,
-            "composite condition has no conditions (at least one non-empty "
-            "bucket of all_of/any_of/none_of is required)",
+            "this group of rules is empty -- add at least one rule, or "
+            "remove the group",
         ))
     return atoms
 
@@ -305,15 +328,17 @@ def _check_atom(
     if not isinstance(operator, str) or not operator:
         out.append(LintFinding(
             SEVERITY_ERROR, "condition-malformed", atom_path,
-            "condition is missing its operator",
+            "this rule has no comparison type set -- open it in the "
+            "Conditional Logic section and choose one",
         ))
         return
     spec = vocab.OPERATORS.get(operator)
     if spec is None:
         out.append(LintFinding(
             SEVERITY_ERROR, "unknown-operator", atom_path,
-            f"operator {operator!r} is not in the v2 registry (allowed: "
-            f"{', '.join(sorted(vocab.ALLOWED_OPERATORS))})",
+            f"the condition uses {operator!r}, which is not a recognized "
+            f"comparison type -- change it to one of: "
+            f"{', '.join(sorted(vocab.ALLOWED_OPERATORS))}",
         ))
         return
 
@@ -322,14 +347,16 @@ def _check_atom(
         if not isinstance(ref, str) or not ref:
             out.append(LintFinding(
                 SEVERITY_ERROR, "condition-malformed", atom_path,
-                "condition is missing its trigger field id",
+                "this rule does not say which field triggers it -- open it "
+                "under Conditional Logic and pick a field",
             ))
             return
         trigger_field = fields_by_id.get(ref)
         if trigger_field is None:
             out.append(LintFinding(
                 SEVERITY_ERROR, "ref-unresolved-field", atom_path,
-                f"references non-existent field {ref!r}",
+                f"this rule points at field {ref!r}, which does not exist "
+                "in this form -- pick a real field or delete the rule",
             ))
             return
 
@@ -351,14 +378,17 @@ def _check_atom(
             if not tolerated_v1_idiom:
                 out.append(LintFinding(
                     SEVERITY_ERROR, "operator-trigger", atom_path,
-                    f"field type {trigger_type!r} cannot trigger conditions",
+                    f"a {trigger_type!r} field cannot trigger a condition -- "
+                    "pick a different trigger field, or remove this rule",
                 ))
                 return
         elif trigger_type not in spec.trigger_types and not tolerated_v1_idiom:
             out.append(LintFinding(
                 SEVERITY_ERROR, "operator-trigger", atom_path,
-                f"operator {operator!r} is not valid on a {trigger_type!r} "
-                f"trigger (valid on: {', '.join(sorted(spec.trigger_types))})",
+                f"{operator!r} cannot be used on a {trigger_type!r} field -- "
+                f"this comparison only works when the trigger field is one "
+                f"of: {', '.join(sorted(spec.trigger_types))}; pick a "
+                f"different trigger field, or change the comparison",
             ))
             return
 
@@ -371,14 +401,16 @@ def _check_atom(
         if is_v2 and value is not None:
             out.append(LintFinding(
                 SEVERITY_ERROR, "value-arity", atom_path,
-                f"operator {operator!r} takes no value (found one)",
+                f"{operator!r} does not take a comparison value, but one is "
+                "set -- remove it",
             ))
         return
     if spec.value_arity == "list":
         if not isinstance(value, list) or not value:
             out.append(LintFinding(
                 SEVERITY_ERROR, "value-arity", atom_path,
-                f"operator {operator!r} requires a non-empty list value",
+                f"{operator!r} needs a list of one or more values to "
+                "compare against -- add at least one",
             ))
             return
         values = value
@@ -386,7 +418,8 @@ def _check_atom(
         if value is None or isinstance(value, list):
             out.append(LintFinding(
                 SEVERITY_ERROR, "value-arity", atom_path,
-                f"operator {operator!r} requires a single scalar value",
+                f"{operator!r} needs a single comparison value, not a list "
+                "or nothing -- set exactly one",
             ))
             return
         values = [value]
@@ -419,8 +452,10 @@ def _check_atom(
                 if str(v) not in option_values:
                     out.append(LintFinding(
                         SEVERITY_ERROR, "ref-option-value", atom_path,
-                        f"value {v!r} is not an option value of trigger "
-                        f"{trigger_field.get('id')!r}",
+                        f"this rule compares against {_quoted(v)}, which is not one "
+                        f"of the answer choices on trigger field "
+                        f"{trigger_field.get('id')!r} -- pick one of its "
+                        "real choices",
                     ))
 
 
@@ -450,29 +485,32 @@ def _check_options(
         if value is None or (isinstance(value, str) and value.strip() == ""):
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-missing", opt_path,
-                "option has no value (every option needs a stable value)",
+                "this answer choice has no stored value -- set one (it can "
+                "differ from the label the user sees)",
             ))
             continue
         value_str = str(value)
         if "," in value_str:
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-comma", opt_path,
-                f"option value {value_str!r} contains a comma -- commas are the "
-                "voice multi-select join delimiter and are forbidden in values",
+                f"the value {_quoted(value_str)} contains a comma, which breaks "
+                "multi-select answers spoken aloud -- remove the comma "
+                "from the value",
             ))
         if is_v2 and not vocab.is_valid_option_slug(value_str):
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-slug", opt_path,
-                f"option value {value_str!r} is not a v2 slug "
-                "(lowercase ascii [a-z0-9_-], minted from the label)",
+                f"the value {_quoted(value_str)} is not in the required format "
+                "(lowercase letters, numbers, hyphens, underscores only) -- "
+                "regenerate it from the label",
             ))
         seen_values[value_str] = seen_values.get(value_str, 0) + 1
     for value_str, count in seen_values.items():
         if count > 1:
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-duplicate", field_path,
-                f"option value {value_str!r} appears {count} times (option "
-                "values must be unique per field)",
+                f"{count} answer choices on this field share the value "
+                f"{_quoted(value_str)} -- give each choice its own unique value",
             ))
 
 
@@ -522,8 +560,11 @@ def _check_cycles(
                     out.append(LintFinding(
                         SEVERITY_WARNING, "show-if-cycle",
                         f"fields (id={nxt})",
-                        "show_if dependencies form a cycle: "
-                        + " -> ".join(path[path.index(nxt):] + [nxt]),
+                        "these fields' show/hide rules point at each other "
+                        "in a loop, so none of them can ever resolve: "
+                        + " -> ".join(path[path.index(nxt):] + [nxt])
+                        + " -- break the loop by removing or changing one "
+                        "of these rules",
                     ))
             elif state == WHITE:
                 color[nxt] = GRAY
@@ -624,7 +665,8 @@ def _check_dump_claims(
         if len(owners) > 1:
             out.append(LintFinding(
                 SEVERITY_ERROR, "dump-widget-multiclaim", f"widget {name!r}",
-                "claimed by more than one field: "
+                "this PDF box is claimed by more than one field, so filling "
+                "it will misbehave -- unclaim it from all but one field: "
                 + ", ".join(sorted(owners)),
             ))
             continue
@@ -633,7 +675,9 @@ def _check_dump_claims(
             (owner,) = owners
             out.append(LintFinding(
                 SEVERITY_ERROR, "dump-widget-multiclaim", f"widget {name!r}",
-                f"claimed by more than one option of field {owner!r}: "
+                f"this PDF box is claimed by more than one answer choice on "
+                f"field {owner!r}, so filling it will misbehave -- unclaim "
+                "it from all but one choice: "
                 + ", ".join(sorted(option_kinds)),
             ))
         # field-level + a single option of the SAME field is the benign
@@ -656,8 +700,9 @@ def _check_dump_claims(
     for name in fillable_unclaimed:
         out.append(LintFinding(
             SEVERITY_WARNING, "dump-widget-unclaimed", f"widget {name!r}",
-            "no field maps to this AcroForm widget (extraction likely dropped "
-            "it) -- backfill or model it explicitly",
+            "this fillable box on the PDF has no field pointing at it, so "
+            "it can never be filled in -- add a field for it, or map it "
+            "onto an existing field",
         ))
 
 
@@ -694,9 +739,10 @@ def _check_field_backing(
                 out.append(LintFinding(
                     SEVERITY_ERROR, "field-unbacked",
                     f"fields[{i}] (id={f.get('id')})",
-                    f"field {f.get('id')!r} (type={f.get('type')!r}) names no "
-                    "PDF widget at all -- it can never be filled or verified; "
-                    "bind it to a real widget or mark it ignored",
+                    f"field {f.get('id')!r} is not connected to any box on "
+                    "the PDF, so an answer here can never be written to the "
+                    "form and there is no way to check it -- connect it to "
+                    "a PDF box, or mark the field ignored",
                 ))
 
     if dump is None:
@@ -717,8 +763,9 @@ def _check_field_backing(
                 out.append(LintFinding(
                     SEVERITY_ERROR, "field-claim-unresolvable",
                     f"fields[{i}] (id={f.get('id')}) {kind}",
-                    f"pdf_field_name {claim!r} resolves to zero AcroForm "
-                    "widgets in this PDF -- the claim points at nothing",
+                    f"this field is connected to PDF box {_quoted(claim)}, but no "
+                    "box with that name exists in this PDF -- reconnect it "
+                    "to a real box",
                 ))
 
 
@@ -737,7 +784,9 @@ def lint_schema(
     if not isinstance(schema, dict):
         return [LintFinding(
             SEVERITY_ERROR, "condition-malformed", "$",
-            f"schema must be an object, found {type(schema).__name__}",
+            "this schema file is not structured as a form (its top "
+            "level is not a set of named properties) -- restore it from "
+            "a working copy or re-run extraction",
         )]
 
     is_v2 = str(schema.get("schema_version")) == vocab.SCHEMA_VERSION_V2
@@ -807,9 +856,10 @@ def lint_schema(
                 and (f.get("show_if") or f.get("require_if"))):
             out.append(LintFinding(
                 SEVERITY_WARNING, "readonly-conditional-no-unlock", field_path,
-                "field is read_only and conditionally shown/required but has no "
-                "unlock_method -- it will be permanently non-fillable when shown "
-                "(add conditional_behavior.unlock_method=flip_readonly_bit)",
+                "this field is locked, and a condition makes it appear or "
+                "become required, but nothing unlocks it -- when that "
+                "happens, no one can ever fill it in; set its unlock method "
+                "to flip_readonly_bit",
             ))
         # An unlock_method WITHOUT pdf_field_flag_change is invisible-broken
         # (bd polyglot-pdf-xbfm fresh-eyes): the editor UI and the check above
@@ -822,11 +872,11 @@ def lint_schema(
                                or cl.get("pdf_field_flag_change")):
             out.append(LintFinding(
                 SEVERITY_WARNING, "unlock-missing-flag-change", field_path,
-                "unlock_method is set but pdf_field_flag_change is missing -- "
-                "the PDF filler cannot flip the read-only bit without it, so "
-                "the field silently stays locked in the filled PDF (add "
-                "pdf_field_flag_change {bit: 0, current_value: 1, "
-                "required_value: 0} beside the unlock_method)",
+                "this field is set to unlock, but is missing the PDF flag "
+                "change that actually unlocks it -- the filled PDF will "
+                "silently stay locked even though the form looks correct; "
+                "add pdf_field_flag_change (bit 0, current value 1, "
+                "required value 0) next to the unlock method",
             ))
 
         # controls_fields / conditional_fields were DELETED at the P6.2 flip (bd
@@ -844,9 +894,11 @@ def lint_schema(
                     out.append(LintFinding(
                         SEVERITY_ERROR, "legacy-trigger-side-logic",
                         f"{field_path}.{legacy_key}",
-                        f"{legacy_key} was removed in schema v2 (its behavior "
-                        f"lives target-side in show_if / require_if now) -- "
-                        f"migrate it",
+                        f"this field still uses the old {legacy_key} way of "
+                        "showing/requiring other fields, which the app no "
+                        "longer reads -- that behavior is silently lost; "
+                        "rebuild it as a show_if / require_if rule on the "
+                        "target field(s) instead",
                     ))
 
             # required lives at validation.required, the shape every kit + the
@@ -861,9 +913,10 @@ def lint_schema(
                 out.append(LintFinding(
                     SEVERITY_ERROR, "required-top-level",
                     f"{field_path}.required",
-                    "required must live at validation.required, not the field top "
-                    "level -- a top-level required is read by no consumer, so this "
-                    "field is silently OPTIONAL; move it into validation",
+                    "this field is marked required in the wrong place, so "
+                    "nothing actually enforces it -- the form will silently "
+                    "accept it left blank; move the required setting into "
+                    "the field's validation rules",
                 ))
 
     _check_cycles(show_if_graph, out)
@@ -888,9 +941,10 @@ def lint_schema(
             out.append(LintFinding(
                 SEVERITY_ERROR, "to-review-pending",
                 f"fields[{i}] (id={f.get('id')})",
-                f"field is still filed in 'To review' section {sid!r} -- "
-                f"re-file it into a real section (schema editor) before the "
-                f"form can be marked complete",
+                f"this field is still sitting in the holding section "
+                f"{sid!r}, waiting for a human to decide where it belongs -- "
+                f"move it into a real section before the form can be "
+                f"marked complete",
             ))
     raw_sections = schema.get("sections")
     sections = [s for s in raw_sections if isinstance(s, dict)] \
@@ -907,10 +961,17 @@ def lint_schema(
             out.append(LintFinding(
                 SEVERITY_ERROR, "to-review-pending",
                 f"sections[{i}] (id={sid})",
-                f"'To review' section {sid!r} still lists {len(stale)} field "
-                f"id(s) ({', '.join(stale[:5])}{', ...' if len(stale) > 5 else ''}) "
-                f"-- empty it (re-file or remove the stale ids) before the "
-                f"form can be marked complete",
+                # Remedy FIRST, interpolated ids LAST: the publish gate
+                # renders each finding [:400], and the id list is the only
+                # unbounded input -- a trailing remedy was truncated off
+                # with realistic 30-char ids (Opus outer review, measured).
+                f"re-file any real field that still lacks a section, then "
+                f"delete the leftover ids -- the holding section {sid!r} "
+                f"lists {len(stale)} id(s) no field points back to "
+                f"(already filed elsewhere, missing a section, or naming "
+                f"no field): "
+                f"{', '.join(stale[:5])}"
+                f"{', ...' if len(stale) > 5 else ''}",
             ))
 
     _check_guidance(fields, schema, out)
@@ -985,9 +1046,9 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
             out.append(LintFinding(
                 SEVERITY_WARNING, "help-details-no-reference-floor",
                 "$.form_metadata.details",
-                "form-level details present but the schema has no "
-                "form_metadata.booklet_text -- the verbatim-containment "
-                "check cannot run; bake the booklet floor",
+                "this form has details text, but no official booklet text "
+                "to check it against, so it cannot be verified as accurate "
+                "-- add the booklet text for this form",
             ))
         else:
             if booklet_norm is None:
@@ -1001,10 +1062,11 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
                     out.append(LintFinding(
                         SEVERITY_WARNING, "help-details-not-contained",
                         "$.form_metadata.details",
-                        f"form-level details paragraph is not a verbatim "
-                        f"excerpt of the booklet text: \"{head}...\" -- the "
-                        f"details channel is SELECT-not-REWRITE "
-                        f"(guidance contract)",
+                        f"this form-level details text is not an exact "
+                        f"quote from the official booklet: \"{head}...\" -- "
+                        f"details must be copied word-for-word from the "
+                        f"booklet, never paraphrased or written from "
+                        f"memory; replace it with a real excerpt",
                     ))
 
     def _instr_of(f: Dict[str, Any]) -> str:
@@ -1020,9 +1082,10 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
         more = ", ..." if len(uncovered) > 5 else ""
         out.append(LintFinding(
             SEVERITY_WARNING, "help-instructions-missing", "$.fields",
-            f"{len(uncovered)} of {len(askable)} askable fields have no "
-            f"help.instructions ({sample}{more}) -- the voice AI has no "
-            f"authored guidance for them (sprint-16 coverage worklist)",
+            f"{len(uncovered)} of {len(askable)} fields the assistant asks "
+            f"about have no spoken guidance written yet ({sample}{more}) -- "
+            f"the assistant will ask about them with no help text at all; "
+            f"write instructions for each one",
         ))
 
     for i, f in enumerate(fields):
@@ -1038,9 +1101,14 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
             out.append(LintFinding(
                 SEVERITY_WARNING, "help-instructions-too-long",
                 f"{field_path}.help.instructions",
-                f"instructions are {len(instr)} chars (hard bound "
-                f"{guidance_contract.INSTRUCTIONS_HARD_CHARS}) -- they ride "
-                f"the spoken ask-hint; move depth into help.details",
+                f"these instructions are {len(instr)} characters, over the "
+                f"{guidance_contract.INSTRUCTIONS_HARD_CHARS}-character "
+                f"limit -- nothing gets cut off, but the assistant may read "
+                f"all of it out loud every time it asks this question, and "
+                f"it adds cost on every turn; shorten it to a quick spoken "
+                f"hint and move the extra depth into Details -- the assistant "
+                f"answers questions from Details but never reads it out in "
+                f"full",
             ))
 
         if instr.strip():
@@ -1054,15 +1122,19 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
                 out.append(LintFinding(
                     SEVERITY_WARNING, "help-instructions-label-restatement",
                     f"{field_path}.help.instructions",
-                    "instructions merely restate the field label/options -- "
-                    "empty beats filler (guidance contract)",
+                    "these instructions just repeat the field's name or "
+                    "answer choices without adding anything -- either "
+                    "write something that actually helps, or clear it "
+                    "and leave it empty",
                 ))
             if guidance_contract.SCREEN_REF_RE.search(instr):
                 out.append(LintFinding(
                     SEVERITY_WARNING, "help-instructions-screen-ref",
                     f"{field_path}.help.instructions",
-                    "instructions carry on-screen deixis or a 'see page/"
-                    "instructions' cross-reference -- meaningless when spoken",
+                    "the instructions say things like 'see page 7' or "
+                    "'check the box below', which mean nothing when spoken "
+                    "aloud -- rewrite them to say the actual requirement "
+                    "in words",
                 ))
 
         if not details.strip():
@@ -1072,9 +1144,9 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
             out.append(LintFinding(
                 SEVERITY_WARNING, "help-details-no-reference-floor",
                 f"{field_path}.help.details",
-                "help.details present but the schema has no "
-                "form_metadata.booklet_text -- the verbatim-containment check "
-                "cannot run; bake the booklet floor",
+                "this field has details text, but no official booklet text "
+                "to check it against, so it cannot be verified as accurate "
+                "-- add the booklet text for this form",
             ))
         else:
             # normalize the (potentially 80KB+) booklet ONCE per schema, not
@@ -1090,22 +1162,26 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
                     out.append(LintFinding(
                         SEVERITY_WARNING, "help-details-not-contained",
                         f"{field_path}.help.details",
-                        f"details paragraph is not a verbatim excerpt of the "
-                        f"booklet text (normalized substring check failed): "
-                        f"\"{head}...\" -- the details channel is "
-                        f"SELECT-not-REWRITE (guidance contract)",
+                        f"this details text is not an exact quote from the "
+                        f"official booklet: \"{head}...\" -- details must be "
+                        f"copied word-for-word from the booklet, never "
+                        f"paraphrased or written from memory; replace it "
+                        f"with a real excerpt",
                     ))
 
         if len(details) > guidance_contract.DETAILS_INLINE_MAX_CHARS:
             out.append(LintFinding(
                 SEVERITY_WARNING, "help-details-oversize",
                 f"{field_path}.help.details",
-                f"details are {len(details)} chars; only the first "
-                f"{guidance_contract.DETAILS_INLINE_MAX_CHARS} ride the voice "
-                f"model inline (clamp+topic-index backstop) -- the overflow "
-                f"reaches only the secretary. The enrichment engine should "
-                f"SELECT verbatim excerpts to fit and INDEX the rest "
-                f"(bd wsao.8)",
+                f"these details are {len(details)} characters, over the "
+                f"{guidance_contract.DETAILS_INLINE_MAX_CHARS}-character "
+                f"budget the assistant carries while the user is on this "
+                f"field -- the extra text is cut (at a paragraph break "
+                f"where possible) and "
+                f"replaced with a list of the dropped headings, which the "
+                f"assistant can still look up on request, but that takes an "
+                f"extra step; trim the excerpt to the parts that matter "
+                f"most so the answer is at hand immediately",
             ))
 
         if (len(details) > guidance_contract.DETAILS_HEADINGS_REQUIRED_CHARS
@@ -1113,10 +1189,11 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
             out.append(LintFinding(
                 SEVERITY_WARNING, "help-details-headings-missing",
                 f"{field_path}.help.details",
-                f"details exceed "
-                f"{guidance_contract.DETAILS_HEADINGS_REQUIRED_CHARS} chars "
-                f"with no heading lines -- add the booklet's own headings "
-                f"(## / 'a.' / 'Exception N.')",
+                f"this details text is long "
+                f"(over {guidance_contract.DETAILS_HEADINGS_REQUIRED_CHARS} "
+                f"characters) with no headings, so no one can scan it or "
+                f"jump to a section -- add the booklet's own headings "
+                f"(for example '## Exceptions' or 'a. Nonresident aliens')",
             ))
 
 

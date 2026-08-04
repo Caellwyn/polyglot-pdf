@@ -178,8 +178,9 @@ async def verify_fresh_translations(
                 lint_flags.append(VerifyFlag(
                     taxonomy=FLAG_MECHANICAL, kind=item.kind,
                     source=item.source,
-                    message=item.problem + " (verification unavailable -- "
-                            "original kept unrectified)",
+                    message=item.problem + " -- automatic verification "
+                            "unavailable right now, so this was left "
+                            "as-is; review it by hand",
                 ))
         return _unavailable(fresh, len(items), lint_flags, str(exc))
 
@@ -348,6 +349,22 @@ async def _call(coro: Any, stage: str) -> Any:
     return result
 
 
+def _plain_reason(trace_entry: str) -> str:
+    """Strip the internal stage prefix -- exactly 'lint: ' or 'judge: ',
+    the only two prefixes trace[0] can carry: the 'lint: ' first entry is
+    written in verify_fresh_translations' stage-0 mechanical pass and the
+    'judge: ' first entry in _initial_round; no other site can write
+    index 0 -- so the remaining reason, which the lint/judge legs already
+    write as prose, can be quoted in a reviewer-facing message without
+    leaking pipeline jargon. Later trace entries ('attempt N: judge: ...')
+    are NOT handled: pass trace[0] only."""
+    reason = trace_entry
+    for prefix in ("lint: ", "judge: "):
+        if reason.startswith(prefix):
+            reason = reason[len(prefix):]
+    return reason
+
+
 def _finalize(items: List[_Item],
               fresh: Dict[str, Dict[str, str]]) -> VerifyResult:
     final = {kind: dict(values) for kind, values in fresh.items()}
@@ -366,8 +383,12 @@ def _finalize(items: List[_Item],
                 else FLAG_RECTIFIED
             flags.append(VerifyFlag(
                 taxonomy=taxonomy, kind=item.kind, source=item.source,
-                message="%s; rectified clean: '%s' -> '%s'"
-                        % (item.trace[0], item.original, item.resolved),
+                message="the checker flagged this (\"%s\") and it was "
+                        "automatically corrected: '%s' -> '%s' -- read the "
+                        "new wording and confirm it says the right thing"
+                        % ((_plain_reason(item.trace[0]) if item.trace
+                            else "a problem was found"),
+                           item.original, item.resolved),
             ))
         elif item.unresolved or (item.flagged_values
                                  and item.resolved is None):
@@ -379,19 +400,57 @@ def _finalize(items: List[_Item],
                     and item.latest_lint_clean_rectify:
                 final[item.kind][item.source] = \
                     item.latest_lint_clean_rectify
-                kept = "kept latest lint-clean rectify '%s'" \
-                    % item.latest_lint_clean_rectify
+                kept = ("the form currently uses the best automatic "
+                        "correction ('%s')"
+                        % item.latest_lint_clean_rectify)
             else:
                 final[item.kind][item.source] = item.original
-                kept = "kept original '%s'" % item.original
+                kept = ("the form currently uses the original text ('%s')"
+                        % item.original)
             flags.append(VerifyFlag(
                 taxonomy=FLAG_UNRESOLVED, kind=item.kind,
                 source=item.source,
-                message="UNRESOLVED after bounded rectify (%s); %s; trace: %s"
-                        % ("mechanical-origin" if item.mechanical_origin
-                           else "judge-origin", kept,
-                           " | ".join(item.trace)),
+                message="this translation still looks wrong after "
+                        "automatic correction was tried -- review it and "
+                        "fix it by hand; %s. First problem found: %s"
+                        % (kept, (_plain_reason(item.trace[0]) if item.trace
+                            else "a problem was found")),
             ))
+    for item in items:
+        # EXACTLY the unresolved-flag branch's condition (which sits under
+        # an elif resolved-is-None): the log and the reviewer flag must
+        # name the same item set or a future loop edit desynchronizes
+        # them (Opus outer review, latent).
+        if item.resolved is None and (item.unresolved or item.flagged_values):
+            # The reviewer-facing flag deliberately drops the retry trace
+            # (bd xfdb de-jargoning); keep it HERE so a repeatedly-failing
+            # translation stays diagnosable without a re-run (Opus outer
+            # review pass 2).
+            # Kit-authoring text only (labels/spoken names + judge prose),
+            # never end-user data, so it is safe under the PII policy.
+            # ESCAPE FIRST, THEN bound to 1200: the root log filter
+            # (backend/utils/logging.py) silently DROPS sub-ERROR records
+            # whose rendered JSON exceeds 2000 chars, and ascii-escaping
+            # inflates raw glyphs ~6x -- slicing before escaping (the first
+            # attempt) still busted the filter for the non-Latin traces
+            # this line exists to diagnose. Post-escape 1200 chars render
+            # to ~1400 of JSON, always under the cap (Opus outer review,
+            # measured both orders).
+            # source is bounded+escaped like trace: it is the OTHER
+            # unbounded kit string on this record, and a long section
+            # title (630 chars ship today) would push the rendered JSON
+            # over the same 2000-char drop threshold (Opus outer review,
+            # measured: 200-char source + full escaped trace = ~1814).
+            _log.info(
+                "translation_verify_unresolved_trace",
+                kind=item.kind,
+                source=item.source
+                    .encode("ascii", "backslashreplace")
+                    .decode("ascii")[:200],
+                trace=" | ".join(item.trace)
+                    .encode("ascii", "backslashreplace")
+                    .decode("ascii")[:1200],
+            )
     _log.info(
         "translation_verify_complete",
         checked=counts["checked"], mechanical=counts["mechanical"],

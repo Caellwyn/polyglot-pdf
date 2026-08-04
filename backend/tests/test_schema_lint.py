@@ -80,7 +80,7 @@ def test_unknown_operator_trips_once():
     assert _rules(findings) == ["unknown-operator"]
     assert "is_selected" in findings[0].message
     # The message names the allowed set so the finding is actionable.
-    assert "allowed:" in findings[0].message
+    assert "change it to one of:" in findings[0].message
 
 
 def test_value_arity_trips_once():

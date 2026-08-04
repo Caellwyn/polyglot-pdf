@@ -35,19 +35,19 @@ interface ValidationPanelProps {
 // hover title. Unmapped ids fall back to the raw id (forward-compatible with new
 // rules the backend adds).
 const RULE_LABELS: Record<string, string> = {
-  'unknown-operator': 'Unknown operator',
-  'value-arity': 'Wrong value shape',
-  'option-value-missing': 'Option has no value',
-  'option-value-duplicate': 'Duplicate option value',
-  'option-value-comma': 'Comma in option value',
-  'option-value-slug': 'Option value not a slug',
-  'ref-unresolved-field': 'Unresolved field reference',
-  'operator-trigger': 'Operator not valid on trigger',
-  'ref-option-value': 'Unknown option reference',
-  'condition-malformed': 'Malformed condition',
-  'composite-depth': 'Nested condition too deep',
-  'show-if-cycle': 'Circular show-if dependency',
-  'dump-widget-multiclaim': 'PDF widget claimed twice',
+  'unknown-operator': 'Unrecognized comparison',
+  'value-arity': 'Wrong comparison value',
+  'option-value-missing': 'Answer choice has no value',
+  'option-value-duplicate': 'Duplicate answer value',
+  'option-value-comma': 'Comma in answer value',
+  'option-value-slug': 'Answer value in wrong format',
+  'ref-unresolved-field': 'Points at a missing field',
+  'operator-trigger': 'Comparison not valid here',
+  'ref-option-value': 'Not a real answer choice',
+  'condition-malformed': 'Broken condition',
+  'composite-depth': 'Condition nested too deep',
+  'show-if-cycle': 'Show/hide rules loop forever',
+  'dump-widget-multiclaim': 'PDF box claimed twice',
   // PDF-mapping + review-state rules. These were reaching reviewers as their
   // raw internal ids ("field-claim-unresolvable"), which reads as a system
   // error rather than something to fix -- caught by the rule-label parity test
@@ -55,38 +55,86 @@ const RULE_LABELS: Record<string, string> = {
   'dump-widget-unclaimed': 'PDF box not used by any field',
   'field-claim-unresolvable': 'Field points at a missing PDF box',
   'field-unbacked': 'Field has no PDF box',
-  'readonly-conditional-no-unlock': 'Read-only field can never be filled',
+  'readonly-conditional-no-unlock': 'Locked field can never be filled',
   'unlock-missing-flag-change': 'Unlock is missing its PDF flag change',
   'required-top-level': 'Required in the wrong place',
   'legacy-trigger-side-logic': 'Old-style trigger logic',
-  'to-review-pending': 'Section still needs re-filing',
+  'to-review-pending': 'Still needs re-filing',
   // Translation verify/rectify gate flags (bd polyglot-pdf-9djc): persisted by
   // the bake into _bakeoff provenance and re-emitted by the backend linter.
   // All WARNING -- the human-review worklist for baked translations.
-  'translation-drift-rectified': 'Translation drift (auto-corrected)',
-  'translation-drift-unresolved': 'Translation drift (needs human review)',
+  'translation-drift-rectified': 'Translation auto-corrected',
+  'translation-drift-unresolved': 'Translation needs human review',
   'translation-ambiguous-source': 'Ambiguous source text',
-  'translation-mechanical': 'Translation mechanical check',
+  'translation-mechanical': 'Translation check failed',
   'translation-coverage': 'Translation coverage gap',
   // Guidance-content rules (bd wsao.3, sprint-16): the instructions/details
   // authoring worklist. All WARNING; the coverage rule is ONE aggregated
   // finding per schema (path $.fields, no field focus by design).
-  'help-instructions-missing': 'Guidance coverage gap',
-  'help-instructions-too-long': 'Instructions too long (spoken bound)',
-  'help-instructions-label-restatement': 'Instructions restate the label',
-  'help-instructions-screen-ref': 'Instructions reference the page/screen',
-  'help-details-not-contained': 'Details not verbatim from booklet',
-  'help-details-no-reference-floor': 'Details without booklet floor',
-  'help-details-oversize': 'Details oversize',
+  'help-instructions-missing': 'No spoken guidance yet',
+  'help-instructions-too-long': 'Instructions too long',
+  'help-instructions-label-restatement': 'Instructions just repeat the label',
+  'help-instructions-screen-ref': 'Instructions refer to the screen',
+  'help-details-not-contained': 'Details not a verbatim quote',
+  'help-details-no-reference-floor': 'No booklet text to check details against',
+  'help-details-oversize': 'Details too long to reach the assistant',
   'help-details-headings-missing': 'Details missing headings',
   // The staleness gate (bd anim): computed FRESH each lint pass by
   // _check_guidance_identity_drift, not re-emitted from the bake report.
   'guidance-identity-stale': 'Guidance may be out of date',
   // Guidance verify-loop flags (bd wsao.5), re-emitted from the persisted
   // bake report -- the instructions_enrich analog of the translation flags.
-  'instructions-rectified': 'Guidance revised by verify loop',
-  'instructions-ungrounded-dropped': 'Guidance dropped (failed judge)',
-  'instructions-enrich-unavailable': 'Guidance judge unavailable',
+  'instructions-rectified': 'Guidance auto-corrected',
+  'instructions-ungrounded-dropped': 'Guidance dropped (failed a safety check)',
+  'instructions-enrich-unavailable': 'Guidance quality check unavailable',
+};
+
+// One imperative-sentence remedy per rule -- the action a reviewer takes,
+// independent of the (already-plain) message text. NOT rendered anywhere
+// yet (bd polyglot-pdf-xfdb, sprint-18 C12); a later bead (C1's embedded
+// findings) consumes this to show "what to do" beside each finding. Keep
+// every entry a single imperative sentence -- this is the "do this" line,
+// the message above already carries the "what happened" / "why it
+// matters" explanation.
+export const RULE_REMEDIES: Record<string, string> = {
+  'unknown-operator': 'Change the comparison to one of the allowed types.',
+  'value-arity': 'Fix the comparison value to match what this comparison type expects.',
+  'option-value-missing': 'Set a stored value for this answer choice.',
+  'option-value-duplicate': 'Give each answer choice its own unique value.',
+  'option-value-comma': 'Remove the comma from the answer value.',
+  'option-value-slug': 'Regenerate the value from the label.',
+  'ref-unresolved-field': 'Point this rule at a real field, or delete the rule.',
+  'operator-trigger': 'Pick a comparison type that is valid for this field.',
+  'ref-option-value': 'Pick one of the trigger field\'s real answer choices.',
+  'condition-malformed': 'Rebuild this condition under the Conditional Logic section of the field.',
+  'composite-depth': 'Flatten the nested condition to one level.',
+  'show-if-cycle': 'Remove or change one of the rules to break the loop.',
+  'dump-widget-multiclaim': 'Unclaim the PDF box from all but one field or choice.',
+  'dump-widget-unclaimed': 'Add a field for this PDF box, or map it onto an existing field.',
+  'field-claim-unresolvable': 'Reconnect this field to a real PDF box.',
+  'field-unbacked': 'Connect this field to a PDF box, or mark it ignored.',
+  'readonly-conditional-no-unlock': 'Set the unlock method to flip_readonly_bit.',
+  'unlock-missing-flag-change': 'Add a pdf_field_flag_change next to the unlock method.',
+  'required-top-level': 'Move the required setting into the field\'s validation rules.',
+  'legacy-trigger-side-logic': 'Rebuild this as a show_if / require_if rule on the target field.',
+  'to-review-pending': 'File the field into a real section; if the holding section lists leftover ids no field uses, delete those ids.',
+  'translation-drift-rectified': 'Review the auto-corrected translation.',
+  'translation-drift-unresolved': 'Review and correct this translation by hand.',
+  'translation-ambiguous-source': 'Add context or a glossary entry for this source text.',
+  'translation-mechanical': 'Fix the translation as described in the message.',
+  'translation-coverage': 'Re-run the translation pass to fill the missing strings.',
+  'help-instructions-missing': 'Write spoken instructions for this field.',
+  'help-instructions-too-long': 'Shorten the instructions and move detail into Details.',
+  'help-instructions-label-restatement': 'Rewrite the instructions to add real guidance, or clear them.',
+  'help-instructions-screen-ref': 'Rewrite the instructions to say the requirement in words.',
+  'help-details-not-contained': 'Replace the details with a verbatim excerpt from the booklet.',
+  'help-details-no-reference-floor': 'Add the booklet text for this form.',
+  'help-details-oversize': 'Trim the details down to the most important excerpt.',
+  'help-details-headings-missing': 'Add headings from the booklet to the details text.',
+  'guidance-identity-stale': 'Confirm the guidance still reads correctly, or re-author it.',
+  'instructions-rectified': 'Review the auto-corrected guidance.',
+  'instructions-ungrounded-dropped': 'Write guidance for this field by hand.',
+  'instructions-enrich-unavailable': 'Re-run guidance authoring for this kit.',
 };
 
 // LAST-RESORT fallback for a session with NO backend reachable at all: the

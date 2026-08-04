@@ -211,7 +211,7 @@ def test_flags_block_and_artifact(kit, monkeypatch, capsys, tmp_path):
     assert "translation-ambiguous-source" in out
     # Paths (rule + kit location) print; messages do not (cp1252 rule).
     assert "label_translations.spanish" in out
-    assert "under-determined" not in out
+    assert "could not tell what this English text means" not in out
     assert f"wrote flags artifact {flags_path}" in out
 
     raw = flags_path.read_bytes()
@@ -223,7 +223,8 @@ def test_flags_block_and_artifact(kit, monkeypatch, capsys, tmp_path):
     assert flags and all(f["severity"] == "WARNING" for f in flags)
     assert {f["rule"] for f in flags} == {"translation-ambiguous-source"}
     # The artifact carries what the console withheld: the full messages.
-    assert all("under-determined" in f["message"] for f in flags)
+    assert all("could not tell what this English text means" in f["message"]
+               for f in flags)
 
 
 def test_flags_out_written_even_when_flag_free(kit, monkeypatch, tmp_path):
