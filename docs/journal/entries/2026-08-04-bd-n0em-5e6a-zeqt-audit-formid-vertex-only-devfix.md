@@ -85,6 +85,44 @@ FAILs, which is the assess loop doing exactly its job:
    Notable asymmetry worth remembering: the backend half had a deliberate
    source-parity guard while the frontend half, equally revertible, had nothing.
 
+**Fresh-eyes round 2 (Opus clearing round): GAPS-FOUND (5), all adopted.** Two
+were rubric FAILs that invalidated this bead's headline claim:
+1. ADOPTED (n0em criterion 1 FAIL -- **the tests were vacuous**): the reviewer
+   reverted the route to its exact pre-fix form and **6 of the 7 tests still
+   passed**. The module tested a local REPRODUCTION of the route's schema
+   construction, so it could not observe the route at all; only the
+   `inspect.getsource` substring guard fired.
+2. ADOPTED (n0em criterion 2 FAIL): worse, the reviewer defeated that guard with
+   a realistic ONE-TOKEN mutation -- `if jit_form_title or jit_form_number:` ->
+   `if jit_form_title:` -- which leaves both guarded substrings intact. All 7
+   tests passed against a live bug matching a scenario one of them claimed to
+   cover. The reviewer then demonstrated that a real route-level test costs ~20
+   lines using the existing `TestLiveHandshakeFlow` TestClient harness.
+   **Rewritten**: the module now drives the REAL `/ws/fill` route over a
+   websocket and asserts the `form_id` the CallbackHandler is actually
+   constructed with (the value `log_field_confirmation` writes), including the
+   reconnect case as three sequential round-trips sharing one
+   `form_session_id`. Re-verified against BOTH mutations: the subtle `or`
+   removal now fails 1 test, the full revert fails 3 (the fourth, older-client
+   degradation, correctly still passes).
+3-4. ADOPTED (5e6a criterion 2 FAIL): two more stragglers recommending the
+   forbidden flip -- `deploy-demo.sh:74` ("flipping BACK to AI Studio ... needs
+   no stale pin cleared", in the same comment block whose next paragraph
+   forbids it) and `config-deployment.md:80` ("reaching it still requires
+   VERTEXAI=false" with no local-only qualifier, in a deployment doc).
+5. ADOPTED (reviewer filed as out-of-scope; fixed inline as it is two lines the
+   diff itself falsified): `form_filling_service.py:610` asserted the
+   manifest-first handshake "carries no form_metadata and resolves to unknown"
+   -- true before this change, false after.
+
+**Lesson recorded against myself:** I reported these tests as
+"mutation-verified" after checking exactly ONE mutation (renaming the dict key),
+which the substring guard happened to catch. I never tested the mutation that
+mattered. A source-substring guard proves a string is present, not that
+behavior is correct -- it is a weak substitute for exercising the real code
+path, and claiming verification on the strength of one convenient mutation is
+how a vacuous test ships wearing a verified label.
+
 ## Lessons
 
 - **A durable sink makes every latent metadata defect permanent.** `form_id`

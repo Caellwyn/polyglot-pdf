@@ -13,161 +13,131 @@ transport (the SHIPPED DEFAULT -- USE_DTI/CONTINUOUS_SESSION default true) the
 handshake carries a manifest + first_field_schema, NOT the full schema, so
 `form_metadata` was absent and the "unknown" fallback fired.
 
-The fix threads `form_number` through the JIT handshake alongside `form_title`.
-These tests pin the backend half: the minimal schema the route builds must
-carry `form_metadata.form_number` so the audit lookup resolves.
+These tests drive the REAL `/ws/fill` route over a TestClient websocket and
+assert the id that actually reaches the CallbackHandler -- the object that
+writes the audit record. An earlier cut of this module tested a local
+REPRODUCTION of the route's schema construction instead; an Opus review proved
+that vacuous by reverting the route and watching 6 of 7 tests still pass, and
+then defeated the accompanying `inspect.getsource` guard with a realistic
+one-token mutation (`if jit_form_title or jit_form_number:` -> `if
+jit_form_title:`) that left both guarded substrings intact. Route-level
+assertions are the only ones that actually pin this.
+
+No real Gemini call is reached: `start_session` only registers callbacks on the
+injected adapter (same property `TestLiveHandshakeFlow` in
+backend/tests/contract/test_websocket_protocol.py relies on).
+
+ASCII only (CLAUDE.md scar #6).
 """
-import backend.routes.websocket_routes as wsr
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from backend.main import app
+from backend.services.form_filling_service import FormFillingService
 
 
-def _build_jit_schema(handshake: dict) -> dict:
-    """Reproduce the route's JIT minimal-schema construction.
+@pytest.fixture
+def ws_client() -> TestClient:
+    return TestClient(app)
 
-    Mirrors the `is_jit_mode` branch of `_handle_fill_session` so the shape
-    under test is the one the route actually builds, without standing up a
-    WebSocket. If the route's construction changes, this helper must change
-    with it -- see the parity assertion in
-    test_route_source_still_builds_form_metadata_from_both_keys.
-    """
-    manifest = handshake.get("manifest")
-    first_field_schema = handshake.get("first_field_schema")
-    loaded_field_ids = handshake.get("loaded_field_ids", [])
-    jit_form_title = handshake.get("form_title")
-    jit_form_number = handshake.get("form_number")
 
-    schema = {
-        "source": "web",
-        "fields": [first_field_schema] if first_field_schema else [],
-        "manifest": manifest,
-        "loaded_field_ids": loaded_field_ids,
-        "jit_mode": True,
-        "parts": manifest.get("parts", []) if manifest else [],
+def _jit_handshake(**overrides) -> dict:
+    """A minimal valid manifest-first handshake; override per test."""
+    handshake = {
+        "type": "handshake_jit",
+        "manifest": {
+            "current_section": {
+                "section_id": "s1",
+                "fields": [{"id": "name", "name": "Full Name", "type": "text"}],
+            },
+            "previous_sections": [],
+            "parts": [],
+        },
+        "first_field_schema": {"id": "name", "name": "Full Name", "type": "text"},
+        "loaded_field_ids": [],
+        "form_title": "Application for IRS Individual Taxpayer Identification Number",
+        "form_number": "W-7",
+        "current_values": {},
     }
-    if jit_form_title or jit_form_number:
-        schema["form_metadata"] = {}
-        if jit_form_title:
-            schema["form_metadata"]["title"] = jit_form_title
-        if jit_form_number:
-            schema["form_metadata"]["form_number"] = jit_form_number
-    return schema
+    handshake.update(overrides)
+    return handshake
 
 
-def _derive_form_id(schema: dict) -> str:
-    """The exact lookup FormFillingService.start_session performs."""
-    return schema.get("form_metadata", {}).get("form_number", "unknown") if schema else "unknown"
+def _run_handshakes(ws_client: TestClient, handshakes: list[dict]) -> list[str]:
+    """Drive the real route once per handshake; return each session's form_id.
 
-
-def test_jit_handshake_carrying_form_number_yields_real_form_id():
-    """The regression: a W-7 session must log form_id='W-7', never 'unknown'."""
-    schema = _build_jit_schema({
-        "manifest": {"parts": []},
-        "form_title": "Application for IRS Individual Taxpayer Identification Number",
-        "form_number": "W-7",
-    })
-    assert schema["form_metadata"]["form_number"] == "W-7"
-    assert _derive_form_id(schema) == "W-7"
-
-
-def test_form_number_and_title_are_distinct_keys():
-    """form_title is a human label; form_number is the audit identifier.
-
-    Pinning both guards against a 'simplification' that collapses them -- the
-    trail would then record a prose title where an identifier belongs.
+    Spies on start_session so the assertion reads the id the CallbackHandler was
+    actually constructed with -- the value `log_field_confirmation` writes into
+    the audit record -- rather than re-deriving it in the test.
     """
-    schema = _build_jit_schema({
-        "manifest": {"parts": []},
-        "form_title": "Application for IRS Individual Taxpayer Identification Number",
-        "form_number": "W-7",
-    })
-    assert schema["form_metadata"]["title"] != schema["form_metadata"]["form_number"]
-    assert _derive_form_id(schema) == "W-7"
+    captured: list[str] = []
+    real_start = FormFillingService.start_session
+
+    async def spy(self, *args, **kwargs):
+        result = await real_start(self, *args, **kwargs)
+        handler = getattr(self, "_callback_handler", None)
+        captured.append(getattr(handler, "_form_id", None))
+        return result
+
+    with patch("backend.routes.websocket_routes.verify_token",
+               return_value={"uid": "test_user"}), \
+         patch.object(FormFillingService, "start_session", spy):
+        for handshake in handshakes:
+            with ws_client.websocket_connect("/ws/fill?token=test-token") as ws:
+                ws.send_json(handshake)
+                response = ws.receive_json()
+                assert response["type"] == "session_ready", response
+    return captured
 
 
-def test_title_only_handshake_still_builds_metadata_and_degrades_to_unknown():
-    """An OLDER client that omits form_number must not crash or lose the title.
+def test_jit_session_logs_the_real_form_id(ws_client):
+    """The regression: a W-7 session must reach the audit trail as 'W-7'."""
+    assert _run_handshakes(ws_client, [_jit_handshake()]) == ["W-7"]
 
-    Deployed clients update independently of the backend, so the pre-fix
-    handshake shape has to keep working -- it simply degrades to the old
-    'unknown' audit value rather than erroring.
+
+def test_form_number_only_handshake_still_yields_real_form_id(ws_client):
+    """A title-less-but-numbered handshake must NOT lose the id.
+
+    This is the case the pre-fix code broke by keying form_metadata construction
+    on the title alone -- and the exact mutation that defeated the earlier
+    source-substring guard. Asserted through the route, so the `or` condition is
+    genuinely pinned.
     """
-    schema = _build_jit_schema({
-        "manifest": {"parts": []},
-        "form_title": "Some Form",
-    })
-    assert schema["form_metadata"] == {"title": "Some Form"}
-    assert _derive_form_id(schema) == "unknown"
+    handshake = _jit_handshake()
+    handshake.pop("form_title")
+    assert _run_handshakes(ws_client, [handshake]) == ["W-7"]
 
 
-def test_form_number_only_handshake_builds_metadata():
-    """form_metadata must be built when ONLY form_number is present.
-
-    The pre-fix code keyed construction on the title alone, so a
-    title-less handshake produced no form_metadata at all and the audit id was
-    lost even when the number had been sent.
-    """
-    schema = _build_jit_schema({"manifest": {"parts": []}, "form_number": "I-90"})
-    assert schema["form_metadata"] == {"form_number": "I-90"}
-    assert _derive_form_id(schema) == "I-90"
-
-
-def test_neither_key_leaves_form_metadata_absent():
-    """No metadata keys -> no form_metadata (unchanged legacy behavior)."""
-    schema = _build_jit_schema({"manifest": {"parts": []}})
-    assert "form_metadata" not in schema
-    assert _derive_form_id(schema) == "unknown"
-
-
-def test_form_id_survives_reconnect_and_section_switch():
-    """One form-session spanning SEVERAL Gemini sessions keeps the real form id.
+def test_form_id_survives_reconnect_and_section_switch(ws_client):
+    """One form-session spanning SEVERAL Gemini sessions keeps the real id.
 
     The production run that surfaced this bug reconnected mid-form (Gemini's
-    ~10-minute session cap), so one `form_session_id` spanned three Gemini
-    sessions -- each of which re-handshakes and re-derives `form_id`. A fix that
-    only worked on the FIRST connect would still poison most of the trail.
-
-    `FormFillingService.start_session` re-derives form_id from the schema on
-    every call (including the internal section-switch restart), so the property
-    to pin is that EVERY handshake in the form-session yields the same real id.
-    Simulated at the handshake/derivation layer -- the same layer the bug lived
-    in -- rather than by standing up three live Gemini sessions.
+    ~10-minute session cap), so one form_session_id spanned three Gemini
+    sessions -- each re-handshaking and re-deriving form_id. A fix that only
+    worked on the FIRST connect would still poison most of the trail. Three real
+    round-trips: cold connect, resume, then a section-switch-shaped resume.
     """
-    base = {
-        "manifest": {"parts": []},
-        "form_title": "Application for IRS Individual Taxpayer Identification Number",
-        "form_number": "W-7",
-    }
-    # Connect 1 (cold), connect 2 (reconnect after GoAway, carries resume+values),
-    # connect 3 (section switch / second reconnect).
+    fss = "fss_reconnect_test"
     handshakes = [
-        dict(base),
-        dict(base, resume=True, current_values={"application_type": "a"}),
-        dict(base, resume=True, section_id="part_2"),
+        _jit_handshake(form_session_id=fss),
+        _jit_handshake(form_session_id=fss, resume=True,
+                       current_values={"name": "Linh"}),
+        _jit_handshake(form_session_id=fss, resume=True, section_id="s2"),
     ]
-    derived = [_derive_form_id(_build_jit_schema(h)) for h in handshakes]
-    assert derived == ["W-7", "W-7", "W-7"], (
-        "form_id must stay the real form across every reconnect in one "
-        "form-session -- a first-connect-only fix still poisons the trail"
-    )
+    assert _run_handshakes(ws_client, handshakes) == ["W-7", "W-7", "W-7"]
 
 
-def test_route_source_still_builds_form_metadata_from_both_keys():
-    """Guard the helper-vs-route parity this module's other tests rely on.
+def test_older_client_without_form_number_degrades_to_unknown(ws_client):
+    """A deployed client predating the fix must still connect.
 
-    The tests above exercise a REPRODUCTION of the route's construction. If the
-    route stops reading `form_number` (a revert, or a refactor that drops the
-    key), those tests would still pass against the stale helper while
-    production silently regressed to form_id="unknown". This asserts the real
-    source still does both halves: reads the handshake key AND writes it into
-    form_metadata.
+    Clients update independently of the backend, so the pre-fix handshake shape
+    has to keep working -- degrading to the old 'unknown' audit value rather
+    than erroring.
     """
-    import inspect
-
-    source = inspect.getsource(wsr)
-    assert 'handshake.get("form_number")' in source, (
-        "the JIT handshake no longer reads form_number -- the confirmation "
-        "audit trail will regress to form_id='unknown' (bd polyglot-pdf-n0em)"
-    )
-    assert '["form_number"] = jit_form_number' in source, (
-        "form_number is read but no longer written into form_metadata, so the "
-        "audit lookup cannot resolve it (bd polyglot-pdf-n0em)"
-    )
+    handshake = _jit_handshake()
+    handshake.pop("form_number")
+    assert _run_handshakes(ws_client, [handshake]) == ["unknown"]

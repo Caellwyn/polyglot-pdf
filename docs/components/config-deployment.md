@@ -77,8 +77,10 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   differs by backend, so `_resolve_model` is backend-aware: on Vertex the
   standard tier resolves to `gemini-live-2.5-flash-native-audio` (the AI Studio
   id 1008s on Vertex), so a Vertex deploy needs no `MODEL_NATIVE` pin. 3.1 is
-  AI-Studio-only as of 2026-06, so reaching it still requires `VERTEXAI=false`.
-  See [ai-models.md](../standards/ai-models.md).
+  AI-Studio-only as of 2026-06, so reaching it still requires `VERTEXAI=false`
+  — which is a **LOCAL-ONLY** exercise: a deployed service refuses to start on
+  that path (see the Vertex-only rule below). See
+  [ai-models.md](../standards/ai-models.md).
 - **`GEMINI_API_KEY`** — required when `VERTEXAI=false` (AI Studio key); unused on
   the Vertex path. On the demo Cloud Run service it is injected via **Secret
   Manager** (`--set-secrets`), never as a plaintext env var.

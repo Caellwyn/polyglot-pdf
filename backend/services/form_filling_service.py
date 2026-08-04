@@ -608,9 +608,11 @@ class FormFillingService:
             return
         # Cache-key form id: prefer the form_number of the schema the labels are
         # actually collected from (the full-form catalog). The passed-in form_id
-        # comes from the PER-SECTION schema, which on a DTI manifest-first
-        # handshake carries no form_metadata and resolves to "unknown" -- two
-        # different forms must never share a cache entry (verified live, W-7).
+        # comes from the PER-SECTION schema; since bd polyglot-pdf-n0em the
+        # manifest-first handshake DOES carry form_metadata.form_number, so it
+        # normally resolves correctly -- but an older client omitting the key
+        # still yields "unknown", and two different forms must never share a
+        # cache entry, so the full-schema number stays the preferred source.
         translation_form_id = (
             (schema.get("form_metadata") or {}).get("form_number") or form_id
         )
