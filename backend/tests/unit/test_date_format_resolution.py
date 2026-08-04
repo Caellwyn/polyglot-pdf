@@ -113,6 +113,29 @@ def test_layout_resolution_reads_every_declared_source(field, expected):
     assert _resolve_date_format(field) == expected
 
 
+@pytest.mark.parametrize(
+    "hint,expected_label",
+    [
+        # A hint naming TWO layouts must resolve to the one mentioned FIRST --
+        # picking the other would silently choose the layout the author
+        # explicitly ruled out. Position dominates token length.
+        ("Use MM/DD/YYYY not DD/MM/YYYY", "MM/DD/YYYY"),
+        ("Use DD/MM/YYYY not MM/DD/YYYY", "DD/MM/YYYY"),
+        # ...while length still breaks ties, so a bare "yyyy" cannot shadow a
+        # longer layout that starts at the same place.
+        ("yyyy-mm-dd then notes", "YYYY-MM-DD"),
+        ("Year only (yyyy)", "YYYY"),
+    ],
+)
+def test_prose_hint_prefers_the_earliest_named_layout(hint, expected_label):
+    assert _resolve_date_format({"format": hint})[1] == expected_label
+
+
+def test_unrecognizable_prose_falls_back_to_iso():
+    """A spelled-out hint with no layout token must not guess."""
+    assert _resolve_date_format({"format": "month/day/year"})[1] == "YYYY-MM-DD"
+
+
 def test_flat_format_wins_over_nested_hint():
     """Priority order is format -> help.format_hint -> validation.hint."""
     field = {"format": "YYYY-MM-DD", "help": {"format_hint": "MM/DD/YYYY"}}

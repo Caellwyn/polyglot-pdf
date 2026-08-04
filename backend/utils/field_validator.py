@@ -270,11 +270,25 @@ def _resolve_date_format(field: Dict[str, Any]) -> tuple:
             continue
         if spec in _DATE_LAYOUTS:
             return _DATE_LAYOUTS[spec]
-        # Prose hint: find the first layout token mentioned anywhere in it.
-        # Longest-first so "mm/dd/yyyy" wins over a bare "yyyy" substring.
-        for token in sorted(_DATE_LAYOUTS, key=len, reverse=True):
-            if token in spec:
-                return _DATE_LAYOUTS[token]
+        # Prose hint (e.g. 'MM/DD/YYYY or "Never Entered US"'): pick the layout
+        # token that appears EARLIEST in the sentence, breaking ties on the
+        # LONGEST token. Position must dominate length, or a hint naming two
+        # layouts ("Use DD/MM/YYYY not MM/DD/YYYY") would resolve to whichever
+        # token the dict happened to yield first among equal-length candidates
+        # -- silently picking the layout the author explicitly ruled OUT.
+        # Length still breaks ties so a bare "yyyy" inside "mm/dd/yyyy" (same
+        # start index is impossible, but "yyyy-mm-dd" vs "yyyy" is not) cannot
+        # shadow the longer, more specific layout.
+        best = None  # (start_index, -len(token), token)
+        for token in _DATE_LAYOUTS:
+            idx = spec.find(token)
+            if idx == -1:
+                continue
+            candidate = (idx, -len(token), token)
+            if best is None or candidate < best:
+                best = candidate
+        if best is not None:
+            return _DATE_LAYOUTS[best[2]]
 
     return _DATE_LAYOUTS[_DEFAULT_DATE_SPEC]
 
