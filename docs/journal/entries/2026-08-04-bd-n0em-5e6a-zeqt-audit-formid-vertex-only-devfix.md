@@ -152,6 +152,35 @@ no `K_SERVICE` fail-closed guard, so unlike `VERTEXAI` a stray env var could
 disable auth on a deployed service. Correct to file rather than fix here --
 it is a distinct hardening, not part of these three beads.
 
+**Fresh-eyes round 4 (Opus): GAPS-FOUND (1), adopted.** The round confirmed all
+prior fixes hold (re-traced `form_session_id` across 68 backend sites to verify
+the round-3 docstring is factually accurate rather than merely softened; counted
+the test module; verified no executable line changed since the round-3 green
+suite) and ran an exhaustive named sweep of README, DEPLOYMENT.md, every deploy
+script, `.github/`, env examples, skills, and probes.
+
+**The finding is the sharpest of the whole review:** `USE_PREMIUM_MODEL=true`
+**IS the AI-Studio flip under another name** -- 3.1 exists only on AI Studio --
+and it is the one variant the new startup guard CANNOT fail-closed on, because
+`_resolve_model` sets the premium id BEFORE the `VERTEXAI` branch. A deployed
+service therefore starts cleanly and then `1008`s at connect time, which is a
+worse failure mode than the crash-loop the guard produces. Three docs still
+presented it as a plain opt-in (`ai-models.md:58`, `technical_guide.md:40`,
+`config-deployment.md:52`); all now carry a LOCAL-ONLY qualifier that names the
+silent-failure mechanism.
+
+Fixed here as docs (a warning); the GUARD gap is filed as
+`polyglot-pdf-llva` (P2) -- extend the fail-closed check to refuse startup when
+the RESOLVED model is unavailable on the active backend, keyed on model+backend
+rather than on a flag name so a future AI-Studio-only model is covered
+automatically. Deliberately not done in this PR: it is a distinct hardening with
+its own exit criteria, and 5e6a's criteria are about the `VERTEXAI` flip and the
+docs.
+
+Deliberately left (reviewer's call, concurred): `scripts/spikes/*_findings.md`
+is a dated experiment artifact, frozen like a journal entry; pre-existing emoji
+in `deploy-demo.sh` echo lines are outside every changed hunk.
+
 ## Lessons
 
 - **A durable sink makes every latent metadata defect permanent.** `form_id`
@@ -159,6 +188,12 @@ it is a distinct hardening, not part of these three beads.
   but it was invisible while the trail died with the container. Turning on
   durability is the moment to audit what the record actually CONTAINS, not just
   that it persists. The first real production session was the audit.
+- **A policy can have a second name that the guard does not cover.** The
+  Vertex-only directive was enforced on `VERTEXAI`, but `USE_PREMIUM_MODEL=true`
+  reaches the same forbidden backend by a different route -- and reaches it
+  PAST the guard, failing at connect instead of at startup. When adding a
+  fail-closed guard, enumerate every setting that can produce the forbidden
+  state, not just the one the directive was phrased around.
 - **Two transports means two places for schema-derived values to fall through.**
   The legacy full-schema handshake and the manifest-first one both build a
   `schema` dict, but only one carries `form_metadata`. Any value derived from

@@ -56,6 +56,11 @@ of 2026-06.
 
 - `USE_PREMIUM_MODEL` (env, **default `false`** → 2.5) flips between the two tiers;
   set it `true` to run the 3.1 premium tier (now tool-call-reliable; see above).
+  **LOCAL ONLY.** 3.1 exists only on AI Studio, so `USE_PREMIUM_MODEL=true` *is*
+  the AI-Studio flip under another name — and it is the variant the Vertex-only
+  startup guard CANNOT catch: `_resolve_model` sets the premium id before the
+  `VERTEXAI` branch, so a deployed service starts fine and then `1008`s at
+  connect time. Deploy 3.1 only once it is GA on Vertex.
 - `MODEL_NATIVE` is the **resolved** active model and the single source of truth.
   Setting `MODEL_NATIVE` directly via env pins an exact string and **overrides**
   the flag (`_resolve_model` only fills it in when empty).
