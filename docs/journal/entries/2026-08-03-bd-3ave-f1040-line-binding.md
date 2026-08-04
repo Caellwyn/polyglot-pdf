@@ -85,7 +85,7 @@ i-90 / w7) makes the desync impossible to reintroduce silently.
 
 **Verified:** oracle 20 mismatches -> 0 (56 fields verifiable, up from 52);
 lint ERRORs 4 -> 0; `dump-widget-unclaimed` 12 -> 8; production fill round-trip
-24/24 present, 0 errors, 0 misplaced. Full backend suite 1470 passed.
+24/24 present, 0 errors, 0 misplaced. Full backend suite 1473 passed.
 Mutation-verified against the shipped kit: the oracle test names all 20
 misbindings, the round-trip names exactly `fld_1a`..`fld_1d` as never reaching
 the PDF.
