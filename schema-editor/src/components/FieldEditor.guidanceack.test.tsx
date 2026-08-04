@@ -145,14 +145,15 @@ describe('the DISPLAY pins to current identity too (round-3 regression)', () => 
   });
 });
 
-describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', () => {
-  // Post-ack, every other surface agreed the field was clear -- green row,
-  // no amber ring, counted complete -- while the banner two inches above the
-  // checkbox kept repeating the instruction the human had just carried out.
-  // The reviewer could not tell whether their click registered.
+describe('the staleness finding renders ONLY at the gate box (bd hii0, re-homed by s18 C1)', () => {
+  // The pane era showed the staleness message in the top banner and had to
+  // suppress it post-ack (bd hii0). With findings property-anchored, the
+  // staleness finding's ONE home is the amber ack-gate box under Instructions
+  // -- which already owns its acked-state suppression -- so the banner never
+  // carries it in any state.
   const banner = () => screen.queryByTestId('field-problems');
 
-  it('drops the staleness line once the ack pins the CURRENT identity', () => {
+  it('never puts the staleness line in the banner once acked for the CURRENT identity', () => {
     const acked = {
       ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
     } as FormField;
@@ -163,17 +164,22 @@ describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', (
     expect(banner()?.textContent ?? '').not.toContain(staleFinding.message);
   });
 
-  it('still shows it when there is NO ack at all', () => {
+  it('with NO ack the gate box is the visible signal (not the banner)', () => {
     render(
       <FieldEditor field={FIELD} schema={makeSchema(FIELD)}
         onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
     );
-    expect(banner()?.textContent ?? '').toContain(staleFinding.message);
+    // The gate box renders with its explanation + required checkbox...
+    expect(screen.getByTestId('guidance-ack-checkbox')).toBeInTheDocument();
+    expect(screen.getByText(/changed after this guidance was written/))
+      .toBeInTheDocument();
+    // ...and the banner does not duplicate the finding.
+    expect(banner()?.textContent ?? '').not.toContain(staleFinding.message);
   });
 
-  it('still shows it when the ack pins a SUPERSEDED identity', () => {
+  it('an ack pinning a SUPERSEDED identity re-raises the gate box', () => {
     // The whole point of pinning: an ack for older content is not a waiver
-    // for the current content, so the banner must nag again.
+    // for the current content, so the gate must ask again.
     const staleAck = {
       ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: 'OLD-H2' },
     } as FormField;
@@ -181,7 +187,10 @@ describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', (
       <FieldEditor field={staleAck} schema={makeSchema(staleAck)}
         onUpdateField={vi.fn()} authorTier lintFindings={[staleFinding]} />,
     );
-    expect(banner()?.textContent ?? '').toContain(staleFinding.message);
+    const box = screen.getByTestId('guidance-ack-checkbox') as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(screen.getByText(/Required before this field can be marked/))
+      .toBeInTheDocument();
   });
 
   it('suppresses ONLY the staleness rule -- unrelated findings still render', () => {
@@ -232,10 +241,12 @@ describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', (
     expect(banner()?.textContent ?? '').not.toContain(unparseable.message);
   });
 
-  it('THIS field\'s ack does not suppress ANOTHER field\'s staleness', () => {
-    // The suppression is scoped by field_id, so a whole-schema findings list
-    // cannot let one field's ack silence another field's warning. (The title
-    // used to state the inverse direction of what is asserted below.)
+  it('ANOTHER field\'s staleness neither raises THIS field\'s gate nor renders here', () => {
+    // The gate lookup is scoped by field_id, so a whole-schema findings list
+    // cannot let one field's finding raise another field's gate -- and under
+    // property-anchored rendering, zip's finding belongs to ZIP's row and
+    // editor, never phone's surfaces (rendering it here would mis-anchor the
+    // problem at controls that are fine).
     const otherFieldFinding: LintFinding = {
       severity: 'WARNING', rule: 'guidance-identity-stale',
       path: `fields (id=zip).help[identity:${IDENTITY}]`,
@@ -244,14 +255,15 @@ describe('the flagged-reasons banner respects the ack (bd polyglot-pdf-hii0)', (
     const acked = {
       ...FIELD, _review: { status: 'unreviewed', guidance_ack_sha1: IDENTITY },
     } as FormField;
-    render(
+    const { container } = render(
       <FieldEditor field={acked} schema={makeSchema(acked)}
         onUpdateField={vi.fn()} authorTier
         lintFindings={[staleFinding, otherFieldFinding]} />,
     );
-    const text = banner()?.textContent ?? '';
-    expect(text).not.toContain(staleFinding.message);
-    expect(text).toContain('zip changed since its guidance was written');
+    // phone's own finding is acked -> no gate; zip's raises nothing here.
+    expect(screen.queryByText(/Required before this field can be marked/)).toBeNull();
+    expect(container.textContent ?? '')
+      .not.toContain('zip changed since its guidance was written');
   });
 });
 

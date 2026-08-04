@@ -46,7 +46,11 @@ describe('FieldEditor review control (bd u8t6)', () => {
       target: { value: 'reviewed_correct' },
     });
     expect(onUpdateField).toHaveBeenCalledWith(
-      expect.objectContaining({ _review: { status: 'reviewed_correct' } }),
+      // The sign-off stamps seen_fingerprints (empty set with no findings in
+      // hand) -- the timeliness rule's baseline (sprint-18 C1).
+      expect.objectContaining({
+        _review: { status: 'reviewed_correct', seen_fingerprints: [] },
+      }),
     );
   });
 

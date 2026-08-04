@@ -68,6 +68,12 @@ interface FormCatalogueProps {
     // to the disk-scan version then).
     version?: KitVersionInfo;
   } | null;
+  /**
+   * Mirror a Mark-complete server refusal up to the host, which homes it on
+   * the bottom strip's refusal/error line with field links (sprint-18 C1,
+   * decision 1). Called with null when a later status flip succeeds.
+   */
+  onStatusRefusal?: (detail: string | null) => void;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -84,7 +90,7 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const FormCatalogue: React.FC<FormCatalogueProps> = ({
   onOpenKit, confirmFolderChange, clearOpenKit, selectedKitId, liveProgress,
-  onRootChange, serverActionsOk = false,
+  onRootChange, serverActionsOk = false, onStatusRefusal,
 }) => {
   const supported = React.useMemo(isDirectoryAccessSupported, []);
   const [root, setRoot] = React.useState<FsDirectoryHandle | null>(null);
@@ -259,6 +265,7 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
     setNotice(null);
     setBusy(true);
     setError(null);
+    onStatusRefusal?.(null);
     // Completion is the PUBLISH gate, so it must go through the server whenever
     // we can reach it (bd polyglot-pdf-rh5v). The backend runs six checks --
     // PDF present, schema validates, extraction_info, v2 stamp, lint clean --
@@ -304,11 +311,16 @@ export const FormCatalogue: React.FC<FormCatalogueProps> = ({
       // a generic failure, and leave the kit as-is -- the server did not promote
       // it, so the card must not either.
       setNotice(null);
-      setError(err instanceof Error ? err.message : 'Failed to update status');
+      const detail = err instanceof Error ? err.message : 'Failed to update status';
+      setError(detail);
+      // A refused completion also lands on the strip's refusal line (sprint-18
+      // C1): the refusal renders next to the counts it contradicts, with
+      // click-to-focus links for any "(id=x)" the gate names.
+      if (status === 'complete') onStatusRefusal?.(detail);
     } finally {
       setBusy(false);
     }
-  }, [root, refresh, serverActionsOk]);
+  }, [root, refresh, serverActionsOk, onStatusRefusal]);
 
   // Single-kit deploy (bd polyglot-pdf-ipzh). `deployTarget` is null until the
   // dev-only host endpoint answers, so the button never renders in a static or

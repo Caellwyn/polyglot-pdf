@@ -5,6 +5,8 @@ import { currentIdentity, needsGuidanceAck, staleFieldIds }
 import { checkFieldComplete } from '../utils/validation';
 import { getReview, isReviewTargetFromFindings, statusFromFindings }
   from '../utils/reviewStatus';
+import { isFindingDismissable, ruleLabel, RULE_REMEDIES }
+  from '../utils/lintFindings';
 import { getIgnoredFields } from '../utils/ignoreField';
 import { isGroupableField, mergeBlockReason } from '../utils/fieldGrouping';
 import { isToReviewSection } from '../utils/sectionOps';
@@ -36,6 +38,17 @@ interface FieldListProps {
   // Un-ignore a quarantined field (bd polyglot-pdf-mzkw). Absent -> the grey
   // Ignored bucket renders read-only.
   onRestoreField?: (fieldId: string) => void;
+  // FORM-LEVEL findings (no field anchor) for the ONE pinned Form row at the
+  // top of the list (sprint-18 C1, decision 1) -- already filtered of
+  // dismissed WARNINGs by the host (visibleFormFindings).
+  formFindings?: LintFinding[];
+  // Standalone dismiss for a form-level WARNING -- the only standalone dismiss
+  // in the editor; no field review can cover a schema-level finding.
+  onDismissFormFinding?: (finding: LintFinding) => void;
+  // "Show only fields needing review" (the strip count's secondary action) --
+  // the overview that used to justify a separate warnings pane.
+  reviewFilterActive?: boolean;
+  onClearReviewFilter?: () => void;
 }
 
 export const FieldList: React.FC<FieldListProps> = ({
@@ -52,11 +65,27 @@ export const FieldList: React.FC<FieldListProps> = ({
   lintFindingsByField,
   pageCount,
   onRestoreField,
+  formFindings,
+  onDismissFormFinding,
+  reviewFilterActive = false,
+  onClearReviewFilter,
 }) => {
   // Quarantined fields (bd mzkw): read from the stash, rendered in their own
   // grey group, and deliberately absent from every other list computation.
   const ignoredEntries = React.useMemo(() => getIgnoredFields(schema), [schema]);
   const [ignoredExpanded, setIgnoredExpanded] = React.useState(false);
+  // The pinned Form row (sprint-18 C1): schema-level findings, collapsed to a
+  // badge until opened. Auto-open once when an ERROR-severity form finding
+  // first appears -- an ERROR blocks the publish gate, so it must not hide
+  // behind an unopened chevron.
+  const [formRowExpanded, setFormRowExpanded] = React.useState(false);
+  const formErrorCount = (formFindings ?? [])
+    .filter(f => f.severity === 'ERROR').length;
+  const hadFormErrorRef = React.useRef(false);
+  React.useEffect(() => {
+    if (formErrorCount > 0 && !hadFormErrorRef.current) setFormRowExpanded(true);
+    hadFormErrorRef.current = formErrorCount > 0;
+  }, [formErrorCount]);
   // Grouping UI is active only when the parent wired the merge callbacks.
   const groupingEnabled = !!onToggleGroupSelection;
   const groupSelectionSet = React.useMemo(() => new Set(groupSelection), [groupSelection]);
@@ -261,6 +290,28 @@ export const FieldList: React.FC<FieldListProps> = ({
     );
   };
 
+  // A visible per-row flag for backend findings (sprint-18 C1): the warnings
+  // pane is gone, so the ROW is where a finding announces itself -- a count
+  // chip (red when any ERROR, amber otherwise) beside the id, with the
+  // messages on hover. Clicking the row opens the field, where each finding
+  // renders at the property it concerns.
+  const renderFindingBadge = (field: FormField) => {
+    const findings = lintFindingsByField?.get(field.id) ?? [];
+    if (findings.length === 0) return null;
+    const errors = findings.filter(f => f.severity === 'ERROR').length;
+    return (
+      <span
+        data-testid={`field-flag-${field.id}`}
+        className={`text-[10px] font-semibold rounded-full px-1.5 shrink-0 ${
+          errors > 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+        }`}
+        title={findings.map(f => f.message).join('\n')}
+      >
+        {findings.length}
+      </span>
+    );
+  };
+
   const getFieldIcon = (status: string) => {
     if (status === 'complete') {
       return (
@@ -332,7 +383,23 @@ export const FieldList: React.FC<FieldListProps> = ({
     [normalizedQuery]
   );
 
-  // Group fields by section, applying the search filter while keeping grouping.
+  // The search filter, composed with the review filter (sprint-18 C1): the
+  // strip count's secondary action narrows the list to review targets -- the
+  // same predicate the count and the jump use, so "N to review" and the
+  // filtered list always show the same fields.
+  const passesFilters = React.useCallback(
+    (field: FormField) => {
+      if (!matchesQuery(field)) return false;
+      if (reviewFilterActive
+          && !isReviewTargetFromFindings(field, lintFindingsByField?.get(field.id))) {
+        return false;
+      }
+      return true;
+    },
+    [matchesQuery, reviewFilterActive, lintFindingsByField],
+  );
+
+  // Group fields by section, applying the filters while keeping grouping.
   const sectionedFields = React.useMemo(() => {
     const map = new Map<string, FormField[]>();
 
@@ -340,18 +407,18 @@ export const FieldList: React.FC<FieldListProps> = ({
       const fields = section.fields
         .map(id => fieldsById.get(id))
         .filter((f): f is FormField => f !== undefined)
-        .filter(matchesQuery);
+        .filter(passesFilters);
       map.set(section.id, fields);
     }
 
     // Fields without section
-    const orphanFields = schema.fields.filter(f => !f.section_id).filter(matchesQuery);
+    const orphanFields = schema.fields.filter(f => !f.section_id).filter(passesFilters);
     if (orphanFields.length > 0) {
       map.set('_orphan', orphanFields);
     }
 
     return map;
-  }, [schema.sections, schema.fields, fieldsById, matchesQuery]);
+  }, [schema.sections, schema.fields, fieldsById, passesFilters]);
 
   // Sections that contain at least one matching field while filtering.
   const matchingSectionCount = React.useMemo(() => {
@@ -381,18 +448,12 @@ export const FieldList: React.FC<FieldListProps> = ({
   // field IS one (bd polyglot-pdf-u8t6) -- both flow through isReviewTarget's
   // effective-status precedence.
   const hasReviewTarget = React.useMemo(
-    // Routed through the SAME findings-driven helper the row icon uses
-    // (bd polyglot-pdf-l7u0), not a hand-reassembled pair of booleans: the
-    // jump and the icon must never disagree about whether a field still needs
-    // review.
+    // Routed through the SAME findings-driven predicate the strip's counts use
+    // (sprint-18 C1, decision 2): the jump, the count, and the icons must
+    // never disagree about whether a field still needs review.
     () => visibleOrderedFields.some(
-      f => isReviewTargetFromFindings(f, lintFindingsByField?.get(f.id), pageCount)),
-    // isReviewTarget is a pure per-field check; the memo keys on the fields,
-    // the lint findings (a backend ERROR also makes a row a review target),
-    // and pageCount (which arrives asynchronously when the PDF finishes
-    // loading and can flip a field into the page-out-of-range reason).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleOrderedFields, lintFindingsByField, pageCount]
+      f => isReviewTargetFromFindings(f, lintFindingsByField?.get(f.id))),
+    [visibleOrderedFields, lintFindingsByField]
   );
 
   const jumpToNextReview = React.useCallback(() => {
@@ -404,14 +465,13 @@ export const FieldList: React.FC<FieldListProps> = ({
     for (let step = 1; step <= fields.length; step++) {
       const candidate = fields[(current + step) % fields.length];
       if (isReviewTargetFromFindings(
-            candidate, lintFindingsByField?.get(candidate.id), pageCount)) {
+            candidate, lintFindingsByField?.get(candidate.id))) {
         onSelectField(candidate.id);
         return;
       }
     }
     // Everything visible is complete -> nothing to jump to.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleOrderedFields, selectedBaseId, onSelectField, lintFindingsByField, pageCount]);
+  }, [visibleOrderedFields, selectedBaseId, onSelectField, lintFindingsByField]);
 
   const moveSelection = React.useCallback(
     (delta: 1 | -1) => {
@@ -598,11 +658,125 @@ export const FieldList: React.FC<FieldListProps> = ({
 
       <div className="flex-1 overflow-auto custom-scrollbar">
       <div className="p-2 space-y-1">
+        {/* Review-filter note (sprint-18 C1): the list is narrowed to review
+            targets by the strip count's secondary action; say so, with the
+            way back. */}
+        {reviewFilterActive && (
+          <div
+            className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1"
+            role="status"
+            data-testid="review-filter-note"
+          >
+            <span className="flex-1">Showing only fields needing review.</span>
+            {onClearReviewFilter && (
+              <button
+                type="button"
+                className="underline"
+                onClick={onClearReviewFilter}
+              >
+                Show all
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* The ONE pinned Form row (sprint-18 C1, decision 1): findings about
+            the FORM rather than any field -- schema-wide coverage, kit-level
+            flags, PDF widget claims. No field review can cover these, so this
+            row is the only place a standalone dismiss exists (WARNINGs only;
+            an ERROR blocks the publish gate and cannot be waved away). */}
+        {(formFindings ?? []).length > 0 && (() => {
+          const findings = formFindings ?? [];
+          const warnCount = findings.length - formErrorCount;
+          return (
+            <div
+              className={`rounded-md shadow-sm border ${
+                formErrorCount > 0
+                  ? 'bg-red-50 border-red-300'
+                  : 'bg-amber-50 border-amber-300'
+              }`}
+              data-testid="form-findings-row"
+            >
+              <button
+                className="w-full flex items-center gap-2 p-2 text-left"
+                onClick={() => setFormRowExpanded(v => !v)}
+                aria-expanded={formRowExpanded}
+              >
+                <svg
+                  className={`w-4 h-4 text-gray-500 transition-transform ${
+                    formRowExpanded ? 'transform rotate-90' : ''
+                  }`}
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span className={`text-sm font-medium flex-1 ${
+                  formErrorCount > 0 ? 'text-red-900' : 'text-amber-900'
+                }`}>
+                  Form
+                </span>
+                {formErrorCount > 0 && (
+                  <span className="text-[10px] font-semibold rounded-full px-1.5 bg-red-100 text-red-700">
+                    {formErrorCount} to fix
+                  </span>
+                )}
+                {warnCount > 0 && (
+                  <span className="text-[10px] font-semibold rounded-full px-1.5 bg-amber-100 text-amber-700">
+                    {warnCount} notice{warnCount !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </button>
+              {formRowExpanded && (
+                <div className="border-t border-gray-200 divide-y divide-gray-100">
+                  {findings.map((finding, idx) => {
+                    const isError = finding.severity === 'ERROR';
+                    const label = ruleLabel(finding.rule);
+                    const remedy = finding.rule
+                      ? RULE_REMEDIES[finding.rule]
+                      : undefined;
+                    return (
+                      <div
+                        key={`${finding.rule}|${finding.path}|${idx}`}
+                        className="p-2 text-xs space-y-0.5"
+                        data-testid={`form-finding-${idx}`}
+                      >
+                        <div className={isError ? 'text-red-700' : 'text-amber-800'}>
+                          {label && <span className="font-medium">{label}: </span>}
+                          {finding.message}
+                        </div>
+                        {remedy && (
+                          <div className="text-gray-600">{remedy}</div>
+                        )}
+                        {onDismissFormFinding && isFindingDismissable(finding) && (
+                          <button
+                            type="button"
+                            className="text-gray-500 underline"
+                            data-testid={`dismiss-form-finding-${idx}`}
+                            title="Hide this notice for this form. It returns if the underlying finding changes."
+                            onClick={() => onDismissFormFinding(finding)}
+                          >
+                            Dismiss
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Render sections */}
         {schema.sections.map(section => {
           const fields = sectionedFields.get(section.id) || [];
-          // While filtering, hide sections with no matching fields.
-          if (isFiltering && fields.length === 0) return null;
+          // While filtering (search or review filter), hide empty sections.
+          if ((isFiltering || reviewFilterActive) && fields.length === 0) return null;
           const isExpanded = isFiltering || expandedSections.has(section.id);
           // Total resolved fields in this section, independent of the filter
           // (matches the non-filtered count badge so it does not jump on clear).
@@ -753,6 +927,7 @@ export const FieldList: React.FC<FieldListProps> = ({
                               <span className="flex-1 truncate text-gray-700 font-mono text-xs">
                                 {field.id}
                               </span>
+                              {renderFindingBadge(field)}
                               <span className="text-xs text-gray-400 font-mono">
                                 [{field.type}]
                               </span>
@@ -861,6 +1036,7 @@ export const FieldList: React.FC<FieldListProps> = ({
                     <span className="flex-1 truncate text-gray-700 font-mono text-xs">
                       {field.id}
                     </span>
+                    {renderFindingBadge(field)}
                     <span className="text-xs text-gray-400 font-mono">
                       [{field.type}]
                     </span>

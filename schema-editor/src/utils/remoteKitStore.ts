@@ -265,12 +265,25 @@ export interface LintReport {
 }
 
 /** Lint the CURRENT (possibly-unsaved) schema over the backend's single Python
- * ruleset -- the same rules the mark-complete promotion gate enforces. Sends
- * the schema the editor holds, not a kit id, so the panel lints exactly what is
- * on screen before any save. AuthError on a rotated code (editorFetch throws it
- * for the caller to re-prompt). */
-export async function lintSchema(schema: FormSchema): Promise<LintReport> {
-  const res = await editorFetch('/api/editor/lint', {
+ * ruleset -- the same rules the mark-complete promotion gate enforces. Always
+ * sends the schema the editor HOLDS, so the strip lints exactly what is on
+ * screen before any save.
+ *
+ * `kitId` (sprint-18 C1, bd polyglot-pdf-o7y9) scopes the lint to the open
+ * kit: the kit-scoped route loads the kit's persisted AcroForm dump exactly as
+ * the publish gate does, so the two dump-gated rules (widget multiclaim /
+ * unclaimed) are visible to the strip too -- without it a confidently clean
+ * strip could still 409 at the gate. Omit for a schema with no kit identity
+ * (nothing opened from the store); that falls back to the dump-less route.
+ * AuthError on a rotated code (editorFetch throws it for the caller to
+ * re-prompt). */
+export async function lintSchema(
+  schema: FormSchema, kitId?: string,
+): Promise<LintReport> {
+  const path = kitId
+    ? `/api/editor/kits/${encodeURIComponent(kitId)}/lint`
+    : '/api/editor/lint';
+  const res = await editorFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(stripEditorState(schema)),

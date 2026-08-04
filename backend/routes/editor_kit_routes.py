@@ -663,16 +663,62 @@ async def lint_editor_schema(
     Never 4xx on schema shape -- lint_schema never raises, and a malformed draft
     IS the thing the contractor needs the findings for (a structural problem
     surfaces as a condition-malformed finding, not an HTTP error). No dump is
-    passed: this route lints the POSTED schema (no kit id), so it has no kit dump
-    to load -- the dump-aware widget-claim rule runs at the kit-scoped gates (the
-    extract route + the promotion gate, bd v96b) where the acroform.json artifact
-    is available.
+    passed: this route has no kit id, so it has no kit dump to load. An OPEN
+    kit's editor lints through the kit-scoped POST /kits/{kit_id}/lint twin
+    below, which loads acroform.json exactly as the promotion gate does -- this
+    dump-less route remains for schemas with no kit identity (nothing opened
+    from the store).
     """
     findings = lint_schema(schema)
     out = [LintFindingOut(**f.as_dict()) for f in findings]
     error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
     warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
     _log.info("editor_schema_linted", role=role,
+              errors=error_count, warnings=warning_count)
+    return LintResponse(
+        findings=out, errorCount=error_count, warningCount=warning_count,
+    )
+
+
+@router.post("/kits/{kit_id}/lint", response_model=LintResponse)
+async def lint_editor_kit_schema(
+    kit_id: str,
+    role: Annotated[str, Depends(require_editor_role)],
+    schema: Annotated[dict, Body()],
+) -> LintResponse:
+    """Lint the POSTED schema WITH the kit's persisted AcroForm dump.
+
+    The kit-scoped twin of POST /lint (sprint-18 C1, bd polyglot-pdf-o7y9).
+    The dumpless route structurally cannot run the two dump-gated rules
+    (dump-widget-multiclaim ERROR, dump-widget-unclaimed WARNING), so an
+    editor strip fed by it could read clean -- and its progress reach a
+    confident 100% -- while the promotion gate still 409s on a dump-only
+    ERROR. This route loads acroform.json exactly as the /status complete
+    gate does and passes it to the SAME lint_schema call, so the editor's
+    live findings and the gate share one input set. The schema still comes
+    from the request body (the on-screen, possibly-unsaved draft), never
+    from the store: the strip lints what the human is looking at.
+
+    A kit without a persisted dump (pre-v96b) degrades to the dump-less
+    rules -- identical to the gate's own degradation, so the two still agree.
+    """
+    kit_id = _safe_kit_id(kit_id)
+    if not isinstance(schema.get("fields"), list):
+        raise HTTPException(
+            status_code=422,
+            detail="Schema must be a JSON object with a 'fields' list",
+        )
+    store = get_form_kit_store()
+    # 404 for an unknown kit rather than silently linting dump-less: a typo'd
+    # kit id must not masquerade as a legitimate no-dump kit.
+    await _load_meta_or_404(store, kit_id)
+    dump_data = await _load_kit_dump(store, kit_id)
+    findings = lint_schema(schema, dump_data)
+    out = [LintFindingOut(**f.as_dict()) for f in findings]
+    error_count = sum(1 for f in findings if f.severity == SEVERITY_ERROR)
+    warning_count = sum(1 for f in findings if f.severity == SEVERITY_WARNING)
+    _log.info("editor_kit_schema_linted", kit_id=kit_id, role=role,
+              has_dump=dump_data is not None,
               errors=error_count, warnings=warning_count)
     return LintResponse(
         findings=out, errorCount=error_count, warningCount=warning_count,

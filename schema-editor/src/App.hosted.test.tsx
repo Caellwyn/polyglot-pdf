@@ -30,11 +30,20 @@ vi.mock('./components/FieldList', () => ({ FieldList: () => <div data-testid="li
 // (bd zgln; fresh-eyes: an isolation test of the panel does not cover App's
 // wiring to it). data-has-repair reflects whether the host passed the callback.
 vi.mock('./components/ValidationPanel', () => ({
-  ValidationPanel: ({ onRepairAll }: { onRepairAll?: () => Promise<void> }) => (
+  ValidationPanel: ({ onRepairAll, onJumpToReview }: {
+    onRepairAll?: () => Promise<void>; onJumpToReview?: () => void;
+  }) => (
     <div data-testid="vp" data-has-repair={onRepairAll ? 'yes' : 'no'}>
       {onRepairAll && (
         <button data-testid="repair-all" onClick={() => void onRepairAll()}>
           repair
+        </button>
+      )}
+      {/* The strip's "M to review" control (sprint-18 C1): the mock exposes
+          it so App's jump wiring is testable through the full tree. */}
+      {onJumpToReview && (
+        <button data-testid="strip-jump" onClick={onJumpToReview}>
+          jump
         </button>
       )}
     </div>
@@ -601,5 +610,35 @@ describe('bd 79tz: afterEach drains queued one-time mocks', () => {
   it('pin (2/2): the next test does NOT inherit it', async () => {
     // Fails with "leaked" if afterEach stops draining queued once-mocks.
     await expect(probeSession()).resolves.toEqual({ role: 'editor' });
+  });
+});
+
+// The strip's "M to review" control (sprint-18 C1, bd polyglot-pdf-o7y9):
+// clicking it walks the fields in reading order and selects the next review
+// target under the pinned predicate -- skipping currently-signed-off fields,
+// wrapping at the end. Pinned through the full App tree because the walk
+// itself lives in App (the strip only fires the callback).
+describe('the strip jump control (sprint-18 C1)', () => {
+  it('selects the next review target in reading order, skipping reviewed fields', async () => {
+    vi.mocked(loadRemoteSchema).mockResolvedValue({
+      form_metadata: { title: 'R', version: '1' },
+      sections: [],
+      fields: [
+        { id: 'f1', name: 'F1', type: 'text' },
+        { id: 'f2', name: 'F2', type: 'text',
+          _review: { status: 'reviewed_correct', seen_fingerprints: [] } },
+        { id: 'f3', name: 'F3', type: 'text' },
+      ],
+    } as unknown as FormSchema);
+    await passGate();
+    await openKit('draft-kit');
+    // The kit opened with nothing selected -> the editor shows metadata.
+    await screen.findByText('edit metadata');
+    fireEvent.click(screen.getByTestId('strip-jump'));
+    await screen.findByText('edit f1');   // first target (unreviewed)
+    fireEvent.click(screen.getByTestId('strip-jump'));
+    await screen.findByText('edit f3');   // skips the signed-off f2
+    fireEvent.click(screen.getByTestId('strip-jump'));
+    await screen.findByText('edit f1');   // wraps back around
   });
 });

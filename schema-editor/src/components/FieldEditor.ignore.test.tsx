@@ -108,7 +108,10 @@ describe('FieldEditor Ignored option (bd mzkw)', () => {
     );
     selectStatus('reviewed_correct');
     expect(onUpdateField).toHaveBeenCalledWith(
-      expect.objectContaining({ _review: { status: 'reviewed_correct' } }),
+      // The sign-off stamps seen_fingerprints (sprint-18 C1).
+      expect.objectContaining({
+        _review: { status: 'reviewed_correct', seen_fingerprints: [] },
+      }),
     );
   });
 

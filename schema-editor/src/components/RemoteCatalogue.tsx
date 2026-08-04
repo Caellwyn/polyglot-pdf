@@ -30,6 +30,15 @@ interface RemoteCatalogueProps {
    * "Show form cards" toggle, so the header gives its space to the editor.
    */
   defaultExpanded?: boolean;
+  /**
+   * Mirror a Mark-complete server refusal (publish gate 409/422, translation
+   * coverage) up to the host, which homes it on the bottom strip's
+   * refusal/error line with field links (sprint-18 C1, decision 1). Called
+   * with null when a later status flip succeeds. The card's own inline error
+   * stays -- the strip line is the home NEXT TO the counts the refusal
+   * contradicts.
+   */
+  onStatusRefusal?: (detail: string | null) => void;
 }
 
 interface RemoteKitProgress {
@@ -59,7 +68,7 @@ const STATUS_STYLE: Record<string, string> = {
  */
 export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
   onOpenKit, selectedKitId, role, onAuthError, liveProgress,
-  defaultExpanded = false,
+  defaultExpanded = false, onStatusRefusal,
 }) => {
   const [kits, setKits] = React.useState<RemoteKitEntry[]>([]);
   // bd tynm: the card grid is collapsed by default behind a compact selector
@@ -230,6 +239,7 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
     setNotice(null);
     setBusy(true);
     setError(null);
+    onStatusRefusal?.(null);
     if (status === 'complete') setCompletingId(kit.id);
     try {
       const result = await setRemoteStatus(kit.id, status);
@@ -256,12 +266,17 @@ export const RemoteCatalogue: React.FC<RemoteCatalogueProps> = ({
         onAuthError?.();
         return;
       }
-      setError(err instanceof Error ? err.message : 'Failed to update status');
+      const detail = err instanceof Error ? err.message : 'Failed to update status';
+      setError(detail);
+      // A refused completion also lands on the strip's refusal line (sprint-18
+      // C1): the refusal renders next to the counts it contradicts, with
+      // click-to-focus links for any "(id=x)" the gate names.
+      if (status === 'complete') onStatusRefusal?.(detail);
       setBusy(false);
     } finally {
       setCompletingId(null);
     }
-  }, [refresh, onAuthError]);
+  }, [refresh, onAuthError, onStatusRefusal]);
 
   // Rename a kit's DISPLAY label (bd 15ic): metadata-only, so it is safe for
   // ANY selected kit (no open involved -- unlike the status actions, which

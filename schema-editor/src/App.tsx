@@ -41,8 +41,8 @@ import {
   type LintReport,
   type RemoteKitEntry,
 } from './utils/remoteKitStore';
-import { getCompletionStats } from './utils/validation';
-import { needsAckFieldIds } from './utils/guidanceStaleness';
+import { isReviewTargetFromFindings, reviewCounts } from './utils/reviewStatus';
+import { visibleFormFindings, withFormFindingDismissed } from './utils/lintFindings';
 import { mergeFields, ungroupField, changeGroupKind } from './utils/fieldGrouping';
 import {
   recoverSelectionAfterVanish, renameBlockReason, renameFieldId,
@@ -70,12 +70,20 @@ export function liveStats(
   schema: FormSchema,
   lintFindings: LintFinding[] | undefined,
 ): { percent: number; complete: number; total: number; version: KitVersionInfo } {
-  // The guidance-ack gate (bd anim) demotes a drifted reviewed_correct field
-  // to amber in the FieldList; the catalogue bar's live % must agree.
-  const s = getCompletionStats(
-    schema, needsAckFieldIds(schema.fields, lintFindings));
+  // ONE count predicate (sprint-18 C1, decision 2): the catalogue bar's live %
+  // computes the same reviewCounts the bottom strip shows -- reviewed_correct,
+  // not demoted by the ack gate or the timeliness rule, no field lint ERROR --
+  // so the two surfaces can never disagree about the open kit.
+  const byField = new Map<string, LintFinding[]>();
+  for (const f of lintFindings ?? []) {
+    if (!f.field_id) continue;
+    const bucket = byField.get(f.field_id);
+    if (bucket) bucket.push(f);
+    else byField.set(f.field_id, [f]);
+  }
+  const s = reviewCounts(schema.fields, byField);
   return {
-    percent: s.percentage, complete: s.complete, total: s.total,
+    percent: s.percentage, complete: s.reviewed, total: s.total,
     version: versionInfoFromSchema(schema),
   };
 }
@@ -155,6 +163,65 @@ export const App: React.FC = () => {
     }
     return map;
   }, [lintFindings]);
+  // Form-level findings (no field anchor) for the pinned Form row at the top
+  // of the field list -- minus standalone-dismissed WARNINGs (sprint-18 C1).
+  const formFindings = React.useMemo(
+    () => (schema ? visibleFormFindings(schema, lintFindings) : []),
+    [schema, lintFindings],
+  );
+  // Standalone dismiss for a form-level WARNING -- the ONLY standalone dismiss
+  // in the editor (no field review can cover a schema-level finding). A
+  // normal undoable commit, like any other schema edit.
+  const handleDismissFormFinding = React.useCallback((finding: LintFinding) => {
+    if (!schema) return;
+    const next = withFormFindingDismissed(schema, finding);
+    if (next !== schema) commitSchema(next);
+  }, [schema, commitSchema]);
+  // "M to review" as a CONTROL (sprint-18 C1, decision 2): the strip's count
+  // jumps to the next review target; its secondary action filters the field
+  // list to flagged fields -- the overview that used to justify a pane.
+  const [reviewFilterActive, setReviewFilterActive] = React.useState(false);
+  // The latest server refusal (publish gate / translation coverage), homed on
+  // the strip's refusal line (decision 1: no refusal is ever homeless).
+  const [publishRefusal, setPublishRefusal] = React.useState<string | null>(null);
+  // The fields in reading order -- sections as listed, then orphans -- the
+  // same order the FieldList renders, so the strip's jump and the list's own
+  // "Next to review" walk one order.
+  const orderedFields = React.useMemo(() => {
+    if (!schema) return [] as FormField[];
+    // Defensive `?? []`s: a hand-authored or legacy schema can lack sections
+    // (the editor opens it fine; only the publish gate demands the full shape).
+    const fields = schema.fields ?? [];
+    const byId = new Map(fields.map(f => [f.id, f]));
+    const seen = new Set<string>();
+    const ordered: FormField[] = [];
+    for (const section of schema.sections ?? []) {
+      for (const id of section.fields ?? []) {
+        const f = byId.get(id);
+        if (f && !seen.has(id)) { ordered.push(f); seen.add(id); }
+      }
+    }
+    for (const f of fields) {
+      if (!f.section_id && !seen.has(f.id)) ordered.push(f);
+    }
+    return ordered;
+  }, [schema]);
+  const handleJumpToReview = React.useCallback(() => {
+    if (orderedFields.length === 0) return;
+    // Option rows select as "<fieldId>:option:<n>" -- start from the base.
+    const baseId = selectedFieldId ? selectedFieldId.split(':option:')[0] : null;
+    const current = baseId ? orderedFields.findIndex(f => f.id === baseId) : -1;
+    for (let step = 1; step <= orderedFields.length; step++) {
+      const candidate = orderedFields[(current + step) % orderedFields.length];
+      if (isReviewTargetFromFindings(
+            candidate, lintFindingsByField.get(candidate.id))) {
+        setViewMode('edit');
+        setSelectedFieldId(candidate.id);
+        return;
+      }
+    }
+    // Every field is reviewed -> nothing to jump to.
+  }, [orderedFields, selectedFieldId, lintFindingsByField]);
   // Multi-selection for the merge/group operation (bd polyglot-pdf-s4dp.1). This
   // is the set of fields ticked for a merge; insertion order is preserved (the
   // first ticked field is the merge primary). Separate from selectedFieldId,
@@ -1155,6 +1222,9 @@ export const App: React.FC = () => {
             selectedKitId={selectedKitId}
             role={role}
             onAuthError={handleAuthExpired}
+            // A Mark-complete refusal is homed on the strip's refusal line
+            // beside the counts it contradicts (sprint-18 C1, decision 1).
+            onStatusRefusal={setPublishRefusal}
             liveProgress={
               selectedKitId && schema
                 ? { kitId: selectedKitId, saved: !hasUnsavedChanges && savingToKit, ...liveStats(schema, lintFindings) }
@@ -1167,6 +1237,8 @@ export const App: React.FC = () => {
             confirmFolderChange={confirmFolderChange}
             clearOpenKit={clearOpenKit}
             onRootChange={handleRootChange}
+            // Same refusal home as the hosted catalogue (sprint-18 C1).
+            onStatusRefusal={setPublishRefusal}
             // Lets Mark-complete run the server's publish gates + translation
             // drift sweep instead of writing metadata.json blind (bd rh5v).
             serverActionsOk={serverActionsOk}
@@ -1449,6 +1521,10 @@ export const App: React.FC = () => {
                 lintFindingsByField={lintFindingsByField}
                 pageCount={pdfPageCount}
                 onRestoreField={handleRestoreField}
+                formFindings={formFindings}
+                onDismissFormFinding={handleDismissFormFinding}
+                reviewFilterActive={reviewFilterActive}
+                onClearReviewFilter={() => setReviewFilterActive(false)}
               />
             </div>
           </div>
@@ -1551,13 +1627,23 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Bottom: Validation Panel. Findings come from the backend's single
-          Python linter (bd h76m.11); clicking a field-anchored finding focuses
-          that field (and, in preview mode, drops back to edit so the selection
-          is visible). */}
+      {/* Bottom: the one-truth strip (sprint-18 C1). It owns the lint
+          round-trip (kit-scoped when a kit is open, so the strip lints with
+          the same dump-loaded inputs as the publish gate) and the single
+          count line; findings themselves render at their fields. */}
       {schema && (
         <ValidationPanel
           schema={schema}
+          // Kit-scope the lint only when server actions are trusted for this
+          // kit (hosted, or a local folder that passed the same-folder
+          // handshake) -- a mismatched local folder must not pull ANOTHER
+          // copy's AcroForm dump into this schema's findings.
+          kitId={serverActionsOk && selectedKitId ? selectedKitId : undefined}
+          onJumpToReview={handleJumpToReview}
+          onToggleReviewFilter={() => setReviewFilterActive(v => !v)}
+          reviewFilterActive={reviewFilterActive}
+          refusal={publishRefusal}
+          onDismissRefusal={() => setPublishRefusal(null)}
           onSelectField={(fieldId) => {
             // A finding can point at a field that is now QUARANTINED (bd mzkw)
             // -- lint flags persisted before it was ignored still name it. The
