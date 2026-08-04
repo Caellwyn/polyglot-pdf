@@ -181,6 +181,30 @@ def test_read_prefers_firestore_and_sorts_by_timestamp(fake_db):
     assert [e["event"] for e in events] == ["a", "b"]
 
 
+def test_shutdown_race_falls_back_to_synchronous_write(fake_db, monkeypatch):
+    """Submit-after-shutdown must WRITE synchronously, never drop (fresh-eyes
+    on bd z2is): flush_confirmation_sink() can shut the executor between
+    _get_executor() returning and submit() running -- exactly Cloud Run's
+    SIGTERM drain window, when a liability event most matters."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    dead = ThreadPoolExecutor(max_workers=1)
+    dead.shutdown(wait=True)  # submit() on this now raises RuntimeError
+    monkeypatch.setattr(cl, "_get_executor", lambda: dead)
+
+    cl.log_field_confirmation(
+        form_id="I-90",
+        form_session_id="fss_race_1",
+        field_id="f1",
+        field_name=None,
+        confirmation_method="verbal",
+    )
+    # No flush needed -- the fallback path writes synchronously.
+    added = fake_db.collections[cl._FIRESTORE_COLLECTION].added
+    assert len(added) == 1
+    assert added[0]["form_session_id"] == "fss_race_1"
+
+
 def test_read_falls_back_to_file_when_firestore_empty(fake_db, tmp_path, monkeypatch):
     # Firestore query returns nothing; the local JSONL (written by the same
     # call) must still be readable -- dev-mode behavior preserved.

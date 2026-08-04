@@ -82,8 +82,28 @@ verification (a confirmation record retrievable after scale-to-zero; a live
 401 on the demo) is pending the next gated demo deploy per the deploy
 authorization rules.
 
-**Fresh-eyes triage:** (filled after the Step 5.5/5.6 loops run -- see the
-closeout record below.)
+**Fresh-eyes triage (round 1, sonnet): GAPS-FOUND (2 rubric + 2 supporting).**
+All four adopted and fixed inline:
+1. ADOPTED (rubric): `read_confirmation_log` had no operational caller -- the
+   durable trail was writable but not practically retrievable. Fixed:
+   `scripts/read_confirmations.py` (support/legal retrieval tool; JSONL or
+   summary output) + the confirmation-and-audit doc names it as the entry
+   point.
+2. ADOPTED (concurrency): a TOCTOU race -- `flush_confirmation_sink()` could
+   shut the executor between `_get_executor()` and `submit()`, silently
+   dropping an event during exactly the Cloud Run SIGTERM window. Fixed:
+   submit-after-shutdown `RuntimeError` now falls back to a SYNCHRONOUS write
+   (blocking briefly mid-shutdown is fine; the event is never dropped).
+   Regression-pinned by `test_shutdown_race_falls_back_to_synchronous_write`.
+3. ADOPTED (rubric): zero frontend regression coverage on the token-threading
+   half of the auth change. Fixed: `pdfFiller.auth.test.ts` (Authorization
+   header attached with getToken, absent without) +
+   `SchemaFormDemo.auth.test.tsx` (ID token on the manifest fetch; a 401
+   SURFACES and does NOT fall back to the static bundle; a plain network
+   failure still does).
+4. ADOPTED (doc): the retrieval function's unwired state was undocumented
+   while the lifecycle pair's was -- folded into fix 1's doc line.
+Round 2 outcome recorded below after the re-spawn.
 
 ## Lessons
 
@@ -109,9 +129,12 @@ Firestore mirror note on the confirmation row),
 `docs/components/pdf-filling.md` (fill-pdf auth + getToken),
 `docs/standards/ai-models.md` (ALLOW_AI_STUDIO guard),
 `docs/components/config-deployment.md` (three new env vars + auth-gate note).
-`docs/technical_guide.md` was flagged stale by the checker from PRIOR changes
-(2026-08-01 mtimes predate this branch) -- reviewed and left; not bumped here
-per the "already stale before you" rule.
+`docs/technical_guide.md` tracks files this branch changed, so it WAS bumped
+(routes table auth annotations, VERTEXAI guard note, CONFIRMATION_FIRESTORE
+row). Other checker-flagged stale docs (`voice-instance-lifecycle`,
+`ws-protocol`) track files this branch did NOT touch (audioManager,
+VoiceOverlay, schemaFormState) -- reviewed and left per the
+"already stale before you" rule.
 
 ## Files touched
 

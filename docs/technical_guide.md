@@ -1,6 +1,10 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-07-25. See [journal/entries/2026-07-25-bd-9djc-v4-flag-surfacing.md](journal/entries/2026-07-25-bd-9djc-v4-flag-surfacing.md) for closeout details. Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872; section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
+*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: HTTP auth gates on
+fill-pdf/form-kits, the deliberately-public kit-PDF GET, the
+CONFIRMATION_FIRESTORE_ENABLED sink, and the ALLOW_AI_STUDIO guard). See
+[journal/entries/2026-08-03-bd-z2is-p0-prod-readiness.md](journal/entries/2026-08-03-bd-z2is-p0-prod-readiness.md).
+Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872; section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
 **Tracks:** `backend/main.py`, `backend/config.py`, `backend/routes/*.py`, `firebase.json`, `deploy-*.sh`
 
@@ -39,7 +43,8 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `CONTEXT_COMPRESSION_ENABLED` | `true` | Sliding-window context compression that bounds the continuous session (production default; validated by the jnjj.25 cost gate + G3 correctness gate). `false` disables it. See [components/context-compression.md](components/context-compression.md). |
 | `FORM_KITS_MODE` | `local` | Form-kit store backend (`local` FS vs. GCS/remote). |
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
-| `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`) -- a behavioral switch worth knowing when deploying. Env-overridable so demo/prod can flip without a code edit. |
+| `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`) -- a behavioral switch worth knowing when deploying. Env-overridable so demo/prod can flip without a code edit. On Cloud Run (`K_SERVICE` set), `false` additionally requires `ALLOW_AI_STUDIO=true` or startup fails (fail-closed guard, bd z2is). |
+| `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
 | `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
 
 Non-env tunables also in `config.py` (code constants, **not** `getenv` -- change
@@ -62,13 +67,13 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 
 | Method | Path | Surface doc |
 |--------|------|-------------|
-| WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. `components/websocket-routing.md`, `components/voice-ai.md` |
+| WS | `/ws/fill` (+ `/api/ws/fill`) | The voice form-fill session. Requires `?token=<Firebase idToken>`. `components/websocket-routing.md`, `components/voice-ai.md` |
 | WS | `/ws/audio`, `/ws/echo` | Lower-level / debug audio sockets. **Dev-only**: handshake rejected unless the `backend/.env.DEV` marker exists (same gate as `/dev/console-log`; bd polyglot-pdf-puu8). `components/websocket-routing.md` |
-| POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). `components/pdf-filling.md` |
-| POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized). `standards/confirmation-and-audit.md` |
-| GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). `components/pdf-filling.md` |
-| GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). |
-| GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. |
+| POST | `/api/fill-pdf` | Render the filled PDF (PyMuPDF). **Auth-gated** (`Authorization: Bearer <idToken>` via `require_auth`; bd z2is). `components/pdf-filling.md` |
+| POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). `standards/confirmation-and-audit.md` |
+| GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is). `components/pdf-filling.md` |
+| GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is). |
+| GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Deliberately public** (blank template = public government form, also in the static bundle; pdfjs loads it headerless -- bd z2is). |
 | GET | `/api/editor/session` | Hosted-editor access-code probe -> `{role}`. Token-gated (`X-Editor-Token`); the whole `/api/editor/*` surface is 503 when no token is configured. `components/pdf-filling.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | GET | `/api/editor/kits/{kit_id}/schema`, `.../pdf` | Draft-capable single-kit reads for the hosted editor. Token-gated. |

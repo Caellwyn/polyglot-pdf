@@ -95,7 +95,10 @@ them is now safe.)
   total_fields_confirmed)` → `form_session_ended` with a confirmed-field **count**
   (no values). `completion_status` is one of `completed` / `abandoned` / `error`.
 - `read_confirmation_log(form_session_id)` / `get_confirmation_log_path(...)` read
-  back a session's events for review or legal purposes.
+  back a session's events for review or legal purposes. The operational entry
+  point is **`scripts/read_confirmations.py <form_session_id>`** (bd z2is) --
+  no HTTP route exposes the trail (deliberate: it needs no unauthenticated
+  surface, and the reader needs ADC anyway for the Firestore sink).
 
 ## Where it's written
 

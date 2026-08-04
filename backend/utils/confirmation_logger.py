@@ -117,7 +117,16 @@ def _submit_firestore_write(event: dict) -> None:
         return
     try:
         _get_executor().submit(_firestore_write, dict(event))
-    except Exception as e:  # e.g. submit after interpreter-shutdown
+    except RuntimeError:
+        # Shutdown race (fresh-eyes on bd z2is): flush_confirmation_sink() can
+        # swap+shut the executor between _get_executor() returning and submit()
+        # running, and submit-after-shutdown raises RuntimeError. That window is
+        # exactly Cloud Run's SIGTERM drain -- the moment a liability event is
+        # most likely to matter -- so fall back to a SYNCHRONOUS write instead
+        # of dropping it. Blocking briefly is fine mid-shutdown, and
+        # _firestore_write never raises (it logs loudly on failure).
+        _firestore_write(dict(event))
+    except Exception as e:
         _log.error(
             "confirmation_firestore_submit_failed",
             error=str(e),
