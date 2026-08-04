@@ -164,7 +164,7 @@ which pins the updated `help-instructions-missing` message text (asserts
 
 - Backend full suite (`PYTHONPATH=<worktree> ... pytest -m "not external" -q`,
   run from the worktree root, venv from the main repo):
-  `2531 passed, 3 skipped, 3 deselected` in 308s, exit code 0.
+  `2534 passed (incl. the new gate-cap and remedy-parity pins), 3 skipped, 3 deselected` in 308s, exit code 0.
 - `backend/tests/unit/test_lint_rule_parity.py` (RULE_LABELS parity + the
   guidance-staleness rule-id pin): `3 passed`.
 - Frontend vitest (`node node_modules/vitest/vitest.mjs run --reporter=dot`,
