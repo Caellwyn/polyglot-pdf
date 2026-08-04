@@ -308,13 +308,16 @@ def _check_digits(source: str, translation: str) -> List[MechanicalFailure]:
     if native:
         # Show the glyph itself beside the codepoint: a reviewer cannot
         # find a character named only "U+0660" (Opus outer review). The
-        # source stays ASCII -- the glyph is runtime data.
-        escaped = ", ".join(
+        # SOURCE stays ASCII (the glyph is runtime data), which means the
+        # message is NO LONGER ascii-by-construction: any consumer that
+        # prints it must go through _ascii() or equivalent (cp1252 scar,
+        # CLAUDE.md #6) -- both current console sinks already do.
+        rendered = ", ".join(
             "'%s' (U+%04X)" % (ch, ord(ch)) for ch in native)
         failures.append(MechanicalFailure(
             CHECK_NON_ASCII_DIGITS,
             "this translation uses non-standard digit characters (%s) -- "
-            "numbers must always use plain 0-9, replace them" % escaped,
+            "numbers must always use plain 0-9, replace them" % rendered,
         ))
     for run in sorted(set(re.findall(r"[0-9]+", source))):
         if run not in translation:
@@ -437,14 +440,17 @@ def _check_script(
     if not counts:
         return []  # nothing left to check (string was all DNT/masks/digits)
     if counts.get(expected, 0) == 0:
-        summary = ", ".join(
-            "%s=%d" % (script, counts[script]) for script in sorted(counts))
+        # Lead with the LANGUAGE, not the internal script-registry id
+        # ("han-alphabet" is jargon AND wrong -- Han is not an alphabet;
+        # Opus outer review). The dominant found script is named plainly.
+        found_script = max(counts, key=counts.get)
+        lang = language_name or expected
         return [MechanicalFailure(
             CHECK_SCRIPT,
-            "this translation has no %s-alphabet characters at all -- it "
-            "looks like it was never actually translated (letter counts "
-            "found instead: {%s}); replace it with a real %s translation"
-            % (expected, summary, language_name or expected),
+            "this translation has no %s characters at all -- it looks "
+            "like it was never actually translated (the letters it does "
+            "use are mostly %s); replace it with a real %s translation"
+            % (lang, found_script, lang),
         )]
     return []
 
@@ -466,6 +472,8 @@ def _check_wrong_language(
     for ch in set(translation):
         claimed = markers.get(ch)
         if claimed:
+            # Glyph beside codepoint; message no longer ascii-by-
+            # construction -- print sites must _ascii() (see _check_digits).
             hits.setdefault(claimed, []).append(
                 "'%s' (U+%04X)" % (ch, ord(ch)))
     if not hits:

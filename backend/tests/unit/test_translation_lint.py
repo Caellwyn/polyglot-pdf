@@ -336,7 +336,9 @@ def test_lint_kit_schema_flags_and_skips():
         by_path.setdefault(finding.path, []).append(finding.message)
     spoken_path = "fields[0] (id=f_name).spoken_name_translations.russian"
     assert spoken_path in by_path
-    assert any("no cyrillic-alphabet characters" in m for m in by_path[spoken_path])
+    # The message now leads with the LANGUAGE, not the internal script id
+    # (bd xfdb, Opus outer review: "han-alphabet" was jargon and wrong).
+    assert any("no russian characters" in m for m in by_path[spoken_path])
     assert "fields[0] (id=f_name).options[opt_a].label_translations.russian" \
         in by_path
     # The es alias entry, the english entry, the unknown key, and the clean

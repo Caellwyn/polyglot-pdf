@@ -351,12 +351,13 @@ async def _call(coro: Any, stage: str) -> Any:
 
 def _plain_reason(trace_entry: str) -> str:
     """Strip the internal stage prefix -- exactly 'lint: ' or 'judge: ',
-    the only two prefixes trace[0] can carry (_initial_round is the sole
-    writer of the first entry) -- so the remaining reason, which the
-    lint/judge legs already write as prose, can be quoted in a
-    reviewer-facing message without leaking pipeline jargon. Later trace
-    entries ('attempt N: judge: ...') are NOT handled: pass trace[0]
-    only."""
+    the only two prefixes trace[0] can carry: the 'lint: ' first entry is
+    written in verify_fresh_translations' stage-0 mechanical pass and the
+    'judge: ' first entry in _initial_round; no other site can write
+    index 0 -- so the remaining reason, which the lint/judge legs already
+    write as prose, can be quoted in a reviewer-facing message without
+    leaking pipeline jargon. Later trace entries ('attempt N: judge: ...')
+    are NOT handled: pass trace[0] only."""
     reason = trace_entry
     for prefix in ("lint: ", "judge: "):
         if reason.startswith(prefix):
@@ -435,9 +436,17 @@ def _finalize(items: List[_Item],
             # this line exists to diagnose. Post-escape 1200 chars render
             # to ~1400 of JSON, always under the cap (Opus outer review,
             # measured both orders).
+            # source is bounded+escaped like trace: it is the OTHER
+            # unbounded kit string on this record, and a long section
+            # title (630 chars ship today) would push the rendered JSON
+            # over the same 2000-char drop threshold (Opus outer review,
+            # measured: 200-char source + full escaped trace = ~1814).
             _log.info(
                 "translation_verify_unresolved_trace",
-                kind=item.kind, source=item.source,
+                kind=item.kind,
+                source=item.source
+                    .encode("ascii", "backslashreplace")
+                    .decode("ascii")[:200],
                 trace=" | ".join(item.trace)
                     .encode("ascii", "backslashreplace")
                     .decode("ascii")[:1200],

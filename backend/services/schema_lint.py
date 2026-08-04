@@ -204,6 +204,22 @@ class LintFinding:
         }
 
 
+def _quoted(value: Any, limit: int = 80) -> str:
+    """repr() a user-controlled string bounded with an EXPLICIT ellipsis.
+
+    Interpolated option values / claims are the only unbounded inputs in
+    ERROR messages, and the publish gate renders each finding [:400] --
+    an over-long value used to push the trailing remedy clause off the
+    visible segment (Opus outer review). The marker makes the truncation
+    honest; ids in the to-review message are deliberately NOT truncated
+    (a mangled id defeats its own remedy) -- only quoted VALUES are.
+    """
+    text = str(value)
+    if len(text) <= limit:
+        return repr(text)
+    return repr(text[:limit]) + "..."
+
+
 def has_errors(findings: List[LintFinding]) -> bool:
     return any(f.severity == SEVERITY_ERROR for f in findings)
 
@@ -436,7 +452,7 @@ def _check_atom(
                 if str(v) not in option_values:
                     out.append(LintFinding(
                         SEVERITY_ERROR, "ref-option-value", atom_path,
-                        f"this rule compares against {v!r}, which is not one "
+                        f"this rule compares against {_quoted(v)}, which is not one "
                         f"of the answer choices on trigger field "
                         f"{trigger_field.get('id')!r} -- pick one of its "
                         "real choices",
@@ -477,14 +493,14 @@ def _check_options(
         if "," in value_str:
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-comma", opt_path,
-                f"the value {value_str!r} contains a comma, which breaks "
+                f"the value {_quoted(value_str)} contains a comma, which breaks "
                 "multi-select answers spoken aloud -- remove the comma "
                 "from the value",
             ))
         if is_v2 and not vocab.is_valid_option_slug(value_str):
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-slug", opt_path,
-                f"the value {value_str!r} is not in the required format "
+                f"the value {_quoted(value_str)} is not in the required format "
                 "(lowercase letters, numbers, hyphens, underscores only) -- "
                 "regenerate it from the label",
             ))
@@ -494,7 +510,7 @@ def _check_options(
             out.append(LintFinding(
                 SEVERITY_ERROR, "option-value-duplicate", field_path,
                 f"{count} answer choices on this field share the value "
-                f"{value_str!r} -- give each choice its own unique value",
+                f"{_quoted(value_str)} -- give each choice its own unique value",
             ))
 
 
@@ -747,7 +763,7 @@ def _check_field_backing(
                 out.append(LintFinding(
                     SEVERITY_ERROR, "field-claim-unresolvable",
                     f"fields[{i}] (id={f.get('id')}) {kind}",
-                    f"this field is connected to PDF box {claim!r}, but no "
+                    f"this field is connected to PDF box {_quoted(claim)}, but no "
                     "box with that name exists in this PDF -- reconnect it "
                     "to a real box",
                 ))
@@ -954,7 +970,7 @@ def lint_schema(
                 f"lists {len(stale)} id(s) no field points back to "
                 f"(already filed elsewhere, missing a section, or naming "
                 f"no field): "
-                f"{', '.join(x[:40] for x in stale[:5])}"
+                f"{', '.join(stale[:5])}"
                 f"{', ...' if len(stale) > 5 else ''}",
             ))
 
