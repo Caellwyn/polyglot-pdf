@@ -132,3 +132,98 @@ describe('formatNextFieldHint option-label translation (bd polyglot-pdf-0rm1)', 
     expect(hint).toContain("field_id: 'p1_checkbox4'")
   })
 })
+
+describe('formatNextFieldHint resolver mirrors the backend (bd polyglot-pdf-thun)', () => {
+  // The hint and the backend-rendered guidance block reach the model on the
+  // SAME turn, so any key form the backend resolves and this does not shows up
+  // as the two-languages-at-once condition bd 0rm1 set out to fix. The backend
+  // (option_translation.py _kit_translation_keys / _kit_translation) accepts
+  // the lowercase NAME, the BCP-47 code, and its stem, lowercases the dict's
+  // own keys, and treats a blank value as a miss.
+
+  const fieldKeyedBy = (key: string) => baseField({
+    options: [{ value: 'yes', label: 'Yes', label_translations: { [key]: 'Si' } }]
+  } as Partial<FormField>)
+
+  it.each([
+    ['canonical lowercase name', 'spanish'],
+    ['full BCP-47 code', 'es-US'],
+    ['BCP-47 stem', 'es'],
+    ['capitalized name', 'Spanish'],
+    ['uppercase code', 'ES-US'],
+  ])('resolves a label keyed by %s', (_label, key) => {
+    const hint = formatNextFieldHint(fieldKeyedBy(key), 2, 'Spanish')
+    expect(hint).toContain('options: [Si]')
+  })
+
+  it('does NOT resolve an ISO-639-1 code that differs from the BCP-47 stem', () => {
+    // Backend parity, stated explicitly so the tolerance cannot drift wider
+    // than the backend's: Chinese bakes under "chinese"/"cmn-CN"/"cmn", so a
+    // kit keyed "zh" falls back to English on BOTH sides -- consistent, which
+    // is the property that matters, rather than silently divergent.
+    const field = baseField({
+      options: [{ value: 'y', label: 'Yes', label_translations: { zh: 'Shi' } }]
+    } as Partial<FormField>)
+    expect(formatNextFieldHint(field, 2, 'Chinese')).toContain('options: [Yes]')
+  })
+
+  it.each([
+    ['empty string', ''],
+    ['a single space', ' '],
+    ['tabs and newlines', '\t\n  '],
+  ])('treats a %s translation as a miss and falls back to English', (_label, value) => {
+    // A whitespace-only value would otherwise render as a BLANK inside the
+    // spoken options list -- worse than the English label, because the model
+    // reads an option with no text at all.
+    const field = baseField({
+      options: [{ value: 'yes', label: 'Yes', label_translations: { spanish: value } }]
+    } as Partial<FormField>)
+    const hint = formatNextFieldHint(field, 2, 'Spanish')
+    expect(hint).toContain('options: [Yes]')
+  })
+
+  it('keeps the hint English for a kit with no label_translations at all', () => {
+    // bd polyglot-pdf-thun criterion 2, recorded as behavior: the backend's
+    // rung-2 secretary overrides are built server-side and never sent to the
+    // client, so an UNBAKED kit's hint stays English by design. The resolver
+    // comment states this; the test pins that it degrades to English rather
+    // than to a blank or 'undefined'.
+    const field = baseField({
+      options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]
+    } as Partial<FormField>)
+    const hint = formatNextFieldHint(field, 2, 'Spanish')
+    expect(hint).toContain('options: [Yes, No]')
+    expect(hint).not.toContain('undefined')
+  })
+})
+
+describe('formatNextFieldHint option shapes (bd polyglot-pdf-5419)', () => {
+  it('renders a legacy bare-string option array as the strings themselves', () => {
+    // `options: ["A", "B"]` is a supported shape (schema_lint checks it,
+    // manifest_service._sanitize_options passes it through, validation.ts
+    // optionValue() handles it). Mapping it through `o.label` handed the voice
+    // model a literal 'undefined' as the option text.
+    const field = baseField({ options: ['A', 'B'] as any })
+    const hint = formatNextFieldHint(field, 2)
+    expect(hint).toContain('options: [A, B]')
+    expect(hint).not.toContain('undefined')
+  })
+
+  it('falls back to the value when a dict option has no label', () => {
+    const field = baseField({
+      options: [{ value: 'yes' }, { value: 'no', label: '' }] as any
+    })
+    const hint = formatNextFieldHint(field, 2)
+    expect(hint).toContain('options: [yes, no]')
+    expect(hint).not.toContain('undefined')
+  })
+
+  it('never emits undefined for bare strings in a translated session', () => {
+    // The bare-string path has no label_translations to consult; it must not
+    // fall through the translation branch into an undefined read.
+    const field = baseField({ options: ['A', 'B'] as any })
+    const hint = formatNextFieldHint(field, 2, 'Spanish')
+    expect(hint).toContain('options: [A, B]')
+    expect(hint).not.toContain('undefined')
+  })
+})

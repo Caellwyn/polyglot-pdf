@@ -24,6 +24,7 @@ import type { SchemaFormState } from './schema-forms/state/schemaFormState';
 import type { FormSchema, FormField } from './schema-forms/types/schema';
 import { shouldShowField } from './schema-forms/utils/validation';
 import { readFieldEntryWithAlias } from './schema-forms/utils/fieldValue';
+import { kitTranslationKeys } from './shared/languages';
 
 // Navigation operates on the canonical schema FormField (it iterates
 // state.schema.fields and returns those objects). Re-export it under the same
@@ -429,17 +430,58 @@ export function formatNextFieldHint(
   // Required-ness lives under validation on the canonical FormField (the old
   // local navigation FormField had a flat `required`, which masked this).
   const requiredSuffix = field.validation?.required ? ', required' : '';
-  // options are FieldOption objects ({value,label}), not bare strings -- list
-  // their labels so the hint reads as option text, not "[object Object]".
   // Labels resolve through the kit-baked label_translations for the session
   // language (bd polyglot-pdf-0rm1): the guidance block already spoke the
   // session language while this hint carried raw English labels, so the model
   // held the same options in two languages with a read-EVERY-option directive
-  // beside both. Keys are lowercase English language names (same convention
-  // as the guidance path); a miss falls back to the English label.
+  // beside both.
+  //
+  // This resolver MIRRORS the backend's (backend/services/option_translation.py
+  // _kit_translation_keys / _kit_translation), because the two feed the SAME
+  // model turn -- any tolerance the backend has and this does not reappears as
+  // the exact two-languages-at-once condition 0rm1 set out to fix
+  // (bd polyglot-pdf-thun). Kept in sync deliberately:
+  //   - the CANONICAL key is the lowercase language NAME ("spanish"), what the
+  //     authoring bake writes; hand-authored kits may instead use the BCP-47
+  //     code ("es-US") or its stem ("es"), so all three resolve;
+  //   - the dict's OWN keys are lowercased before lookup, so "Spanish" hits;
+  //   - a whitespace-only value is a MISS, not a blank spoken label.
+  // NOT mirrored: the backend's rung-2 secretary translate_items fallback for
+  // an unbaked kit. Those overrides live only on the backend (they are built
+  // per form+language at session start and never sent to the client), so a
+  // partially-baked kit still shows translated guidance beside an English
+  // hint. That gap is bd polyglot-pdf-thun criterion 2 -- the hint stays
+  // English by design rather than inventing a second, divergent translation
+  // path on the client; the SI's translate-on-the-fly rule covers the window.
   const langKey = language ? language.trim().toLowerCase() : '';
-  const optionLabel = (o: { label: string; label_translations?: Record<string, string> }): string =>
-    (langKey && langKey !== 'english' && o.label_translations?.[langKey]) || o.label;
+  const langKeys = langKey && langKey !== 'english'
+    ? kitTranslationKeys(langKey)
+    : [];
+  const optionLabel = (o: unknown): string => {
+    // A LEGACY bare-string option ("options": ["A", "B"]) is a supported schema
+    // shape -- schema_lint checks it, the backend's _sanitize_options passes it
+    // through, and validation.ts optionValue() handles it. It has no `.label`,
+    // so reading one blindly handed the voice model a literal "undefined" as
+    // the option text (bd polyglot-pdf-5419). The string IS the label.
+    if (typeof o === 'string') return o;
+    if (!o || typeof o !== 'object') return '';
+    const opt = o as { label?: string; value?: string; label_translations?: Record<string, string> };
+    const translations = opt.label_translations;
+    if (langKeys.length && translations && typeof translations === 'object') {
+      const lowered: Record<string, string> = {};
+      for (const [k, v] of Object.entries(translations)) {
+        // Whitespace-only is a miss (backend option_translation.py:118), or the
+        // spoken options list would carry a blank where a label belongs.
+        if (typeof v === 'string' && v.trim()) lowered[k.trim().toLowerCase()] = v;
+      }
+      for (const key of langKeys) {
+        if (lowered[key]) return lowered[key];
+      }
+    }
+    // Fall back to the English label, then the value -- a dict option missing
+    // `label` is the other half of the 'undefined' hole above.
+    return opt.label || opt.value || '';
+  };
   const optionsSuffix = field.options && field.options.length > 0
     ? `, options: [${field.options.map(optionLabel).join(', ')}]`
     : '';

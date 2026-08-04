@@ -146,3 +146,62 @@ export const SUPPORTED_FILL_LANGUAGES = [
 ] as const;
 
 export type FillLanguage = typeof SUPPORTED_FILL_LANGUAGES[number];
+
+/**
+ * Spoken-language NAME (lowercase) -> BCP-47 code.
+ *
+ * MIRRORS backend/utils/language_codes.py SPOKEN_LANGUAGE_BCP47 -- keep the two
+ * in sync; every entry in SPOKEN_LANGUAGES above must appear here (pinned by
+ * languages.test.ts). Regional variants match the backend's choices for this
+ * app's user base (US immigration intake): es-US over es-ES, pt-BR over pt-PT.
+ *
+ * Used to read hand-authored kits whose option `label_translations` are keyed
+ * by CODE rather than by the canonical lowercase name (bd polyglot-pdf-thun).
+ * The backend's kit resolver accepts all three forms, so this one must too, or
+ * the guidance block and the next-field hint disagree on the same turn.
+ */
+export const SPOKEN_LANGUAGE_BCP47: Record<string, string> = {
+	english: "en-US",
+	spanish: "es-US",
+	chinese: "cmn-CN",
+	tagalog: "fil-PH",
+	arabic: "ar-XA",
+	french: "fr-FR",
+	korean: "ko-KR",
+	german: "de-DE",
+	portuguese: "pt-BR",
+	hindi: "hi-IN",
+	italian: "it-IT",
+	urdu: "ur-PK",
+	persian: "fa-IR",
+	dutch: "nl-NL",
+	ukrainian: "uk-UA",
+	russian: "ru-RU",
+	swedish: "sv-SE",
+	afrikaans: "af-ZA",
+};
+
+/**
+ * The `label_translations` keys accepted for a session language, lowercase.
+ *
+ * Mirrors backend/services/option_translation.py `_kit_translation_keys`: the
+ * CANONICAL key is the lowercase spoken-language NAME ("spanish") -- what the
+ * authoring bake writes -- while a hand-authored kit may use the full BCP-47
+ * code ("es-US") or its stem ("es"). Bare ISO-639-1 codes that differ from the
+ * BCP-47 stem ("zh", "tl") do NOT resolve on either side; the accepted short
+ * forms are the stems ("cmn", "fil").
+ *
+ * @param languageName - session language name, already lowercased/trimmed
+ */
+export function kitTranslationKeys(languageName: string): string[] {
+	const name = languageName.trim().toLowerCase();
+	if (!name) return [];
+	const keys = [name];
+	const full = SPOKEN_LANGUAGE_BCP47[name]?.toLowerCase();
+	if (full) {
+		keys.push(full);
+		const stem = full.split("-")[0];
+		if (stem !== full) keys.push(stem);
+	}
+	return keys;
+}

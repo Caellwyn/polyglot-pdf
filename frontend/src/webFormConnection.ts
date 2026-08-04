@@ -1293,6 +1293,19 @@ export class WebFormConnection {
   private handleGetNextFieldHintRequest(message: any): void {
     const requestId = message.request_id;
 
+    // Refresh from the persisted snapshot first -- the same staleness rule the
+    // sibling next-field producers already follow (handleSwitchFieldRequest,
+    // handleManualUpdateHint). This is the PRIMARY per-turn hint producer (the
+    // confirm_field next-field round-trip), and `this.state` is an in-memory
+    // copy that changeSpokenLanguage() does NOT mutate: it persists the new
+    // language through SchemaFormStateManager.setSelectedLanguage, which builds
+    // a NEW state object and saves it. Without this refresh the hint resolved
+    // option labels against the PREVIOUS language for the rest of the session,
+    // so a Spanish -> Ukrainian switch sent the model Spanish option labels
+    // beside a Ukrainian guidance block (bd polyglot-pdf-pjws).
+    const persisted = SchemaFormStateManager.load();
+    if (persisted) this.state = persisted;
+
     // Compute the next field ONCE, and derive BOTH the hint and (for DTI) the
     // schema from it -- so the hint and the supplied schema can never refer to
     // different fields (fresh-eyes substitute review, Codex PR #229).
@@ -1308,7 +1321,7 @@ export class WebFormConnection {
 
     const hint = nextField
       ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined,
-          this.state.selectedLanguage)
+          this.sessionLanguage)
       : null;
 
     // Store last field hint for recovery prompts
@@ -1331,6 +1344,27 @@ export class WebFormConnection {
       hint: hint,  // Can be null if form is complete
       ...(nextFieldSchema ? { next_field_schema: nextFieldSchema } : {}),
     });
+  }
+
+  /**
+   * The session's CURRENT spoken language, read through to the persisted
+   * snapshot (bd polyglot-pdf-pjws).
+   *
+   * changeSpokenLanguage() (shared/connection.ts) persists a mid-session switch
+   * via SchemaFormStateManager.setSelectedLanguage / acceptDisclaimer, both of
+   * which build a NEW state object and save() it -- they never touch this
+   * object's in-memory `this.state`. Any hint formatted off `this.state`
+   * directly therefore resolves option labels in the PREVIOUS language for the
+   * rest of the session, which is worse than the pre-0rm1 English fallback: the
+   * model gets confident labels in a language the user just switched away from,
+   * beside a guidance block in the new one.
+   *
+   * Reading only the LANGUAGE through to storage (rather than reloading all of
+   * `this.state`) keeps this safe for the section-switch callers, which hold a
+   * freshly-mutated in-memory state that a blanket reload could revert.
+   */
+  private get sessionLanguage(): string | null | undefined {
+    return SchemaFormStateManager.load()?.selectedLanguage ?? this.state.selectedLanguage;
   }
 
   /**
@@ -1366,7 +1400,7 @@ export class WebFormConnection {
 
     // Format hint for Gemini
     const hint = formatNextFieldHint(nextField, fieldOrder || undefined,
-        this.state.selectedLanguage);
+        this.sessionLanguage);
 
     return hint;
   }
@@ -1648,6 +1682,16 @@ export class WebFormConnection {
     const { field_id, confirmation_method, request_id } = message;
 
     console.log('[WebFormConnection] Confirming field:', field_id, 'method:', confirmation_method);
+
+    // Refresh before reading OR writing (bd polyglot-pdf-pjws). This handler
+    // ends in SchemaFormStateManager.save(this.state), so running it on a stale
+    // in-memory copy does not merely read the wrong values -- it PERSISTS them,
+    // reverting any field written outside this object since the last sync. The
+    // observed case is selectedLanguage: changeSpokenLanguage() saves the new
+    // language straight to storage, and the next confirm wrote the old one back
+    // over it, silently undoing the switch.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) this.state = persistedAtEntry;
 
     // Loop-breaker (bd polyglot-pdf-0y7): a field is only meaningfully confirmable
     // when it has a usable value. confirmField() no-ops when there is no fieldValues
@@ -2116,7 +2160,7 @@ export class WebFormConnection {
     // correct. Keep the recovery-prompt hint current, same as the other
     // next-field producers.
     const hint = formatNextFieldHint(field, getFieldOrder(this.state, fieldId) || undefined,
-        this.state.selectedLanguage);
+        this.sessionLanguage);
     sessionStorage.setItem('vff_last_field_hint', hint);
     // Read via the `[]`-alias fallback (bd 5k52 class): a checkbox-group's
     // entry may sit under the bracket variant; a bare read would misreport a
@@ -3306,7 +3350,7 @@ export class WebFormConnection {
     }
     const nextFieldHint = nextField
       ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined,
-          this.state.selectedLanguage)
+          this.sessionLanguage)
       : null;
 
     // Keep the recovery-prompt hint current (same side effect as

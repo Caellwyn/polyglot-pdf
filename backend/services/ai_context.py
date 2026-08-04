@@ -23,6 +23,33 @@ ASK_DIRECTLY_OPTION_TYPES = {"select"}
 # maintainer-reviewed as reasonable for now, may be tuned later.
 LONG_OPTION_LIST_THRESHOLD = 20
 
+# The two-option natural-question marker (bd polyglot-pdf-41fi) asserts that ONE
+# question can carry BOTH choices. That claim is only true for a SINGLE-select
+# field: on a multi-select the user may legitimately want BOTH options, and an
+# exclusive-choice ask ("is it this or that?") forecloses that (bd
+# polyglot-pdf-9tuu). Named on the MULTI-select side, mirroring the
+# ASK_DIRECTLY_OPTION_TYPES rationale above: a field whose type is unrecognized
+# or absent is NOT assumed multi-select, so it keeps the natural-question ask
+# rather than degrading to a two-item list recital.
+MULTI_SELECT_OPTION_TYPES = {"checkbox_group", "multiselect", "multi_select"}
+
+# The same marker also assumes both labels are short enough to fold into one
+# natural question. Two shipped-kit pairs are not (bd polyglot-pdf-575i): I-90
+# 'p7_checkbox7' carries ~23- and ~27-word legal declarations whose
+# representation-scope clause a single question drops outright. Above this word
+# count the pair falls back to the normal recital, so the full substance of both
+# options is still read aloud.
+#
+# 20 sits in the gap this corpus actually shows. Measured over every 2-option
+# field in the three shipped kits, the longest label of each pair runs
+# 1,1,1,1,2,2,3,3,4,5,6 words for the plainly-either/or fields, then 17 for W-7
+# 'previously_received_itin_or_irsn' -- a genuine yes/no whose labels are padded
+# with the printed-form navigation the SI already tells the model not to speak
+# ("Yes. Complete line 6f. ...") -- and then 27 for the I-90 declaration. The
+# threshold must sit above the W-7 case (it IS one natural question) and below
+# the I-90 one; 20 is the midpoint of that gap.
+TWO_OPTION_MAX_LABEL_WORDS = 20
+
 
 def render_field_guidance(
     field: Optional[Dict[str, Any]], fill_language: Optional[str] = None,
@@ -92,6 +119,10 @@ def render_field_guidance(
     options = guidance.get("options")
     if options:
         opt_strs = []
+        # The SPOKEN text of each option, undecorated -- opt_strs carries the
+        # '"label" (use value: v)' wrapper, which is machine plumbing the model
+        # never says aloud, so a length rule must not measure it.
+        spoken_labels = []
         for opt in options:
             if isinstance(opt, dict):
                 opt_value = opt.get("value", "")
@@ -102,8 +133,10 @@ def render_field_guidance(
                     opt_strs.append(opt_label)
                 else:
                     opt_strs.append(opt_value)
+                spoken_labels.append(opt_label or opt_value or "")
             else:
                 opt_strs.append(str(opt))
+                spoken_labels.append(str(opt))
         n = len(opt_strs)
         # The user cannot read the form, so the model's recital is their only
         # access to the choices (bd polyglot-pdf-6bq8). The count + imperative
@@ -124,11 +157,23 @@ def render_field_guidance(
                 f"Options ({n} total -- long standard list; ask directly and "
                 f"offer to read all {n} aloud): [{', '.join(opt_strs)}]"
             )
-        elif n == 2:
+        elif n == 2 and ftype not in MULTI_SELECT_OPTION_TYPES and all(
+            len(label.split()) <= TWO_OPTION_MAX_LABEL_WORDS
+            for label in spoken_labels
+        ):
             # A two-option field IS one natural question (bd polyglot-pdf-41fi):
             # forcing the list recital produced "Select No, Select Yes -- which
             # one applies?" on yes/no fields. The SI's two-option rule carries
             # the phrasing detail (yes/no vs either/or).
+            #
+            # Two carve-outs, because the marker asserts an EXCLUSIVE choice
+            # between two SHORT labels and neither holds universally:
+            #  - a MULTI-select at n==2 (bd polyglot-pdf-9tuu) -- the user may
+            #    want both, so it falls to the recital, whose SI rule already
+            #    says "or which ones, for a multi-select";
+            #  - a pair whose labels are too long to fold into one question
+            #    (bd polyglot-pdf-575i) -- reciting both is the only way the
+            #    user hears their full substance.
             parts.append(
                 f"Options (2 -- ask ONE natural question that makes both "
                 f"choices clear; do not recite the labels as a list): "

@@ -134,15 +134,56 @@ def test_a_correct_binding_produces_no_finding():
 # --------------------------------------------------------------------------- #
 
 @needs_f1040
-def test_body_text_numerals_are_not_read_as_line_markers():
-    """f1040's line-4c row prints a checkbox legend '1 Rollover 2 QCD 3' whose
-    trailing '3' sits ~50pt left of the row's widget. A proximity-only rule read
-    that as 'line 3' and reported three bogus mismatches. Only markers in a
-    RECURRING gutter column count, so no finding may claim line '3' here."""
-    schema = json.loads(_F1040_SCHEMA.read_text(encoding="utf-8"))
+def test_a_correctly_bound_legend_row_field_is_not_falsely_flagged():
+    """A CORRECTLY bound field on a legend row must stay silent (bd 35z0).
+
+    f1040's line-4c/5a/5b rows each print the checkbox legend "1 Rollover 2 QCD
+    3". The legend's '1' (x_right 278.0) and '2' (357.2) each recur on THREE
+    rows, so they clear the column-size threshold outright -- only the
+    uniqueness rule (condition 2 in collect_markers) rejects them. If they were
+    accepted, every widget just right of one would inherit a bogus row number.
+
+    The synthetic field below is the demonstration: fld_4c is bound CORRECTLY to
+    c1_35, the 4c-row checkbox, which sits 5.8pt right of the legend '1' --
+    inside the _GUTTER_MAX_DX proximity window. Accept the legend and the oracle
+    reports that this correct binding "is on line 1"; reject it and there is
+    nothing on the row to check, so the oracle stays silent.
+
+    This REPLACES test_body_text_numerals_are_not_read_as_line_markers, which
+    asserted only `all(f["widget_is_on_line"] != "3" ...)` over the live kit's
+    findings. bd polyglot-pdf-3ave fixed that kit, so the list went empty and
+    `all()` over it is vacuously True -- the test could no longer fail. It was
+    also never load-bearing: mutation-tested against BOTH the live and the
+    frozen-corrupt schema, no finding claims line '3' either way, because the
+    stray legend '3' (x_right 422.0) prints on only TWO rows and is rejected by
+    the column-SIZE rule (_GUTTER_MIN_COL = 3), never reaching the uniqueness
+    rule the test named. Asserting a POSITIVE outcome under the mutation, rather
+    than the absence of one specific line number, is what makes this bite.
+    """
+    schema = {
+        "form_id": "synthetic_legend_row",
+        "fields": [{
+            "id": "fld_4c",
+            "name": "Line 4c",
+            "type": "checkbox",
+            # c1_35: the 4c-row checkbox, immediately right of the legend '1'.
+            "pdf_field_name": "topmostSubform[0].Page1[0].c1_35[0]",
+        }],
+    }
     result = clb.check(schema, str(_F1040_PDF))
-    assert all(f["widget_is_on_line"] != "3" for f in result["findings"]), \
-        "a body-text numeral was mistaken for a printed gutter marker"
+
+    assert result["findings"] == [], (
+        "a legend numeral was accepted as a gutter marker, so a correctly "
+        f"bound field was flagged: {result['findings']}"
+    )
+    # The binding is correct AND unverifiable-by-design: with the legend
+    # rejected, the 4c row carries no gutter marker beside this widget, so the
+    # oracle abstains rather than guessing. Pinning `checked` makes the test
+    # fail loudly if a future rule change starts "verifying" this row -- the
+    # findings-only assertion above would stay green through that.
+    assert result["checked"] == 0, (
+        "the legend row became verifiable -- a marker is now being read there"
+    )
 
 
 @needs_f1040
@@ -187,11 +228,11 @@ def test_the_f1040_checkbox_legend_is_not_read_as_a_gutter():
     not identify a gutter; the column must also carry DISTINCT marker texts.
 
     The earlier test only asserted that no finding claimed line '3'. That held by
-    coincidence, not by the rule: under the old collector the legend markers WERE
-    paired with the legend checkboxes, and no finding fired only because those
-    options are labelled "1 Rollover" / "2 QCD", so the parsed line happened to
-    EQUAL the legend numeral. This asserts the marker set directly instead, so the
-    rule cannot silently rot behind a coincidence.
+    coincidence, not by the rule (it was retired as vacuous in bd
+    polyglot-pdf-35z0; see test_a_correctly_bound_legend_row_field_is_not_falsely_flagged,
+    which now covers the false-positive side with a positive assertion). This
+    asserts the marker set directly, so the rule cannot silently rot behind a
+    coincidence.
     """
     import fitz
     markers = clb.collect_markers(fitz.open(str(_F1040_PDF))[0])

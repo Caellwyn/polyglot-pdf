@@ -430,11 +430,19 @@ def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
         field["type"] = ftype
     text = render_field_guidance(field)
     if expects_recital:
-        # A 2-option recital-side field gets the natural-question marker
-        # (bd polyglot-pdf-41fi), still on the recital side of the gate --
-        # never the select-style ask-directly marker.
-        assert "ask ONE natural question that makes both choices clear" in text, ftype
+        # Both 2-option markers sit on the RECITAL side of the ask-directly
+        # gate -- which one fires is the multi-select question below, not this
+        # test's concern. What this pins is that NO option-bearing type
+        # silently reaches the select-style ask-directly branch.
         assert "standard list; ask directly" not in text, ftype
+        if ftype == "checkbox_group":
+            # A 2-option MULTI-select recites (bd polyglot-pdf-9tuu): the
+            # natural-question marker asserts an exclusive choice, which would
+            # foreclose selecting BOTH.
+            assert "read ALL 2 aloud when asking" in text, ftype
+        else:
+            # Single-select: one natural question IS the ask (bd 41fi).
+            assert "ask ONE natural question that makes both choices clear" in text, ftype
     else:
         assert "standard list; ask directly" in text, ftype
         assert "read ALL" not in text, ftype
@@ -543,6 +551,117 @@ def test_real_yes_no_fields_get_the_natural_question_marker():
         assert "read ALL" not in text, fid
 
 
+def test_substantive_two_option_pair_keeps_the_full_recital():
+    # bd polyglot-pdf-575i criterion 1: I-90 'p7_checkbox7' is a 2-option RADIO
+    # whose labels are ~23- and ~27-word legal declarations ("I am not an
+    # attorney ... with the applicant's consent" vs "I am an attorney ... my
+    # representation extends / does not extend beyond ..."). Its spoken_name
+    # ("Is the preparer an attorney or not") collapses to an attorney yes/no,
+    # so ONE natural question drops the representation-scope clause -- load-
+    # bearing legal text the user never hears. Too long to fold into one
+    # question => the normal recital stands.
+    f = _load_kit_field("i-90", "p7_checkbox7")
+    assert len(f["options"]) == 2
+    text = render_field_guidance(f)
+    assert "Options (2 -- read ALL 2 aloud when asking; " in text
+    assert "ask ONE natural question" not in text
+    # Both declarations ride the injection in full -- the marker changes the
+    # ask, never the model's access to the text.
+    assert "my representation of the applicant" in text
+
+
+def test_two_option_word_threshold_admits_the_navigation_padded_yes_no():
+    # The threshold's live boundary case, and why it is not lower. W-7
+    # 'previously_received_itin_or_irsn' IS a genuine yes/no ("Have you
+    # previously received an ITIN?"), but its labels are padded to 17 words with
+    # the printed-form navigation the SI already tells the model not to speak
+    # ("Yes. Complete line 6f. If more than one, list on a sheet and attach...").
+    # It must KEEP the natural-question marker; a threshold at or below 17 would
+    # regress it into "No/Don't know. Skip line 6f. -- which one applies?", the
+    # exact recital bd 41fi removed.
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    f = _load_kit_field("w7", "previously_received_itin_or_irsn")
+    longest = max(len((o["label"] or "").split()) for o in f["options"])
+    assert longest > 12, "fixture no longer exercises the padded-label case"
+    assert TWO_OPTION_MAX_LABEL_WORDS > longest
+    text = render_field_guidance(f)
+    assert "ask ONE natural question that makes both choices clear" in text
+
+
+def test_two_option_word_threshold_boundary_is_inclusive():
+    # A silent `<=` -> `<` flip (or a threshold nudge) would re-route every
+    # exactly-at-threshold pair with the suite green -- the same durability
+    # lesson as the long-list boundary pin above.
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS as W
+
+    def pair(words):
+        label = " ".join(f"w{i}" for i in range(words))
+        return {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+            "options": [{"value": "a", "label": label},
+                        {"value": "b", "label": "short"}],
+        }
+
+    assert "ask ONE natural question" in render_field_guidance(pair(W))
+    assert f"read ALL 2 aloud" in render_field_guidance(pair(W + 1))
+
+
+def test_two_option_multi_select_is_not_forced_into_an_exclusive_choice():
+    # bd polyglot-pdf-9tuu criterion 1: the marker (and the SI rule it triggers)
+    # describes an EXCLUSIVE choice -- "a plain yes/no question ... an either/or
+    # question otherwise ... do not ask which one applies". On a checkbox_group
+    # the user may legitimately want BOTH, so a 2-option multi-select falls to
+    # the recital, whose rule already says "or which ones, for a multi-select".
+    # Latent today (no shipped kit has a 2-option checkbox_group -- counts run
+    # 3/5/8) but kits are LLM-extracted and ship regularly.
+    field = {
+        "id": "accommodations", "name": "Accommodations",
+        "spoken_name": "accommodations you need", "type": "checkbox_group",
+        "options": [
+            {"value": "deaf", "label": "Deaf or hard of hearing"},
+            {"value": "blind", "label": "Blind or low vision"},
+        ],
+    }
+    text = render_field_guidance(field)
+    assert "Options (2 -- read ALL 2 aloud when asking; " in text
+    assert "ask ONE natural question" not in text
+
+
+@pytest.mark.parametrize("ftype", ["checkbox_group", "multiselect", "multi_select"])
+def test_every_multi_select_spelling_escapes_the_exclusive_marker(ftype):
+    # The gate is a name set, so an LLM-invented spelling of the same concept
+    # must be listed to be caught. These are the spellings the schema surfaces
+    # and the editor can emit; a new one arriving in a kit is the known
+    # maintenance cost of a name set (the alternative, guessing multi-ness from
+    # an unrecognized type, would break the cqx6 safe-default in the other
+    # direction).
+    field = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": ftype,
+        "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(field)
+    assert "read ALL 2 aloud when asking" in text, ftype
+    assert "ask ONE natural question" not in text, ftype
+
+
+def test_f1040_line_reference_pair_still_asks_a_natural_question():
+    # bd polyglot-pdf-575i criterion 2: f1040 'fld_3c' options are '1 Line 3a' /
+    # '2 Line 3b' -- pure printed-form navigation, so SPEAK THE SUBSTANCE alone
+    # would leave the model nothing to say. The mechanism is the SI's
+    # all-navigation carve-out (pinned in
+    # test_dti_si_handles_options_that_are_pure_print_navigation), NOT a render
+    # change: the labels are short, so this stays a one-natural-question field
+    # and the field's own name carries the meaning ("Check if your child's
+    # dividends are included in ... 3a or ... 3b").
+    f = _load_kit_field("f1040", "fld_3c")
+    text = render_field_guidance(f)
+    assert "ask ONE natural question that makes both choices clear" in text
+    # Both line references reach the model verbatim -- they are the only thing
+    # distinguishing the two options.
+    assert "1 Line 3a" in text and "2 Line 3b" in text
+
+
 def test_real_multi_option_lists_keep_the_unconditional_recital():
     # bd 41fi + c2jy criterion 2: the two fields the original bug was about
     # still get the read-ALL imperative, kit-backed so a schema re-type or a
@@ -555,11 +674,41 @@ def test_real_multi_option_lists_keep_the_unconditional_recital():
 
 def test_dti_si_two_option_rule():
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "TWO-option fields are different" in si
     assert "ONE natural question that makes both choices clear IS the complete ask" in si
     assert "Do not recite the two labels as a list" in si
     # Both phrasings are named so the rule travels beyond yes/no pairs.
     assert "plain yes/no question when the options amount to yes and no" in si
+
+
+def test_dti_si_two_option_rule_is_scoped_to_the_guidance_marker():
+    # bd polyglot-pdf-575i + 9tuu: the rule used to open "TWO-option fields are
+    # different", a bare COUNT test the model could apply to any n==2 field --
+    # including the two the render now deliberately sends to the recital (long
+    # substantive labels; a multi-select). The SI must key on the MARKER the
+    # render emits, not on the count, or the two channels contradict each other
+    # on exactly those fields.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "TWO-option fields, WHEN THE GUIDANCE MARKS THEM SO" in si
+    assert "This applies ONLY when the guidance carries that two-option marker" in si
+    # The recital branch's own marker text is named, so the model can tell the
+    # two n==2 cases apart from the guidance alone.
+    assert "the guidance marks 'read ALL 2 aloud'" in si
+    # And the bare-count phrasing is GONE -- an allowlist pin is worthless if
+    # the superseded wording survives elsewhere in the SI (memory: pin message
+    # text with allowlists, then assert no residue).
+    assert "TWO-option fields are different" not in si
+
+
+def test_dti_si_handles_options_that_are_pure_print_navigation():
+    # bd polyglot-pdf-575i criterion 2: f1040 'fld_3c' labels are '1 Line 3a' /
+    # '2 Line 3b' -- pure printed-form navigation. SPEAK THE SUBSTANCE alone
+    # would strip both to nothing, leaving the model no way to tell the options
+    # apart. The carve-out's carve-out: when navigation is ALL there is, it IS
+    # the option's identity and is spoken.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "would leave an option with NOTHING to say" in si
+    assert "'1 Line 3a'" in si
+    assert "the reference IS that option's only identity: say it as written" in si
 
 
 def test_dti_si_speaks_substance_not_print_navigation():
@@ -595,8 +744,13 @@ def test_initiating_templates_carry_two_option_carve_out():
     s = _settings()
     for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
         tpl = getattr(s, name)
-        assert ("the field has only TWO options (then ask ONE natural "
-                "question that makes both choices clear)") in tpl, name
+        # Keyed on the guidance MARKER, not on a bare count (bd 575i + 9tuu):
+        # the render now withholds the two-option marker from a long-labelled
+        # pair and from a 2-option multi-select, and an unqualified "only TWO
+        # options" here would re-assert the natural question on exactly those.
+        assert ("the guidance marks the field as having TWO options (then ask "
+                "ONE natural question that makes both choices clear)") in tpl, name
+        assert "the field has only TWO options" not in tpl, name
 
 
 # --- ASCII-only guard for every constant this change touched (scar #6) --------
