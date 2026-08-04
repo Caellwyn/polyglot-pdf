@@ -95,12 +95,12 @@ describe('hint reads through to persisted state (bd polyglot-pdf-pjws)', () => {
 
   it('a later confirm_field does not revert persisted state', () => {
     // handleConfirmFieldRequest ends in save(this.state), so running it on a
-    // stale copy PERSISTS the old language over the new one -- the switch would
-    // survive exactly one turn and then silently undo itself.
+    // stale copy PERSISTS that copy over whatever was written outside this
+    // object since the last sync -- silently reverting it.
     //
     // ORDER MATTERS, and it is the real order: the model fills the field (which
-    // updates the in-memory copy), the user switches language, THEN the confirm
-    // lands. If the fill were only persisted and never in memory, the handler
+    // updates the in-memory copy), something outside writes to storage, THEN the
+    // confirm lands. If the fill were only persisted and never in memory, the handler
     // would bail at the no-usable-value loop-breaker before reaching its save()
     // -- the clobber would not fire and this test would pass vacuously
     // (verified by mutation).
@@ -113,8 +113,9 @@ describe('hint reads through to persisted state (bd polyglot-pdf-pjws)', () => {
     ;(conn as any).state = filled
     SchemaFormStateManager.save(filled)
 
-    // The switch: persisted only -- changeSpokenLanguage never touches
-    // `conn.state`, so the in-memory copy still says Spanish.
+    // The outside write: persisted ONLY. Nothing in this flow touches
+    // `conn.state`, so the in-memory copy still says Spanish -- the fixture for
+    // "written outside this object" (see the file header).
     SchemaFormStateManager.setSelectedLanguage(filled, 'Ukrainian')
     expect((conn as any).state.selectedLanguage).toBe('Spanish')
 
@@ -248,8 +249,8 @@ describe('hint reads through to persisted state (bd polyglot-pdf-pjws)', () => {
 
   it('computeNextFieldHintString reads through to storage too', () => {
     // The second hint producer, reached via the public getNextFieldHint()
-    // (session restart / reconnect). It formats off the accessor, so a
-    // reconnect after a language switch must not re-assert the old labels.
+    // (session restart / reconnect). It formats off the accessor, so it must
+    // read persisted state rather than a stale in-memory copy.
     const conn = new WebFormConnection(SCHEMA)
     const started = SchemaFormStateManager.acceptDisclaimer(
       (conn as any).state, 'Spanish'

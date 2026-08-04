@@ -635,7 +635,7 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 
 	// NOTE: there is deliberately NO mid-session language change here.
 	// The spoken language is PINNED for the whole form -- chosen once in
-	// LanguageSelectionModal (handleInitialLanguageSelect below), carried into the
+	// LanguageSelectionModal (handleInitialLanguageSelect above), carried into the
 	// Gemini config + system instruction at session start, and held for every turn.
 	// The only way to change it is a NEW session: 'clear form', then pick again in
 	// the modal. A handleLanguageChange() that swapped the language on a live

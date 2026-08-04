@@ -690,9 +690,13 @@ class FormFillingService:
             return
 
         # Store spoken language for section switching (persists across sections).
-        # If mid-session language switching ever becomes a supported flow, this is
-        # where the option-label translation would re-fire for the new language
-        # (bd polyglot-pdf-ow1e; today it runs at session start only).
+        # This is an idempotent re-write under current policy: the spoken language
+        # is PINNED per session (bd polyglot-pdf-87a9,
+        # docs/standards/voice-and-vad.md), and the only caller of this path is the
+        # client's reconnect opener re-asserting the SAME pinned language -- so
+        # option-label translation correctly builds once, at session start
+        # (bd polyglot-pdf-ow1e). Changing language means a NEW session, which
+        # rebuilds the overrides from scratch.
         self._spoken_language = spoken_language
 
         # Strip the technical "(field_id: ...)" parenthetical so Gemini doesn't
@@ -707,8 +711,8 @@ class FormFillingService:
         # render_field_guidance that delivers fields 2..N in the confirm_field
         # response. The current field is whatever next_field_hint points at -- resolve
         # it by the field_id embedded in the UNSTRIPPED hint, NOT schema["fields"][0]:
-        # this same opener fires on a mid-form spoken-language change (where the
-        # current field is field N, not the handshake's field 1), and on a full-section
+        # this same opener fires on a mid-form RECONNECT (where the current field is
+        # field N, not the handshake's field 1), and on a full-section
         # handshake schema["fields"][0] is merely the positional first field, not the
         # client's computeNextField selection (Codex PR #254). The id is NOT stripped
         # here: this block is CONTEXT the model acts on (and copies the id verbatim

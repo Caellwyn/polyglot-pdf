@@ -207,7 +207,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 			// the "disclaimer re-shows while Gemini talks" desync
 			// (bd polyglot-pdf-fn1m). So gate the disclaimer step on
 			// disclaimerAccepted here, mirroring the alreadyLive branch above and
-			// the language handler: reconnect either way (to resume the session),
+			// the initial language-selection handler: reconnect either way (to resume the session),
 			// but only surface the agree step when it has NOT been accepted.
 			const alreadyAccepted = SchemaFormStateManager.load()?.disclaimerAccepted
 			// Trigger the same flow as handleInitialLanguageSelect
@@ -1133,7 +1133,7 @@ export function VoiceOverlay({ schema, wsUrl, onClose, connectionManager: shared
 
 	// NOTE: there is deliberately NO mid-session language change here.
 	// The spoken language is PINNED for the whole form -- chosen once in
-	// LanguageSelectionModal (handleInitialLanguageSelect below), carried into the
+	// LanguageSelectionModal (handleInitialLanguageSelect above), carried into the
 	// Gemini config + system instruction at session start, and held for every turn.
 	// The only way to change it is a NEW session: 'clear form', then pick again in
 	// the modal. A handleLanguageChange() that swapped the language on a live

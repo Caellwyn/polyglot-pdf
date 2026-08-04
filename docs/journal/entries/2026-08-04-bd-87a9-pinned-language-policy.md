@@ -77,6 +77,31 @@ value the user typed on screen.
 
 ## Lessons
 
+**Both reviewers caught the same thing: my sweep was incomplete.** I fixed the
+comments I had touched and stopped. Independently, both Opus passes found the same
+residue -- a body comment in the test file still naming the deleted
+`changeSpokenLanguage`, two tier-2 docs (`ws-protocol.md`, `websocket-routing.md`)
+still defining the message as a language *change*, two comments a call frame deeper
+in `form_filling_service.py` asserting the retired flow, a "below" that should read
+"above" in both overlay notes, and a dangling "the language handler" cross-reference
+pointing at the function I removed. In a PR whose entire product is comment truth,
+that is the defect itself, one layer out.
+
+`websocket-routing.md` is the one that stings: my own journal claimed the stale
+tier-2 docs "track files this branch did not touch", and that doc tracks
+`websocket_routes.py`, which this branch does touch. I asserted a sweep I had not
+run.
+
+**The policy is now enforced, not just described.** Both reviewers noted that a
+re-added switcher would break no test -- documentation alone had already failed
+once here, so `pinned-language-policy.test.ts` pins two things: the surviving
+`change_spoken_language` sender carries a language byte-identical to the persisted
+one (a re-assertion, not a switch), and no production source declares or calls
+`changeSpokenLanguage` / `handleLanguageChange` at all. The second is a source
+scan rather than a behavior test on purpose: the removed code was dead for months
+and passed every behavior test that existed. Both are mutation-verified.
+
+
 **Verify the PREMISE of a bead, not just its claims.** bd pjws described a
 mid-session language switch, and I checked that the code did what the bead said
 -- the state really did go stale, the confirm really did write it back. Every
@@ -114,8 +139,14 @@ outright (they are current-state).
   checker reports OK.
 - **Amended `docs/journal/entries/2026-08-04-bd-575i-...md`** with a correction
   block rather than a rewrite.
-- Reviewed and left: the other tier-2 docs the checker flags STALE track files
-  this branch did not touch.
+- **Bumped `docs/standards/ws-protocol.md` and `docs/components/websocket-routing.md`**
+  -- both still defined `change_spoken_language` as a language *change*, directly
+  contradicting the new SPEC section, and `websocket-routing.md` tracks
+  `websocket_routes.py`, which this branch DOES touch. An earlier draft of this
+  entry claimed the remaining stale docs "track files this branch did not touch";
+  that was wrong, and both reviewers caught it.
+- Reviewed and left: the tier-2 docs the checker still flags STALE genuinely track
+  files this branch does not touch (re-checked, not assumed, this time).
 - No CLAUDE.md changes.
 
 ## Files touched
@@ -129,3 +160,6 @@ outright (they are current-state).
 - `backend/routes/websocket_routes.py` -- MISNOMER note on the `change_spoken_language` handler (behavior unchanged; the reconnect path depends on it).
 - `docs/standards/voice-and-vad.md` -- the SPEC section + stamp.
 - `docs/journal/entries/2026-08-04-bd-575i-...md` -- correction block.
+- `docs/standards/ws-protocol.md`, `docs/components/websocket-routing.md` -- the `change_spoken_language` rows + the initiating-message prose corrected; stamped.
+- `backend/services/form_filling_service.py` -- two comments that asserted the retired flow (comment-only; behavior unchanged).
+- `frontend/src/__tests__/pinned-language-policy.test.ts` -- new; pins the re-assertion invariant and bans a re-added switcher at source level.
