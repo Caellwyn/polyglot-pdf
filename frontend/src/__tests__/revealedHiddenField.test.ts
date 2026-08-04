@@ -66,6 +66,54 @@ const REVEALED_BUT_EMPTY = stateWith({
   trigger: { value: "yes", confirmed: true },
 });
 
+describe("dropping the extra `hidden` term changes EXACTLY one shape", () => {
+  // The safety proof for bd ubam: seven call sites dropped a `field.hidden`
+  // term, so the question that matters is "what ELSE moved?" The answer must be
+  // nothing. Enumerate every hidden/show_if combination and assert the old gate
+  // (`!(field.hidden || !shouldShowField(...))`) and the new one
+  // (`shouldShowField(...)`) agree everywhere EXCEPT hidden+satisfied.
+  const values = { trig: { value: "x" } };
+  const shapes: Array<[string, any, boolean]> = [
+    // [label, field, expected-to-differ]
+    ["plain hidden, no show_if", { id: "a", hidden: true }, false],
+    ["plain visible, no show_if", { id: "b" }, false],
+    [
+      "hidden + UNSATISFIED show_if",
+      { id: "c", hidden: true, show_if: { field: "trig", operator: "equals", value: "nope" } },
+      false,
+    ],
+    [
+      "hidden + SATISFIED show_if",
+      { id: "d", hidden: true, show_if: { field: "trig", operator: "is_not_empty" } },
+      true, // <-- the ONLY intended behaviour change
+    ],
+    [
+      "visible + UNSATISFIED show_if",
+      { id: "e", show_if: { field: "trig", operator: "equals", value: "nope" } },
+      false,
+    ],
+    // Fail-open branches: shouldShowField returns !field.hidden for an unknown
+    // operator, so these must be unaffected too.
+    [
+      "hidden + MALFORMED show_if",
+      { id: "f", hidden: true, show_if: { field: "trig", operator: "bogus_op" } },
+      false,
+    ],
+    [
+      "visible + MALFORMED show_if",
+      { id: "g", show_if: { field: "trig", operator: "bogus_op" } },
+      false,
+    ],
+  ];
+  const allFields = shapes.map(s => s[1]) as FormField[];
+
+  it.each(shapes)("%s", (_label, field, shouldDiffer) => {
+    const now = shouldShowField(field as FormField, values, allFields);
+    const before = !(field.hidden || !now); // the old, seven-times-repeated gate
+    expect(now !== before).toBe(shouldDiffer);
+  });
+});
+
 describe("a hidden field whose show_if is satisfied (bd ubam)", () => {
   it("premise: the fixture really does render once the condition is met", () => {
     // If this fails the whole file is vacuous -- shouldShowField is the
