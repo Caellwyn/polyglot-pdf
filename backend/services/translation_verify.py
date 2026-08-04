@@ -385,7 +385,8 @@ def _finalize(items: List[_Item],
                 message="a problem was found here (%s) and automatically "
                         "corrected: '%s' -> '%s' -- read the new wording "
                         "and confirm it says the right thing"
-                        % (_plain_reason(item.trace[0]),
+                        % ((_plain_reason(item.trace[0]) if item.trace
+                            else "a problem was found"),
                            item.original, item.resolved),
             ))
         elif item.unresolved or (item.flagged_values
@@ -411,7 +412,8 @@ def _finalize(items: List[_Item],
                 message="this translation still looks wrong after "
                         "automatic correction was tried -- review it and "
                         "fix it by hand; %s. First problem found: %s"
-                        % (kept, _plain_reason(item.trace[0])),
+                        % (kept, (_plain_reason(item.trace[0]) if item.trace
+                            else "a problem was found")),
             ))
     _log.info(
         "translation_verify_complete",

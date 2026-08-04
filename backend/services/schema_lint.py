@@ -321,7 +321,7 @@ def _check_atom(
         out.append(LintFinding(
             SEVERITY_ERROR, "unknown-operator", atom_path,
             f"the condition uses {operator!r}, which is not a recognized "
-            f"rule -- change it to one of: "
+            f"comparison type -- change it to one of: "
             f"{', '.join(sorted(vocab.ALLOWED_OPERATORS))}",
         ))
         return
@@ -370,8 +370,9 @@ def _check_atom(
             out.append(LintFinding(
                 SEVERITY_ERROR, "operator-trigger", atom_path,
                 f"{operator!r} cannot be used on a {trigger_type!r} field -- "
-                f"valid comparisons for this field type are: "
-                f"{', '.join(sorted(spec.trigger_types))}",
+                f"this comparison only works when the trigger field is one "
+                f"of: {', '.join(sorted(spec.trigger_types))}; pick a "
+                f"different trigger field, or change the comparison",
             ))
             return
 

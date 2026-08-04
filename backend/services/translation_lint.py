@@ -278,7 +278,7 @@ def lint_translation(
         _check_dnt(source, translation, dnt_terms, form_number_re))
     failures.extend(
         _check_script(source, translation, lang_entry, dnt_terms,
-                      form_number_re, mask_re))
+                      form_number_re, mask_re, language_name))
     failures.extend(_check_wrong_language(source, translation, language_name))
     failures.extend(_check_pins(source, translation, lang_entry))
     return failures
@@ -390,6 +390,7 @@ def _check_script(
     dnt_terms: List[str],
     form_number_re: Optional[re.Pattern],
     mask_re: Optional[re.Pattern],
+    language_name: str = "",
 ) -> List[MechanicalFailure]:
     """Expected script PRESENT after stripping DNT terms, form numbers,
     format masks and digits. NEVER 'no Latin present' -- Latin runs like
@@ -436,7 +437,7 @@ def _check_script(
             "this translation has no %s-alphabet characters at all -- it "
             "looks like it was never actually translated (letter counts "
             "found instead: {%s}); replace it with a real %s translation"
-            % (expected, summary, expected),
+            % (expected, summary, language_name or expected),
         )]
     return []
 
