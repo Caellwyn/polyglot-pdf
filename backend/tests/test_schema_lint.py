@@ -613,7 +613,8 @@ def _dump_kit(kit):
 # exists but can't be filled through the app":
 #   - dump-widget-unclaimed: a real fillable PDF widget with NO schema field
 #     (extraction dropped it) -- i-90's 4 were FIXED by bd 0nxh (now 0); f1040
-#     still has 12; w7 has 2 (the box-h "Other" reason text line
+#     went 12 -> 8 (bd polyglot-pdf-3ave + lha9; see the per-kit note below);
+#     w7 has 2 (the box-h "Other" reason text line
 #     f1_04 and the 6d "Other" ID-document text line f1_23 -- both surfaced as
 #     genuinely unmodeled once bd polyglot-pdf-ivh9 corrected the field-to-widget
 #     off-by-one that had been mis-parking treaty_country / id_number on them;
