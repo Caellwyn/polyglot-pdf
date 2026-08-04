@@ -13,7 +13,6 @@ import type { ConnectionManager } from '../shared/connection'
 import { SchemaFormStateManager } from '../schema-forms/state/schemaFormState'
 import { clearOnboardingState } from '../schema-forms/onboardingStorage'
 import type { FormSchema } from '../schema-forms/types/schema'
-import { computeNextField, formatNextFieldHint } from '../navigation'
 import { useDemoVAD } from './useDemoVAD'
 import { DisclaimerModal, DISCLAIMER_TRANSLATIONS } from '../schema-forms/components/DisclaimerModal'
 import { getOverlayStrings } from './overlayTranslations'
@@ -634,56 +633,15 @@ export function VoiceOverlayMobile({ schema, wsUrl, connectionManager: sharedCon
 		}
 	}
 
-	// Handle language selection change
-	const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-		const newLanguage = event.target.value
-
-		if (!newLanguage) {
-			setSelectedLanguage('')
-			return
-		}
-
-		console.log('[VoiceOverlayMobile] Language selected:', newLanguage)
-		setSelectedLanguage(newLanguage)
-
-		// Check if disclaimer already accepted (returning user)
-		const state = SchemaFormStateManager.load()
-		if (state?.disclaimerAccepted) {
-			console.log('[VoiceOverlayMobile] Disclaimer already accepted - proceeding to connection')
-			// Already accepted, just change language if connected
-			if (connectionManager && isConnected) {
-				try {
-					const nextField = computeNextField(state)
-					const nextFieldHint = nextField ? formatNextFieldHint(nextField, undefined, newLanguage) : 'all fields are complete'
-					connectionManager.changeSpokenLanguage(newLanguage, nextFieldHint)
-				} catch (err) {
-					console.error('[VoiceOverlayMobile] Failed to change spoken language:', err)
-					setError(err instanceof Error ? err.message : 'Failed to change language')
-				}
-			}
-			return
-		}
-
-		// First time - connect to Gemini, THEN show disclaimer modal
-		console.log('[VoiceOverlayMobile] First language selection - connecting to Gemini...')
-		try {
-			// Set pending flag so disclaimer will be read when connection is ready
-			setPendingDisclaimerRead(true)
-
-			// Start connection
-			await handleConnect()
-
-			// Show disclaimer modal
-			console.log('[VoiceOverlayMobile] Connection initiated - showing disclaimer modal')
-			setShowDisclaimerModal(true)
-
-			// The useEffect watching status will send the disclaimer prompt when ready
-		} catch (err) {
-			console.error('[VoiceOverlayMobile] Failed to connect after language selection:', err)
-			setError(err instanceof Error ? err.message : 'Connection failed')
-			setPendingDisclaimerRead(false) // Clear flag on error
-		}
-	}
+	// NOTE: there is deliberately NO mid-session language change here.
+	// The spoken language is PINNED for the whole form -- chosen once in
+	// LanguageSelectionModal (handleInitialLanguageSelect below), carried into the
+	// Gemini config + system instruction at session start, and held for every turn.
+	// The only way to change it is a NEW session: 'clear form', then pick again in
+	// the modal. A handleLanguageChange() that swapped the language on a live
+	// session used to sit here, wired to nothing; it was removed rather than left
+	// as a trap, because its presence implied a supported flow that does not exist
+	// (bd polyglot-pdf-87a9). See docs/standards/voice-and-vad.md.
 
 	const handleDisclaimerListenAgain = () => {
 		console.log('[VoiceOverlayMobile] User requested to listen again')

@@ -688,8 +688,19 @@ async def _handle_fill_session(
 						await websocket.send_json({"type": "language_changed", "language": new_language})
 					continue
 				elif mtype == "change_spoken_language":
-					# Frontend requests to change the spoken conversation language
-					# Backend sends initiating message to Gemini to switch language and greet user
+					# MISNOMER, kept for wire compatibility: this does NOT switch the
+					# session's language. The spoken language is PINNED for the whole
+					# form -- chosen once before the form starts, carried into the
+					# per-connect Gemini config + SI, and held for every turn; changing
+					# it requires a NEW session ("clear form" -> language modal). See
+					# docs/standards/voice-and-vad.md ("the spoken language is pinned
+					# per session") and bd polyglot-pdf-87a9.
+					#
+					# The ONLY live sender is the frontend's reconnect opener, which
+					# RE-ASSERTS the same pinned language after a socket teardown (a
+					# section switch or reconnect drops the Gemini session). So the work
+					# here is re-establishing the language + current field on a fresh
+					# Gemini session, which is exactly what the initiating message does.
 					spoken_language = obj.get("spoken_language")
 					next_field_hint = obj.get("next_field_hint")
 					if not spoken_language or not isinstance(spoken_language, str):

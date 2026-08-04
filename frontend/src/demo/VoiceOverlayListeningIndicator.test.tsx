@@ -120,7 +120,6 @@ function makeMockManager(status: string, opts?: { sendingMic?: boolean }): Conne
     isPaused: vi.fn(() => status === 'paused'),
     rearmAudioCapture: vi.fn(async () => {}),
     changeFillLanguage: vi.fn(async () => {}),
-    changeSpokenLanguage: vi.fn(),
     readDisclaimer: vi.fn(),
     switchToFirstSection: vi.fn(async () => {}),
     startSection: vi.fn(async () => {}),

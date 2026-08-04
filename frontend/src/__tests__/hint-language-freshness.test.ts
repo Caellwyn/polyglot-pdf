@@ -1,17 +1,27 @@
 /**
- * Mid-session spoken-language changes must reach the next-field hint
+ * State written OUTSIDE WebFormConnection must reach the next-field hint, and
+ * must not be clobbered by a handler that saves a stale copy
  * (bd polyglot-pdf-pjws).
  *
- * After bd polyglot-pdf-0rm1 the hint resolves option labels from the session
- * language, so a stale language is no longer harmless: the pre-0rm1 hint fell
- * back to English (merely redundant beside a translated guidance block), but a
- * STALE one asserts confident labels in the language the user just switched
- * AWAY from. The model then holds two different non-English languages for the
- * same options on the same turn.
+ * READ THIS FIRST, because it is not what the bead title says. The spoken
+ * language is PINNED for the whole form -- it is set once before the form starts
+ * and held for every turn, and the only way to change it is a NEW session
+ * ("clear form" -> language modal). Mid-conversation switching is NOT a
+ * supported flow (bd polyglot-pdf-87a9, docs/standards/voice-and-vad.md), and
+ * the UI paths that once did it have been removed. pjws was originally written
+ * up as a mid-session-switch bug; that framing was wrong.
  *
- * The staleness is structural: changeSpokenLanguage() (shared/connection.ts)
- * persists through SchemaFormStateManager, which builds a NEW state object and
- * save()s it -- it never mutates WebFormConnection's in-memory `this.state`.
+ * What IS real, and what these tests pin: every SchemaFormStateManager mutator
+ * builds a NEW state object and save()s it, never touching this object's
+ * in-memory `this.state`. So a handler can (a) READ a stale copy and emit a hint
+ * that disagrees with what the form holds, or (b) SAVE a stale copy and revert
+ * whatever was written outside it. Both are general stale-state defects with
+ * nothing to do with language policy.
+ *
+ * selectedLanguage remains the most legible probe for that class -- it is a
+ * single scalar that is easy to write outside this object and easy to assert on
+ * -- so the cases below still drive it, and the assertions still read as a
+ * language changing. Treat that as a TEST FIXTURE, not a supported user flow.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -56,12 +66,12 @@ function hintFrom(conn: WebFormConnection): string | null {
   return response.hint
 }
 
-describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
+describe('hint reads through to persisted state (bd polyglot-pdf-pjws)', () => {
   beforeEach(() => {
     sessionStorage.clear()
   })
 
-  it('uses the NEW language after a mid-session change', () => {
+  it('picks up a selectedLanguage persisted outside this object', () => {
     const conn = new WebFormConnection(SCHEMA)
 
     // Session starts in Spanish, exactly as the disclaimer flow leaves it.
@@ -71,9 +81,10 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
     ;(conn as any).state = started
     expect(hintFrom(conn)).toContain('options: [Masculino, Femenino]')
 
-    // The user switches to Ukrainian. This is what changeSpokenLanguage() does:
-    // persist through the state manager. It deliberately does NOT touch
-    // `conn.state` -- reproducing the real staleness rather than hiding it.
+    // Persist a DIFFERENT selectedLanguage straight through the state manager,
+    // deliberately not touching `conn.state` -- the fixture for "written outside
+    // this object" (see the file header: this is not a supported user flow, it is
+    // the cheapest scalar to probe the stale-read class with).
     SchemaFormStateManager.setSelectedLanguage(started, 'Ukrainian')
     expect((conn as any).state.selectedLanguage).toBe('Spanish')
 
@@ -82,7 +93,7 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
     expect(hint).not.toContain('Masculino')
   })
 
-  it('a later confirm_field does not revert the persisted language', () => {
+  it('a later confirm_field does not revert persisted state', () => {
     // handleConfirmFieldRequest ends in save(this.state), so running it on a
     // stale copy PERSISTS the old language over the new one -- the switch would
     // survive exactly one turn and then silently undo itself.
@@ -119,7 +130,7 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
     expect(after?.selectedLanguage).toBe('Ukrainian')
   })
 
-  it('a later skip_field does not revert the persisted language either', async () => {
+  it('a later skip_field does not revert persisted state either', async () => {
     // The SIBLING of the confirm case above, and the same defect:
     // handleSkipFieldRequest also ends in save(this.state), so on a stale copy
     // it persists the old language over the new one. A skip is as routine a
@@ -235,7 +246,7 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
     expect((conn as any).state.selectedLanguage).toBe('Spanish')
   })
 
-  it('computeNextFieldHintString picks up a language change too', () => {
+  it('computeNextFieldHintString reads through to storage too', () => {
     // The second hint producer, reached via the public getNextFieldHint()
     // (session restart / reconnect). It formats off the accessor, so a
     // reconnect after a language switch must not re-assert the old labels.
