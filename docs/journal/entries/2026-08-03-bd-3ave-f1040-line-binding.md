@@ -85,10 +85,14 @@ impossible to reintroduce silently -- but only after a SECOND review round
 caught it passing VACUOUSLY on i-90: the lookup matched widget names exactly,
 while i-90 stores LEAF names (`P1_Line1_AlienNumber[0]`) against a PDF that
 uses fully-qualified ones, so all 132 of its fields were skipped and the test
-stayed green with every position corrupted. It now resolves names the way
-production's `find_widget` does (exact, then a dot-boundary suffix that must be
-UNAMBIGUOUS -- f1040 has genuine leaf collisions), and carries a per-kit floor
-of fields-checked so it can never silently fall back to asserting nothing.
+stayed green with every position corrupted. It now resolves names MORE
+STRICTLY than production's `find_widget` (exact, then a dot-boundary suffix
+that must be UNAMBIGUOUS; production does a bare `endswith` and takes the first
+hit, which a guard must not do -- f1040 has genuine leaf collisions, and
+asserting a position against a guessed widget is worse than skipping it). The
+two agree on 100% of fields across all three shipped kits today. It also
+carries a per-kit floor of fields-checked so it can never silently fall back to
+asserting nothing.
 Coverage went 0 -> 114 fields on i-90, re-mutation-verified.
 
 **Verified:** oracle 20 mismatches -> 0 (56 fields verifiable, up from 52);
