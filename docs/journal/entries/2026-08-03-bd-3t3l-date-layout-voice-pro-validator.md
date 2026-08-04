@@ -131,6 +131,53 @@ harness run would have UNDERSTATED real per-form cost while being trusted as the
 accounting number. Help text, comment, and
 `docs/standards/validation-delegation.md` all corrected.
 
+## The review rounds (and the one that nearly shipped a silent revert)
+
+Four adversarial rounds found **seven** gaps in the above work. Two are worth
+recording because of *how* they hid.
+
+**Round 2: a fix that was committed, then silently un-committed.** Round 1
+corrected the `speech_config` merge so neither the language nor the voice block
+could clobber the other. That fix was in its commit. But the round-1 reviewer had
+mutated the file to test the claim, never restored it, and an unrelated
+`git add -A` for the *progress-bar* change swept the mutation into the next
+commit -- reverting the fix on the branch. **The full suite stayed green
+throughout.**
+
+It stayed green because the guard test asserted
+`src.count("config['speech_config'] = {") == 0` -- a literal, single-quoted
+source grep. The reverted line was double-quoted. A test that pins *spelling*
+rather than *behaviour* bought false confidence at precisely the moment it was
+load-bearing.
+
+Two changes came out of it: both writers now route through one
+`_merge_speech_config` helper (the failure is structurally impossible rather than
+a rule each call site must remember), and the guard drives the helper in *both*
+orders and asserts the property. The same trap caught me again minutes later --
+`git checkout` on a mutated file restored it to the *committed* version, silently
+discarding an uncommitted fix I had just written. Restore from a saved copy, then
+verify with `git show HEAD:<file>` that the *commit* contains what you intended.
+Passing tests are not evidence the right code is in the commit.
+
+**Round 3: the fix reintroduced its own bug class.** `getProgress` filtered on
+`!f.hidden && shouldShowField(...)`. But `shouldShowField` *already* returns
+`!field.hidden` when there is no `show_if`, so the extra gate changed behaviour
+for exactly one shape -- `hidden: true` WITH a satisfied `show_if` -- and changed
+it wrongly. Such a field renders (FieldRenderer uses `shouldShowField` alone) and
+is required by `isSectionValid`, yet the extra gate dropped it from *both* halves
+of the ratio. That is the "bar never reads complete" bug this work exists to fix,
+reintroduced by the fix for it. `isSectionValid` carries a comment documenting
+the identical trap from an earlier fresh-eyes round; the lesson had already been
+learned once in this file and was re-learned one function away.
+
+**A pre-existing divergence found while checking that fix** (filed as
+`polyglot-pdf-ubam`, not fixed here): `isFormComplete` keeps the same
+`field.hidden ||` gate. Measured on a two-field probe -- `getProgress` = 50,
+`isFormComplete` = `true`. It declares a form complete with a visibly unanswered
+field, which now also means **spending pro-validator money on an incomplete
+form**. Dormant (no shipped kit has the shape), out of scope for these beads, and
+a change to when a paid validator fires deserves its own reviewed PR.
+
 ## Lessons
 
 1. **When a model ignores a verified instruction, look for a competing signal in
@@ -150,3 +197,18 @@ accounting number. Help text, comment, and
 4. **A default that no data satisfies is a trap, not a fallback.** Defaulting to
    ISO looked safe and made every real field take the wrong branch -- silently
    disabling three other checks along the way.
+5. **Never write a guard test that greps source TEXT for a literal.** Pin
+   behaviour: drive the code and assert the property. A spelling-pinned test
+   passes while the bug is live, which is worse than no test -- it converts
+   "untested" into "falsely confirmed." If a structural guard is genuinely
+   needed, make it quote- and whitespace-insensitive.
+6. **A mutation probe left in the tree WILL be committed by the next
+   `git add -A`.** Restore it, stage explicitly by path while any probe has
+   touched the tree, and verify the COMMIT (`git show HEAD:<file>`) rather than
+   trusting a green suite. Note `git checkout <file>` restores to the committed
+   version -- it will happily discard an uncommitted fix.
+7. **When two functions answer "is this field answerable?", they must share one
+   predicate.** Four call sites here (`FieldRenderer`, `isSectionValid`,
+   `getProgress`, `isFormComplete`) each re-derived visibility, and three
+   different answers were in the tree at once. The right shape is one helper the
+   others call, not four correct-looking copies.
