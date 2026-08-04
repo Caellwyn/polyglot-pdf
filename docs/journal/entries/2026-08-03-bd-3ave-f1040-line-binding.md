@@ -93,7 +93,8 @@ Coverage went 0 -> 114 fields on i-90, re-mutation-verified.
 
 **Verified:** oracle 20 mismatches -> 0 (56 fields verifiable, up from 52);
 lint ERRORs 4 -> 0; `dump-widget-unclaimed` 12 -> 8; production fill round-trip
-24/24 present, 0 errors, 0 misplaced. Full backend suite 1474 passed.
+24/24 present, 0 errors, 0 misplaced. Full CI suite (`backend/tests tests`)
+2537 passed.
 Mutation-verified against the shipped kit: the oracle test names all 20
 misbindings, the round-trip names exactly `fld_1a`..`fld_1d` as never reaching
 the PDF.
@@ -110,6 +111,15 @@ the PDF.
   distinguishes them, and three of the oracle's 24 suggestions were outright
   wrong for exactly this reason. Check a proposed map for collisions BEFORE
   writing it -- that check is what surfaced all of them here.
+- **A regression test must not use a live shipped artifact as its corrupt
+  specimen.** `tests/test_check_line_binding.py` proved the oracle DETECTS this
+  shift by running it against the shipped f1040 kit -- so fixing the kit
+  inverted four tests. The detection is now pinned against the frozen
+  `schema_archived.json` (20 findings, `fld_9` on the printed 6a box), which
+  keeps the proof permanent and lets the shipped kit be correct. Caught by the
+  Opus outer review, not by me: I had verified only `backend/tests` while CI
+  runs `pytest backend/tests tests`, so the PR would have merged CI-red. Run
+  the command CI runs, not a subset of it.
 - **The write-in/checkbox rows that interrupt a numeric column are where these
   shifts originate** (this bead, and bd ivh9 on w7 before it). Both times the
   cascade began at a widget the extractor did not model as part of the run.

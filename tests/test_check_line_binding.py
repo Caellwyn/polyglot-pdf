@@ -30,6 +30,13 @@ spec.loader.exec_module(clb)
 
 _F1040_PDF = _REPO / "form-kits" / "f1040" / "form.pdf"
 _F1040_SCHEMA = _REPO / "form-kits" / "f1040" / "schema.json"
+# The CORRUPT specimen these detection tests grade against (bd polyglot-pdf-3ave
+# fixed the live kit). They used to read the SHIPPED schema, which meant "the
+# oracle detects the shift" was pinned to the shift STAYING UNFIXED -- fixing
+# the kit inverted four tests and would have merged CI-red. schema_archived.json
+# is the frozen pre-fix binding (20 findings, fld_9 on the printed 6a box), so
+# the detection stays pinned forever and the shipped kit is free to be correct.
+_F1040_CORRUPT_SCHEMA = _REPO / "form-kits" / "f1040" / "schema_archived.json"
 
 # w7 is the ABSTENTION fixture: it prints markers but has no field that both
 # states a line number and claims a widget on a marked row, so the oracle
@@ -81,7 +88,7 @@ def test_iter_fields_walks_nested_parts_and_sections():
 def test_catches_the_shipped_f1040_line_shift():
     """The shipped kit's page-1 income block is shifted (bd 3ave). Every finding
     must name a field whose claimed widget is printed on a DIFFERENT line."""
-    schema = json.loads(_F1040_SCHEMA.read_text(encoding="utf-8"))
+    schema = json.loads(_F1040_CORRUPT_SCHEMA.read_text(encoding="utf-8"))
     result = clb.check(schema, str(_F1040_PDF))
     found = {f["field_id"] for f in result["findings"]}
     # Spot-pin the hand-verified worst cases (see bd 3ave):
@@ -99,7 +106,7 @@ def test_catches_the_shipped_f1040_line_shift():
 def test_a_correct_binding_produces_no_finding():
     """Rebinding a field to the widget printed on its OWN line clears it --
     the oracle keys on the printed marker, not on the field being suspicious."""
-    schema = json.loads(_F1040_SCHEMA.read_text(encoding="utf-8"))
+    schema = json.loads(_F1040_CORRUPT_SCHEMA.read_text(encoding="utf-8"))
     before = {f["field_id"] for f in clb.check(schema, str(_F1040_PDF))["findings"]}
     assert "fld_9" in before
 
@@ -429,7 +436,7 @@ def test_the_json_payload_marks_abstention_explicitly(tmp_path, capsys):
 @needs_f1040
 def test_the_json_payload_marks_a_verified_run_not_abstained(tmp_path, capsys):
     out = tmp_path / "f1040.json"
-    clb.main(["--schema", str(_F1040_SCHEMA), "--pdf", str(_F1040_PDF),
+    clb.main(["--schema", str(_F1040_CORRUPT_SCHEMA), "--pdf", str(_F1040_PDF),
               "--json", str(out)])
     capsys.readouterr()
     payload = json.loads(out.read_text(encoding="utf-8"))
@@ -439,9 +446,9 @@ def test_the_json_payload_marks_a_verified_run_not_abstained(tmp_path, capsys):
 
 @needs_f1040
 def test_exit_code_signals_findings(tmp_path, capsys):
-    rc = clb.main(["--schema", str(_F1040_SCHEMA), "--pdf", str(_F1040_PDF),
+    rc = clb.main(["--schema", str(_F1040_CORRUPT_SCHEMA), "--pdf", str(_F1040_PDF),
                    "--json", str(tmp_path / "out.json")])
     capsys.readouterr()
-    assert rc == 1  # the shipped kit is known-corrupt
+    assert rc == 1  # the ARCHIVED pre-fix kit is known-corrupt
     payload = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))
     assert payload["findings"] and payload["checked"] > 0
