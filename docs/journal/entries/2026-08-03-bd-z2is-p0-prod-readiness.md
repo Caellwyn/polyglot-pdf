@@ -170,7 +170,38 @@ The round also softened one journal overclaim: the pre-z2is `client_ip` was
 the Hosting proxy address in production (ProxyHeadersMiddleware defaults to
 trusting only localhost), so the removal is correct hygiene rather than
 closing an active end-user-IP leak.
-Round 4 (Opus) on the updated diff: outcome recorded below.
+**Fresh-eyes round 4 (Opus, Workflow fallback): NO-GAPS.** All four rubric
+criteria PASS, with the round-3 fixes verified BY EXECUTION rather than
+inspection: a live Firestore query against the demo project via the new
+`--project` flag (correct project, clean exit-1 semantics), a 401 edge-case
+matrix on fill-pdf (absent/Basic/malformed/case-variant headers), a
+real-uvicorn shutdown timing run (8s stalled commit; loop released at 5.0s),
+`firebase_admin._lookup_project_id` source-read confirming the `--project`
+pre-init ordering, and mutation-verification of the flush-loop and
+probe-cache tests. Two non-gap notes: (1) `scripts/dev-local.ps1` never sets
+`VFF_DISABLE_AUTH`, so the new catalogue gate 401s Windows local dev -- a
+PRE-EXISTING omission whose blast radius this diff widens; filed by the
+reviewer as bd polyglot-pdf-zeqt (to be fixed in the next PR rather than
+invalidating this clear for a dev-script line). (2) The 5s drain cap bounds
+the EVENT LOOP, not process exit -- the non-daemon sink thread keeps draining
+until SIGKILL, which is the documented intent.
+
+**Second independent confirming review (fresh Opus, no shared context):
+rubric NO-GAPS on the identical HEAD (63047d71).** Independently re-verified
+all four criteria, mutation-verified the wv3j drain test and the probe-cache
+test, ran the full suites (backend 1476 / frontend 1189 + tsc clean), and
+restored its own mutation probes to a clean tree. Two OUT-OF-SCOPE hardening
+findings, filed by the reviewer: bd polyglot-pdf-fzwp (concurrent cold-cache
+`/health` probes do not coalesce -- an unauthenticated bounded-cost surface)
+and bd polyglot-pdf-k3v7 (`strict=True` is inert without `--firestore`, so a
+flag-forgotten deployed retrieval can still read as not-found). Orchestrator
+triage: both are real, neither is a correctness/data risk; deferred to their
+beads rather than re-opening two clean clears.
+
+**Gate result: TWO independent Opus reviews cleared the identical final diff
+(round-4 primary + the confirming pass). This closing journal paragraph is
+the only change on top of the cleared SHA -- journal-only, no executable
+code, per the docs-only review-skip rationale.**
 
 ## Lessons
 
