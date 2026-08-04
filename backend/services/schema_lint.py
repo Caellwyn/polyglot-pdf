@@ -947,11 +947,10 @@ def lint_schema(
                 f"sections[{i}] (id={sid})",
                 f"the holding section {sid!r} still lists {len(stale)} field "
                 f"id(s) ({', '.join(stale[:5])}{', ...' if len(stale) > 5 else ''}) "
-                f"that no field currently points back to -- each is either "
-                f"a field already filed in a proper section, a field with no "
-                f"section set at all, or a leftover naming no field; re-file "
-                f"any real field that still lacks a section FIRST, then "
-                f"delete the leftover ids from the holding section's list",
+                f"that no field points back to (already filed elsewhere, "
+                f"missing a section entirely, or naming no field) -- re-file "
+                f"any real field that still lacks a section, then delete "
+                f"the leftover ids",
             ))
 
     _check_guidance(fields, schema, out)

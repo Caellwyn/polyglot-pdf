@@ -382,9 +382,9 @@ def _finalize(items: List[_Item],
                 else FLAG_RECTIFIED
             flags.append(VerifyFlag(
                 taxonomy=taxonomy, kind=item.kind, source=item.source,
-                message="a problem was found here (%s) and automatically "
-                        "corrected: '%s' -> '%s' -- read the new wording "
-                        "and confirm it says the right thing"
+                message="the checker flagged this (\"%s\") and it was "
+                        "automatically corrected: '%s' -> '%s' -- read the "
+                        "new wording and confirm it says the right thing"
                         % ((_plain_reason(item.trace[0]) if item.trace
                             else "a problem was found"),
                            item.original, item.resolved),
@@ -422,12 +422,18 @@ def _finalize(items: List[_Item],
             # translation stays diagnosable without a re-run (Opus outer
             # review pass 2).
             # Kit-authoring text only (labels/spoken names + judge prose),
-            # never end-user data, so it is safe under the PII policy;
-            # bounded so a pathological trace cannot flood the log.
+            # never end-user data, so it is safe under the PII policy.
+            # Bounded to 1200 chars AND ascii-escaped BEFORE logging: the
+            # root log filter (backend/utils/logging.py) silently DROPS
+            # sub-ERROR records whose rendered JSON exceeds 2000 chars,
+            # and ensure_ascii inflates raw glyphs ~6x -- an unbounded or
+            # glyph-carrying trace would vanish in exactly the pathological
+            # case this line exists to diagnose (Opus outer review).
             _log.info(
                 "translation_verify_unresolved_trace",
                 kind=item.kind, source=item.source,
-                trace=" | ".join(item.trace)[:2000],
+                trace=" | ".join(item.trace)[:1200]
+                    .encode("ascii", "backslashreplace").decode("ascii"),
             )
     _log.info(
         "translation_verify_complete",

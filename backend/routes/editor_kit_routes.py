@@ -1497,23 +1497,23 @@ async def set_editor_kit_status(
             f for f in lint_schema(schema, dump_data) if f.severity == SEVERITY_ERROR
         ]
         if lint_errors:
-            # Cap the finding list BEFORE appending the "and N more" tail so a
-            # long list can never truncate away the count of what was elided.
-            # Each segment is ALSO capped (~200 chars) before joining: a single
-            # finding whose message embeds a very long option value (e.g. a
-            # 10KB string) would otherwise eat the whole [:1400] budget on its
-            # own, hiding later findings' text within the first 8 (bd
-            # polyglot-pdf-tmby nit 1).
-            # 400/2000: the bd-xfdb copy pass moved every message's remedy
-            # clause to the END; the old 200-char cap systematically cut
-            # exactly that clause at the one gate where the reviewer is
-            # actively blocked (Opus outer review).
-            # 3200 = 8 findings x 400: the outer cap must never be the
-            # binding constraint, or long findings lose their trailing
-            # remedy clause again (Opus outer review, final round).
+            # Cap the finding list BEFORE appending the "and N more" tail so
+            # a long list can never truncate away the count of what was
+            # elided. Each segment is ALSO capped at 400 chars before
+            # joining: a single finding whose message embeds a very long
+            # option value (e.g. a 10KB string) would otherwise eat the
+            # whole budget on its own, hiding later findings within the
+            # first 8 (bd polyglot-pdf-tmby nit 1). 400 (was 200): the
+            # bd-xfdb copy pass moved every message's remedy clause to the
+            # END, and the old cap systematically cut exactly that clause
+            # at the one gate where the reviewer is actively blocked. The
+            # outer cap is 8 x 400 + 7 x len("; ") = 3214 -- sized so the
+            # per-segment cap is ALWAYS the binding constraint (a smaller
+            # outer cap re-cuts the 8th finding's remedy; Opus outer
+            # review, both points measured).
             shown = "; ".join(
                 f"[{f.rule}] {f.path}: {f.message}"[:400] for f in lint_errors[:8]
-            )[:3200]
+            )[:3214]
             more = len(lint_errors) - 8
             if more > 0:
                 shown += f"; ... and {more} more"
