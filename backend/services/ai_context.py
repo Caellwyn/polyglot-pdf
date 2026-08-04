@@ -23,6 +23,58 @@ ASK_DIRECTLY_OPTION_TYPES = {"select"}
 # maintainer-reviewed as reasonable for now, may be tuned later.
 LONG_OPTION_LIST_THRESHOLD = 20
 
+# The two-option natural-question marker (bd polyglot-pdf-41fi) asserts that ONE
+# question can carry BOTH choices. That claim is only true for a SINGLE-select
+# field: on a multi-select the user may legitimately want BOTH options, and an
+# exclusive-choice ask ("is it this or that?") forecloses that (bd
+# polyglot-pdf-9tuu). Named on the MULTI-select side, mirroring the
+# ASK_DIRECTLY_OPTION_TYPES rationale above: a field whose type is unrecognized
+# or absent is NOT assumed multi-select, so it keeps the natural-question ask
+# rather than degrading to a two-item list recital.
+#
+# "checkbox" is in the set, but ONLY reaches this gate when it carries options
+# -- which is exactly the legacy v1 group idiom, a genuine multi-select. Three
+# independent places agree: schema_repair._membership_trigger treats it as
+# selecting FROM A SET ("v1 group modeling: type checkbox with options"), its
+# _normalize_checkbox_shapes RETYPES a checkbox with >= 2 options to
+# checkbox_group, validation.ts's isCheckboxGroupField treats it as a group, and
+# FieldRenderer routes it to the same CheckboxField that branches on
+# `!field.options` to render the check-as-many-as-you-like group UI.
+# A v2 standalone checkbox has NO options and so never reaches the options
+# branch at all -- its value is a boolean.
+# Without this, a kit that skipped repair (hand-authored, editor-drafted, or a
+# pre-repair draft) with two such options got the exclusive-choice ask over a UI
+# where both boxes are checkable (2nd Opus outer review, final round).
+MULTI_SELECT_OPTION_TYPES = {
+    "checkbox_group", "checkbox", "multiselect", "multi_select",
+}
+
+# The same marker also assumes both labels are short enough to fold into one
+# natural question. Two shipped-kit pairs are not (bd polyglot-pdf-575i): I-90
+# 'p7_checkbox7' carries ~23- and ~27-word legal declarations whose
+# representation-scope clause a single question drops outright. Above this word
+# count the pair falls back to the normal recital, so the full substance of both
+# options is still read aloud.
+#
+# 20 sits in the gap this corpus actually shows. Measured over every 2-option
+# field in the three shipped kits, the longest label of each pair runs
+# 1,1,1,1,1,2,2,2,3,3,4,5,6 words for the plainly-either/or fields, then 17 for W-7
+# 'previously_received_itin_or_irsn' -- a genuine yes/no whose labels are padded
+# with the printed-form navigation the SI already tells the model not to speak
+# ("Yes. Complete line 6f. ...") -- and then 27 for the I-90 declaration. The
+# threshold must sit above the W-7 case (it IS one natural question) and below
+# the I-90 one; 20 sits inside that 17-to-27 gap with room on both sides,
+# deliberately nearer the low end so a slightly wordier genuine either/or
+# still asks naturally.
+#
+# Those counts are ENGLISH, and the render measures the English label even in a
+# translated session (see the positional read in render_field_guidance). Word
+# count is not translation-invariant, so a threshold calibrated on English MUST
+# be applied to English or the branch becomes language-dependent -- which it
+# briefly was, flipping BOTH of the fields above on shipped kits (Opus outer
+# review, this PR).
+TWO_OPTION_MAX_LABEL_WORDS = 20
+
 
 def render_field_guidance(
     field: Optional[Dict[str, Any]], fill_language: Optional[str] = None,
@@ -92,7 +144,66 @@ def render_field_guidance(
     options = guidance.get("options")
     if options:
         opt_strs = []
-        for opt in options:
+        # The label the LENGTH rule measures, undecorated and always ENGLISH.
+        #
+        # Two things would corrupt this measurement if taken naively:
+        #  - opt_strs carries the '"label" (use value: v)' wrapper, which is
+        #    machine plumbing the model never says aloud;
+        #  - by the time options reach here they may already be TRANSLATED
+        #    (manifest_service._apply_label_overrides substitutes the session
+        #    language into opt['label']). Word count is not translation-
+        #    invariant, so measuring the translated text made the two-option
+        #    branch language-dependent: measured live, I-90 'p7_checkbox7' fell
+        #    back UNDER the threshold in Chinese and Korean (re-introducing the
+        #    exact substance drop bd polyglot-pdf-575i fixed) while W-7
+        #    'previously_received_itin_or_irsn' rose OVER it in 8 of 17 baked
+        #    languages (re-introducing the bd 41fi recital). The gate must
+        #    describe the FIELD, not the session, so it measures English.
+        #
+        # The English label is read POSITIONALLY from the raw `field` rather
+        # than recovered from the override map. get_field_guidance builds its
+        # options from field["options"] through _sanitize_options and
+        # _apply_label_overrides, both plain list comprehensions -- so the two
+        # lists are 1:1 by index, and index i's pre-override label IS the
+        # English one. Exact, and it needs no map at all.
+        #
+        # A reverse lookup over option_label_overrides (keyed by English label)
+        # was the earlier approach and is NOT equivalent: it keys on the
+        # TRANSLATED string but fires on whatever sits in opt["label"], and
+        # those are different populations. An option the secretary did not
+        # translate stays English, and a single unrelated long label mapping TO
+        # that same string re-attributed its word count -- e.g. a 2-option
+        # "Yes"/"No" field silently measured 25 words when some other label
+        # translated to "Yes". Reachable on a partially-baked kit, since
+        # build_translation_overrides records only what the secretary returned
+        # (2nd independent Opus outer review).
+        # Source the raw options EXACTLY as get_field_guidance does
+        # (manifest_service.py: `field.get("options") or field.get("allowed_values")`)
+        # -- an `allowed_values`-shaped field is a supported read-side shape, and
+        # reading only "options" left raw_options None for it, so the fallback
+        # measured the TRANSLATED label and the branch went language-dependent
+        # again on exactly that shape (both final Opus outer reviews, found
+        # independently). If the two sourcing rules ever diverge the length guard
+        # below degrades to the fallback rather than mis-indexing.
+        raw_options = None
+        if isinstance(field, dict):
+            raw_options = field.get("options") or field.get("allowed_values")
+        if not isinstance(raw_options, list) or len(raw_options) != len(options):
+            raw_options = None
+
+        def _english_label(index, fallback):
+            # Fallback = the possibly-translated label, used only when the raw
+            # options are absent or mis-shaped (a caller passing pre-reduced
+            # guidance). Same behavior as before any override existed.
+            if raw_options is None:
+                return fallback
+            raw = raw_options[index]
+            if isinstance(raw, dict):
+                return raw.get("label") or raw.get("value") or fallback
+            return raw if isinstance(raw, str) else fallback
+
+        measured_labels = []
+        for index, opt in enumerate(options):
             if isinstance(opt, dict):
                 opt_value = opt.get("value", "")
                 opt_label = opt.get("label", "")
@@ -102,8 +213,18 @@ def render_field_guidance(
                     opt_strs.append(opt_label)
                 else:
                     opt_strs.append(opt_value)
+                spoken = opt_label or opt_value or ""
             else:
                 opt_strs.append(str(opt))
+                spoken = str(opt)
+            measured = _english_label(index, spoken)
+            # str() so a malformed kit (an LLM-extracted/editor-drafted label
+            # that is a number or None) cannot crash the render on .split();
+            # schema_lint does not assert the label is a string, and every
+            # render call site is unguarded.
+            measured_labels.append(
+                measured if isinstance(measured, str) else str(measured)
+            )
         n = len(opt_strs)
         # The user cannot read the form, so the model's recital is their only
         # access to the choices (bd polyglot-pdf-6bq8). The count + imperative
@@ -124,11 +245,23 @@ def render_field_guidance(
                 f"Options ({n} total -- long standard list; ask directly and "
                 f"offer to read all {n} aloud): [{', '.join(opt_strs)}]"
             )
-        elif n == 2:
+        elif n == 2 and ftype not in MULTI_SELECT_OPTION_TYPES and all(
+            len(label.split()) <= TWO_OPTION_MAX_LABEL_WORDS
+            for label in measured_labels
+        ):
             # A two-option field IS one natural question (bd polyglot-pdf-41fi):
             # forcing the list recital produced "Select No, Select Yes -- which
             # one applies?" on yes/no fields. The SI's two-option rule carries
             # the phrasing detail (yes/no vs either/or).
+            #
+            # Two carve-outs, because the marker asserts an EXCLUSIVE choice
+            # between two SHORT labels and neither holds universally:
+            #  - a MULTI-select at n==2 (bd polyglot-pdf-9tuu) -- the user may
+            #    want both, so it falls to the recital, whose SI rule already
+            #    says "or which ones, for a multi-select";
+            #  - a pair whose labels are too long to fold into one question
+            #    (bd polyglot-pdf-575i) -- reciting both is the only way the
+            #    user hears their full substance.
             parts.append(
                 f"Options (2 -- ask ONE natural question that makes both "
                 f"choices clear; do not recite the labels as a list): "

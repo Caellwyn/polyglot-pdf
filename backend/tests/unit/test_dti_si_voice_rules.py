@@ -412,6 +412,7 @@ def test_render_field_guidance_checkbox_group_gets_recital():
     ("number", True),
     ("radio", True),
     ("checkbox_group", True),
+    ("checkbox", True),  # options-bearing => the legacy v1 group idiom
     ("select", False),
 ])
 def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
@@ -430,11 +431,21 @@ def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
         field["type"] = ftype
     text = render_field_guidance(field)
     if expects_recital:
-        # A 2-option recital-side field gets the natural-question marker
-        # (bd polyglot-pdf-41fi), still on the recital side of the gate --
-        # never the select-style ask-directly marker.
-        assert "ask ONE natural question that makes both choices clear" in text, ftype
+        # Both 2-option markers sit on the RECITAL side of the ask-directly
+        # gate -- which one fires is the multi-select question below, not this
+        # test's concern. What this pins is that NO option-bearing type
+        # silently reaches the select-style ask-directly branch.
         assert "standard list; ask directly" not in text, ftype
+        if ftype in ("checkbox_group", "checkbox"):
+            # A 2-option MULTI-select recites (bd polyglot-pdf-9tuu): the
+            # natural-question marker asserts an exclusive choice, which would
+            # foreclose selecting BOTH. `checkbox` counts because reaching this
+            # branch at all means it CARRIES options -- the legacy v1 group
+            # idiom, which renders as a check-as-many-as-you-like group.
+            assert "read ALL 2 aloud when asking" in text, ftype
+        else:
+            # Single-select: one natural question IS the ask (bd 41fi).
+            assert "ask ONE natural question that makes both choices clear" in text, ftype
     else:
         assert "standard list; ask directly" in text, ftype
         assert "read ALL" not in text, ftype
@@ -543,6 +554,388 @@ def test_real_yes_no_fields_get_the_natural_question_marker():
         assert "read ALL" not in text, fid
 
 
+def test_substantive_two_option_pair_keeps_the_full_recital():
+    # bd polyglot-pdf-575i criterion 1: I-90 'p7_checkbox7' is a 2-option RADIO
+    # whose labels are ~23- and ~27-word legal declarations ("I am not an
+    # attorney ... with the applicant's consent" vs "I am an attorney ... my
+    # representation extends / does not extend beyond ..."). Its spoken_name
+    # ("Is the preparer an attorney or not") collapses to an attorney yes/no,
+    # so ONE natural question drops the representation-scope clause -- load-
+    # bearing legal text the user never hears. Too long to fold into one
+    # question => the normal recital stands.
+    f = _load_kit_field("i-90", "p7_checkbox7")
+    assert len(f["options"]) == 2
+    text = render_field_guidance(f)
+    assert "Options (2 -- read ALL 2 aloud when asking; " in text
+    assert "ask ONE natural question" not in text
+    # Both declarations ride the injection in full -- the marker changes the
+    # ask, never the model's access to the text.
+    assert "my representation of the applicant" in text
+
+
+def test_two_option_word_threshold_admits_the_navigation_padded_yes_no():
+    # The threshold's live boundary case, and why it is not lower. W-7
+    # 'previously_received_itin_or_irsn' IS a genuine yes/no ("Have you
+    # previously received an ITIN?"), but its labels are padded to 17 words with
+    # the printed-form navigation the SI already tells the model not to speak
+    # ("Yes. Complete line 6f. If more than one, list on a sheet and attach...").
+    # It must KEEP the natural-question marker; a threshold at or below 17 would
+    # regress it into "No/Don't know. Skip line 6f. -- which one applies?", the
+    # exact recital bd 41fi removed.
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    f = _load_kit_field("w7", "previously_received_itin_or_irsn")
+    longest = max(len((o["label"] or "").split()) for o in f["options"])
+    assert longest > 12, "fixture no longer exercises the padded-label case"
+    assert TWO_OPTION_MAX_LABEL_WORDS > longest
+    text = render_field_guidance(f)
+    assert "ask ONE natural question that makes both choices clear" in text
+
+
+def test_two_option_word_threshold_boundary_is_inclusive():
+    # A silent `<=` -> `<` flip (or a threshold nudge) would re-route every
+    # exactly-at-threshold pair with the suite green -- the same durability
+    # lesson as the long-list boundary pin above.
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS as W
+
+    def pair(words):
+        label = " ".join(f"w{i}" for i in range(words))
+        return {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+            "options": [{"value": "a", "label": label},
+                        {"value": "b", "label": "short"}],
+        }
+
+    assert "ask ONE natural question" in render_field_guidance(pair(W))
+    assert f"read ALL 2 aloud" in render_field_guidance(pair(W + 1))
+
+
+@pytest.mark.parametrize("kit,fid,expect_natural", [
+    # The two fields the threshold was calibrated to separate. Both must land
+    # on the SAME side in EVERY baked language.
+    ("i-90", "p7_checkbox7", False),
+    ("w7", "previously_received_itin_or_irsn", True),
+])
+def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_natural):
+    # The gate must describe the FIELD, not the session. It briefly did not:
+    # manifest_service._apply_label_overrides substitutes the session-language
+    # label into opt["label"] BEFORE the render measures it, and word count is
+    # not translation-invariant -- so an English-calibrated threshold applied to
+    # translated text flipped both of these fields on SHIPPED kits (Opus outer
+    # review, this PR): i-90 'p7_checkbox7' dropped under the threshold in
+    # Chinese and Korean (re-introducing the bd 575i substance drop) and w7
+    # 'previously_received_itin_or_irsn' rose over it in 8 of 17 languages
+    # (re-introducing the bd 41fi recital). The render now reverse-maps the
+    # override to recover the English label.
+    #
+    # Parametrized over EVERY language the kit actually bakes, not a sample:
+    # the two failures above hit disjoint language sets, so any fixed sample
+    # would have missed one of them.
+    f = _load_kit_field(kit, fid)
+    languages = sorted({
+        lang
+        for opt in f["options"]
+        for lang in (opt.get("label_translations") or {})
+    })
+    assert len(languages) >= 15, f"{fid} is no longer a fully-baked fixture"
+
+    marker = "ask ONE natural question that makes both choices clear"
+    # English (no overrides) is the reference the threshold was calibrated on.
+    assert (marker in render_field_guidance(f)) is expect_natural, f"{fid} english"
+
+    for lang in languages:
+        overrides = {
+            opt["label"]: (opt.get("label_translations") or {})[lang]
+            for opt in f["options"]
+            if (opt.get("label_translations") or {}).get(lang)
+        }
+        text = render_field_guidance(f, option_label_overrides=overrides)
+        assert (marker in text) is expect_natural, f"{fid} flipped in {lang}"
+        # The translated labels still ride the injection -- the fix changes
+        # only what the LENGTH rule measures, never what the model receives.
+        for translated in overrides.values():
+            assert translated in text, f"{fid} lost its {lang} label"
+
+
+def test_english_label_is_read_positionally_not_matched_by_text():
+    # The English label the length rule measures is read POSITIONALLY from the
+    # raw field, never recovered by matching the rendered label's text against
+    # the override map. Text-matching is not sound here, because the map is
+    # keyed by ENGLISH label but the rendered label may or may not have been
+    # translated -- two different populations. These are the cases that
+    # separate the two approaches (2nd independent Opus outer review):
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    long_english = " ".join(f"w{i}" for i in range(TWO_OPTION_MAX_LABEL_WORDS + 5))
+    natural = "ask ONE natural question that makes both choices clear"
+
+    # (a) A 2-option field the secretary did NOT translate (its labels stay
+    # English) while some UNRELATED long label elsewhere on the form translates
+    # TO one of those English strings. Reachable on a partially-baked kit:
+    # build_translation_overrides records only what the secretary returned. A
+    # reverse lookup fires on "Yes" and hands back the 25-word label, so the
+    # pair silently loses its natural question.
+    short_pair = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+        "options": [{"value": "a", "label": "Yes"}, {"value": "b", "label": "No"}],
+    }
+    text = render_field_guidance(short_pair,
+                                 option_label_overrides={long_english: "Yes"})
+    assert natural in text
+    assert "read ALL" not in text
+
+    # (b) The inverse: a genuinely LONG English pair whose translation is
+    # SHORT. Measuring the rendered (translated) text would wrongly promote it
+    # to a natural question; the English label is what the threshold describes.
+    long_pair = {
+        "id": "g", "name": "G", "spoken_name": "g", "type": "radio",
+        "options": [{"value": "a", "label": long_english},
+                    {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(long_pair,
+                                 option_label_overrides={long_english: "Corto"})
+    assert "read ALL 2 aloud when asking" in text
+    assert natural not in text
+    # The SHORT translation still reaches the model -- only the measurement
+    # uses English, never the rendered text.
+    assert "Corto" in text
+
+    # (b2) The same, under the `allowed_values` option shape. get_field_guidance
+    # sources options as `field["options"] or field["allowed_values"]`, so the
+    # positional read must too -- looking only at "options" left the raw list
+    # None here, and the fallback measured the TRANSLATED label, putting exactly
+    # this shape back on the language-dependent branch (both final Opus outer
+    # reviews, found independently). No shipped kit uses it, but it is a
+    # supported read-side shape that option_translation._collect_labels already
+    # traverses, so the override map DOES reach these fields.
+    allowed_values_pair = {
+        "id": "h", "name": "H", "spoken_name": "h", "type": "radio",
+        "allowed_values": [{"value": "a", "label": long_english},
+                           {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(allowed_values_pair,
+                                 option_label_overrides={long_english: "Corto"})
+    assert "read ALL 2 aloud when asking" in text
+    assert natural not in text
+
+    # (c) Two different English labels sharing ONE translation (i-90/Russian
+    # genuinely does this). Positional reading is immune; any text-keyed map
+    # has to guess, and insertion order decided the guess.
+    colliding = {long_english: "Si", "Yes": "Si", "No": "No"}
+    text = render_field_guidance(short_pair, option_label_overrides=colliding)
+    assert natural in text
+    text = render_field_guidance(
+        short_pair, option_label_overrides={"Yes": "Si", "No": "No", long_english: "Si"}
+    )
+    assert natural in text
+
+
+def test_positional_read_degrades_safely_on_a_mis_shaped_field():
+    """The positional read must never be what breaks a render.
+
+    SCOPE NOTE, deliberately explicit: this test pins NO-CRASH, nothing more.
+    None of `_english_label`'s remaining guards can be pinned by outcome, and it
+    is worth recording why rather than dressing up cases that do not distinguish
+    them (that dressing-up is the vacuous-pin failure this PR exists to remove,
+    bd polyglot-pdf-35z0):
+
+    - The LENGTH guard is unreachable by construction. The read now sources the
+      raw list with the SAME rule get_field_guidance uses
+      (`options or allowed_values`), so the two lists always have equal length;
+      the guard only survives to keep that true if the two rules ever drift.
+    - `or raw.get("value")` and the BARE-STRING branch cannot differ from the
+      fallback. `_apply_label_overrides` substitutes only on an option's `label`
+      key, so a value-only option and a bare-string option are never overridden
+      -- raw text and rendered text are the same string, and the two code paths
+      provably return equal values.
+
+    The one guard with observable behavior is the SOURCE rule
+    (`options` or `allowed_values`), and it is pinned in
+    test_english_label_is_read_positionally_not_matched_by_text.
+
+    What remains real here: the render runs on the per-turn injection path, so a
+    crash strands the session mid-form. These shapes must render.
+    """
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    long_english = " ".join(f"w{i}" for i in range(TWO_OPTION_MAX_LABEL_WORDS + 5))
+
+    # An allowed_values-shaped field still measures English (the source rule),
+    # which IS mutation-bearing -- but via the source rule, not the length guard.
+    mismatched = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+        "options": [],
+        "allowed_values": [{"value": "a", "label": long_english},
+                           {"value": "b", "label": "B"}],
+    }
+    assert "read ALL 2 aloud when asking" in render_field_guidance(
+        mismatched, option_label_overrides={long_english: "Corto"})
+
+    # NO-CRASH ONLY, per the scope note above.
+    # A scalar `options` is excluded: it already raises upstream in
+    # _sanitize_options, which is pre-existing behavior this PR neither
+    # introduces nor is scoped to change.
+    for shape in (
+        {"options": {"y": "Yes"}},
+        {"options": "YesNo"},
+        {"options": [{"value": long_english}, {"value": "b", "label": "B"}]},
+        {"options": [long_english, "B"]},
+        {"options": [None, {"value": "b", "label": "B"}]},
+    ):
+        field = {"id": "f", "name": "F", "spoken_name": "f", "type": "radio"}
+        field.update(shape)
+        render_field_guidance(field)
+        render_field_guidance(field, option_label_overrides={long_english: "Corto"})
+
+
+@pytest.mark.parametrize("bad_label", [1, 3.5, True, ["x"], {"a": 1}])
+def test_render_survives_a_non_string_option_label(bad_label):
+    # schema_lint does not assert that a label is a string, _sanitize_options
+    # copies it verbatim, and every render call site is unguarded -- so a
+    # non-string label from an LLM-extracted or editor-drafted kit reached
+    # `label.split()` and crashed the render mid-form (Opus outer review, this
+    # PR; origin/dev rendered these fine because it measured no lengths).
+    #
+    # Every parametrization must be TRUTHY and non-str. A falsy label (None,
+    # "", 0) is collapsed to the value by `opt_label or opt_value` upstream and
+    # never reaches the gate, so pinning one would be vacuous -- it passes with
+    # the coercion reverted (caught by the 2nd Opus outer round, which is
+    # exactly the failure mode bd polyglot-pdf-35z0 is about). The falsy path
+    # is covered by test_render_falls_back_to_value_for_a_falsy_label below.
+    assert bad_label and not isinstance(bad_label, str), "vacuous parametrization"
+    field = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+        "options": [{"value": "a", "label": bad_label},
+                    {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(field)
+    assert "Options (2" in text
+
+
+def test_render_falls_back_to_value_for_a_falsy_label():
+    # The other half: a falsy label never reaches the length gate because
+    # `opt_label or opt_value` collapses it to the value first. Pinned
+    # separately so the coercion test above can stay strictly non-vacuous.
+    #
+    # The LONG-value case is the one that actually pins the `or opt_value`
+    # fallback. A short-value assertion is satisfied by the separate
+    # `opt_strs.append(opt_value)` branch, so it stayed green with the fallback
+    # deleted (3rd Opus outer round -- the same redundant-mechanism vacuity this
+    # PR keeps finding). Only a value LONGER than the threshold forces the
+    # measured label to have come from the fallback: measure the falsy label
+    # instead and the pair reads as 0 words, taking the natural-question branch.
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    long_value = " ".join(f"w{i}" for i in range(TWO_OPTION_MAX_LABEL_WORDS + 5))
+    for falsy in (None, "", 0):
+        short = {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+            "options": [{"value": "alpha", "label": falsy},
+                        {"value": "beta", "label": "Beta"}],
+        }
+        text = render_field_guidance(short)
+        assert "alpha" in text, falsy
+        assert "ask ONE natural question" in text, falsy
+
+        long_ = {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+            "options": [{"value": long_value, "label": falsy},
+                        {"value": "beta", "label": "Beta"}],
+        }
+        text = render_field_guidance(long_)
+        assert "read ALL 2 aloud when asking" in text, falsy
+        assert "ask ONE natural question" not in text, falsy
+
+
+def test_two_option_multi_select_is_not_forced_into_an_exclusive_choice():
+    # bd polyglot-pdf-9tuu criterion 1: the marker (and the SI rule it triggers)
+    # describes an EXCLUSIVE choice -- "a plain yes/no question ... an either/or
+    # question otherwise ... do not ask which one applies". On a checkbox_group
+    # the user may legitimately want BOTH, so a 2-option multi-select falls to
+    # the recital, whose rule already says "or which ones, for a multi-select".
+    # Latent today (no shipped kit has a 2-option checkbox_group -- counts run
+    # 3/5/8) but kits are LLM-extracted and ship regularly.
+    field = {
+        "id": "accommodations", "name": "Accommodations",
+        "spoken_name": "accommodations you need", "type": "checkbox_group",
+        "options": [
+            {"value": "deaf", "label": "Deaf or hard of hearing"},
+            {"value": "blind", "label": "Blind or low vision"},
+        ],
+    }
+    text = render_field_guidance(field)
+    assert "Options (2 -- read ALL 2 aloud when asking; " in text
+    assert "ask ONE natural question" not in text
+
+
+def test_legacy_options_bearing_checkbox_is_treated_as_a_multi_select():
+    # bd 9tuu criterion 1 says "or ANY type whose semantics allow selecting more
+    # than one" -- and `type: "checkbox"` WITH options is exactly that: the
+    # legacy v1 group idiom. Three places in the codebase agree
+    # (schema_repair._membership_trigger, validation.ts isCheckboxGroupField, and
+    # FieldRenderer routing it to the group-rendering CheckboxField), so a
+    # 2-option one must NOT get the exclusive-choice ask over a UI where both
+    # boxes are checkable (2nd Opus outer review, final round).
+    #
+    # Latent: no shipped kit carries this shape (repair retypes it), but a
+    # hand-authored, editor-drafted, or pre-repair kit does.
+    field = {
+        "id": "p3_race", "name": "Race", "spoken_name": "race",
+        "type": "checkbox",
+        "options": [{"value": "x", "label": "Deaf or hard of hearing"},
+                    {"value": "y", "label": "Blind or low vision"}],
+    }
+    text = render_field_guidance(field)
+    assert "read ALL 2 aloud when asking" in text
+    assert "ask ONE natural question" not in text
+
+
+def test_standalone_checkbox_is_unaffected_by_the_multi_select_gate():
+    # The other half, so the gate cannot be read as "checkbox is always
+    # multi-select": a v2 STANDALONE checkbox has NO options (its value is a
+    # boolean), so it never reaches the options branch at all and grows no
+    # option prose. Adding "checkbox" to the gate must not change that.
+    field = {
+        "id": "agree", "name": "Agree", "spoken_name": "agree",
+        "type": "checkbox",
+    }
+    assert "Options" not in render_field_guidance(field)
+
+
+@pytest.mark.parametrize("ftype", ["checkbox_group", "checkbox", "multiselect", "multi_select"])
+def test_every_multi_select_spelling_escapes_the_exclusive_marker(ftype):
+    # The gate is a name set, so an LLM-invented spelling of the same concept
+    # must be listed to be caught. These are the spellings the schema surfaces
+    # and the editor can emit; a new one arriving in a kit is the known
+    # maintenance cost of a name set (the alternative, guessing multi-ness from
+    # an unrecognized type, would break the cqx6 safe-default in the other
+    # direction).
+    field = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": ftype,
+        "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(field)
+    assert "read ALL 2 aloud when asking" in text, ftype
+    assert "ask ONE natural question" not in text, ftype
+
+
+def test_f1040_line_reference_pair_still_asks_a_natural_question():
+    # bd polyglot-pdf-575i criterion 2: f1040 'fld_3c' options are '1 Line 3a' /
+    # '2 Line 3b' -- pure printed-form navigation, so SPEAK THE SUBSTANCE alone
+    # would leave the model nothing to say. The mechanism is the SI's
+    # all-navigation carve-out (pinned in
+    # test_dti_si_handles_options_that_are_pure_print_navigation), NOT a render
+    # change: the labels are short, so this stays a one-natural-question field
+    # and the field's own name carries the meaning ("Check if your child's
+    # dividends are included in ... 3a or ... 3b").
+    f = _load_kit_field("f1040", "fld_3c")
+    text = render_field_guidance(f)
+    assert "ask ONE natural question that makes both choices clear" in text
+    # Both line references reach the model verbatim -- they are the only thing
+    # distinguishing the two options.
+    assert "1 Line 3a" in text and "2 Line 3b" in text
+
+
 def test_real_multi_option_lists_keep_the_unconditional_recital():
     # bd 41fi + c2jy criterion 2: the two fields the original bug was about
     # still get the read-ALL imperative, kit-backed so a schema re-type or a
@@ -555,11 +948,41 @@ def test_real_multi_option_lists_keep_the_unconditional_recital():
 
 def test_dti_si_two_option_rule():
     si = _settings().DTI_SYSTEM_INSTRUCTION
-    assert "TWO-option fields are different" in si
     assert "ONE natural question that makes both choices clear IS the complete ask" in si
     assert "Do not recite the two labels as a list" in si
     # Both phrasings are named so the rule travels beyond yes/no pairs.
     assert "plain yes/no question when the options amount to yes and no" in si
+
+
+def test_dti_si_two_option_rule_is_scoped_to_the_guidance_marker():
+    # bd polyglot-pdf-575i + 9tuu: the rule used to open "TWO-option fields are
+    # different", a bare COUNT test the model could apply to any n==2 field --
+    # including the two the render now deliberately sends to the recital (long
+    # substantive labels; a multi-select). The SI must key on the MARKER the
+    # render emits, not on the count, or the two channels contradict each other
+    # on exactly those fields.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "TWO-option fields, WHEN THE GUIDANCE MARKS THEM SO" in si
+    assert "This applies ONLY when the guidance carries that two-option marker" in si
+    # The recital branch's own marker text is named, so the model can tell the
+    # two n==2 cases apart from the guidance alone.
+    assert "the guidance marks 'read ALL 2 aloud'" in si
+    # And the bare-count phrasing is GONE -- an allowlist pin is worthless if
+    # the superseded wording survives elsewhere in the SI (memory: pin message
+    # text with allowlists, then assert no residue).
+    assert "TWO-option fields are different" not in si
+
+
+def test_dti_si_handles_options_that_are_pure_print_navigation():
+    # bd polyglot-pdf-575i criterion 2: f1040 'fld_3c' labels are '1 Line 3a' /
+    # '2 Line 3b' -- pure printed-form navigation. SPEAK THE SUBSTANCE alone
+    # would strip both to nothing, leaving the model no way to tell the options
+    # apart. The carve-out's carve-out: when navigation is ALL there is, it IS
+    # the option's identity and is spoken.
+    si = _settings().DTI_SYSTEM_INSTRUCTION
+    assert "would leave an option with NOTHING to say" in si
+    assert "'1 Line 3a'" in si
+    assert "the reference IS that option's only identity: say it as written" in si
 
 
 def test_dti_si_speaks_substance_not_print_navigation():
@@ -595,8 +1018,13 @@ def test_initiating_templates_carry_two_option_carve_out():
     s = _settings()
     for name in ("INITIATING_MESSAGE", "RESUME_INITIATING_MESSAGE"):
         tpl = getattr(s, name)
-        assert ("the field has only TWO options (then ask ONE natural "
-                "question that makes both choices clear)") in tpl, name
+        # Keyed on the guidance MARKER, not on a bare count (bd 575i + 9tuu):
+        # the render now withholds the two-option marker from a long-labelled
+        # pair and from a 2-option multi-select, and an unqualified "only TWO
+        # options" here would re-assert the natural question on exactly those.
+        assert ("the guidance marks the field as having TWO options (then ask "
+                "ONE natural question that makes both choices clear)") in tpl, name
+        assert "the field has only TWO options" not in tpl, name
 
 
 # --- ASCII-only guard for every constant this change touched (scar #6) --------
