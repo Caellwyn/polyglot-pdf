@@ -327,9 +327,17 @@ class Settings(BaseModel):
 	# non-native speakers concentrating on each word. Other calm candidates if
 	# this needs tuning: Schedar (Even), Vindemiatrix (Gentle), Achernar (Soft),
 	# Algieba (Smooth).
-	# NOTE: the SDK types voice_name as a bare Optional[str] with NO enum, so a
-	# misspelling is not caught locally -- it fails at the endpoint (1007 at
-	# connect). Set to empty to fall back to the API default.
+	# VERIFY BEFORE DEPLOY -- an unaccepted voice name is a HARD failure, not a
+	# degrade: the SDK types voice_name as a bare Optional[str] with NO enum, and
+	# Vertex closes the session with `1007 Invalid voice name` at connect, so a
+	# bad value breaks EVERY session. A 2026-07-30 probe (bd polyglot-pdf-e1x9)
+	# endpoint-verified 11 prebuilt voices ACCEPTED on
+	# gemini-live-2.5-flash-native-audio with `NotARealVoiceXYZ` correctly
+	# rejected -- but the probe did not record its 11 names, so "Iapetus" is
+	# documented-valid (it is one of Google's 30 TTS voices, and native-audio
+	# accepts the TTS set) yet NOT endpoint-verified on this tier. First deploy
+	# must confirm the session connects; set LIVE_VOICE_NAME="" to fall back to
+	# the API default if it 1007s.
 	LIVE_VOICE_NAME: str = os.getenv("LIVE_VOICE_NAME", "Iapetus")
 
 	# Runtime option-label translation (bd polyglot-pdf-ow1e): at session start
