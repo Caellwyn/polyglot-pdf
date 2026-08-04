@@ -196,6 +196,42 @@ describe("W-7 completion denominator", () => {
     expect(progress).toBe(0);
   });
 
+  it("COUNTS a hidden field whose show_if is satisfied (it renders)", () => {
+    // shouldShowField returns `!field.hidden` ONLY when there is no show_if.
+    // With a SATISFIED show_if, a `hidden: true` field IS rendered by
+    // FieldRenderer and IS required by isSectionValid -- so it must appear in
+    // the progress ratio too. An extra `!f.hidden &&` in getProgress would drop
+    // it from BOTH halves and resurrect the "never reads complete" bug for this
+    // shape. No shipped kit has it today, hence a synthetic fixture.
+    const trigger = { id: "trig", type: "text" };
+    const revealed = {
+      id: "revealed",
+      type: "text",
+      hidden: true,
+      show_if: { field: "trig", operator: "is_not_empty" },
+    };
+    const tiny = {
+      ...schema,
+      fields: [trigger, revealed],
+    } as unknown as FormSchema;
+
+    // Trigger empty -> show_if unmet -> `revealed` is not visible; only `trig`
+    // counts, and it is empty, so 0%.
+    const before = {
+      schema: tiny,
+      fieldValues: {},
+    } as unknown as ProgressState;
+    expect(SchemaFormStateManager.getProgress(before)).toBe(0);
+
+    // Trigger filled -> show_if satisfied -> `revealed` becomes answerable and
+    // MUST enter the denominator. 1 of 2 done => 50%, NOT 100%.
+    const after = {
+      schema: tiny,
+      fieldValues: { trig: { value: "x", confirmed: true } },
+    } as unknown as ProgressState;
+    expect(SchemaFormStateManager.getProgress(after)).toBe(50);
+  });
+
   it("returns 0 rather than NaN when nothing is visible", () => {
     const empty = {
       schema: { ...schema, fields: [] },

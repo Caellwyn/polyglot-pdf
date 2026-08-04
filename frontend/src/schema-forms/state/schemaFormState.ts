@@ -679,10 +679,19 @@ export class SchemaFormStateManager {
    * Get form completion progress (percentage).
    *
    * Counts ONLY the fields the user can actually act on right now (bd
-   * polyglot-pdf-52qm.7): not `hidden`, and either unconditional or with a
-   * SATISFIED `show_if`. `ignored` fields need no filter -- ignoring quarantines
-   * the field out of `schema.fields` entirely (schema-editor/src/utils/
-   * ignoreField.ts), so they are already absent here.
+   * polyglot-pdf-52qm.7). Visibility is `shouldShowField` ALONE -- deliberately
+   * NOT `!f.hidden && shouldShowField(...)`. shouldShowField already returns
+   * `!field.hidden` for the no-show_if case, so ANDing an extra `!f.hidden`
+   * diverges from what actually renders: a field with `hidden: true` AND a
+   * SATISFIED `show_if` is rendered by FieldRenderer and is required by
+   * isSectionValid, so excluding it here would drop an answerable field from
+   * BOTH halves of the ratio -- the very "bar never reads complete" bug this
+   * function was fixed for. isSectionValid documents the same trap (a prior
+   * fresh-eyes finding); this now matches it.
+   *
+   * `ignored` fields need no filter -- ignoring quarantines the field out of
+   * `schema.fields` entirely (schema-editor/src/utils/ignoreField.ts), so they
+   * are already absent here.
    *
    * Both halves matter. The denominator used to be `schema.fields.length`, so
    * the 7 statically hidden fields on the shipped W-7 could never be filled and
@@ -701,8 +710,8 @@ export class SchemaFormStateManager {
    * matching isSectionValid's emptiness test.
    */
   static getProgress(state: SchemaFormState): number {
-    const visibleFields = state.schema.fields.filter(
-      (f) => !f.hidden && shouldShowField(f, state.fieldValues, state.schema.fields)
+    const visibleFields = state.schema.fields.filter((f) =>
+      shouldShowField(f, state.fieldValues, state.schema.fields)
     );
     if (visibleFields.length === 0) return 0;
 
