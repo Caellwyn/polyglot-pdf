@@ -350,10 +350,13 @@ async def _call(coro: Any, stage: str) -> Any:
 
 
 def _plain_reason(trace_entry: str) -> str:
-    """Strip the internal stage prefix ('lint: ' / 'judge: ' /
-    'attempt N: judge: ') off a trace entry so the remaining reason --
-    which the lint/judge legs already write as prose -- can be quoted in
-    a reviewer-facing message without leaking pipeline jargon."""
+    """Strip the internal stage prefix -- exactly 'lint: ' or 'judge: ',
+    the only two prefixes trace[0] can carry (_initial_round is the sole
+    writer of the first entry) -- so the remaining reason, which the
+    lint/judge legs already write as prose, can be quoted in a
+    reviewer-facing message without leaking pipeline jargon. Later trace
+    entries ('attempt N: judge: ...') are NOT handled: pass trace[0]
+    only."""
     reason = trace_entry
     for prefix in ("lint: ", "judge: "):
         if reason.startswith(prefix):

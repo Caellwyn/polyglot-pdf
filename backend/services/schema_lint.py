@@ -79,13 +79,15 @@ Rules (stable ids; one finding per violation site):
                                 otherwise emit one warning per field). bd
                                 wsao.3
 - help-instructions-too-long WARNING instructions exceed the hard bound
-                                (guidance_contract.INSTRUCTIONS_HARD_CHARS) --
-                                they ride the SPOKEN ask-hint
+                                (guidance_contract.INSTRUCTIONS_HARD_CHARS).
+                                Lint-only: nothing truncates -- the full text
+                                rides into the model context on every ask and
+                                can be spoken aloud whole
 - help-instructions-label-restatement WARNING instructions add nothing beyond
                                 the field's own name/option labels
-- help-instructions-screen-ref WARNING instructions carry on-screen deixis or
-                                a "see page/instructions" cross-reference --
-                                meaningless in a spoken channel
+- help-instructions-screen-ref WARNING instructions point at things only a
+                                reader can see ("see page 7", "the box
+                                below") -- meaningless in a spoken channel
 - help-details-not-contained WARNING a help.details paragraph is NOT a
                                 verbatim (normalized) excerpt of
                                 metadata.booklet_text -- the zero-trust
@@ -943,8 +945,10 @@ def lint_schema(
                 f"sections[{i}] (id={sid})",
                 f"the holding section {sid!r} still lists {len(stale)} field "
                 f"id(s) ({', '.join(stale[:5])}{', ...' if len(stale) > 5 else ''}) "
-                f"that need a real section -- move or remove them before "
-                f"the form can be marked complete",
+                f"that are leftovers -- any real fields among them are "
+                f"already filed in a proper section, and the rest name no "
+                f"field at all; delete these ids from the holding section's "
+                f"list so the form can be marked complete",
             ))
 
     _check_guidance(fields, schema, out)
@@ -1145,11 +1149,14 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
             out.append(LintFinding(
                 SEVERITY_WARNING, "help-details-oversize",
                 f"{field_path}.help.details",
-                f"these details are {len(details)} characters; only the "
-                f"first {guidance_contract.DETAILS_INLINE_MAX_CHARS} reach "
-                f"the assistant while the user is on this field, so text "
-                f"past that point is invisible to it in the moment -- trim "
-                f"the excerpt down to the parts that matter most",
+                f"these details are {len(details)} characters, over the "
+                f"{guidance_contract.DETAILS_INLINE_MAX_CHARS}-character "
+                f"budget the assistant carries while the user is on this "
+                f"field -- the extra text is cut at a paragraph break and "
+                f"replaced with a list of the dropped headings, which the "
+                f"assistant can still look up on request, but that takes an "
+                f"extra step; trim the excerpt to the parts that matter "
+                f"most so the answer is at hand immediately",
             ))
 
         if (len(details) > guidance_contract.DETAILS_HEADINGS_REQUIRED_CHARS

@@ -26,8 +26,8 @@ rule id, severity, path shape, or emission condition changed; the
 [identity:<sha1>] path contract is byte-identical. ValidationPanel gained
 refreshed RULE_LABELS plus a new exported RULE_REMEDIES map (one
 imperative sentence per rule; consumed by C1 later). The
-checkFieldComplete-vs-lint mapping table is committed (JOURNAL_DRAFT.md
-in the C12 commit).
+checkFieldComplete-vs-lint mapping table is committed (the companion entry
+2026-08-03-bd-xfdb-rule-message-tables.md).
 
 Two verified-consequence rewrites worth recording:
 
@@ -62,15 +62,17 @@ inventing that rule is a C1/C4 design decision, not a copy-pass call.
 ## Verification
 
 Backend full suite from the worktree: 2530 passed, 3 skipped, 3
-deselected, exit 0. test_lint_rule_parity.py: 3 passed (RULE_LABELS
-coverage intact, declaration shape preserved). schema-editor vitest:
+deselected, exit 0. test_lint_rule_parity.py: 4 passed (RULE_LABELS
+coverage intact, declaration shape preserved, and the new RULE_REMEDIES
+map pinned to the same coverage -- Opus round 2). schema-editor vitest:
 73 files / 1086 tests passed. tsc --noEmit clean.
 
 ## Doc freshness
 
-No tier-1/tier-2 doc documents individual lint message text (the rule
-CATALOGUE lives in schema_lint.py's docstring, which was updated in
-place). The sprint-18 plan doc rides this same PR (cherry-picked commit).
+No tier-1/tier-2 doc documents individual lint message text. The rule
+CATALOGUE in schema_lint.py's module docstring was updated in place in the
+fresh-eyes round-2 fix (the deixis line, the disproven spoken-ask-hint
+claim); the details-overflow line there was already accurate. The sprint-18 plan doc rides this same PR (cherry-picked commit).
 
 ## Files touched
 
@@ -82,4 +84,4 @@ place). The sprint-18 plan doc rides this same PR (cherry-picked commit).
   + new exported RULE_REMEDIES
 - backend/tests/* + tests/* + ValidationPanel.test.tsx -- 9 allowlist
   assertion updates
-- JOURNAL_DRAFT.md -- rule->message + checkFieldComplete mapping tables
+- docs/journal/entries/2026-08-03-bd-xfdb-rule-message-tables.md -- rule->message + checkFieldComplete mapping tables

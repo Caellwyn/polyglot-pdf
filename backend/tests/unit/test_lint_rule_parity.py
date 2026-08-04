@@ -101,6 +101,36 @@ def test_the_panel_has_no_labels_for_rules_that_no_longer_exist():
     )
 
 
+def _panel_remedy_rule_ids() -> set[str]:
+    """The rule ids RULE_REMEDIES in ValidationPanel.tsx has a remedy for."""
+    src = _PANEL_TSX.read_text(encoding="utf-8")
+    block = re.search(
+        r"export const RULE_REMEDIES: Record<string, string> = \{(.*?)\n\};",
+        src, re.DOTALL)
+    assert block, "RULE_REMEDIES not found in ValidationPanel.tsx"
+    return set(re.findall(r"'([a-z0-9-]+)':", block.group(1)))
+
+
+def test_the_remedy_map_tracks_the_label_map():
+    """RULE_REMEDIES (bd xfdb) is forward-staging for the embedded-findings
+    UI (sprint-18 C1): every labelled rule carries one imperative remedy
+    sentence. Without this pin, a new rule ships with a label but a blank
+    remedy line the moment C1 wires the map in -- the same silent-drift
+    class the label tests above exist to catch, one map over (Opus round 2,
+    bd xfdb)."""
+    labels = _panel_labelled_rule_ids()
+    remedies = _panel_remedy_rule_ids()
+    missing = sorted(labels - remedies)
+    assert missing == [], (
+        "these rules have a RULE_LABELS entry but no RULE_REMEDIES sentence: "
+        f"{missing}. Add the remedy (what should the reviewer DO?)."
+    )
+    stale = sorted(remedies - labels)
+    assert stale == [], (
+        f"RULE_REMEDIES names rules RULE_LABELS does not: {stale}."
+    )
+
+
 def test_the_guidance_staleness_rule_id_matches_on_both_sides():
     """The specific id the ack gate keys on (bd anim / bd cpiw).
 

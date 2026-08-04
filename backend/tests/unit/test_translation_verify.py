@@ -151,8 +151,12 @@ async def test_mechanical_failure_skips_judge_on_the_way_in():
     assert result.final["field-name"]["USCIS number"] == "Numero de USCIS"
     assert [f.taxonomy for f in result.flags] == [FLAG_MECHANICAL]
     # Sanctioned reviewer phrase (bd xfdb): the rectified message asks
-    # the human to read and confirm the new wording.
+    # the human to read and confirm the new wording. The stage prefix is
+    # stripped (_plain_reason) -- pinned so the strip cannot silently
+    # regress (Opus round 2 mutation check).
     assert "read the new wording" in result.flags[0].message
+    assert "lint:" not in result.flags[0].message
+    assert "judge:" not in result.flags[0].message
 
 
 @pytest.mark.asyncio
@@ -180,6 +184,11 @@ async def test_mechanical_origin_unresolved_keeps_latest_lint_clean_rectify():
     # (bd xfdb): the message names which value the form now uses.
     assert "the best automatic correction" in result.flags[0].message
     assert "fix it by hand" in result.flags[0].message
+    # Pin the _plain_reason strip itself (Opus round 2 mutation check:
+    # without this, disabling the strip regresses silently): no stage
+    # prefix may leak into the reviewer-facing message.
+    assert "lint:" not in result.flags[0].message
+    assert "judge:" not in result.flags[0].message
 
 
 # --- judge path -------------------------------------------------------------

@@ -1,4 +1,15 @@
-# Sprint-18 C12: lint message copy pass -- journal draft
+---
+date: 2026-08-03
+bead: polyglot-pdf-xfdb
+title: "Sprint-18 C12 reference tables: rule->message map + checkFieldComplete/lint mapping"
+tags: [schema-editor, lint, reference]
+---
+
+# Sprint-18 C12 reference tables
+
+Durable companion to 2026-08-03-bd-xfdb-lint-message-copy-pass.md. The
+checkFieldComplete mapping table below carries the DEFERRED-with-rationale
+decisions that sprint-18 children C1/C4 pick up -- do not delete.
 
 bd polyglot-pdf-xfdb. Plan: docs/sprint_18_editor-ux-overhaul_plan.md,
 decision 12 + the C12 bead entry.
