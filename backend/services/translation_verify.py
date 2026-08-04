@@ -349,6 +349,18 @@ async def _call(coro: Any, stage: str) -> Any:
     return result
 
 
+def _plain_reason(trace_entry: str) -> str:
+    """Strip the internal stage prefix ('lint: ' / 'judge: ' /
+    'attempt N: judge: ') off a trace entry so the remaining reason --
+    which the lint/judge legs already write as prose -- can be quoted in
+    a reviewer-facing message without leaking pipeline jargon."""
+    reason = trace_entry
+    for prefix in ("lint: ", "judge: "):
+        if reason.startswith(prefix):
+            reason = reason[len(prefix):]
+    return reason
+
+
 def _finalize(items: List[_Item],
               fresh: Dict[str, Dict[str, str]]) -> VerifyResult:
     final = {kind: dict(values) for kind, values in fresh.items()}
@@ -368,9 +380,10 @@ def _finalize(items: List[_Item],
             flags.append(VerifyFlag(
                 taxonomy=taxonomy, kind=item.kind, source=item.source,
                 message="a problem was found here (%s) and automatically "
-                        "corrected; rectified clean: '%s' -> '%s' -- "
-                        "review the correction"
-                        % (item.trace[0], item.original, item.resolved),
+                        "corrected: '%s' -> '%s' -- read the new wording "
+                        "and confirm it says the right thing"
+                        % (_plain_reason(item.trace[0]),
+                           item.original, item.resolved),
             ))
         elif item.unresolved or (item.flagged_values
                                  and item.resolved is None):
@@ -382,20 +395,20 @@ def _finalize(items: List[_Item],
                     and item.latest_lint_clean_rectify:
                 final[item.kind][item.source] = \
                     item.latest_lint_clean_rectify
-                kept = "kept latest lint-clean rectify '%s'" \
-                    % item.latest_lint_clean_rectify
+                kept = ("the form currently uses the best automatic "
+                        "correction ('%s')"
+                        % item.latest_lint_clean_rectify)
             else:
                 final[item.kind][item.source] = item.original
-                kept = "kept original '%s'" % item.original
+                kept = ("the form currently uses the original text ('%s')"
+                        % item.original)
             flags.append(VerifyFlag(
                 taxonomy=FLAG_UNRESOLVED, kind=item.kind,
                 source=item.source,
-                message="this translation could not be automatically fixed "
-                        "after repeated attempts (%s) -- a human needs to "
-                        "review and correct it by hand; %s; attempts: %s"
-                        % ("mechanical-origin" if item.mechanical_origin
-                           else "judge-origin", kept,
-                           " | ".join(item.trace)),
+                message="this translation still looks wrong after "
+                        "automatic correction was tried -- review it and "
+                        "fix it by hand; %s. First problem found: %s"
+                        % (kept, _plain_reason(item.trace[0])),
             ))
     _log.info(
         "translation_verify_complete",

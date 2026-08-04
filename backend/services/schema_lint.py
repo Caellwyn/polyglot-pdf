@@ -765,7 +765,9 @@ def lint_schema(
     if not isinstance(schema, dict):
         return [LintFinding(
             SEVERITY_ERROR, "condition-malformed", "$",
-            f"schema must be an object, found {type(schema).__name__}",
+            "this schema file is not structured as a form (its top "
+            "level is not a set of named properties) -- restore it from "
+            "a working copy or re-run extraction",
         )]
 
     is_v2 = str(schema.get("schema_version")) == vocab.SCHEMA_VERSION_V2
