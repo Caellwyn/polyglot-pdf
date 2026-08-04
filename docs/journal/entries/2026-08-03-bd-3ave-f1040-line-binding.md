@@ -67,6 +67,22 @@ tests:
    distinct sentinel per income line, reading the output PDF back to ask the
    form which printed row each value landed on.
 
+**`pdf_position` resynced (fresh-eyes finding, adopted in-PR).** The reviewer
+caught that `pdf_field_name` and `pdf_position` are SIBLINGS describing the
+same widget, and the rebind moved one without the other: all 28 stored
+positions were 24-84pt away from their new widget (and `fld_1a`..`fld_1d` had
+no position key at all). The fill path reads `pdf_field_name`, but the preview
+overlay (`frontend/src/pdf-view/FieldOverlay.tsx` -> `pdfToScreenCoords`) reads
+`pdf_position` and never re-derives it at runtime -- so a correct fill would
+have coexisted with a highlight box on the wrong row. Rewritten from the PDF's
+own widget rects; the WHOLE kit (167 positioned fields) now agrees. The
+reviewer filed this as out-of-scope bead `polyglot-pdf-7yhy`; it was fixed
+here instead and that bead closed, because this diff is what desynchronized
+the pair and the correct values came from the same source of truth already in
+hand. A new cross-kit guard
+(`test_stored_pdf_position_agrees_with_the_claimed_widget`, running on f1040 /
+i-90 / w7) makes the desync impossible to reintroduce silently.
+
 **Verified:** oracle 20 mismatches -> 0 (56 fields verifiable, up from 52);
 lint ERRORs 4 -> 0; `dump-widget-unclaimed` 12 -> 8; production fill round-trip
 24/24 present, 0 errors, 0 misplaced. Full backend suite 1470 passed.
@@ -101,9 +117,11 @@ STALE set is unrelated to this diff.
 ## Files touched
 
 - `form-kits/f1040/schema.json` -- 28 `pdf_field_name` rebinds (24 for 3ave,
-  4 for lha9); no other key altered.
+  4 for lha9) plus the matching 28 `pdf_position` blocks resynced to the same
+  widgets (24 rewritten, 4 inserted where the key was absent).
 - `backend/tests/test_kit_line_binding.py` -- NEW: the widget-assignment gate
-  (row oracle + verifiability floor + production fill round-trip).
+  (row oracle + verifiability floor + production fill round-trip + the
+  cross-kit pdf_position/pdf_field_name agreement guard).
 - `backend/tests/test_schema_lint.py` -- `_UNFILLABLE_BASELINE` f1040
   12 -> 8, with the swap-then-drop history recorded so the number is readable.
 - `docs/journal/entries/2026-08-03-bd-3ave-f1040-line-binding.md` -- this entry.

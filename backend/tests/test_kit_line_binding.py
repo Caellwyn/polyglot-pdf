@@ -130,6 +130,56 @@ def test_f1040_income_lines_fill_onto_their_own_printed_rows():
     )
 
 
+@pytest.mark.parametrize("kit", ["f1040", "i-90", "w7"])
+def test_stored_pdf_position_agrees_with_the_claimed_widget(kit):
+    """`pdf_position` must describe the widget `pdf_field_name` claims.
+
+    The two keys are siblings that a rebind can silently desynchronize: the
+    fill path reads `pdf_field_name`, but the preview overlay
+    (`frontend/src/pdf-view/FieldOverlay.tsx` -> `pdfToScreenCoords`) reads
+    `pdf_position` and never re-derives it from the PDF at runtime. So a
+    correct fill can coexist with a highlight box drawn on the wrong row --
+    which is exactly what bd polyglot-pdf-3ave's rebind produced until this
+    guard was added (fresh-eyes finding on that PR; the stale positions
+    carried the SAME one-row shift the bindings did).
+    """
+    import json
+
+    import fitz
+
+    kit_dir = _REPO / "form-kits" / kit
+    if not (kit_dir / "form.pdf").exists():
+        pytest.skip(f"{kit} kit not present")
+    schema = json.loads((kit_dir / "schema.json").read_text(encoding="utf-8"))
+
+    rects: dict[str, tuple[int, object]] = {}
+    with fitz.open(kit_dir / "form.pdf") as doc:
+        for pno, page in enumerate(doc):
+            for w in page.widgets():
+                if isinstance(w.field_name, str):
+                    rects.setdefault(w.field_name, (pno + 1, w.rect))
+
+    drift = []
+    for f in schema.get("fields", []):
+        claim, pos = f.get("pdf_field_name"), f.get("pdf_position")
+        if not isinstance(claim, str) or claim not in rects or not pos:
+            continue  # unresolvable claims / position-less fields: other gates
+        page, rect = rects[claim]
+        if (pos.get("page") != page
+                or abs(pos.get("x", 0) - rect.x0) > 2
+                or abs(pos.get("y", 0) - rect.y0) > 2):
+            drift.append(
+                f"{f.get('id')}: stored ({pos.get('x')},{pos.get('y')}) p{pos.get('page')} "
+                f"but {claim.split('.')[-1]} is at ({round(rect.x0)},{round(rect.y0)}) p{page}"
+            )
+
+    assert not drift, (
+        f"{kit}: {len(drift)} field(s) whose pdf_position does not describe the "
+        f"widget they claim -- the preview overlay will highlight the wrong box. "
+        + "; ".join(drift[:6])
+    )
+
+
 @pytest.mark.parametrize("kit", sorted(_MIN_VERIFIED))
 def test_line_binding_oracle_still_verifies_the_kit(kit):
     # Guards the assertion above from going vacuous: the oracle abstains
