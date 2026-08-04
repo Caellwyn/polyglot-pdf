@@ -654,6 +654,55 @@ def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_
             assert translated in text, f"{fid} lost its {lang} label"
 
 
+def test_colliding_translations_do_not_borrow_another_labels_word_count():
+    # The reverse lookup keys on the TRANSLATED string, and the override map
+    # spans the WHOLE form -- so two different English labels can share one
+    # translation (i-90/Russian genuinely does this on a pair of 12/14-word
+    # "incorrect data because of ..." labels). A first-wins map would then
+    # measure some OTHER option's English label: here a short 2-option field
+    # would inherit a 25-word count and lose its natural question, silently and
+    # with the suite green (3rd Opus outer round).
+    #
+    # Ambiguous entries are dropped, so the lookup misses and the TRANSLATED
+    # text is measured -- for this option only, and never a wrong attribution.
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    long_english = " ".join(f"w{i}" for i in range(TWO_OPTION_MAX_LABEL_WORDS + 5))
+    field = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+        "options": [{"value": "a", "label": "Yes"}, {"value": "b", "label": "No"}],
+    }
+    # The long label is inserted FIRST on purpose. A first-wins reverse map
+    # (setdefault) keys on insertion order, so with "Yes" first it would happen
+    # to pick the right label and this test would pass for the wrong reason --
+    # order-dependent luck, not the rule. Both orders are asserted below.
+    overrides = {
+        long_english: "Si",
+        "Yes": "Si",
+        "No": "No",
+    }
+    text = render_field_guidance(field, option_label_overrides=overrides)
+    assert "ask ONE natural question that makes both choices clear" in text
+    assert "read ALL" not in text
+
+    # ... and the opposite insertion order must behave identically.
+    reordered = {"Yes": "Si", "No": "No", long_english: "Si"}
+    text = render_field_guidance(field, option_label_overrides=reordered)
+    assert "ask ONE natural question that makes both choices clear" in text
+    assert "read ALL" not in text
+
+    # An UNambiguous entry still resolves -- dropping collisions must not
+    # disable the reverse lookup wholesale.
+    unambiguous = {long_english: "Traducido", "Other": "Otro"}
+    long_field = {
+        "id": "g", "name": "G", "spoken_name": "g", "type": "radio",
+        "options": [{"value": "a", "label": "Traducido"},
+                    {"value": "b", "label": "Otro"}],
+    }
+    text = render_field_guidance(long_field, option_label_overrides=unambiguous)
+    assert "read ALL 2 aloud when asking" in text
+
+
 @pytest.mark.parametrize("bad_label", [1, 3.5, True, ["x"], {"a": 1}])
 def test_render_survives_a_non_string_option_label(bad_label):
     # schema_lint does not assert that a label is a string, _sanitize_options
@@ -682,15 +731,35 @@ def test_render_falls_back_to_value_for_a_falsy_label():
     # The other half: a falsy label never reaches the length gate because
     # `opt_label or opt_value` collapses it to the value first. Pinned
     # separately so the coercion test above can stay strictly non-vacuous.
+    #
+    # The LONG-value case is the one that actually pins the `or opt_value`
+    # fallback. A short-value assertion is satisfied by the separate
+    # `opt_strs.append(opt_value)` branch, so it stayed green with the fallback
+    # deleted (3rd Opus outer round -- the same redundant-mechanism vacuity this
+    # PR keeps finding). Only a value LONGER than the threshold forces the
+    # measured label to have come from the fallback: measure the falsy label
+    # instead and the pair reads as 0 words, taking the natural-question branch.
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    long_value = " ".join(f"w{i}" for i in range(TWO_OPTION_MAX_LABEL_WORDS + 5))
     for falsy in (None, "", 0):
-        field = {
+        short = {
             "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
             "options": [{"value": "alpha", "label": falsy},
                         {"value": "beta", "label": "Beta"}],
         }
-        text = render_field_guidance(field)
+        text = render_field_guidance(short)
         assert "alpha" in text, falsy
         assert "ask ONE natural question" in text, falsy
+
+        long_ = {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+            "options": [{"value": long_value, "label": falsy},
+                        {"value": "beta", "label": "Beta"}],
+        }
+        text = render_field_guidance(long_)
+        assert "read ALL 2 aloud when asking" in text, falsy
+        assert "ask ONE natural question" not in text, falsy
 
 
 def test_two_option_multi_select_is_not_forced_into_an_exclusive_choice():

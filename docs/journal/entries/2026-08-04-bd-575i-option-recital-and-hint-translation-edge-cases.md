@@ -44,8 +44,9 @@ words for the plainly-either/or fields, then **17** for w7
 case is a genuine yes/no ("Have you previously received an ITIN?") padded with the
 printed-form navigation the SI already suppresses ("Yes. Complete line 6f. ..."),
 so it MUST keep the natural-question marker -- any threshold at or below 17
-regresses it into exactly the recital bd 41fi removed. 20 is the midpoint of the
-only real gap in the data.
+regresses it into exactly the recital bd 41fi removed. 20 sits inside the only real gap in the data (17 to 27) with room on both
+sides -- deliberately nearer the low end, so a slightly wordier genuine
+either/or still asks naturally.
 
 f1040 `fld_3c` was the other half of 575i, and it needed a different mechanism:
 both its labels ("1 Line 3a" / "2 Line 3b") are *pure* printed-form navigation, so
@@ -164,6 +165,40 @@ found three new ones:
   that refresh at entry skip the redundant parse, and the default stays
   read-through so a non-refreshing caller is still correct.
 
+**Third outer-review round -- two MORE vacuous cases, both mine.** Round 2's
+fixes held (both directions of the BCP-47 guard bite; all five non-str
+parametrizations fail). Round 3 then found the same failure mode twice more, in
+tests I had written while explicitly hunting for it:
+
+- The `''` (empty-string) case of the frontend whitespace test could not fail.
+  `optionLabel` had TWO blank filters -- `v.trim()` at build time and a
+  truthiness check at lookup -- so either alone caught it, and replacing the
+  lookup with `key in lowered` broke nothing at all. Removed the redundancy
+  rather than pinning both halves: the build-time filter is now the single
+  guard (mirroring the backend's one filter), the lookup is a plain presence
+  check, and all three blank cases now bite.
+- `test_render_falls_back_to_value_for_a_falsy_label` did not pin the fallback
+  its own docstring named. Its short-value assertion was satisfied by the
+  separate `opt_strs.append(opt_value)` branch, so deleting `or opt_value` from
+  the measured label left it green. Now asserts a LONG value with a falsy label,
+  which only the fallback can route to the recital.
+
+It also found a real robustness gap: the reverse-lookup map was first-wins, so
+two English labels sharing one translation (i-90/Russian genuinely does this)
+would make one measure the other's word count. Ambiguous entries are now dropped,
+so the lookup misses and measures the translated text -- the pre-fix behavior for
+that one label, never a wrong attribution. My first attempt at THAT test also
+passed for the wrong reason: it depended on dict insertion order, and with the
+short label inserted first, first-wins happened to pick correctly. Both orders
+are now asserted.
+
+Plus documentation corrections this review caught: a stale `spoken_labels`
+reference (renamed `measured_labels`), "8 new tests" where the file adds 11, and
+the claim that 20 is the "midpoint" of the 17-to-27 gap (it is not; the wording
+now says what it actually is and why it leans low). The close reason on bd
+polyglot-pdf-semp described the pre-round-2 test, so it carries a correcting
+comment.
+
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on
 clean dev with the branch stashed: 1198 passed / 1 failed). The failing count
@@ -190,6 +225,31 @@ direction: 35z0's assertion was vacuous because the data went empty underneath i
 mine were vacuous because a redundant code path held them up. **Redundancy is a
 virtue in the product and a defect in the pins.** Worth doing on any change where
 two mechanisms both plausibly satisfy the same assertion.
+
+**Redundant guards cannot be tested -- so remove the redundancy, do not pin
+both halves.** This PR shipped THREE vacuous cases across three review rounds,
+and every one had the same shape: two mechanisms both satisfied the assertion, so
+reverting either left the test green. The pjws pins (a handler refresh AND a
+read-through accessor), the frontend blank filter (`v.trim()` at build AND a
+truthiness check at lookup), and the falsy-label fallback (`or opt_value` AND the
+separate `opt_strs` branch). I caught the first myself, then wrote the next two
+while explicitly watching for it -- which says the instinct to add a belt-and-
+braces guard is stronger than the instinct to check whether the braces are
+reachable.
+
+The durable fix differs by case. Where BOTH mechanisms are genuinely wanted (the
+pjws pair covers different callers), pin each separately and say why in the test.
+Where one is redundant (the blank filter), DELETE it -- a guard that cannot fail
+a test is not defense in depth, it is an untestable branch that will be
+"simplified" later by someone who cannot tell which half mattered. Preferring the
+second reading more often would have avoided two of the three.
+
+**Watch for tests that pass by insertion order.** My first collision test built
+an override dict with the short label first, so a first-wins reverse map happened
+to pick the RIGHT label and the mutation stayed green -- correct outcome, wrong
+reason, and dependent on nothing but dict ordering. When a test's subject is
+"which of two colliding entries wins", assert BOTH orders; ordering is exactly
+the variable under test.
 
 **Mutation-verify per PARAMETRIZATION, not per test.** I mutation-verified the
 non-string-label test and watched it go red -- but only three of its four cases
@@ -259,13 +319,13 @@ field rather than just moving a number.
 ## Files touched
 
 - `backend/services/ai_context.py` -- `MULTI_SELECT_OPTION_TYPES` +
-  `TWO_OPTION_MAX_LABEL_WORDS`; the n==2 branch gated on both; `spoken_labels`
+  `TWO_OPTION_MAX_LABEL_WORDS`; the n==2 branch gated on both; `measured_labels`
   collected undecorated so the length rule never measures the `(use value: v)`
   wrapper.
 - `backend/config.py` -- PRESENTING OPTIONS two-option rule re-keyed to the
   guidance marker + the all-navigation carve-out; WORKFLOW step 1 and both
   initiating templates re-scoped to match.
-- `backend/tests/unit/test_dti_si_voice_rules.py` -- 8 new tests (substantive
+- `backend/tests/unit/test_dti_si_voice_rules.py` -- 11 new tests (substantive
   pair, threshold boundary + the w7 admit case, multi-select and its spellings,
   fld_3c, the two SI-prose pins); 3 existing contract tests updated.
 - `frontend/src/navigation.ts` -- resolver mirrors the backend (key tolerance,

@@ -47,7 +47,9 @@ MULTI_SELECT_OPTION_TYPES = {"checkbox_group", "multiselect", "multi_select"}
 # with the printed-form navigation the SI already tells the model not to speak
 # ("Yes. Complete line 6f. ...") -- and then 27 for the I-90 declaration. The
 # threshold must sit above the W-7 case (it IS one natural question) and below
-# the I-90 one; 20 is the midpoint of that gap.
+# the I-90 one; 20 sits inside that 17-to-27 gap with room on both sides,
+# deliberately nearer the low end so a slightly wordier genuine either/or
+# still asks naturally.
 #
 # Those counts are ENGLISH, and the render measures the English label even in a
 # translated session (see the reverse lookup in render_field_guidance). Word
@@ -144,11 +146,29 @@ def render_field_guidance(
         # The override map is keyed BY the English label (ow1e), so a reverse
         # lookup recovers it; no override / no match -> the label is already
         # English.
+        #
+        # AMBIGUOUS entries are DROPPED, not first-wins. The override map spans
+        # the whole form, so two different English labels can share one
+        # translation -- i-90/Russian really does collapse two 12/14-word
+        # "incorrect data because of ..." labels onto one string. Keeping the
+        # first would silently measure some OTHER option's word count, and a
+        # future kit whose 2-option field collided with a long label elsewhere
+        # would flip branch with the suite green (3rd Opus outer round). On a
+        # drop the lookup misses and we measure the translated text -- exactly
+        # the pre-fix behavior for that one label, never a wrong attribution.
         english_by_translation = {}
         if option_label_overrides:
+            ambiguous = set()
             for english, translated in option_label_overrides.items():
-                if isinstance(translated, str) and isinstance(english, str):
-                    english_by_translation.setdefault(translated, english)
+                if not (isinstance(translated, str) and isinstance(english, str)):
+                    continue
+                prior = english_by_translation.get(translated)
+                if prior is not None and prior != english:
+                    ambiguous.add(translated)
+                else:
+                    english_by_translation[translated] = english
+            for translated in ambiguous:
+                english_by_translation.pop(translated, None)
         measured_labels = []
         for opt in options:
             if isinstance(opt, dict):

@@ -468,14 +468,20 @@ export function formatNextFieldHint(
     const opt = o as { label?: string; value?: string; label_translations?: Record<string, string> };
     const translations = opt.label_translations;
     if (langKeys.length && translations && typeof translations === 'object') {
+      // ONE blank filter, here at build time, mirroring the backend's
+      // `if isinstance(v, str) and v.strip()` (option_translation.py:118): a
+      // blank or whitespace-only value never enters the map, so anything in it
+      // is usable. The lookup below is therefore a plain presence check --
+      // a second truthiness test there would be redundant, and redundancy in a
+      // guard means neither half can be pinned (3rd Opus outer round: with both
+      // in place, replacing the lookup's `lowered[key]` with `key in lowered`
+      // broke no test at all).
       const lowered: Record<string, string> = {};
       for (const [k, v] of Object.entries(translations)) {
-        // Whitespace-only is a miss (backend option_translation.py:118), or the
-        // spoken options list would carry a blank where a label belongs.
         if (typeof v === 'string' && v.trim()) lowered[k.trim().toLowerCase()] = v;
       }
       for (const key of langKeys) {
-        if (lowered[key]) return lowered[key];
+        if (key in lowered) return lowered[key];
       }
     }
     // Fall back to the English label, then the value -- a dict option missing
