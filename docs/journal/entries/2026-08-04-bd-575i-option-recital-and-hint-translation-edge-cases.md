@@ -318,8 +318,9 @@ The final confirming review scored bd 9tuu criterion 1 as FAILING, correctly.
 `MULTI_SELECT_OPTION_TYPES` listed `checkbox_group`, `multiselect` and
 `multi_select` but not plain `checkbox` -- and `type: "checkbox"` WITH options is
 the legacy v1 group idiom, a genuine multi-select. Three places in the codebase
-say so independently: `schema_repair._is_v1_group` defines it as "type checkbox
-WITH 2+ options" and retypes it, `validation.ts`'s `isCheckboxGroupField` counts
+say so independently: `schema_repair._membership_trigger` treats it as selecting
+from a SET, and the repair pass retypes a checkbox with >= 2 options to
+`checkbox_group`, `validation.ts`'s `isCheckboxGroupField` counts
 it, and `FieldRenderer` routes it to the same `CheckboxField` that branches on
 `!field.options` to render the check-as-many-as-you-like group UI. So a 2-option
 one got the exclusive-choice ask over a UI where both boxes are checkable --

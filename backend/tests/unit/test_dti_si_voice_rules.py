@@ -872,7 +872,7 @@ def test_legacy_options_bearing_checkbox_is_treated_as_a_multi_select():
     # bd 9tuu criterion 1 says "or ANY type whose semantics allow selecting more
     # than one" -- and `type: "checkbox"` WITH options is exactly that: the
     # legacy v1 group idiom. Three places in the codebase agree
-    # (schema_repair._is_v1_group, validation.ts isCheckboxGroupField, and
+    # (schema_repair._membership_trigger, validation.ts isCheckboxGroupField, and
     # FieldRenderer routing it to the group-rendering CheckboxField), so a
     # 2-option one must NOT get the exclusive-choice ask over a UI where both
     # boxes are checkable (2nd Opus outer review, final round).

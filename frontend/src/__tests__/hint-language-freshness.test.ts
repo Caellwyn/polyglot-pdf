@@ -202,12 +202,18 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
   })
 
   // The two mechanisms above -- the per-handler state refresh and the
-  // read-through accessor -- BOTH fix the primary hint path, so removing
-  // either one alone leaves the end-to-end test green (verified by mutation:
-  // only removing both turns it red). Redundancy is fine in the product and
-  // fatal in the pins, so each is asserted on its own here. Without these, a
-  // later refactor could drop one mechanism silently -- and the surviving one
-  // does NOT cover the other's callers.
+  // read-through accessor -- cover DIFFERENT callers, and each is asserted on
+  // its own below so a later refactor cannot drop one silently.
+  //
+  // They were briefly redundant on the primary hint path (when they were first
+  // added, removing either alone left the end-to-end test green, and only
+  // removing both turned it red). That is no longer so: the hint handler now
+  // passes sessionLanguageFor(true), deliberately short-circuiting the
+  // accessor's read-through because the handler already refreshed. So removing
+  // the handler refresh alone DOES turn this file red today (final Opus outer
+  // review caught the stale claim). The separate pins remain the right shape --
+  // the accessor is what keeps the OTHER three hint producers fresh, and
+  // nothing else covers those.
 
   it('the accessor itself reads the language through to storage', () => {
     // Pins the accessor independently of any handler: it is what keeps the
