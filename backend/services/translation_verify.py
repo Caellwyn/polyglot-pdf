@@ -178,8 +178,9 @@ async def verify_fresh_translations(
                 lint_flags.append(VerifyFlag(
                     taxonomy=FLAG_MECHANICAL, kind=item.kind,
                     source=item.source,
-                    message=item.problem + " (verification unavailable -- "
-                            "original kept unrectified)",
+                    message=item.problem + " -- automatic verification "
+                            "unavailable right now, so this was left "
+                            "as-is; review it by hand",
                 ))
         return _unavailable(fresh, len(items), lint_flags, str(exc))
 
@@ -366,7 +367,9 @@ def _finalize(items: List[_Item],
                 else FLAG_RECTIFIED
             flags.append(VerifyFlag(
                 taxonomy=taxonomy, kind=item.kind, source=item.source,
-                message="%s; rectified clean: '%s' -> '%s'"
+                message="a problem was found here (%s) and automatically "
+                        "corrected; rectified clean: '%s' -> '%s' -- "
+                        "review the correction"
                         % (item.trace[0], item.original, item.resolved),
             ))
         elif item.unresolved or (item.flagged_values
@@ -387,7 +390,9 @@ def _finalize(items: List[_Item],
             flags.append(VerifyFlag(
                 taxonomy=FLAG_UNRESOLVED, kind=item.kind,
                 source=item.source,
-                message="UNRESOLVED after bounded rectify (%s); %s; trace: %s"
+                message="this translation could not be automatically fixed "
+                        "after repeated attempts (%s) -- a human needs to "
+                        "review and correct it by hand; %s; attempts: %s"
                         % ("mechanical-origin" if item.mechanical_origin
                            else "judge-origin", kept,
                            " | ".join(item.trace)),

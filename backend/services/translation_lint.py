@@ -256,7 +256,11 @@ def lint_translation(
     """
     failures: List[MechanicalFailure] = []
     if not isinstance(translation, str) or not translation.strip():
-        return [MechanicalFailure(CHECK_EMPTY, "empty: translation is empty")]
+        return [MechanicalFailure(
+            CHECK_EMPTY,
+            "this translation is empty -- the English text will be shown "
+            "or spoken instead until it is filled in",
+        )]
     source = source if isinstance(source, str) else str(source)
 
     glossary = glossary if isinstance(glossary, dict) else {}
@@ -302,15 +306,15 @@ def _check_digits(source: str, translation: str) -> List[MechanicalFailure]:
         escaped = ", ".join("U+%04X" % ord(ch) for ch in native)
         failures.append(MechanicalFailure(
             CHECK_NON_ASCII_DIGITS,
-            "non-ascii-digits: translation uses native digit(s) %s -- the "
-            "glossary digits policy pins ASCII 0-9" % escaped,
+            "this translation uses non-standard digit characters (%s) -- "
+            "numbers must always use plain 0-9, replace them" % escaped,
         ))
     for run in sorted(set(re.findall(r"[0-9]+", source))):
         if run not in translation:
             failures.append(MechanicalFailure(
                 CHECK_DIGIT_RUN,
-                "digit-run-missing: source digit run '%s' does not appear "
-                "in the translation" % run,
+                "the number '%s' from the source text is missing from the "
+                "translation -- add it back exactly as written" % run,
             ))
     return failures
 
@@ -327,8 +331,9 @@ def _check_masks(
         if mask not in translation:
             failures.append(MechanicalFailure(
                 CHECK_MASK,
-                "mask-broken: format mask '%s' from the source is not "
-                "byte-identical in the translation" % mask,
+                "the format pattern '%s' from the source text (for example "
+                "a date format) is missing or altered in the translation -- "
+                "copy it exactly, unchanged" % mask,
             ))
     return failures
 
@@ -361,9 +366,10 @@ def _check_dnt(
         if token not in translation:
             failures.append(MechanicalFailure(
                 CHECK_DNT,
-                "dnt-violated: '%s' must stay untranslated and byte-"
-                "identical, but is missing/altered in the translation"
-                % token,
+                "'%s' is supposed to stay in English (it is a form number, "
+                "agency name, or other fixed term) but is missing or "
+                "altered in the translation -- put it back exactly as "
+                "written" % token,
             ))
     return failures
 
@@ -427,9 +433,10 @@ def _check_script(
             "%s=%d" % (script, counts[script]) for script in sorted(counts))
         return [MechanicalFailure(
             CHECK_SCRIPT,
-            "wrong-script: expected %s script is entirely absent after "
-            "stripping DNT/masks/digits; letter counts {%s}"
-            % (expected, summary),
+            "this translation has no %s-alphabet characters at all -- it "
+            "looks like it was never actually translated (letter counts "
+            "found instead: {%s}); replace it with a real %s translation"
+            % (expected, summary, expected),
         )]
     return []
 
@@ -459,9 +466,11 @@ def _check_wrong_language(
         for claimed, chars in sorted(hits.items()))
     return [MechanicalFailure(
         CHECK_WRONG_LANGUAGE,
-        "wrong-language-marker: translation for %s contains %s -- likely a "
-        "same-script wrong-language string, which would anchor the voice "
-        "model to the WRONG language" % (language_name, detail),
+        "this %s translation contains characters that only appear in a "
+        "different language (%s) -- it may have been translated into the "
+        "wrong language; a session in %s could end up hearing the wrong "
+        "language spoken back, so check and fix it"
+        % (language_name, detail, language_name),
     )]
 
 
@@ -493,8 +502,9 @@ def _check_pins(
                 and target.lower() not in translation_lower:
             failures.append(MechanicalFailure(
                 CHECK_PIN,
-                "pin-missed: source contains '%s', whose official rendering "
-                "'%s' is absent from the translation" % (en_term, target),
+                "the source text says '%s', which has an official required "
+                "translation ('%s') that is missing from this translation "
+                "-- use the official wording" % (en_term, target),
             ))
     return failures
 
@@ -664,11 +674,11 @@ def coverage_findings(
             severity=SEVERITY_WARNING,
             rule=RULE_COVERAGE,
             path="coverage.%s" % lang,
-            message="translation-coverage: %s covers %d/%d strings -- %d "
-                    "missing (each falls back to the ENGLISH label in a %s "
-                    "session; re-run the bake to fill the gap). First "
-                    "missing: %s" % (lang, n, total, total - n, lang,
-                                     examples),
+            message="%s covers %d/%d strings -- the other %d have no "
+                    "translation, so a %s session will hear the ENGLISH "
+                    "text instead in those spots; re-run the translation "
+                    "pass to fill the gap. First missing: %s"
+                    % (lang, n, total, total - n, lang, examples),
         ))
     return findings
 
@@ -727,7 +737,9 @@ def lint_kits(
                 severity=SEVERITY_WARNING,
                 rule=RULE_MECHANICAL,
                 path="schema.json",
-                message="unreadable schema (%s) -- kit skipped"
+                message="this kit's schema.json could not be read (%s) -- "
+                        "it was skipped and needs to be fixed or "
+                        "re-extracted"
                         % type(exc).__name__,
             )]
             continue

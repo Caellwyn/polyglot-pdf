@@ -147,7 +147,7 @@ async def test_mechanical_failure_skips_judge_on_the_way_in():
     reentry_items = pro.judge_translations.await_args_list[0].args[0]
     assert [i["translation"] for i in reentry_items] == ["Numero de USCIS"]
     rectify_items = pro.rectify_translations.await_args_list[0].args[0]
-    assert "dnt-violated" in rectify_items[0]["problem"]
+    assert "supposed to stay in English" in rectify_items[0]["problem"]
     assert result.final["field-name"]["USCIS number"] == "Numero de USCIS"
     assert [f.taxonomy for f in result.flags] == [FLAG_MECHANICAL]
     assert "rectified clean" in result.flags[0].message

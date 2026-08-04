@@ -336,7 +336,7 @@ def test_lint_kit_schema_flags_and_skips():
         by_path.setdefault(finding.path, []).append(finding.message)
     spoken_path = "fields[0] (id=f_name).spoken_name_translations.russian"
     assert spoken_path in by_path
-    assert any("wrong-script" in m for m in by_path[spoken_path])
+    assert any("no cyrillic-alphabet characters" in m for m in by_path[spoken_path])
     assert "fields[0] (id=f_name).options[opt_a].label_translations.russian" \
         in by_path
     # The es alias entry, the english entry, the unknown key, and the clean
@@ -373,7 +373,7 @@ def test_lint_kits_unreadable_schema_fail_open(tmp_path):
     (kit / "schema.json").write_text("not json", encoding="utf-8")
     results = lint_kits(tmp_path, _G)
     assert len(results["broken-kit"]) == 1
-    assert "unreadable schema" in results["broken-kit"][0].message
+    assert "could not be read" in results["broken-kit"][0].message
 
 
 # ---------------------------------------------------------------------------

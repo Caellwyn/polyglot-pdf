@@ -292,7 +292,7 @@ def test_judge_omission_drops_field(monkeypatch):
     omission = [f for f in flags
                 if f["rule"] == "instructions-ungrounded-dropped"
                 and "id=b" in f["path"]]
-    assert len(omission) == 1 and "omitted" in omission[0]["message"]
+    assert len(omission) == 1 and "never quality-checked" in omission[0]["message"]
 
 
 def test_format_hint_only_field_is_judged_and_swept(monkeypatch):
@@ -435,7 +435,7 @@ def test_rectify_to_empty_flags_as_dropped(monkeypatch):
     dropped = [f for f in flags
                if f["rule"] == "instructions-ungrounded-dropped"
                and "id=bad" in f["path"]]
-    assert len(dropped) == 1 and "rectifier emptied" in dropped[0]["message"]
+    assert len(dropped) == 1 and "no guidance could be written" in dropped[0]["message"]
     assert not [f for f in flags if "id=good" in f["path"]]
 
 
