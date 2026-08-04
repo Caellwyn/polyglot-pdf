@@ -256,12 +256,19 @@ def test_stored_pdf_position_agrees_with_the_claimed_widget(kit):
             continue  # unresolvable / ambiguous claims: other gates own those
         page, rect = hit
         checked += 1
+        # width/height are checked too, not just the origin: the overlay draws
+        # a BOX, and a stored size that drifts from the widget is the same
+        # class of schema-vs-PDF desync this guard exists to stop.
         if (pos.get("page") != page
                 or abs(pos.get("x", 0) - rect.x0) > 2
-                or abs(pos.get("y", 0) - rect.y0) > 2):
+                or abs(pos.get("y", 0) - rect.y0) > 2
+                or abs(pos.get("width", 0) - rect.width) > 2
+                or abs(pos.get("height", 0) - rect.height) > 2):
             drift.append(
-                f"{f.get('id')}: stored ({pos.get('x')},{pos.get('y')}) p{pos.get('page')} "
-                f"but {claim.rsplit('.', 1)[-1]} is at ({round(rect.x0)},{round(rect.y0)}) p{page}"
+                f"{f.get('id')}: stored ({pos.get('x')},{pos.get('y')}) "
+                f"{pos.get('width')}x{pos.get('height')} p{pos.get('page')} but "
+                f"{claim.rsplit('.', 1)[-1]} is at ({round(rect.x0)},{round(rect.y0)}) "
+                f"{round(rect.width, 2)}x{round(rect.height, 2)} p{page}"
             )
 
     assert not drift, (

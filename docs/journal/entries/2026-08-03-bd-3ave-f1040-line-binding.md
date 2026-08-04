@@ -94,7 +94,7 @@ Coverage went 0 -> 114 fields on i-90, re-mutation-verified.
 **Verified:** oracle 20 mismatches -> 0 (56 fields verifiable, up from 52);
 lint ERRORs 4 -> 0; `dump-widget-unclaimed` 12 -> 8; production fill round-trip
 24/24 present, 0 errors, 0 misplaced. Full CI suite (`backend/tests tests`)
-2537 passed.
+2538 passed.
 Mutation-verified against the shipped kit: the oracle test names all 20
 misbindings, the round-trip names exactly `fld_1a`..`fld_1d` as never reaching
 the PDF.

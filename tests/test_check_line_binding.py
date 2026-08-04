@@ -452,3 +452,25 @@ def test_exit_code_signals_findings(tmp_path, capsys):
     assert rc == 1  # the ARCHIVED pre-fix kit is known-corrupt
     payload = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))
     assert payload["findings"] and payload["checked"] > 0
+@needs_f1040
+def test_the_corrupt_specimen_is_still_the_pre_fix_binding():
+    """Pin the identity of the file the four detection tests grade against.
+
+    `schema_archived.json` is the MIGRATION TOOL's backup convention
+    (`scripts/migrate_schema_v2.py --archive`), not a review-owned fixture --
+    re-running that migration on f1040 would overwrite it and silently gut the
+    detection tests above, which would then abstain or invert with nobody
+    noticing. This asserts the specimen still exhibits the exact bd
+    polyglot-pdf-3ave shift it is supposed to represent. (Same guard shape as
+    `test_archived_i90_is_the_v1_original` in tests/test_i90_migrated_baseline.py.)
+    """
+    schema = json.loads(_F1040_CORRUPT_SCHEMA.read_text(encoding="utf-8"))
+    result = clb.check(schema, str(_F1040_PDF))
+    assert len(result["findings"]) == 20, (
+        f"the corrupt specimen now yields {len(result['findings'])} findings, "
+        f"not the 20 of the pre-fix kit -- schema_archived.json was probably "
+        f"regenerated, which would leave the detection tests toothless"
+    )
+    by_id = {f["field_id"]: f for f in result["findings"]}
+    assert by_id["fld_9"]["widget_is_on_line"] == "6a"
+    assert by_id["fld_11a"]["widget_is_on_line"] == "7a"
