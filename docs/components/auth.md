@@ -127,10 +127,12 @@ dependency reading `Authorization: Bearer <idToken>` and delegating to
 threads `user.getIdToken()` into those fetches (`pdfFiller.fillPDF`'s optional
 `getToken` param; `SchemaFormDemo`'s manifest/schema fetches, where a 401
 surfaces as an error instead of silently falling back to the static bundle).
-`GET /api/form-kits/{kit_id}/pdf` is **deliberately ungated** — the blank
-template is a public government form, the same bytes ship in the static Hosting
-bundle, and the pdfjs viewer loads the URL with no headers; the non-gate is
-pinned by test so a blanket-auth sweep can't silently break the viewer.
+`GET /api/form-kits/{kit_id}/pdf` is **deliberately ungated** — no frontend
+consumer loads that route today (the manifest's `pdfPath` is always the static
+Hosting path, so the viewer fetches the static copy), and the same
+blank-template bytes ship publicly in the frontend bundle regardless; gating it
+would protect nothing not already public. The non-gate is pinned by test so a
+blanket-auth sweep is a deliberate decision, not an accident.
 
 ## Testing
 

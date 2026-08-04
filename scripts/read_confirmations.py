@@ -10,15 +10,24 @@ Firestore console.
 
 Usage (from the repo root, with the backend venv):
 
-    # Deployed trail (Firestore; needs ADC for the project):
-    CONFIRMATION_FIRESTORE_ENABLED=true GOOGLE_CLOUD_PROJECT=<project> \
-        backend/.venv/Scripts/python.exe scripts/read_confirmations.py fss_abc123
+    # Deployed trail (Firestore). --project pins the queried project
+    # DETERMINISTICALLY (it beats whatever your gcloud ADC defaults to --
+    # firebase_admin otherwise resolves the project from the credential
+    # first, so an env var alone can silently query the wrong project):
+    backend/.venv/Scripts/python.exe scripts/read_confirmations.py \
+        fss_abc123 --firestore --project polyglot-demo-aa709
 
     # Local dev trail (JSONL under CONFIRMATION_LOG_DIR):
     backend/.venv/Scripts/python.exe scripts/read_confirmations.py fss_abc123
 
+Credentials note: this READ runs under YOUR OWN gcloud ADC, not the Cloud Run
+runtime SA -- the SA's roles/datastore.user covers the backend's WRITES only.
+Your principal needs Firestore read access on the target project.
+
 Prints one JSON object per line (chronological), or a count summary with
---summary. Exit 0 with events found; exit 1 if the session has no events.
+--summary. Exit codes: 0 = events printed; 1 = the query SUCCEEDED and the
+session has no events; 2 = RETRIEVAL FAILED (the sink could not be queried --
+NOT evidence the record is absent).
 """
 import argparse
 import json
@@ -49,10 +58,29 @@ def main() -> int:
         help="force the Firestore sink on for this read "
         "(same as CONFIRMATION_FIRESTORE_ENABLED=true)",
     )
+    parser.add_argument(
+        "--project",
+        help="GCP project to query (deterministic: pre-initializes "
+        "firebase_admin with this projectId, which beats the ADC "
+        "credential's own project resolution)",
+    )
     args = parser.parse_args()
 
     if args.firestore:
         os.environ["CONFIRMATION_FIRESTORE_ENABLED"] = "true"
+
+    if args.project:
+        # Must happen BEFORE backend.services.auth is imported: its module-load
+        # initialize_app() (no options) would otherwise win, and firebase_admin
+        # resolves the project from the CREDENTIAL first -- GOOGLE_CLOUD_PROJECT
+        # is only a last-resort fallback, so the env var alone can silently
+        # query whatever project the operator's gcloud ADC points at
+        # (round-3 fresh-eyes on bd z2is).
+        import firebase_admin
+
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(options={"projectId": args.project})
+        os.environ["GOOGLE_CLOUD_PROJECT"] = args.project
 
     from backend.utils.confirmation_logger import (
         ConfirmationReadError,
@@ -67,9 +95,11 @@ def main() -> int:
     except ConfirmationReadError as e:
         print(
             f"RETRIEVAL FAILED for {args.form_session_id}: could not query the "
-            f"Firestore sink ({e}). This is NOT evidence the record is absent -- "
-            "check ADC credentials, GOOGLE_CLOUD_PROJECT, and that the caller "
-            "has roles/datastore.user.",
+            f"Firestore sink ({e}). This is NOT evidence the record is absent. "
+            "This read runs under YOUR OWN gcloud ADC (not the Cloud Run "
+            "runtime SA): check that your principal has Firestore read access "
+            "on the target project, and pass --project to pin which project is "
+            "queried.",
             file=sys.stderr,
         )
         return 2

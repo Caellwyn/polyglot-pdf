@@ -18,6 +18,7 @@ stateless/no-PII invariant (docs/standards/stateless-architecture.md).
 """
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 import structlog
 from datetime import datetime, timedelta, timezone
@@ -290,6 +291,46 @@ def get_confirmation_log_path(form_session_id: str) -> Path:
     Useful for retrieving logs for review or legal purposes.
     """
     return _confirmation_log_dir() / f"{form_session_id}.jsonl"
+
+
+# Probe cache for confirmation_sink_status (monotonic timestamp, status).
+_probe_cache: Optional[tuple] = None
+_probe_lock = threading.Lock()
+
+
+def confirmation_sink_status(max_age_s: float = 300.0) -> str:
+    """Report whether the Firestore confirmation sink can actually WRITE.
+
+    Round-3 fresh-eyes on bd z2is: without this, IAM drift (e.g. the runtime
+    SA losing roles/datastore.user) is detectable only by a manual
+    read_confirmations.py run -- the writer logs-and-continues by design, so
+    the app looks healthy while the liability trail silently stays empty.
+    Surfaced on /health so the standard post-deploy check sees it.
+
+    Returns "disabled" (sink off), "ok" (probe write+delete succeeded), or
+    "error: <msg>". The probe writes then deletes a `_health_probe` doc in the
+    events collection (a READ would not verify write perms). Result is cached
+    for max_age_s so /health polling does not hammer Firestore.
+    """
+    global _probe_cache
+    if not _firestore_enabled():
+        return "disabled"
+    with _probe_lock:
+        if _probe_cache and (time.monotonic() - _probe_cache[0]) < max_age_s:
+            return _probe_cache[1]
+    try:
+        from backend.services.auth import get_db
+
+        ref = get_db().collection(_FIRESTORE_COLLECTION).document("_health_probe")
+        ref.set({"probe": True, "ts": datetime.now(timezone.utc)})
+        ref.delete()
+        status = "ok"
+    except Exception as e:
+        _log.error("confirmation_sink_probe_failed", error=str(e))
+        status = f"error: {e}"
+    with _probe_lock:
+        _probe_cache = (time.monotonic(), status)
+    return status
 
 
 class ConfirmationReadError(Exception):

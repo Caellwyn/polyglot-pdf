@@ -85,7 +85,11 @@ def test_form_kit_schema_requires_token(_auth_on):
 
 
 def test_form_kit_pdf_is_deliberately_public(_auth_on, monkeypatch):
-    """The blank-template PDF GET must NOT be auth-gated (see route docstring).
+    """The blank-template PDF GET must NOT be auth-gated (see route docstring:
+    no frontend consumer loads this route -- the viewer fetches the static
+    Hosting copy -- and the same public-form bytes ship in the static bundle
+    regardless, so gating protects nothing). Pinned so a future blanket-auth
+    sweep is a deliberate decision, not an accident.
 
     With auth forced on and no token, the route must still reach the store
     (404 from the double), never 401.

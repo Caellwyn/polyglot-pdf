@@ -73,7 +73,7 @@ Routes declared directly on `app` in `main.py` (`/health`, `/version`) are
 | POST | `/api/disclaimer-acceptance` | Log disclaimer acceptance (anonymized; client IP deliberately NOT logged, bd z2is). `standards/confirmation-and-audit.md` |
 | GET | `/api/form-kits` | Form-kit manifest (metadata only; GCS/deployed manifest is complete-only, local mode lists any kit with a schema). **Auth-gated** (bd z2is). `components/pdf-filling.md` |
 | GET | `/api/form-kits/{kit_id}/schema` | A single kit's schema JSON, streamed from the store (works local + gcs; `no-store`). **Auth-gated** (bd z2is). |
-| GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Deliberately public** (blank template = public government form, also in the static bundle; pdfjs loads it headerless -- bd z2is). |
+| GET | `/api/form-kits/{kit_id}/pdf` | A single kit's PDF bytes, streamed from the store. **Deliberately public** (no frontend consumer loads this route -- the viewer fetches the STATIC `/form-kits/...` copy; the same public-form bytes ship in the static bundle regardless -- bd z2is). |
 | GET | `/api/editor/session` | Hosted-editor access-code probe -> `{role}`. Token-gated (`X-Editor-Token`); the whole `/api/editor/*` surface is 503 when no token is configured. `components/pdf-filling.md` |
 | GET | `/api/editor/kits` | Editor kit list INCLUDING drafts (from the storage listing, not the complete-only manifest). Token-gated. |
 | GET | `/api/editor/kits/{kit_id}/schema`, `.../pdf` | Draft-capable single-kit reads for the hosted editor. Token-gated. |

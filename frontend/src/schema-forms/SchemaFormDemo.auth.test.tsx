@@ -19,10 +19,13 @@ vi.mock('./components/SchemaForm', () => ({
 vi.mock('./components/LanguageSelectionModal', () => ({
   LanguageSelectionModal: () => <div data-testid="onboarding-modal" />,
 }));
+// Mutable holder so individual tests can swap the user (e.g. a failing
+// getIdToken) without a second mock module.
+const authState: { user: { getIdToken: () => Promise<string> } } = {
+  user: { getIdToken: async () => 'id-token-abc' },
+};
 vi.mock('../contexts/AuthContext', () => ({
-  useAuth: () => ({
-    user: { getIdToken: async () => 'id-token-abc' },
-  }),
+  useAuth: () => authState,
 }));
 
 afterEach(() => {
@@ -30,6 +33,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   sessionStorage.clear();
+  authState.user = { getIdToken: async () => 'id-token-abc' };
 });
 
 function stubFetch(handler: (url: string) => Promise<Partial<Response>>) {
@@ -82,6 +86,28 @@ describe('SchemaFormDemo authed manifest fetch (bd z2is)', () => {
     expect(
       screen.getByText(/Not authorized to load form kits/i)
     ).toBeTruthy();
+    expect(calls.some((u) => u.includes('/form-kits/index.json'))).toBe(false);
+  });
+
+  it('surfaces a FAILED token refresh as an auth error, not the static fallback', async () => {
+    // Round-3 fresh-eyes: a getIdToken() rejection (revoked session, clock
+    // skew) landing in the generic catch would silently degrade to the stale
+    // static bundle -- the exact masking the 401 branch exists to prevent.
+    authState.user = {
+      getIdToken: async () => {
+        throw new Error('token refresh failed');
+      },
+    };
+    const calls = stubFetch(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ generatedAt: 'x', forms: [] }),
+    }));
+
+    render(<SchemaFormDemo />);
+
+    await screen.findByText('Unable to load forms');
+    expect(screen.getByText(/Could not refresh your sign-in/i)).toBeTruthy();
     expect(calls.some((u) => u.includes('/form-kits/index.json'))).toBe(false);
   });
 

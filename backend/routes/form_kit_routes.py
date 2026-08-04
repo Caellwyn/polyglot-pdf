@@ -224,13 +224,16 @@ async def get_form_kit_pdf(kit_id: str) -> Response:
     Works in both local and gcs mode. The PDF filename is resolved from the
     manifest (custom filenames are honored), falling back to `form.pdf`.
 
-    DELIBERATELY unauthenticated (bd polyglot-pdf-z2is): the blank template is
-    a public government form, the same bytes ship in the frontend's static
-    bundle (frontend/public/form-kits, served by Hosting with no auth), and
-    the viewer loads this URL via pdfjs `getDocument(url)` which sends no
-    Authorization header. Gating this route would break that viewer path while
-    protecting nothing that is not already public. Revisit when kits become
-    firm-scoped (private kits must gate BOTH this route and the static bundle).
+    DELIBERATELY unauthenticated (bd polyglot-pdf-z2is; rationale corrected in
+    review round 3): NO frontend consumer loads this route today -- the
+    manifest's pdfPath is always the static Hosting path
+    /form-kits/<id>/<file> (see form_kits.py normalize_manifest), so the
+    viewer fetches the STATIC copy, and the same blank-template bytes ship
+    publicly in the frontend bundle regardless. The route exists as the
+    store-backed read for gcs mode (bd sbfk). Gating it would protect nothing
+    that is not already public via Hosting. Revisit when kits become
+    firm-scoped (private kits must gate BOTH this route and the static
+    bundle, and the viewer would need header-carrying fetches).
     """
     kit_id = _safe_kit_id(kit_id)
     store = get_form_kit_store()

@@ -30,14 +30,30 @@ class _FakeQuery:
             yield m
 
 
+class _FakeDocRef:
+    def __init__(self):
+        self.set_calls = []
+        self.delete_calls = 0
+
+    def set(self, doc):
+        self.set_calls.append(doc)
+
+    def delete(self):
+        self.delete_calls += 1
+
+
 class _FakeCollection:
     def __init__(self):
         self.added = []
         self.query_docs = []
+        self.doc_refs = {}
 
     def add(self, doc):
         self.added.append(doc)
         return (None, None)
+
+    def document(self, doc_id):
+        return self.doc_refs.setdefault(doc_id, _FakeDocRef())
 
     def where(self, *args, **kwargs):
         return _FakeQuery(self.query_docs)
@@ -53,10 +69,12 @@ class _FakeDB:
 
 @pytest.fixture(autouse=True)
 def _fresh_sink():
-    """Each test starts and ends with no live background writer."""
+    """Each test starts and ends with no live background writer or probe cache."""
     cl.flush_confirmation_sink()
+    cl._probe_cache = None
     yield
     cl.flush_confirmation_sink()
+    cl._probe_cache = None
 
 
 @pytest.fixture
@@ -264,6 +282,40 @@ def test_flush_drains_sibling_executor_created_mid_drain(fake_db):
         for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
     }
     assert ids == {"fss_sib_1", "fss_sib_2"}
+
+
+def test_sink_status_disabled_ok_and_error(fake_db, monkeypatch):
+    """confirmation_sink_status (round-3 fresh-eyes): IAM drift must be
+    visible on /health, not only via a manual retrieval run."""
+    # ok: probe write+delete against the fake
+    assert cl.confirmation_sink_status() == "ok"
+    probe_ref = fake_db.collections[cl._FIRESTORE_COLLECTION].doc_refs["_health_probe"]
+    assert probe_ref.set_calls and probe_ref.delete_calls == 1
+
+    # error: broken client -> "error: ..." (fresh cache)
+    cl._probe_cache = None
+
+    def _broken():
+        raise RuntimeError("403 Permission denied")
+
+    monkeypatch.setattr("backend.services.auth.get_db", _broken)
+    status = cl.confirmation_sink_status()
+    assert status.startswith("error:")
+
+    # disabled: sink off -> "disabled" without touching the client
+    monkeypatch.delenv("CONFIRMATION_FIRESTORE_ENABLED", raising=False)
+    assert cl.confirmation_sink_status() == "disabled"
+
+
+def test_sink_status_is_cached(fake_db, monkeypatch):
+    assert cl.confirmation_sink_status() == "ok"
+
+    def _explode():
+        raise AssertionError("probe must be served from cache within max_age")
+
+    monkeypatch.setattr("backend.services.auth.get_db", _explode)
+    # Within max_age the cached "ok" is returned; no second Firestore hit.
+    assert cl.confirmation_sink_status(max_age_s=300.0) == "ok"
 
 
 def test_read_falls_back_to_file_when_firestore_empty(fake_db, tmp_path, monkeypatch):

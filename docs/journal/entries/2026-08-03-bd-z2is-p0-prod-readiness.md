@@ -18,8 +18,12 @@ before any paying customer:
 2. `POST /api/fill-pdf` -- the endpoint that renders user-entered field values
    into a PDF -- was unauthenticated on a service deployed
    `--allow-unauthenticated`, as were the form-kit catalogue reads.
-3. The disclaimer-acceptance route logged the caller's IP (PII under
-   GDPR/CCPA), making the "no personal data stored" posture literally false.
+3. The disclaimer-acceptance route logged a `client_ip` (an IP is PII under
+   GDPR/CCPA). Round-3 nuance: in production that value was the Hosting
+   proxy's address, not the end user's (ProxyHeadersMiddleware trusts only
+   localhost), so this was correct hygiene + local-dev exposure removal
+   rather than closing an active end-user-IP leak -- but the field had no
+   business being logged either way.
 4. `VERTEXAI=false` (the AI Studio path, whose consumer terms permit human
    review/training use of request data) was one stray env flip away from
    carrying production client audio.
@@ -132,7 +136,41 @@ read could have made:
    401s -- rewritten to expect the 401 and verify the authed path. The
    deploy-form-kit.sh half (env-clobbering --set-env-vars hint) is
    pre-existing and stays with the reviewer-filed bd polyglot-pdf-pnye.
-Round 3 (Opus) on the updated diff: outcome recorded below.
+**Fresh-eyes round 3 (Opus, Workflow fallback): GAPS-FOUND (7).** All seven
+adopted; the round scored all rubric criteria PASS on mechanism and pushed on
+the periphery -- operability, stated rationale, and hardening:
+1-3. ADOPTED: the printed deploy verification could query the WRONG project
+   (firebase_admin resolves the project from the credential first, so the env
+   var alone is not deterministic) and named the wrong principal for the read;
+   the script's exit-code contract was stale. Fixed: `--project` flag that
+   pre-initializes firebase_admin with an explicit projectId; corrected
+   your-own-ADC guidance in both the script's failure message and
+   deploy-all.sh's printed steps; exit codes documented (0/1/2).
+4. ADOPTED: the public-kit-PDF rationale cited a viewer path that does not
+   exist (nothing loads the API pdf route; pdfPath is always the static
+   Hosting path). The DECISION stands on corrected grounds -- no consumer +
+   the same bytes ship publicly in the static bundle -- rewritten in the
+   route comment, auth.md, technical_guide.md, and the pinning test's
+   docstring.
+5. ADOPTED: the sync shutdown handler could block the event loop past Cloud
+   Run's SIGTERM grace on a stalled Firestore commit (gapic deadline 60s vs
+   ~10s grace). Fixed: async handler, drain offloaded to a thread with a 5s
+   cap; on timeout the thread keeps draining until SIGKILL and the loop is
+   never blocked.
+6. ADOPTED: IAM drift killing the sink was detectable only by a manual
+   retrieval run. Fixed: `confirmation_sink_status()` probe (write+delete a
+   `_health_probe` doc, 5-min cache) surfaced as `confirmation_sink` on
+   `/health` with a 3s bound -- the standard post-deploy check now sees a
+   dead sink.
+7. ADOPTED: a FAILED `getIdToken()` refresh in SchemaFormDemo was
+   misclassified as backend-unavailable and silently fell back to the stale
+   static bundle. Fixed: token acquisition wrapped; a refresh failure now
+   surfaces like a 401. Pinned by a new test case.
+The round also softened one journal overclaim: the pre-z2is `client_ip` was
+the Hosting proxy address in production (ProxyHeadersMiddleware defaults to
+trusting only localhost), so the removal is correct hygiene rather than
+closing an active end-user-IP leak.
+Round 4 (Opus) on the updated diff: outcome recorded below.
 
 ## Lessons
 

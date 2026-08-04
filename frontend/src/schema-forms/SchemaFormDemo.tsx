@@ -67,7 +67,19 @@ export function SchemaFormDemo() {
         let authRejected = false;
         try {
           const backendUrl = getBackendHttpUrl();
-          const token = user ? await user.getIdToken() : undefined;
+          let token: string | undefined;
+          try {
+            token = user ? await user.getIdToken() : undefined;
+          } catch {
+            // A failed token REFRESH (revoked session, clock skew) is an auth
+            // failure, not "backend unavailable" -- surface it like a 401
+            // instead of masking it behind the stale static bundle
+            // (round-3 fresh-eyes on bd z2is).
+            authRejected = true;
+            throw new Error(
+              "Could not refresh your sign-in (please sign in again)"
+            );
+          }
           const response = await fetch(`${backendUrl}/api/form-kits`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
