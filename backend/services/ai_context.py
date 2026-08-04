@@ -143,34 +143,41 @@ def render_field_guidance(
         #    'previously_received_itin_or_irsn' rose OVER it in 8 of 17 baked
         #    languages (re-introducing the bd 41fi recital). The gate must
         #    describe the FIELD, not the session, so it measures English.
-        # The override map is keyed BY the English label (ow1e), so a reverse
-        # lookup recovers it; no override / no match -> the label is already
-        # English.
         #
-        # AMBIGUOUS entries are DROPPED, not first-wins. The override map spans
-        # the whole form, so two different English labels can share one
-        # translation -- i-90/Russian really does collapse two 12/14-word
-        # "incorrect data because of ..." labels onto one string. Keeping the
-        # first would silently measure some OTHER option's word count, and a
-        # future kit whose 2-option field collided with a long label elsewhere
-        # would flip branch with the suite green (3rd Opus outer round). On a
-        # drop the lookup misses and we measure the translated text -- exactly
-        # the pre-fix behavior for that one label, never a wrong attribution.
-        english_by_translation = {}
-        if option_label_overrides:
-            ambiguous = set()
-            for english, translated in option_label_overrides.items():
-                if not (isinstance(translated, str) and isinstance(english, str)):
-                    continue
-                prior = english_by_translation.get(translated)
-                if prior is not None and prior != english:
-                    ambiguous.add(translated)
-                else:
-                    english_by_translation[translated] = english
-            for translated in ambiguous:
-                english_by_translation.pop(translated, None)
+        # The English label is read POSITIONALLY from the raw `field` rather
+        # than recovered from the override map. get_field_guidance builds its
+        # options from field["options"] through _sanitize_options and
+        # _apply_label_overrides, both plain list comprehensions -- so the two
+        # lists are 1:1 by index, and index i's pre-override label IS the
+        # English one. Exact, and it needs no map at all.
+        #
+        # A reverse lookup over option_label_overrides (keyed by English label)
+        # was the earlier approach and is NOT equivalent: it keys on the
+        # TRANSLATED string but fires on whatever sits in opt["label"], and
+        # those are different populations. An option the secretary did not
+        # translate stays English, and a single unrelated long label mapping TO
+        # that same string re-attributed its word count -- e.g. a 2-option
+        # "Yes"/"No" field silently measured 25 words when some other label
+        # translated to "Yes". Reachable on a partially-baked kit, since
+        # build_translation_overrides records only what the secretary returned
+        # (2nd independent Opus outer review).
+        raw_options = field.get("options") if isinstance(field, dict) else None
+        if not isinstance(raw_options, list) or len(raw_options) != len(options):
+            raw_options = None
+
+        def _english_label(index, fallback):
+            # Fallback = the possibly-translated label, used only when the raw
+            # options are absent or mis-shaped (a caller passing pre-reduced
+            # guidance). Same behavior as before any override existed.
+            if raw_options is None:
+                return fallback
+            raw = raw_options[index]
+            if isinstance(raw, dict):
+                return raw.get("label") or raw.get("value") or fallback
+            return raw if isinstance(raw, str) else fallback
+
         measured_labels = []
-        for opt in options:
+        for index, opt in enumerate(options):
             if isinstance(opt, dict):
                 opt_value = opt.get("value", "")
                 opt_label = opt.get("label", "")
@@ -184,12 +191,14 @@ def render_field_guidance(
             else:
                 opt_strs.append(str(opt))
                 spoken = str(opt)
+            measured = _english_label(index, spoken)
             # str() so a malformed kit (an LLM-extracted/editor-drafted label
             # that is a number or None) cannot crash the render on .split();
             # schema_lint does not assert the label is a string, and every
             # render call site is unguarded.
-            spoken = spoken if isinstance(spoken, str) else str(spoken)
-            measured_labels.append(english_by_translation.get(spoken, spoken))
+            measured_labels.append(
+                measured if isinstance(measured, str) else str(measured)
+            )
         n = len(opt_strs)
         # The user cannot read the form, so the model's recital is their only
         # access to the choices (bd polyglot-pdf-6bq8). The count + imperative

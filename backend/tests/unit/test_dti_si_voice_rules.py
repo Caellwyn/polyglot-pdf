@@ -654,53 +654,59 @@ def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_
             assert translated in text, f"{fid} lost its {lang} label"
 
 
-def test_colliding_translations_do_not_borrow_another_labels_word_count():
-    # The reverse lookup keys on the TRANSLATED string, and the override map
-    # spans the WHOLE form -- so two different English labels can share one
-    # translation (i-90/Russian genuinely does this on a pair of 12/14-word
-    # "incorrect data because of ..." labels). A first-wins map would then
-    # measure some OTHER option's English label: here a short 2-option field
-    # would inherit a 25-word count and lose its natural question, silently and
-    # with the suite green (3rd Opus outer round).
-    #
-    # Ambiguous entries are dropped, so the lookup misses and the TRANSLATED
-    # text is measured -- for this option only, and never a wrong attribution.
+def test_english_label_is_read_positionally_not_matched_by_text():
+    # The English label the length rule measures is read POSITIONALLY from the
+    # raw field, never recovered by matching the rendered label's text against
+    # the override map. Text-matching is not sound here, because the map is
+    # keyed by ENGLISH label but the rendered label may or may not have been
+    # translated -- two different populations. These are the cases that
+    # separate the two approaches (2nd independent Opus outer review):
     from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
 
     long_english = " ".join(f"w{i}" for i in range(TWO_OPTION_MAX_LABEL_WORDS + 5))
-    field = {
+    natural = "ask ONE natural question that makes both choices clear"
+
+    # (a) A 2-option field the secretary did NOT translate (its labels stay
+    # English) while some UNRELATED long label elsewhere on the form translates
+    # TO one of those English strings. Reachable on a partially-baked kit:
+    # build_translation_overrides records only what the secretary returned. A
+    # reverse lookup fires on "Yes" and hands back the 25-word label, so the
+    # pair silently loses its natural question.
+    short_pair = {
         "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
         "options": [{"value": "a", "label": "Yes"}, {"value": "b", "label": "No"}],
     }
-    # The long label is inserted FIRST on purpose. A first-wins reverse map
-    # (setdefault) keys on insertion order, so with "Yes" first it would happen
-    # to pick the right label and this test would pass for the wrong reason --
-    # order-dependent luck, not the rule. Both orders are asserted below.
-    overrides = {
-        long_english: "Si",
-        "Yes": "Si",
-        "No": "No",
-    }
-    text = render_field_guidance(field, option_label_overrides=overrides)
-    assert "ask ONE natural question that makes both choices clear" in text
+    text = render_field_guidance(short_pair,
+                                 option_label_overrides={long_english: "Yes"})
+    assert natural in text
     assert "read ALL" not in text
 
-    # ... and the opposite insertion order must behave identically.
-    reordered = {"Yes": "Si", "No": "No", long_english: "Si"}
-    text = render_field_guidance(field, option_label_overrides=reordered)
-    assert "ask ONE natural question that makes both choices clear" in text
-    assert "read ALL" not in text
-
-    # An UNambiguous entry still resolves -- dropping collisions must not
-    # disable the reverse lookup wholesale.
-    unambiguous = {long_english: "Traducido", "Other": "Otro"}
-    long_field = {
+    # (b) The inverse: a genuinely LONG English pair whose translation is
+    # SHORT. Measuring the rendered (translated) text would wrongly promote it
+    # to a natural question; the English label is what the threshold describes.
+    long_pair = {
         "id": "g", "name": "G", "spoken_name": "g", "type": "radio",
-        "options": [{"value": "a", "label": "Traducido"},
-                    {"value": "b", "label": "Otro"}],
+        "options": [{"value": "a", "label": long_english},
+                    {"value": "b", "label": "B"}],
     }
-    text = render_field_guidance(long_field, option_label_overrides=unambiguous)
+    text = render_field_guidance(long_pair,
+                                 option_label_overrides={long_english: "Corto"})
     assert "read ALL 2 aloud when asking" in text
+    assert natural not in text
+    # The SHORT translation still reaches the model -- only the measurement
+    # uses English, never the rendered text.
+    assert "Corto" in text
+
+    # (c) Two different English labels sharing ONE translation (i-90/Russian
+    # genuinely does this). Positional reading is immune; any text-keyed map
+    # has to guess, and insertion order decided the guess.
+    colliding = {long_english: "Si", "Yes": "Si", "No": "No"}
+    text = render_field_guidance(short_pair, option_label_overrides=colliding)
+    assert natural in text
+    text = render_field_guidance(
+        short_pair, option_label_overrides={"Yes": "Si", "No": "No", long_english: "Si"}
+    )
+    assert natural in text
 
 
 @pytest.mark.parametrize("bad_label", [1, 3.5, True, ["x"], {"a": 1}])

@@ -199,6 +199,32 @@ now says what it actually is and why it leans low). The close reason on bd
 polyglot-pdf-semp described the pre-round-2 test, so it carries a correcting
 comment.
 
+**Second independent reviewer -- the English-label recovery was a heuristic where
+an exact answer existed.** The two-independent-clearing-passes gate earned its
+keep here. The second Opus cleared all twelve criteria independently, and then
+found a real defect in the newest code: the reverse lookup keyed on the
+TRANSLATED string but fired on whatever sat in `opt["label"]`, and those are
+different populations. An option the secretary did not translate stays English, so
+a single unrelated long label mapping to that same string re-attributed its word
+count -- a plain "Yes"/"No" pair measuring 25 words. Reachable on a
+partially-baked kit, since `build_translation_overrides` records only what the
+secretary actually returned. The ambiguity-drop guard did not help: one entry is
+unambiguous.
+
+The reviewer also supplied the fix that removes the guesswork: `guidance["options"]`
+is positionally 1:1 with `field["options"]` (both `_sanitize_options` and
+`_apply_label_overrides` are order-preserving list comprehensions), so the render
+can read the true English label BY INDEX and delete the map entirely. That also
+fixes a case the reverse map got wrong in the other direction -- a long English
+label whose translation is short would have been wrongly promoted to a natural
+question.
+
+Worth naming: I reached for a lookup table to invert a transformation whose
+inverse was already available structurally. The override map was the thing in
+front of me, so I inverted it; the positional correspondence was the thing that
+actually held. Verified after the change with a full-form sweep -- 255 two-option
+renders across 17 languages, zero branch flips.
+
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on
 clean dev with the branch stashed: 1198 passed / 1 failed). The failing count
@@ -225,6 +251,18 @@ direction: 35z0's assertion was vacuous because the data went empty underneath i
 mine were vacuous because a redundant code path held them up. **Redundancy is a
 virtue in the product and a defect in the pins.** Worth doing on any change where
 two mechanisms both plausibly satisfy the same assertion.
+
+**Before inverting a mapping, check whether the inverse is already available
+structurally.** To recover an English label from a possibly-translated one I built
+a reverse index of the translation map -- which is a guess dressed as a lookup: it
+keys on the translated string but is applied to labels that may never have been
+translated. The exact answer was sitting right there: the guidance options are
+positionally 1:1 with the raw field options, so index i's pre-override label IS
+the English one. The heuristic needed a collision guard, a fallback, and three
+rounds of review; the structural answer needed none and was shorter. The tell I
+missed: I was inverting a map whose forward direction was lossy (many English
+labels can share a translation) -- a lossy function has no inverse, so any
+"reverse lookup" over one is necessarily a guess.
 
 **Redundant guards cannot be tested -- so remove the redundancy, do not pin
 both halves.** This PR shipped THREE vacuous cases across three review rounds,
