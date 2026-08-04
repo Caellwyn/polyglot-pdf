@@ -193,7 +193,7 @@ short label inserted first, first-wins happened to pick correctly. Both orders
 are now asserted.
 
 Plus documentation corrections this review caught: a stale `spoken_labels`
-reference (renamed `measured_labels`), "8 new tests" where the file adds 11, and
+reference (renamed `measured_labels`), an understated new-test count, and
 the claim that 20 is the "midpoint" of the 17-to-27 gap (it is not; the wording
 now says what it actually is and why it leans low). The close reason on bd
 polyglot-pdf-semp described the pre-round-2 test, so it carries a correcting
@@ -325,14 +325,14 @@ field rather than just moving a number.
 - `backend/config.py` -- PRESENTING OPTIONS two-option rule re-keyed to the
   guidance marker + the all-navigation carve-out; WORKFLOW step 1 and both
   initiating templates re-scoped to match.
-- `backend/tests/unit/test_dti_si_voice_rules.py` -- 11 new tests (substantive
+- `backend/tests/unit/test_dti_si_voice_rules.py` -- 12 new test functions (substantive
   pair, threshold boundary + the w7 admit case, multi-select and its spellings,
   fld_3c, the two SI-prose pins); 3 existing contract tests updated.
 - `frontend/src/navigation.ts` -- resolver mirrors the backend (key tolerance,
   whitespace-as-miss, bare-string + missing-label shapes).
 - `frontend/src/shared/languages.ts` -- `SPOKEN_LANGUAGE_BCP47` +
   `kitTranslationKeys`, mirroring `backend/utils/language_codes.py`.
-- `frontend/src/__tests__/navigation-hint.test.ts` -- 11 new cases for the key
+- `frontend/src/__tests__/navigation-hint.test.ts` -- 7 new it()/it.each() blocks (16 cases, up from 9) for the key
   forms, blank values, the unbaked-kit fallback, and the option shapes.
 - `frontend/src/webFormConnection.ts` -- `sessionLanguage` read-through accessor
   wired into all four hint producers; state refresh in the hint and confirm
