@@ -159,15 +159,24 @@ the test module; verified no executable line changed since the round-3 green
 suite) and ran an exhaustive named sweep of README, DEPLOYMENT.md, every deploy
 script, `.github/`, env examples, skills, and probes.
 
-**The finding is the sharpest of the whole review:** `USE_PREMIUM_MODEL=true`
-**IS the AI-Studio flip under another name** -- 3.1 exists only on AI Studio --
-and it is the one variant the new startup guard CANNOT fail-closed on, because
+**The finding:** `USE_PREMIUM_MODEL=true` selects 3.1, which exists only on AI
+Studio -- and the new startup guard CANNOT fail-closed on it, because
 `_resolve_model` sets the premium id BEFORE the `VERTEXAI` branch. A deployed
-service therefore starts cleanly and then `1008`s at connect time, which is a
-worse failure mode than the crash-loop the guard produces. Three docs still
+service therefore starts cleanly and then `1008`s at connect time on every
+session, a worse failure mode than the crash-loop the guard produces. Three docs
 presented it as a plain opt-in (`ai-models.md:58`, `technical_guide.md:40`,
-`config-deployment.md:52`); all now carry a LOCAL-ONLY qualifier that names the
+`config-deployment.md:52`); all now carry a LOCAL-ONLY qualifier naming the
 silent-failure mechanism.
+
+**Correction (round 5).** Round 4 framed this as "the AI-Studio flip under
+another name," and the round-5 reviewer checked it and found that overstated:
+with `VERTEXAI=true` the adapter builds a **Vertex** client
+(`live_ai_gemini.py:329-336`), so the combination never reaches AI Studio. It is
+a MODEL-AVAILABILITY failure (a Vertex 1008 for an id Vertex does not publish),
+not a privacy-boundary breach. 5e6a criterion 1 therefore genuinely PASSES, and
+deferring the guard to `llva` is correct rather than an evasion. The docs
+qualifier is still right -- an operator must not deploy 3.1 -- but the reason is
+"it will not run," not "it leaks to consumer terms."
 
 Fixed here as docs (a warning); the GUARD gap is filed as
 `polyglot-pdf-llva` (P2) -- extend the fail-closed check to refuse startup when
@@ -188,12 +197,15 @@ in `deploy-demo.sh` echo lines are outside every changed hunk.
   but it was invisible while the trail died with the container. Turning on
   durability is the moment to audit what the record actually CONTAINS, not just
   that it persists. The first real production session was the audit.
-- **A policy can have a second name that the guard does not cover.** The
-  Vertex-only directive was enforced on `VERTEXAI`, but `USE_PREMIUM_MODEL=true`
-  reaches the same forbidden backend by a different route -- and reaches it
-  PAST the guard, failing at connect instead of at startup. When adding a
-  fail-closed guard, enumerate every setting that can produce the forbidden
-  state, not just the one the directive was phrased around.
+- **A guard covers a FLAG; enumerate the STATES that flag was standing in for.**
+  The Vertex-only guard fires on `VERTEXAI=false`. `USE_PREMIUM_MODEL=true`
+  produces a different bad deployed state (an unrunnable model) that slips past
+  it entirely, failing at connect rather than at startup. Note the discipline
+  this cuts both ways: my first framing called that "the AI-Studio flip under
+  another name," and review corrected it -- with `VERTEXAI=true` the adapter
+  still builds a Vertex client, so it is unavailability, not a privacy breach.
+  Enumerate the bad states a guard should cover, and be equally precise about
+  which bad state each one actually is.
 - **Two transports means two places for schema-derived values to fall through.**
   The legacy full-schema handshake and the manifest-first one both build a
   `schema` dict, but only one carries `form_metadata`. Any value derived from
@@ -233,6 +245,7 @@ rewritten.
 - frontend/src/schema-forms/state/schemaFormState.ts -- send form_number on the JIT handshake
 - backend/routes/websocket_routes.py -- read form_number; build form_metadata from either key
 - backend/config.py -- ALLOW_AI_STUDIO removed; deployed AI Studio path fails hard
+- backend/services/form_filling_service.py -- corrected the cache-key comment this change falsified (review round 2)
 - scripts/dev-local.ps1 -- VFF_DISABLE_AUTH wired with override + banner
 - deploy-demo.sh -- 3.1 comment rewritten (local-only until Vertex GA)
 - docs/standards/ai-models.md, docs/components/config-deployment.md -- Vertex-only rule
