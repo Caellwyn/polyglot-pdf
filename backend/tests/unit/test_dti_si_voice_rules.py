@@ -697,6 +697,24 @@ def test_english_label_is_read_positionally_not_matched_by_text():
     # uses English, never the rendered text.
     assert "Corto" in text
 
+    # (b2) The same, under the `allowed_values` option shape. get_field_guidance
+    # sources options as `field["options"] or field["allowed_values"]`, so the
+    # positional read must too -- looking only at "options" left the raw list
+    # None here, and the fallback measured the TRANSLATED label, putting exactly
+    # this shape back on the language-dependent branch (both final Opus outer
+    # reviews, found independently). No shipped kit uses it, but it is a
+    # supported read-side shape that option_translation._collect_labels already
+    # traverses, so the override map DOES reach these fields.
+    allowed_values_pair = {
+        "id": "h", "name": "H", "spoken_name": "h", "type": "radio",
+        "allowed_values": [{"value": "a", "label": long_english},
+                           {"value": "b", "label": "B"}],
+    }
+    text = render_field_guidance(allowed_values_pair,
+                                 option_label_overrides={long_english: "Corto"})
+    assert "read ALL 2 aloud when asking" in text
+    assert natural not in text
+
     # (c) Two different English labels sharing ONE translation (i-90/Russian
     # genuinely does this). Positional reading is immune; any text-keyed map
     # has to guess, and insertion order decided the guess.
@@ -707,6 +725,64 @@ def test_english_label_is_read_positionally_not_matched_by_text():
         short_pair, option_label_overrides={"Yes": "Si", "No": "No", long_english: "Si"}
     )
     assert natural in text
+
+
+def test_positional_read_degrades_safely_on_a_mis_shaped_field():
+    """The positional read must never be what breaks a render.
+
+    SCOPE NOTE, deliberately explicit: this test pins NO-CRASH, nothing more.
+    None of `_english_label`'s remaining guards can be pinned by outcome, and it
+    is worth recording why rather than dressing up cases that do not distinguish
+    them (that dressing-up is the vacuous-pin failure this PR exists to remove,
+    bd polyglot-pdf-35z0):
+
+    - The LENGTH guard is unreachable by construction. The read now sources the
+      raw list with the SAME rule get_field_guidance uses
+      (`options or allowed_values`), so the two lists always have equal length;
+      the guard only survives to keep that true if the two rules ever drift.
+    - `or raw.get("value")` and the BARE-STRING branch cannot differ from the
+      fallback. `_apply_label_overrides` substitutes only on an option's `label`
+      key, so a value-only option and a bare-string option are never overridden
+      -- raw text and rendered text are the same string, and the two code paths
+      provably return equal values.
+
+    The one guard with observable behavior is the SOURCE rule
+    (`options` or `allowed_values`), and it is pinned in
+    test_english_label_is_read_positionally_not_matched_by_text.
+
+    What remains real here: the render runs on the per-turn injection path, so a
+    crash strands the session mid-form. These shapes must render.
+    """
+    from backend.services.ai_context import TWO_OPTION_MAX_LABEL_WORDS
+
+    long_english = " ".join(f"w{i}" for i in range(TWO_OPTION_MAX_LABEL_WORDS + 5))
+
+    # An allowed_values-shaped field still measures English (the source rule),
+    # which IS mutation-bearing -- but via the source rule, not the length guard.
+    mismatched = {
+        "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+        "options": [],
+        "allowed_values": [{"value": "a", "label": long_english},
+                           {"value": "b", "label": "B"}],
+    }
+    assert "read ALL 2 aloud when asking" in render_field_guidance(
+        mismatched, option_label_overrides={long_english: "Corto"})
+
+    # NO-CRASH ONLY, per the scope note above.
+    # A scalar `options` is excluded: it already raises upstream in
+    # _sanitize_options, which is pre-existing behavior this PR neither
+    # introduces nor is scoped to change.
+    for shape in (
+        {"options": {"y": "Yes"}},
+        {"options": "YesNo"},
+        {"options": [{"value": long_english}, {"value": "b", "label": "B"}]},
+        {"options": [long_english, "B"]},
+        {"options": [None, {"value": "b", "label": "B"}]},
+    ):
+        field = {"id": "f", "name": "F", "spoken_name": "f", "type": "radio"}
+        field.update(shape)
+        render_field_guidance(field)
+        render_field_guidance(field, option_label_overrides={long_english: "Corto"})
 
 
 @pytest.mark.parametrize("bad_label", [1, 3.5, True, ["x"], {"a": 1}])

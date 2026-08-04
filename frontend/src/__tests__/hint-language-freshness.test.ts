@@ -119,6 +119,38 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
     expect(after?.selectedLanguage).toBe('Ukrainian')
   })
 
+  it('a later skip_field does not revert the persisted language either', async () => {
+    // The SIBLING of the confirm case above, and the same defect:
+    // handleSkipFieldRequest also ends in save(this.state), so on a stale copy
+    // it persists the old language over the new one. A skip is as routine a
+    // per-turn tool call as a confirm -- the pjws fix originally covered only
+    // the confirm path, and both final Opus outer reviews found this
+    // independently.
+    //
+    // The field is left EMPTY on purpose: the handler's data-loss guard refuses
+    // to skip a field that already holds a value.
+    const conn = new WebFormConnection(SCHEMA)
+    const started = SchemaFormStateManager.acceptDisclaimer(
+      (conn as any).state, 'Spanish'
+    )
+    ;(conn as any).state = started
+    SchemaFormStateManager.save(started)
+
+    SchemaFormStateManager.setSelectedLanguage(started, 'Ukrainian')
+    expect((conn as any).state.selectedLanguage).toBe('Spanish')
+
+    ;(conn as any).send = () => {}
+    await (conn as any).handleSkipFieldRequest({
+      field_id: 'p1_sex', request_id: 's1',
+    })
+
+    const after = SchemaFormStateManager.load()
+    // The skip must have taken (proving the handler ran through to its save)...
+    expect(after?.fieldValues['p1_sex']?.skipped).toBe(true)
+    // ...without reverting the language.
+    expect(after?.selectedLanguage).toBe('Ukrainian')
+  })
+
   it('falls back to the in-memory language when nothing is persisted', () => {
     // The accessor must not turn an empty sessionStorage into a null language:
     // that would silently drop translation on the pre-persist opener turn.

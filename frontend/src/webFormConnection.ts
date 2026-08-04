@@ -1705,8 +1705,24 @@ export class WebFormConnection {
     // observed case is selectedLanguage: changeSpokenLanguage() saves the new
     // language straight to storage, and the next confirm wrote the old one back
     // over it, silently undoing the switch.
+    //
+    // fieldValues are MERGED with in-memory winning, for the same reason as the
+    // skip handler: everything below is gated on the field having a usable
+    // VALUE, so a plain overwrite could hide an entry present only in memory and
+    // turn a legitimate confirm into a spurious 'no_value' refusal (which the
+    // loop-breaker then escalates into a re-prompt). Production writes all
+    // self-persist, so the maps normally agree; the merge keeps the failure
+    // direction safe when they do not.
     const persistedAtEntry = SchemaFormStateManager.load();
-    if (persistedAtEntry) this.state = persistedAtEntry;
+    if (persistedAtEntry) {
+      this.state = {
+        ...persistedAtEntry,
+        fieldValues: {
+          ...persistedAtEntry.fieldValues,
+          ...this.state.fieldValues,
+        },
+      };
+    }
 
     // Loop-breaker (bd polyglot-pdf-0y7): a field is only meaningfully confirmable
     // when it has a usable value. confirmField() no-ops when there is no fieldValues
@@ -1997,6 +2013,33 @@ export class WebFormConnection {
     if (!request_id) {
       console.warn('[WebFormConnection] skip_field with no request_id -- ignoring (cannot ack).');
       return;
+    }
+
+    // Refresh before reading OR writing -- the same rule as the confirm handler
+    // (bd polyglot-pdf-pjws). This handler also ends in
+    // SchemaFormStateManager.save(this.state), so on a stale in-memory copy it
+    // does not merely read wrong values, it PERSISTS them: a skip landing after
+    // a mid-session language change wrote the OLD selectedLanguage back over the
+    // new one, silently undoing the switch. A skip is as routine a per-turn tool
+    // call as a confirm; both final Opus outer reviews found this sibling path
+    // independently.
+    //
+    // fieldValues are MERGED, not replaced, and in-memory wins. Everything below
+    // is gated on a DATA-LOSS guard (markFieldSkipped BLANKS the value), so this
+    // refresh must never be able to hide a value the guard would have seen: a
+    // plain overwrite would let a skip through on an entry present only in
+    // memory and destroy a real answer. Production writes all self-persist, so
+    // the two maps normally agree -- the merge is what keeps the failure
+    // direction safe when they do not.
+    const persistedAtEntry = SchemaFormStateManager.load();
+    if (persistedAtEntry) {
+      this.state = {
+        ...persistedAtEntry,
+        fieldValues: {
+          ...persistedAtEntry.fieldValues,
+          ...this.state.fieldValues,
+        },
+      };
     }
 
     const field = this.state.schema.fields.find(f => f.id === field_id);

@@ -225,6 +225,62 @@ front of me, so I inverted it; the positional correspondence was the thing that
 actually held. Verified after the change with a full-form sweep -- 255 two-option
 renders across 17 languages, zero branch flips.
 
+**Final round -- two independent reviewers, two real gaps, found separately.**
+Running both required passes on the same diff paid off: they converged on the
+same two defects without seeing each other.
+
+- `handleSkipFieldRequest` was the SIBLING of the confirm-handler clobber. It
+  also ends in `save(this.state)` with no refresh, so a skip landing after a
+  mid-session language change wrote the old language back over the new one. The
+  pjws fix had covered confirm and the hint producers but missed skip -- and a
+  skip is as routine a per-turn tool call as a confirm. Fixed the same way, with
+  a mirror of the existing confirm test.
+- The positional English-label read looked only at `field["options"]`, but
+  `get_field_guidance` sources `options or allowed_values`. For an
+  `allowed_values`-shaped field the raw list came back None, the guard fell back
+  to the translated label, and that shape went language-dependent again --
+  reproduced flipping in 8 of 17 languages. Now sourced with the identical rule.
+
+Also corrected: a code comment and a tier-2 doc line still describing the
+reverse map that the previous commit deleted (tier-2 docs are current-state
+only), and the missing SI character count in the doc stamp (16,513 -> 17,178,
++4%; per-turn SI is 95-98% of session cost, so the doc tracks it).
+
+One more vacuous-test lesson, this time caught before shipping. I wrote a test
+pinning the positional read's remaining guards, mutation-tested it, and found
+three of the four survived. Two attempts to make them bite both failed, and the
+reason turned out to be structural: `_apply_label_overrides` substitutes only on
+an option's `label`, so a value-only or bare-string option is never overridden
+and the raw and rendered text are provably the SAME string -- the two code paths
+cannot differ, so no assertion can separate them. Similarly the length guard is
+unreachable now that the source rule mirrors `get_field_guidance` exactly. Rather
+than manufacture a case, the test now pins what is real (these shapes must not
+crash the per-turn render) and its docstring states plainly which guards are
+unpinnable and why.
+
+**The skip fix broke a data-loss guard, and the full suite caught it.** Adding
+the refresh to `handleSkipFieldRequest` turned an existing test red: it seeds a
+value directly into in-memory state without persisting, and a plain
+`this.state = persisted` discarded it -- so the handler's already-filled guard
+saw an empty field and let the skip through, which BLANKS the value. Exactly the
+shadow-data-loss the guard exists to stop.
+
+Both handlers now MERGE fieldValues with in-memory winning, rather than
+replacing. The direction matters and is asymmetric: both handlers gate on
+whether the field holds a value, so hiding an in-memory entry fails DANGEROUSLY
+(a skip destroys a real answer; a confirm is spuriously refused as 'no_value'),
+while carrying a stale in-memory entry forward fails safely (the guard refuses
+and the model re-asks). Production writes all self-persist so the two maps
+normally agree -- the merge just makes the disagreement case fail in the safe
+direction. The hint handler keeps a plain replace: it has no such guard, it only
+computes the next field.
+
+Worth noting the test that caught it was not one of mine, and not one any
+reviewer named. It was an existing pin from an earlier bead
+(bd polyglot-pdf-7yra) doing precisely its job -- which is the argument for
+running the FULL suite rather than the touched files, even when the change looks
+local.
+
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on
 clean dev with the branch stashed: 1198 passed / 1 failed). The failing count

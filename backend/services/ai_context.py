@@ -52,7 +52,7 @@ MULTI_SELECT_OPTION_TYPES = {"checkbox_group", "multiselect", "multi_select"}
 # still asks naturally.
 #
 # Those counts are ENGLISH, and the render measures the English label even in a
-# translated session (see the reverse lookup in render_field_guidance). Word
+# translated session (see the positional read in render_field_guidance). Word
 # count is not translation-invariant, so a threshold calibrated on English MUST
 # be applied to English or the branch becomes language-dependent -- which it
 # briefly was, flipping BOTH of the fields above on shipped kits (Opus outer
@@ -161,7 +161,17 @@ def render_field_guidance(
         # translated to "Yes". Reachable on a partially-baked kit, since
         # build_translation_overrides records only what the secretary returned
         # (2nd independent Opus outer review).
-        raw_options = field.get("options") if isinstance(field, dict) else None
+        # Source the raw options EXACTLY as get_field_guidance does
+        # (manifest_service.py: `field.get("options") or field.get("allowed_values")`)
+        # -- an `allowed_values`-shaped field is a supported read-side shape, and
+        # reading only "options" left raw_options None for it, so the fallback
+        # measured the TRANSLATED label and the branch went language-dependent
+        # again on exactly that shape (both final Opus outer reviews, found
+        # independently). If the two sourcing rules ever diverge the length guard
+        # below degrades to the fallback rather than mis-indexing.
+        raw_options = None
+        if isinstance(field, dict):
+            raw_options = field.get("options") or field.get("allowed_values")
         if not isinstance(raw_options, list) or len(raw_options) != len(options):
             raw_options = None
 
