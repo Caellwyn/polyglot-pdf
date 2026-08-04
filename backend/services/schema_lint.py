@@ -233,7 +233,7 @@ def _walk_condition(
         out.append(LintFinding(
             SEVERITY_ERROR, "condition-malformed", path,
             f"this condition is a {type(cond).__name__}, not a set of "
-            "rules -- rebuild it in the editor's condition builder",
+            "rules -- rebuild it under the field's Conditional Logic section",
         ))
         return []
 
@@ -258,8 +258,8 @@ def _walk_condition(
         if not isinstance(members, list):
             out.append(LintFinding(
                 SEVERITY_ERROR, "condition-malformed", f"{path}.{bucket}",
-                "this group must be a list of rules -- rebuild it in the "
-                "editor's condition builder",
+                "this group must be a list of rules -- rebuild it under the "
+                "field's Conditional Logic section",
             ))
             continue
         for i, member in enumerate(members):
@@ -268,8 +268,8 @@ def _walk_condition(
                 out.append(LintFinding(
                     SEVERITY_ERROR, "condition-malformed", member_path,
                     f"this rule is a {type(member).__name__}, not a single "
-                    "field/operator rule -- rebuild it in the editor's "
-                    "condition builder",
+                    "field/operator rule -- rebuild it under the field's "
+                    "Conditional Logic section",
                 ))
                 continue
             if vocab.CONDITION_GROUP_BUCKETS & member.keys():
@@ -313,7 +313,7 @@ def _check_atom(
         out.append(LintFinding(
             SEVERITY_ERROR, "condition-malformed", atom_path,
             "this rule has no comparison type set -- open it in the "
-            "condition builder and choose one",
+            "Conditional Logic section and choose one",
         ))
         return
     spec = vocab.OPERATORS.get(operator)
@@ -332,7 +332,7 @@ def _check_atom(
             out.append(LintFinding(
                 SEVERITY_ERROR, "condition-malformed", atom_path,
                 "this rule does not say which field triggers it -- open it "
-                "in the condition builder and pick a field",
+                "under Conditional Logic and pick a field",
             ))
             return
         trigger_field = fields_by_id.get(ref)
@@ -946,10 +946,11 @@ def lint_schema(
                 f"sections[{i}] (id={sid})",
                 f"the holding section {sid!r} still lists {len(stale)} field "
                 f"id(s) ({', '.join(stale[:5])}{', ...' if len(stale) > 5 else ''}) "
-                f"that are leftovers -- any real fields among them are "
-                f"already filed in a proper section, and the rest name no "
-                f"field at all; delete these ids from the holding section's "
-                f"list so the form can be marked complete",
+                f"that no field currently points back to -- each is either "
+                f"a field already filed in a proper section, a field with no "
+                f"section set at all, or a leftover naming no field; re-file "
+                f"any real field that still lacks a section FIRST, then "
+                f"delete the leftover ids from the holding section's list",
             ))
 
     _check_guidance(fields, schema, out)
@@ -1153,7 +1154,8 @@ def _check_guidance(fields: List[Dict[str, Any]], schema: Dict[str, Any],
                 f"these details are {len(details)} characters, over the "
                 f"{guidance_contract.DETAILS_INLINE_MAX_CHARS}-character "
                 f"budget the assistant carries while the user is on this "
-                f"field -- the extra text is cut at a paragraph break and "
+                f"field -- the extra text is cut (at a paragraph break "
+                f"where possible) and "
                 f"replaced with a list of the dropped headings, which the "
                 f"assistant can still look up on request, but that takes an "
                 f"extra step; trim the excerpt to the parts that matter "

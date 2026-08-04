@@ -61,7 +61,7 @@ inventing that rule is a C1/C4 design decision, not a copy-pass call.
 
 ## Verification
 
-Backend full suite from the worktree: 2530 passed, 3 skipped, 3
+Backend full suite from the worktree: 2531 passed, 3 skipped, 3
 deselected, exit 0. test_lint_rule_parity.py: 4 passed (RULE_LABELS
 coverage intact, declaration shape preserved, and the new RULE_REMEDIES
 map pinned to the same coverage -- Opus round 2). schema-editor vitest:

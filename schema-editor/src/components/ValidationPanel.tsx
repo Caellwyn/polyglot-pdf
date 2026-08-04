@@ -106,7 +106,7 @@ export const RULE_REMEDIES: Record<string, string> = {
   'ref-unresolved-field': 'Point this rule at a real field, or delete the rule.',
   'operator-trigger': 'Pick a comparison type that is valid for this field.',
   'ref-option-value': 'Pick one of the trigger field\'s real answer choices.',
-  'condition-malformed': 'Rebuild this condition in the condition builder.',
+  'condition-malformed': 'Rebuild this condition under the Conditional Logic section of the field.',
   'composite-depth': 'Flatten the nested condition to one level.',
   'show-if-cycle': 'Remove or change one of the rules to break the loop.',
   'dump-widget-multiclaim': 'Unclaim the PDF box from all but one field or choice.',

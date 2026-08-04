@@ -415,6 +415,17 @@ def _finalize(items: List[_Item],
                         % (kept, (_plain_reason(item.trace[0]) if item.trace
                             else "a problem was found")),
             ))
+    for item in items:
+        if item.unresolved or (item.flagged_values and item.resolved is None):
+            # The reviewer-facing flag deliberately drops the retry trace
+            # (bd xfdb de-jargoning); keep it HERE so a repeatedly-failing
+            # translation stays diagnosable without a re-run (Opus outer
+            # review pass 2).
+            _log.info(
+                "translation_verify_unresolved_trace",
+                kind=item.kind, source=item.source,
+                trace=" | ".join(item.trace),
+            )
     _log.info(
         "translation_verify_complete",
         checked=counts["checked"], mechanical=counts["mechanical"],

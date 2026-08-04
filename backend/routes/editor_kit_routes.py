@@ -1504,9 +1504,13 @@ async def set_editor_kit_status(
             # 10KB string) would otherwise eat the whole [:1400] budget on its
             # own, hiding later findings' text within the first 8 (bd
             # polyglot-pdf-tmby nit 1).
+            # 400/2000: the bd-xfdb copy pass moved every message's remedy
+            # clause to the END; the old 200-char cap systematically cut
+            # exactly that clause at the one gate where the reviewer is
+            # actively blocked (Opus outer review).
             shown = "; ".join(
-                f"[{f.rule}] {f.path}: {f.message}"[:200] for f in lint_errors[:8]
-            )[:1400]
+                f"[{f.rule}] {f.path}: {f.message}"[:400] for f in lint_errors[:8]
+            )[:2000]
             more = len(lint_errors) - 8
             if more > 0:
                 shown += f"; ... and {more} more"

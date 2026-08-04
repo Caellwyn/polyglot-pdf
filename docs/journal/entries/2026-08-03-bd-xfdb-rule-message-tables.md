@@ -71,7 +71,7 @@ Two mandatory specifics from the bead:
 
 | Rule | What changed |
 |---|---|
-| unknown-operator | plain "not a recognized rule" + allowed list |
+| unknown-operator | plain "not a recognized comparison type" + allowed list |
 | value-arity | names what shape is actually needed per arity (none/list/scalar) |
 | condition-malformed (multiple sites) | "rebuild it in the condition builder" instead of type-name jargon |
 | composite-depth (x2 sites) | "pick one shape" / "flatten it" |
