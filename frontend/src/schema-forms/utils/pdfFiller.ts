@@ -69,7 +69,11 @@ export async function fillPDF(
   kitId: string,
   pdfUrl: string | undefined,
   fieldValues: Record<string, any>,
-  schema: FormSchema
+  schema: FormSchema,
+  // Fresh-token callback (mirrors the WS connection's getToken, bd wq0):
+  // /api/fill-pdf is auth-gated (bd polyglot-pdf-z2is). Optional so local-dev
+  // callers against a VFF_DISABLE_AUTH backend keep working without one.
+  getToken?: () => Promise<string | undefined>
 ): Promise<Uint8Array> {
   if (!pdfUrl) {
     throw new Error("PDF URL is required to fill the form");
@@ -107,12 +111,20 @@ export async function fillPDF(
   });
 
   try {
+    // Attach the Firebase ID token when a getter was provided; the backend's
+    // require_auth 401s without it (VFF_DISABLE_AUTH covers local dev).
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const token = getToken ? await getToken() : undefined;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     // Call backend endpoint
     const response = await fetch(`${backendUrl}/api/fill-pdf`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(requestPayload),
     });
 

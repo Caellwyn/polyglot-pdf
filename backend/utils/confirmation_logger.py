@@ -5,10 +5,23 @@ Logs field confirmations with timestamps (NO PII).
 Demonstrates proper confirmation workflow for legal defense.
 
 CRITICAL: Only log metadata, NEVER log actual field values or user data.
+
+Durability (bd polyglot-pdf-z2is): the local JSONL file is a dev convenience --
+on Cloud Run the filesystem is ephemeral tmpfs and the service scales to zero,
+so file-only confirmation logs did NOT survive production. When
+CONFIRMATION_FIRESTORE_ENABLED=true (set in the deploy env), every event is
+ALSO mirrored to the `confirmation_events` Firestore collection via a
+fire-and-forget background writer, so the liability trail is durable and
+retrievable per form-session. Events are metadata-only (field ids, methods,
+timestamps -- never values), so this persistence does not touch the
+stateless/no-PII invariant (docs/standards/stateless-architecture.md).
 """
 import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 import structlog
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Literal
 
@@ -20,12 +33,113 @@ _log = structlog.get_logger().bind(module="confirmation_logger")
 # var / a test fixture can set it after this module is imported.
 _DEFAULT_CONFIRMATION_LOG_DIR = "logs/confirmations"
 
+# Firestore mirror (bd polyglot-pdf-z2is). Env-resolved per call, like the dir,
+# so tests and deploys control it without an import-order dance.
+_FIRESTORE_COLLECTION = "confirmation_events"
+
+# Single background writer so the voice hot path (callback_handler's confirm
+# round-trip) never blocks on a network write. ThreadPoolExecutor threads are
+# non-daemon, so queued writes drain on interpreter exit (graceful shutdown).
+_executor: Optional[ThreadPoolExecutor] = None
+_executor_lock = threading.Lock()
+
 
 def _confirmation_log_dir() -> Path:
     """Return the confirmation-log directory, creating it if needed."""
     log_dir = Path(os.getenv("CONFIRMATION_LOG_DIR", _DEFAULT_CONFIRMATION_LOG_DIR))
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
+
+
+def _firestore_enabled() -> bool:
+    return os.getenv("CONFIRMATION_FIRESTORE_ENABLED", "false").lower() == "true"
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    global _executor
+    with _executor_lock:
+        if _executor is None:
+            _executor = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="confirmation-sink"
+            )
+        return _executor
+
+
+def flush_confirmation_sink() -> None:
+    """Drain pending Firestore writes (tests + graceful shutdown).
+
+    Loops swap-then-drain until no executor remains (bd polyglot-pdf-wv3j):
+    shutdown(wait=True) runs OUTSIDE the lock (so submitters aren't blocked on
+    a long drain), which means a concurrent _submit_firestore_write can lazily
+    create a FRESH executor while the swapped-out one drains. A single-pass
+    flush would return with that sibling alive and its write undrained; the
+    loop re-checks and drains it too, so the post-condition "no live executor,
+    nothing queued" actually holds.
+    """
+    global _executor
+    while True:
+        with _executor_lock:
+            executor, _executor = _executor, None
+        if executor is None:
+            return
+        executor.shutdown(wait=True)
+
+
+def _firestore_write(event: dict) -> None:
+    """Write one confirmation event to Firestore (runs on the sink thread).
+
+    Failures are logged LOUDLY (error level -> Cloud Logging) but never raised:
+    the voice session must not die because the audit mirror hiccupped. The
+    parallel structlog line in the caller already reached Cloud Logging, so a
+    failed mirror write degrades durability, not evidence.
+    """
+    try:
+        # Lazy import: keeps firebase_admin out of this module's import chain
+        # (unit tests import confirmation_logger without Firestore creds) and
+        # makes the client patchable at backend.services.auth.get_db.
+        from backend.services.auth import get_db
+
+        doc = dict(event)
+        retention_days = os.getenv("CONFIRMATION_RETENTION_DAYS")
+        if retention_days:
+            # expire_at feeds a Firestore TTL policy. The policy itself is a
+            # deploy-time decision gated on counsel's answer to what retention
+            # is legally REQUIRED (bd polyglot-pdf-pol2); until the env var is
+            # set, events carry no expiry.
+            doc["expire_at"] = datetime.now(timezone.utc) + timedelta(
+                days=int(retention_days)
+            )
+        get_db().collection(_FIRESTORE_COLLECTION).add(doc)
+    except Exception as e:
+        _log.error(
+            "confirmation_firestore_write_failed",
+            error=str(e),
+            form_session_id=event.get("form_session_id"),
+            event_type=event.get("event"),
+        )
+
+
+def _submit_firestore_write(event: dict) -> None:
+    """Queue a Firestore mirror write; never blocks or raises into the caller."""
+    if not _firestore_enabled():
+        return
+    try:
+        _get_executor().submit(_firestore_write, dict(event))
+    except RuntimeError:
+        # Shutdown race (fresh-eyes on bd z2is): flush_confirmation_sink() can
+        # swap+shut the executor between _get_executor() returning and submit()
+        # running, and submit-after-shutdown raises RuntimeError. That window is
+        # exactly Cloud Run's SIGTERM drain -- the moment a liability event is
+        # most likely to matter -- so fall back to a SYNCHRONOUS write instead
+        # of dropping it. Blocking briefly is fine mid-shutdown, and
+        # _firestore_write never raises (it logs loudly on failure).
+        _firestore_write(dict(event))
+    except Exception as e:
+        _log.error(
+            "confirmation_firestore_submit_failed",
+            error=str(e),
+            form_session_id=event.get("form_session_id"),
+        )
 
 # Matches the confirm_field tool's confirmation_method enum (backend/config.py)
 # and the values actually written by callback_handler._handle_confirm_field_tool.
@@ -85,6 +199,8 @@ def log_field_confirmation(
 
     # Also write to dedicated confirmation log file (one file per form session)
     _write_confirmation_to_file(form_session_id, confirmation_event)
+    # ...and mirror to the durable Firestore sink when enabled (bd z2is).
+    _submit_firestore_write(confirmation_event)
 
 
 def _write_confirmation_to_file(form_session_id: str, event: dict) -> None:
@@ -129,8 +245,12 @@ def log_form_session_start(
         "section_id": section_id,
     }
 
-    _log.info("form_session_started", **event)
+    # Filter the "event" key: it collides with structlog's positional event
+    # name (same pattern as log_field_confirmation). Latent TypeError until the
+    # z2is sink tests gave this function its first caller.
+    _log.info("form_session_started", **{k: v for k, v in event.items() if k != "event"})
     _write_confirmation_to_file(form_session_id, event)
+    _submit_firestore_write(event)
 
 
 def log_form_session_end(
@@ -159,8 +279,9 @@ def log_form_session_end(
         "total_fields_confirmed": total_fields_confirmed,
     }
 
-    _log.info("form_session_ended", **event)
+    _log.info("form_session_ended", **{k: v for k, v in event.items() if k != "event"})
     _write_confirmation_to_file(form_session_id, event)
+    _submit_firestore_write(event)
 
 
 def get_confirmation_log_path(form_session_id: str) -> Path:
@@ -172,12 +293,81 @@ def get_confirmation_log_path(form_session_id: str) -> Path:
     return _confirmation_log_dir() / f"{form_session_id}.jsonl"
 
 
-def read_confirmation_log(form_session_id: str) -> list[dict]:
+# Probe cache for confirmation_sink_status (monotonic timestamp, status).
+_probe_cache: Optional[tuple] = None
+_probe_lock = threading.Lock()
+
+
+def confirmation_sink_status(max_age_s: float = 300.0) -> str:
+    """Report whether the Firestore confirmation sink can actually WRITE.
+
+    Round-3 fresh-eyes on bd z2is: without this, IAM drift (e.g. the runtime
+    SA losing roles/datastore.user) is detectable only by a manual
+    read_confirmations.py run -- the writer logs-and-continues by design, so
+    the app looks healthy while the liability trail silently stays empty.
+    Surfaced on /health so the standard post-deploy check sees it.
+
+    Returns "disabled" (sink off), "ok" (probe write+delete succeeded), or
+    "error: <msg>". The probe writes then deletes a `_health_probe` doc in the
+    events collection (a READ would not verify write perms). Result is cached
+    for max_age_s so /health polling does not hammer Firestore.
+    """
+    global _probe_cache
+    if not _firestore_enabled():
+        return "disabled"
+    with _probe_lock:
+        if _probe_cache and (time.monotonic() - _probe_cache[0]) < max_age_s:
+            return _probe_cache[1]
+    try:
+        from backend.services.auth import get_db
+
+        ref = get_db().collection(_FIRESTORE_COLLECTION).document("_health_probe")
+        ref.set({"probe": True, "ts": datetime.now(timezone.utc)})
+        ref.delete()
+        status = "ok"
+    except Exception as e:
+        _log.error("confirmation_sink_probe_failed", error=str(e))
+        status = f"error: {e}"
+    with _probe_lock:
+        _probe_cache = (time.monotonic(), status)
+    return status
+
+
+class ConfirmationReadError(Exception):
+    """The Firestore sink could not be QUERIED (perms/ADC/project/transport).
+
+    Distinct from 'the session has no events': for a legal-retrieval surface,
+    'the record does not exist' and 'I could not check' must never be the same
+    answer (fresh-eyes on bd z2is).
+    """
+
+
+def read_confirmation_log(form_session_id: str, strict: bool = False) -> list[dict]:
     """
     Read all confirmation events for a form session.
 
     Returns list of confirmation events in chronological order.
+
+    When the Firestore sink is enabled, Firestore is the authoritative source
+    (the local file dies with the Cloud Run instance); any events found there
+    are returned, sorted by timestamp client-side (an equality-only query needs
+    no composite index). The local JSONL file remains the dev-mode fallback.
+
+    strict=True makes a FAILED Firestore query raise ConfirmationReadError
+    instead of degrading to the (usually absent) local file -- so an operator
+    tool can distinguish 'no events' from 'could not check'. Default False
+    preserves the never-raise contract for in-app callers.
     """
+    if _firestore_enabled():
+        try:
+            events = _read_confirmation_log_firestore(form_session_id)
+        except ConfirmationReadError:
+            if strict:
+                raise
+            events = []
+        if events:
+            return events
+
     log_file = get_confirmation_log_path(form_session_id)
 
     if not log_file.exists():
@@ -194,3 +384,34 @@ def read_confirmation_log(form_session_id: str) -> list[dict]:
         _log.error("confirmation_log_read_failed", error=str(e), form_session_id=form_session_id)
 
     return events
+
+
+def _read_confirmation_log_firestore(form_session_id: str) -> list[dict]:
+    """Fetch a form-session's events from the Firestore sink.
+
+    Raises ConfirmationReadError on any query failure (after logging it) --
+    the caller decides whether to degrade or surface (see read_confirmation_log).
+    """
+    try:
+        from backend.services.auth import get_db
+
+        collection = get_db().collection(_FIRESTORE_COLLECTION)
+        try:
+            # Newer google-cloud-firestore deprecates positional where().
+            from google.cloud.firestore_v1.base_query import FieldFilter
+
+            query = collection.where(
+                filter=FieldFilter("form_session_id", "==", form_session_id)
+            )
+        except ImportError:
+            query = collection.where("form_session_id", "==", form_session_id)
+        events = [doc.to_dict() for doc in query.stream()]
+        events.sort(key=lambda e: e.get("timestamp", ""))
+        return events
+    except Exception as e:
+        _log.error(
+            "confirmation_firestore_read_failed",
+            error=str(e),
+            form_session_id=form_session_id,
+        )
+        raise ConfirmationReadError(str(e)) from e

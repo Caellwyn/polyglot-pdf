@@ -2,7 +2,9 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-07-17. See [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md) for closeout details.*
+*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: ALLOW_AI_STUDIO guard,
+CONFIRMATION_FIRESTORE_ENABLED sink env, HTTP auth-gate note on
+VFF_DISABLE_AUTH). Prior: 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -28,7 +30,7 @@ which bypasses the cache).
 
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
-  `DISABLE_GEMINI_VAD`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
+  `ALLOW_AI_STUDIO`, `DISABLE_GEMINI_VAD`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
@@ -87,8 +89,22 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   PII/PHI. This is the HIPAA guard — see
   [hipaa-pii-policy.md](../standards/hipaa-pii-policy.md) and bd `polyglot-pdf-hjo`.
 - **`VFF_DISABLE_AUTH=true`** — dev bypass for Firebase token verification
-  (`backend/services/auth.py`); returns a stub `dev_user`. Auth canon lives in the
-  planned `auth.md` (bd `polyglot-pdf-y3l`).
+  (`backend/services/auth.py`); returns a stub `dev_user`. Covers BOTH the
+  `/ws/fill` gate and the bd-z2is HTTP gates (`require_auth` on
+  `/api/fill-pdf` + form-kit list/schema reads). Auth canon:
+  [auth.md](auth.md).
+- **`ALLOW_AI_STUDIO=true`** — explicit acknowledgment required to run
+  `VERTEXAI=false` on a DEPLOYED service (`K_SERVICE` present ⇒ Cloud Run);
+  without it, `Settings` fails startup (bd `polyglot-pdf-z2is`). Local dev /
+  harness / probes are unaffected. See
+  [../standards/ai-models.md](../standards/ai-models.md).
+- **`CONFIRMATION_FIRESTORE_ENABLED=true`** — mirrors the confirmation audit
+  trail (metadata only, never values) to the `confirmation_events` Firestore
+  collection; set in `deploy-all.sh`'s `BACKEND_ENV` because the file-only
+  trail dies with the Cloud Run instance. Optional
+  `CONFIRMATION_RETENTION_DAYS` stamps an `expire_at` for a TTL policy;
+  `CONFIRMATION_LOG_DIR` still points the local JSONL (dev). See
+  [../standards/confirmation-and-audit.md](../standards/confirmation-and-audit.md).
 - **`SCHEMA_EDITOR_TOKEN` / `SCHEMA_AUTHOR_TOKEN`** — shared-secret access codes
   for the token-gated `/api/editor/*` surface the hosted schema editor uses
   (`backend/routes/editor_kit_routes.py`, bd `polyglot-pdf-92qe.1`). Two tiers:

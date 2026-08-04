@@ -83,7 +83,11 @@ actually writes.
 
 These helpers are **defined but not yet wired** — only `log_field_confirmation`
 has a live caller today; the session-lifecycle pair is scaffolding for the
-logging roadmap (see [logging-and-cost.md](logging-and-cost.md), Phase 2):
+logging roadmap (see [logging-and-cost.md](logging-and-cost.md), Phase 2).
+(The pair previously raised a latent `TypeError` on every call — `**event`
+collided with structlog's positional event name; fixed under bd
+polyglot-pdf-z2is when the sink tests gave them their first caller, so wiring
+them is now safe.)
 
 - `log_form_session_start(form_id, form_session_id, section_id=None)` →
   `form_session_started`.
@@ -91,15 +95,36 @@ logging roadmap (see [logging-and-cost.md](logging-and-cost.md), Phase 2):
   total_fields_confirmed)` → `form_session_ended` with a confirmed-field **count**
   (no values). `completion_status` is one of `completed` / `abandoned` / `error`.
 - `read_confirmation_log(form_session_id)` / `get_confirmation_log_path(...)` read
-  back a session's events for review or legal purposes.
+  back a session's events for review or legal purposes. The operational entry
+  point is **`scripts/read_confirmations.py <form_session_id>`** (bd z2is) --
+  no HTTP route exposes the trail (deliberate: it needs no unauthenticated
+  surface, and the reader needs ADC anyway for the Firestore sink).
 
 ## Where it's written
 
-One file per form-session: `<dir>/<form_session_id>.jsonl`. The directory is
-resolved per-write by `_confirmation_log_dir()`, which reads the
-`CONFIRMATION_LOG_DIR` env var (default `logs/confirmations`) and creates it if
-needed. Resolving per-call (not at import) lets a test fixture point writes at a
-tmp dir.
+Two sinks (bd polyglot-pdf-z2is):
+
+- **Local JSONL (dev).** One file per form-session:
+  `<dir>/<form_session_id>.jsonl`. The directory is resolved per-write by
+  `_confirmation_log_dir()`, which reads the `CONFIRMATION_LOG_DIR` env var
+  (default `logs/confirmations`) and creates it if needed. Resolving per-call
+  (not at import) lets a test fixture point writes at a tmp dir. On Cloud Run
+  this file lives on ephemeral tmpfs and dies with the instance — it is a dev
+  convenience, **not** the durable record.
+- **Firestore mirror (deployed).** When `CONFIRMATION_FIRESTORE_ENABLED=true`
+  (set in `deploy-all.sh`'s `BACKEND_ENV`), every event is also written to the
+  `confirmation_events` Firestore collection by a fire-and-forget background
+  writer (single worker thread; the voice hot path never blocks on the network
+  write; failures log `confirmation_firestore_write_failed` at error level —
+  loud, never raised). `read_confirmation_log(form_session_id)` prefers
+  Firestore when enabled (equality query, sorted client-side — no composite
+  index needed) and falls back to the file. If `CONFIRMATION_RETENTION_DAYS`
+  is set, each document carries an `expire_at` timestamp for a Firestore TTL
+  policy; activating the policy is a deploy-time decision gated on counsel's
+  retention answer (bd polyglot-pdf-pol2). `flush_confirmation_sink()` drains
+  the queue (wired as a FastAPI shutdown handler in `backend/main.py`).
+  Firestore security rules never expose the collection (no matching rule =
+  client deny; the backend writes via the Admin SDK, which bypasses rules).
 
 ## Why this exists (liability)
 
@@ -114,4 +139,7 @@ their writes via `CONFIRMATION_LOG_DIR` so a test run never dirties the tree.
 Audit logs are runtime artifacts, not source — keep them out of version control
 (this was the subject of bd `polyglot-pdf-0rx`).
 
-*Last updated: 2026-07-05 (bd polyglot-pdf-mpoe staleness sweep: documented the DTI current-field-id coercion in confirm_field's logged field_id; rest verified accurate against current code). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*
+*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: durable Firestore mirror for
+deployed envs — the file-only trail died with the Cloud Run instance; also fixed
+the session-lifecycle pair's latent structlog TypeError). Prior: 2026-07-05 (bd
+polyglot-pdf-mpoe staleness sweep). See [../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md](../journal/entries/2026-07-05-bd-mpoe-doc-staleness-sweep.md).*

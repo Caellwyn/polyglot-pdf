@@ -2,7 +2,8 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-07-17. See [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md) for closeout details.*
+*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: ALLOW_AI_STUDIO fail-closed
+guard on Cloud Run). Prior: 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -87,7 +88,13 @@ of 2026-06.
   model. `true` -> Vertex AI ("AI Agent Platform") via service-account ADC +
   `GOOGLE_CLOUD_PROJECT` (compliance-friendly; keeps request data private). `false`
   -> Gemini Developer API (**AI Studio**) via `GEMINI_API_KEY` -- the *only*
-  credential AI Studio accepts (no ADC/SA path). This matters because **model
+  credential AI Studio accepts (no ADC/SA path). **Fail-closed guard on deployed
+  builds (bd polyglot-pdf-z2is):** when `K_SERVICE` is set (Cloud Run),
+  `VERTEXAI=false` refuses to start unless `ALLOW_AI_STUDIO=true` is also set --
+  AI Studio's consumer terms permit human review / training use of request data,
+  so reaching it in a deployed env must be a deliberate two-flag decision (e.g.
+  A/B-ing 3.1), never a stray flip. Local dev / harness / probes (no `K_SERVICE`)
+  are unaffected. This matters because **model
   availability AND the model id differ by service**: the native-audio Live models
   are published under DIFFERENT ids on each backend, and a Live
   (`bidiGenerateContent`) connect with the wrong-backend id `1008`s. As of 2026-06:

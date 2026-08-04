@@ -1,7 +1,9 @@
 import os
+from typing import Optional
+
 import firebase_admin
 from firebase_admin import auth, credentials, firestore
-from fastapi import HTTPException, status
+from fastapi import Header, HTTPException, status
 import structlog
 
 logger = structlog.get_logger()
@@ -40,6 +42,23 @@ def verify_token(token: str) -> dict:
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+async def require_auth(authorization: Optional[str] = Header(None)) -> dict:
+    """FastAPI dependency: require a Firebase ID token on an HTTP route.
+
+    Reads `Authorization: Bearer <token>` and verifies it via verify_token
+    (which honors the VFF_DISABLE_AUTH dev bypass, so local dev and the voice
+    harness are unaffected). 401 on a missing or invalid token.
+
+    This is the HTTP counterpart of the `?token=` check on /ws/fill
+    (bd polyglot-pdf-z2is: /api/fill-pdf renders user-entered field values and
+    must not be an open endpoint on a service deployed --allow-unauthenticated).
+    """
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    return verify_token(token)
+
 
 def get_db():
     """Returns Firestore client"""

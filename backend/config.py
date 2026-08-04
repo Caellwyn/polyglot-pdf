@@ -108,7 +108,16 @@ class Settings(BaseModel):
 	#   have 3.1. Set VERTEXAI=false (with USE_PREMIUM_MODEL=true) on the demo
 	#   service to run 3.1 until Vertex ships it. Env-overridable so demo/prod can
 	#   flip without a code edit; mirrors USE_PREMIUM_MODEL / DISABLE_GEMINI_VAD.
+	#   On a DEPLOYED service (Cloud Run), VERTEXAI=false additionally requires
+	#   ALLOW_AI_STUDIO=true -- see the fail-closed guard in _resolve_model.
 	VERTEXAI: bool = os.getenv("VERTEXAI", "true").lower() == "true"
+	# Explicit acknowledgment required to run the AI Studio path on a DEPLOYED
+	# build (bd polyglot-pdf-z2is). AI Studio's consumer terms permit human
+	# review / training use of request data -- acceptable only as a deliberate,
+	# flagged exception (e.g. A/B-ing 3.1, which has no Vertex id), never as the
+	# result of a stray env flip. The guard fires only when K_SERVICE is set
+	# (Cloud Run), so local dev / the voice harness / probes are unaffected.
+	ALLOW_AI_STUDIO: bool = os.getenv("ALLOW_AI_STUDIO", "false").lower() == "true"
 	# CRITICAL VAD MODE TOGGLE (bd polyglot-pdf-333).
 	#   False (DEFAULT) -> NATIVE mode: Gemini's own automatic VAD drives turn
 	#     detection. The adapter sends the VAD_* sensitivity knobs below; the
@@ -360,6 +369,19 @@ class Settings(BaseModel):
 
 	@model_validator(mode="after")
 	def _resolve_model(self) -> "Settings":
+		# Fail-closed guard (bd polyglot-pdf-z2is): on a DEPLOYED service
+		# (K_SERVICE is set by Cloud Run), the AI Studio path must be an explicit
+		# two-flag decision, never a stray VERTEXAI flip. AI Studio's consumer
+		# terms permit human review / training use of request data; Vertex is the
+		# privacy-preserving path the product promise is built on. Local dev, the
+		# voice harness, and probes have no K_SERVICE and are unaffected.
+		if not self.VERTEXAI and not self.ALLOW_AI_STUDIO and os.getenv("K_SERVICE"):
+			raise ValueError(
+				"VERTEXAI=false on a deployed service requires ALLOW_AI_STUDIO=true. "
+				"The AI Studio path sends request data under consumer terms (human "
+				"review / training use); set ALLOW_AI_STUDIO=true only as a "
+				"deliberate, documented exception (e.g. A/B-ing 3.1)."
+			)
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
 		# explicit MODEL_NATIVE was pinned via env (non-empty wins). The standard
 		# (2.5) tier is BACKEND-AWARE: the native-audio Live model has a different id

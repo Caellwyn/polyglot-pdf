@@ -9,12 +9,13 @@ import os
 import re
 import tempfile
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 import fitz  # PyMuPDF
 import structlog
 
+from backend.services.auth import require_auth
 from backend.services.form_kits import (
 	FormKitNotFound,
 	FormKitStoreError,
@@ -41,8 +42,14 @@ class PDFFillRequest(BaseModel):
 
 
 @router.post("/fill-pdf")
-async def fill_pdf(request: PDFFillRequest) -> Response:
-	"""Fill a PDF form with provided values using PyMuPDF."""
+async def fill_pdf(request: PDFFillRequest, _user: dict = Depends(require_auth)) -> Response:
+	"""Fill a PDF form with provided values using PyMuPDF.
+
+	Auth-gated (bd polyglot-pdf-z2is): the request body carries user-entered
+	field values (PII/PHI in transit), so this must not be an open endpoint on a
+	service deployed --allow-unauthenticated. VFF_DISABLE_AUTH=true (local dev /
+	voice harness) bypasses inside require_auth.
+	"""
 
 	store = get_form_kit_store()
 	_log.info(

@@ -16,6 +16,7 @@ import type { FormSchema } from "./types/schema";
 import type { FormKitDescriptor, FormKitManifest } from "./types/formKit";
 import { getBackendHttpUrl } from "./utils/pdfFiller";
 import { LanguageSelectionModal } from "./components/LanguageSelectionModal";
+import { useAuth } from "../contexts/AuthContext";
 import {
   loadOnboardingState,
   saveOnboardingState,
@@ -23,6 +24,11 @@ import {
 } from "./onboardingStorage";
 
 export function SchemaFormDemo() {
+  // Rendered inside ProtectedRoute, so `user` is present (real or the local
+  // test-harness mock). Its ID token rides Authorization headers to the
+  // auth-gated /api/form-kits* routes (bd polyglot-pdf-z2is).
+  const { user } = useAuth();
+
   // Onboarding state - form + language must be selected before proceeding
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
@@ -58,9 +64,32 @@ export function SchemaFormDemo() {
 
         // Try backend API first, fall back to static file for local dev
         let manifest: FormKitManifest;
+        let authRejected = false;
         try {
           const backendUrl = getBackendHttpUrl();
-          const response = await fetch(`${backendUrl}/api/form-kits`);
+          let token: string | undefined;
+          try {
+            token = user ? await user.getIdToken() : undefined;
+          } catch {
+            // A failed token REFRESH (revoked session, clock skew) is an auth
+            // failure, not "backend unavailable" -- surface it like a 401
+            // instead of masking it behind the stale static bundle
+            // (round-3 fresh-eyes on bd z2is).
+            authRejected = true;
+            throw new Error(
+              "Could not refresh your sign-in (please sign in again)"
+            );
+          }
+          const response = await fetch(`${backendUrl}/api/form-kits`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (response.status === 401 || response.status === 403) {
+            // An auth rejection must SURFACE, never silently degrade to the
+            // static bundle -- that would mask a broken token path in prod
+            // behind stale bundled kits (bd polyglot-pdf-z2is).
+            authRejected = true;
+            throw new Error("Not authorized to load form kits (sign in again?)");
+          }
           if (response.ok) {
             const data = await response.json();
             // Backend returns { forms: [...] }, convert to manifest format.
@@ -87,7 +116,10 @@ export function SchemaFormDemo() {
           } else {
             throw new Error("Backend unavailable");
           }
-        } catch {
+        } catch (err) {
+          if (authRejected) {
+            throw err; // bubble to the outer catch -> manifestError state
+          }
           // Fall back to static manifest for local development
           console.log("[SchemaFormDemo] Backend unavailable, using static manifest");
           const response = await fetch("/form-kits/index.json");
@@ -126,7 +158,13 @@ export function SchemaFormDemo() {
       try {
         setSchemaLoading(true);
         setSchemaError(null);
-        const response = await fetch(form.schemaPath);
+        // schemaPath is usually a static Hosting path (header ignored), but a
+        // manifest may carry an /api/form-kits/{id}/schema path, which is
+        // auth-gated (bd polyglot-pdf-z2is) -- attach the token either way.
+        const token = user ? await user.getIdToken() : undefined;
+        const response = await fetch(form.schemaPath, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
 
         if (!response.ok) {
           throw new Error(`Failed to load schema: ${response.statusText}`);

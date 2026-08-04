@@ -48,6 +48,14 @@ ROLES=(
     "roles/aiplatform.user"
     "roles/storage.objectViewer"
     "roles/logging.logWriter"
+    # Firestore writer for the durable confirmation audit sink (bd
+    # polyglot-pdf-z2is): CONFIRMATION_FIRESTORE_ENABLED=true makes the
+    # backend mirror confirmation metadata to the confirmation_events
+    # collection. Without this role every sink write 403s SILENTLY (the
+    # writer logs-and-continues by design), so the liability trail stays
+    # empty while the app looks healthy. Re-run this script against an
+    # existing project to add the binding.
+    "roles/datastore.user"
 )
 
 for role in "${ROLES[@]}"; do

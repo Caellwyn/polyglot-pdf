@@ -238,7 +238,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     # Default empty -> prod keeps the Vertex defaults baked into config.py.
     # GEMINI_API_KEY is injected separately via Secret Manager (--set-secrets),
     # NOT here -- never put the key in plaintext env vars.
-    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX"
+    # CONFIRMATION_FIRESTORE_ENABLED (bd polyglot-pdf-z2is): mirror the
+    # liability confirmation trail to Firestore. Cloud Run's filesystem is
+    # ephemeral tmpfs, so the file-only trail did NOT survive deployment --
+    # every deployed env needs the durable sink. Metadata only, never values.
+    BACKEND_ENV="GOOGLE_CLOUD_PROJECT=$POLYGLOT_PROJECT_NAME,FORM_KITS_MODE=gcs,FORM_KITS_GCS_BUCKET=$FORM_KITS_BUCKET,FORM_KITS_REMOTE_PREFIX=$FORM_KITS_PREFIX,CONFIRMATION_FIRESTORE_ENABLED=true"
     [ -n "$BACKEND_EXTRA_ENV" ] && BACKEND_ENV="$BACKEND_ENV,$BACKEND_EXTRA_ENV"
 
     # BACKEND_SERVICE_ACCOUNT: when a channel deploy script exports it, set the
@@ -501,5 +505,21 @@ fi
 log_info "💡 Next steps:"
 echo "   1. Test the application at the frontend URL"
 echo "   2. Verify API routes work through Firebase hosting"
-echo "   3. Check form-kits load via /api/form-kits endpoint"
+echo "   3. Check form-kits load: /api/form-kits is AUTH-GATED (bd z2is), so a"
+echo "      tokenless curl returning 401 is CORRECT. Verify the authed path"
+echo "      end-to-end (first deploy exercising Authorization through the"
+echo "      Hosting /api/** rewrite):"
+echo "        curl -i -H \"Authorization: Bearer <Firebase idToken>\" \\"
+echo "          https://<hosting-domain>/api/form-kits   # expect 200"
+echo "   4. Confirm the durable confirmation sink writes: run a session, then"
+echo "        backend/.venv/Scripts/python.exe scripts/read_confirmations.py \\"
+echo "          <form_session_id> --firestore --summary --project $POLYGLOT_PROJECT_NAME"
+echo "      (--project pins the queried project; without it your gcloud ADC's"
+echo "      default project wins and a record can falsely read as absent."
+echo "      The runtime SA needs roles/datastore.user for the backend's WRITES"
+echo "      -- setup-gcp-project.sh; this READ runs under YOUR gcloud ADC,"
+echo "      which needs its own Firestore read access. Exit 2 = could not"
+echo "      query, exit 1 = queried fine but no events.)"
+echo "      Quick drift check any time: curl the service /health and read the"
+echo "      confirmation_sink field (ok / error / disabled)."
 echo ""
