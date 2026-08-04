@@ -103,7 +103,36 @@ All four adopted and fixed inline:
    failure still does).
 4. ADOPTED (doc): the retrieval function's unwired state was undocumented
    while the lifecycle pair's was -- folded into fix 1's doc line.
-Round 2 outcome recorded below after the re-spawn.
+**Fresh-eyes round 2 (Opus, via the effort-400 Workflow fallback):
+GAPS-FOUND (5).** The round's payoff was a live-infrastructure catch no code
+read could have made:
+1. ADOPTED (rubric FAIL -> fixed): the Cloud Run runtime SA
+   (polyglot-backend-sa) holds NO Firestore role -- verified against the live
+   demo project -- so every sink write would 403 and be swallowed: the exact
+   silently-empty-liability-trail failure this bead exists to eliminate.
+   Fixed: `roles/datastore.user` added to `scripts/setup-gcp-project.sh`'s
+   ROLES array (re-runnable against an existing project); the live binding +
+   end-to-end write check ride the next gated demo deploy (deploy-all.sh's
+   printed next-steps now include the read_confirmations.py verification).
+2. ADOPTED: a FAILED Firestore read was indistinguishable from "no events" --
+   for a legal-retrieval tool, opposite answers. Fixed: `ConfirmationReadError`
+   + `read_confirmation_log(strict=True)`; the script now prints RETRIEVAL
+   FAILED (exit 2) vs not-found (exit 1). Pinned by test.
+3. ADOPTED (filed by the reviewer as bd polyglot-pdf-wv3j, fixed inline here,
+   bead closed by this PR): flush's swap-then-drain could leave a freshly
+   created sibling executor undrained. Fixed: flush loops swap+drain until no
+   executor remains. Deterministically pinned by hijacking the first
+   executor's shutdown to spawn a mid-drain sibling.
+4. NOTED (deploy-time verification, no code fix possible pre-deploy): this is
+   the first Authorization header ever sent through the Hosting /api/**
+   rewrite in this codebase; the authed curl is now a printed post-deploy
+   step and is called out for the next demo test-drive.
+5. ADOPTED (the deploy-all.sh half): the printed post-deploy verification
+   told the operator to expect an open /api/form-kits, which now correctly
+   401s -- rewritten to expect the 401 and verify the authed path. The
+   deploy-form-kit.sh half (env-clobbering --set-env-vars hint) is
+   pre-existing and stays with the reviewer-filed bd polyglot-pdf-pnye.
+Round 3 (Opus) on the updated diff: outcome recorded below.
 
 ## Lessons
 

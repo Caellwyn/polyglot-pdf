@@ -205,6 +205,67 @@ def test_shutdown_race_falls_back_to_synchronous_write(fake_db, monkeypatch):
     assert added[0]["form_session_id"] == "fss_race_1"
 
 
+def test_strict_read_distinguishes_failure_from_empty(monkeypatch):
+    """A FAILED Firestore query must never read as 'no events' (fresh-eyes on
+    bd z2is): for a legal-retrieval surface those are opposite answers.
+    strict=True raises ConfirmationReadError; the default degrades as before."""
+    monkeypatch.setenv("CONFIRMATION_FIRESTORE_ENABLED", "true")
+
+    def _broken():
+        raise RuntimeError("403 Permission denied")
+
+    monkeypatch.setattr("backend.services.auth.get_db", _broken)
+
+    with pytest.raises(cl.ConfirmationReadError):
+        cl.read_confirmation_log("fss_strict_1", strict=True)
+
+    # Non-strict keeps the never-raise contract for in-app callers.
+    assert cl.read_confirmation_log("fss_strict_1") == []
+
+
+def test_flush_drains_sibling_executor_created_mid_drain(fake_db):
+    """bd polyglot-pdf-wv3j: shutdown(wait=True) runs outside the lock, so a
+    concurrent submit can lazily create a SIBLING executor while the swapped
+    one drains. The flush loop must drain that sibling too and leave no live
+    executor behind."""
+    cl.log_field_confirmation(
+        form_id="I-90",
+        form_session_id="fss_sib_1",
+        field_id="f1",
+        field_name=None,
+        confirmation_method="verbal",
+    )
+    ex1 = cl._executor
+    assert ex1 is not None
+
+    real_shutdown = ex1.shutdown
+
+    def hijacked_shutdown(wait=True, **kw):
+        # Simulate the concurrent producer landing after the swap, before the
+        # drain completes: this lazily creates a fresh sibling executor.
+        cl.log_field_confirmation(
+            form_id="I-90",
+            form_session_id="fss_sib_2",
+            field_id="f2",
+            field_name=None,
+            confirmation_method="verbal",
+        )
+        real_shutdown(wait=wait, **kw)
+
+    ex1.shutdown = hijacked_shutdown  # instance attr shadows the method
+
+    cl.flush_confirmation_sink()
+
+    # The deterministic pin: a single-pass flush would leave the sibling as
+    # the live module executor; the loop must end with none.
+    assert cl._executor is None
+    ids = {
+        d["form_session_id"]
+        for d in fake_db.collections[cl._FIRESTORE_COLLECTION].added
+    }
+    assert ids == {"fss_sib_1", "fss_sib_2"}
+
+
 def test_read_falls_back_to_file_when_firestore_empty(fake_db, tmp_path, monkeypatch):
     # Firestore query returns nothing; the local JSONL (written by the same
     # call) must still be readable -- dev-mode behavior preserved.

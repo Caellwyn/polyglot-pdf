@@ -54,9 +54,26 @@ def main() -> int:
     if args.firestore:
         os.environ["CONFIRMATION_FIRESTORE_ENABLED"] = "true"
 
-    from backend.utils.confirmation_logger import read_confirmation_log
+    from backend.utils.confirmation_logger import (
+        ConfirmationReadError,
+        read_confirmation_log,
+    )
 
-    events = read_confirmation_log(args.form_session_id)
+    # strict=True: a FAILED Firestore query (perms/ADC/project) must never be
+    # reported as "no events found" -- for a legal-retrieval tool those are
+    # opposite answers (bd z2is fresh-eyes finding).
+    try:
+        events = read_confirmation_log(args.form_session_id, strict=True)
+    except ConfirmationReadError as e:
+        print(
+            f"RETRIEVAL FAILED for {args.form_session_id}: could not query the "
+            f"Firestore sink ({e}). This is NOT evidence the record is absent -- "
+            "check ADC credentials, GOOGLE_CLOUD_PROJECT, and that the caller "
+            "has roles/datastore.user.",
+            file=sys.stderr,
+        )
+        return 2
+
     if not events:
         print(
             f"No confirmation events found for {args.form_session_id} "

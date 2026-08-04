@@ -67,13 +67,20 @@ def _get_executor() -> ThreadPoolExecutor:
 def flush_confirmation_sink() -> None:
     """Drain pending Firestore writes (tests + graceful shutdown).
 
-    Shuts the background writer down waiting for queued writes, then resets it
-    so a later event lazily creates a fresh one.
+    Loops swap-then-drain until no executor remains (bd polyglot-pdf-wv3j):
+    shutdown(wait=True) runs OUTSIDE the lock (so submitters aren't blocked on
+    a long drain), which means a concurrent _submit_firestore_write can lazily
+    create a FRESH executor while the swapped-out one drains. A single-pass
+    flush would return with that sibling alive and its write undrained; the
+    loop re-checks and drains it too, so the post-condition "no live executor,
+    nothing queued" actually holds.
     """
     global _executor
-    with _executor_lock:
-        executor, _executor = _executor, None
-    if executor is not None:
+    while True:
+        with _executor_lock:
+            executor, _executor = _executor, None
+        if executor is None:
+            return
         executor.shutdown(wait=True)
 
 
@@ -285,7 +292,16 @@ def get_confirmation_log_path(form_session_id: str) -> Path:
     return _confirmation_log_dir() / f"{form_session_id}.jsonl"
 
 
-def read_confirmation_log(form_session_id: str) -> list[dict]:
+class ConfirmationReadError(Exception):
+    """The Firestore sink could not be QUERIED (perms/ADC/project/transport).
+
+    Distinct from 'the session has no events': for a legal-retrieval surface,
+    'the record does not exist' and 'I could not check' must never be the same
+    answer (fresh-eyes on bd z2is).
+    """
+
+
+def read_confirmation_log(form_session_id: str, strict: bool = False) -> list[dict]:
     """
     Read all confirmation events for a form session.
 
@@ -295,9 +311,19 @@ def read_confirmation_log(form_session_id: str) -> list[dict]:
     (the local file dies with the Cloud Run instance); any events found there
     are returned, sorted by timestamp client-side (an equality-only query needs
     no composite index). The local JSONL file remains the dev-mode fallback.
+
+    strict=True makes a FAILED Firestore query raise ConfirmationReadError
+    instead of degrading to the (usually absent) local file -- so an operator
+    tool can distinguish 'no events' from 'could not check'. Default False
+    preserves the never-raise contract for in-app callers.
     """
     if _firestore_enabled():
-        events = _read_confirmation_log_firestore(form_session_id)
+        try:
+            events = _read_confirmation_log_firestore(form_session_id)
+        except ConfirmationReadError:
+            if strict:
+                raise
+            events = []
         if events:
             return events
 
@@ -320,7 +346,11 @@ def read_confirmation_log(form_session_id: str) -> list[dict]:
 
 
 def _read_confirmation_log_firestore(form_session_id: str) -> list[dict]:
-    """Fetch a form-session's events from the Firestore sink (empty on error)."""
+    """Fetch a form-session's events from the Firestore sink.
+
+    Raises ConfirmationReadError on any query failure (after logging it) --
+    the caller decides whether to degrade or surface (see read_confirmation_log).
+    """
     try:
         from backend.services.auth import get_db
 
@@ -343,4 +373,4 @@ def _read_confirmation_log_firestore(form_session_id: str) -> list[dict]:
             error=str(e),
             form_session_id=form_session_id,
         )
-        return []
+        raise ConfirmationReadError(str(e)) from e
