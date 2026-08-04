@@ -98,7 +98,7 @@ Two mandatory specifics from the bead:
 | help-instructions-too-long | VERIFIED consequence, see above |
 | help-instructions-label-restatement | "adds anything -- or clear it and leave it empty" |
 | help-instructions-screen-ref | no "deixis", see above |
-| help-details-oversize | "text past that point is invisible to it in the moment" |
+| help-details-oversize | states the verified behavior: the text over budget is cut at a paragraph break and replaced with a heading index the assistant can look up on request (an extra step) -- trim so the answer is at hand immediately |
 | help-details-headings-missing | "no one can scan it or jump to a section" |
 | guidance-identity-stale | already plain; unchanged |
 | translation-mechanical (empty/digits/masks/dnt/script/wrong-language/pins) | dropped the internal `check-id:` prefix jargon, plain consequence + fix per check |

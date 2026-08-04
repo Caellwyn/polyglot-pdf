@@ -117,7 +117,7 @@ export const RULE_REMEDIES: Record<string, string> = {
   'unlock-missing-flag-change': 'Add a pdf_field_flag_change next to the unlock method.',
   'required-top-level': 'Move the required setting into the field\'s validation rules.',
   'legacy-trigger-side-logic': 'Rebuild this as a show_if / require_if rule on the target field.',
-  'to-review-pending': 'Move this field or section into a real place in the form.',
+  'to-review-pending': 'File the field into a real section; if the holding section lists leftover ids no field uses, delete those ids.',
   'translation-drift-rectified': 'Review the auto-corrected translation.',
   'translation-drift-unresolved': 'Review and correct this translation by hand.',
   'translation-ambiguous-source': 'Add context or a glossary entry for this source text.',
