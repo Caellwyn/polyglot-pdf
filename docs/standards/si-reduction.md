@@ -66,7 +66,9 @@ everything form-specific OFF the SI and onto the per-turn injection:
   initiating templates -- it is NOT covered by the standard-list phrase. Those
   clauses key on the MARKER, never on a bare option count, because two n==2 cases
   deliberately take the recital branch instead (bd polyglot-pdf-575i + 9tuu): a
-  MULTI-select (`MULTI_SELECT_OPTION_TYPES`), where the user may want BOTH options
+  MULTI-select (`MULTI_SELECT_OPTION_TYPES` -- which includes a `checkbox` that
+  CARRIES options, the legacy v1 group idiom; a v2 standalone checkbox has none
+  and never reaches this branch), where the user may want BOTH options
   and an exclusive either/or ask would foreclose that, and a pair whose labels
   exceed `TWO_OPTION_MAX_LABEL_WORDS` (20), which cannot fold into one natural
   question without dropping substance. That word count is measured on the ENGLISH

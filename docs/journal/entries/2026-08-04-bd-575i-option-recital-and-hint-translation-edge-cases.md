@@ -266,14 +266,14 @@ saw an empty field and let the skip through, which BLANKS the value. Exactly the
 shadow-data-loss the guard exists to stop.
 
 Both handlers now MERGE fieldValues with in-memory winning, rather than
-replacing. The direction matters and is asymmetric: both handlers gate on
-whether the field holds a value, so hiding an in-memory entry fails DANGEROUSLY
-(a skip destroys a real answer; a confirm is spuriously refused as 'no_value'),
-while carrying a stale in-memory entry forward fails safely (the guard refuses
-and the model re-asks). Production writes all self-persist so the two maps
-normally agree -- the merge just makes the disagreement case fail in the safe
-direction. The hint handler keeps a plain replace: it has no such guard, it only
-computes the next field.
+replacing. Both handlers gate on whether the field holds a value, so DROPPING an
+in-memory entry is what breaks them: a skip sails past the already-filled guard
+and destroys a real answer, and a confirm is spuriously refused as 'no_value'.
+The merge is CONSERVATIVE -- it preserves what dev already did (these handlers
+read `this.state` unconditionally before), so a language fix does not also change
+which field VALUE wins. It does NOT make the divergence safe in general; see the
+correction below, which is the accurate account. The hint handler keeps a plain
+replace: it has no such guard, it only computes the next field.
 
 Worth noting the test that caught it was not one of mine, and not one any
 reviewer named. It was an existing pin from an earlier bead
@@ -301,10 +301,39 @@ wins. The real write-ownership fix is filed (bd polyglot-pdf-uw3w, with the
 `[]`-alias resurrection it enables as bd polyglot-pdf-3irc) rather than smuggled
 into this PR.
 
-The merge direction is now pinned too. A reviewer noted that both a plain replace
-and a persisted-wins merge left the suite green, so a deliberate choice with a
-real tradeoff was indistinguishable from an accident. It now has a test, and the
-mutation to a plain replace turns two tests red.
+The merge is now pinned -- partially, and worth being precise about which part.
+A reviewer noted that both a plain REPLACE and a PERSISTED-WINS merge left the
+suite green, so the choice was indistinguishable from an accident. The new test
+closes the first half only: mutating to a plain replace turns two tests red,
+while persisted-wins still passes. That is deliberate rather than an oversight --
+persisted-wins is arguably the *better* direction, and bd polyglot-pdf-uw3w
+exists to decide it, so pinning in-memory-wins as correct would prejudge that
+bead. What the test does guarantee is the property these handlers actually
+depend on: the refresh must not DROP an in-memory entry. The test's docstring
+says so, and this paragraph is the corrected claim (an earlier draft implied it
+covered both mutations; a later reviewer caught that it does not).
+
+**A rubric FAIL on the last round -- `checkbox` with options is a multi-select.**
+The final confirming review scored bd 9tuu criterion 1 as FAILING, correctly.
+`MULTI_SELECT_OPTION_TYPES` listed `checkbox_group`, `multiselect` and
+`multi_select` but not plain `checkbox` -- and `type: "checkbox"` WITH options is
+the legacy v1 group idiom, a genuine multi-select. Three places in the codebase
+say so independently: `schema_repair._is_v1_group` defines it as "type checkbox
+WITH 2+ options" and retypes it, `validation.ts`'s `isCheckboxGroupField` counts
+it, and `FieldRenderer` routes it to the same `CheckboxField` that branches on
+`!field.options` to render the check-as-many-as-you-like group UI. So a 2-option
+one got the exclusive-choice ask over a UI where both boxes are checkable --
+exactly what 9tuu's criterion names ("or ANY type whose semantics allow selecting
+more than one").
+
+Safe to add, because a v2 standalone `checkbox` has no options and never reaches
+the options branch at all (its value is a boolean) -- pinned in both directions.
+Latent on shipped kits (repair retypes the idiom before it ships), which is the
+same latency bar 9tuu itself was filed at.
+
+I had read that criterion's "or any type whose semantics allow selecting more
+than one" and then enumerated types by NAME rather than by semantics, which is
+how the one type whose multi-ness depends on another field slipped through.
 
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on

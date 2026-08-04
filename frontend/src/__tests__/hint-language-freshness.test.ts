@@ -157,12 +157,12 @@ describe('next-field hint language freshness (bd polyglot-pdf-pjws)', () => {
     // makes the skip handler's data-loss guard miss a filled field (it then
     // BLANKS a real answer) and makes a legitimate confirm fail as 'no_value'.
     //
-    // Pinned because the direction is a DELIBERATE choice with a real tradeoff
-    // (see the handler comments and bd polyglot-pdf-uw3w): unpinned, both a
-    // plain replace and a persisted-wins merge leave the suite green, so a
-    // future reader cannot tell the direction was chosen rather than stumbled
-    // into. This asserts only the in-memory-survives half -- the half the
-    // handlers actually depend on.
+    // SCOPE, stated precisely: this pins the merge against a plain REPLACE
+    // only. A persisted-wins merge still passes, and that is deliberate --
+    // persisted-wins is arguably the better direction and bd polyglot-pdf-uw3w
+    // exists to decide it, so asserting in-memory-wins as correct here would
+    // prejudge that bead. What IS guaranteed is the property both handlers
+    // depend on: the refresh must not DROP an in-memory entry.
     const conn = new WebFormConnection(SCHEMA)
     const started = SchemaFormStateManager.acceptDisclaimer(
       (conn as any).state, 'Spanish'

@@ -412,6 +412,7 @@ def test_render_field_guidance_checkbox_group_gets_recital():
     ("number", True),
     ("radio", True),
     ("checkbox_group", True),
+    ("checkbox", True),  # options-bearing => the legacy v1 group idiom
     ("select", False),
 ])
 def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
@@ -435,10 +436,12 @@ def test_option_type_gate_defaults_toward_recital(ftype, expects_recital):
         # test's concern. What this pins is that NO option-bearing type
         # silently reaches the select-style ask-directly branch.
         assert "standard list; ask directly" not in text, ftype
-        if ftype == "checkbox_group":
+        if ftype in ("checkbox_group", "checkbox"):
             # A 2-option MULTI-select recites (bd polyglot-pdf-9tuu): the
             # natural-question marker asserts an exclusive choice, which would
-            # foreclose selecting BOTH.
+            # foreclose selecting BOTH. `checkbox` counts because reaching this
+            # branch at all means it CARRIES options -- the legacy v1 group
+            # idiom, which renders as a check-as-many-as-you-like group.
             assert "read ALL 2 aloud when asking" in text, ftype
         else:
             # Single-select: one natural question IS the ask (bd 41fi).
@@ -865,7 +868,41 @@ def test_two_option_multi_select_is_not_forced_into_an_exclusive_choice():
     assert "ask ONE natural question" not in text
 
 
-@pytest.mark.parametrize("ftype", ["checkbox_group", "multiselect", "multi_select"])
+def test_legacy_options_bearing_checkbox_is_treated_as_a_multi_select():
+    # bd 9tuu criterion 1 says "or ANY type whose semantics allow selecting more
+    # than one" -- and `type: "checkbox"` WITH options is exactly that: the
+    # legacy v1 group idiom. Three places in the codebase agree
+    # (schema_repair._is_v1_group, validation.ts isCheckboxGroupField, and
+    # FieldRenderer routing it to the group-rendering CheckboxField), so a
+    # 2-option one must NOT get the exclusive-choice ask over a UI where both
+    # boxes are checkable (2nd Opus outer review, final round).
+    #
+    # Latent: no shipped kit carries this shape (repair retypes it), but a
+    # hand-authored, editor-drafted, or pre-repair kit does.
+    field = {
+        "id": "p3_race", "name": "Race", "spoken_name": "race",
+        "type": "checkbox",
+        "options": [{"value": "x", "label": "Deaf or hard of hearing"},
+                    {"value": "y", "label": "Blind or low vision"}],
+    }
+    text = render_field_guidance(field)
+    assert "read ALL 2 aloud when asking" in text
+    assert "ask ONE natural question" not in text
+
+
+def test_standalone_checkbox_is_unaffected_by_the_multi_select_gate():
+    # The other half, so the gate cannot be read as "checkbox is always
+    # multi-select": a v2 STANDALONE checkbox has NO options (its value is a
+    # boolean), so it never reaches the options branch at all and grows no
+    # option prose. Adding "checkbox" to the gate must not change that.
+    field = {
+        "id": "agree", "name": "Agree", "spoken_name": "agree",
+        "type": "checkbox",
+    }
+    assert "Options" not in render_field_guidance(field)
+
+
+@pytest.mark.parametrize("ftype", ["checkbox_group", "checkbox", "multiselect", "multi_select"])
 def test_every_multi_select_spelling_escapes_the_exclusive_marker(ftype):
     # The gate is a name set, so an LLM-invented spelling of the same concept
     # must be listed to be caught. These are the spellings the schema surfaces

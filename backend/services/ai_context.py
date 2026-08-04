@@ -31,7 +31,21 @@ LONG_OPTION_LIST_THRESHOLD = 20
 # ASK_DIRECTLY_OPTION_TYPES rationale above: a field whose type is unrecognized
 # or absent is NOT assumed multi-select, so it keeps the natural-question ask
 # rather than degrading to a two-item list recital.
-MULTI_SELECT_OPTION_TYPES = {"checkbox_group", "multiselect", "multi_select"}
+#
+# "checkbox" is in the set, but ONLY reaches this gate when it carries options
+# -- which is exactly the legacy v1 group idiom, a genuine multi-select. Three
+# independent places agree: schema_repair.py:100 defines it as the v1 group
+# modeling ("type checkbox WITH 2+ options") and retypes it, validation.ts's
+# isCheckboxGroupField treats it as a group, and FieldRenderer routes it to the
+# same CheckboxField that branches on `!field.options` to render the
+# check-as-many-as-you-like group UI. A v2 standalone checkbox has NO options
+# and so never reaches the options branch at all -- its value is a boolean.
+# Without this, a kit that skipped repair (hand-authored, editor-drafted, or a
+# pre-repair draft) with two such options got the exclusive-choice ask over a UI
+# where both boxes are checkable (2nd Opus outer review, final round).
+MULTI_SELECT_OPTION_TYPES = {
+    "checkbox_group", "checkbox", "multiselect", "multi_select",
+}
 
 # The same marker also assumes both labels are short enough to fold into one
 # natural question. Two shipped-kit pairs are not (bd polyglot-pdf-575i): I-90
