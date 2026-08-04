@@ -1044,6 +1044,13 @@ async def fill_form_from_schema(
 		# gap O: the minimal schema dict has no form_metadata, so ai_context fell
 		# back to "Form").
 		jit_form_title = handshake.get("form_title")
+		# The form NUMBER ("W-7") is what the confirmation audit trail logs as
+		# form_id (bd polyglot-pdf-n0em). It rides the handshake separately from
+		# the human-facing title because the minimal JIT schema has no
+		# form_metadata to derive it from -- without it every confirmation event
+		# recorded form_id="unknown" and the liability record could not name the
+		# form. An older client that omits the key still degrades to "unknown".
+		jit_form_number = handshake.get("form_number")
 
 		# Build minimal schema from manifest for validation
 		# The manifest contains field_id|spoken_name pairs, we'll use it for context
@@ -1058,8 +1065,15 @@ async def fill_form_from_schema(
 		}
 		# Carry the form title through form_metadata so ai_context.build_form_context
 		# renders it unchanged (same key the legacy full-schema path uses).
-		if jit_form_title:
-			schema["form_metadata"] = {"title": jit_form_title}
+		# form_number rides the same dict so the confirmation audit trail's
+		# schema.form_metadata.form_number lookup resolves on this transport too
+		# (bd polyglot-pdf-n0em) -- built even when only one of the two is present.
+		if jit_form_title or jit_form_number:
+			schema["form_metadata"] = {}
+			if jit_form_title:
+				schema["form_metadata"]["title"] = jit_form_title
+			if jit_form_number:
+				schema["form_metadata"]["form_number"] = jit_form_number
 		# manifest_field_count reads the REAL section field list
 		# (manifest.current_section.fields), not a non-existent top-level
 		# manifest.fields that always logged 0 (gap E).

@@ -2,8 +2,10 @@
 
 **Tracks:** backend/config.py backend/dependencies.py backend/adapters/live_ai_gemini.py
 
-*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: ALLOW_AI_STUDIO fail-closed
-guard on Cloud Run). Prior: 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
+*Last updated: 2026-08-04 (bd polyglot-pdf-5e6a: Vertex-only production --
+a deployed AI Studio path now fails startup with no override; 3.1 A/B is
+local-only until Vertex GA). Prior: 2026-08-03 (bd polyglot-pdf-z2is
+fail-closed guard), 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
 
 How the Gemini model is selected, how to A/B two tiers in live testing, and how
 that selection drives cost. The cost mechanics themselves live in
@@ -54,6 +56,11 @@ of 2026-06.
 
 - `USE_PREMIUM_MODEL` (env, **default `false`** → 2.5) flips between the two tiers;
   set it `true` to run the 3.1 premium tier (now tool-call-reliable; see above).
+  **LOCAL ONLY.** 3.1 exists only on AI Studio, so `USE_PREMIUM_MODEL=true` *is*
+  the AI-Studio flip under another name — and it is the variant the Vertex-only
+  startup guard CANNOT catch: `_resolve_model` sets the premium id before the
+  `VERTEXAI` branch, so a deployed service starts fine and then `1008`s at
+  connect time. Deploy 3.1 only once it is GA on Vertex.
 - `MODEL_NATIVE` is the **resolved** active model and the single source of truth.
   Setting `MODEL_NATIVE` directly via env pins an exact string and **overrides**
   the flag (`_resolve_model` only fills it in when empty).
@@ -88,13 +95,19 @@ of 2026-06.
   model. `true` -> Vertex AI ("AI Agent Platform") via service-account ADC +
   `GOOGLE_CLOUD_PROJECT` (compliance-friendly; keeps request data private). `false`
   -> Gemini Developer API (**AI Studio**) via `GEMINI_API_KEY` -- the *only*
-  credential AI Studio accepts (no ADC/SA path). **Fail-closed guard on deployed
-  builds (bd polyglot-pdf-z2is):** when `K_SERVICE` is set (Cloud Run),
-  `VERTEXAI=false` refuses to start unless `ALLOW_AI_STUDIO=true` is also set --
-  AI Studio's consumer terms permit human review / training use of request data,
-  so reaching it in a deployed env must be a deliberate two-flag decision (e.g.
-  A/B-ing 3.1), never a stray flip. Local dev / harness / probes (no `K_SERVICE`)
-  are unaffected. This matters because **model
+  credential AI Studio accepts (no ADC/SA path).
+
+  > **VERTEX IS THE ONLY PRODUCTION PATH** (maintainer directive 2026-08-04, bd
+  > `polyglot-pdf-5e6a`). Vertex's privacy agreement is what prevents Google from
+  > using client data for model training; AI Studio's consumer terms do not offer
+  > that, so no deployed use of it is acceptable. When `K_SERVICE` is set (Cloud
+  > Run), `VERTEXAI=false` **fails startup outright** -- there is deliberately
+  > **no override flag** (the earlier `ALLOW_AI_STUDIO` acknowledgment was
+  > removed). AI Studio is permitted **for local development only** (no
+  > `K_SERVICE`), e.g. testing a model that is not yet on Vertex. A model such as
+  > 3.1 ships only once it is **GA for Vertex customers**.
+
+  This matters because **model
   availability AND the model id differ by service**: the native-audio Live models
   are published under DIFFERENT ids on each backend, and a Live
   (`bidiGenerateContent`) connect with the wrong-backend id `1008`s. As of 2026-06:
@@ -111,9 +124,10 @@ of 2026-06.
   (`bd polyglot-pdf-a079`). It does **not** pin `MODEL_NATIVE`: `_resolve_model` is
   backend-aware, so the standard tier on Vertex resolves to
   `gemini-live-2.5-flash-native-audio` on its own (see "Backend-aware standard tier"
-  below). To A/B 3.1 you flip back to the AI-Studio path (`VERTEXAI=false`,
-  `USE_PREMIUM_MODEL=true`) -- a Vertex round-trip can't reach 3.1, and with no pin
-  to clear the flip is clean. Surfaced on `/health` as `vertexai`.
+  below). A/B-ing 3.1 requires the AI-Studio path (`VERTEXAI=false`,
+  `USE_PREMIUM_MODEL=true`), so it is a **LOCAL-ONLY** exercise -- a deployed
+  service refuses to start on that path (see the Vertex-only rule above).
+  Surfaced on `/health` as `vertexai`.
 
 `backend/dependencies.py` is the **one** place models reach adapters:
 `get_live_ai()` constructs `LiveAIGemini(api_key=settings.GEMINI_API_KEY,
@@ -125,6 +139,10 @@ text-gen validator/secretary path. Routes depend on the service factory, so
 nothing else picks a model.
 
 ## A/B-ing 2.5 vs 3.1
+
+**Locally only.** 3.1 is AI-Studio-only as of 2026-06, and a deployed service
+cannot run the AI Studio path at all (Vertex-only rule above) — so this A/B is a
+local-dev exercise, and 3.1 becomes deployable only once it is **GA on Vertex**.
 
 1. Set `USE_PREMIUM_MODEL=true` (or pin `MODEL_NATIVE=<id>`) and restart — no code
    change, no redeploy of a new image.

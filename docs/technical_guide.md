@@ -1,8 +1,11 @@
 # Technical guide -- polyglot-pdf
 
-*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: HTTP auth gates on
-fill-pdf/form-kits, the deliberately-public kit-PDF GET, the
-CONFIRMATION_FIRESTORE_ENABLED sink, and the ALLOW_AI_STUDIO guard). See
+*Last updated: 2026-08-04 (bd polyglot-pdf-5e6a: Vertex-only production -- the
+ALLOW_AI_STUDIO override is REMOVED and a deployed AI Studio path fails startup;
+see [journal/entries/2026-08-04-bd-n0em-5e6a-zeqt-audit-formid-vertex-only-devfix.md](journal/entries/2026-08-04-bd-n0em-5e6a-zeqt-audit-formid-vertex-only-devfix.md)).
+Prior: 2026-08-03 (bd polyglot-pdf-z2is: HTTP auth gates on
+fill-pdf/form-kits, the deliberately-public kit-PDF GET, and the
+CONFIRMATION_FIRESTORE_ENABLED sink). See
 [journal/entries/2026-08-03-bd-z2is-p0-prod-readiness.md](journal/entries/2026-08-03-bd-z2is-p0-prod-readiness.md).
 Continuous-DTI is the production default (`USE_DTI` / `CONTINUOUS_SESSION` / `CONTEXT_COMPRESSION_ENABLED` all default true, bd polyglot-pdf-7872; section-reset is the deprecated fallback, bd polyglot-pdf-55jg). This guide lists the deploy flow + env vars; per-channel model/auth config detail lives in [standards/ai-models.md](standards/ai-models.md) and [components/config-deployment.md](components/config-deployment.md).*
 
@@ -34,7 +37,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `false` (default) -> 2.5 standard, `true` -> `gemini-3.1-flash-live-preview` (premium). The standard 2.5 id is **backend-aware** (`_resolve_model`): `gemini-live-2.5-flash-native-audio` on Vertex (`VERTEXAI=true`), `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio (`VERTEXAI=false`) -- each 1008s on the other backend. Both tool-call reliably; 2.5 is the default because it is ~170x faster per turn on the audio path. 3.1 is AI-Studio-only. See [ai-models.md](standards/ai-models.md). |
+| `USE_PREMIUM_MODEL` | `false` | Picks the native audio-to-audio tier: `false` (default) -> 2.5 standard, `true` -> `gemini-3.1-flash-live-preview` (premium). **`true` is LOCAL-ONLY**: 3.1 exists only on AI Studio, and the Vertex-only startup guard does NOT catch this flip (the premium id resolves before the `VERTEXAI` branch), so a deployed service starts and then `1008`s at connect. The standard 2.5 id is **backend-aware** (`_resolve_model`): `gemini-live-2.5-flash-native-audio` on Vertex (`VERTEXAI=true`), `gemini-2.5-flash-native-audio-preview-12-2025` on AI Studio (`VERTEXAI=false`) -- each 1008s on the other backend. Both tool-call reliably; 2.5 is the default because it is ~170x faster per turn on the audio path. 3.1 is AI-Studio-only. See [ai-models.md](standards/ai-models.md). |
 | `MODEL_NATIVE` | _(derived)_ | Resolved active native-audio model. Defaults from `USE_PREMIUM_MODEL`; set explicitly to pin an exact model string (overrides the flag). |
 | `MODEL_LABELING` | `gemini-2.5-flash` | Field labeling/normalization model. |
 | `GEMINI_API_KEY` | _(unset)_ | Gemini API key; `/health` reports only its presence, never the value. |
@@ -43,7 +46,7 @@ Cloud Run host it's built against). Backend config is env-driven via
 | `CONTEXT_COMPRESSION_ENABLED` | `true` | Sliding-window context compression that bounds the continuous session (production default; validated by the jnjj.25 cost gate + G3 correctness gate). `false` disables it. See [components/context-compression.md](components/context-compression.md). |
 | `FORM_KITS_MODE` | `local` | Form-kit store backend (`local` FS vs. GCS/remote). |
 | `FORM_KITS_GCS_BUCKET` / `FORM_KITS_REMOTE_*` | _(unset)_ | Remote form-kit store config (see `backend/services/form_kits.py`). |
-| `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`) -- a behavioral switch worth knowing when deploying. Env-overridable so demo/prod can flip without a code edit. On Cloud Run (`K_SERVICE` set), `false` additionally requires `ALLOW_AI_STUDIO=true` or startup fails (fail-closed guard, bd z2is). |
+| `VERTEXAI` | `true` | Route LLM/embedding calls through Vertex AI (`true`) vs. the Gemini API key path (`false`). **Vertex is the ONLY production path** (bd 5e6a): its privacy agreement is what keeps client data out of Google's model training. On Cloud Run (`K_SERVICE` set), `false` **fails startup outright -- there is no override flag**. AI Studio is permitted for LOCAL dev only (e.g. pre-GA model testing); a model like 3.1 deploys only once GA on Vertex. |
 | `CONFIRMATION_FIRESTORE_ENABLED` | `false` (deploys set `true`) | Mirror the confirmation audit trail (metadata only) to the `confirmation_events` Firestore collection -- the durable sink; the local JSONL dies with the Cloud Run instance. Optional `CONFIRMATION_RETENTION_DAYS` stamps `expire_at`. Retrieval: `scripts/read_confirmations.py`. See `standards/confirmation-and-audit.md` (bd z2is). |
 | `DISABLE_GEMINI_VAD` | `false` | `false` (default) -> native mode (Gemini's automatic VAD is on); `true` -> manual mode (the frontend drives turn-taking with explicit `activity_start`/`activity_end`). Env-overridable. |
 

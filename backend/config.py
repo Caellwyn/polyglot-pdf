@@ -100,24 +100,19 @@ class Settings(BaseModel):
 	SECRETARY_DEADLINE_S: float = float(os.getenv("SECRETARY_DEADLINE_S", "2.5"))
 	SECRETARY_TIMEOUT_S: float = float(os.getenv("SECRETARY_TIMEOUT_S", "8.0"))
 	# Whether to use Vertex AI (now "AI Agent Platform") for LLM operations.
-	# True (DEFAULT) -> Vertex via service-account ADC + GOOGLE_CLOUD_PROJECT
-	#   (compliance-friendly; required for prod). Vertex preview-model access is
-	#   gated per-project: as of 2026-06, gemini-3.1-flash-live-preview is NOT yet
-	#   available on Vertex, so it 1008s ("policy violation") under this path.
-	# False -> Gemini Developer API (AI Studio) via GEMINI_API_KEY, which DOES
-	#   have 3.1. Set VERTEXAI=false (with USE_PREMIUM_MODEL=true) on the demo
-	#   service to run 3.1 until Vertex ships it. Env-overridable so demo/prod can
-	#   flip without a code edit; mirrors USE_PREMIUM_MODEL / DISABLE_GEMINI_VAD.
-	#   On a DEPLOYED service (Cloud Run), VERTEXAI=false additionally requires
-	#   ALLOW_AI_STUDIO=true -- see the fail-closed guard in _resolve_model.
+	#
+	# VERTEX IS THE ONLY PRODUCTION PATH (maintainer directive 2026-08-04, bd
+	# polyglot-pdf-5e6a). Vertex's privacy agreement is what prevents Google
+	# from using client data for model training -- the product's privacy promise
+	# depends on it, so AI Studio is NEVER acceptable on a deployed service.
+	#
+	# True (DEFAULT) -> Vertex via service-account ADC + GOOGLE_CLOUD_PROJECT.
+	# False -> Gemini Developer API (AI Studio) via GEMINI_API_KEY. Permitted
+	#   ONLY for LOCAL development -- e.g. testing gemini-3.1-flash-live-preview
+	#   before it reaches Vertex GA. A deployed service (K_SERVICE set by Cloud
+	#   Run) REFUSES TO START on this path; there is no override flag. 3.1 ships
+	#   only once it is GA for Vertex customers.
 	VERTEXAI: bool = os.getenv("VERTEXAI", "true").lower() == "true"
-	# Explicit acknowledgment required to run the AI Studio path on a DEPLOYED
-	# build (bd polyglot-pdf-z2is). AI Studio's consumer terms permit human
-	# review / training use of request data -- acceptable only as a deliberate,
-	# flagged exception (e.g. A/B-ing 3.1, which has no Vertex id), never as the
-	# result of a stray env flip. The guard fires only when K_SERVICE is set
-	# (Cloud Run), so local dev / the voice harness / probes are unaffected.
-	ALLOW_AI_STUDIO: bool = os.getenv("ALLOW_AI_STUDIO", "false").lower() == "true"
 	# CRITICAL VAD MODE TOGGLE (bd polyglot-pdf-333).
 	#   False (DEFAULT) -> NATIVE mode: Gemini's own automatic VAD drives turn
 	#     detection. The adapter sends the VAD_* sensitivity knobs below; the
@@ -402,18 +397,22 @@ class Settings(BaseModel):
 
 	@model_validator(mode="after")
 	def _resolve_model(self) -> "Settings":
-		# Fail-closed guard (bd polyglot-pdf-z2is): on a DEPLOYED service
-		# (K_SERVICE is set by Cloud Run), the AI Studio path must be an explicit
-		# two-flag decision, never a stray VERTEXAI flip. AI Studio's consumer
-		# terms permit human review / training use of request data; Vertex is the
-		# privacy-preserving path the product promise is built on. Local dev, the
-		# voice harness, and probes have no K_SERVICE and are unaffected.
-		if not self.VERTEXAI and not self.ALLOW_AI_STUDIO and os.getenv("K_SERVICE"):
+		# Fail-closed guard (bd polyglot-pdf-z2is, HARDENED under bd
+		# polyglot-pdf-5e6a): a DEPLOYED service (K_SERVICE is set by Cloud Run)
+		# may NEVER run the AI Studio path. There is deliberately NO override
+		# flag -- the earlier ALLOW_AI_STUDIO acknowledgment was removed because
+		# no legitimate deployed AI Studio use exists: only Vertex's privacy
+		# agreement prevents Google from using client data for model training,
+		# and the product's privacy promise rests on it (maintainer directive
+		# 2026-08-04). Local dev, the voice harness, and probes have no
+		# K_SERVICE and remain free to use AI Studio for pre-GA 3.1 testing.
+		if not self.VERTEXAI and os.getenv("K_SERVICE"):
 			raise ValueError(
-				"VERTEXAI=false on a deployed service requires ALLOW_AI_STUDIO=true. "
-				"The AI Studio path sends request data under consumer terms (human "
-				"review / training use); set ALLOW_AI_STUDIO=true only as a "
-				"deliberate, documented exception (e.g. A/B-ing 3.1)."
+				"VERTEXAI=false is not permitted on a deployed service. Vertex is "
+				"the ONLY production path: its privacy agreement is what keeps "
+				"client data out of Google's model training, and AI Studio's "
+				"consumer terms do not. Use AI Studio locally (no K_SERVICE) for "
+				"pre-GA model testing; deploy 3.1 only once it is GA on Vertex."
 			)
 		# Resolve the active native-audio model from USE_PREMIUM_MODEL unless an
 		# explicit MODEL_NATIVE was pinned via env (non-empty wins). The standard

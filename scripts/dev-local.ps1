@@ -189,10 +189,22 @@ $BackendArgs = @(
 # on the Studio (premium) path, which uses GEMINI_API_KEY. Respect an already-set
 # value so a different project can be used per run.
 $VertexProject = if ($env:GOOGLE_CLOUD_PROJECT) { $env:GOOGLE_CLOUD_PROJECT } else { 'polyglot-demo-aa709' }
+# VFF_DISABLE_AUTH=true bypasses Firebase token verification, matching
+# scripts/dev-local.sh (bd polyglot-pdf-zeqt -- this script never set it, so the
+# POSIX and PowerShell dev paths diverged). Locally, firebase_admin uses ADC and
+# verify_id_token() validates against the ADC project + fetches Google's signing
+# keys, which times out / mismatches the demo project's token: the WS handshake
+# silently times out and the SPA falls back to Cloud Run, so your local backend
+# never sees the session. Since bd polyglot-pdf-z2is the same verification also
+# gates /api/fill-pdf and /api/form-kits*, so WITHOUT this the local form
+# CATALOGUE 401s and the app shows "Unable to load forms" -- a wider break than
+# the original WS-only symptom. Override per run: $env:VFF_DISABLE_AUTH='false'
+$DisableAuth = if ($env:VFF_DISABLE_AUTH) { $env:VFF_DISABLE_AUTH } else { 'true' }
 $BackendEnvVars = @{
     'VERTEXAI'             = $VertexAi
     'USE_PREMIUM_MODEL'    = $UsePremium
     'GOOGLE_CLOUD_PROJECT' = $VertexProject
+    'VFF_DISABLE_AUTH'     = $DisableAuth
     'PYTHONPATH'           = $RepoRoot
     'PYTHONUNBUFFERED'     = '1'
 }
@@ -203,7 +215,7 @@ foreach ($k in $BackendEnvVars.Keys) {
 }
 
 Write-Host ""
-Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium)..." -ForegroundColor Cyan
+Write-Host "Starting backend (uvicorn :8000, VERTEXAI=$VertexAi, USE_PREMIUM_MODEL=$UsePremium, VFF_DISABLE_AUTH=$DisableAuth)..." -ForegroundColor Cyan
 
 try {
     $BackendProc = Start-Process -FilePath $VenvPython -ArgumentList $BackendArgs `

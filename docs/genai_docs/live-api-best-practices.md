@@ -145,7 +145,10 @@ connect + audio reply, no 1007 (bd polyglot-pdf-y25o;
 `scripts/spikes/transcription_lang_codes_findings.md`). Shipped as the ASR
 language bias behind `TRANSCRIPTION_LANGUAGE_HINT_ENABLED` (default true).
 Premium tier (AI Studio 3.1) remains unverified -- 3.1 does not exist on
-Vertex; disable the flag or verify first if a deploy flips USE_PREMIUM_MODEL.
+Vertex, so USE_PREMIUM_MODEL=true is LOCAL-ONLY (a deployed service resolves an
+id Vertex does not publish and 1008s at connect; see
+`../standards/ai-models.md` and bd polyglot-pdf-llva). Verify this behavior
+locally before 3.1 is ever deployed.
 
 ### Translation config (available as of 2.8.0, NOT yet endpoint-verified)
 

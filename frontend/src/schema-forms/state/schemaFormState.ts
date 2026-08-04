@@ -1040,6 +1040,13 @@ export class SchemaFormStateManager {
       // {form_title}, {previous_spoken_names}, and {next_field_hint} wrong
       // (bd polyglot-pdf-jnjj.9, gaps O / M / D-hint):
       form_title: state.schema.form_metadata?.title ?? 'Form',
+      // The form NUMBER (e.g. "W-7") rides the manifest-first handshake too
+      // (bd polyglot-pdf-n0em): the backend's confirmation audit trail derives
+      // form_id from schema.form_metadata.form_number, which the JIT transport
+      // does not carry -- so every confirmation event logged form_id="unknown"
+      // and the liability record could not name the form. Distinct from
+      // form_title (a human label); this is the identifier the audit uses.
+      form_number: state.schema.form_metadata?.form_number ?? null,
       previous_spoken_names: this.getPreviousSpokenNames(state),
       initial_field_hint: initialFieldHint,
       // The user's app-start language choice (bd polyglot-pdf-y25o): needed
