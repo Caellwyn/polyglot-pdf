@@ -193,7 +193,8 @@ convention carries the parent in the exact shape
 
 **Default-ON, opt-out** (`--no-verify` / `TRANSLATION_VERIFY_ENABLED`).
 This does NOT contradict the wire-pro-passes-dark pattern
-(`FORM_COMPLETE_PRO_VALIDATOR` default-false): that guards RUNTIME
+(`FORM_COMPLETE_PRO_VALIDATOR` default-false *as of this sprint* -- it defaults
+ON since 2026-08-03, bd polyglot-pdf-egy2): that guards RUNTIME
 per-session cost; this gate runs at AUTHORING time only -- a deliberate,
 per-bake spend of ~cents.
 

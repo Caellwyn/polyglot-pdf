@@ -164,6 +164,32 @@ _COMPRESSION_TRIGGER_MAX_TOKENS = 128_000
 _SPONTANEOUS_DROP_CLOSE_CODES = frozenset({1011, 1006})
 
 
+def _merge_speech_config(config: Dict[str, Any], key: str, value: Any) -> None:
+    """Set ONE key inside config['speech_config'], preserving whatever is
+    already there.
+
+    speech_config has two independent contributors -- the session language
+    (`language_code`) and the prebuilt voice (`voice_config`) -- set by separate,
+    separately-gated blocks in _build_live_config. Each must be able to run
+    first, last, or alone.
+
+    This exists because a bare `config['speech_config'] = {...}` in EITHER block
+    silently drops the other contributor's key: no exception, no log, and the
+    session simply connects with the default voice (or without the language
+    hint). Routing both writers through one helper makes that failure
+    STRUCTURALLY impossible rather than a rule each call site has to remember --
+    which matters because the earlier "just write both blocks as merges" fix was
+    reverted by an unrelated edit and the test suite stayed green (it was
+    grepping source text for a single-quoted assignment, so a double-quoted one
+    walked straight past it).
+    """
+    speech_cfg = config.get('speech_config')
+    if not isinstance(speech_cfg, dict):
+        speech_cfg = {}
+    speech_cfg[key] = value
+    config['speech_config'] = speech_cfg
+
+
 def estimate_si_floor_tokens(
     system_instruction: Optional[str],
     function_declarations: Optional[List[Dict[str, Any]]],
@@ -1691,7 +1717,7 @@ class LiveAIGemini(ILiveAI):
         # assignment here would drop a voice_config that had already been set,
         # so neither block may care which one runs first.
         if lang_codes and getattr(settings, "SPEECH_LANGUAGE_CODE_ENABLED", False):
-            config["speech_config"] = {"language_code": list(lang_codes)[0]}
+            _merge_speech_config(config, 'language_code', list(lang_codes)[0])
             self._log.info("[lang] speech_config.language_code applied",
                           language_code=list(lang_codes)[0])
 
@@ -1705,13 +1731,10 @@ class LiveAIGemini(ILiveAI):
         # it (and vice versa -- this block must not care which ran first).
         voice_name = (getattr(settings, "LIVE_VOICE_NAME", "") or "").strip()
         if voice_name:
-            speech_cfg = config.get('speech_config')
-            if not isinstance(speech_cfg, dict):
-                speech_cfg = {}
-            speech_cfg['voice_config'] = {
-                'prebuilt_voice_config': {'voice_name': voice_name}
-            }
-            config['speech_config'] = speech_cfg
+            _merge_speech_config(
+                config, 'voice_config',
+                {'prebuilt_voice_config': {'voice_name': voice_name}},
+            )
             self._log.info("[voice] speech_config.voice_config applied",
                           voice_name=voice_name)
 

@@ -191,35 +191,61 @@ def test_voice_config_merges_with_language_code():
     }
 
 
-def test_each_speech_config_block_merges_rather_than_assigns():
-    """BOTH halves must be order-independent, not just the one that happens to
-    run second today (Opus fresh-eyes round 1). The production call order only
-    exercises language-then-voice, so a plain assignment in the LANGUAGE block
-    would be invisible here until someone reorders the blocks -- and would then
-    silently drop the configured voice with no error and no log.
+def test_speech_config_writers_preserve_each_other_in_both_orders():
+    """Both speech_config contributors must survive regardless of write order.
 
-    Assert the property directly: seed speech_config with a foreign key and
-    confirm each block PRESERVES it instead of clobbering it."""
-    # Language block must preserve a pre-existing voice_config.
-    adapter = _adapter_with(["ru-RU"], transcripts=True, liveness=False)
-    cfg = adapter._build_live_config(_settings_with_speech_flag(True, ""))
-    assert cfg.get("speech_config", {}).get("language_code") == "ru-RU"
+    Asserts the property FUNCTIONALLY, by driving the shared writer in both
+    orders. An earlier version of this test grepped the source for a
+    single-quoted bare assignment; a double-quoted one walked straight past it,
+    so the suite stayed green while the bug was live in the tree (Opus
+    fresh-eyes round 2). Behaviour, not spelling."""
+    from backend.adapters.live_ai_gemini import _merge_speech_config
 
-    # Voice block must preserve a pre-existing language_code (already covered by
-    # the merge test above, which runs language first).
-    adapter = _adapter_with(None, transcripts=True, liveness=False)
-    cfg = adapter._build_live_config(_settings_with_speech_flag(True, "Iapetus"))
-    assert cfg["speech_config"]["voice_config"]["prebuilt_voice_config"][
-        "voice_name"] == "Iapetus"
+    voice = {"prebuilt_voice_config": {"voice_name": "Iapetus"}}
 
-    # The real guard: neither block may use a bare assignment. Verified by
-    # source inspection -- both read config.get('speech_config') first.
+    # language first, then voice
+    a: dict = {}
+    _merge_speech_config(a, "language_code", "ru-RU")
+    _merge_speech_config(a, "voice_config", voice)
+
+    # voice first, then language -- the order production does NOT currently use,
+    # which is exactly why it needs pinning: a reorder must stay safe.
+    b: dict = {}
+    _merge_speech_config(b, "voice_config", voice)
+    _merge_speech_config(b, "language_code", "ru-RU")
+
+    expected = {"language_code": "ru-RU", "voice_config": voice}
+    assert a["speech_config"] == expected
+    assert b["speech_config"] == expected
+
+    # A single writer alone must not fabricate the other key.
+    c: dict = {}
+    _merge_speech_config(c, "voice_config", voice)
+    assert c["speech_config"] == {"voice_config": voice}
+
+    # A non-dict squatter is replaced, not crashed on.
+    d: dict = {"speech_config": "garbage"}
+    _merge_speech_config(d, "language_code", "es-US")
+    assert d["speech_config"] == {"language_code": "es-US"}
+
+
+def test_both_speech_config_writers_route_through_the_shared_helper():
+    """Structural guard: _build_live_config must not write speech_config
+    directly. Routing both contributors through _merge_speech_config is what
+    makes the drop-the-other-key bug impossible; a direct assignment
+    reintroduces it. Matches any quoting style, unlike the round-1 version."""
     import inspect
+    import re
     from backend.adapters import live_ai_gemini
+
     src = inspect.getsource(live_ai_gemini.LiveAIGemini._build_live_config)
-    assert src.count("config['speech_config'] = {") == 0, (
-        "a speech_config block uses a bare dict assignment -- it will silently "
-        "drop whatever the other block set")
+    direct_writes = re.findall(r"""config\[\s*['"]speech_config['"]\s*\]\s*=""", src)
+    assert direct_writes == [], (
+        "_build_live_config assigns config['speech_config'] directly; use "
+        "_merge_speech_config so the other contributor's key survives")
+    assert src.count("_merge_speech_config(") == 2, (
+        "expected exactly two speech_config contributors (language + voice) "
+        "routed through the shared merge helper")
 
 
 def test_voice_config_set_even_when_language_bias_is_off():
