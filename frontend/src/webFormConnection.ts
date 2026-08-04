@@ -1321,7 +1321,9 @@ export class WebFormConnection {
 
     const hint = nextField
       ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined,
-          this.sessionLanguage)
+          // `this.state` was replaced from the persisted snapshot at the top of
+          // this handler, so its language IS the fresh one -- no second parse.
+          this.sessionLanguageFor(true))
       : null;
 
     // Store last field hint for recovery prompts
@@ -1362,9 +1364,22 @@ export class WebFormConnection {
    * Reading only the LANGUAGE through to storage (rather than reloading all of
    * `this.state`) keeps this safe for the section-switch callers, which hold a
    * freshly-mutated in-memory state that a blanket reload could revert.
+   *
+   * `alreadyFresh` skips the read for a caller that JUST replaced `this.state`
+   * from the same snapshot. load() parses the whole persisted blob -- schema
+   * included -- so on the confirm -> next-field round-trip (the primary
+   * per-turn path, which refreshes at the top of the handler) the unconditional
+   * read cost a second full JSON.parse for a value already in hand
+   * (2nd Opus outer review, this PR). Defaults to reading through, so a caller
+   * that has NOT refreshed still gets the fresh language.
    */
-  private get sessionLanguage(): string | null | undefined {
+  private sessionLanguageFor(alreadyFresh = false): string | null | undefined {
+    if (alreadyFresh) return this.state.selectedLanguage;
     return SchemaFormStateManager.load()?.selectedLanguage ?? this.state.selectedLanguage;
+  }
+
+  private get sessionLanguage(): string | null | undefined {
+    return this.sessionLanguageFor();
   }
 
   /**
@@ -2160,7 +2175,8 @@ export class WebFormConnection {
     // correct. Keep the recovery-prompt hint current, same as the other
     // next-field producers.
     const hint = formatNextFieldHint(field, getFieldOrder(this.state, fieldId) || undefined,
-        this.sessionLanguage);
+        // refreshed at handler entry -- no second parse.
+        this.sessionLanguageFor(true));
     sessionStorage.setItem('vff_last_field_hint', hint);
     // Read via the `[]`-alias fallback (bd 5k52 class): a checkbox-group's
     // entry may sit under the bracket variant; a bare read would misreport a
@@ -3350,7 +3366,8 @@ export class WebFormConnection {
     }
     const nextFieldHint = nextField
       ? formatNextFieldHint(nextField, getFieldOrder(this.state, nextField.id) || undefined,
-          this.sessionLanguage)
+          // refreshed at handler entry -- no second parse.
+          this.sessionLanguageFor(true))
       : null;
 
     // Keep the recovery-prompt hint current (same side effect as

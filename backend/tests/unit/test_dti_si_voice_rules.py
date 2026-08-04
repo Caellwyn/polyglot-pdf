@@ -654,13 +654,21 @@ def test_two_option_branch_is_the_same_in_every_baked_language(kit, fid, expect_
             assert translated in text, f"{fid} lost its {lang} label"
 
 
-@pytest.mark.parametrize("bad_label", [1, None, 3.5, True])
+@pytest.mark.parametrize("bad_label", [1, 3.5, True, ["x"], {"a": 1}])
 def test_render_survives_a_non_string_option_label(bad_label):
     # schema_lint does not assert that a label is a string, _sanitize_options
     # copies it verbatim, and every render call site is unguarded -- so a
-    # number/None label from an LLM-extracted or editor-drafted kit reached
+    # non-string label from an LLM-extracted or editor-drafted kit reached
     # `label.split()` and crashed the render mid-form (Opus outer review, this
     # PR; origin/dev rendered these fine because it measured no lengths).
+    #
+    # Every parametrization must be TRUTHY and non-str. A falsy label (None,
+    # "", 0) is collapsed to the value by `opt_label or opt_value` upstream and
+    # never reaches the gate, so pinning one would be vacuous -- it passes with
+    # the coercion reverted (caught by the 2nd Opus outer round, which is
+    # exactly the failure mode bd polyglot-pdf-35z0 is about). The falsy path
+    # is covered by test_render_falls_back_to_value_for_a_falsy_label below.
+    assert bad_label and not isinstance(bad_label, str), "vacuous parametrization"
     field = {
         "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
         "options": [{"value": "a", "label": bad_label},
@@ -668,6 +676,21 @@ def test_render_survives_a_non_string_option_label(bad_label):
     }
     text = render_field_guidance(field)
     assert "Options (2" in text
+
+
+def test_render_falls_back_to_value_for_a_falsy_label():
+    # The other half: a falsy label never reaches the length gate because
+    # `opt_label or opt_value` collapses it to the value first. Pinned
+    # separately so the coercion test above can stay strictly non-vacuous.
+    for falsy in (None, "", 0):
+        field = {
+            "id": "f", "name": "F", "spoken_name": "f", "type": "radio",
+            "options": [{"value": "alpha", "label": falsy},
+                        {"value": "beta", "label": "Beta"}],
+        }
+        text = render_field_guidance(field)
+        assert "alpha" in text, falsy
+        assert "ask ONE natural question" in text, falsy
 
 
 def test_two_option_multi_select_is_not_forced_into_an_exclusive_choice():

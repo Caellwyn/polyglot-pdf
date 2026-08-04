@@ -138,6 +138,32 @@ coerced and pinned; and the new `SPOKEN_LANGUAGE_BCP47` docstring claimed a guar
 in `languages.test.ts` that did not exist, so the guard was written rather than the
 claim deleted.
 
+**Second outer-review round -- three more, including a vacuous test of my own.**
+The re-review confirmed the three fixes above held (it re-ran the sweep over 15
+fields x 17 languages against the real override-build path, and found the reverse
+map has 17 real collisions in i-90 but none that can cross the threshold). It then
+found three new ones:
+
+- The `[None]` parametrization of the non-string-label test was **vacuous** --
+  `opt_label or opt_value` collapses a falsy label to the value before the gate,
+  so it passed with the coercion reverted. In the PR whose whole subject is a
+  vacuous test. Replaced with genuinely non-coercible truthy shapes (`["x"]`,
+  `{"a": 1}`), added an in-test guard asserting every parametrization is truthy
+  and non-str, and split the falsy path into its own test.
+- The new BCP-47 drift guard was **one-directional**: `languages.test.ts` compares
+  the frontend map against a literal in the same frontend file, so both operands
+  are frontend-local and a BACKEND value edit stayed green on both surfaces
+  (mutation-verified: `sv-SE` -> `sv-XX` broke nothing). Since
+  `language_codes.py` is the ASR-biasing map and gets edited for ASR reasons,
+  that was the likelier direction. Added the backend end of the contract
+  (`test_map_values_match_the_frontend_mirror`) and rewrote the docstring to say
+  which suite guards which direction.
+- `sessionLanguage` parsed the persisted blob a second time on the primary
+  per-turn path, where the handler had already refreshed `this.state` from that
+  same read. Split into `sessionLanguageFor(alreadyFresh)`; the three handlers
+  that refresh at entry skip the redundant parse, and the default stays
+  read-through so a non-refreshing caller is still correct.
+
 **Deferred:** `SchemaForm.previewEdit.test.tsx` fails in full-suite runs but passes
 in isolation. Verified pre-existing and not caused by this branch (reproduced on
 clean dev with the branch stashed: 1198 passed / 1 failed). The failing count
@@ -164,6 +190,26 @@ direction: 35z0's assertion was vacuous because the data went empty underneath i
 mine were vacuous because a redundant code path held them up. **Redundancy is a
 virtue in the product and a defect in the pins.** Worth doing on any change where
 two mechanisms both plausibly satisfy the same assertion.
+
+**Mutation-verify per PARAMETRIZATION, not per test.** I mutation-verified the
+non-string-label test and watched it go red -- but only three of its four cases
+actually failed, and I read the red as "the test bites" and moved on. The
+`[None]` case passed because a falsy label is collapsed to the value upstream and
+never reaches the gate at all. A parametrized test is N tests; a mutation that
+kills SOME of them says nothing about the rest. Shipping a vacuous case into the
+PR whose entire subject is a vacuous test is the sharpest possible reminder that
+"the suite went red" is the wrong granularity to check at. The guard I added
+(asserting each parametrization is truthy and non-str) encodes the precondition so
+the next person cannot add a silently-collapsed case.
+
+**A mirror needs a guard at BOTH ends, or it guards nothing in the likely
+direction.** The BCP-47 map guard I wrote compared the frontend map against a
+literal in the frontend test file -- both operands frontend-local, so it could
+only catch an edit to the side it lived on. The realistic drift was a backend edit
+(that file exists for ASR biasing and is maintained for ASR reasons), which stayed
+green everywhere. When two files must agree, ask which one is more likely to
+change, and make sure THAT edit is what fails a test. Both ends now hold a literal
+copy of the contract.
 
 **A threshold calibrated on one representation must be APPLIED to that
 representation.** The 20-word cutoff was measured on English labels and then

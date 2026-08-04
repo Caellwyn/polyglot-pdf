@@ -56,6 +56,34 @@ def test_map_covers_all_spoken_languages():
     assert set(SPOKEN_LANGUAGE_BCP47.keys()) == expected
 
 
+def test_map_values_match_the_frontend_mirror():
+    """The map's VALUES are now a cross-surface contract, not just an ASR hint.
+
+    bd polyglot-pdf-thun made the frontend hint resolver accept BCP-47 keys in a
+    kit's option `label_translations`, reading them from a hand-copied mirror of
+    this map (`SPOKEN_LANGUAGE_BCP47` / `kitTranslationKeys` in
+    frontend/src/shared/languages.ts). If a code here drifts from that mirror,
+    the frontend and backend resolve DIFFERENT keys for the same session and the
+    guidance block and the next-field hint can speak different languages on one
+    turn -- the exact bug bd thun exists to prevent.
+
+    The sibling test above pinned only the key SET, and languages.test.ts
+    compares the frontend map against a literal in its own file, so BOTH
+    operands there are frontend-local: a value edit HERE was green on both
+    surfaces (2nd Opus outer review, bd 575i PR). This literal is the backend
+    end of that contract -- it and the frontend one must be updated together.
+    """
+    frontend_mirror = {
+        "english": "en-US", "spanish": "es-US", "chinese": "cmn-CN",
+        "tagalog": "fil-PH", "arabic": "ar-XA", "french": "fr-FR",
+        "korean": "ko-KR", "german": "de-DE", "portuguese": "pt-BR",
+        "hindi": "hi-IN", "italian": "it-IT", "urdu": "ur-PK",
+        "persian": "fa-IR", "dutch": "nl-NL", "ukrainian": "uk-UA",
+        "russian": "ru-RU", "swedish": "sv-SE", "afrikaans": "af-ZA",
+    }
+    assert SPOKEN_LANGUAGE_BCP47 == frontend_mirror
+
+
 # --- 2. Service wiring: handshake language -> adapter setter -------------------
 
 @pytest.mark.asyncio

@@ -151,9 +151,17 @@ export type FillLanguage = typeof SUPPORTED_FILL_LANGUAGES[number];
  * Spoken-language NAME (lowercase) -> BCP-47 code.
  *
  * MIRRORS backend/utils/language_codes.py SPOKEN_LANGUAGE_BCP47 -- keep the two
- * in sync; every entry in SPOKEN_LANGUAGES above must appear here. Both the
- * backend mirror and that coverage are pinned in languages.test.ts. Regional
- * variants match the backend's choices for this app's user base (US
+ * in sync; every entry in SPOKEN_LANGUAGES above must appear here.
+ *
+ * The sync is pinned from BOTH ends, and it has to be: each suite compares its
+ * own map against a literal in its own file, so one side alone cannot see a
+ * drift introduced on the other. languages.test.ts guards edits made HERE;
+ * backend test_transcription_language_bias.py::test_map_values_match_the_frontend_mirror
+ * guards edits made THERE (the likelier direction -- that file is the ASR
+ * biasing map and gets edited for ASR reasons). Change a code and you must
+ * update both literals.
+ *
+ * Regional variants match the backend's choices for this app's user base (US
  * immigration intake): es-US over es-ES, pt-BR over pt-PT.
  *
  * Used to read hand-authored kits whose option `label_translations` are keyed
