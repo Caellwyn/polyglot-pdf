@@ -201,11 +201,17 @@ _MIN_POSITIONS_CHECKED = {"f1040": 167, "i-90": 114, "w7": 47}
 
 
 def _resolve_widget(claim: str, rects: dict, by_suffix: dict):
-    """Same resolution production uses (pdf_fill_routes find_widget): exact
-    match first, then a DOT-BOUNDARY suffix match. Not a bare
-    `claim.split('.')[-1]` -- f1040 has genuine leaf collisions
-    (`Checkbox_ReadOrder[0].c1_8[0]` vs a separate bare `c1_8[0]`), so an
-    ambiguous suffix must resolve to nothing rather than to the wrong widget.
+    """Resolve a schema claim to a widget: exact match first, then a
+    DOT-BOUNDARY suffix match that must be UNAMBIGUOUS.
+
+    Deliberately STRICTER than production's `find_widget`
+    (`backend/routes/pdf_fill_routes.py`), which does a bare `endswith` and
+    takes the first page-order hit. Here an ambiguous suffix resolves to
+    `None` (skipped) rather than to a guessed widget -- f1040 has genuine leaf
+    collisions (`Checkbox_ReadOrder[0].c1_8[0]` vs a separate bare `c1_8[0]`),
+    and a guard must never assert a position against a widget it only guessed.
+    Verified: on all three shipped kits the two resolvers agree on 100% of
+    fields, so the strictness costs no coverage today (Opus outer review).
     """
     if claim in rects:
         return rects[claim]

@@ -85,9 +85,13 @@ def test_iter_fields_walks_nested_parts_and_sections():
 # --------------------------------------------------------------------------- #
 
 @needs_f1040
-def test_catches_the_shipped_f1040_line_shift():
-    """The shipped kit's page-1 income block is shifted (bd 3ave). Every finding
-    must name a field whose claimed widget is printed on a DIFFERENT line."""
+def test_catches_the_f1040_line_shift():
+    """The PRE-FIX f1040 page-1 income block is shifted (bd 3ave). Every finding
+    must name a field whose claimed widget is printed on a DIFFERENT line.
+
+    Graded against the FROZEN pre-fix specimen, not the live kit: bd 3ave
+    fixed the shipped schema, so pinning detection to the shipped file would
+    mean this test only passes while the bug is unfixed."""
     schema = json.loads(_F1040_CORRUPT_SCHEMA.read_text(encoding="utf-8"))
     result = clb.check(schema, str(_F1040_PDF))
     found = {f["field_id"] for f in result["findings"]}
