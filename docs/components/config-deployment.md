@@ -2,9 +2,11 @@
 
 **Tracks:** backend/config.py backend/main.py backend/utils/dev_file_logger.py backend/services/callback_handler.py Dockerfile .gcloudignore deploy-all.sh deploy-demo.sh deploy-production.sh backend/deploy-new.sh firebase.json .firebaserc frontend/src/shared/config.ts
 
-*Last updated: 2026-08-03 (bd polyglot-pdf-z2is: ALLOW_AI_STUDIO guard,
+*Last updated: 2026-08-04 (bd polyglot-pdf-5e6a: Vertex-only production --
+the ALLOW_AI_STUDIO override was removed; a deployed AI Studio path now fails
+startup outright). Prior: 2026-08-03 (bd polyglot-pdf-z2is:
 CONFIRMATION_FIRESTORE_ENABLED sink env, HTTP auth-gate note on
-VFF_DISABLE_AUTH). Prior: 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
+VFF_DISABLE_AUTH), 2026-07-17, see [../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md](../journal/entries/2026-07-17-bd-2h9j-extraction-time-option-translations.md).*
 
 How the backend is configured (settings, feature flags, env vars) and how both
 surfaces ship. Config lives in `backend/config.py` (`Settings`, a pydantic
@@ -30,7 +32,7 @@ which bypasses the cache).
 
 - **Env-overridable** (the field calls `os.getenv`): `USE_PREMIUM_MODEL`,
   `MODEL_NATIVE`, `MODEL_LABELING`, `GEMINI_API_KEY`, `VERTEXAI`,
-  `ALLOW_AI_STUDIO`, `DISABLE_GEMINI_VAD`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
+  `DISABLE_GEMINI_VAD`, `USE_DTI`, `SECRETARY_TIMEOUT_S`,
   `FORM_KITS_MODE`, `FORM_KITS_LOCAL_ROOT`, `FORM_KITS_GCS_BUCKET`,
   `FORM_KITS_REMOTE_PREFIX`, `SCHEMA_EDITOR_TOKEN`, `SCHEMA_AUTHOR_TOKEN`,
   `CORS_EXTRA_ORIGINS`, `EXTRACTOR_MODEL`, `EXTRACTOR_TIMEOUT_SEC`,
@@ -93,11 +95,14 @@ The schema+PDF store backing PDF fill ([pdf-filling.md](pdf-filling.md)):
   `/ws/fill` gate and the bd-z2is HTTP gates (`require_auth` on
   `/api/fill-pdf` + form-kit list/schema reads). Auth canon:
   [auth.md](auth.md).
-- **`ALLOW_AI_STUDIO=true`** — explicit acknowledgment required to run
-  `VERTEXAI=false` on a DEPLOYED service (`K_SERVICE` present ⇒ Cloud Run);
-  without it, `Settings` fails startup (bd `polyglot-pdf-z2is`). Local dev /
-  harness / probes are unaffected. See
-  [../standards/ai-models.md](../standards/ai-models.md).
+- **Vertex is the ONLY production path** (maintainer directive 2026-08-04, bd
+  `polyglot-pdf-5e6a`). `VERTEXAI=false` on a DEPLOYED service (`K_SERVICE`
+  present ⇒ Cloud Run) makes `Settings` fail startup, and there is **no
+  override flag** — the former `ALLOW_AI_STUDIO` acknowledgment was removed
+  because no legitimate deployed AI Studio use exists. Only Vertex's privacy
+  agreement keeps client data out of Google's model training. AI Studio is
+  permitted **locally only** (no `K_SERVICE`), for testing a model before it
+  reaches Vertex GA. See [../standards/ai-models.md](../standards/ai-models.md).
 - **`CONFIRMATION_FIRESTORE_ENABLED=true`** — mirrors the confirmation audit
   trail (metadata only, never values) to the `confirmation_events` Firestore
   collection; set in `deploy-all.sh`'s `BACKEND_ENV` because the file-only

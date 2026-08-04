@@ -1,0 +1,118 @@
+---
+date: 2026-08-04
+bead: polyglot-pdf-n0em
+title: "Audit trail names the form, Vertex-only production, and Windows local dev works again"
+tags: [security, hotfix, conventions]
+---
+
+## Trigger
+
+Three small, independent fixes bundled because each was blocking something
+concrete and none warranted its own review cycle.
+
+**`polyglot-pdf-n0em` (P1)** -- found in PRODUCTION. The maintainer's first real
+deployed W-7 voice run (form-session `fss_mse0bv3x_yzmqj4gz`, 2026-08-04) wrote
+31 `field_confirmed` events to the durable Firestore sink, every one carrying
+`form_id="unknown"` instead of `"W-7"`. Now that the sink is durable (bd
+`polyglot-pdf-z2is`), every session was permanently recording a liability trail
+that could not name the form.
+
+**`polyglot-pdf-5e6a` (P1)** -- maintainer directive, post-merge of PR #536: AI
+Studio is NEVER a production path. Only Vertex's privacy agreement prevents
+Google from using client data for model training, and the product's privacy
+promise rests on that. PR #536 had shipped a two-flag escape hatch
+(`ALLOW_AI_STUDIO=true`) designed when flipping the demo to AI Studio for 3.1
+was a documented path; the directive kills that path.
+
+**`polyglot-pdf-zeqt` (P2)** -- filed by the PR #536 outer review. `dev-local.ps1`
+never set `VFF_DISABLE_AUTH`, so once #536 gated the form-kit routes, Windows
+local dev showed "Unable to load forms". The POSIX sibling `dev-local.sh` had
+always set it; the two dev paths had silently diverged.
+
+## What shipped
+
+**form_id through the manifest-first handshake.** `FormFillingService.start_session`
+derives `form_id` from `schema["form_metadata"]["form_number"]`, but on the
+manifest-first (JIT) transport -- the SHIPPED DEFAULT, since `USE_DTI` /
+`CONTINUOUS_SESSION` default true -- the handshake carries a manifest +
+`first_field_schema`, not the full schema, so `form_metadata` was absent and the
+`"unknown"` fallback fired. The client now sends `form_number` alongside the
+existing `form_title` (`schemaFormState.getJITHandshakePayload`), and
+`websocket_routes` threads it into the minimal schema's `form_metadata`. Two
+design points: (1) `form_number` and `form_title` stay DISTINCT keys -- the
+title is a human label, the number is the audit identifier, and collapsing them
+would record prose where an identifier belongs; (2) the metadata dict is now
+built when EITHER key is present (the old code keyed construction on the title
+alone, so a title-less handshake lost the number even if sent).
+
+Worth noting the same `form_id` feeds the token-cost logging context
+(`set_session_context`), which is why the deployed cost summaries also showed
+`form_id: "unknown"` -- one fix corrects both surfaces. Section switches and
+reconnects re-enter `start_session`, so they inherit the fix with no extra
+plumbing.
+
+**Vertex-only production.** The `ALLOW_AI_STUDIO` field and its acknowledgment
+branch are REMOVED. `Settings` now fails startup outright when `VERTEXAI=false`
+and `K_SERVICE` is set (Cloud Run), with no override. Local dev, the voice
+harness, and probes have no `K_SERVICE` and keep full AI Studio access -- the
+one sanctioned use, for testing a model (e.g. 3.1) before it reaches Vertex GA.
+Docs corrected in three places that still described flipping a DEPLOYED service
+to AI Studio: `ai-models.md` (the canonical selection rule, plus the A/B section
+now labelled local-only), `config-deployment.md`, and the `deploy-demo.sh`
+comment block.
+
+**Windows dev parity.** `dev-local.ps1` sets `VFF_DISABLE_AUTH` (default `true`,
+per-run override via `$env:VFF_DISABLE_AUTH`), matching `dev-local.sh`, and the
+startup banner now reports it.
+
+## Lessons
+
+- **A durable sink makes every latent metadata defect permanent.** `form_id`
+  had been `"unknown"` on the JIT path for as long as JIT has been the default,
+  but it was invisible while the trail died with the container. Turning on
+  durability is the moment to audit what the record actually CONTAINS, not just
+  that it persists. The first real production session was the audit.
+- **Two transports means two places for schema-derived values to fall through.**
+  The legacy full-schema handshake and the manifest-first one both build a
+  `schema` dict, but only one carries `form_metadata`. Any value derived from
+  `schema[...]` needs checking against BOTH shapes -- `form_title` had already
+  been fixed this way (bd `jnjj.9`, gap O) and `form_number` was the same class
+  of bug, missed because the two keys were added at different times.
+- **Bash-tool file writes do not persist, and `grep` verification of them
+  lies.** An attempt to edit 18 per-language translation blocks via a
+  Python-through-Bash script silently wrote to a sandboxed copy three times;
+  the `grep -c` checks in between read that same phantom copy and reported
+  success while the real file was uncompilable. Only `tsc --noEmit` caught it.
+  Repetitive multi-block edits still go through Write/Edit, and verification
+  belongs to the toolchain (compiler/tests), never grep. Recorded in local
+  memory; the pre-existing repo scar tissue covers the general rule.
+
+## Doc freshness
+
+Bumped with substance: `docs/standards/ai-models.md` (Vertex-only production
+rule replacing the two-flag guard; A/B section marked local-only),
+`docs/components/config-deployment.md` (`ALLOW_AI_STUDIO` removed from the
+env-overridable list and its bullet rewritten as the Vertex-only rule), and
+`docs/standards/ws-protocol.md` (the new `form_number` handshake key).
+
+That last one was **not** volunteered -- the existing contract test
+`test_every_code_read_handshake_key_is_documented` failed the full suite
+because the route read a handshake key absent from the protocol doc's tables.
+Exactly the guard working as designed: the wire contract cannot grow a key
+silently. Worth noting as a pattern, since any future handshake key will hit
+the same gate.
+
+The `z2is` journal entry retains its `ALLOW_AI_STUDIO` references deliberately
+-- it is the historical record of what shipped that day, and the journal is not
+rewritten.
+
+## Files touched
+
+- frontend/src/schema-forms/state/schemaFormState.ts -- send form_number on the JIT handshake
+- backend/routes/websocket_routes.py -- read form_number; build form_metadata from either key
+- backend/config.py -- ALLOW_AI_STUDIO removed; deployed AI Studio path fails hard
+- scripts/dev-local.ps1 -- VFF_DISABLE_AUTH wired with override + banner
+- deploy-demo.sh -- 3.1 comment rewritten (local-only until Vertex GA)
+- docs/standards/ai-models.md, docs/components/config-deployment.md -- Vertex-only rule
+- backend/tests/unit/test_jit_handshake_form_id.py -- new (6 tests, incl. a source-parity guard)
+- backend/tests/unit/test_vertexai_guard.py -- rewritten for the no-override policy
