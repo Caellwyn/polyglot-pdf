@@ -671,7 +671,9 @@ class LiveAIGemini(ILiveAI):
         mumbled session-language word is not transcribed as a neighboring
         language (which drags the native-audio model's language auto-detect
         with it). Applied by _build_live_config at the NEXT connect -- the Live
-        config is per-connect, so a mid-session language change takes effect on
+        config is per-connect. The spoken language is PINNED per session (bd
+        polyglot-pdf-87a9), so in practice the codes are set once, before the
+        connect; were they ever to change they would take effect on
         the next session (re)establishment; the SI language lock governs until
         then. None clears the hint (unbiased multilingual ASR).
         """

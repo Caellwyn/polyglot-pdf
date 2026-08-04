@@ -669,7 +669,10 @@ class FormFillingService:
         """
         Send initiating message to Gemini to prompt conversation in specific language.
 
-        This is triggered when user changes spoken language or when switching sections.
+        Triggered on a RECONNECT/section switch -- the client's opener re-asserting
+        the session's PINNED spoken language on a fresh Gemini session. It is NOT a
+        language switch: mid-conversation switching is unsupported (bd
+        polyglot-pdf-87a9, docs/standards/voice-and-vad.md).
         Uses session.send_client_content() to initiate Gemini's response.
 
         Args:
@@ -744,7 +747,7 @@ class FormFillingService:
             if field:
                 # Track the current field for update_form_fields coercion (bd
                 # polyglot-pdf-h1bn): this opener fires at session/section start
-                # (field 1) and on a spoken-language change (field N); in every case
+                # (field 1) and on a mid-form RECONNECT (field N); in every case
                 # `field` is the field the model is about to fill.
                 if field.get("id"):
                     self._current_field_id = field["id"]

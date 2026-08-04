@@ -191,7 +191,8 @@ def code_service_send_types() -> set[str]:
 _FE_SEND_CALL_FILES = (
     "frontend/src/webFormConnection.ts",
     # shared/connection.ts sends read_disclaimer / restart_gemini_session /
-    # change_spoken_language (the doc's own send-site column cites it).
+    # change_spoken_language is sent by webFormConnection.ts (the reconnect
+    # opener); shared/connection.ts no longer sends it (bd polyglot-pdf-87a9).
     "frontend/src/shared/connection.ts",
 )
 _FE_BUILDER_FILES = ("frontend/src/schema-forms/state/schemaFormState.ts",)

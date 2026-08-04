@@ -92,6 +92,24 @@ tier-2 docs "track files this branch did not touch", and that doc tracks
 `websocket_routes.py`, which this branch does touch. I asserted a sweep I had not
 run.
 
+**The sweep took THREE passes, and that is the lesson.** Round 1 I fixed the
+comments I had touched. Round 2 both reviewers found residue I had missed. Round 3
+both reviewers found MORE -- including a twin of an already-corrected sentence 32
+lines below it, in the same function I had just edited, and a tier-2 standard
+(`si-reduction.md`) whose `Tracks:` globs miss this branch, so the freshness
+checker reported it OK while it contradicted the new SPEC outright.
+
+Each round I fixed the instances I was shown instead of re-running the search.
+The fix that finally worked was mechanical: one repo-wide grep for every phrasing
+of the retired claim, across code, tests, and docs, filtered against the phrasings
+that state the policy correctly -- then fix everything it returns and re-run it
+until it comes back clean. That is what "sweep" should have meant from the first
+round; spot-fixing what a reviewer points at is not a sweep, it is a queue.
+
+Ironically `form_filling_service.py:593` already said "SESSION-START ONLY --
+mid-session language changes are not a supported flow". The codebase contradicted
+itself before this PR; I had simply never looked at all of it at once.
+
 **The policy is now enforced, not just described.** Both reviewers noted that a
 re-added switcher would break no test -- documentation alone had already failed
 once here, so `pinned-language-policy.test.ts` pins two things: the surviving
