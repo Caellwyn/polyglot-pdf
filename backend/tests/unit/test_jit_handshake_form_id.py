@@ -117,6 +117,39 @@ def test_neither_key_leaves_form_metadata_absent():
     assert _derive_form_id(schema) == "unknown"
 
 
+def test_form_id_survives_reconnect_and_section_switch():
+    """One form-session spanning SEVERAL Gemini sessions keeps the real form id.
+
+    The production run that surfaced this bug reconnected mid-form (Gemini's
+    ~10-minute session cap), so one `form_session_id` spanned three Gemini
+    sessions -- each of which re-handshakes and re-derives `form_id`. A fix that
+    only worked on the FIRST connect would still poison most of the trail.
+
+    `FormFillingService.start_session` re-derives form_id from the schema on
+    every call (including the internal section-switch restart), so the property
+    to pin is that EVERY handshake in the form-session yields the same real id.
+    Simulated at the handshake/derivation layer -- the same layer the bug lived
+    in -- rather than by standing up three live Gemini sessions.
+    """
+    base = {
+        "manifest": {"parts": []},
+        "form_title": "Application for IRS Individual Taxpayer Identification Number",
+        "form_number": "W-7",
+    }
+    # Connect 1 (cold), connect 2 (reconnect after GoAway, carries resume+values),
+    # connect 3 (section switch / second reconnect).
+    handshakes = [
+        dict(base),
+        dict(base, resume=True, current_values={"application_type": "a"}),
+        dict(base, resume=True, section_id="part_2"),
+    ]
+    derived = [_derive_form_id(_build_jit_schema(h)) for h in handshakes]
+    assert derived == ["W-7", "W-7", "W-7"], (
+        "form_id must stay the real form across every reconnect in one "
+        "form-session -- a first-connect-only fix still poisons the trail"
+    )
+
+
 def test_route_source_still_builds_form_metadata_from_both_keys():
     """Guard the helper-vs-route parity this module's other tests rely on.
 

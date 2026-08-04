@@ -65,6 +65,26 @@ comment block.
 per-run override via `$env:VFF_DISABLE_AUTH`), matching `dev-local.sh`, and the
 startup banner now reports it.
 
+**Fresh-eyes round 1 (Sonnet): GAPS-FOUND (3), all adopted.** Two were rubric
+FAILs, which is the assess loop doing exactly its job:
+1. ADOPTED (5e6a criterion 2 FAIL): `docs/technical_guide.md` still described
+   `ALLOW_AI_STUDIO=true` as the live mechanism for a deployed
+   `VERTEXAI=false` -- a file whose own `**Tracks:**` line names
+   `backend/config.py`. My earlier sweep missed it because I filtered the grep
+   output. Rewritten to the Vertex-only rule + stamp bumped.
+2. ADOPTED (n0em criterion 2 FAIL): no test covered the RECONNECT case the
+   criterion names, even though the production bug was found on a session that
+   reconnected mid-form. Correctness across reconnect rested on reading the
+   code, not on a test. Added
+   `test_form_id_survives_reconnect_and_section_switch` (cold connect + two
+   resume handshakes must all derive the real id).
+3. ADOPTED: the FRONTEND half of the fix -- the one line that actually puts
+   `form_number` on the wire -- had no test at all, despite the fixture already
+   seeding `form_number: 'I-90'` and a sibling precedent in the same file. Added
+   two tests (real value; null when the kit lacks one), both mutation-verified.
+   Notable asymmetry worth remembering: the backend half had a deliberate
+   source-parity guard while the frontend half, equally revertible, had nothing.
+
 ## Lessons
 
 - **A durable sink makes every latent metadata defect permanent.** `form_id`
@@ -114,5 +134,8 @@ rewritten.
 - scripts/dev-local.ps1 -- VFF_DISABLE_AUTH wired with override + banner
 - deploy-demo.sh -- 3.1 comment rewritten (local-only until Vertex GA)
 - docs/standards/ai-models.md, docs/components/config-deployment.md -- Vertex-only rule
-- backend/tests/unit/test_jit_handshake_form_id.py -- new (6 tests, incl. a source-parity guard)
+- docs/standards/ws-protocol.md -- documents the new form_number handshake key
+- docs/technical_guide.md -- Vertex-only rule (fresh-eyes: stale ALLOW_AI_STUDIO row)
+- backend/tests/unit/test_jit_handshake_form_id.py -- new (7 tests: source-parity guard + reconnect)
 - backend/tests/unit/test_vertexai_guard.py -- rewritten for the no-override policy
+- frontend/src/schema-forms/state/schemaFormState.test.ts -- 2 new form_number handshake tests

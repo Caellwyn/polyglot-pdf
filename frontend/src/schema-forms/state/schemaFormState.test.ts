@@ -501,6 +501,39 @@ describe('SchemaFormStateManager', () => {
       expect(payload).toHaveProperty('form_session_id')
     })
 
+    it('sends form_number on the JIT handshake, distinct from form_title (bd n0em)', () => {
+      // The backend derives the confirmation audit trail's form_id from
+      // schema.form_metadata.form_number. The manifest-first (JIT) transport --
+      // the shipped default -- carries no full schema, so this key is the ONLY
+      // way the real form id reaches the audit record; without it every
+      // confirmation event logged form_id="unknown" (found in production).
+      const schema = createTestSchema()
+      const state = SchemaFormStateManager.init(schema)
+
+      const payload = SchemaFormStateManager.getJITHandshakePayload(state, 'English')
+
+      expect(payload.form_number).toBe('I-90')
+      // Identifier and human label must stay separate keys: collapsing them
+      // would write a prose title where the audit expects an identifier.
+      expect(payload.form_number).not.toBe(payload.form_title)
+    })
+
+    it('sends form_number as null when the schema has no form_number (bd n0em)', () => {
+      // A kit lacking form_metadata.form_number must not crash the handshake --
+      // the backend degrades that session to form_id="unknown", the pre-fix
+      // behavior, rather than erroring.
+      const schema = createTestSchema()
+      const noNumber = {
+        ...schema,
+        form_metadata: { ...schema.form_metadata, form_number: undefined as any },
+      }
+      const state = SchemaFormStateManager.init(noNumber)
+
+      const payload = SchemaFormStateManager.getJITHandshakePayload(state, 'English')
+
+      expect(payload.form_number).toBeNull()
+    })
+
     it('uses the current SECTION order as section_number', () => {
       const schema = createTestSchema()
       const state = SchemaFormStateManager.init(schema)
