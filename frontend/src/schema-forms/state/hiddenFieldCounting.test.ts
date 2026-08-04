@@ -162,6 +162,40 @@ describe("W-7 completion denominator", () => {
     expect(progress).toBe(100);
   });
 
+  it("counts a SKIPPED field as done, like isSectionValid does", () => {
+    // A skipped field satisfies isSectionValid (a required field must stay
+    // skippable -- defer to a translator, or genuinely no answer) and counts as
+    // SETTLED for computeReadyWindows. If getProgress disagreed, a user who
+    // legitimately skips could complete the section while the bar stuck below
+    // 100% -- the same "never reads complete" complaint the hidden-field filter
+    // fixed. Uses the fixpoint fill, then converts one entry to a skip.
+    const filled = stateWithAllVisibleFieldsFilled() as unknown as {
+      fieldValues: Record<string, { value: string; confirmed?: boolean; skipped?: boolean }>;
+    };
+    const firstId = Object.keys(filled.fieldValues)[0];
+    expect(firstId).toBeDefined();
+    // A skip stores no value (bd 4dxt: the skipped flag is separate, the value
+    // stays empty) -- so this is exactly the shape that must still count.
+    filled.fieldValues[firstId] = { value: "", skipped: true };
+
+    const progress = SchemaFormStateManager.getProgress(
+      filled as unknown as ProgressState
+    );
+    expect(progress).toBe(100);
+  });
+
+  it("does not count an empty array as filled", () => {
+    // isSectionValid treats [] as empty; getProgress must agree or a
+    // multi-select left untouched would read as answered.
+    const first = (fields as unknown as FormField[]).find(
+      f => !f.hidden && !f.show_if
+    )!;
+    const progress = SchemaFormStateManager.getProgress(
+      stateFrom({ [first.id]: { value: [] as unknown as string, confirmed: true } })
+    );
+    expect(progress).toBe(0);
+  });
+
   it("returns 0 rather than NaN when nothing is visible", () => {
     const empty = {
       schema: { ...schema, fields: [] },

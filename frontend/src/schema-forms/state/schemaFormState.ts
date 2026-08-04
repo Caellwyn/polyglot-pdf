@@ -695,6 +695,10 @@ export class SchemaFormStateManager {
    * The denominator is intentionally DYNAMIC: revealing a conditional field
    * grows it, so progress can move backwards when the user's answer opens a new
    * branch. That is honest -- there really is more work to do.
+   *
+   * A SKIPPED field counts as DONE, consistent with isSectionValid and
+   * computeReadyWindows' SETTLED definition. An empty array counts as NOT done,
+   * matching isSectionValid's emptiness test.
    */
   static getProgress(state: SchemaFormState): number {
     const visibleFields = state.schema.fields.filter(
@@ -702,12 +706,25 @@ export class SchemaFormStateManager {
     );
     if (visibleFields.length === 0) return 0;
 
-    const filledFields = visibleFields.filter((f) => {
-      const actualValue = state.fieldValues[f.id]?.value;
-      return actualValue !== null && actualValue !== undefined && actualValue !== "";
+    // A SKIPPED field counts as done, matching isSectionValid (which accepts a
+    // skipped required field) and computeReadyWindows' SETTLED definition
+    // (confirmed / skipped / not shown). Without this, a user who legitimately
+    // skips a field -- deferring to a translator, or genuinely having no answer
+    // -- completes the section while the bar sticks below 100%, which is the
+    // same "never reads complete" complaint the hidden-field filter fixed.
+    const doneFields = visibleFields.filter((f) => {
+      const fieldValue = state.fieldValues[f.id];
+      if (fieldValue?.skipped) return true;
+      const actualValue = fieldValue?.value;
+      return (
+        actualValue !== null &&
+        actualValue !== undefined &&
+        actualValue !== "" &&
+        !(Array.isArray(actualValue) && actualValue.length === 0)
+      );
     }).length;
 
-    return (filledFields / visibleFields.length) * 100;
+    return (doneFields / visibleFields.length) * 100;
   }
 
   /**
