@@ -239,4 +239,28 @@ describe('WebFormConnection fieldValues persist sites (two-writer guard)', () =>
       expect(args, `call ${i + 1} schema ids`).toContain('this.schemaFieldIds()')
     }
   })
+
+  it('every fieldValues-only merge also adopts the persisted validationErrors', () => {
+    // validationErrors has its own independent UI writer (SchemaForm.tsx's blur
+    // handler), so a merge that rebuilds state from this.state must carry it or
+    // a blur error raised in the window is erased and isSectionValid stops
+    // blocking on an invalid field.
+    //
+    // A BEHAVIOURAL test can only pin the one handler it drives -- removing the
+    // adopt at any of the other sites left the whole suite green. Per this
+    // project's mutation-verify-per-parametrization rule, pin the SHAPE so every
+    // site is covered, not just the one that happens to have a test.
+    const merges = SRC.split('...this.state,').slice(1)
+    // Only the merges that go on to reconcile fieldValues are in scope; other
+    // `...this.state` spreads (e.g. validatedWindowIndices) are not.
+    const fieldValueMerges = merges.filter(m =>
+      m.slice(0, 1200).includes('fieldValues: reconcileFieldValues(')
+    )
+    expect(fieldValueMerges.length).toBe(7)
+    for (const [i, m] of fieldValueMerges.entries()) {
+      expect(m.slice(0, 1200), `fieldValues-only merge ${i + 1}`).toMatch(
+        /validationErrors:\s*persisted[A-Za-z]*\.validationErrors/
+      )
+    }
+  })
 })

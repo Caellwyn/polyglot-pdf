@@ -867,12 +867,16 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
-        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
-        // blur handler persists it through SchemaFormStateManager without
-        // touching this.state, so a one-key merge would revert an error raised
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
         // during this window and the section gate would stop blocking on a
-        // genuinely invalid field. Adopt the persisted map wholesale -- the
-        // connection never writes it, so there is nothing of ours to preserve.
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
         validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
@@ -1074,12 +1078,16 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
-        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
-        // blur handler persists it through SchemaFormStateManager without
-        // touching this.state, so a one-key merge would revert an error raised
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
         // during this window and the section gate would stop blocking on a
-        // genuinely invalid field. Adopt the persisted map wholesale -- the
-        // connection never writes it, so there is nothing of ours to preserve.
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
         validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
@@ -1219,12 +1227,16 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
-        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
-        // blur handler persists it through SchemaFormStateManager without
-        // touching this.state, so a one-key merge would revert an error raised
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
         // during this window and the section gate would stop blocking on a
-        // genuinely invalid field. Adopt the persisted map wholesale -- the
-        // connection never writes it, so there is nothing of ours to preserve.
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
         validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
@@ -1857,12 +1869,16 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
-        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
-        // blur handler persists it through SchemaFormStateManager without
-        // touching this.state, so a one-key merge would revert an error raised
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
         // during this window and the section gate would stop blocking on a
-        // genuinely invalid field. Adopt the persisted map wholesale -- the
-        // connection never writes it, so there is nothing of ours to preserve.
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
         validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
@@ -2634,12 +2650,16 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
-        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
-        // blur handler persists it through SchemaFormStateManager without
-        // touching this.state, so a one-key merge would revert an error raised
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
         // during this window and the section gate would stop blocking on a
-        // genuinely invalid field. Adopt the persisted map wholesale -- the
-        // connection never writes it, so there is nothing of ours to preserve.
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
         validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
@@ -2723,12 +2743,16 @@ export class WebFormConnection {
     if (persistedAtEntry) {
       this.state = {
         ...this.state,
-        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
-        // blur handler persists it through SchemaFormStateManager without
-        // touching this.state, so a one-key merge would revert an error raised
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
         // during this window and the section gate would stop blocking on a
-        // genuinely invalid field. Adopt the persisted map wholesale -- the
-        // connection never writes it, so there is nothing of ours to preserve.
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
         validationErrors: persistedAtEntry.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedAtEntry.fieldValues,
@@ -3887,12 +3911,16 @@ export class WebFormConnection {
     if (persistedBeforeUpdate) {
       this.state = {
         ...this.state,
-        // validationErrors is a THIRD writer the UI owns alone: SchemaForm.tsx's
-        // blur handler persists it through SchemaFormStateManager without
-        // touching this.state, so a one-key merge would revert an error raised
+        // validationErrors has an independent UI writer: SchemaForm.tsx's blur
+        // handler persists it through SchemaFormStateManager without touching
+        // this.state, so a fieldValues-only merge would revert an error raised
         // during this window and the section gate would stop blocking on a
-        // genuinely invalid field. Adopt the persisted map wholesale -- the
-        // connection never writes it, so there is nothing of ours to preserve.
+        // genuinely invalid field. Adopt the persisted map wholesale.
+        //
+        // The connection does not ADD entries here, but it does CLEAR them --
+        // updateField and markFieldSkipped delete the entry for the field they
+        // write. That is why this adopt must stay BEFORE the mutator: the clear
+        // has to run after, or a resolved error would be resurrected.
         validationErrors: persistedBeforeUpdate.validationErrors,
         fieldValues: reconcileFieldValues(
           persistedBeforeUpdate.fieldValues,

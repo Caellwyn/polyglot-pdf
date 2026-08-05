@@ -88,9 +88,11 @@ interface FieldValue {
 `fieldValues` has **two independent writers**, and `validationErrors` is a third
 map the UI owns alone (`SchemaForm.tsx`'s blur handler persists it without
 touching `this.state`), so the reconciling handlers adopt the persisted
-`validationErrors` wholesale — the connection never writes it, and a
-fieldValues-only merge reverted a blur error raised during the window, which
-stopped `isSectionValid` blocking on a genuinely invalid field. The React UI (`SchemaForm.tsx`
+`validationErrors` wholesale — a fieldValues-only merge reverted a blur error
+raised during the window, which stopped `isSectionValid` blocking on a genuinely
+invalid field. The connection does not *add* entries to that map, but it does
+**clear** them (`updateField` and `markFieldSkipped` delete the entry for the
+field they write), which is why each adopt must stay *before* its mutator. The React UI (`SchemaForm.tsx`
 `handleFieldChange` / `handleFieldSkip`) persists through `SchemaFormStateManager`
 and never touches `WebFormConnection`'s in-memory `this.state`; the voice layer
 holds `this.state` across turns. Any connection handler ending in
