@@ -1047,6 +1047,20 @@ export class SchemaFormStateManager {
       // and the liability record could not name the form. Distinct from
       // form_title (a human label); this is the identifier the audit uses.
       form_number: state.schema.form_metadata?.form_number ?? null,
+      // Kit identity + government EDITION for the audit trail (bd
+      // polyglot-pdf-47r3). form_number alone identifies neither:
+      //  - kit_id is the UNIQUE kit key -- two kits can share a form_number
+      //    (a standard W-7 and a firm-specific variant, which the firm-tier
+      //    epic anticipates), and only kit_id tells them apart;
+      //  - edition_date is the government's own edition marker (USCIS/IRS
+      //    revise forms and enforce edition dates), so a disputed filing can
+      //    answer "which edition did the client confirm against?".
+      // NOT form_metadata.version: that is a schema-AUTHORING field whose
+      // values are inconsistent across kits ("v9_conformant", "draft"), so it
+      // would put a version-shaped field with per-kit meaning into a legal
+      // record.
+      kit_id: loadOnboardingState().formId ?? null,
+      edition_date: state.schema.form_metadata?.edition_date ?? null,
       previous_spoken_names: this.getPreviousSpokenNames(state),
       initial_field_hint: initialFieldHint,
       // The user's app-start language choice (bd polyglot-pdf-y25o): needed

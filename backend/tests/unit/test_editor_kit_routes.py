@@ -17,6 +17,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -44,7 +45,14 @@ VALID_SCHEMA = {
     # Post the P6.2 flip (bd h76m.16) a complete kit MUST be v2 -- the
     # mark-complete gate requires schema_version=="2".
     "schema_version": "2",
-    "form_metadata": {"title": "Test Form", "version": "unknown"},
+    # edition_date present so this fixture stays CLEAN under the bd
+    # polyglot-pdf-47r3 audit-identity lint (a kit with form_metadata but no
+    # government edition now legitimately carries an advisory WARNING -- the
+    # audit trail falls back to a content fingerprint). Same pattern as the
+    # help.instructions note below: keep the "clean" fixture genuinely clean.
+    "form_metadata": {
+        "title": "Test Form", "version": "unknown", "edition_date": "12/2024",
+    },
     "sections": [{"id": "s1", "label": "Section 1", "order": 1, "fields": ["f1"]}],
     "fields": [
         # help.instructions authored so this fixture is CLEAN under the
@@ -1065,6 +1073,105 @@ def test_status_flip_preserves_other_metadata(client):
     assert meta["description"] == "Green card"   # preserved
 
 
+# --- publish date (bd polyglot-pdf-47r3) --------------------------------------
+#
+# The marked-complete date is the revision marker for a kit with no government
+# edition: a firm's own intake form has no "12/2024", but it does have "the
+# version published on <date>" (maintainer, 2026-08-04). Stamped here so the
+# data accumulates; surfacing it into the audit record is epic
+# polyglot-pdf-7jmy, which needs a manifest/wire change to carry it.
+
+
+def test_a_kit_with_no_edition_date_can_still_be_published(client):
+    """A custom form MUST stay publishable (bd polyglot-pdf-47r3, maintainer call).
+
+    The audit-identity lint rule is a WARNING precisely so a firm's own intake
+    sheet -- which has no government edition date -- is not blocked; the record
+    falls back to a content fingerprint instead.
+
+    This asserts the BEHAVIOR at the gate that can actually block, not the
+    severity label. The lint-level test (test_missing_edition_date_warns_but_
+    never_blocks) pins the label, but set_editor_kit_status 409s on ANY lint
+    ERROR and never sees that assertion -- an Opus review proved a severity flip
+    to ERROR left all 132 tests in this file green while making every
+    edition-less kit un-publishable.
+    """
+    c, _store, root = client
+    schema = {
+        **VALID_SCHEMA,
+        "form_metadata": {"title": "Acme Intake", "version": "unknown"},
+    }
+    assert "edition_date" not in schema["form_metadata"]
+    _make_kit(root, "acme-intake", status="draft", schema=schema)
+
+    r = c.post(
+        "/api/editor/kits/acme-intake/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+
+    assert r.status_code == 200, r.text
+    meta = json.loads((root / "acme-intake" / "metadata.json").read_text())
+    assert meta["status"] == "complete"
+
+
+def test_promotion_stamps_the_publish_date(client):
+    c, _store, root = client
+    _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA)
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+
+    assert r.status_code == 200
+    meta = json.loads((root / "i-90" / "metadata.json").read_text())
+    # ISO-8601 UTC, parseable -- not a free-text date.
+    stamped = datetime.fromisoformat(meta["published_at"])
+    assert stamped.tzinfo is not None
+    assert abs((datetime.now(timezone.utc) - stamped).total_seconds()) < 60
+
+
+def test_revert_to_draft_keeps_the_last_publish_date(client):
+    """A revert must not erase it: the kit WAS published then.
+
+    Erasing on revert would lose the marker for every confirmation recorded
+    while it was live -- the exact evidence the date exists to preserve.
+    """
+    c, _store, root = client
+    _make_kit(root, "i-90", status="complete", schema=VALID_SCHEMA,
+              extra_meta={"published_at": "2026-01-15T00:00:00+00:00"})
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "draft"},
+    )
+
+    assert r.status_code == 200
+    meta = json.loads((root / "i-90" / "metadata.json").read_text())
+    assert meta["status"] == "draft"
+    assert meta["published_at"] == "2026-01-15T00:00:00+00:00"
+
+
+def test_republishing_moves_the_publish_date(client):
+    """Re-publishing after an edit updates it -- that IS the revision signal."""
+    c, _store, root = client
+    _make_kit(root, "i-90", status="draft", schema=VALID_SCHEMA,
+              extra_meta={"published_at": "2026-01-15T00:00:00+00:00"})
+
+    r = c.post(
+        "/api/editor/kits/i-90/status",
+        headers={"X-Editor-Token": "edit-tok"},
+        json={"status": "complete"},
+    )
+
+    assert r.status_code == 200
+    meta = json.loads((root / "i-90" / "metadata.json").read_text())
+    assert meta["published_at"] != "2026-01-15T00:00:00+00:00"
+
+
 # --- POST status: the drift re-translation sweep (bd polyglot-pdf-783r) ------
 #
 # The client fixture stubs _sweep_drifted_translations to a no-op so the gate
@@ -1646,7 +1753,11 @@ def test_extract_runs_and_stores_the_draft(client, monkeypatch):
     # A clean v2 draft (validates + lint-clean): a standalone text field.
     draft = {
         "source": "pdf", "schema_version": "2",
-        "form_metadata": {"title": "T", "version": "unknown"},
+        # edition_date keeps this lint-clean under the bd polyglot-pdf-47r3
+        # audit-identity WARNING (see the VALID_SCHEMA note at the top).
+        "form_metadata": {
+            "title": "T", "version": "unknown", "edition_date": "12/2024",
+        },
         "sections": [{"id": "s1", "label": "S1", "order": 1, "fields": ["a"]}],
         "fields": [{"id": "a", "name": "A", "spoken_name": "a", "type": "text",
                     "section_id": "s1", "pdf_field_name": "form1[0].a[0]",

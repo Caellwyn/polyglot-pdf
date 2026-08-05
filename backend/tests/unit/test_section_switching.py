@@ -262,6 +262,85 @@ async def test_switch_to_section_preserves_form_session_id_in_callback_handler()
 
 
 @pytest.mark.asyncio
+async def test_switch_to_section_preserves_kit_id_and_edition_in_callback_handler():
+    """bd polyglot-pdf-47r3 (fresh-eyes gap): the SAME trap as rwjy above, for
+    the two audit-identity fields added by 47r3.
+
+    _switch_to_section_locked re-enters start_session with the NEW SECTION's
+    schema and no kit_id / full_schema. Unconditional overwrites therefore reset
+    kit_id to None and recomputed edition_date's fingerprint from a
+    single-field section schema -- so every confirmation after section 1 lost
+    its kit, and the "pinned" revision marker CHANGED mid-session. Both must
+    survive the switch, like form_session_id.
+    """
+    service = FormFillingService()
+
+    live_ai = AsyncMock()
+    service._live_ai = live_ai
+    service._session_id = "ephemeral-session"
+    service._websocket = AsyncMock()
+    service._form_session_id = "fss_persistent_47r3"
+    # Simulate what the INITIAL start_session established.
+    service._kit_id = "w7"
+    service._edition_date = "12/2024"
+
+    await service.switch_to_section(
+        section_schema={"form_metadata": {"form_number": "W-7"}, "fields": []},
+        section_values={},
+        section_metadata={
+            "section_id": "part_2",
+            "section_number": 2,
+            "total_sections": 3,
+            "section_label": "Section 2",
+            "previous_spoken_names": [],
+        },
+        initial_field_hint=None,
+    )
+
+    assert service._callback_handler is not None
+    assert service._callback_handler._kit_id == "w7"
+    assert service._callback_handler._edition_date == "12/2024"
+
+
+@pytest.mark.asyncio
+async def test_switch_to_section_does_not_recompute_the_edition_fingerprint():
+    """A kit with NO government edition must keep ONE fingerprint all session.
+
+    The fingerprint is derived from the full form's answerable shape. A section
+    switch supplies only that section's schema, so recomputing would yield a
+    different marker per section -- the opposite of pinning a revision. The
+    session's original marker must survive untouched.
+    """
+    service = FormFillingService()
+
+    live_ai = AsyncMock()
+    service._live_ai = live_ai
+    service._session_id = "ephemeral-session"
+    service._websocket = AsyncMock()
+    service._form_session_id = "fss_persistent_fp"
+    service._kit_id = "acme-intake"
+    service._edition_date = "sha256:deadbeef1234"  # from the FULL form at connect
+
+    await service.switch_to_section(
+        section_schema={
+            "form_metadata": {"form_number": "ACME-1"},  # no edition_date
+            "fields": [{"id": "only_one", "type": "text"}],
+        },
+        section_values={},
+        section_metadata={
+            "section_id": "part_2",
+            "section_number": 2,
+            "total_sections": 3,
+            "section_label": "Section 2",
+            "previous_spoken_names": [],
+        },
+        initial_field_hint=None,
+    )
+
+    assert service._callback_handler._edition_date == "sha256:deadbeef1234"
+
+
+@pytest.mark.asyncio
 async def test_switch_to_section_handles_no_live_ai():
     """switch_to_section should handle gracefully when no LiveAI configured."""
     service = FormFillingService()

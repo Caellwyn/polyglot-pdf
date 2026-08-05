@@ -38,9 +38,17 @@ def _lint_structural(schema, dump=None):
     schema DEFECTS, and a fixture without authored help.instructions now
     legitimately carries the aggregated coverage warning -- orthogonal to
     what each test pins. The guidance rules have their own suite
-    (backend/tests/unit/test_guidance_contract.py)."""
+    (backend/tests/unit/test_guidance_contract.py).
+
+    Also drops audit-identity-* (bd polyglot-pdf-47r3) for the same reason:
+    it is a KIT-LEVEL publish gate (does form_metadata name the form and its
+    government edition?), not a structural defect in the fields these fixtures
+    build -- and `_schema()` deliberately omits form_metadata entirely, so it
+    would fire on nearly every fixture and drown the exact-defect-list
+    assertions. Its own suite is test_audit_identity_lint below."""
     return [f for f in lint_schema(schema, dump)
-            if not f.rule.startswith("help-")]
+            if not f.rule.startswith("help-")
+            and not f.rule.startswith("audit-identity-")]
 
 def _schema(fields, version=None):
     s = {"source": "pdf", "fields": fields}
@@ -1312,3 +1320,55 @@ def test_w7_identity_stale_set_is_pinned():
         f"  no longer stale: {sorted(_W7_EXPECTED_STALE - got)}\n"
         f"If guidance was re-baked, shrink the pin; if the hash formula moved, "
         f"check for a mass false alarm before widening it.")
+
+
+# --- audit identity (bd polyglot-pdf-47r3) ------------------------------------
+#
+# The confirmation trail records form_number + kit_id + edition_date so a
+# disputed filing can name WHICH form and WHICH revision the client confirmed
+# against. edition_date is ADVISORY here, never a publish gate: a custom form (a
+# firm's own intake sheet) legitimately has no government edition, and blocking
+# it would make the product unusable for exactly the firm-tier customers it is
+# meant to serve (maintainer, 2026-08-04). The audit record falls back to a
+# content fingerprint instead.
+
+
+def _audit_rules(schema):
+    return [f.rule for f in lint_schema(schema)
+            if f.rule.startswith("audit-identity-")]
+
+
+def test_missing_edition_date_warns_but_never_blocks():
+    schema = _schema([{"id": "a", "type": "text"}])
+    schema["form_metadata"] = {"title": "T"}
+
+    findings = [f for f in lint_schema(schema)
+                if f.rule == "audit-identity-no-edition"]
+
+    assert len(findings) == 1
+    # WARNING, not ERROR: an ERROR would block Mark-complete promotion.
+    assert findings[0].severity == SEVERITY_WARNING
+
+
+def test_edition_date_present_is_silent():
+    schema = _schema([{"id": "a", "type": "text"}])
+    schema["form_metadata"] = {"title": "T", "edition_date": "12/2024"}
+
+    assert _audit_rules(schema) == []
+
+
+def test_blank_edition_date_is_treated_as_missing():
+    """A whitespace-only edition is not an edition -- it must not read as one."""
+    schema = _schema([{"id": "a", "type": "text"}])
+    schema["form_metadata"] = {"title": "T", "edition_date": "   "}
+
+    assert _audit_rules(schema) == ["audit-identity-no-edition"]
+
+
+def test_schema_without_form_metadata_is_not_flagged():
+    """A metadata-less schema is a fixture/draft shape, not an authoring slip.
+
+    Flagging it would fire on nearly every structural fixture in this suite and
+    drown the exact-defect-list assertions those tests make.
+    """
+    assert _audit_rules(_schema([{"id": "a", "type": "text"}])) == []

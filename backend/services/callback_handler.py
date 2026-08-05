@@ -38,6 +38,8 @@ class CallbackHandler:
         send_transcript: bool = False,
         form_id: Optional[str] = None,
         form_session_id: Optional[str] = None,
+        kit_id: Optional[str] = None,
+        edition_date: Optional[str] = None,
     ):
         """
         Initialize callback handler.
@@ -49,6 +51,10 @@ class CallbackHandler:
             send_transcript: Whether to send transcript events to frontend
             form_id: Form type identifier (e.g., "I-90") for confirmation logging
             form_session_id: Persistent form session ID for confirmation logging
+            kit_id: Kit identifier (e.g., "w7") -- the UNIQUE kit key, since two
+                kits can share a form_id (bd polyglot-pdf-47r3)
+            edition_date: The form's government edition (e.g., "12/2024"), so the
+                audit record names which edition was confirmed against
         """
         self._websocket = websocket
         self._session_id = session_id
@@ -65,6 +71,8 @@ class CallbackHandler:
         self._processing_active = False
         self._form_id = form_id  # For confirmation logging
         self._form_session_id = form_session_id  # For confirmation logging
+        self._kit_id = kit_id  # Audit trail: which KIT (bd polyglot-pdf-47r3)
+        self._edition_date = edition_date  # Audit trail: which EDITION
         
         # Service methods will be injected
         self._handle_update_fields = None
@@ -942,7 +950,9 @@ class CallbackHandler:
                 form_session_id=self._form_session_id,
                 field_id=field_id,
                 field_name=None,  # Will be enriched by frontend if needed
-                confirmation_method=confirmation_method
+                confirmation_method=confirmation_method,
+                kit_id=self._kit_id,  # bd polyglot-pdf-47r3
+                edition_date=self._edition_date
             )
 
         # SECTION-BOUNDARY SHORT-CIRCUIT (bd polyglot-pdf-njvh). When this confirm

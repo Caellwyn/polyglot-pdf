@@ -60,6 +60,10 @@ const RULE_LABELS: Record<string, string> = {
   'required-top-level': 'Required in the wrong place',
   'legacy-trigger-side-logic': 'Old-style trigger logic',
   'to-review-pending': 'Still needs re-filing',
+  // Audit-trail identity (bd polyglot-pdf-47r3). Advisory only: a custom form
+  // legitimately has no government edition, and the confirmation record falls
+  // back to a content fingerprint -- so this reads as a prompt, not a defect.
+  'audit-identity-no-edition': 'No form edition date',
   // Translation verify/rectify gate flags (bd polyglot-pdf-9djc): persisted by
   // the bake into _bakeoff provenance and re-emitted by the backend linter.
   // All WARNING -- the human-review worklist for baked translations.
@@ -118,6 +122,7 @@ export const RULE_REMEDIES: Record<string, string> = {
   'required-top-level': 'Move the required setting into the field\'s validation rules.',
   'legacy-trigger-side-logic': 'Rebuild this as a show_if / require_if rule on the target field.',
   'to-review-pending': 'File the field into a real section; if the holding section lists leftover ids no field uses, delete those ids.',
+  'audit-identity-no-edition': 'If this is an official government form, set its edition date (e.g. "12/2024") in the form metadata so confirmation records name the exact edition a client filled. If it is a custom or in-house form with no published edition, ignore this -- records fall back to a content fingerprint automatically.',
   'translation-drift-rectified': 'Review the auto-corrected translation.',
   'translation-drift-unresolved': 'Review and correct this translation by hand.',
   'translation-ambiguous-source': 'Add context or a glossary entry for this source text.',
