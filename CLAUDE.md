@@ -85,8 +85,10 @@ closed); the cited code path is the ground truth when a doc and the code disagre
    journal entry does not re-run the review. The subagents' STATUS lines are read
    directly -- there is **no bot watcher and no `@codex review` /
    `pr_review_watcher.py` / `requested_reviewers` trigger** (all dead path).
-   Docs/beads/journal-only changes
-   skip the outer review (fresh-eyes `NO-GAPS` is their record). Once both clear,
+   **Docs-only changes get ONE adversarial HAIKU review** instead (the
+   `docs-reviewer` agent -- prose review, not a contract trace); only a genuinely
+   TRIVIAL diff skips adversarial review entirely (fresh-eyes `NO-GAPS` is its
+   record). Once both clear,
    **one `closeout_finish.py` run opens the PR AND closes the bead(s)** (no two-call
    watcher pattern), then closeout auto-merges a routine low-risk PR or pings the
    maintainer for a consequence-bearing one (see "Auto-merge vs. maintainer merge").
@@ -194,9 +196,12 @@ when **ALL** of these hold:
      review returned `NO-GAPS` -- ONE looped clearing pass (see
      [`docs/doctrine/review-flow.md`](docs/doctrine/review-flow.md)). (There is NO
      external reviewer; the maintainer's Codex subscription ended 2026-07-08.) A
-     separate, independent model instance, adversarially, found it clean. **A
-     review-SKIPPED PR does NOT satisfy this** -- no adversarial review ran, so it
-     pings (below).
+     separate, independent model instance, adversarially, found it clean. **This
+     condition means the OPUS cross-surface gate specifically** -- a docs-only PR
+     cleared by the Haiku `docs-reviewer`, or a trivial PR with no adversarial
+     review, does NOT satisfy it and pings (below). (Whether a Haiku-cleared docs
+     PR should count is an open question for the maintainer, deliberately left
+     undecided by bd polyglot-pdf-saxh; do not widen it autonomously.)
    - **CI / required status checks are green.**
    - **The PR is NOT consequence-bearing** (see the list below).
 

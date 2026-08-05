@@ -37,7 +37,7 @@ You are running the closeout for this repo. This skill encodes the closeout chec
 
 ## Hard rules (read before doing anything)
 
-- **Review is entirely Claude-based -- there is NO external reviewer, and BOTH layers run PRE-PR.** The outer review (Step 5.6) is an Opus-5 adversarial cross-surface review: the `cross-surface-reviewer` agent (`model: opus`) on the LOCAL diff (`git diff origin/dev...HEAD`), looped to a SINGLE clearing `NO-GAPS`, BEFORE the PR opens. There is **no `@codex review` trigger comment, no `pr_review_watcher.py` bot watcher, and no `requested_reviewers` API** -- all dead path (the maintainer's OpenAI Codex subscription ended 2026-07-08; Codex had succeeded Copilot at the earlier credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). **For a change that does not warrant a review** (see the Step 5.6 review-worthiness gate), skip the outer review entirely; a docs-only / beads-only / journal-only / trivial change gets no outer review (its fresh-eyes `NO-GAPS` from Step 5.5 is the record).
+- **Review is entirely Claude-based -- there is NO external reviewer, and BOTH layers run PRE-PR.** The outer review (Step 5.6) is an Opus-5 adversarial cross-surface review: the `cross-surface-reviewer` agent (`model: opus`) on the LOCAL diff (`git diff origin/dev...HEAD`), looped to a SINGLE clearing `NO-GAPS`, BEFORE the PR opens. There is **no `@codex review` trigger comment, no `pr_review_watcher.py` bot watcher, and no `requested_reviewers` API** -- all dead path (the maintainer's OpenAI Codex subscription ended 2026-07-08; Codex had succeeded Copilot at the earlier credit-exhaustion cutover, bd hrn.8/hrn.9 -- both retired). **The Step 5.6 gate is a THREE-way fork** (bd polyglot-pdf-saxh): source diffs get that Opus cross-surface review; **docs-only diffs get ONE adversarial Haiku review** (the `docs-reviewer` agent, looped to `NO-GAPS` -- prose review, not a contract trace); only a genuinely TRIVIAL diff skips adversarial review entirely (its fresh-eyes `NO-GAPS` from Step 5.5 is the record).
 - **Open a NORMAL (non-draft) PR, never stop before it.** Do NOT use `--draft`. BOTH review layers run PRE-PR: the fresh-eyes inner loop (Step 5.5) and the Opus-5 outer review (Step 5.6, review-worthy PRs only), both looped to clean on the LOCAL branch. Only then does Step 6 open the PR, close the bead(s), and make the merge decision (Step 6.2): a routine low-risk PR that reviewed CLEAN auto-merges; a consequence-bearing one is pinged to the maintainer. Do NOT idle waiting for a "go" to open the PR.
 - **NEVER use a draft PR + ready-flip.** A draft adds a state flip for no benefit. Always open normal.
 - **Merge is autonomous for routine low-risk PRs; the maintainer's for consequence-bearing ones (autonomy increase 2026-07-04).** Once the review is CLEAN and CI is green, apply the auto-merge rule (CLAUDE.md "Auto-merge vs. maintainer merge"): if the PR is NOT consequence-bearing, **run `gh pr merge` yourself** (Step 6.2). If it IS consequence-bearing -- proves the bead direction impossible / substantially changes an approved plan / affects operational cost / affects user-facing features / risks downstream disruption / needs substantial multi-surface rework -- do NOT merge; **ping the maintainer** that the PR is clean and ready for their merge. When unsure which side of the line, treat it as consequence-bearing and ping. Force-push and `bd dolt push --force` stay barred regardless.
@@ -248,7 +248,7 @@ This is the SPEAR **Assess** gate, and it runs BEFORE the PR opens (doctrine:
 [`review-flow.md`](../../../docs/doctrine/review-flow.md)). Two parts: you score the
 rubric yourself, then a recursive adversarial fresh-eyes loop hunts the gaps you
 cannot see. **Fresh-eyes ALWAYS runs here -- review-worthy or not** -- so for a
-review-skipped PR (no outer review) the fresh-eyes gap-free verdict IS the review
+TRIVIAL PR (no adversarial review at all) the fresh-eyes gap-free verdict IS the review
 record.
 
 ### Step 5.5.a -- Score the exit-criteria rubric (orchestrator judgment)
@@ -350,12 +350,13 @@ Step 5.6 outer cross-surface review, which runs next.
 Commit any gap fixes (and fold the assess outcome -- the rubric scorecard, the
 fresh-eyes round count, the adopt/reject/defer breakdown, and any filed bead IDs --
 into the journal entry's "What shipped" section) so the tree is clean before
-Step 5.6. **The Opus-5 outer cross-surface review (Step 5.6) runs next, BEFORE the
-PR opens** -- carry the inner reviewer's `## Changed contracts` block into its
-prompt. For a review-SKIPPED PR (no outer review) the last fresh-eyes `NO-GAPS`
-verdict here is the review record -- note that in the PR body.
+Step 5.6. **Step 5.6's adversarial review runs next, BEFORE the PR opens** -- the
+Opus cross-surface review for a source diff (carry the inner reviewer's `## Changed
+contracts` block into its prompt), or the Haiku `docs-reviewer` for a docs-only
+diff. For a genuinely TRIVIAL PR (no adversarial review at all) the last fresh-eyes
+`NO-GAPS` verdict here is the review record -- note that in the PR body.
 
-## Step 5.6 -- Opus-5 outer cross-surface review (PRE-PR): ONE looped clearing pass
+## Step 5.6 -- Adversarial review (PRE-PR): ONE looped clearing pass, model by diff type
 
 **Both review layers run BEFORE the PR opens (2026-07-08 flow).** The inner
 fresh-eyes loop (Step 5.5) cleared to `NO-GAPS`; the Opus-5 outer cross-surface
@@ -374,17 +375,40 @@ work is already done.
 makes this call -- there is no script gate). A review of a change that can't contain
 a code regression is wasted effort. Decision rule:
 
-- **Skip the outer review** when the diff cannot introduce a runtime/logic
-  regression -- e.g. it touches ONLY docs (`docs/`, `*.md`), `.beads/`, journal
-  entries, or other non-executed prose/config. A pure doc bump, a beads sync, or a
-  journal-only PR is in this bucket; go straight to Step 6 (its fresh-eyes `NO-GAPS`
-  from Step 5.5 is the review record).
-- **Run the Opus outer review** when the diff touches executable source
+**This is a THREE-way fork, not a skip/run binary** (maintainer directive
+2026-08-05, bd polyglot-pdf-saxh). Every PR gets SOME adversarial review; only the
+model and mandate change:
+
+- **Run the Opus outer cross-surface review** when the diff touches executable source
   (`backend/`, `frontend/src/`, scripts, CI, config that changes runtime behavior)
-  in any non-trivial way.
-- **When genuinely ambiguous, run the review** -- a wasted review is cheaper than
-  a shipped regression. "Ambiguous" means a real judgment call, not "I'd rather not
-  wait"; do not use the gate to dodge review of actual code.
+  in any non-trivial way. This is Step 5.6 proper (`cross-surface-reviewer`,
+  `model: opus`).
+- **Run the HAIKU docs review** when the diff is docs-only -- `docs/`, `*.md`,
+  `.beads/`, journal entries, or other non-executed prose. Spawn the
+  **`docs-reviewer`** agent (`.claude/agents/docs-reviewer.md`, already
+  `model: haiku`) on the same local diff, looped to `NO-GAPS` exactly like the Opus
+  loop. Its mandate is **adversarial prose review, NOT a contract trace** -- prose
+  that contradicts the code it documents, stale cross-references, doc-vs-doc
+  conflicts, a `*Last updated:*` bump with no real prose review. Prompt requirements
+  (a)-(d) are the same as the Opus spawn; requirement (e) (the `## Changed
+  contracts` paste) does NOT apply -- a docs diff changes no runtime contract.
+  *Why this exists:* before bd saxh a docs-only PR got NO adversarial model review
+  at all (the retired guaranteed-Opus inner round had been its only one), so a doc
+  asserting something the code contradicts could ship unchallenged.
+- **Skip adversarial review entirely** only for a genuinely TRIVIAL diff -- a typo
+  fix, a whitespace change, a `.beads/` sync with no prose. Its fresh-eyes `NO-GAPS`
+  from Step 5.5 is the record. When in doubt between trivial and docs-only, run the
+  Haiku review: it is cheap and fast, and that is the whole point of having it.
+- **When genuinely ambiguous between docs-only and source, run the OPUS review** --
+  a wasted review is cheaper than a shipped regression. "Ambiguous" means a real
+  judgment call, not "I'd rather not wait"; do not use the gate to dodge review of
+  actual code. **A diff that touches even one executable file is a source diff**, no
+  matter how much docs prose rides along with it.
+
+**Auto-merge is UNCHANGED by this fork** (bd saxh deliberately did not widen it): a
+docs PR that a Haiku review cleared still **pings** the maintainer rather than
+auto-merging. Whether a Haiku-cleared docs PR should become auto-merge-eligible is a
+product/autonomy call for the maintainer, not this skill's to assume. See Step 6.2.
 
 **Fresh-eyes is NOT re-run here** -- it ran (and looped to `NO-GAPS`) in Step 5.5;
 its triage breakdown and any filed out-of-scope beads are already recorded. Step 5.6
@@ -564,7 +588,7 @@ Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 
 
 **There is NO trigger comment and NO watcher.** Do NOT put an `@codex review` line in the PR body, do NOT use the `requested_reviewers` reviewer API, and do NOT launch `pr_review_watcher.py` -- all retired dead path.
 
-1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; for a review-SKIPPED change, also note "review record: fresh-eyes NO-GAPS, round <n>"; for a reviewed change, note "review record: Opus outer cross-surface review, NO-GAPS"). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. The equivalent raw commands, if opening BY HAND:
+1. **Open the PR + close the bead(s) in one `closeout_finish.py` run** (or the raw commands if not delegating). The one run does everything mechanical: rebase, push, open the PR, and close the bead(s). The PR body is a **brief what-shipped summary + bead id(s)** plus the **`## Exit criteria` scorecard from Step 5.5.a** (each criterion PASS/FAIL with one-line evidence; note the review record matching the Step 5.6 fork -- "review record: Opus outer cross-surface review, NO-GAPS" for a source change, "review record: Haiku docs review, NO-GAPS" for a docs-only change, or "review record: fresh-eyes NO-GAPS, round <n>" for a trivial change with no adversarial review). Write the body ONCE -- Step 6.3 records the review outcome in the journal + merge ping, not the PR body, so do NOT add an empty placeholder section. The pre-push `git pull --rebase origin dev` may hit a conflict -- resolve it per "Merge-conflict resolution" above. The equivalent raw commands, if opening BY HAND:
    ```bash
    git -C "<WT>" fetch origin && git -C "<WT>" pull --rebase origin dev
    git -C "<WT>" push -u origin <branch>
@@ -577,7 +601,7 @@ Both reviews have now cleared on the LOCAL branch (Step 5.5 `NO-GAPS`, Step 5.6 
    Do NOT pass `--draft`. The PR can't merge itself (`allow_auto_merge=false`), so opening it normally is safe. The bead(s) close in the same `closeout_finish.py` run (`--close-beads` is default-on now); if opening by hand, close them with one `scripts/bd_safe.py close <full-id> --reason "..."` per bead.
 2. **Decide the merge: auto-merge or ping** (autonomy increase 2026-07-04; CLAUDE.md "Auto-merge vs. maintainer merge"). Auto-merge requires ALL of: (a) an **adversarial reviewer cleared the diff** -- the Opus-5 outer cross-surface review gate (`NO-GAPS` on the final diff, Step 5.6); (b) CI / required checks green; (c) the PR is **not consequence-bearing**. Judge (c): does it prove the bead direction impossible / substantially change an approved plan / affect operational cost / affect user-facing features / risk downstream disruption / need substantial multi-surface rework? (Same line as the step-2 escalation triggers; when unsure, treat as consequence-bearing.)
    - **All three hold -> AUTO-MERGE.** Capture the exact head SHA the review + CI cleared (`HEAD_SHA="$(gh pr view <pr#> --json headRefOid -q .headRefOid)"`), confirm CI/required checks are green (`gh pr checks <pr#>`), then merge **pinned to that SHA**: `gh pr merge <pr#> --squash --match-head-commit "$HEAD_SHA"` (match the repo's merge style). The `--match-head-commit` guard makes the merge FAIL rather than silently merge an unreviewed head if anything pushed to the branch between the clear and the merge (the review-race). NEVER pass `--admin` (it bypasses the very checks gate condition (b) relies on; it is also settings-denied). Then post a SHORT plain-language note to the maintainer: what shipped + bead id(s), and the defended-decision list (below). This is a notification, not a request -- the merge is done. If the merge fails on the SHA match, a new commit landed -> re-review that commit before retrying, do NOT drop the guard.
-   - **Any of the three fails -> PING, do not merge.** That includes: consequence-bearing; review NOT clean; checks red; **or a review-SKIPPED PR** (docs-only / beads-only / trivial per the Step 5.6 gate) -- a skipped PR had no adversarial review, so condition (a) is unmet and it is NOT auto-merge-eligible even though it's low-risk; hand it to the maintainer. Also ping when you're simply unsure which side of the line the PR is on. Hand the maintainer a "clean and ready for your merge" summary and stop.
+   - **Any of the three fails -> PING, do not merge.** That includes: consequence-bearing; review NOT clean; checks red; **or a PR whose adversarial review was not the Opus cross-surface one** -- that is, a docs-only PR cleared by the Haiku `docs-reviewer`, or a trivial PR with no adversarial review at all. **Condition (a) currently means the OPUS gate specifically**, so neither is auto-merge-eligible even though both are low-risk; hand them to the maintainer. (Whether a Haiku-cleared docs PR *should* satisfy (a) is an open product/autonomy question for the maintainer -- bd polyglot-pdf-saxh deliberately did not decide it. Do not widen this on your own.) Also ping when you're simply unsure which side of the line the PR is on. Hand the maintainer a "clean and ready for your merge" summary and stop.
 3. **Write the merge ping / notification.** Either way the summary is **for the product owner in plain language -- no jargon, no acronyms** (the maintainer's standing checkpoint AND the escalation-rule audit surface; see CLAUDE.md "Escalation vs. autonomy"). Include: what shipped + bead id(s), housekeeping result, doc/journal status, test result, fresh-eyes breakdown, the review outcome (the Opus outer cross-surface review's round count, final = `NO-GAPS`), the PR URL, and **whether you auto-merged or are handing it back**. **Then LIST each judgment call you made autonomously this PR -- INCLUDING the merge decision itself -- and briefly DEFEND it.** Make these easy to scan; this defended decision list is where the maintainer catches anything that was decided (or merged) but should have been escalated.
 
 **Do NOT go back and rewrite the PR body after opening it.** The fresh-eyes triage breakdown and the outer-review round count already live in the **journal entry** (Step 3, the canonical chronological record) and the **merge ping** (Step 6.3, what the maintainer actually reads). Re-editing the PR description with `gh pr edit` is a **wasted model turn** generating prose for a surface nobody reads -- the initial `gh pr create --body` is the only body write. The durable record is the journal.
