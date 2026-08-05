@@ -145,3 +145,50 @@ A it does NOT eliminate the desync anyway.
   only signal is a prompt-token drop that does not return to the connect floor.
 - Historical correlation stands (every incident session had evictions) but Run A
   shows correlation != sole causation.
+
+## POST-HOC DISCOVERY (2026-08-05 morning): divergence is INTERRUPTION-LOCKED
+
+Prompted by the maintainer's question ("was this introduced by the spell-out
+instruction?"), a free re-analysis of the flush-edge metadata on every WAV dump:
+
+| Flush edge | Generations | Diverged | Rate |
+|---|---|---|---|
+| turn_complete (model finished speaking) | 46 | 0 | 0% |
+| interrupted (generation cut mid-stream) | 14 | 7 | 50% |
+
+ALL SEVEN divergences across all three runs -- including the phantom J-A-M-E-S
+pair and every attractor emission -- occurred on generations whose audio stream
+was INTERRUPTED. Zero divergences on cleanly-completed generations, in any run,
+with or without compression.
+
+REINTERPRETATION:
+- The trigger is interruption of an in-flight generation (barge-in / next input
+  arriving while the model speaks). After an interruption the audio head resumes
+  from truncated acoustic state -- regressing to common phrasings ("Okay, and
+  what is your first name?" -- which also occurs as LEGITIMATE output, so it is
+  in-distribution resumption, not novel confabulation... except J-A-M-E-S, which
+  matches no name in any of tonight's sessions and remains the strongest
+  upstream-report artifact), while the text head restarts cleanly from text
+  context.
+- The historical eviction correlation was a PROXY: evictions and interruptions
+  both concentrate late-session, in the rapid-fire name block. The maintainer's
+  checkbox->names confound instinct was pointing at the real variable all along
+  -- the names sequence changes the interaction RHYTHM (short turns, fast
+  answers, frequent barge-ins), and rhythm drives interruptions.
+- The spell-out instruction's CONTENT is exonerated (divergent utterances
+  IGNORE it: generic phrasing, no spell-first); its WORKFLOW plausibly
+  multiplied exposure by creating exactly that rapid short-turn rhythm.
+- Stage 2's swallowed `interrupted` signal is now adjacent to the crime scene:
+  the same event the client discards is the one that predicts corrupted
+  server-side audio. (The WAVs are server-generated, so the client holes do not
+  CAUSE the divergence -- but the client's stale-playback behavior compounds
+  what the user hears at precisely the risky moments.)
+
+NEXT DISCRIMINATING EXPERIMENTS (cheap):
+- Pacing arm: harness waits for turn_complete before injecting each answer ->
+  prediction: zero divergence. (~$1)
+- Barge-in arm: deliberate mid-speech injections -> prediction: divergence rate
+  spikes. (~$1)
+- Surgical fix candidate: interruption-TRIGGERED text re-anchor (inject current
+  field + stored value as text only after an interruption event) -- precise,
+  cheap, harness-measurable.
