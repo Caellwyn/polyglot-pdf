@@ -9,6 +9,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { FieldEditor } from './FieldEditor';
 import { findingFingerprint } from '../utils/lintFindings';
+import { statusFromFindings } from '../utils/reviewStatus';
 import type { FormSchema, FormField } from '../types/schema';
 import type { LintFinding } from '../utils/remoteKitStore';
 
@@ -213,6 +214,65 @@ describe('findings render at the property they concern (s18 C1)', () => {
     const chip = screen.getByTestId('field-findings-chip');
     expect(chip).toHaveTextContent('1 notice'); // amber wording, count of 1
     expect(chip.className).toContain('bg-amber-100');
+  });
+});
+
+describe('the timeliness demotion has a reachable EXIT (Opus outer r9)', () => {
+  // The demotion is an effective-status derivation, so the STORED status is
+  // still reviewed_correct and the <select> already reads "Reviewed -
+  // correct" -- re-picking it fires no change event. Without an explicit
+  // control the field is permanently amber and nothing the reviewer clicks
+  // can clear it.
+  const signedOff: FormField = {
+    ...TEXT_FIELD,
+    _review: { status: 'reviewed_correct', seen_fingerprints: [] },
+  } as unknown as FormField;
+
+  it('the dropdown still SHOWS reviewed-correct while the field is demoted', () => {
+    // Why the re-confirm control has to exist: the demotion never writes, so
+    // the stored status -- and the <select>'s value -- stay
+    // "reviewed_correct". A real browser fires no change event when the user
+    // re-picks the option already selected, so the dropdown cannot be the
+    // exit. (jsdom's fireEvent.change dispatches unconditionally, so that
+    // browser behavior is not directly assertable here -- this pins the
+    // precondition that makes it true.)
+    render(
+      <FieldEditor field={signedOff} schema={makeSchema(signedOff)}
+        onUpdateField={vi.fn()} authorTier
+        lintFindings={[instructionsFinding]} />,
+    );
+    expect((screen.getByLabelText('Review status') as HTMLSelectElement).value)
+      .toBe('reviewed_correct');
+    // ...and the field IS demoted, so an exit is genuinely needed.
+    expect(statusFromFindings(signedOff, [instructionsFinding])).toBe('review');
+  });
+
+  it('offers a re-confirm control that re-stamps the fingerprints', () => {
+    const onUpdateField = vi.fn();
+    render(
+      <FieldEditor field={signedOff} schema={makeSchema(signedOff)}
+        onUpdateField={onUpdateField} authorTier
+        lintFindings={[instructionsFinding]} />,
+    );
+    fireEvent.click(screen.getByTestId('reconfirm-review'));
+    const updated = onUpdateField.mock.calls[0][0] as FormField;
+    expect(updated._review?.seen_fingerprints)
+      .toEqual([findingFingerprint(instructionsFinding)]);
+  });
+
+  it('shows no re-confirm control when the sign-off is still current', () => {
+    const current: FormField = {
+      ...TEXT_FIELD,
+      _review: {
+        status: 'reviewed_correct',
+        seen_fingerprints: [findingFingerprint(instructionsFinding)],
+      },
+    } as unknown as FormField;
+    render(
+      <FieldEditor field={current} schema={makeSchema(current)}
+        onUpdateField={vi.fn()} authorTier lintFindings={[instructionsFinding]} />,
+    );
+    expect(screen.queryByTestId('reconfirm-review')).toBeNull();
   });
 });
 

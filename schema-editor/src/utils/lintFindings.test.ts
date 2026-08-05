@@ -84,6 +84,42 @@ describe('findingFingerprint', () => {
     expect(findingFingerprint(f({ path: 'fields[0] (id=a)', field_id: 'a' })))
       .not.toBe(findingFingerprint(f({ path: 'fields[0] (id=b)', field_id: 'b' })));
   });
+
+  it('distinguishes two different duplicate-value defects on one field (Opus outer r9)', () => {
+    // option-value-duplicate is emitted at the BARE field path with the
+    // offending value only in the message, so without a content
+    // discriminator, fixing duplicate "a" and introducing duplicate "b"
+    // inherited the old sign-off and never demoted.
+    const dupA = f({
+      rule: 'option-value-duplicate', field_id: 'x',
+      path: 'fields[0] (id=x)', message: '2 answer choices share the value "a"',
+    });
+    const dupB = f({
+      rule: 'option-value-duplicate', field_id: 'x',
+      path: 'fields[0] (id=x)', message: '2 answer choices share the value "b"',
+    });
+    expect(findingFingerprint(dupA)).not.toBe(findingFingerprint(dupB));
+    // The SAME defect reworded still matches -- only the listed rules take
+    // the content discriminator, and the index strip still applies.
+    expect(findingFingerprint(f({ ...dupA, path: 'fields[7] (id=x)' })))
+      .toBe(findingFingerprint(dupA));
+    // Other rules keep the message-independent fingerprint C12 depends on.
+    const other = f({ rule: 'help-details-oversize', field_id: 'x',
+                      path: 'fields[0] (id=x).help.details' });
+    expect(findingFingerprint({ ...other, message: 'reworded entirely' }))
+      .toBe(findingFingerprint(other));
+  });
+
+  it('never rewrites indices inside a PDF widget NAME (Opus outer r9)', () => {
+    // `widget '<name>'` paths carry raw AcroForm names, which legitimately
+    // contain fields[0]-shaped segments; collapsing them would let one
+    // dismissal hide a different widget's finding.
+    const w0 = f({ rule: 'dump-widget-unclaimed', field_id: null,
+                   path: "widget 'form1[0].fields[0].x[0]'" });
+    const w1 = f({ rule: 'dump-widget-unclaimed', field_id: null,
+                   path: "widget 'form1[0].fields[1].x[0]'" });
+    expect(findingFingerprint(w0)).not.toBe(findingFingerprint(w1));
+  });
 });
 
 describe('propertyAnchor', () => {

@@ -16,8 +16,8 @@ import {
 import { ConditionBuilder } from './ConditionBuilder';
 import { moveFieldToSection } from '../utils/sectionOps';
 import { checkFieldComplete } from '../utils/validation';
-import { getReview, withGuidanceAck, withReviewNote, withReviewStatus }
-  from '../utils/reviewStatus';
+import { getReview, newFindingsSinceReview, withGuidanceAck, withReviewNote,
+  withReviewStatus } from '../utils/reviewStatus';
 import { GUIDANCE_STALE_RULE, currentIdentity, isAcknowledged }
   from '../utils/guidanceStaleness';
 import { propertyAnchor, resolveOptionIndex, ruleLabel, RULE_REMEDIES }
@@ -334,6 +334,11 @@ const FieldReviewEditor: React.FC<{
 }> = ({ field, onUpdateField, onIgnoreField, ignoreBlocked, lintFindings }) => {
   const review = getReview(field);
   const [ignoreError, setIgnoreError] = React.useState<string | null>(null);
+  // The field is signed off, but a finding has appeared since -- so the
+  // effective status is amber while the STORED status still reads
+  // reviewed_correct (the demotion is a derivation, never a stored write).
+  // Drives the re-confirm control below (Opus outer review, pass 9).
+  const staleSignoff = newFindingsSinceReview(field, lintFindings);
 
   const handleStatusChange = (value: string) => {
     setIgnoreError(null);
@@ -384,6 +389,32 @@ const FieldReviewEditor: React.FC<{
           confirmation under Instructions. A real error (red) always stays red
           until fixed.
         </p>
+        {/* The EXIT from the timeliness demotion (Opus outer review, pass 9).
+            A finding that appeared after the sign-off sends the field back to
+            needs-review, but the stored status is still reviewed_correct --
+            so the <select> above already reads "Reviewed - correct" and
+            re-picking it fires no change event. Without this the field is
+            permanently amber with no control that can clear it, which is the
+            dead end the ack gate had one layer down. Re-signing off re-stamps
+            seen_fingerprints with what is on screen NOW. */}
+        {staleSignoff && (
+          <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2">
+            <p className="text-xs text-amber-900">
+              New problems have been found on this field since it was marked
+              reviewed, so it is back in the "to review" count. Read them
+              above, then confirm you have seen them.
+            </p>
+            <button
+              type="button"
+              className="btn-sm btn-primary mt-1"
+              data-testid="reconfirm-review"
+              onClick={() => onUpdateField(
+                withReviewStatus(field, 'reviewed_correct', lintFindings))}
+            >
+              I have seen these -- still reviewed
+            </button>
+          </div>
+        )}
         {onIgnoreField && ignoreBlocked && (
           <p className="text-xs text-gray-500 mt-1">{ignoreBlocked}</p>
         )}

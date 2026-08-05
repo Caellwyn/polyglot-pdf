@@ -185,8 +185,22 @@ export const App: React.FC = () => {
   const resetPerFormReviewUi = React.useCallback(() => {
     setReviewFilterActive(false);
     setPublishRefusal(null);
-    setLintFindings([]);
+    // NOTE: lintFindings is deliberately NOT cleared here. This runs at the
+    // TOP of an open, before the async load can fail -- and a failed open
+    // leaves the previous form on screen with its strip (which keys on the
+    // unchanged kit id, so it neither remounts nor re-fires onReport).
+    // Clearing the mirror there would blank every row's findings while the
+    // strip still counted them: the strip-vs-rows disagreement this bead
+    // exists to end (Opus outer review, pass 9). The mirror is instead
+    // cleared on SUCCESS, beside loadSchemaState, via clearLintMirror.
   }, []);
+  // Clear the findings mirror at the point a DIFFERENT form actually becomes
+  // the open one. The strip remounts on the same transition (it is keyed per
+  // form) and re-lints, so this only covers the window before its first
+  // report lands -- but in that window a stale finding from the previous
+  // form would otherwise resolve to no field here and be promoted onto the
+  // new form's pinned Form row.
+  const clearLintMirror = React.useCallback(() => setLintFindings([]), []);
   // The fields in reading order -- sections as listed, then orphans -- the
   // same order the FieldList renders, so the strip's jump and the list's own
   // "Next to review" walk one order.
@@ -290,6 +304,7 @@ export const App: React.FC = () => {
 
     try {
       const loadedSchema = await loadSchema(form.schemaPath);
+      clearLintMirror(); // a DIFFERENT form is now open (s18 C1)
       loadSchemaState(loadedSchema); // fresh baseline -> history cleared
       setSelectedForm(form);
     } catch (err) {
@@ -298,7 +313,7 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi]);
+  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi, clearLintMirror]);
 
   // Open a kit from the catalogue (bd b0pe): read its schema from the directory
   // handle and build a blob URL for its PDF, then drive the existing schema +
@@ -343,6 +358,7 @@ export const App: React.FC = () => {
       if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = pdfUrl || null;
 
+      clearLintMirror(); // a DIFFERENT kit is now open (s18 C1)
       loadSchemaState(loaded); // fresh baseline -> history cleared
       setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
       setSelectedKitId(entry.id);
@@ -354,7 +370,7 @@ export const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi]);
+  }, [hasUnsavedChanges, loadSchemaState, resetPerFormReviewUi, clearLintMirror]);
 
   // A remote call answered 401 mid-session (rotated/revoked code): drop back to
   // the access gate. The gate re-probes the stored code, finds it dead, clears
@@ -440,6 +456,7 @@ export const App: React.FC = () => {
       if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = pdfUrl || null;
 
+      clearLintMirror(); // a DIFFERENT kit is now open (s18 C1)
       loadSchemaState(loaded); // fresh baseline -> history cleared
       setSelectedForm({ name: entry.label, pdfPath: pdfUrl, schemaPath: entry.schemaFile });
       setSelectedKitId(entry.id);
@@ -456,7 +473,8 @@ export const App: React.FC = () => {
     } finally {
       if (seq === openSeqRef.current) setLoading(false);
     }
-  }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired, resetPerFormReviewUi]);
+  }, [hasUnsavedChanges, loadSchemaState, handleAuthExpired, resetPerFormReviewUi,
+      clearLintMirror]);
 
   // Guard a folder switch: returns false to ABORT when the user declines to
   // discard unsaved edits (same guard handleOpenKit uses, so a folder change can't
@@ -484,6 +502,7 @@ export const App: React.FC = () => {
     setSelectedFieldId(null);
     setGroupSelection([]); // merge selection is per-form (bd polyglot-pdf-s4dp.1)
     resetPerFormReviewUi(); // refusal + review filter are per-form (s18 C1)
+    clearLintMirror();      // no form open -> no findings
     clearSchema();
     fileHandleRef.current = null;
     localEntryRef.current = null;
@@ -491,7 +510,7 @@ export const App: React.FC = () => {
       URL.revokeObjectURL(pdfBlobUrlRef.current);
       pdfBlobUrlRef.current = null;
     }
-  }, [clearSchema, resetPerFormReviewUi]);
+  }, [clearSchema, resetPerFormReviewUi, clearLintMirror]);
 
   // Update a field in the schema
   const handleUpdateField = React.useCallback((updatedField: FormField) => {

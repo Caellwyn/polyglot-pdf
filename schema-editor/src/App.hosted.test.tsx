@@ -704,6 +704,32 @@ describe('lint findings clear on a kit switch (sprint-18 C1)', () => {
     await waitFor(() => expect(
       screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));
   });
+
+  it('the findings mirror is cleared on a SUCCESSFUL open, not at the attempt', async () => {
+    // The clear must sit beside loadSchemaState (success) rather than at the
+    // top of the handler: run at the attempt, a FAILED open blanks every
+    // row's findings while the strip -- keyed on the unchanged kit id, so it
+    // neither remounts nor re-reports -- keeps counting them, which is the
+    // strip-vs-rows disagreement this bead removes (Opus outer review,
+    // pass 9). Kit B carries a DIFFERENT field, so A's finding would resolve
+    // to no field there and be promoted onto B's Form row if it leaked.
+    vi.mocked(listRemoteKits).mockResolvedValue([KIT, KIT_B]);
+    vi.mocked(loadRemoteSchema).mockImplementation(async (kitId: string) =>
+      kitId === 'second-kit'
+        ? ({ ...SCHEMA,
+             fields: [{ id: 'b1', name: 'B1', type: 'text' }],
+           } as unknown as FormSchema)
+        : (JSON.parse(JSON.stringify(SCHEMA)) as FormSchema));
+    await passGate();
+    await openKit('draft-kit');
+    await screen.findByTestId('pdf');
+    fireEvent.click(screen.getByTestId('vp-emit-report'));
+    expect(screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0');
+    // A successful switch clears it: no promotion onto B's Form row.
+    await openKit('second-kit');
+    await waitFor(() => expect(
+      screen.getByTestId('list').getAttribute('data-form-findings')).toBe('0'));
+  });
 });
 
 // The refusal line is PER-FORM state (sprint-18 C1, fresh-eyes round 3): a

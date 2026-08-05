@@ -348,6 +348,29 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
             {counts.toReview} to review
           </span>
         )}
+        {/* The filter toggle as a REAL control (Opus outer review, pass 9):
+            right-click alone is unreachable by keyboard (Enter/Space fire
+            click, never contextmenu) and never fires on touch, so the
+            "overview that replaced the pane" did not exist for those users.
+            The count's right-click stays as the power-user shortcut. */}
+        {onToggleReviewFilter && (
+          <button
+            type="button"
+            data-testid="strip-filter-toggle"
+            aria-pressed={reviewFilterActive}
+            className={`whitespace-nowrap rounded px-1.5 py-0.5 border ${
+              reviewFilterActive
+                ? 'text-amber-900 bg-amber-100 border-amber-300'
+                : 'text-gray-600 bg-white border-gray-200 hover:bg-gray-50'
+            }`}
+            title={reviewFilterActive
+              ? 'Show all fields in the list'
+              : 'Show only the fields needing review in the list'}
+            onClick={onToggleReviewFilter}
+          >
+            {reviewFilterActive ? 'Showing flagged' : 'Show flagged only'}
+          </button>
+        )}
         <span aria-hidden="true">&middot;</span>
         <span className="whitespace-nowrap" data-testid="strip-total">
           {counts.total} total

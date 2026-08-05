@@ -144,6 +144,27 @@ describe('the strip is ONE line of status-derived counts (s18 C1)', () => {
     fireEvent.contextMenu(control);
     expect(onToggleReviewFilter).toHaveBeenCalledTimes(1);
   });
+
+  it('the filter is reachable by ordinary CLICK, not only right-click (Opus outer r9)', () => {
+    // Right-click is unreachable by keyboard (Enter/Space fire click) and
+    // never fires on touch, so the filter -- the overview that replaced the
+    // pane -- needs a real button.
+    const onToggleReviewFilter = vi.fn();
+    const { rerender } = render(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onToggleReviewFilter={onToggleReviewFilter} />,
+    );
+    const toggle = screen.getByTestId('strip-filter-toggle');
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(onToggleReviewFilter).toHaveBeenCalledTimes(1);
+    rerender(
+      <ValidationPanel schema={SCHEMA} onSelectField={() => {}}
+        onToggleReviewFilter={onToggleReviewFilter} reviewFilterActive />,
+    );
+    expect(screen.getByTestId('strip-filter-toggle'))
+      .toHaveAttribute('aria-pressed', 'true');
+  });
 });
 
 describe('the kit-scoped lint round-trip (s18 C1)', () => {

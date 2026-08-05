@@ -171,7 +171,34 @@ export function stripIdentitySuffix(path: string): string {
 const CONTAINER_INDEX_RE = /\b(fields|sections|parts)\[\d+\]/g;
 
 export function stripContainerIndices(path: string): string {
-  return (path || '').replace(CONTAINER_INDEX_RE, '$1[]');
+  const p = path || '';
+  // A `widget '<name>'` path carries a raw AcroForm NAME, not path structure
+  // -- and PDF widget names legitimately contain `fields[0]`-shaped segments
+  // (form1[0].fields[0].x[0]). Rewriting those would collapse two distinct
+  // widgets into one fingerprint, so dismissing one form-level finding would
+  // silently hide the other (Opus outer review, pass 9). Latent today (no
+  // shipped kit has such a name) -- guarded because the input is
+  // PDF-controlled data, not our own path grammar.
+  if (p.startsWith('widget ')) return p;
+  return p.replace(CONTAINER_INDEX_RE, '$1[]');
+}
+
+// Rules whose PATH does not localize the defect: the offending value lives
+// only in the MESSAGE, so two genuinely different defects on one field share
+// a path (schema_lint emits option-value-duplicate at the bare field path
+// with the duplicated value in the message). For these, and ONLY these, the
+// fingerprint folds in a bounded content hash -- otherwise fixing duplicate
+// "a" and introducing duplicate "b" inherits the old sign-off and never
+// demotes (Opus outer review, pass 9). Every other rule keeps the
+// message-independent fingerprint the C12 copy pass depends on.
+const MESSAGE_LOCALIZED_RULES = new Set(['option-value-duplicate']);
+
+function contentDiscriminator(message: string): string {
+  let h = 5381;
+  for (let i = 0; i < message.length; i++) {
+    h = ((h << 5) + h + message.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
 }
 
 /**
@@ -187,7 +214,10 @@ export function stripContainerIndices(path: string): string {
  */
 export function findingFingerprint(f: LintFinding): string {
   const path = stripContainerIndices(stripIdentitySuffix(f.path));
-  return `${f.rule}|${f.field_id ?? ''}|${path}`;
+  const extra = MESSAGE_LOCALIZED_RULES.has(f.rule)
+    ? `|${contentDiscriminator(f.message)}`
+    : '';
+  return `${f.rule}|${f.field_id ?? ''}|${path}${extra}`;
 }
 
 /**

@@ -236,6 +236,42 @@ why it passed a broken implementation. (3) stripIdentitySuffix was
 end-anchored (a silent-failure shape this repo has shipped before); it
 now matches the token anywhere.
 
+Opus outer review, primary pass 9: confirmed the pass-8 identity fixes hold
+(it specifically tried to make position leak back and could not). Six
+findings; four fixed inline, two filed. Fixed: (1) THE DEAD END -- the
+timeliness demotion never writes, so the stored status stays
+reviewed_correct and the review dropdown already reads "Reviewed -
+correct"; re-picking it fires no change event in a real browser, and that
+dropdown was the only caller that re-stamps. A field demoted by a new
+finding was therefore permanently amber with no control able to clear it
+-- the same trap the ack gate had, one layer up. There is now an explicit
+"I have seen these -- still reviewed" control that re-stamps with what is
+on screen. (2) option-value-duplicate carries the offending value only in
+its MESSAGE at a bare field path, so a different duplicate defect
+inherited the old sign-off; a per-rule content discriminator (that one
+rule only) fixes it while every other rule keeps the message-independent
+fingerprint C12 depends on. (3) stripContainerIndices could rewrite
+indices inside a PDF WIDGET NAME (PDF-controlled data, not our path
+grammar), collapsing two widgets into one fingerprint; widget paths are
+now left alone. (4) The review filter was reachable only by right-click --
+unreachable by keyboard (Enter/Space fire click) and absent on touch --
+for the overview the pane removal promised; there is now a real toggle
+button with aria-pressed, right-click kept as the shortcut. Also moved
+the findings-mirror clear from the top of the open handlers to the
+success path, so a FAILED open no longer blanks the rows' findings while
+the strip keeps counting them. Filed by the reviewer: bd
+polyglot-pdf-b97k (the catalogue scans still use getCompletionStats while
+liveStats uses reviewCounts -- two definitions of one number, with
+comments asserting the opposite), bd polyglot-pdf-18uh, bd
+polyglot-pdf-0f4s.
+
+A note on the test that did NOT catch the dead end: the unit test called
+withReviewStatus directly and the UI test started from an unreviewed
+field, so neither drove the real control. Attempting to pin the trap
+itself is not possible in jsdom (fireEvent.change dispatches
+unconditionally, unlike a browser's no-event-on-unchanged-value), so the
+test pins the precondition plus the new control instead.
+
 ## Lessons
 
 - A mutation that reddens a test can still be masked by an ADJACENT rule:
